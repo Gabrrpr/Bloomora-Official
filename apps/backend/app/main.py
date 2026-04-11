@@ -1,6 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.v1.routes import customization
+
 app = FastAPI(
     title="Bloomora API",
     description="Backend API for Bloomora — Floral E-Commerce Platform for Esting's Flowers International Inc.",
@@ -8,7 +10,7 @@ app = FastAPI(
 )
 
 # ---------------------------------------------------------------------------
-# CORS — allow web and mobile frontends to talk to this API
+# CORS
 # ---------------------------------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
@@ -22,13 +24,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------------------------------------------------------------------
+# Routers
+# ---------------------------------------------------------------------------
+app.include_router(customization.router, prefix="/api/v1")
 
 # ---------------------------------------------------------------------------
 # Health check
 # ---------------------------------------------------------------------------
 @app.get("/", tags=["Health"])
 def root():
-    return {"status": "ok", "message": "Bloomora API is running"}
+    return {"status": "ok", "message": "Bloomora API is running 🌸"}
 
 
 @app.get("/health", tags=["Health"])
