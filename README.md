@@ -1,4 +1,4 @@
-# 🌸 Bloomora
+# Bloomora
 
 > Web and Mobile E-Commerce Platform with Two-Way Customization for Floral Ordering Using Flux Generative AI Model — built for **Esting's Flowers International Inc.**
 
@@ -8,7 +8,7 @@
 
 ---
 
-## 📌 Overview
+## Overview
 
 Bloomora is a full-stack monorepo capstone project that provides Esting's Flowers International Inc. with a centralized digital platform for:
 
@@ -20,11 +20,11 @@ Bloomora is a full-stack monorepo capstone project that provides Esting's Flower
 
 ---
 
-## 👥 Team
+## Team
 
 | Name | Role |
 |---|---|
-| Batac, John Gabriel R. | Full-Stack Developer |
+| Batac, John Gabriel R. | shoplifter |
 | Ibarrientos, Forest Red R. | Developer |
 | De Leon, Julius Francis G. | Developer |
 | Mapoy, Pauline Erika M. | Developer |
@@ -34,7 +34,7 @@ Bloomora is a full-stack monorepo capstone project that provides Esting's Flower
 
 ---
 
-## 🗂️ Monorepo Structure
+## Monorepo Structure
 
 ```
 bloomora/
@@ -51,7 +51,7 @@ bloomora/
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
@@ -67,7 +67,7 @@ bloomora/
 
 ---
 
-## ⚙️ Getting Started
+## Getting Started
 
 ### Prerequisites
 
@@ -148,7 +148,7 @@ Scan the QR code with Expo Go or run on an emulator.
 
 ---
 
-## 🔐 Environment Variables
+## Environment Variables
 
 Each app has its own `.env` file. Copy from the `.env.example` in each directory.
 
@@ -198,7 +198,7 @@ MAIL_PORT=587
 
 ---
 
-## 👤 User Roles
+## User Roles
 
 | Role | Platform Access |
 |---|---|
@@ -209,7 +209,7 @@ MAIL_PORT=587
 
 ---
 
-## 📡 API Endpoints (v1)
+## API Endpoints (v1)
 
 | Module | Base Path |
 |---|---|
