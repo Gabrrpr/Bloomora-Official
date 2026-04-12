@@ -10,7 +10,7 @@ class ArrangementFlower(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     arrangement_id = Column(UUID(as_uuid=True), ForeignKey("arrangements.id"), nullable=False)
     flower_id = Column(UUID(as_uuid=True), ForeignKey("flowers.id"), nullable=False)
-    quantity = Column(Integer, default=1) 
+    quantity = Column(Integer, default=1)
 
     # Relationships
     arrangement = relationship("Arrangement", back_populates="flower_items")
@@ -24,7 +24,7 @@ class Arrangement(Base):
     name = Column(String(255), nullable=True)
     description = Column(Text, nullable=True)
     prompt_text = Column(Text, nullable=True)
-    generated_image_url = Column(String(500), nullable=True)  
+    generated_image_url = Column(String(500), nullable=True)
     estimated_price = Column(Numeric(10, 2), nullable=True)
 
     # FK links to other materials
@@ -63,6 +63,44 @@ class Flower(Base):
     product = relationship("Product", back_populates="flower")
     # This now refers to the association table if needed, 
     # but the ArrangementFlower -> Flower link is usually enough.
+    
+class Vase(Base):
+    __tablename__ = "vases"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    material = Column(String(100), nullable=True)
+    color = Column(String(100), nullable=True)
+    size = Column(String(50), nullable=True)
+    unit_price = Column(Numeric(10, 2), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    # Relationships
+    product = relationship("Product", back_populates="vase")
+    arrangements = relationship("Arrangement", back_populates="vase", foreign_keys="Arrangement.vase_id")
 
 
-# Vase, Wrapping, and Accessory classes remain the same...
+class Wrapping(Base):
+    __tablename__ = "wrappings"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    material = Column(String(100), nullable=True)
+    color = Column(String(100), nullable=True)
+    unit_price = Column(Numeric(10, 2), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    # Relationships
+    product = relationship("Product", back_populates="wrapping")
+    arrangements = relationship("Arrangement", back_populates="wrapping", foreign_keys="Arrangement.wrapping_id")
+
+
+class Accessory(Base):
+    __tablename__ = "accessories"
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    accessory_type = Column(String(100), nullable=True)
+    color = Column(String(100), nullable=True)
+    unit_price = Column(Numeric(10, 2), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    # Relationships
+    product = relationship("Product", back_populates="accessory")
+    arrangements = relationship("Arrangement", back_populates="accessory", foreign_keys="Arrangement.accessory_id")
+
+

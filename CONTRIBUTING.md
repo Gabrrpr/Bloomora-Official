@@ -34,7 +34,8 @@ cd apps/backend
 python -m venv venv
 
 # Activate it (Git Bash on Windows)
-source venv/Scripts/activate
+
+venv/Scripts/activate
 
 # You should see (venv) in your terminal now
 

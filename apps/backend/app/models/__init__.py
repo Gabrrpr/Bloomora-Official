@@ -5,6 +5,7 @@ from .order import Order, Transaction, Delivery
 from .arrangement import Arrangement, Flower, Vase, Wrapping, Accessory
 from .support import Review, Chat, ActivityLog
 from .ai_usage_log import AIUsageLog
+from .arrangement import Arrangement, Flower, VaseOption, Wrapping, Accessory
 
 __all__ = [
     "Base",
