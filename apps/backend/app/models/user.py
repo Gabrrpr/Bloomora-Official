@@ -45,3 +45,4 @@ class User(Base):
     deliveries = relationship("Delivery", back_populates="rider", foreign_keys="Delivery.rider_id")
     chats = relationship("Chat", back_populates="user")
     activity_logs = relationship("ActivityLog", back_populates="user")
+    ai_usage_logs = relationship("AIUsageLog", back_populates="user")
