@@ -3,7 +3,7 @@ app = FastAPI(title="Bloomora Backend")
 
 @app.get("/")
 async def root():
-    return {"message": "🌸 Bloomora Backend LIVE!"}
+    return {"message": "Bloomora Backend LIVE!"}
 
 @app.get("/docs")
 async def docs():

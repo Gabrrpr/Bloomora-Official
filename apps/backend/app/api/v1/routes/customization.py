@@ -5,9 +5,8 @@ import uuid
 
 from app.core.dependencies import get_db, get_current_user
 from app.models import (
-    User, Product, Inventory, Arrangement,
-    Flower, Vase, Wrapping, Accessory,
-    ProductCategoryEnum, ProductStatusEnum
+    User, Arrangement,
+    ProductCategoryEnum,
 )
 from app.models.ai_usage_log import DAILY_AI_LIMIT
 from app.schemas.customization import (
@@ -23,15 +22,6 @@ from app.services.ai_usage_service import (
     get_remaining_generations,
 )
 
-# TODO: Implement inventory_service module with check_material_availability and get_alternatives functions
-def check_material_availability(db, material_id):
-    """Placeholder: Check if material is available in inventory."""
-    pass
-
-def get_alternatives(db, category, exclude_id=None):
-    """Placeholder: Get alternative materials for a given category."""
-    pass
-
 router = APIRouter(prefix="/customization", tags=["Customization"])
 pollinations = PollinationsService()
 
@@ -39,7 +29,7 @@ pollinations = PollinationsService()
 @router.get("/ai-usage", tags=["Customization"])
 def get_ai_usage(
     db: Session = Depends(get_db),
-    # current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     """Returns how many AI generations the current user has left today."""
     remaining = get_remaining_generations(db, current_user.id)
@@ -88,7 +78,9 @@ async def check_and_generate(
         if not material_id:
             continue
 
+        print(f"DEBUG: checking {field_name} = {material_id}")
         result = check_material_availability(db, material_id)
+        print(f"DEBUG: result = {result}")
 
         if not result.is_available:
             alternatives = get_alternatives(db, category, exclude_id=material_id)
@@ -114,18 +106,25 @@ async def check_and_generate(
         )
 
     # ── Step 3b: All available → save arrangement + generate image ────────
+    from app.models.arrangement import Flower, Vase, Wrapping, Accessory
+    
+    flower   = db.query(Flower).filter(Flower.product_id == payload.flower_id).first() if payload.flower_id else None
+    vase     = db.query(Vase).filter(Vase.product_id == payload.vase_id).first() if payload.vase_id else None
+    wrapping = db.query(Wrapping).filter(Wrapping.product_id == payload.wrapping_id).first() if payload.wrapping_id else None
+    accessory = db.query(Accessory).filter(Accessory.product_id == payload.accessory_id).first() if payload.accessory_id else None
+    
     arrangement = Arrangement(
         id=uuid.uuid4(),
         prompt_text=payload.prompt_text,
-        flower_id=payload.flower_id,
-        vase_id=payload.vase_id,
-        wrapping_id=payload.wrapping_id,
-        accessory_id=payload.accessory_id,
+        flower_id=flower.id if flower else None,
+        vase_id=vase.id if vase else None,
+        wrapping_id=wrapping.id if wrapping else None,
+        accessory_id=accessory.id if accessory else None,
     )
     db.add(arrangement)
     db.commit()
     db.refresh(arrangement)
-
+    
     # Generate image via Pollinations
     generated_url = await pollinations.generate_arrangement_image(
         db=db,
