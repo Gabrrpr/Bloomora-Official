@@ -14,6 +14,9 @@ class Settings(BaseSettings):
 
     # Pollinations
     POLLINATIONS_API_URL: str = "https://image.pollinations.ai/prompt"
+    
+    # Supabase Storage
+    SUPABASE_BUCKET: str = "arrangements"
 
     # Lalamove
     LALAMOVE_API_KEY: str = ""

@@ -1,6 +1,11 @@
+import httpx
+import io
+from PIL import Image, ImageDraw, ImageFont
+from supabase import create_client, Client
 from urllib.parse import quote
 from typing import Optional
 from sqlalchemy.orm import Session
+from app.core.config import settings
 from app.models.arrangement import Arrangement
 
 
@@ -39,12 +44,67 @@ class PollinationsService:
             "Professional floral photography, high-fidelity, 8k, realistic studio lighting."
         )
 
-        # 3. Call Pollinations.ai
+        # 3. Call Pollinations.ai to get image URL
         encoded_prompt = quote(full_prompt)
-        image_url = f"{self.base_url}{encoded_prompt}?width=1024&height=1024&model={self.model}&nologo=true"
+        pollinations_url = f"{self.base_url}{encoded_prompt}?width=1024&height=1024&model={self.model}&nologo=true"
 
-        # 4. Update your model with the generated URL
-        arrangement.generated_image_url = image_url
+        try:
+            # Download image
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(pollinations_url, timeout=30.0)
+                resp.raise_for_status()
+                image_bytes = resp.content
+
+            # Load with Pillow and apply watermark
+            img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
+            draw = ImageDraw.Draw(img)
+
+            # Watermark text and positioning (bottom-right, scalable)
+            watermark_text = "Bloomora.ai ©"
+            font_size = max(60, img.width // 20)  # Larger for visibility
+            try:
+                font = ImageFont.truetype("arial.ttf", font_size)
+            except:
+                font = ImageFont.load_default()
+
+            bbox = draw.textbbox((0, 0), watermark_text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            margin = 20
+            x = img.width - text_width - margin
+            y = img.height - text_height - margin
+
+            # Semi-transparent white text with black outline
+            draw.text((x-1, y-1), watermark_text, fill="black", font=font)
+            draw.text((x+1, y-1), watermark_text, fill="black", font=font)
+            draw.text((x-1, y+1), watermark_text, fill="black", font=font)
+            draw.text((x+1, y+1), watermark_text, fill="black", font=font)
+            draw.text((x, y), watermark_text, fill=(255, 255, 255, 128), font=font)
+
+            # Convert back and get bytes
+            img = img.convert("RGB")
+            output = io.BytesIO()
+            img.save(output, format="PNG", optimize=True)
+            watermarked_bytes = output.getvalue()
+
+            # Init Supabase client and upload
+            supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+            file_path = f"{settings.SUPABASE_BUCKET}/{arrangement_id}.png"
+            upload_resp = supabase.storage.from_(settings.SUPABASE_BUCKET).upload(
+                file_path, watermarked_bytes, options={"contentType": "image/png"}
+            )
+
+            # Get public URL (assume upload success or check)
+            public_url = supabase.storage.from_(settings.SUPABASE_BUCKET).get_public_url(file_path)
+            watermarked_url = public_url
+            print(f"Uploaded watermarked image to: {watermarked_url}")
+
+        except Exception as e:
+            print(f"Watermark/upload failed: {e}")
+            watermarked_url = pollinations_url  # Fallback to original
+
+        # 4. Update model and commit
+        arrangement.generated_image_url = watermarked_url
         db.commit()
-    
-        return image_url
+
+        return watermarked_url

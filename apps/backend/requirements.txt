@@ -10,4 +10,7 @@ supabase
 httpx
 python-multipart
 websockets
-pydantic-settings
+pydantic[email]==2.9.2
+pillow==12.1.1
+supabase==2.7.4
+
