@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 import uuid
 
 from app.core.dependencies import get_db, get_current_user
@@ -8,11 +8,14 @@ from app.models import (
     User, Arrangement,
     ProductCategoryEnum,
 )
+from app.models.arrangement import Flower, Vase, Wrapping, Accessory
 from app.models.ai_usage_log import DAILY_AI_LIMIT
 from app.schemas.customization import (
     CustomizationRequest,
     CustomizationResponse,
     UnavailableItem,
+    PriceBreakdown,
+    PriceBreakdownItem,
 )
 from app.services.pollinations_service import PollinationsService
 from app.services.inventory_service import check_material_availability, get_alternatives
@@ -24,6 +27,62 @@ from app.services.ai_usage_service import (
 
 router = APIRouter(prefix="/customization", tags=["Customization"])
 pollinations = PollinationsService()
+
+
+def calculate_price_breakdown(
+    flower: Optional[Flower],
+    vase: Optional[Vase],
+    wrapping: Optional[Wrapping],
+    accessory: Optional[Accessory],
+) -> PriceBreakdown:
+    """
+    Builds an itemized price breakdown from the selected materials.
+    """
+    items: List[PriceBreakdownItem] = []
+
+    if flower:
+        subtotal = float(flower.unit_price) * flower.quantity
+        items.append(PriceBreakdownItem(
+            material_type="Flower",
+            product_name=f"{flower.color} {flower.style}" if flower.color and flower.style else "Flower",
+            unit_price=float(flower.unit_price),
+            quantity=flower.quantity,
+            subtotal=subtotal,
+        ))
+
+    if vase:
+        subtotal = float(vase.unit_price) * vase.quantity
+        items.append(PriceBreakdownItem(
+            material_type="Vase",
+            product_name=f"{vase.style} {vase.material} Vase" if vase.style and vase.material else "Vase",
+            unit_price=float(vase.unit_price),
+            quantity=vase.quantity,
+            subtotal=subtotal,
+        ))
+
+    if wrapping:
+        subtotal = float(wrapping.unit_price) * wrapping.quantity
+        items.append(PriceBreakdownItem(
+            material_type="Wrapping",
+            product_name=f"{wrapping.color} {wrapping.style} Wrapping" if wrapping.color and wrapping.style else "Wrapping",
+            unit_price=float(wrapping.unit_price),
+            quantity=wrapping.quantity,
+            subtotal=subtotal,
+        ))
+
+    if accessory:
+        subtotal = float(accessory.unit_price) * accessory.quantity
+        items.append(PriceBreakdownItem(
+            material_type="Accessory",
+            product_name=accessory.name if accessory.name else "Accessory",
+            unit_price=float(accessory.unit_price),
+            quantity=accessory.quantity,
+            subtotal=subtotal,
+        ))
+
+    total_price = sum(item.subtotal for item in items)
+
+    return PriceBreakdown(items=items, total_price=total_price)
 
 
 @router.get("/ai-usage", tags=["Customization"])
@@ -53,7 +112,7 @@ async def check_and_generate(
     Flow:
     1. Check if user has remaining AI generations today (limit: 5/day)
     2. Check inventory availability for all selected materials
-    3a. All available → generate image via Pollinations.ai → log usage
+    3a. All available → generate image via Pollinations.ai → calculate price breakdown → log usage
     3b. Some unavailable → return unavailable items + suggested alternatives
     """
 
@@ -78,9 +137,7 @@ async def check_and_generate(
         if not material_id:
             continue
 
-        print(f"DEBUG: checking {field_name} = {material_id}")
         result = check_material_availability(db, material_id)
-        print(f"DEBUG: result = {result}")
 
         if not result.is_available:
             alternatives = get_alternatives(db, category, exclude_id=material_id)
@@ -105,14 +162,13 @@ async def check_and_generate(
             remaining_generations=remaining,
         )
 
-    # ── Step 3b: All available → save arrangement + generate image ────────
-    from app.models.arrangement import Flower, Vase, Wrapping, Accessory
-    
-    flower   = db.query(Flower).filter(Flower.product_id == payload.flower_id).first() if payload.flower_id else None
-    vase     = db.query(Vase).filter(Vase.product_id == payload.vase_id).first() if payload.vase_id else None
-    wrapping = db.query(Wrapping).filter(Wrapping.product_id == payload.wrapping_id).first() if payload.wrapping_id else None
+    # ── Step 3b: Look up material records using product IDs ───────────────
+    flower    = db.query(Flower).filter(Flower.product_id == payload.flower_id).first() if payload.flower_id else None
+    vase      = db.query(Vase).filter(Vase.product_id == payload.vase_id).first() if payload.vase_id else None
+    wrapping  = db.query(Wrapping).filter(Wrapping.product_id == payload.wrapping_id).first() if payload.wrapping_id else None
     accessory = db.query(Accessory).filter(Accessory.product_id == payload.accessory_id).first() if payload.accessory_id else None
-    
+
+    # ── Step 3c: Save arrangement with correct material IDs ───────────────
     arrangement = Arrangement(
         id=uuid.uuid4(),
         prompt_text=payload.prompt_text,
@@ -124,8 +180,8 @@ async def check_and_generate(
     db.add(arrangement)
     db.commit()
     db.refresh(arrangement)
-    
-    # Generate image via Pollinations
+
+    # ── Step 3d: Generate image via Pollinations ──────────────────────────
     generated_url = await pollinations.generate_arrangement_image(
         db=db,
         arrangement_id=str(arrangement.id),
@@ -136,6 +192,14 @@ async def check_and_generate(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Image generation failed. Please try again."
         )
+
+    # ── Step 3e: Calculate price breakdown ────────────────────────────────
+    price_breakdown = calculate_price_breakdown(flower, vase, wrapping, accessory)
+
+    # Update arrangement with estimated price
+    arrangement.estimated_price = price_breakdown.total_price
+    arrangement.generated_image_url = generated_url
+    db.commit()
 
     # ── Step 4: Log the AI usage ──────────────────────────────────────────
     log_ai_usage(
@@ -154,4 +218,5 @@ async def check_and_generate(
         arrangement_id=str(arrangement.id),
         unavailable_items=[],
         remaining_generations=remaining,
+        price_breakdown=price_breakdown,
     )

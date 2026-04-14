@@ -28,10 +28,26 @@ class UnavailableItem(BaseModel):
     alternatives: List[AlternativeItem]
 
 
+class PriceBreakdownItem(BaseModel):
+    """Single line item in the price breakdown."""
+    material_type: str          # e.g. "Flower", "Vase", "Wrapping", "Accessory"
+    product_name: str           # e.g. "Red Rose"
+    unit_price: float
+    quantity: int
+    subtotal: float
+
+
+class PriceBreakdown(BaseModel):
+    """Full price breakdown of the arrangement."""
+    items: List[PriceBreakdownItem]
+    total_price: float
+
+
 class CustomizationResponse(BaseModel):
     success: bool
     message: str
     generated_image_url: Optional[str] = None
     arrangement_id: Optional[str] = None
     unavailable_items: List[UnavailableItem] = []
-    remaining_generations: int = 5      # ← how many AI uses left today
+    remaining_generations: int = 5
+    price_breakdown: Optional[PriceBreakdown] = None  # ← populated on success
