@@ -45,7 +45,7 @@ function Stars({ count = 5 }) {
   return (
     <div className="flex items-center gap-0.5">
       {[1, 2, 3, 4, 5].map(i => (
-        <svg key={i} className="w-3.5 h-3.5" fill={i <= count ? "#f59e0b" : "#e5e7eb"} viewBox="0 0 20 20">
+        <svg key={i} className="w-3 h-3" fill={i <= count ? "#f59e0b" : "#e5e7eb"} viewBox="0 0 20 20">
           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
         </svg>
       ))}
@@ -55,27 +55,20 @@ function Stars({ count = 5 }) {
 
 function ReviewCard({ review, color }) {
   return (
-    <div className="bg-white flex flex-col h-full" style={{ border: "1px solid #e5e7eb", borderRadius: "8px", overflow: "hidden" }}>
+    <div className="bg-white flex flex-col" style={{ border: "1px solid #e5e7eb", borderRadius: "8px", overflow: "hidden" }}>
       <div style={{ height: "3px", backgroundColor: color }} />
-      <div className="p-4 flex flex-col gap-3">
+      <div className="p-4 flex flex-col gap-2.5">
         <div className="flex items-center justify-between">
           <Stars count={review.rating} />
-          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded" style={{ backgroundColor: "#f9fafb", border: "1px solid #e5e7eb" }}>
+          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded" style={{ backgroundColor: "#f9fafb", border: "1px solid #e5e7eb" }}>
             {SOURCE_ICON[review.source]}
             <span className="text-[10px] text-gray-500 font-medium">{review.source}</span>
           </div>
         </div>
-
-        {/* Quote mark — proper typographic open-quote, green, visible */}
-        <div style={{ fontFamily: "Georgia, serif", fontSize: "40px", lineHeight: 1, color: "#2E8B34", opacity: 0.5, marginBottom: "-8px", userSelect: "none" }}>
-          &ldquo;
-        </div>
-
+        <div style={{ fontFamily: "Georgia, serif", fontSize: "36px", lineHeight: 1, color: "#2E8B34", opacity: 0.45, userSelect: "none" }}>&ldquo;</div>
         <p className="text-gray-700 text-sm leading-relaxed">{review.text}</p>
-
         <div style={{ borderTop: "1px solid #f3f4f6" }} />
-
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center gap-2">
           <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: color }}>
             {review.initials}
           </div>
@@ -94,66 +87,64 @@ export default function Testimonials() {
   const [cardsRef, cardsVisible] = useScrollReveal(0.1)
   const [videoRef, videoVisible] = useScrollReveal(0.1)
   const [current, setCurrent] = useState(0)
+  const [visibleCount, setVisibleCount] = useState(3)
   const total = REVIEWS.length
+
+  useEffect(() => {
+    function handleResize() {
+      if (window.innerWidth < 640) setVisibleCount(1)
+      else if (window.innerWidth < 1024) setVisibleCount(2)
+      else setVisibleCount(3)
+    }
+    handleResize()
+    window.addEventListener("resize", handleResize)
+    return () => window.removeEventListener("resize", handleResize)
+  }, [])
 
   const prev = () => setCurrent(c => (c - 1 + total) % total)
   const next = () => setCurrent(c => (c + 1) % total)
-  const getVisible = () => [0, 1, 2].map(i => REVIEWS[(current + i) % total])
+  const getVisible = () => Array.from({ length: visibleCount }, (_, i) => REVIEWS[(current + i) % total])
 
   return (
-    <section className="py-16 px-8" style={{ backgroundColor: "#f7fbf7", borderTop: "1px solid #e5e7eb" }}>
+    <section className="py-12 px-4 sm:px-8" style={{ backgroundColor: "#f7fbf7", borderTop: "1px solid #e5e7eb" }}>
       <div className="max-w-7xl mx-auto">
 
-        {/* Header */}
-        <div
-          ref={headerRef}
-          className="text-center mb-10"
-          style={{ transition: "opacity 0.6s ease, transform 0.6s ease", opacity: headerVisible ? 1 : 0, transform: headerVisible ? "translateY(0)" : "translateY(20px)" }}
-        >
+        <div ref={headerRef} className="text-center mb-8"
+          style={{ transition: "opacity 0.6s ease, transform 0.6s ease", opacity: headerVisible ? 1 : 0, transform: headerVisible ? "translateY(0)" : "translateY(20px)" }}>
           <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "#2E8B34" }}>Customer Reviews</p>
-          <h2 className="text-3xl font-bold text-gray-800 mb-2" style={{ fontFamily: "Georgia, serif" }}>What Our Customers Say</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-2" style={{ fontFamily: "Georgia, serif" }}>What Our Customers Say</h2>
           <p className="text-gray-400 text-sm">Real feedback from real customers.</p>
-          <div className="mt-4 w-12 h-0.5 mx-auto" style={{ backgroundColor: "#2E8B34" }} />
+          <div className="mt-3 w-12 h-0.5 mx-auto" style={{ backgroundColor: "#2E8B34" }} />
         </div>
 
         {/* Carousel */}
-        <div
-          ref={cardsRef}
-          style={{ transition: "opacity 0.6s ease, transform 0.6s ease", opacity: cardsVisible ? 1 : 0, transform: cardsVisible ? "translateY(0)" : "translateY(24px)" }}
-        >
-          <div className="flex items-stretch gap-4">
-            {/* Left arrow */}
-            <button
-              onClick={prev}
-              className="flex-shrink-0 w-10 h-10 self-center bg-white flex items-center justify-center transition-all duration-200 hover:shadow-md"
-              style={{ border: "1px solid #e5e7eb", borderRadius: "8px" }}
-            >
-              <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div ref={cardsRef}
+          style={{ transition: "opacity 0.6s ease, transform 0.6s ease", opacity: cardsVisible ? 1 : 0, transform: cardsVisible ? "translateY(0)" : "translateY(24px)" }}>
+          <div className="flex items-center gap-2 sm:gap-4">
+            <button onClick={prev}
+              className="flex-shrink-0 w-9 h-9 bg-white flex items-center justify-center hover:shadow-md transition-all"
+              style={{ border: "1px solid #e5e7eb", borderRadius: "8px" }}>
+              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
               </svg>
             </button>
 
-            {/* Cards */}
-            <div className="grid grid-cols-3 gap-4 flex-1">
+            <div className="flex-1 grid gap-3" style={{ gridTemplateColumns: `repeat(${visibleCount}, minmax(0, 1fr))` }}>
               {getVisible().map((review, i) => (
                 <ReviewCard key={`${review.id}-${i}`} review={review} color={AVATAR_COLORS[REVIEWS.indexOf(review) % AVATAR_COLORS.length]} />
               ))}
             </div>
 
-            {/* Right arrow */}
-            <button
-              onClick={next}
-              className="flex-shrink-0 w-10 h-10 self-center bg-white flex items-center justify-center transition-all duration-200 hover:shadow-md"
-              style={{ border: "1px solid #e5e7eb", borderRadius: "8px" }}
-            >
-              <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button onClick={next}
+              className="flex-shrink-0 w-9 h-9 bg-white flex items-center justify-center hover:shadow-md transition-all"
+              style={{ border: "1px solid #e5e7eb", borderRadius: "8px" }}>
+              <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
           </div>
 
-          {/* Dots */}
-          <div className="flex justify-center gap-2 mt-5">
+          <div className="flex justify-center gap-1.5 mt-4">
             {REVIEWS.map((_, i) => (
               <button key={i} onClick={() => setCurrent(i)} className="w-2 h-2 rounded-full transition-all duration-200"
                 style={{ backgroundColor: i === current ? "#2E8B34" : "#d1fae5" }} />
@@ -161,42 +152,30 @@ export default function Testimonials() {
           </div>
         </div>
 
-        {/* Video section */}
-        <div
-          ref={videoRef}
-          className="mt-12"
-          style={{ transition: "opacity 0.7s ease, transform 0.7s ease", opacity: videoVisible ? 1 : 0, transform: videoVisible ? "translateY(0)" : "translateY(28px)" }}
-        >
-          <div className="bg-white p-6 flex flex-col md:flex-row gap-8 items-center" style={{ border: "1px solid #e5e7eb", borderRadius: "8px" }}>
+        {/* Video */}
+        <div ref={videoRef} className="mt-10"
+          style={{ transition: "opacity 0.7s ease, transform 0.7s ease", opacity: videoVisible ? 1 : 0, transform: videoVisible ? "translateY(0)" : "translateY(28px)" }}>
+          <div className="bg-white p-5 sm:p-6 flex flex-col md:flex-row gap-6 items-center" style={{ border: "1px solid #e5e7eb", borderRadius: "8px" }}>
             <div className="flex-1">
               <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "#2E8B34" }}>See It For Yourself</p>
-              <h3 className="text-2xl font-bold text-gray-800 mb-3" style={{ fontFamily: "Georgia, serif" }}>A Tour of Our Pampanga Branch</h3>
-              <p className="text-gray-400 text-sm leading-relaxed mb-4">
-                Watch how our team carefully crafts each arrangement with fresh flowers, dedication, and love — right from our Pampanga store.
-              </p>
-              <a
-                href="https://www.facebook.com/watch/?v=612504224857086&rdid=mjiAAoOFQEC5qu4n"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 text-white transition-all duration-200 hover:opacity-90"
-                style={{ backgroundColor: "#1877F2", borderRadius: "6px" }}
-              >
+              <h3 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2" style={{ fontFamily: "Georgia, serif" }}>A Tour of Our Pampanga Branch</h3>
+              <p className="text-gray-400 text-sm leading-relaxed mb-4">Watch our team carefully craft each arrangement using fresh flowers, right from our Pampanga store.</p>
+              <a href="https://www.facebook.com/watch/?v=612504224857086&rdid=mjiAAoOFQEC5qu4n"
+                target="_blank" rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 text-white transition-all hover:opacity-90"
+                style={{ backgroundColor: "#1877F2", borderRadius: "6px" }}>
                 <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" />
                 </svg>
                 Watch on Facebook
               </a>
             </div>
-            <div className="flex-1 w-full relative overflow-hidden" style={{ borderRadius: "8px", aspectRatio: "16/9", minWidth: 0 }}>
+            <div className="flex-1 w-full overflow-hidden" style={{ borderRadius: "8px", aspectRatio: "16/9", minWidth: 0 }}>
               <iframe
                 src="https://www.facebook.com/plugins/video.php?href=https%3A%2F%2Fwww.facebook.com%2Fwatch%2F%3Fv%3D612504224857086&show_text=false&width=560"
-                className="w-full h-full"
-                style={{ border: "none", borderRadius: "8px" }}
-                scrolling="no"
-                frameBorder="0"
-                allowFullScreen
-                allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-              />
+                className="w-full h-full" style={{ border: "none", borderRadius: "8px" }}
+                scrolling="no" frameBorder="0" allowFullScreen
+                allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share" />
             </div>
           </div>
         </div>
