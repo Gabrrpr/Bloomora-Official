@@ -73,8 +73,8 @@ const BRANCHES = [
   {
     name: "Pampanga Branch",
     address: "McArthur Hi-way, Dolores, City of San Fernando, Pampanga C-2000",
-    hours: "9:00 AM – 9:00 PM",
-    phone: null,
+    hours: "7:30 AM – 5:00 PM",
+    phone: "+63 045 961 5378",
   },
 ]
 
