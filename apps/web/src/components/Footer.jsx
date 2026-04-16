@@ -93,7 +93,7 @@ export default function Footer() {
               <img src="/src/assets/Estings.svg" alt="Esting's" className="h-7 object-contain brightness-0 invert" onError={e => e.target.style.display = "none"} />
             </div>
             <p className="text-sm leading-relaxed mb-5" style={{ color: "rgba(255,255,255,0.65)" }}>
-              Since 1959, Esting's Flowershop has been delivering fresh, quality flowers from San Fernando, Pampanga, and Manila.
+              Since 1959, Esting's Flower International Inc. has been delivering fresh, quality flowers from San Fernando, Pampanga, and Manila.
             </p>
 
             {/* Social icons */}
@@ -172,7 +172,7 @@ export default function Footer() {
       {/* Bottom bar */}
       <div className="px-8 py-4 border-t" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2 text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>
-          <span>© {new Date().getFullYear()} Esting's Flowers International Inc. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} Esting's Flower International Inc. All rights reserved.</span>
           <div className="flex items-center gap-4">
             <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
             <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>

@@ -38,7 +38,7 @@ export default function Login({ onNavigate }) {
               </svg>
             </div>
             <h1 className="text-2xl font-bold text-gray-800">Welcome back</h1>
-            <p className="text-gray-500 text-sm mt-1">Sign in to your Bloomora account</p>
+            <p className="text-gray-500 text-sm mt-1">Log in to your account and pick up where you left off.</p>
           </div>
 
           {error && (
@@ -52,7 +52,7 @@ export default function Login({ onNavigate }) {
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                 </span>
-                <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="you@example.com" required
+                <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="juandelacruz@gmail.com" required
                   className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
               </div>
             </div>

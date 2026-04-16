@@ -23,9 +23,9 @@ export default function FlowerPanel() {
           <img
             src={estingsLogo}
             alt="Esting's"
-            className="h-20 brightness-0 invert drop-shadow-lg"
+            className="h-38 brightness-0 invert drop-shadow-lg"
           />
-          <p className="text-white font-bold text-sm tracking-[0.25em] uppercase drop-shadow">
+          <p className="text-white font-bold text-2xl tracking-[0.25em] uppercase drop-shadow">
             Flower International Inc.
           </p>
         </div>

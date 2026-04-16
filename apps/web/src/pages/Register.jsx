@@ -144,7 +144,7 @@ export default function Register({ onNavigate }) {
                       type="email"
                       value={form.email}
                       onChange={(e) => setForm({ ...form, email: e.target.value })}
-                      placeholder="you@example.com"
+                      placeholder="juandelacruz@gmail.com"
                       className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
                     />
                   </div>
