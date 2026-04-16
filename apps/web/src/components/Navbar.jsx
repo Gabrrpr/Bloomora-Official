@@ -76,7 +76,7 @@ const SOCIAL_LINKS = [
 function DropdownMenu({ items }) {
   return (
     <div
-      className="absolute top-full left-0 mt-1 bg-white z-50 min-w-[180px]"
+      className="absolute top-full left-0 mt-1 bg-white z-[100] min-w-[180px]"
       style={{ border: "1px solid #e5e7eb", borderRadius: "8px", boxShadow: "0 8px 24px rgba(0,0,0,0.08)" }}
     >
       {items.map((item) => (
@@ -97,7 +97,7 @@ function DropdownMenu({ items }) {
 function CartDropdown({ cartCount }) {
   return (
     <div
-      className="absolute top-full right-0 mt-2 bg-white z-50 w-72"
+      className="absolute top-full right-0 mt-2 bg-white z-[100] w-72"
       style={{ border: "1px solid #e5e7eb", borderRadius: "12px", boxShadow: "0 12px 32px rgba(0,0,0,0.12)" }}
     >
       {/* Header */}
@@ -151,7 +151,7 @@ function CartDropdown({ cartCount }) {
 function UserDropdown({ user, onNavigate, onLogout }) {
   return (
     <div
-      className="absolute top-full right-0 mt-2 bg-white z-50 w-56"
+      className="absolute top-full right-0 mt-2 bg-white z-[100] w-56"
       style={{ border: "1px solid #e5e7eb", borderRadius: "12px", boxShadow: "0 12px 32px rgba(0,0,0,0.12)" }}
     >
       {user ? (
@@ -194,7 +194,7 @@ function UserDropdown({ user, onNavigate, onLogout }) {
 
           <div className="border-t border-gray-100 mt-1" />
           <button
-            onClick={onLogout}
+            onClick={(e) => { e.stopPropagation(); onLogout(); }}
             className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors rounded-b-xl"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
@@ -326,7 +326,7 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
                   </svg>
                 </button>
                 {isDropdownOpen && (
-                  <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg z-50 min-w-[120px]">
+                  <div className="absolute top-full left-0 mt-1 bg-white border border-gray-200 rounded shadow-lg z-[100] min-w-[120px]">
                     {["Manila", "Pampanga"].map((loc) => (
                       <button
                         key={loc}
@@ -413,7 +413,7 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
                 </span>
               </button>
               {cartOpen && (
-                <div onMouseEnter={() => setCartOpen(true)} onMouseLeave={() => setCartOpen(false)}>
+                <div onMouseEnter={() => setCartOpen(true)} onMouseLeave={() => setCartOpen(false)} onClick={(e) => e.stopPropagation()}>
                   <CartDropdown cartCount={cartCount} />
                 </div>
               )}
@@ -441,7 +441,7 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
                 )}
               </button>
               {userOpen && (
-                <div onMouseEnter={() => setUserOpen(true)} onMouseLeave={() => setUserOpen(false)}>
+                <div onMouseEnter={() => setUserOpen(true)} onMouseLeave={() => setUserOpen(false)} onClick={(e) => e.stopPropagation()}>
                   <UserDropdown user={user} onNavigate={onNavigate} onLogout={handleLogout} />
                 </div>
               )}
@@ -563,3 +563,4 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
     </div>
   );
 }
+

@@ -8,3 +8,4 @@ async def root():
 @app.get("/docs")
 async def docs():
     return {"docs": "http://127.0.0.1:8000/docs"}
+
