@@ -1,10 +1,13 @@
 from pydantic import BaseModel
-from datetime import datetime
-from typing import Optional
+from typing import List
 from uuid import UUID
+from datetime import datetime
 
+class MessageCreate(BaseModel):
+    user_id: UUID
+    text: str
 
-class ChatMessageOut(BaseModel):
+class MessageOut(BaseModel):
     id: UUID
     user_id: UUID
     message: str
@@ -15,15 +18,12 @@ class ChatMessageOut(BaseModel):
     class Config:
         from_attributes = True
 
-
-class ChatHistoryOut(BaseModel):
-    user_id: str
-    username: str
-    full_name: str
-    latest_message: Optional[str] = None
-    last_message_at: Optional[datetime] = None
-    is_online: bool
+class ConversationOut(BaseModel):
+    user_name: str
     unread_count: int
+    last_message: str
+    customer_id: UUID
+    recent_orders: List[dict]
 
-    class Config:
-        from_attributes = True
+class ConversationList(BaseModel):
+    conversations: List[ConversationOut]

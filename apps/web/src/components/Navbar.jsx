@@ -67,7 +67,6 @@ const SOCIAL_LINKS = [
   },
 ];
 
-/* ── animated dropdown for nav links ── */
 function DropdownMenu({ items, onNavigate, onClose }) {
   return (
     <div
@@ -83,8 +82,7 @@ function DropdownMenu({ items, onNavigate, onClose }) {
         <button
           key={item.label}
           onClick={() => { if (item.page && onNavigate) onNavigate(item.page); onClose?.(); }}
-          className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 first:rounded-t-xl last:rounded-b-xl group transition-all duration-150 hover:pl-5"
-          style={{ "--hover-bg": SITE_GREEN }}
+          className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 first:rounded-t-xl last:rounded-b-xl transition-all duration-150"
           onMouseEnter={e => { e.currentTarget.style.backgroundColor = SITE_GREEN; e.currentTarget.style.color = "white"; }}
           onMouseLeave={e => { e.currentTarget.style.backgroundColor = ""; e.currentTarget.style.color = ""; }}
         >
@@ -95,7 +93,6 @@ function DropdownMenu({ items, onNavigate, onClose }) {
   );
 }
 
-/* ── cart hover mini-panel ── */
 function CartDropdown({ cartCount, onNavigate }) {
   return (
     <div
@@ -135,7 +132,6 @@ function CartDropdown({ cartCount, onNavigate }) {
   );
 }
 
-/* ── user dropdown ── */
 function UserDropdown({ user, onNavigate, onLogout }) {
   const menuItems = [
     { label: "My Profile", page: "profile", icon: "M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0ZM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632Z" },
@@ -146,7 +142,7 @@ function UserDropdown({ user, onNavigate, onLogout }) {
 
   return (
     <div
-      className="absolute top-full right-0 mt-2 bg-white z-50 w-58 overflow-hidden"
+      className="absolute top-full right-0 mt-2 bg-white z-50 overflow-hidden"
       style={{ border: "1px solid #e5e7eb", borderRadius: "14px", boxShadow: "0 12px 32px rgba(0,0,0,0.12)", animation: "dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards", minWidth: "220px" }}
     >
       {user ? (
@@ -196,7 +192,6 @@ function UserDropdown({ user, onNavigate, onLogout }) {
   );
 }
 
-/* ── location dropdown with smooth transition ── */
 function LocationDropdown({ selected, onChange, onClose }) {
   return (
     <div
@@ -209,8 +204,17 @@ function LocationDropdown({ selected, onChange, onClose }) {
           onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#f0fdf4"; e.currentTarget.style.color = SITE_GREEN; }}
           onMouseLeave={e => { e.currentTarget.style.backgroundColor = ""; e.currentTarget.style.color = ""; }}
         >
-          {selected === loc && <svg className="w-3.5 h-3.5 flex-shrink-0" style={{ color: SITE_GREEN }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-          <span className={`${selected === loc ? "font-semibold" : ""}`} style={{ color: selected === loc ? SITE_GREEN : "#374151", marginLeft: selected === loc ? 0 : "19px" }}>{loc}</span>
+          {selected === loc && (
+            <svg className="w-3.5 h-3.5 flex-shrink-0" style={{ color: SITE_GREEN }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+            </svg>
+          )}
+          <span
+            className={selected === loc ? "font-semibold" : ""}
+            style={{ color: selected === loc ? SITE_GREEN : "#374151", marginLeft: selected === loc ? 0 : "19px" }}
+          >
+            {loc}
+          </span>
         </button>
       ))}
     </div>
@@ -260,17 +264,18 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
       <style>{`
         @keyframes dropIn {
           from { opacity: 0; transform: translateY(-8px) scale(0.97); }
-          to   { opacity: 1; transform: translateY(0)   scale(1); }
+          to   { opacity: 1; transform: translateY(0) scale(1); }
         }
       `}</style>
 
       <div className="w-full sticky top-0 z-50" ref={navRef}>
+
         {/* Announcement bar */}
         <div className="text-white px-4 sm:px-8 py-2.5 flex items-center" style={{ backgroundColor: "#0C573E" }}>
           <div className="flex-1" />
           <span className="font-medium text-xs sm:text-sm text-center whitespace-nowrap">
-            Get <span className="font-bold">3% off your first order</span>{" — "}
-            <a href="#" className="font-bold underline underline-offset-2 hover:opacity-80 transition-opacity tracking-wide">SHOP NOW</a>
+            🌸 Get <span className="font-bold">5% off your first order</span>{" — "}
+            <a href="#" className="font-bold underline underline-offset-2 hover:opacity-80 transition-opacity tracking-wide">ORDER NOW</a>
           </span>
           <div className="flex-1 flex items-center justify-end gap-2">
             {SOCIAL_LINKS.map((s) => (
@@ -296,7 +301,8 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
 
             {/* Desktop center */}
             <div className="hidden lg:flex items-center gap-5 xl:gap-7">
-              {/* Deliver to — smooth dropdown */}
+
+              {/* Deliver to */}
               <div className="flex items-center gap-1.5" ref={locationRef}>
                 <span className="text-xs uppercase tracking-wide font-medium" style={{ color: SITE_GREEN }}>Deliver to</span>
                 <div className="relative">
@@ -305,9 +311,13 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
                     className="flex items-center gap-1.5 border rounded-lg px-3 py-1.5 text-sm text-gray-700 hover:border-green-400 transition-all duration-200"
                     style={{ borderColor: locationOpen ? SITE_GREEN : "#e5e7eb" }}
                   >
-                    <svg className="w-3 h-3" style={{ color: SITE_GREEN }} fill="currentColor" viewBox="0 0 24 24"><path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742ZM12 13.5a3 3 0 100-6 3 3 0 000 6Z" clipRule="evenodd" /></svg>
+                    <svg className="w-3 h-3" style={{ color: SITE_GREEN }} fill="currentColor" viewBox="0 0 24 24">
+                      <path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742ZM12 13.5a3 3 0 100-6 3 3 0 000 6Z" clipRule="evenodd" />
+                    </svg>
                     {selectedLocation}
-                    <svg className="w-3 h-3 text-gray-400 transition-transform duration-200" style={{ transform: locationOpen ? "rotate(180deg)" : "rotate(0deg)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
+                    <svg className="w-3 h-3 text-gray-400 transition-transform duration-200" style={{ transform: locationOpen ? "rotate(180deg)" : "rotate(0deg)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                    </svg>
                   </button>
                   {locationOpen && (
                     <LocationDropdown selected={selectedLocation} onChange={setSelectedLocation} onClose={() => setLocationOpen(false)} />
@@ -331,7 +341,9 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
                     >
                       {link.label}
                       {link.dropdown && (
-                        <svg className="w-3 h-3 text-gray-400 ml-0.5 transition-transform duration-200" style={{ transform: openMenu === link.label ? "rotate(180deg)" : "rotate(0deg)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5" /></svg>
+                        <svg className="w-3 h-3 text-gray-400 ml-0.5 transition-transform duration-200" style={{ transform: openMenu === link.label ? "rotate(180deg)" : "rotate(0deg)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                        </svg>
                       )}
                     </button>
                     {link.dropdown && openMenu === link.label && (
@@ -340,9 +352,15 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
                   </div>
                 ))}
 
-                <button onClick={() => onNavigate?.("make-it-personal")} className="whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full text-white flex items-center gap-1 transition-all duration-200 hover:shadow-md hover:scale-105"
-                  style={{ background: "linear-gradient(135deg,#2E8B34,#0C573E)" }}>
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
+                {/* Make it Personal */}
+                <button
+                  onClick={() => onNavigate?.("make-it-personal")}
+                  className="whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full text-white flex items-center gap-1 transition-all duration-200 hover:shadow-md hover:scale-105"
+                  style={{ background: "linear-gradient(135deg,#2E8B34,#0C573E)" }}
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                  </svg>
                   Make it Personal
                 </button>
               </div>
@@ -350,6 +368,7 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
 
             {/* Right icons */}
             <div className="flex items-center gap-1 sm:gap-2">
+
               {/* Search */}
               <div className="relative hidden lg:flex items-center" ref={searchRef}>
                 <div
@@ -362,7 +381,7 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
                   }}
                 >
                   <button
-                    onClick={() => { setSearchOpen(p => !p); if (!searchOpen) setTimeout(() => searchInputRef.current?.focus(), 50) }}
+                    onClick={() => { setSearchOpen(p => !p); if (!searchOpen) setTimeout(() => searchInputRef.current?.focus(), 50); }}
                     className="w-9 h-9 flex items-center justify-center flex-shrink-0 text-gray-600 hover:text-green-700 transition-colors"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
@@ -376,12 +395,8 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
                       value={searchQuery}
                       onChange={e => setSearchQuery(e.target.value)}
                       onKeyDown={e => {
-                        if (e.key === "Enter" && searchQuery.trim()) {
-                          setSearchOpen(false)
-                          setSearchQuery("")
-                          onNavigate?.("home")
-                        }
-                        if (e.key === "Escape") { setSearchOpen(false); setSearchQuery("") }
+                        if (e.key === "Enter" && searchQuery.trim()) { setSearchOpen(false); setSearchQuery(""); onNavigate?.("home"); }
+                        if (e.key === "Escape") { setSearchOpen(false); setSearchQuery(""); }
                       }}
                       placeholder="Search flowers..."
                       className="flex-1 pr-3 text-sm outline-none bg-transparent text-gray-700 placeholder-gray-400"
@@ -414,7 +429,7 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
                         ).slice(0, 5).map(product => (
                           <button
                             key={product.id}
-                            onClick={() => { setSearchOpen(false); setSearchQuery(""); onNavigate?.("home") }}
+                            onClick={() => { setSearchOpen(false); setSearchQuery(""); onNavigate?.("home"); }}
                             className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition text-left border-b border-gray-50 last:border-0"
                           >
                             <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-pink-50 to-rose-100 flex-shrink-0 flex items-center justify-center text-lg border border-gray-100">
@@ -428,7 +443,7 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
                         ))}
                         <div className="px-4 py-2.5 border-t border-gray-100">
                           <button
-                            onClick={() => { setSearchOpen(false); setSearchQuery(""); onNavigate?.("home") }}
+                            onClick={() => { setSearchOpen(false); setSearchQuery(""); onNavigate?.("home"); }}
                             className="text-xs font-semibold hover:underline"
                             style={{ color: SITE_GREEN }}
                           >
@@ -449,7 +464,9 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
                   onClick={() => onNavigate?.("cart")}
                   className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full hover:bg-gray-50 transition-colors relative text-gray-600"
                 >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0Zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0Z" /></svg>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0Zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0Z" />
+                  </svg>
                   <span className="absolute -top-1 -right-1 flex items-center justify-center text-white font-bold rounded-full" style={{ backgroundColor: cartCount > 0 ? "#e11d48" : "#9ca3af", fontSize: "9px", width: "16px", height: "16px" }}>{cartCount}</span>
                 </button>
                 {cartOpen && (
@@ -482,7 +499,9 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
               {/* Hamburger */}
               <button className="lg:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-50 transition-colors text-gray-600 ml-1" onClick={() => setMobileOpen(p => !p)}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
-                  {mobileOpen ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /> : <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />}
+                  {mobileOpen
+                    ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    : <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />}
                 </svg>
               </button>
             </div>
@@ -526,9 +545,12 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 mb-3">
                       <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: "linear-gradient(135deg,#2E8B34,#0C573E)" }}>{user.firstName?.[0]?.toUpperCase()}</div>
-                      <div><p className="text-sm font-semibold text-gray-800">{user.firstName} {user.lastName}</p><p className="text-xs text-gray-400">{user.email}</p></div>
+                      <div>
+                        <p className="text-sm font-semibold text-gray-800">{user.firstName} {user.lastName}</p>
+                        <p className="text-xs text-gray-400">{user.email}</p>
+                      </div>
                     </div>
-                    {[{l:"My Profile",p:"profile"},{l:"My Orders",p:"orders"},{l:"Wishlist",p:"wishlist"},{l:"Settings",p:"settings"}].map(({l,p}) => (
+                    {[{ l: "My Profile", p: "profile" }, { l: "My Orders", p: "orders" }, { l: "Wishlist", p: "wishlist" }, { l: "Settings", p: "settings" }].map(({ l, p }) => (
                       <button key={p} onClick={() => { onNavigate?.(p); setMobileOpen(false); }}
                         className="w-full text-left text-sm text-gray-600 px-2 py-1.5 rounded hover:bg-green-50 hover:text-green-800 transition-colors">{l}</button>
                     ))}
@@ -545,7 +567,11 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
                 )}
               </div>
               <div className="px-2 pb-3">
-                <button onClick={() => { onNavigate?.("make-it-personal"); setMobileOpen(false); }} className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full text-white" style={{ background: "linear-gradient(135deg,#2E8B34,#0C573E)" }}>Make it Personal</button>
+                <button onClick={() => { onNavigate?.("make-it-personal"); setMobileOpen(false); }}
+                  className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full text-white"
+                  style={{ background: "linear-gradient(135deg,#2E8B34,#0C573E)" }}>
+                  Make it Personal
+                </button>
               </div>
             </div>
           )}

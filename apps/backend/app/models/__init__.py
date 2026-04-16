@@ -4,6 +4,7 @@ from .product import Product, Inventory, ProductCategoryEnum, ProductStatusEnum
 from .order import Order, Transaction, Delivery
 from .arrangement import Arrangement, Flower, Vase, Wrapping, Accessory
 from .support import Review, Chat, ActivityLog
+from .chat import Chat
 from .ai_usage_log import AIUsageLog
 
 __all__ = [
@@ -18,5 +19,5 @@ __all__ = [
     # Arrangement
     "Arrangement", "Flower", "Vase", "Wrapping", "Accessory",
     # Support
-    "Review", "Chat", "ActivityLog", "SenderEnum",
+    "Review", "Chat", "ActivityLog", "SenderEnum", "Chat",
 ]
