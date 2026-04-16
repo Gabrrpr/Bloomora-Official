@@ -274,8 +274,8 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
         <div className="text-white px-4 sm:px-8 py-2.5 flex items-center" style={{ backgroundColor: "#0C573E" }}>
           <div className="flex-1" />
           <span className="font-medium text-xs sm:text-sm text-center whitespace-nowrap">
-            🌸 Get <span className="font-bold">5% off your first order</span>{" — "}
-            <a href="#" className="font-bold underline underline-offset-2 hover:opacity-80 transition-opacity tracking-wide">ORDER NOW</a>
+            Get <span className="font-bold">3% off your first order</span>{" — "}
+            <a href="#" className="font-bold underline underline-offset-2 hover:opacity-80 transition-opacity tracking-wide">SHOP NOW</a>
           </span>
           <div className="flex-1 flex items-center justify-end gap-2">
             {SOCIAL_LINKS.map((s) => (
