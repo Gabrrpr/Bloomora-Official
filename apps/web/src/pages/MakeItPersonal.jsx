@@ -16,9 +16,9 @@ export default function MakeItPersonal({ onNavigate }) {
             </svg>
             <span className="text-xs font-bold tracking-widest uppercase" style={{ color: G }}>Make it Personal</span>
           </div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-3">Not feeling the pre-made ones?</h1>
+          <h1 className="text-3xl font-bold text-gray-800 mb-3">Create your perfect bouquet</h1>
           <p className="text-gray-500 text-sm max-w-md mx-auto leading-relaxed">
-            Build your own bouquet and make it exactly how you want it.
+            Choose how you'd like to build your arrangement. Our florists will craft it fresh, just for you.
           </p>
         </div>
 
@@ -43,7 +43,7 @@ export default function MakeItPersonal({ onNavigate }) {
             <div className="p-5">
               <h2 className="text-base font-semibold text-gray-800 mb-1.5">Mix and Match</h2>
               <p className="text-sm text-gray-500 leading-relaxed mb-4">
-                Build your bouquet step by step. Pick the size, style, main flowers, fillers, and finishing touches to make it feel just right for you.
+                Build your bouquet step by step. Choose size, arrangement type, focal flowers, fillers, and finishing touches.
               </p>
               <div
                 className="flex items-center gap-1.5 text-sm font-semibold transition-all duration-200 group-hover:gap-2.5"
@@ -75,7 +75,7 @@ export default function MakeItPersonal({ onNavigate }) {
             <div className="p-5">
               <h2 className="text-base font-semibold text-gray-800 mb-1.5">Describe Your Arrangement</h2>
               <p className="text-sm text-gray-500 leading-relaxed mb-4">
-                Just tell us what you have in mind like the occasion, colors, or style and we will turn it into a bouquet that matches your idea.
+                Just tell us what you have in mind — occasion, colors, style — and our AI will generate your dream bouquet.
               </p>
               <div className="flex items-center gap-1.5 text-sm font-semibold text-pink-500 transition-all duration-200 group-hover:gap-2.5">
                 Describe it

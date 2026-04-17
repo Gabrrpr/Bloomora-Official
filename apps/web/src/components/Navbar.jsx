@@ -24,22 +24,37 @@ const NAV_LINKS = [
   { label: "Home", page: "home" },
   {
     label: "Shop", page: null,
-    dropdown: [
-      { label: "Best Sellers", page: "home" },
-      { label: "Classic Collection", page: "home" },
-      { label: "Seasonal Picks", page: "home" },
-      { label: "Gift Sets", page: "home" },
+    categorized: true,
+    categories: [
+      {
+        heading: "Flowers",
+        items: [
+          { label: "Best Sellers", page: "home" },
+          { label: "Classic Collection", page: "home" },
+          { label: "Gift Sets", page: "home" },
+        ],
+      },
+      {
+        heading: "Non-Flowers",
+        items: [
+          { label: "Vases and Containers", page: "home" },
+          { label: "Pots and Planters", page: "home" },
+          { label: "Floral Supplies", page: "home" },
+          { label: "Wrapping & Accessories", page: "home" },
+        ],
+      },
     ],
   },
   {
-    label: "Occasions", page: null,
+    label: "Occasions", page: "occasions",
     dropdown: [
-      { label: "Birthdays", page: "home" },
-      { label: "Anniversaries", page: "home" },
-      { label: "Weddings", page: "home" },
-      { label: "Graduations", page: "home" },
-      { label: "Sympathy", page: "home" },
-      { label: "Just Because", page: "home" },
+      { label: "Birthdays",    page: "occasions" },
+      { label: "Anniversaries",page: "occasions" },
+      { label: "Weddings",     page: "occasions" },
+      { label: "Graduations",  page: "occasions" },
+      { label: "Sympathy",     page: "occasions" },
+      { label: "Just Because", page: "occasions" },
+      { label: "Openings",     page: "occasions" },
     ],
   },
   { label: "About Us", page: "about" },
@@ -67,16 +82,38 @@ const SOCIAL_LINKS = [
   },
 ];
 
-function DropdownMenu({ items, onNavigate, onClose }) {
+function DropdownMenu({ items, categories, onNavigate, onClose }) {
+  // Categorized (Shop)
+  if (categories) {
+    return (
+      <div
+        className="absolute top-full left-0 mt-2 bg-white z-50 overflow-hidden"
+        style={{ border: "1px solid #e5e7eb", borderRadius: "12px", boxShadow: "0 12px 32px rgba(0,0,0,0.10)", animation: "dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards", minWidth: "340px" }}
+      >
+        <div className="flex divide-x divide-gray-100">
+          {categories.map(cat => (
+            <div key={cat.heading} className="flex-1 py-3">
+              <p className="px-4 pb-2 text-xs font-bold uppercase tracking-widest" style={{ color: SITE_GREEN }}>{cat.heading}</p>
+              {cat.items.map(item => (
+                <button
+                  key={item.label}
+                  onClick={() => { if (item.page && onNavigate) onNavigate(item.page); onClose?.(); }}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-600 transition-all duration-150"
+                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = SITE_GREEN; e.currentTarget.style.color = "white"; }}
+                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = ""; e.currentTarget.style.color = ""; }}
+                >{item.label}</button>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  // Flat (Occasions, etc.)
   return (
     <div
       className="absolute top-full left-0 mt-2 bg-white z-50 min-w-[190px] overflow-hidden"
-      style={{
-        border: "1px solid #e5e7eb",
-        borderRadius: "12px",
-        boxShadow: "0 12px 32px rgba(0,0,0,0.10)",
-        animation: "dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards",
-      }}
+      style={{ border: "1px solid #e5e7eb", borderRadius: "12px", boxShadow: "0 12px 32px rgba(0,0,0,0.10)", animation: "dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards" }}
     >
       {items.map((item) => (
         <button
@@ -85,9 +122,7 @@ function DropdownMenu({ items, onNavigate, onClose }) {
           className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 first:rounded-t-xl last:rounded-b-xl transition-all duration-150"
           onMouseEnter={e => { e.currentTarget.style.backgroundColor = SITE_GREEN; e.currentTarget.style.color = "white"; }}
           onMouseLeave={e => { e.currentTarget.style.backgroundColor = ""; e.currentTarget.style.color = ""; }}
-        >
-          {item.label}
-        </button>
+        >{item.label}</button>
       ))}
     </div>
   );
@@ -238,6 +273,31 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
   const locationRef = useRef(null);
   const searchRef = useRef(null);
   const searchInputRef = useRef(null);
+  const menuCloseTimer = useRef(null);
+  const cartCloseTimer = useRef(null);
+  const userCloseTimer = useRef(null);
+
+  const openMenuDelayed = (label) => {
+    clearTimeout(menuCloseTimer.current);
+    setOpenMenu(label);
+  };
+  const closeMenuDelayed = () => {
+    menuCloseTimer.current = setTimeout(() => setOpenMenu(null), 200);
+  };
+  const openCartDelayed = () => {
+    clearTimeout(cartCloseTimer.current);
+    setCartOpen(true);
+  };
+  const closeCartDelayed = () => {
+    cartCloseTimer.current = setTimeout(() => setCartOpen(false), 200);
+  };
+  const openUserDelayed = () => {
+    clearTimeout(userCloseTimer.current);
+    setUserOpen(true);
+  };
+  const closeUserDelayed = () => {
+    userCloseTimer.current = setTimeout(() => setUserOpen(false), 200);
+  };
 
   const handleLogout = () => { logout(); setUserOpen(false); onNavigate?.("login"); };
 
@@ -329,8 +389,8 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
               <div className="flex items-center gap-4 xl:gap-5">
                 {NAV_LINKS.map(link => (
                   <div key={link.label} className="relative"
-                    onMouseEnter={() => link.dropdown && setOpenMenu(link.label)}
-                    onMouseLeave={() => setOpenMenu(null)}
+                    onMouseEnter={() => (link.dropdown || link.categories) && openMenuDelayed(link.label)}
+                    onMouseLeave={() => (link.dropdown || link.categories) && closeMenuDelayed()}
                   >
                     <button
                       onClick={() => handleNavClick(link)}
@@ -340,14 +400,16 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
                       onMouseLeave={e => { if (active !== link.label) e.currentTarget.style.color = "#4b5563"; }}
                     >
                       {link.label}
-                      {link.dropdown && (
+                      {(link.dropdown || link.categories) && (
                         <svg className="w-3 h-3 text-gray-400 ml-0.5 transition-transform duration-200" style={{ transform: openMenu === link.label ? "rotate(180deg)" : "rotate(0deg)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                         </svg>
                       )}
                     </button>
-                    {link.dropdown && openMenu === link.label && (
-                      <DropdownMenu items={link.dropdown} onNavigate={onNavigate} onClose={() => setOpenMenu(null)} />
+                    {(link.dropdown || link.categories) && openMenu === link.label && (
+                      <div onMouseEnter={() => openMenuDelayed(link.label)} onMouseLeave={() => closeMenuDelayed()}>
+                        <DropdownMenu items={link.dropdown} categories={link.categories} onNavigate={onNavigate} onClose={() => setOpenMenu(null)} />
+                      </div>
                     )}
                   </div>
                 ))}
@@ -459,8 +521,8 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
               {/* Cart */}
               <div className="relative" ref={cartRef}>
                 <button
-                  onMouseEnter={() => setCartOpen(true)}
-                  onMouseLeave={() => setCartOpen(false)}
+                  onMouseEnter={openCartDelayed}
+                  onMouseLeave={closeCartDelayed}
                   onClick={() => onNavigate?.("cart")}
                   className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full hover:bg-gray-50 transition-colors relative text-gray-600"
                 >
@@ -470,7 +532,7 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
                   <span className="absolute -top-1 -right-1 flex items-center justify-center text-white font-bold rounded-full" style={{ backgroundColor: cartCount > 0 ? "#e11d48" : "#9ca3af", fontSize: "9px", width: "16px", height: "16px" }}>{cartCount}</span>
                 </button>
                 {cartOpen && (
-                  <div onMouseEnter={() => setCartOpen(true)} onMouseLeave={() => setCartOpen(false)}>
+                  <div onMouseEnter={openCartDelayed} onMouseLeave={closeCartDelayed}>
                     <CartDropdown cartCount={cartCount} onNavigate={onNavigate} />
                   </div>
                 )}
@@ -479,8 +541,8 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
               {/* User */}
               <div className="relative" ref={userRef}>
                 <button
-                  onMouseEnter={() => setUserOpen(true)}
-                  onMouseLeave={() => setUserOpen(false)}
+                  onMouseEnter={openUserDelayed}
+                  onMouseLeave={closeUserDelayed}
                   onClick={() => setUserOpen(p => !p)}
                   className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full hover:bg-gray-50 transition-colors text-gray-600"
                 >
@@ -490,7 +552,7 @@ export default function Navbar({ cartCount = 0, onNavigate }) {
                   }
                 </button>
                 {userOpen && (
-                  <div onMouseEnter={() => setUserOpen(true)} onMouseLeave={() => setUserOpen(false)}>
+                  <div onMouseEnter={openUserDelayed} onMouseLeave={closeUserDelayed}>
                     <UserDropdown user={user} onNavigate={(p) => { onNavigate?.(p); setUserOpen(false); }} onLogout={handleLogout} />
                   </div>
                 )}
