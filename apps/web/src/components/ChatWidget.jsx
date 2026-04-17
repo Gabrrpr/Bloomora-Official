@@ -44,10 +44,10 @@ export default function ChatWidget() {
       websocket.onmessage = (event) => {
         const data = JSON.parse(event.data)
         console.log('WS message:', data)
-        setMessages(prev => [...prev, { 
-          id: data.id, 
-          from: data.sender === 'admin' ? 'bot' : 'user', 
-          text: data.message 
+        setMessages(prev => [...prev, {
+          id: data.id,
+          from: data.sender === 'admin' ? 'bot' : 'user',
+          text: data.message
         }])
       }
       websocket.onerror = (err) => console.error('WS error:', err)
