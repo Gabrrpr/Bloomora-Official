@@ -1,60 +1,78 @@
-import { createContext, useContext, useState, useEffect } from "react"
-import { loginUser, registerUser, googleLogin as googleLoginService, facebookLogin as facebookLoginService } from '../services/auth.js'
+import { createContext, useContext, useState } from "react"
+import { loginUser, googleLogin as googleLoginApi, facebookLogin as facebookLoginApi } from "../services/auth"
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null)
-  const [token, setToken] = useState(localStorage.getItem('token'))
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    if (token) {
-      // Decode token to get user info or validate
-      setLoading(false)
-    } else {
-      setLoading(false)
-    }
-  }, [token])
+  const [user, setUser] = useState(() => {
+    const saved = localStorage.getItem("user")
+    return saved ? JSON.parse(saved) : null
+  })
 
   const login = async (username, password) => {
     try {
       const data = await loginUser(username, password)
-      localStorage.setItem('token', data.access_token)
-      setToken(data.access_token)
-      // TODO: Fetch user info with token
-      return { success: true }
-    } catch (error) {
-      return { success: false, error: error.message }
+      console.log("LOGIN DATA:", data)
+      const userData = {
+        token: data.access_token,
+        role: "customer",
+        firstName: username,
+        lastName: "",
+        email: username,
+      }
+      localStorage.setItem("access_token", data.access_token)
+      localStorage.setItem("user", JSON.stringify(userData))
+      setUser(userData)
+      console.log("USER SET:", userData)
+      return { success: true, role: "customer" }
+    } catch (err) {
+      console.error("LOGIN ERROR:", err)
+      return { success: false, error: err.message }
+    }
+  }
+
+  const setUserFromToken = async (token) => {
+    try {
+      const profileRes = await fetch("http://localhost:8000/api/v1/auth/me", {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!profileRes.ok) return null
+      const profile = await profileRes.json()
+      const userData = {
+        token,
+        role: profile.role,
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+        email: profile.email,
+      }
+      localStorage.setItem("user", JSON.stringify(userData))
+      setUser(userData)
+      return userData
+    } catch {
+      return null
     }
   }
 
   const register = async (userData) => {
-    try {
-      const data = await registerUser(userData)
-      // Auto login after register? Or direct to login
-      return { success: true, userId: data.user_id }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
+    const { registerUser } = await import("../services/auth")
+    return await registerUser(userData)
   }
 
   const logout = () => {
-    localStorage.removeItem('token')
-    setToken(null)
+    localStorage.removeItem("access_token")
+    localStorage.removeItem("user")
     setUser(null)
   }
 
-  const googleLogin = () => googleLoginService()
-  const facebookLogin = () => facebookLoginService()
-
-  if (loading) return <div>Loading...</div>
+  const googleLogin = () => googleLoginApi()
+  const facebookLogin = () => facebookLoginApi()
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, googleLogin, facebookLogin }}>
+    <AuthContext.Provider value={{ user, login, register, logout, googleLogin, facebookLogin, setUserFromToken }}>
       {children}
     </AuthContext.Provider>
   )
 }
-
-export const useAuth = () => useContext(AuthContext)
+export function useAuth() {
+  return useContext(AuthContext)
+}
