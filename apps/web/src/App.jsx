@@ -1,5 +1,5 @@
-import { useState } from "react"
 import { AuthProvider, useAuth } from "./context/AuthContext"
+import { useState, useEffect } from "react"
 import Navbar from "./components/Navbar"
 import Home from "./pages/Home"
 import Login from "./pages/Login"
@@ -25,11 +25,36 @@ import ChatWidget from "./components/ChatWidget"
 const AUTH_PAGES = ["login", "register", "forgot-password", "terms"]
 
 function AppContent() {
-  const { user } = useAuth()
+  const { user, setUserFromToken } = useAuth()
   const [page, setPage] = useState("login")
   const [cartCount, setCartCount] = useState(2)
   const [prevPage, setPrevPage] = useState("login")
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get("token")
+    const role = params.get("role")
+
+    if (token) {
+      localStorage.setItem("access_token", token)
+      window.history.replaceState({}, document.title, "/")
+      setUserFromToken(token).then(userData => {
+        if (!userData) return setPage("home")
+        if (userData.role === "admin" || userData.role === "staff") {
+          setPage("admin")
+        } else {
+          setPage("home")
+        }
+      })
+    } else {
+      const saved = localStorage.getItem("user")
+      if (saved) {
+        setPage("home")
+      }
+    }
+  }, [])
+
+  const [prevStep, setPrevStep] = useState(0)
   const navigate = (to) => {
     setPrevPage(page)
     setPage(to)
@@ -42,7 +67,7 @@ function AppContent() {
     if (page === "login")            return <Login onNavigate={navigate} />
     if (page === "register")         return <Register onNavigate={navigate} />
     if (page === "forgot-password")  return <ForgotPassword onNavigate={navigate} />
-    if (page === "terms")            return <TermsAndConditions onNavigate={navigate} onBack={() => navigate(prevPage)} />
+    if (page === "terms")            return <TermsAndConditions onNavigate={navigate} onBack={() => setPage(prevPage)} />
   }
 
   const renderPage = () => {

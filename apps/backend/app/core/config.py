@@ -24,11 +24,18 @@ class Settings(BaseSettings):
     LALAMOVE_BASE_URL: str = "https://rest.lalamove.com"
 
     # Email
-    MAIL_USERNAME: str = ""
-    MAIL_PASSWORD: str = ""
-    MAIL_FROM: str = ""
+    MAIL_USERNAME: str = "johngbatac@gmail.com"
+    MAIL_PASSWORD: str = "wlmp rfgh tkni synm"
+    MAIL_FROM: str = "johngbatac@gmail.com"
     MAIL_SERVER: str = "smtp.gmail.com"
     MAIL_PORT: int = 587
+
+    # OAuth
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+    FACEBOOK_CLIENT_ID: str = "your_fb_app_id"
+    FACEBOOK_CLIENT_SECRET: str = "your_fb_secret"
+    OAUTH_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth"
 
     class Config:
         env_file = ".env"

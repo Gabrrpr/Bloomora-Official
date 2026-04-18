@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
@@ -12,8 +13,28 @@ from app.models.user import User, RoleEnum
 from app.services.email_service import generate_otp, send_otp_email
 from pydantic import BaseModel, EmailStr
 from typing import Optional
+from authlib.integrations.starlette_client import OAuth
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
+
+# ── OAuth Setup ───────────────────────────────────────────────────────────
+oauth = OAuth()
+oauth.register(
+    name='google',
+    client_id=settings.GOOGLE_CLIENT_ID,
+    client_secret=settings.GOOGLE_CLIENT_SECRET,
+    server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
+    client_kwargs={'scope': 'openid email profile'},
+)
+oauth.register(
+    name='facebook',
+    client_id=settings.FACEBOOK_CLIENT_ID,
+    client_secret=settings.FACEBOOK_CLIENT_SECRET,
+    access_token_url='https://graph.facebook.com/v20.0/oauth/access_token',
+    authorize_url='https://www.facebook.com/v20.0/dialog/oauth',
+    api_base_url='https://graph.facebook.com/v20.0/',
+    client_kwargs={'scope': 'email public_profile'},
+)
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────
@@ -145,9 +166,12 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 @router.post("/login", response_model=TokenResponse)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == form_data.username).first()
+    # Try finding by username first, then email
+    user = db.query(User).filter(
+        (User.username == form_data.username) | (User.email == form_data.username)
+    ).first()
     if not user or not verify_password(form_data.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid username or password.")
+        raise HTTPException(status_code=401, detail="Invalid credentials.")
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user.")
     if not user.is_verified:
@@ -155,3 +179,121 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
     token = create_access_token(str(user.id))
     return TokenResponse(access_token=token)
+
+
+# ── Google OAuth ──────────────────────────────────────────────────────────
+
+@router.get("/google")
+async def google_login(request: Request):
+    return await oauth.google.authorize_redirect(
+        request, 
+        "http://localhost:8000/api/v1/auth/google/callback"
+    )
+
+@router.get("/google/callback")
+async def google_callback(request: Request, db: Session = Depends(get_db)):
+    try:
+        token = await oauth.google.authorize_access_token(request)
+        user_info = token.get("userinfo")
+    except Exception:
+        code = request.query_params.get("code")
+        token = await oauth.google.fetch_token(
+            "https://oauth2.googleapis.com/token",
+            code=code,
+            redirect_uri="http://localhost:8000/api/v1/auth/google/callback",
+        )
+        resp = await oauth.google.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            token=token
+        )
+        user_info = resp.json()
+
+    if not user_info:
+        raise HTTPException(status_code=400, detail="Failed to fetch Google user info.")
+
+    email = user_info.get("email")
+    first_name = user_info.get("given_name", "")
+    last_name = user_info.get("family_name", "User")
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Google account has no email.")
+
+    user = db.query(User).filter(User.email == email).first()
+
+    if not user:
+        user = User(
+            id=uuid.uuid4(),
+            username=generate_username(email, db),
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            password_hash="",
+            is_verified=True,
+            is_active=True,
+            role=RoleEnum.customer,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    access_token = create_access_token(str(user.id))
+    role = user.role.value if hasattr(user.role, 'value') else user.role
+    frontend_url = f"http://localhost:5173/?token={access_token}&role={role}"
+    return RedirectResponse(url=frontend_url)
+
+
+# ── Facebook OAuth ────────────────────────────────────────────────────────
+
+@router.get("/facebook")
+async def facebook_login(request: Request):
+    redirect_uri = settings.OAUTH_REDIRECT_URI + "/facebook"
+    return await oauth.facebook.authorize_redirect(request, redirect_uri)
+
+@router.get("/facebook/callback")
+async def facebook_callback(request: Request, db: Session = Depends(get_db)):
+    token = await oauth.facebook.authorize_access_token(request)
+    resp = await oauth.facebook.get("me?fields=id,name,email", token=token)
+    user_info = resp.json()
+
+    email = user_info.get("email")
+    name_parts = user_info.get("name", "").split()
+    first_name = name_parts[0] if name_parts else ""
+    last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else "User"
+
+    if not email:
+        raise HTTPException(status_code=400, detail="Facebook email permission not granted.")
+
+    user = db.query(User).filter(User.email == email).first()
+
+    if not user:
+        user = User(
+            id=uuid.uuid4(),
+            username=generate_username(email, db),
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            password_hash="",
+            is_verified=True,
+            is_active=True,
+            role=RoleEnum.customer,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    access_token = create_access_token(str(user.id))
+    role = user.role.value if hasattr(user.role, 'value') else user.role
+    return {"status": "success", "access_token": access_token, "role": role}
+
+from app.core.dependencies import get_current_user
+
+@router.get("/me")
+def get_me(current_user: User = Depends(get_current_user)):
+    return {
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "first_name": current_user.first_name,
+        "last_name": current_user.last_name,
+        "role": current_user.role.value if hasattr(current_user.role, 'value') else current_user.role,
+        "username": current_user.username,
+    }

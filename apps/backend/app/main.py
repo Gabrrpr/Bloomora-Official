@@ -1,10 +1,9 @@
 from fastapi import FastAPI
-from app.api.v1.routes import auth, products, customization, chats, orders
 from fastapi.middleware.cors import CORSMiddleware
-
-from app.api.v1.routes import customization
-from app.api.v1.routes import auth
-from app.api.v1.routes import products
+from starlette.middleware.sessions import SessionMiddleware
+from app.core.config import settings
+from app.api.v1.routes import auth, products, customization, chats, orders
+from app.core.dependencies import get_current_user
 
 app = FastAPI(
     title="Bloomora API",
@@ -24,6 +23,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
+
 app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
 app.include_router(products.router, prefix="/api/v1/products", tags=["Products"])
 app.include_router(customization.router, prefix="/api/v1", tags=["customization"])
@@ -32,7 +33,7 @@ app.include_router(orders.router, prefix="/api/v1", tags=["orders"])
 
 @app.get("/", tags=["Health"])
 def root():
-    return {"status": "ok", "message": "Bloomora API is running "}
+    return {"status": "ok", "message": "Bloomora API is running"}
 
 @app.get("/health", tags=["Health"])
 def health():

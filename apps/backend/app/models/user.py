@@ -28,6 +28,8 @@ class User(Base):
     username = Column(String(100), unique=True, nullable=False)
     email = Column(String(255), unique=True, nullable=False)
     phone_number = Column(String(20), nullable=True)
+    google_id = Column(String(255), nullable=True)
+    facebook_id = Column(String(255), nullable=True)
     password_hash = Column(String(255), nullable=False)
     date_of_birth = Column(String(20), nullable=True)
     gender = Column(String(20), nullable=True)
