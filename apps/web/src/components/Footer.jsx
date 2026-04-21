@@ -7,37 +7,34 @@ import metrobankImg from "../assets/Metrobank.png"
 
 const FOOTER_LINKS = {
   "Quick Links": [
-    { label: "Home", href: "#" },
-    { label: "Shop", href: "#" },
-    { label: "Occasions", href: "#" },
-    { label: "About Us", href: "#" },
-    { label: "Contact Us", href: "#" },
+    { label: "Home",       page: "home" },
+    { label: "Shop",       page: "shop" },
+    { label: "Occasions",  page: "occasions" },
+    { label: "About Us",   page: "about" },
+    { label: "Contact Us", page: "contact" },
   ],
   "Our Products": [
-    { label: "Best Sellers", href: "#" },
-    { label: "Classic Collection", href: "#" },
-    { label: "Seasonal Picks", href: "#" },
-    { label: "Gift Sets", href: "#" },
-    { label: "Make it Personal", href: "#" },
+    { label: "Best Sellers",         page: "shop" },
+    { label: "Classic Collection",   page: "shop" },
+    { label: "Seasonal Picks",       page: "shop" },
+    { label: "Gift Sets",            page: "shop" },
+    { label: "Make it Personal",     page: "make-it-personal" },
   ],
   "Customer Care": [
-    { label: "FAQs", href: "#" },
-    { label: "Delivery Information", href: "#" },
-    { label: "Track My Order", href: "#" },
-    { label: "Return Policy", href: "#" },
-    { label: "Privacy Policy", href: "#" },
+    { label: "FAQs",            page: "faq" },
+    { label: "Track My Order",  page: "orders" },
+    { label: "Return Policy",   page: "return-policy" },
+    // Removed: Privacy Policy, Delivery Information
   ],
 }
 
 const SOCIAL_LINKS = [
   {
-    name: "Facebook",
-    href: "https://www.facebook.com/profile.php?id=100063877087893",
+    name: "Facebook", href: "https://www.facebook.com/profile.php?id=100063877087893",
     icon: (<svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z" /></svg>),
   },
   {
-    name: "Instagram",
-    href: "https://www.instagram.com/estingsflowershop/",
+    name: "Instagram", href: "https://www.instagram.com/estingsflowershop/",
     icon: (<svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5" /><circle cx="12" cy="12" r="4" /><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none" /></svg>),
   },
   {
@@ -51,18 +48,8 @@ const SOCIAL_LINKS = [
 ]
 
 const BRANCHES = [
-  {
-    name: "Manila Branch",
-    address: "1605 Laon-Laan Corner Dos Castillas Street, Sampaloc, Manila",
-    hours: "9:00 AM – 9:00 PM",
-    phone: "+63 918 902 2401",
-  },
-  {
-    name: "Pampanga Branch",
-    address: "McArthur Hi-way, Dolores, City of San Fernando, Pampanga C-2000",
-    hours: "7:30 AM – 5:00 PM",
-    phone: "+63 045 961 5378",
-  },
+  { name: "Manila Branch", address: "1605 Laon-Laan Corner Dos Castillas Street, Sampaloc, Manila", hours: "9:00 AM – 9:00 PM", phone: "+63 918 902 2401" },
+  { name: "Pampanga Branch", address: "McArthur Hi-way, Dolores, City of San Fernando, Pampanga C-2000", hours: "7:30 AM – 5:00 PM", phone: "+63 045 961 5378" },
 ]
 
 const PAYMENT_METHODS = [
@@ -74,7 +61,9 @@ const PAYMENT_METHODS = [
   { name: "Metrobank", img: metrobankImg },
 ]
 
-export default function Footer() {
+export default function Footer({ onNavigate }) {
+  const handleNav = (page) => { if (onNavigate) onNavigate(page) }
+
   return (
     <footer style={{ backgroundColor: "#0C573E", color: "white" }}>
       <div className="px-8 py-12">
@@ -89,7 +78,6 @@ export default function Footer() {
             <p className="text-sm leading-relaxed mb-5" style={{ color: "rgba(255,255,255,0.65)" }}>
               Since 1959, Esting's Flower International Inc. has been delivering fresh, quality flowers from San Fernando, Pampanga, and Manila.
             </p>
-
             <div className="flex items-center gap-2 mb-7">
               {SOCIAL_LINKS.map(s => (
                 <a key={s.name} href={s.href} title={s.name} target="_blank" rel="noopener noreferrer"
@@ -100,7 +88,6 @@ export default function Footer() {
                 >{s.icon}</a>
               ))}
             </div>
-
             <div className="flex flex-col gap-5">
               {BRANCHES.map(branch => (
                 <div key={branch.name}>
@@ -135,11 +122,13 @@ export default function Footer() {
               <ul className="flex flex-col gap-2.5">
                 {links.map(link => (
                   <li key={link.label}>
-                    <a href={link.href} className="text-sm transition-colors duration-150"
+                    <button onClick={() => handleNav(link.page)}
+                      className="text-sm transition-colors duration-150 text-left bg-transparent border-none cursor-pointer p-0"
                       style={{ color: "rgba(255,255,255,0.6)" }}
                       onMouseEnter={e => e.currentTarget.style.color = "white"}
-                      onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.6)"}
-                    >{link.label}</a>
+                      onMouseLeave={e => e.currentTarget.style.color = "rgba(255,255,255,0.6)"}>
+                      {link.label}
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -151,26 +140,21 @@ export default function Footer() {
       {/* Bottom bar */}
       <div className="px-8 py-4 border-t" style={{ borderColor: "rgba(255,255,255,0.1)" }}>
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3">
-          {/* Left: copyright + policy links */}
           <div className="flex flex-col sm:flex-row items-center gap-3 text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>
             <span>© {new Date().getFullYear()} Esting's Flower International Inc. All rights reserved.</span>
             <div className="hidden sm:flex items-center gap-3">
               <span style={{ color: "rgba(255,255,255,0.2)" }}>|</span>
-              <a href="#" className="hover:text-white transition-colors">Terms of Service</a>
-              <a href="#" className="hover:text-white transition-colors">Privacy Policy</a>
+              <button onClick={() => handleNav("terms")} className="hover:text-white transition-colors bg-transparent border-none cursor-pointer text-xs" style={{ color: "rgba(255,255,255,0.45)" }}>Terms of Service</button>
             </div>
           </div>
 
-          {/* Right: payment method logos — no box, just images side by side */}
-          <div className="flex items-center gap-3 flex-wrap justify-center sm:justify-end">
+          {/* Payment logos — rounded corners, flat, no box */}
+          <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-end">
             <span className="text-xs mr-1" style={{ color: "rgba(255,255,255,0.4)" }}>We accept:</span>
             {PAYMENT_METHODS.map(({ name, img }) => (
-              <img
-                key={name}
-                src={img}
-                alt={name}
-                title={name}
-                className="h-6 w-auto object-contain opacity-90 hover:opacity-100 transition-opacity"
+              <img key={name} src={img} alt={name} title={name}
+                className="opacity-90 hover:opacity-100 transition-opacity"
+                style={{ height: "22px", width: "auto", minWidth: "36px", maxWidth: "56px", objectFit: "contain", borderRadius: "4px" }}
               />
             ))}
           </div>
