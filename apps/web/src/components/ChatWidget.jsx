@@ -30,27 +30,24 @@ export default function ChatWidget() {
   const createSession = useCallback(async () => {
     if (!user || sessionId) return
     try {
-      console.log('Creating session for user', user.id)
-      const response = await fetch('http://localhost:8000/api/v1/chats/sessions', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({})
-      })
-      const data = await response.json()
+      console.log('Creating session for user', user.email || user.id)
+      const data = await api.createSession()
       const newSessionId = data.id
       setSessionId(newSessionId)
-`ws://localhost:8000/api/v1/chats/ws/${user.email}`
+      
+      const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/${user.email || user.id}`)
       websocket.onopen = () => console.log('WS connected')
       websocket.onmessage = (event) => {
         const data = JSON.parse(event.data)
         console.log('WS message:', data)
         setMessages(prev => [...prev, {
           id: data.id,
-          from: data.sender === 'admin' ? 'bot' : 'user',
+          from: data.sender === 'staff' || data.sender === 'admin' ? 'bot' : 'user',
           text: data.message
         }])
       }
       websocket.onerror = (err) => console.error('WS error:', err)
+      websocket.onclose = () => console.log('WS closed')
       setWs(websocket)
     } catch (err) {
       console.error('Session create error:', err)
@@ -65,12 +62,7 @@ export default function ChatWidget() {
     setInput("")
     setTyping(true)
     try {
-      const response = await fetch('http://localhost:8000/api/v1/chats/messages', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-body: JSON.stringify({ user_id: sessionId, text })
-      })
-      if (!response.ok) throw new Error('Send failed')
+      await api.sendMessage(sessionId, text)
       setTyping(false)
     } catch (err) {
       console.error('Message send error:', err)

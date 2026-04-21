@@ -9,22 +9,28 @@ export function AuthProvider({ children }) {
     return saved ? JSON.parse(saved) : null
   })
 
-  const login = async (username, password) => {
+  const login = async (email, password) => {
     try {
-      const data = await loginUser(username, password)
+      const data = await loginUser(email, password)
       console.log("LOGIN DATA:", data)
+      const token = data.access_token
+      const profileRes = await fetch("http://localhost:8000/api/v1/auth/me", {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!profileRes.ok) throw new Error('Failed to fetch profile: ' + profileRes.status)
+      const profile = await profileRes.json()
       const userData = {
-        token: data.access_token,
-        role: "customer",
-        firstName: username,
-        lastName: "",
-        email: username,
+        token,
+        role: profile.role,
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+        email: profile.email,
       }
-      localStorage.setItem("access_token", data.access_token)
+      localStorage.setItem("access_token", token)
       localStorage.setItem("user", JSON.stringify(userData))
       setUser(userData)
-      console.log("USER SET:", userData)
-      return { success: true, role: "customer" }
+      console.log("USER SET with real role:", userData)
+      return { success: true, role: profile.role }
     } catch (err) {
       console.error("LOGIN ERROR:", err)
       return { success: false, error: err.message }

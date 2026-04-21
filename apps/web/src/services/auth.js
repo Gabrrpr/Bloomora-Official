@@ -30,16 +30,17 @@ export async function registerUser(userData) {
   return response.json()
 }
 
-export async function loginUser(username, password) {
-  const formData = new FormData()
-  formData.append('username', username)
-  formData.append('password', password)
-  
+export async function loginUser(email, password) {
   const response = await fetch(`${API_BASE}/auth/login`, {
     method: 'POST',
-    body: formData
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
   })
-  if (!response.ok) throw new Error('Login failed')
+  if (!response.ok) {
+    const errorText = await response.text()
+    console.error('Login response:', response.status, errorText)
+    throw new Error(`Login failed: ${response.status}`)
+  }
   return response.json()
 }
 

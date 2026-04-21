@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from jose import jwt
@@ -38,6 +37,12 @@ oauth.register(
 
 
 # ── Schemas ───────────────────────────────────────────────────────────────
+
+# Add this schema at the top with the others
+class LoginRequest(BaseModel):
+    email: EmailStr
+    password: str
+    
 class SendOTPRequest(BaseModel):
     email: EmailStr
 
@@ -165,12 +170,11 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    # Try finding by username first, then email
+def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(
-        (User.username == form_data.username) | (User.email == form_data.username)
+        (User.username == payload.email) | (User.email == payload.email)
     ).first()
-    if not user or not verify_password(form_data.password, user.password_hash):
+    if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials.")
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user.")

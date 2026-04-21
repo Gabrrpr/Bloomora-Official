@@ -2,10 +2,12 @@ const API_BASE = 'http://localhost:8000/api/v1';
 
 export const api = {
   async request(endpoint, options = {}) {
+    const token = localStorage.getItem('access_token');
     const url = `${API_BASE}${endpoint}`;
     const config = {
       headers: {
         'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
         ...options.headers,
       },
       ...options,
@@ -29,20 +31,25 @@ export const api = {
     return this.request(endpoint);
   },
 
-  // Chat specific
-  async createSession(order_id = null) {
-    return this.post('/chats/sessions', { order_id });
+  // Chat specific - Updated for admin integration
+  async createSession() {
+    return this.post('/chats/sessions');
   },
 
-  async sendMessage(session_id, text) {
-    return this.post('/chats/messages', { chat_session_id: session_id, text });
+  async sendMessage(user_id, text) {
+    return this.post('/chats/messages', { user_id, text });
+  },
+
+  async getChatHistory(user_id) {
+    return this.get(`/chats/history/${user_id}`);
   },
 
   async getConversations() {
     return this.get('/chats/conversations');
   },
 
-  async getMessages(session_id) {
-    return this.get(`/chats/sessions/${session_id}/messages`);
+  async markRead(user_id) {
+    return this.request(`/chats/history/${user_id}/read`, { method: 'PATCH' });
   },
 };
+

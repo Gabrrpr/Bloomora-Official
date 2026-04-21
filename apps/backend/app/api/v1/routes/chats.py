@@ -2,7 +2,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPExce
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List
-import uuid
+from uuid import UUID
 from datetime import datetime, timezone
 
 from app.core.dependencies import get_db, get_current_user
@@ -91,7 +91,7 @@ def get_all_conversations(
         recent_message = db.query(Chat).filter(Chat.user_id == customer_id)\
             .order_by(desc(Chat.created_at)).first()
 
-        recent_orders = db.query(Order).filter(Order.customer_id == customer_id)\
+        recent_orders = db.query(Order).filter(Order.user_id == customer_id)\
             .order_by(desc(Order.created_at)).limit(3).all()
 
         conversations.append(ConversationOut(
