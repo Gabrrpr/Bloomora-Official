@@ -1,308 +1,343 @@
-import { useState } from "react"
-import { useAuth } from "../context/AuthContext"
-import { sendOtp, verifyOtp, registerUser } from "../services/auth.js"
-import FlowerPanel from "../components/FlowerPanel"
+import { useState, useRef, useEffect, useCallback } from "react"
+import { useAuth } from '../context/AuthContext'
+import { api } from '../services/api.js'
 
-const STEPS = ["Email", "Verify", "Details", "Password", "Done"]
+const QUICK_REPLIES_ADMIN = [
+  "Thank you for reaching out! How can I help you today?",
+  "Your order is being prepared and will be delivered soon.",
+  "Same-day delivery is available for orders before 9AM.",
+  "We'd love to help you customize a bouquet! What's the occasion?",
+  "Our price range starts at ₱500 for small arrangements.",
+]
 
-function ProgressBar({ currentStep }) {
-  return (
-    <div className="w-full mb-8">
-      <div className="flex items-center justify-between mb-2">
-        {STEPS.map((label, i) => (
-          <div key={i} className="flex flex-col items-center flex-1">
-            <div
-              className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all ${
-                i < currentStep
-                  ? "bg-green-700 border-green-700 text-white"
-                  : i === currentStep
-                  ? "bg-white border-green-700 text-green-700"
-                  : "bg-white border-gray-200 text-gray-400"
-              }`}
-            >
-              {i < currentStep ? (
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                </svg>
-              ) : (
-                i + 1
-              )}
-            </div>
-            <span className={`text-xs mt-1 ${i === currentStep ? "text-green-700 font-semibold" : "text-gray-400"}`}>
-              {label}
-            </span>
-          </div>
-        ))}
-      </div>
-      <div className="relative h-1.5 bg-gray-100 rounded-full mt-1 mx-4">
-        <div
-          className="absolute left-0 top-0 h-full bg-green-700 rounded-full transition-all duration-500"
-          style={{ width: `${(currentStep / (STEPS.length - 1)) * 100}%` }}
-        />
-      </div>
-    </div>
+export default function AdminChat() {
+  const { user } = useAuth()
+  const [conversations, setConversations] = useState([])
+  const [activeId, setActiveId] = useState(null)
+  const [messages, setMessages] = useState([])
+  const [input, setInput] = useState("")
+  const [typing, setTyping] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+  const [showQuickReplies, setShowQuickReplies] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [ws, setWs] = useState(null)
+  const bottomRef = useRef(null)
+
+  const filtered = conversations.filter(c =>
+    c.user_name.toLowerCase().includes(searchQuery.toLowerCase())
   )
-}
+  const totalUnread = conversations.reduce((sum, c) => sum + c.unread_count, 0)
+  const activeConvo = conversations.find(c => c.customer_id === activeId)
 
-export default function Register({ onNavigate, initalStep = 0 }) {
-  const { register } = useAuth()
-  const [step, setStep] = useState(initalStep)
-  const [form, setForm] = useState({
-    email: "",
-    otp: ["", "", "", ""],
-    firstName: "",
-    middleName: "",
-    lastName: "",
-    password: "",
-    phoneNumber: "",
-    agreeTerms: false,
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState("")
-  const [message, setMessage] = useState("")
-
-  const passwordChecks = {
-    length: form.password.length >= 8,
-    upper: /[A-Z]/.test(form.password),
-    lower: /[a-z]/.test(form.password),
-    number: /[0-9]/.test(form.password),
-    special: /[!@#$%^&*]/.test(form.password),
-  }
-  const passScore = Object.values(passwordChecks).filter(Boolean).length
-
-  const handleOtpChange = (i, val) => {
-    if (!/^\d?$/.test(val)) return
-    const otp = [...form.otp]
-    otp[i] = val
-    setForm({ ...form, otp })
-    if (val && i < 3) document.getElementById(`otp-${i + 1}`)?.focus()
-  }
-
-  const nextStep = async () => {
-    setError("")
-    setLoading(true)
-
+  // Fetch conversations
+  const fetchConversations = useCallback(async () => {
+    if (!user || !['admin', 'staff'].includes(user.role)) return
     try {
-      if (step === 0) {
-        // Send OTP
-        await sendOtp(form.email)
-        setMessage("OTP sent! Check your email.")
-        setStep(1)
-      } else if (step === 1) {
-        // Verify OTP
-        const otpCode = form.otp.join("")
-        if (otpCode.length !== 4) throw new Error("Enter full 4-digit code")
-        await verifyOtp(form.email, otpCode)
-        setStep(2)
-      } else if (step === 2) {
-        // Check names
-        if (!form.firstName || !form.lastName) throw new Error("First and last name required")
-        setStep(3)
-      } else if (step === 3) {
-        // Register
-        if (Object.values(passwordChecks).some(v => !v)) throw new Error("Password must meet requirements")
-        if (!form.agreeTerms) throw new Error("Agree to terms")
-        
-        await register({
-          email: form.email,
-          first_name: form.firstName,
-          middle_name: form.middleName || "",
-          last_name: form.lastName,
-          password: form.password,
-          phone_number: form.phoneNumber || null,
-        })
-        setStep(4)
+      const data = await api.getConversations()
+      setConversations(data.conversations)
+    } catch (err) {
+      console.error('Fetch conversations error:', err)
+    }
+  }, [user])
+
+  // Fetch history and mark read
+  const fetchHistory = useCallback(async (userId) => {
+    try {
+      const data = await api.getChatHistory(userId)
+      setMessages(data)
+      if (activeId !== userId) {
+        await api.markRead(userId)
+        setConversations(prev => prev.map(c => 
+          c.customer_id === userId ? { ...c, unread_count: 0 } : c
+        ))
       }
     } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
+      console.error('Fetch history error:', err)
     }
-  }
+  }, [activeId])
 
-  const resendOtp = async () => {
-    setLoading(true)
+  // Send message
+  const sendMessage = async (text) => {
+    if (!text.trim() || !activeId) return
+    const userMsg = { 
+      id: Date.now(), 
+      from: "staff", 
+      text, 
+      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      sender: 'staff'
+    }
+    setMessages(prev => [...prev, userMsg])
+    setInput("")
+    setShowQuickReplies(false)
+    setTyping(true)
+
     try {
-      await sendOtp(form.email)
-      setMessage("OTP resent!")
-      setError("")
+      await api.sendMessage(activeId, text)
+      // Backend broadcasts, received via WS
     } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
+      console.error('Send message error:', err)
+      setTyping(false)
     }
   }
 
-  // Step renders (same UI as before, just logic changed)
-  const renderStep = () => {
-  if (step === 0) return (
-    <div className="space-y-4">
-      <div className="text-center mb-6">
-        <h1 className="text-2xl font-bold">Create Account</h1>
-        <p className="text-gray-500">Enter email for verification code</p>
-      </div>
-      <div>
-        <label className="block text-sm font-medium mb-2">Email</label>
-        <input
-          type="email"
-          value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
-          className="w-full p-3 border rounded-lg"
-          placeholder="your@email.com"
-        />
-      </div>
-      <button onClick={nextStep} disabled={loading || !form.email} className="w-full p-3 bg-green-600 text-white rounded-lg disabled:opacity-50">
-        {loading ? 'Sending...' : 'Send Code'}
-      </button>
-      <p className="text-center text-sm text-gray-500">
-        Already have an account?{" "}
-        <button onClick={() => onNavigate("login")} className="text-green-700 font-semibold hover:underline">Log in</button>
-      </p>
-    </div>
-  )
+  // WS connection
+  useEffect(() => {
+    if (!user || !user.token || ws) return
 
-  if (step === 1) return (
-    <div className="space-y-4">
-      <div className="text-center mb-6">
-        <h1 className="text-2xl font-bold">Enter your code</h1>
-        <p className="text-gray-500">We sent a code to <span className="font-medium text-gray-700">{form.email}</span></p>
-      </div>
-      <div className="flex justify-center gap-3 mb-6">
-        {form.otp.map((digit, i) => (
-          <input
-            key={i}
-            id={`otp-${i}`}
-            type="text"
-            inputMode="numeric"
-            maxLength={1}
-            value={digit}
-            onChange={(e) => handleOtpChange(i, e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Backspace" && !digit && i > 0)
-                document.getElementById(`otp-${i - 1}`)?.focus()
-            }}
-            className="w-14 h-14 text-center text-xl font-bold border-2 rounded-xl focus:outline-none focus:border-green-500 transition"
-          />
-        ))}
-      </div>
-      <p className="text-center text-sm text-gray-500 mb-4">
-        Didn't receive the email?{" "}
-        <button onClick={resendOtp} disabled={loading} className="text-green-700 font-semibold hover:underline">Resend</button>
-      </p>
-      <div className="flex gap-3">
-        <button onClick={() => setStep(0)} className="flex-1 py-3 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50">Back</button>
-        <button onClick={nextStep} disabled={loading || form.otp.join("").length !== 4} className="flex-1 py-3 bg-green-700 text-white font-semibold rounded-xl disabled:opacity-50">
-          {loading ? "Verifying..." : "Continue"}
-        </button>
-      </div>
-    </div>
-  )
+    const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/${user.email}`)
+    websocket.onopen = () => {
+      console.log('Admin WS connected')
+    }
+  websocket.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      console.log('Admin WS message:', data)
+      // Add to active chat if matches
+      if (activeId && data.user_id === activeId) {
+        setMessages(prev => [...prev, {
+          id: data.id,
+          from: data.sender === 'customer' ? 'customer' : 'staff',
+          text: data.message,
+          time: new Date(data.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          sender: data.sender,
+          message: data.message
+        }])
+      }
+      // Refresh list
+      fetchConversations()
+    }
+    websocket.onerror = (err) => console.error('WS error:', err)
+    websocket.onclose = () => console.log('WS closed')
 
-  if (step === 2) return (
-    <div className="space-y-4">
-      <div className="text-center mb-6">
-        <h1 className="text-2xl font-bold">Complete your account</h1>
-        <p className="text-gray-500">Add your name to finish signing up</p>
-      </div>
-      <div>
-        <label className="block text-sm font-medium mb-1.5">First Name <span className="text-red-400">*</span></label>
-        <input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-          placeholder="Juan" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="block text-sm font-medium mb-1.5">Middle Name</label>
-          <input value={form.middleName} onChange={(e) => setForm({ ...form, middleName: e.target.value })}
-            placeholder="Santos" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-        </div>
-        <div>
-          <label className="block text-sm font-medium mb-1.5">Last Name <span className="text-red-400">*</span></label>
-          <input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-            placeholder="dela Cruz" className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-        </div>
-      </div>
-      <div className="flex gap-3 pt-2">
-        <button onClick={() => setStep(1)} className="flex-1 py-3 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50">Back</button>
-        <button onClick={nextStep} disabled={loading} className="flex-1 py-3 bg-green-700 text-white font-semibold rounded-xl disabled:opacity-50">Continue</button>
-      </div>
-    </div>
-  )
+    setWs(websocket)
+    return () => websocket.close()
+  }, [user, activeId, fetchConversations, ws])
 
-  if (step === 3) return (
-    <div className="space-y-4">
-      <div className="text-center mb-6">
-        <h1 className="text-2xl font-bold">Set your password</h1>
-        <p className="text-gray-500">Must be at least 8 characters</p>
-      </div>
-      <div>
-        <label className="block text-sm font-medium mb-1.5">Password</label>
-        <input type="password" value={form.password}
-          onChange={(e) => setForm({ ...form, password: e.target.value })}
-          placeholder="••••••••"
-          className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-      </div>
-      <div className="space-y-1.5">
-        {[
-          { key: "length", label: "Minimum 8 characters" },
-          { key: "upper", label: "At least one uppercase letter" },
-          { key: "lower", label: "At least one lowercase letter" },
-          { key: "number", label: "At least one number" },
-          { key: "special", label: "At least one special character (!@#$%^&*)" },
-        ].map(({ key, label }) => (
-          <div key={key} className="flex items-center gap-2 text-xs">
-            <span className={passwordChecks[key] ? "text-green-600" : "text-gray-400"}>
-              {passwordChecks[key] ? "✓" : "✗"} {label}
-            </span>
-          </div>
-        ))}
-      </div>
-      <label className="flex items-start gap-2 cursor-pointer">
-        <input type="checkbox" checked={form.agreeTerms}
-          onChange={(e) => setForm({ ...form, agreeTerms: e.target.checked })}
-          className="mt-0.5 w-4 h-4 accent-green-600" />
-        <span className="text-xs text-gray-600">
-          I agree to the{" "}
-          <button type="button" onClick={() => onNavigate("terms")} className="text-green-700 underline">Terms and Conditions</button>
-        </span>
-      </label>
-      <div className="flex gap-3 pt-2">
-        <button onClick={() => setStep(2)} className="flex-1 py-3 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50">Back</button>
-        <button onClick={nextStep} disabled={loading} className="flex-1 py-3 bg-green-700 text-white font-semibold rounded-xl disabled:opacity-50">
-          {loading ? "Creating..." : "Create Account"}
-        </button>
-      </div>
-    </div>
-  )
+  // Load data on mount
+  useEffect(() => {
+    if (user && ['admin', 'staff'].includes(user.role)) {
+      fetchConversations().then(() => {
+        if (conversations.length === 0) {
+          console.log('No conversations found - send test message to self?')
+        }
+      }).finally(() => setLoading(false))
+    } else {
+      setLoading(false)
+    }
+  }, [fetchConversations, user, conversations])
 
-  if (step === 4) return (
-    <div className="text-center py-8">
-      <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-green-100 mb-6">
-        <svg className="w-10 h-10 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-      </div>
-      <h1 className="text-2xl font-bold text-gray-800 mb-2">Account Created!</h1>
-      <p className="text-gray-500 text-sm mb-2">Welcome to Bloomora, <span className="font-semibold">{form.firstName}</span>!</p>
-      <p className="text-gray-400 text-sm mb-8">Your account has been successfully created.</p>
-      <button onClick={() => onNavigate("login")} className="w-full py-3 bg-green-700 text-white font-semibold rounded-xl">
-        Go to Login
-      </button>
-    </div>
-  )
-}
+  // Load history on active change
+  useEffect(() => {
+    if (activeId) {
+      fetchHistory(activeId)
+    }
+  }, [activeId, fetchHistory])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages])
+
+  const selectConversation = (customerId) => {
+    setActiveId(customerId)
+  }
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault()
+      sendMessage(input)
+    }
+  }
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-64 text-gray-500">Loading conversations...</div>
+  }
+
+  if (!user || !['admin', 'staff'].includes(user.role)) {
+    return <div className="text-center py-8 text-gray-500">Admin/Staff access required</div>
+  }
 
   return (
-    <div className="min-h-screen flex">
-      <FlowerPanel />
-      <div className="flex-1 flex items-center justify-center p-8">
-        <div className="max-w-md w-full">
-          <ProgressBar currentStep={step} />
-          {error && <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg mb-4">{error}</div>}
-          {message && <div className="p-3 bg-green-100 border border-green-400 text-green-700 rounded-lg mb-4">{message}</div>}
-          {renderStep()}
+    <div className="flex h-[calc(100vh-120px)] bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+
+      {/* Sidebar */}
+      <div className="w-72 flex-shrink-0 border-r border-gray-100 flex flex-col">
+        <div className="px-4 py-4 border-b border-gray-100">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-bold text-gray-800 text-sm">Customer Messages</h2>
+            {totalUnread > 0 && (
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white bg-red-500">{totalUnread}</span>
+            )}
+          </div>
+          <div className="relative">
+            <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
+            </svg>
+            <input
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Search customers..."
+              className="w-full pl-9 pr-3 py-2 text-xs border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 transition"
+            />
+          </div>
+        </div>
+        <div className="flex-1 overflow-y-auto">
+          {filtered.map(c => (
+            <button
+              key={c.customer_id}
+              onClick={() => selectConversation(c.customer_id)}
+              className={`w-full flex items-start gap-3 px-4 py-3 text-left transition-colors border-b border-gray-50 ${activeId === c.customer_id ? "bg-green-50" : "hover:bg-gray-50"}`}
+            >
+              <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold" 
+                   style={{ backgroundColor: "#0C573E", color: "white" }}>
+                {c.user_name.charAt(0).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between mb-0.5">
+                  <span className={`text-xs font-semibold truncate ${activeId === c.customer_id ? "text-green-800" : "text-gray-800"}`}>{c.user_name}</span>
+                  <span className="text-xs text-gray-400">Recent</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-gray-500 truncate max-w-[140px]">{c.last_message}</p>
+                  {c.unread_count > 0 && (
+                    <span className="ml-1 flex-shrink-0 w-4 h-4 rounded-full bg-green-600 text-white text-xs font-bold flex items-center justify-center">{c.unread_count}</span>
+                  )}
+                </div>
+                {c.recent_orders.length > 0 && (
+                  <div className="mt-1 text-xs text-gray-400">
+                    Recent: {c.recent_orders[0]?.product || 'Custom'}
+                  </div>
+                )}
+              </div>
+            </button>
+          ))}
+          {filtered.length === 0 && (
+            <div className="text-center py-8 text-gray-400 text-sm">No conversations match "{searchQuery}"</div>
+          )}
         </div>
       </div>
+
+      {/* Chat area */}
+      <div className="flex-1 flex flex-col">
+        <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between bg-white">
+          <div className="flex items-center gap-3">
+            {activeConvo && (
+              <>
+                <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold" 
+                     style={{ backgroundColor: "#0C573E", color: "white" }}>
+                  {activeConvo.user_name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">{activeConvo.user_name}</p>
+                  <p className="text-xs text-gray-400">Recent orders: {activeConvo.recent_orders.length}</p>
+                </div>
+              </>
+            )}
+            {!activeConvo && <p className="text-sm text-gray-500">Select a conversation</p>}
+          </div>
+          <div className="flex items-center gap-2">
+            <button className="p-2 rounded-lg hover:bg-gray-100 transition text-gray-500" title="Phone">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-3" style={{ backgroundColor: "#f9fafb" }}>
+          {messages.map(msg => (
+            <div key={msg.id} className={`flex items-end gap-2 ${msg.sender === "staff" ? "justify-end" : "justify-start"}`}>
+              {msg.sender !== "staff" && (
+                <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold" 
+                     style={{ backgroundColor: "#7c3aed" }}>
+                  C
+                </div>
+              )}
+              <div className="max-w-[68%]">
+                <div
+                  className="px-3.5 py-2.5 text-sm leading-relaxed"
+                  style={{
+                    borderRadius: msg.sender === "staff" ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+                    backgroundColor: msg.sender === "staff" ? "#0C573E" : "white",
+                    color: msg.sender === "staff" ? "white" : "#374151",
+                    border: msg.sender !== "staff" ? "1px solid #e5e7eb" : "none",
+                    boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
+                  }}
+                >
+                  {msg.message || msg.text}
+                </div>
+                <p className={`text-xs text-gray-400 mt-1 ${msg.sender === "staff" ? "text-right" : "text-left"}`}>{msg.time || msg.created_at}</p>
+              </div>
+            </div>
+          ))}
+
+          {typing && (
+            <div className="flex items-end gap-2 justify-start">
+              <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold" style={{ backgroundColor: "#7c3aed" }}>
+                C
+              </div>
+              <div className="px-3.5 py-2.5 bg-white border border-gray-200 rounded-2xl rounded-bl-sm flex items-center gap-1">
+                {[0, 1, 2].map(i => (
+                  <div key={i} className="w-1.5 h-1.5 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
+                ))}
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {showQuickReplies && (
+          <div className="px-4 py-2 border-t border-gray-100 bg-white flex flex-wrap gap-1.5">
+            {QUICK_REPLIES_ADMIN.map(q => (
+              <button
+                key={q}
+                onClick={() => sendMessage(q)}
+                className="text-xs px-2.5 py-1 rounded-full border transition-all hover:shadow-sm truncate max-w-xs"
+                style={{ borderColor: "#0C573E", color: "#0C573E", backgroundColor: "white" }}
+              >
+                {q}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="px-4 py-3 bg-white border-t border-gray-100 flex items-center gap-2">
+          <button
+            onClick={() => setShowQuickReplies(p => !p)}
+            className="p-2 rounded-xl hover:bg-gray-100 transition text-gray-400 hover:text-green-700 flex-shrink-0"
+            title="Quick replies"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+          </button>
+          <input
+            type="text"
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={activeConvo ? `Reply to ${activeConvo.user_name}...` : "Select a conversation"}
+            className="flex-1 text-sm outline-none bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent transition disabled:opacity-50"
+            disabled={!activeId}
+          />
+          <button
+            onClick={() => sendMessage(input)}
+            disabled={!input.trim() || !activeId}
+            className="w-9 h-9 flex items-center justify-center rounded-xl text-white transition-all flex-shrink-0 disabled:opacity-50"
+            style={{ backgroundColor: input.trim() && activeId ? "#0C573E" : "#d1d5db" }}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes bounce {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-4px); }
+        }
+        .animate-bounce {
+          animation: bounce 1s ease-in-out infinite;
+        }
+      `}</style>
     </div>
   )
 }
-
