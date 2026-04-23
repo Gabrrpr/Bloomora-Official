@@ -17,7 +17,6 @@ import { GreenCard, WhiteCard, ComingSoon } from "./_adminShared"
 const DG = "#0C573E"
 const G  = "#2E8B34"
 
-// CSS filter to render SVG in normal website green (#2E8B34)
 const GREEN_FILTER = "brightness(0) saturate(100%) invert(38%) sepia(72%) saturate(500%) hue-rotate(90deg) brightness(90%)"
 
 const NAV = [
@@ -44,8 +43,12 @@ function NavIcon({ d }) {
 
 // ── Dashboard panel ───────────────────────────────────────────────────────────
 function DashboardPanel({ user }) {
-  const DAYS = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"]
+  const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
   const todayIdx = (() => { const d = new Date().getDay(); return d === 0 ? 6 : d - 1 })()
+
+  // Y-axis labels and the chart height in px
+  const CHART_HEIGHT = 160
+  const Y_LABELS = ["₱15k", "₱10k", "₱5k", "₱0"]
 
   return (
     <div className="space-y-5">
@@ -58,34 +61,100 @@ function DashboardPanel({ user }) {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4">
+
+        {/* ── Revenue chart — fixed layout ── */}
         <div className="bg-white rounded-xl p-5" style={{ border: "1px solid #e8edf2", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-5">
             <p className="text-sm font-semibold text-gray-800">Revenue This Week</p>
             <span className="text-xs px-2 py-1 rounded-md font-medium" style={{ backgroundColor: "#f0fdf4", color: G }}>Weekly</span>
           </div>
-          <div className="flex gap-2 items-end" style={{ height: "140px" }}>
-            <div className="flex flex-col justify-between text-right pr-2 pb-5 flex-shrink-0">
-              {["₱15k","₱10k","₱5k","₱0"].map(l => (
-                <span key={l} className="text-[10px]" style={{ color: "#cbd5e1" }}>{l}</span>
+
+          {/*
+            Two-column layout:
+            • Left col: fixed-width Y-axis labels
+            • Right col: chart bars + X-axis day labels below
+          */}
+          <div className="flex gap-2" style={{ height: `${CHART_HEIGHT + 24}px` }}>
+
+            {/* Y-axis labels — distribute evenly from top to bottom of chart area */}
+            <div
+              className="flex flex-col justify-between flex-shrink-0 text-right"
+              style={{ width: "36px", paddingBottom: "24px" /* matches x-label row height */ }}
+            >
+              {Y_LABELS.map(l => (
+                <span key={l} className="text-[10px] leading-none" style={{ color: "#cbd5e1" }}>{l}</span>
               ))}
             </div>
-            <div className="flex items-end gap-2 flex-1 pb-5" style={{ borderBottom: "1px solid #f1f5f9", borderLeft: "1px solid #f1f5f9" }}>
-              {DAYS.map((d, i) => (
-                <div key={d} className="flex flex-col items-center gap-1.5 flex-1">
-                  <div className="w-full rounded-sm" style={{ height: i === todayIdx ? "90px" : "28px", background: i === todayIdx ? `linear-gradient(180deg, ${G} 0%, ${DG} 100%)` : "#e2e8f0" }} />
-                  <span className="text-[10px] font-medium" style={{ color: i === todayIdx ? DG : "#94a3b8" }}>{d}</span>
-                </div>
-              ))}
+
+            {/* Chart area */}
+            <div className="flex-1 flex flex-col">
+              {/* Bars + horizontal grid lines */}
+              <div
+                className="flex-1 relative flex items-end gap-1.5"
+                style={{
+                  borderLeft: "1px solid #f1f5f9",
+                  borderBottom: "1px solid #f1f5f9",
+                  paddingLeft: "6px",
+                  paddingRight: "4px",
+                }}
+              >
+                {/* Horizontal grid lines (3 lines dividing 4 equal segments) */}
+                {[1, 2, 3].map(i => (
+                  <div
+                    key={i}
+                    className="absolute left-0 right-0 pointer-events-none"
+                    style={{
+                      top: `${(i / 4) * 100}%`,
+                      borderTop: "1px dashed #f1f5f9",
+                    }}
+                  />
+                ))}
+
+                {/* Bars */}
+                {DAYS.map((d, i) => {
+                  const isToday = i === todayIdx
+                  const barH = isToday ? "60%" : "16%"
+                  return (
+                    <div key={d} className="flex-1 flex items-end">
+                      <div
+                        className="w-full rounded-t-sm transition-all duration-500"
+                        style={{
+                          height: barH,
+                          background: isToday
+                            ? `linear-gradient(180deg, ${G} 0%, ${DG} 100%)`
+                            : "#e2e8f0",
+                          minHeight: "4px",
+                        }}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* X-axis day labels — same flex layout as bars so they align perfectly */}
+              <div className="flex gap-1.5 pt-1.5" style={{ paddingLeft: "6px", paddingRight: "4px" }}>
+                {DAYS.map((d, i) => (
+                  <div key={d} className="flex-1 flex justify-center">
+                    <span
+                      className="text-[10px] font-medium"
+                      style={{ color: i === todayIdx ? DG : "#94a3b8" }}
+                    >
+                      {d}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
 
+        {/* Trending Products */}
         <div className="bg-white rounded-xl p-5" style={{ border: "1px solid #e8edf2", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm font-semibold text-gray-800">Trending Products</p>
             <button className="text-xs font-semibold px-2.5 py-1 rounded-md border border-gray-200 hover:bg-gray-50 transition-all text-gray-600">View All</button>
           </div>
-          {[1,2,3].map(i => (
+          {[1, 2, 3].map(i => (
             <div key={i} className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-0">
               <div className="w-10 h-10 rounded-lg flex-shrink-0" style={{ background: "linear-gradient(135deg, #f0fdf4, #dcfce7)", border: "1px solid #bbf7d0" }} />
               <div className="flex-1 min-w-0">
@@ -107,7 +176,7 @@ function DashboardPanel({ user }) {
           <table className="w-full text-sm">
             <thead style={{ borderBottom: "1px solid #f1f5f9" }}>
               <tr style={{ backgroundColor: "#fafbfc" }}>
-                {["Order ID","Customer","Status","Total"].map(h => (
+                {["Order ID", "Customer", "Status", "Total"].map(h => (
                   <th key={h} className="text-left px-5 py-2.5 text-xs font-semibold uppercase tracking-wider" style={{ color: "#64748b" }}>{h}</th>
                 ))}
               </tr>
@@ -148,7 +217,7 @@ function NotificationPanel() {
         <button className="text-xs font-semibold hover:underline" style={{ color: G }}>Mark all read</button>
       </div>
       <div className="flex border-b border-gray-100">
-        {["All","Orders","Messages","System"].map((t, i) => (
+        {["All", "Orders", "Messages", "System"].map((t, i) => (
           <button key={t} className="flex-1 py-2 text-xs font-semibold border-b-2 transition-all"
             style={{ borderColor: i === 0 ? G : "transparent", color: i === 0 ? G : "#9ca3af" }}>{t}</button>
         ))}
@@ -179,8 +248,8 @@ function UserDropdown({ user, onLogout }) {
         <p className="text-[11px] text-gray-400 mt-0.5">{user?.email || "admin@bloomora.com"}</p>
       </div>
       {[
-        { label: "My Profile",  d: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
-        { label: "Settings",    d: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" },
+        { label: "My Profile", d: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
+        { label: "Settings",   d: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" },
       ].map(item => (
         <button key={item.label} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition-all">
           <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d={item.d} /></svg>
@@ -201,15 +270,12 @@ function UserDropdown({ user, onLogout }) {
 function SidebarContent({ active, setActive, collapsed, onLogout }) {
   return (
     <>
-      {/* Logo — bigger Estings.svg, normal green color */}
       <div className={`flex items-center gap-3 py-4 ${collapsed ? "px-3 justify-center" : "px-4"}`}
         style={{ borderBottom: "1px solid #eff2f7" }}>
         <img src={estingsLogo} alt="" style={{ width: collapsed ? "28px" : "40px", height: collapsed ? "28px" : "40px", objectFit: "contain", flexShrink: 0 }} />
         {!collapsed && (
           <div>
-            {/* Bigger Estings.svg */}
             <img src={estingsText} alt="Esting's" style={{ height: "28px", objectFit: "contain", filter: GREEN_FILTER }} />
-            {/* Smaller, not bold, lighter */}
             <p className="text-[7.5px] font-normal uppercase tracking-widest leading-tight mt-0.5" style={{ color: G, opacity: 0.75 }}>
               Flower International Inc.
             </p>
@@ -309,26 +375,20 @@ export default function AdminDashboard({ onNavigate }) {
           onClick={() => setMobileOpen(false)} />
       )}
 
-      {/* Mobile sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-60 bg-white flex flex-col transition-transform duration-300 lg:hidden ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
         style={{ boxShadow: "4px 0 24px rgba(0,0,0,0.10)" }}>
         <SidebarContent active={active} setActive={(l) => { setActive(l); setMobileOpen(false) }} collapsed={false} onLogout={handleLogout} />
       </aside>
 
-      {/* Desktop sidebar */}
       <aside className={`hidden lg:flex flex-col bg-white flex-shrink-0 min-h-screen transition-all duration-300`}
         style={{ width: collapsed ? "60px" : "220px", borderRight: "1px solid #e8edf2", boxShadow: "1px 0 6px rgba(0,0,0,0.03)" }}>
         <SidebarContent active={active} setActive={setActive} collapsed={collapsed} onLogout={handleLogout} />
       </aside>
 
-      {/* Main */}
       <div className="flex-1 flex flex-col min-h-screen min-w-0">
-
-        {/* Topbar — search now on RIGHT beside bell and user */}
         <header className="bg-white flex-shrink-0 flex items-center gap-3 px-4 lg:px-6"
           style={{ height: "56px", borderBottom: "1px solid #e8edf2", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }}>
 
-          {/* Hamburger */}
           <button className="p-1.5 rounded-lg hover:bg-gray-100 transition-all text-gray-500 flex-shrink-0"
             onClick={() => { if (window.innerWidth >= 1024) setCollapsed(p => !p); else setMobileOpen(p => !p) }}>
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -336,18 +396,13 @@ export default function AdminDashboard({ onNavigate }) {
             </svg>
           </button>
 
-          {/* Greeting */}
           <p className="text-sm text-gray-500 hidden sm:block flex-shrink-0">
             Good day, <span className="font-semibold text-gray-800">{user?.firstName || "Administrator"}!</span>
           </p>
 
-          {/* Spacer */}
           <div className="flex-1" />
 
-          {/* RIGHT SIDE: Search + Bell + User */}
           <div className="flex items-center gap-2">
-
-            {/* Search — compact, right side */}
             <div className="relative hidden sm:block">
               <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
@@ -359,7 +414,6 @@ export default function AdminDashboard({ onNavigate }) {
                 onBlur={e => { e.target.style.width = "176px"; e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none"; e.target.style.backgroundColor = "#f7f9fc" }} />
             </div>
 
-            {/* Bell */}
             <div className="relative" ref={notifRef}>
               <button onClick={() => { setNotifOpen(p => !p); setUserOpen(false) }}
                 className="relative p-1.5 rounded-lg transition-all text-gray-500 hover:bg-gray-100"
@@ -372,7 +426,6 @@ export default function AdminDashboard({ onNavigate }) {
               {notifOpen && <NotificationPanel />}
             </div>
 
-            {/* User */}
             <div className="relative" ref={userRef}>
               <button onClick={() => { setUserOpen(p => !p); setNotifOpen(false) }}
                 className="flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all hover:bg-gray-50"

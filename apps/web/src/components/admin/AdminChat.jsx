@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useAuth } from "../../context/AuthContext"
 
 const DG = "#0C573E"
@@ -12,14 +12,26 @@ const QUICK_REPLIES = [
   "Our price range starts at ₱500 for small arrangements.",
 ]
 
-// ── Avatar ────────────────────────────────────────────────────────────────────
-function Avatar({ name = "?", size = 40 }) {
+// ── Initials avatar ───────────────────────────────────────────────────────────
+function InitialsAvatar({ name = "?", size = 38 }) {
+  const initials = name
+    .split(" ")
+    .map(w => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2)
+
   return (
-    <div className="flex-shrink-0 flex items-center justify-center rounded-full"
-      style={{ width: size, height: size, backgroundColor: DG }}>
-      <svg width={size * 0.55} height={size * 0.55} viewBox="0 0 24 24" fill="white">
-        <path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/>
-      </svg>
+    <div
+      className="flex-shrink-0 flex items-center justify-center rounded-full text-white font-bold"
+      style={{
+        width: size,
+        height: size,
+        fontSize: size * 0.36,
+        background: `linear-gradient(135deg, ${DG}, ${G})`,
+      }}
+    >
+      {initials || "?"}
     </div>
   )
 }
@@ -27,27 +39,42 @@ function Avatar({ name = "?", size = 40 }) {
 // ── Conversation list item ────────────────────────────────────────────────────
 function ConvoItem({ convo, isActive, onClick }) {
   return (
-    <button onClick={onClick}
-      className="w-full flex items-center gap-3 px-4 py-3 text-left transition-all border-b"
+    <button
+      onClick={onClick}
+      className="w-full flex items-center gap-3 px-4 py-3 text-left transition-all"
       style={{
-        backgroundColor: isActive ? "#f3f4f6" : "transparent",
-        borderColor: "#f3f4f6",
+        backgroundColor: isActive ? "#f0fdf4" : "transparent",
+        borderLeft: isActive ? `3px solid ${G}` : "3px solid transparent",
       }}
       onMouseEnter={e => { if (!isActive) e.currentTarget.style.backgroundColor = "#f9fafb" }}
-      onMouseLeave={e => { if (!isActive) e.currentTarget.style.backgroundColor = "transparent" }}>
+      onMouseLeave={e => { if (!isActive) e.currentTarget.style.backgroundColor = "transparent" }}
+    >
       <div className="relative flex-shrink-0">
-        <Avatar name={convo.user_name} size={40} />
+        <InitialsAvatar name={convo.user_name} size={40} />
         {convo.unread_count > 0 && (
           <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-white" />
         )}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-0.5">
           <span className="text-sm font-semibold text-gray-800 truncate">{convo.user_name}</span>
-          <span className="text-[11px] text-gray-400 flex-shrink-0 ml-2">{convo.time || "· 1m"}</span>
+          <span className="text-[11px] text-gray-400 flex-shrink-0 ml-2">{convo.time || ""}</span>
         </div>
-        <p className="text-xs text-gray-400 truncate mt-0.5">{convo.last_message || "..."}</p>
+        <p className="text-xs text-gray-400 truncate">
+          {convo.last_message_from_staff && (
+            <span style={{ color: G }}>You: </span>
+          )}
+          {convo.last_message || "No messages yet"}
+        </p>
       </div>
+      {convo.unread_count > 0 && (
+        <span
+          className="flex-shrink-0 w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold"
+          style={{ backgroundColor: G }}
+        >
+          {convo.unread_count > 9 ? "9+" : convo.unread_count}
+        </span>
+      )}
     </button>
   )
 }
@@ -62,20 +89,25 @@ export default function AdminChat() {
   const [searchQuery, setSearchQuery]     = useState("")
   const [showQuickReplies, setShowQuickReplies] = useState(false)
   const [activeTab, setActiveTab]         = useState("All")
-  const [loading, setLoading]             = useState(false)
   const bottomRef = useRef(null)
+  const inputRef  = useRef(null)
 
   const activeConvo = conversations.find(c => c.customer_id === activeId)
-  const filtered = conversations.filter(c => c.user_name?.toLowerCase().includes(searchQuery.toLowerCase()))
+  const filtered = conversations.filter(c =>
+    c.user_name?.toLowerCase().includes(searchQuery.toLowerCase())
+  )
 
   const sendMessage = (text) => {
     if (!text.trim() || !activeId) return
     setMessages(prev => [...prev, {
-      id: Date.now(), sender: "staff", text,
+      id: Date.now(),
+      sender: "staff",
+      text,
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     }])
     setInput("")
     setShowQuickReplies(false)
+    inputRef.current?.focus()
   }
 
   useEffect(() => {
@@ -86,65 +118,99 @@ export default function AdminChat() {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input) }
   }
 
+  // Group messages by date for date separators
+  const groupedMessages = messages.reduce((acc, msg, i) => {
+    // For demo, just render all — real implementation would parse timestamps
+    acc.push(msg)
+    return acc
+  }, [])
+
+  const TABS = [
+    { label: "All",        count: conversations.length },
+    { label: "Unread",     count: conversations.filter(c => c.unread_count > 0).length },
+    { label: "Unassigned", count: 0 },
+    { label: "Archived",   count: 0 },
+  ]
+
   return (
     <div className="space-y-4">
       <h1 className="text-xl font-bold text-gray-900">Messages</h1>
 
-      {/* Two-panel layout */}
-      <div className="flex rounded-xl overflow-hidden bg-white" style={{ border: "1px solid #e8edf2", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", height: "calc(100vh - 180px)", minHeight: "560px" }}>
-
+      <div
+        className="flex rounded-xl overflow-hidden bg-white"
+        style={{
+          border: "1px solid #e8edf2",
+          boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+          height: "calc(100vh - 180px)",
+          minHeight: "560px",
+        }}
+      >
         {/* ── LEFT: Conversation list ── */}
-        <div className="flex flex-col flex-shrink-0" style={{ width: "320px", borderRight: "1px solid #f1f5f9" }}>
-
-          {/* Search */}
-          <div className="px-4 pt-4 pb-3" style={{ borderBottom: "1px solid #f1f5f9" }}>
-            <div className="relative">
-              <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div
+          className="flex flex-col flex-shrink-0"
+          style={{ width: "300px", borderRight: "1px solid #f1f5f9" }}
+        >
+          {/* Search + filter row */}
+          <div className="px-3 pt-3 pb-2" style={{ borderBottom: "1px solid #f1f5f9" }}>
+            <div className="relative mb-2.5">
+              <svg className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
               </svg>
-              <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search messages..."
-                className="w-full pl-9 pr-4 py-2 text-sm rounded-lg outline-none transition-all"
+              <input
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search conversations..."
+                className="w-full pl-9 pr-4 py-2 text-xs rounded-lg outline-none transition-all"
                 style={{ border: "1px solid #e8edf2", backgroundColor: "#f9fafb" }}
-                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.10)`; e.target.style.backgroundColor = "white" }}
-                onBlur={e => { e.target.style.borderColor = "#e8edf2"; e.target.style.boxShadow = "none"; e.target.style.backgroundColor = "#f9fafb" }} />
+                onFocus={e => { e.target.style.borderColor = G; e.target.style.backgroundColor = "white" }}
+                onBlur={e => { e.target.style.borderColor = "#e8edf2"; e.target.style.backgroundColor = "#f9fafb" }}
+              />
             </div>
-          </div>
 
-          {/* Filter tabs */}
-          <div className="flex items-center gap-2 px-4 py-2.5" style={{ borderBottom: "1px solid #f1f5f9" }}>
-            {[
-              { label: "All", count: conversations.length },
-              { label: "Open" },
-              { label: "Pending", count: 2 },
-            ].map(tab => (
-              <button key={tab.label} onClick={() => setActiveTab(tab.label)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-all"
-                style={{
-                  backgroundColor: activeTab === tab.label ? "#1f2937" : "transparent",
-                  color: activeTab === tab.label ? "white" : "#6b7280",
-                  border: activeTab === tab.label ? "none" : "1px solid #e8edf2",
-                }}>
-                {tab.label}
-                {tab.count !== undefined && (
-                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold"
-                    style={{ backgroundColor: activeTab === tab.label ? "rgba(255,255,255,0.25)" : "#f1f5f9", color: activeTab === tab.label ? "white" : "#6b7280" }}>
-                    {tab.count > 9 ? "9+" : tab.count}
-                  </span>
-                )}
-              </button>
-            ))}
+            {/* Tabs */}
+            <div className="flex items-center gap-1 overflow-x-auto">
+              {TABS.map(tab => (
+                <button
+                  key={tab.label}
+                  onClick={() => setActiveTab(tab.label)}
+                  className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all"
+                  style={{
+                    backgroundColor: activeTab === tab.label ? DG : "transparent",
+                    color: activeTab === tab.label ? "white" : "#6b7280",
+                  }}
+                >
+                  {tab.label}
+                  {tab.count > 0 && (
+                    <span
+                      className="px-1 rounded-full text-[9px] font-bold"
+                      style={{
+                        backgroundColor: activeTab === tab.label ? "rgba(255,255,255,0.25)" : "#e5e7eb",
+                        color: activeTab === tab.label ? "white" : "#6b7280",
+                      }}
+                    >
+                      {tab.count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Conversation list */}
           <div className="flex-1 overflow-y-auto">
             {filtered.length > 0 ? (
               filtered.map(c => (
-                <ConvoItem key={c.customer_id} convo={c} isActive={activeId === c.customer_id} onClick={() => setActiveId(c.customer_id)} />
+                <ConvoItem
+                  key={c.customer_id}
+                  convo={c}
+                  isActive={activeId === c.customer_id}
+                  onClick={() => setActiveId(c.customer_id)}
+                />
               ))
             ) : (
               <div className="flex flex-col items-center justify-center py-16 text-center px-6">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3 mx-auto" style={{ background: "linear-gradient(135deg, #f0fdf4, #dcfce7)" }}>
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3"
+                  style={{ background: "linear-gradient(135deg, #f0fdf4, #dcfce7)" }}>
                   <svg className="w-6 h-6" style={{ color: DG }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
@@ -161,57 +227,78 @@ export default function AdminChat() {
           {activeConvo ? (
             <>
               {/* Chat header */}
-              <div className="flex items-center justify-between px-5 py-3.5 flex-shrink-0"
-                style={{ borderBottom: "1px solid #f1f5f9", backgroundColor: "white" }}>
+              <div
+                className="flex items-center justify-between px-5 py-3 flex-shrink-0"
+                style={{ borderBottom: "1px solid #f1f5f9", backgroundColor: "white" }}
+              >
                 <div className="flex items-center gap-3">
-                  <Avatar name={activeConvo.user_name} size={44} />
+                  <InitialsAvatar name={activeConvo.user_name} size={38} />
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="text-base font-bold text-gray-900">{activeConvo.user_name}</p>
-                      <span className="flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold"
+                      <p className="text-sm font-bold text-gray-900">{activeConvo.user_name}</p>
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
                         style={{ backgroundColor: "#dcfce7", color: "#15803d" }}>
                         <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
-                        Open
+                        online
                       </span>
                     </div>
-                    <p className="text-xs text-gray-400">Customer ID: {activeConvo.customer_id}</p>
+                    <p className="text-[11px] text-gray-400">Customer #{activeConvo.customer_id}</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <button className="p-2 rounded-lg hover:bg-gray-100 transition-all text-gray-400">
+
+                {/* Header actions — matching the peg */}
+                <div className="flex items-center gap-1">
+                  {/* Phone */}
+                  <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-all text-gray-400">
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                  </button>
+                  {/* New chat / compose */}
+                  <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-all text-gray-400">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                  </button>
+                  {/* Assign */}
+                  <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-all text-gray-400">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" /></svg>
                   </button>
                 </div>
               </div>
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3" style={{ backgroundColor: "#f9fafb" }}>
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4" style={{ backgroundColor: "#f9fafb" }}>
                 {messages.length === 0 && (
-                  <div className="flex flex-col items-center justify-center h-full text-center opacity-60">
-                    <p className="text-sm text-gray-400">No messages yet</p>
-                    <p className="text-xs text-gray-400 mt-1">Start the conversation below</p>
+                  <div className="flex flex-col items-center justify-center h-full text-center">
+                    <p className="text-sm text-gray-400">No messages in this conversation yet.</p>
+                    <p className="text-xs text-gray-400 mt-1">Start the conversation below.</p>
                   </div>
                 )}
 
-                {messages.map((msg, i) => {
+                {groupedMessages.map((msg, i) => {
                   const isStaff = msg.sender === "staff"
+                  const showSeen = isStaff && i === messages.length - 1
+
                   return (
                     <div key={msg.id} className={`flex items-end gap-2.5 ${isStaff ? "justify-end" : "justify-start"}`}>
-                      {!isStaff && <Avatar name={activeConvo.user_name} size={32} />}
-                      <div style={{ maxWidth: "65%" }}>
-                        <div className="px-4 py-2.5 text-sm leading-relaxed"
+                      {!isStaff && (
+                        <InitialsAvatar name={activeConvo.user_name} size={30} />
+                      )}
+                      <div style={{ maxWidth: "60%" }}>
+                        <div
+                          className="px-4 py-2.5 text-sm leading-relaxed"
                           style={{
                             borderRadius: isStaff ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
                             backgroundColor: isStaff ? DG : "white",
                             color: isStaff ? "white" : "#1f2937",
-                            boxShadow: isStaff ? "0 2px 8px rgba(12,87,62,0.20)" : "0 1px 3px rgba(0,0,0,0.08)",
-                          }}>
+                            boxShadow: isStaff
+                              ? "0 2px 8px rgba(12,87,62,0.18)"
+                              : "0 1px 3px rgba(0,0,0,0.08)",
+                          }}
+                        >
                           {msg.text}
                         </div>
                         <div className={`flex items-center gap-1.5 mt-1 ${isStaff ? "justify-end" : "justify-start"}`}>
                           <p className="text-[10px] text-gray-400">{msg.time}</p>
-                          {isStaff && i === messages.length - 1 && (
-                            <p className="text-[10px] text-gray-400">Seen</p>
+                          {showSeen && (
+                            <p className="text-[10px]" style={{ color: G }}>✓✓</p>
                           )}
                         </div>
                       </div>
@@ -221,10 +308,12 @@ export default function AdminChat() {
 
                 {typing && (
                   <div className="flex items-end gap-2.5 justify-start">
-                    <Avatar name={activeConvo.user_name} size={32} />
-                    <div className="px-4 py-3 bg-white rounded-2xl rounded-bl-sm flex items-center gap-1.5"
-                      style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}>
-                      {[0,1,2].map(i => (
+                    <InitialsAvatar name={activeConvo.user_name} size={30} />
+                    <div
+                      className="px-4 py-3 bg-white rounded-2xl rounded-bl-sm flex items-center gap-1.5"
+                      style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}
+                    >
+                      {[0, 1, 2].map(i => (
                         <div key={i} className="w-2 h-2 rounded-full bg-gray-400"
                           style={{ animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }} />
                       ))}
@@ -234,61 +323,107 @@ export default function AdminChat() {
                 <div ref={bottomRef} />
               </div>
 
-              {/* Quick replies */}
+              {/* Quick replies panel */}
               {showQuickReplies && (
                 <div className="px-4 py-2 flex flex-wrap gap-1.5" style={{ borderTop: "1px solid #f1f5f9", backgroundColor: "white" }}>
                   {QUICK_REPLIES.map(q => (
-                    <button key={q} onClick={() => sendMessage(q)}
+                    <button
+                      key={q}
+                      onClick={() => sendMessage(q)}
                       className="text-xs px-3 py-1.5 rounded-full border transition-all hover:shadow-sm truncate"
-                      style={{ borderColor: G, color: G, backgroundColor: "#f0fdf4", maxWidth: "280px" }}>
+                      style={{ borderColor: G, color: G, backgroundColor: "#f0fdf4", maxWidth: "280px" }}
+                    >
                       {q}
                     </button>
                   ))}
                 </div>
               )}
 
-              {/* Input area */}
+              {/* ── Input area — matches the peg ── */}
               <div className="flex-shrink-0" style={{ borderTop: "1px solid #f1f5f9", backgroundColor: "white" }}>
-                {/* Text input row */}
                 <div className="flex items-center gap-2 px-4 py-3">
-                  <button onClick={() => setShowQuickReplies(p => !p)}
-                    className="p-2 rounded-lg hover:bg-gray-100 transition-all text-gray-400 flex-shrink-0"
-                    title="Quick replies">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  {/* Emoji-like / quick reply toggle */}
+                  <button
+                    onClick={() => setShowQuickReplies(p => !p)}
+                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-all text-gray-400 flex-shrink-0"
+                    title="Quick replies"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                   </button>
-                  <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
-                    placeholder="Write a reply..."
-                    className="flex-1 px-4 py-2.5 text-sm rounded-xl outline-none transition-all"
+
+                  {/* Text input */}
+                  <input
+                    ref={inputRef}
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="Type a message..."
+                    className="flex-1 px-3 py-2 text-sm rounded-full outline-none transition-all"
                     style={{ border: "1px solid #e8edf2", backgroundColor: "#f9fafb" }}
-                    onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.10)`; e.target.style.backgroundColor = "white" }}
-                    onBlur={e => { e.target.style.borderColor = "#e8edf2"; e.target.style.boxShadow = "none"; e.target.style.backgroundColor = "#f9fafb" }} />
-                  <button onClick={() => sendMessage(input)} disabled={!input.trim()}
-                    className="flex items-center gap-1.5 px-4 py-2.5 text-sm font-bold text-white rounded-xl transition-all hover:opacity-90 active:scale-95 flex-shrink-0"
-                    style={{ background: input.trim() ? `linear-gradient(135deg, ${DG}, ${G})` : "#d1d5db", boxShadow: input.trim() ? "0 2px 8px rgba(12,87,62,0.25)" : "none" }}>
-                    Send
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    onFocus={e => { e.target.style.borderColor = G; e.target.style.backgroundColor = "white" }}
+                    onBlur={e => { e.target.style.borderColor = "#e8edf2"; e.target.style.backgroundColor = "#f9fafb" }}
+                  />
+
+                  {/* Send */}
+                  <button
+                    onClick={() => sendMessage(input)}
+                    disabled={!input.trim()}
+                    className="w-8 h-8 flex items-center justify-center rounded-full flex-shrink-0 transition-all active:scale-95"
+                    style={{
+                      background: input.trim() ? `linear-gradient(135deg, ${DG}, ${G})` : "#e5e7eb",
+                    }}
+                  >
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                    </svg>
+                  </button>
+
+                  {/* Attach */}
+                  <button
+                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-all text-gray-400 flex-shrink-0"
+                    title="Attach file"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+                    </svg>
+                  </button>
+
+                  {/* More actions */}
+                  <button
+                    className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition-all text-gray-400 flex-shrink-0"
+                    title="More options"
+                  >
+                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                      <circle cx="5" cy="12" r="1.5" />
+                      <circle cx="12" cy="12" r="1.5" />
+                      <circle cx="19" cy="12" r="1.5" />
                     </svg>
                   </button>
                 </div>
 
                 {/* Action buttons row */}
                 <div className="flex items-center gap-2 px-4 pb-3 flex-wrap">
-                  <button className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white rounded-lg transition-all hover:opacity-90"
-                    style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
+                  <button
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white rounded-lg transition-all hover:opacity-90"
+                    style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}
+                  >
                     View Order Details
                   </button>
-                  <button className="px-3.5 py-2 text-xs font-semibold rounded-lg border transition-all hover:bg-gray-50"
-                    style={{ borderColor: "#e8edf2", color: "#374151" }}>
+                  <button
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg border transition-all hover:bg-gray-50"
+                    style={{ borderColor: "#e8edf2", color: "#374151" }}
+                  >
                     Mark as Resolved
                   </button>
                   <div className="flex items-center gap-2 ml-auto">
                     <span className="text-xs text-gray-400">Assign to</span>
                     <div className="relative">
-                      <select className="appearance-none pl-3 pr-7 py-1.5 text-xs border rounded-lg bg-white cursor-pointer outline-none"
-                        style={{ borderColor: "#e8edf2" }}>
+                      <select
+                        className="appearance-none pl-3 pr-7 py-1.5 text-xs border rounded-lg bg-white cursor-pointer outline-none"
+                        style={{ borderColor: "#e8edf2" }}
+                      >
                         <option>Employee</option>
                         <option>Manila Staff</option>
                         <option>Pampanga Staff</option>
@@ -304,13 +439,14 @@ export default function AdminChat() {
           ) : (
             /* No conversation selected */
             <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: "linear-gradient(135deg, #f0fdf4, #dcfce7)" }}>
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+                style={{ background: "linear-gradient(135deg, #f0fdf4, #dcfce7)" }}>
                 <svg className="w-8 h-8" style={{ color: DG }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
               </div>
               <p className="text-base font-semibold text-gray-700">Select a conversation</p>
-              <p className="text-sm text-gray-400 mt-1">Choose a customer from the list to view their messages</p>
+              <p className="text-sm text-gray-400 mt-1">Choose a customer from the list to start chatting</p>
             </div>
           )}
         </div>

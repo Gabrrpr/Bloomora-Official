@@ -6,13 +6,13 @@ const G  = "#2E8B34"
 const DG = "#0C573E"
 
 const MENU_ITEMS = [
-  { id: "overview", label: "Overview" },
-  { id: "orders",   label: "My Orders" },
-  { id: "wishlist", label: "Wishlist" },
-  { id: "details",  label: "Personal Details" },
-  { id: "address",  label: "Address Book" },
-  { id: "password", label: "Change Password" },
-  { id: "settings", label: "Preferences" },
+  { id: "overview", label: "Overview",        d: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
+  { id: "orders",   label: "My Orders",       d: "M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007Z" },
+  { id: "wishlist", label: "Wishlist",         d: "M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" },
+  { id: "details",  label: "Personal Details", d: "M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" },
+  { id: "address",  label: "Address Book",    d: "M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75" },
+  { id: "password", label: "Change Password", d: "M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" },
+  { id: "settings", label: "Preferences",     d: "M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 010 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 010-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z M15 12a3 3 0 11-6 0 3 3 0 016 0Z" },
 ]
 
 // ── Reusable input ─────────────────────────────────────────────────────────────
@@ -64,7 +64,6 @@ function GhostBtn({ children, onClick }) {
   )
 }
 
-// ── Toast notification ─────────────────────────────────────────────────────────
 function useToast() {
   const [toast, setToast] = useState(null)
   const show = (msg) => {
@@ -92,8 +91,6 @@ function OverviewPanel({ user, setPanel, onNavigate }) {
   return (
     <div className="space-y-8">
       <SectionHeader title="Account Overview" description="Manage your personal information and preferences." />
-
-      {/* Profile card */}
       <div className="flex items-center gap-5 p-5 rounded-xl" style={{ backgroundColor: "#f8f9fa", border: "1px solid #efefef" }}>
         <div className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-white flex-shrink-0" style={{ background: `linear-gradient(135deg, ${G}, ${DG})` }}>
           {user?.firstName?.[0]?.toUpperCase() || "U"}
@@ -103,8 +100,6 @@ function OverviewPanel({ user, setPanel, onNavigate }) {
           <p className="text-sm text-gray-400">{user?.email}</p>
         </div>
       </div>
-
-      {/* Quick nav grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[
           { label: "My Orders",        id: "orders",   icon: "M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007Z" },
@@ -132,7 +127,6 @@ function OverviewPanel({ user, setPanel, onNavigate }) {
 
 // ── Orders panel ───────────────────────────────────────────────────────────────
 function OrdersPanel({ onNavigate }) {
-  // No orders state for now — groupmate will connect to DB
   const hasOrders = false
   return (
     <div>
@@ -174,7 +168,7 @@ function WishlistPanel({ onNavigate }) {
   )
 }
 
-// ── Personal Details panel — editable ─────────────────────────────────────────
+// ── Personal Details panel ─────────────────────────────────────────────────────
 function DetailsPanel({ user, showToast }) {
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({
@@ -187,7 +181,6 @@ function DetailsPanel({ user, showToast }) {
   const [avatar, setAvatar] = useState(null)
 
   const handleSave = () => {
-    // Groupmate will connect to API
     setEditing(false)
     showToast("Details updated successfully")
   }
@@ -200,8 +193,6 @@ function DetailsPanel({ user, showToast }) {
   return (
     <div>
       <SectionHeader title="Personal Details" description="Update your name, email, and contact information." />
-
-      {/* Profile photo */}
       <div className="flex items-center gap-5 mb-8 pb-6" style={{ borderBottom: "1px solid #f0f0f0" }}>
         <div className="relative">
           {avatar
@@ -230,15 +221,12 @@ function DetailsPanel({ user, showToast }) {
           </button>
         </div>
       </div>
-
-      {/* Form */}
       <div className="grid sm:grid-cols-2 gap-4 mb-6">
         <Field label="First Name"     value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} readOnly={!editing} />
         <Field label="Last Name"      value={form.lastName}  onChange={e => setForm({ ...form, lastName: e.target.value })}  readOnly={!editing} />
         <Field label="Email Address"  value={form.email}     onChange={e => setForm({ ...form, email: e.target.value })}     readOnly={!editing} type="email" />
         <Field label="Phone Number"   value={form.phone}     onChange={e => setForm({ ...form, phone: e.target.value })}     readOnly={!editing} placeholder="e.g. +63 900 000 0000" />
       </div>
-
       <div className="flex items-center gap-3">
         {editing ? (
           <>
@@ -253,7 +241,7 @@ function DetailsPanel({ user, showToast }) {
   )
 }
 
-// ── Address Book panel — with add form ─────────────────────────────────────────
+// ── Address Book panel ─────────────────────────────────────────────────────────
 function AddressPanel({ showToast }) {
   const [addresses, setAddresses] = useState([])
   const [showForm, setShowForm] = useState(false)
@@ -289,7 +277,6 @@ function AddressPanel({ showToast }) {
         )}
       </div>
 
-      {/* Add form */}
       {showForm && (
         <div className="mb-6 p-5 rounded-xl" style={{ border: `1px solid ${G}40`, backgroundColor: "#f8fffe" }}>
           <p className="text-sm font-semibold text-gray-700 mb-4">New Address</p>
@@ -307,7 +294,7 @@ function AddressPanel({ showToast }) {
         </div>
       )}
 
-      {/* Address list */}
+      {/* Address list — empty state has NO "Add Your First Address" button */}
       {addresses.length === 0 && !showForm ? (
         <div className="flex flex-col items-center py-12 text-center">
           <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: "#f3f4f6" }}>
@@ -316,8 +303,7 @@ function AddressPanel({ showToast }) {
             </svg>
           </div>
           <p className="text-sm font-semibold text-gray-600 mb-1">No saved addresses</p>
-          <p className="text-xs text-gray-400 mb-4">Add a delivery address for faster checkout.</p>
-          <PrimaryBtn onClick={() => setShowForm(true)}>Add Your First Address</PrimaryBtn>
+          <p className="text-xs text-gray-400">Add a delivery address for faster checkout.</p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -337,7 +323,7 @@ function AddressPanel({ showToast }) {
   )
 }
 
-// ── Password panel — functional ────────────────────────────────────────────────
+// ── Password panel ─────────────────────────────────────────────────────────────
 function PasswordPanel({ showToast }) {
   const [form, setForm] = useState({ current: "", next: "", confirm: "" })
   const [error, setError] = useState("")
@@ -348,7 +334,6 @@ function PasswordPanel({ showToast }) {
     if (!form.current) { setError("Please enter your current password."); return }
     if (form.next.length < 8) { setError("New password must be at least 8 characters."); return }
     if (form.next !== form.confirm) { setError("New passwords do not match."); return }
-    // Groupmate will connect to API
     setForm({ current: "", next: "", confirm: "" })
     showToast("Password updated successfully")
   }
@@ -357,8 +342,8 @@ function PasswordPanel({ showToast }) {
     <div>
       <SectionHeader title="Change Password" description="Choose a strong password to protect your account." />
       <form onSubmit={handleSubmit} className="max-w-md space-y-4">
-        <Field label="Current Password"  type="password" value={form.current}  onChange={e => setForm({ ...form, current: e.target.value })}  placeholder="Enter current password" />
-        <Field label="New Password"       type="password" value={form.next}     onChange={e => setForm({ ...form, next: e.target.value })}     placeholder="At least 8 characters" />
+        <Field label="Current Password"    type="password" value={form.current}  onChange={e => setForm({ ...form, current: e.target.value })}  placeholder="Enter current password" />
+        <Field label="New Password"        type="password" value={form.next}     onChange={e => setForm({ ...form, next: e.target.value })}     placeholder="At least 8 characters" />
         <Field label="Confirm New Password" type="password" value={form.confirm} onChange={e => setForm({ ...form, confirm: e.target.value })} placeholder="Repeat new password" />
         {error && <p className="text-xs text-red-500">{error}</p>}
         <div className="pt-1">
@@ -435,7 +420,6 @@ export default function AccountPage({ onNavigate }) {
 
             {/* ── Sidebar ── */}
             <aside className="w-56 flex-shrink-0 hidden md:flex flex-col gap-1 sticky top-28">
-              {/* User summary */}
               <div className="px-4 py-3 mb-1">
                 <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Account</p>
                 <p className="text-sm font-semibold text-gray-900 truncate mt-0.5">{user?.firstName} {user?.lastName}</p>
@@ -443,7 +427,7 @@ export default function AccountPage({ onNavigate }) {
 
               {MENU_ITEMS.map(item => (
                 <button key={item.id} onClick={() => setPanel(item.id)}
-                  className="w-full text-left px-4 py-2.5 text-sm rounded-lg transition-all duration-150"
+                  className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 text-sm rounded-lg transition-all duration-150"
                   style={{
                     color:           panel === item.id ? DG : "#6b7280",
                     fontWeight:      panel === item.id ? 600  : 400,
@@ -452,13 +436,23 @@ export default function AccountPage({ onNavigate }) {
                   onMouseEnter={e => { if (panel !== item.id) e.currentTarget.style.backgroundColor = "#f3f4f6"; }}
                   onMouseLeave={e => { if (panel !== item.id) e.currentTarget.style.backgroundColor = "transparent"; }}
                 >
+                  <svg
+                    className="w-4 h-4 flex-shrink-0"
+                    style={{ color: panel === item.id ? G : "#9ca3af" }}
+                    fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.6"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d={item.d} />
+                  </svg>
                   {item.label}
                 </button>
               ))}
 
               <div className="mt-2 pt-3" style={{ borderTop: "1px solid #e9e9e9" }}>
                 <button onClick={handleLogout}
-                  className="w-full text-left px-4 py-2.5 text-sm text-red-400 rounded-lg transition-all hover:bg-red-50">
+                  className="w-full text-left flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-400 rounded-lg transition-all hover:bg-red-50">
+                  <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.6">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
                   Sign out
                 </button>
               </div>

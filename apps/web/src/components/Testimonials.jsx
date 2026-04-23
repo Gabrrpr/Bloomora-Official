@@ -42,8 +42,8 @@ function AvatarIcon() {
   return (
     <svg width="88" height="88" viewBox="0 0 88 88" fill="none" xmlns="http://www.w3.org/2000/svg">
       <circle cx="44" cy="44" r="44" fill={DG} />
-      <circle cx="44" cy="33" r="16" fill="rgba(255,255,255,0.9)" />
-      <ellipse cx="44" cy="76" rx="26" ry="18" fill="rgba(255,255,255,0.9)" />
+      <circle cx="41" cy="30" r="16" fill="rgba(255,255,255,0.9)" />
+      <ellipse cx="40" cy="72" rx="26" ry="18" fill="rgba(255,255,255,0.9)" />
     </svg>
   )
 }
@@ -66,14 +66,15 @@ function ReviewCard({ review }) {
           <AvatarIcon />
         </div>
 
-        <div className="flex flex-col flex-1 px-6 pt-10 pb-6">
+        <div className="flex flex-col flex-1 px-6 pt-6 pb-6">
 
           {/* Big quote mark — no circle, just the character */}
-          <div className="mb-2" style={{
+          <div className="mb-0" style={{
             fontSize: "72px",
             lineHeight: 1,
             color: "rgba(255,255,255,0.35)",
             fontFamily: "Georgia, serif",
+            marginTop: "40px",
           }}>
             &ldquo;
           </div>
