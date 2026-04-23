@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import { useAuth } from '../context/AuthContext'
+import { api } from '../services/api.js'
 
 const G = "#2E8B34"
 const DG = "#0C573E"
@@ -49,12 +50,7 @@ export default function ChatWidget() {
   const createSession = useCallback(async () => {
     if (!user || sessionId) return
     try {
-      const response = await fetch('http://localhost:8000/api/v1/chats/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
-      })
-      const data = await response.json()
+      const data = await api.createSession()
       const newSessionId = data.id
       setSessionId(newSessionId)
       const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/${user.email}`)
@@ -81,12 +77,7 @@ export default function ChatWidget() {
     setInput("")
     setTyping(true)
     try {
-      const response = await fetch('http://localhost:8000/api/v1/chats/messages', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: sessionId, text })
-      })
-      if (!response.ok) throw new Error('Send failed')
+      await api.sendMessage(sessionId, text)
       setTyping(false)
     } catch (err) {
       console.error('Message send error:', err)
