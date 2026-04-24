@@ -41,12 +41,265 @@ function NavIcon({ d }) {
   )
 }
 
-// ── Dashboard panel ───────────────────────────────────────────────────────────
+// ── My Profile Panel ──────────────────────────────────────────────────────────
+function MyProfilePanel({ user, onBack }) {
+  const [editMode, setEditMode] = useState(false)
+  const [form, setForm] = useState({
+    firstName: user?.firstName || "",
+    lastName: user?.lastName || "",
+    email: user?.email || "",
+    phone: user?.phone || "",
+  })
+  const s = k => v => setForm(p => ({ ...p, [k]: v }))
+
+  const inputStyle = (editable) => ({
+    borderColor: editable ? "#dde3ec" : "#f1f5f9",
+    backgroundColor: editable ? "#fff" : "#fafbfc",
+  })
+
+  function FRow({ label, value, onChange, type = "text", editable }) {
+    return (
+      <div>
+        <label className="block text-xs font-semibold text-gray-500 mb-1">{label}</label>
+        <input
+          type={type}
+          value={value}
+          onChange={e => onChange && onChange(e.target.value)}
+          disabled={!editable}
+          className="w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all"
+          style={inputStyle(editable)}
+          onFocus={e => { if (editable) { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.10)` } }}
+          onBlur={e => { e.target.style.borderColor = editable ? "#dde3ec" : "#f1f5f9"; e.target.style.boxShadow = "none" }}
+        />
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-gray-900">My Profile</h1>
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md hover:bg-gray-50 transition-all text-gray-600"
+          style={{ borderColor: "#dde3ec" }}
+        >
+          ← Back to Dashboard
+        </button>
+      </div>
+
+      <div className="bg-white rounded-xl overflow-hidden" style={{ border: "1px solid #e8edf2", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+        {/* Cover */}
+        <div className="h-28 w-full" style={{ background: `linear-gradient(135deg, ${DG} 0%, ${G} 100%)` }} />
+
+        {/* Avatar + name strip */}
+        <div className="px-6 pb-5">
+          <div className="flex items-end justify-between" style={{ marginTop: "-36px" }}>
+            <div className="w-16 h-16 rounded-xl flex items-center justify-center text-2xl font-bold text-white ring-4 ring-white flex-shrink-0"
+              style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
+              {(form.firstName?.[0] || "A").toUpperCase()}
+            </div>
+            <button
+              onClick={() => setEditMode(p => !p)}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all active:scale-95"
+              style={editMode
+                ? { borderColor: G, color: G, backgroundColor: "#f0fdf4" }
+                : { borderColor: "#dde3ec", color: "#374151", backgroundColor: "#fff" }
+              }
+            >
+              {editMode ? (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                  Cancel
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                  Edit Profile
+                </>
+              )}
+            </button>
+          </div>
+          <div className="mt-3">
+            <p className="text-base font-bold text-gray-900">{form.firstName} {form.lastName}</p>
+            <p className="text-xs text-gray-400 mt-0.5">{user?.role || "Administrator"} · {user?.branch || "—"}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Info form */}
+      <div className="bg-white rounded-xl p-5" style={{ border: "1px solid #e8edf2", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+        <p className="text-sm font-semibold text-gray-800 mb-4">Personal Information</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <FRow label="First Name" value={form.firstName} onChange={s("firstName")} editable={editMode} />
+          <FRow label="Last Name" value={form.lastName} onChange={s("lastName")} editable={editMode} />
+          <FRow label="Email Address" value={form.email} onChange={s("email")} type="email" editable={editMode} />
+          <FRow label="Phone Number" value={form.phone} onChange={s("phone")} editable={editMode} />
+          <FRow label="Role" value={user?.role || "Administrator"} editable={false} />
+          <FRow label="Branch" value={user?.branch || "—"} editable={false} />
+        </div>
+        {editMode && (
+          <div className="flex justify-end mt-5">
+            <button
+              className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95"
+              style={{ background: `linear-gradient(135deg,${DG},${G})` }}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+              Save Changes
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ── Full Notifications Page ───────────────────────────────────────────────────
+function NotificationsPage({ onBack }) {
+  const [tab, setTab] = useState("All")
+  const TABS = ["All", "Orders", "Messages", "System"]
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-gray-900">Notifications</h1>
+        <div className="flex items-center gap-2">
+          <button
+            className="text-xs font-semibold px-3 py-2 border rounded-md hover:bg-gray-50 transition-all text-gray-600"
+            style={{ borderColor: "#dde3ec" }}
+          >
+            Mark all as read
+          </button>
+          <button
+            onClick={onBack}
+            className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md hover:bg-gray-50 transition-all text-gray-600"
+            style={{ borderColor: "#dde3ec" }}
+          >
+            ← Back
+          </button>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl overflow-hidden" style={{ border: "1px solid #e8edf2", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+        {/* Tabs */}
+        <div className="flex border-b border-gray-100 px-2 pt-2">
+          {TABS.map(t => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className="px-4 py-2.5 text-sm font-semibold border-b-2 transition-all mr-1"
+              style={{
+                borderColor: tab === t ? G : "transparent",
+                color: tab === t ? G : "#9ca3af",
+              }}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+
+        {/* Empty state */}
+        <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
+            style={{ background: "linear-gradient(135deg, #f0fdf4, #dcfce7)", border: "1px solid #bbf7d0" }}>
+            <svg className="w-7 h-7" style={{ color: DG }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+            </svg>
+          </div>
+          <p className="text-sm font-semibold text-gray-600">All caught up!</p>
+          <p className="text-xs text-gray-400 mt-1 max-w-xs">
+            No {tab === "All" ? "" : tab.toLowerCase()} notifications right now. We'll let you know when something needs your attention.
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Notification Dropdown Panel ───────────────────────────────────────────────
+function NotificationPanel({ onViewAll }) {
+  return (
+    <div className="absolute right-0 top-full mt-2 bg-white rounded-xl overflow-hidden z-50"
+      style={{ width: "340px", border: "1px solid #e8edf2", boxShadow: "0 16px 48px rgba(0,0,0,0.12)" }}>
+      <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: "1px solid #f1f5f9", backgroundColor: "#fafbfc" }}>
+        <div>
+          <p className="text-sm font-bold text-gray-800">Notifications</p>
+          <p className="text-xs text-gray-400">You have 0 unread</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button className="text-xs font-semibold hover:underline" style={{ color: G }}>Mark all read</button>
+          {/* Expand button */}
+          <button
+            onClick={onViewAll}
+            title="Open full notifications page"
+            className="p-1 rounded-md hover:bg-gray-100 transition-all text-gray-400"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div className="flex border-b border-gray-100">
+        {["All", "Orders", "Messages", "System"].map((t, i) => (
+          <button key={t} className="flex-1 py-2 text-xs font-semibold border-b-2 transition-all"
+            style={{ borderColor: i === 0 ? G : "transparent", color: i === 0 ? G : "#9ca3af" }}>{t}</button>
+        ))}
+      </div>
+      <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+        <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "linear-gradient(135deg, #f0fdf4, #dcfce7)" }}>
+          <svg className="w-5 h-5" style={{ color: DG }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+          </svg>
+        </div>
+        <p className="text-sm font-medium text-gray-500">All caught up!</p>
+        <p className="text-xs text-gray-400 mt-0.5">No new notifications right now</p>
+      </div>
+      <div className="px-4 py-2.5 border-t border-gray-100 text-center" style={{ backgroundColor: "#fafbfc" }}>
+        <button onClick={onViewAll} className="text-xs font-semibold hover:underline" style={{ color: G }}>
+          View all notifications →
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── User Dropdown ─────────────────────────────────────────────────────────────
+function UserDropdown({ user, onLogout, onProfile, onSettings }) {
+  return (
+    <div className="absolute right-0 top-full mt-2 bg-white rounded-xl overflow-hidden z-50"
+      style={{ width: "200px", border: "1px solid #e8edf2", boxShadow: "0 16px 48px rgba(0,0,0,0.12)" }}>
+      <div className="px-4 py-3" style={{ borderBottom: "1px solid #f1f5f9", background: "linear-gradient(135deg, #f0fdf4, #fafff8)" }}>
+        <p className="text-xs font-bold text-gray-800">{user?.firstName || "Admin"} {user?.lastName || ""}</p>
+        <p className="text-[11px] text-gray-400 mt-0.5">{user?.email || "admin@bloomora.com"}</p>
+      </div>
+      {[
+        { label: "My Profile", d: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z", action: onProfile },
+        { label: "Settings",   d: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z", action: onSettings },
+      ].map(item => (
+        <button
+          key={item.label}
+          onClick={item.action}
+          className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition-all"
+        >
+          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d={item.d} /></svg>
+          {item.label}
+        </button>
+      ))}
+      <div style={{ borderTop: "1px solid #f1f5f9" }}>
+        <button onClick={onLogout} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-all">
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+          Logout
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Dashboard Panel ───────────────────────────────────────────────────────────
 function DashboardPanel({ user }) {
   const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
   const todayIdx = (() => { const d = new Date().getDay(); return d === 0 ? 6 : d - 1 })()
-
-  // Y-axis labels and the chart height in px
   const CHART_HEIGHT = 160
   const Y_LABELS = ["₱15k", "₱10k", "₱5k", "₱0"]
 
@@ -61,86 +314,35 @@ function DashboardPanel({ user }) {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4">
-
-        {/* ── Revenue chart — fixed layout ── */}
         <div className="bg-white rounded-xl p-5" style={{ border: "1px solid #e8edf2", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
           <div className="flex items-center justify-between mb-5">
             <p className="text-sm font-semibold text-gray-800">Revenue This Week</p>
             <span className="text-xs px-2 py-1 rounded-md font-medium" style={{ backgroundColor: "#f0fdf4", color: G }}>Weekly</span>
           </div>
-
-          {/*
-            Two-column layout:
-            • Left col: fixed-width Y-axis labels
-            • Right col: chart bars + X-axis day labels below
-          */}
           <div className="flex gap-2" style={{ height: `${CHART_HEIGHT + 24}px` }}>
-
-            {/* Y-axis labels — distribute evenly from top to bottom of chart area */}
-            <div
-              className="flex flex-col justify-between flex-shrink-0 text-right"
-              style={{ width: "36px", paddingBottom: "24px" /* matches x-label row height */ }}
-            >
+            <div className="flex flex-col justify-between flex-shrink-0 text-right" style={{ width: "36px", paddingBottom: "24px" }}>
               {Y_LABELS.map(l => (
                 <span key={l} className="text-[10px] leading-none" style={{ color: "#cbd5e1" }}>{l}</span>
               ))}
             </div>
-
-            {/* Chart area */}
             <div className="flex-1 flex flex-col">
-              {/* Bars + horizontal grid lines */}
-              <div
-                className="flex-1 relative flex items-end gap-1.5"
-                style={{
-                  borderLeft: "1px solid #f1f5f9",
-                  borderBottom: "1px solid #f1f5f9",
-                  paddingLeft: "6px",
-                  paddingRight: "4px",
-                }}
-              >
-                {/* Horizontal grid lines (3 lines dividing 4 equal segments) */}
+              <div className="flex-1 relative flex items-end gap-1.5" style={{ borderLeft: "1px solid #f1f5f9", borderBottom: "1px solid #f1f5f9", paddingLeft: "6px", paddingRight: "4px" }}>
                 {[1, 2, 3].map(i => (
-                  <div
-                    key={i}
-                    className="absolute left-0 right-0 pointer-events-none"
-                    style={{
-                      top: `${(i / 4) * 100}%`,
-                      borderTop: "1px dashed #f1f5f9",
-                    }}
-                  />
+                  <div key={i} className="absolute left-0 right-0 pointer-events-none" style={{ top: `${(i / 4) * 100}%`, borderTop: "1px dashed #f1f5f9" }} />
                 ))}
-
-                {/* Bars */}
                 {DAYS.map((d, i) => {
                   const isToday = i === todayIdx
-                  const barH = isToday ? "60%" : "16%"
                   return (
                     <div key={d} className="flex-1 flex items-end">
-                      <div
-                        className="w-full rounded-t-sm transition-all duration-500"
-                        style={{
-                          height: barH,
-                          background: isToday
-                            ? `linear-gradient(180deg, ${G} 0%, ${DG} 100%)`
-                            : "#e2e8f0",
-                          minHeight: "4px",
-                        }}
-                      />
+                      <div className="w-full rounded-t-sm transition-all duration-500" style={{ height: isToday ? "60%" : "16%", background: isToday ? `linear-gradient(180deg, ${G} 0%, ${DG} 100%)` : "#e2e8f0", minHeight: "4px" }} />
                     </div>
                   )
                 })}
               </div>
-
-              {/* X-axis day labels — same flex layout as bars so they align perfectly */}
               <div className="flex gap-1.5 pt-1.5" style={{ paddingLeft: "6px", paddingRight: "4px" }}>
                 {DAYS.map((d, i) => (
                   <div key={d} className="flex-1 flex justify-center">
-                    <span
-                      className="text-[10px] font-medium"
-                      style={{ color: i === todayIdx ? DG : "#94a3b8" }}
-                    >
-                      {d}
-                    </span>
+                    <span className="text-[10px] font-medium" style={{ color: i === todayIdx ? DG : "#94a3b8" }}>{d}</span>
                   </div>
                 ))}
               </div>
@@ -148,7 +350,6 @@ function DashboardPanel({ user }) {
           </div>
         </div>
 
-        {/* Trending Products */}
         <div className="bg-white rounded-xl p-5" style={{ border: "1px solid #e8edf2", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
           <div className="flex items-center justify-between mb-4">
             <p className="text-sm font-semibold text-gray-800">Trending Products</p>
@@ -199,68 +400,6 @@ function DashboardPanel({ user }) {
           </div>
           <p className="px-5 py-8 text-center text-sm text-gray-400">No low stock items</p>
         </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Notification panel ────────────────────────────────────────────────────────
-function NotificationPanel() {
-  return (
-    <div className="absolute right-0 top-full mt-2 bg-white rounded-xl overflow-hidden z-50"
-      style={{ width: "340px", border: "1px solid #e8edf2", boxShadow: "0 16px 48px rgba(0,0,0,0.12)" }}>
-      <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: "1px solid #f1f5f9", backgroundColor: "#fafbfc" }}>
-        <div>
-          <p className="text-sm font-bold text-gray-800">Notifications</p>
-          <p className="text-xs text-gray-400">You have 0 unread</p>
-        </div>
-        <button className="text-xs font-semibold hover:underline" style={{ color: G }}>Mark all read</button>
-      </div>
-      <div className="flex border-b border-gray-100">
-        {["All", "Orders", "Messages", "System"].map((t, i) => (
-          <button key={t} className="flex-1 py-2 text-xs font-semibold border-b-2 transition-all"
-            style={{ borderColor: i === 0 ? G : "transparent", color: i === 0 ? G : "#9ca3af" }}>{t}</button>
-        ))}
-      </div>
-      <div className="flex flex-col items-center justify-center py-10 text-center px-4">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "linear-gradient(135deg, #f0fdf4, #dcfce7)" }}>
-          <svg className="w-5 h-5" style={{ color: DG }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-          </svg>
-        </div>
-        <p className="text-sm font-medium text-gray-500">All caught up!</p>
-        <p className="text-xs text-gray-400 mt-0.5">No new notifications right now</p>
-      </div>
-      <div className="px-4 py-2.5 border-t border-gray-100 text-center" style={{ backgroundColor: "#fafbfc" }}>
-        <button className="text-xs font-semibold hover:underline" style={{ color: G }}>View all notifications</button>
-      </div>
-    </div>
-  )
-}
-
-// ── User dropdown ─────────────────────────────────────────────────────────────
-function UserDropdown({ user, onLogout }) {
-  return (
-    <div className="absolute right-0 top-full mt-2 bg-white rounded-xl overflow-hidden z-50"
-      style={{ width: "200px", border: "1px solid #e8edf2", boxShadow: "0 16px 48px rgba(0,0,0,0.12)" }}>
-      <div className="px-4 py-3" style={{ borderBottom: "1px solid #f1f5f9", background: "linear-gradient(135deg, #f0fdf4, #fafff8)" }}>
-        <p className="text-xs font-bold text-gray-800">{user?.firstName || "Admin"} {user?.lastName || ""}</p>
-        <p className="text-[11px] text-gray-400 mt-0.5">{user?.email || "admin@bloomora.com"}</p>
-      </div>
-      {[
-        { label: "My Profile", d: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
-        { label: "Settings",   d: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" },
-      ].map(item => (
-        <button key={item.label} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-gray-600 hover:bg-gray-50 transition-all">
-          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d={item.d} /></svg>
-          {item.label}
-        </button>
-      ))}
-      <div style={{ borderTop: "1px solid #f1f5f9" }}>
-        <button onClick={onLogout} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-all">
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
-          Logout
-        </button>
       </div>
     </div>
   )
@@ -328,10 +467,11 @@ function SidebarContent({ active, setActive, collapsed, onLogout }) {
   )
 }
 
-// ── Main shell ────────────────────────────────────────────────────────────────
+// ── Main Shell ────────────────────────────────────────────────────────────────
 export default function AdminDashboard({ onNavigate }) {
   const { user, logout } = useAuth()
   const [active, setActive]         = useState("Dashboard")
+  const [overlay, setOverlay]       = useState(null) // "profile" | "notifications" | null
   const [collapsed, setCollapsed]   = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [notifOpen, setNotifOpen]   = useState(false)
@@ -350,7 +490,19 @@ export default function AdminDashboard({ onNavigate }) {
     return () => document.removeEventListener("mousedown", handler)
   }, [])
 
-  const renderPanel = () => {
+  // Navigate to a named panel, clearing overlays
+  const goTo = (panel) => {
+    setActive(panel)
+    setOverlay(null)
+    setUserOpen(false)
+    setNotifOpen(false)
+  }
+
+  const renderMain = () => {
+    // Overlay panels take priority over the active sidebar item
+    if (overlay === "profile")       return <MyProfilePanel user={user} onBack={() => setOverlay(null)} />
+    if (overlay === "notifications") return <NotificationsPage onBack={() => setOverlay(null)} />
+
     switch (active) {
       case "Dashboard":    return <DashboardPanel user={user} />
       case "Orders":       return <AdminOrders />
@@ -375,14 +527,16 @@ export default function AdminDashboard({ onNavigate }) {
           onClick={() => setMobileOpen(false)} />
       )}
 
+      {/* Mobile sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-60 bg-white flex flex-col transition-transform duration-300 lg:hidden ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
         style={{ boxShadow: "4px 0 24px rgba(0,0,0,0.10)" }}>
-        <SidebarContent active={active} setActive={(l) => { setActive(l); setMobileOpen(false) }} collapsed={false} onLogout={handleLogout} />
+        <SidebarContent active={active} setActive={(l) => { goTo(l); setMobileOpen(false) }} collapsed={false} onLogout={handleLogout} />
       </aside>
 
+      {/* Desktop sidebar */}
       <aside className={`hidden lg:flex flex-col bg-white flex-shrink-0 min-h-screen transition-all duration-300`}
         style={{ width: collapsed ? "60px" : "220px", borderRight: "1px solid #e8edf2", boxShadow: "1px 0 6px rgba(0,0,0,0.03)" }}>
-        <SidebarContent active={active} setActive={setActive} collapsed={collapsed} onLogout={handleLogout} />
+        <SidebarContent active={active} setActive={goTo} collapsed={collapsed} onLogout={handleLogout} />
       </aside>
 
       <div className="flex-1 flex flex-col min-h-screen min-w-0">
@@ -414,24 +568,37 @@ export default function AdminDashboard({ onNavigate }) {
                 onBlur={e => { e.target.style.width = "176px"; e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none"; e.target.style.backgroundColor = "#f7f9fc" }} />
             </div>
 
+            {/* Notification bell */}
             <div className="relative" ref={notifRef}>
-              <button onClick={() => { setNotifOpen(p => !p); setUserOpen(false) }}
+              <button
+                onClick={() => { setNotifOpen(p => !p); setUserOpen(false) }}
                 className="relative p-1.5 rounded-lg transition-all text-gray-500 hover:bg-gray-100"
-                style={{ backgroundColor: notifOpen ? "#f0fdf4" : undefined }}>
+                style={{ backgroundColor: notifOpen ? "#f0fdf4" : undefined }}
+              >
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
                 </svg>
                 <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500 border-2 border-white" />
               </button>
-              {notifOpen && <NotificationPanel />}
+              {notifOpen && (
+                <NotificationPanel
+                  onViewAll={() => {
+                    setOverlay("notifications")
+                    setNotifOpen(false)
+                  }}
+                />
+              )}
             </div>
 
+            {/* User menu */}
             <div className="relative" ref={userRef}>
-              <button onClick={() => { setUserOpen(p => !p); setNotifOpen(false) }}
+              <button
+                onClick={() => { setUserOpen(p => !p); setNotifOpen(false) }}
                 className="flex items-center gap-2 px-2 py-1.5 rounded-lg transition-all hover:bg-gray-50"
                 style={{ border: "1px solid transparent" }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = "#e8edf2"; e.currentTarget.style.backgroundColor = "#f8faf9" }}
-                onMouseLeave={e => { if (!userOpen) { e.currentTarget.style.borderColor = "transparent"; e.currentTarget.style.backgroundColor = "transparent" } }}>
+                onMouseLeave={e => { if (!userOpen) { e.currentTarget.style.borderColor = "transparent"; e.currentTarget.style.backgroundColor = "transparent" } }}
+              >
                 <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
                   style={{ background: `linear-gradient(135deg, ${DG} 0%, ${G} 100%)` }}>
                   {user?.firstName?.[0] || "A"}
@@ -444,13 +611,20 @@ export default function AdminDashboard({ onNavigate }) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                 </svg>
               </button>
-              {userOpen && <UserDropdown user={user} onLogout={handleLogout} />}
+              {userOpen && (
+                <UserDropdown
+                  user={user}
+                  onLogout={handleLogout}
+                  onProfile={() => { setOverlay("profile"); setUserOpen(false) }}
+                  onSettings={() => { goTo("Settings") }}
+                />
+              )}
             </div>
           </div>
         </header>
 
         <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
-          {renderPanel()}
+          {renderMain()}
         </main>
       </div>
     </div>
