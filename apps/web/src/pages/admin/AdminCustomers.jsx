@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { api } from "../../services/api.js"
 import { DG, G, GreenCard, WhiteCard, TH, EmptyRow, TableWrap } from "./_adminShared"
 
 // ── Functional Export Button ──────────────────────────────────────────────────
@@ -68,6 +69,42 @@ export default function AdminCustomers() {
   const [statusFilter, setStatusFilter] = useState("")
   const [ordersFilter, setOrdersFilter] = useState("")
   const [dateFilter, setDateFilter] = useState("")
+  const [customers, setCustomers] = useState([])
+  const [total, setTotal] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  const fetchCustomers = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const params = { role: "customer" }
+      if (search.trim()) params.search = search.trim()
+      if (statusFilter) {
+        const map = { Active: "active", Inactive: "inactive", Blocked: "inactive", Unverified: "unverified" }
+        params.status = map[statusFilter] || statusFilter.toLowerCase()
+      }
+      const data = await api.getUsers(params)
+      setCustomers(data.users || [])
+      setTotal(data.total || 0)
+    } catch (err) {
+      setError(err.message || "Failed to load customers")
+    } finally {
+      setLoading(false)
+    }
+  }, [search, statusFilter])
+
+  useEffect(() => {
+    fetchCustomers()
+  }, [fetchCustomers])
+
+  const activeCount = customers.filter(c => c.is_active).length
+
+  const statusBadge = (customer) => {
+    if (!customer.is_verified) return { label: "Unverified", bg: "#fef9c3", color: "#92400e" }
+    if (!customer.is_active) return { label: "Inactive", bg: "#fee2e2", color: "#dc2626" }
+    return { label: "Active", bg: "#dcfce7", color: "#15803d" }
+  }
 
   return (
     <div className="space-y-5">
@@ -75,10 +112,10 @@ export default function AdminCustomers() {
 
       <div className="flex flex-wrap gap-3">
         <div style={{ flex: "1 0 220px", maxWidth: "300px" }}>
-          <GreenCard label="Total customers" value={0} sub="↑ +0 this week" />
+          <GreenCard label="Total customers" value={total} sub="↑ +0 this week" />
         </div>
         <div style={{ flex: "1 0 200px", maxWidth: "280px" }}>
-          <WhiteCard label="Active Customers" value={0} sub="↑ 0% vs last week" accentColor="#22c55e" />
+          <WhiteCard label="Active Customers" value={activeCount} sub="↑ 0% vs last week" accentColor="#22c55e" />
         </div>
       </div>
 
@@ -159,6 +196,7 @@ export default function AdminCustomers() {
               <input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') fetchCustomers() }}
                 placeholder="Find customer"
                 className="w-full pl-9 pr-4 py-2 text-sm border rounded-md bg-white outline-none transition-all"
                 style={{ borderColor: "#dde3ec" }}
@@ -169,7 +207,9 @@ export default function AdminCustomers() {
 
             {/* Refresh */}
             <button
-              className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium border rounded-md hover:bg-gray-50 transition-all text-gray-600 active:scale-95"
+              onClick={fetchCustomers}
+              disabled={loading}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium border rounded-md hover:bg-gray-50 transition-all text-gray-600 active:scale-95 disabled:opacity-50"
               style={{ borderColor: "#dde3ec" }}
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -178,9 +218,15 @@ export default function AdminCustomers() {
               Refresh
             </button>
 
-            <ExportCustomersBtn data={[]} />
+            <ExportCustomersBtn data={customers} />
           </div>
         </div>
+
+        {error && (
+          <div className="px-5 py-3 text-sm text-red-600 bg-red-50 border-b border-red-100">
+            {error}
+          </div>
+        )}
 
         <div className="overflow-x-auto">
           <table className="w-full" style={{ minWidth: "760px" }}>
@@ -191,18 +237,53 @@ export default function AdminCustomers() {
                 <TH>Phone</TH>
                 <TH>Status</TH>
                 <TH>Total Orders</TH>
-                <TH>Last Order Date</TH>
+                <TH>Joined</TH>
                 <TH>Action</TH>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              <EmptyRow cols={7} message="Connect to the backend to load customer data." />
+              {loading ? (
+                <tr><td colSpan={7} className="px-5 py-10 text-center text-sm text-gray-400">Loading customers...</td></tr>
+              ) : customers.length === 0 ? (
+                <EmptyRow cols={7} message={search || statusFilter ? "No customers match your filters." : "No customers found."} />
+              ) : (
+                customers.map(c => {
+                  const sb = statusBadge(c)
+                  return (
+                    <tr key={c.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-5 py-3.5 text-sm">
+                        <span className="font-medium text-gray-800">{c.first_name} {c.last_name}</span>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-gray-600">{c.email}</td>
+                      <td className="px-5 py-3.5 text-sm text-gray-600">{c.phone_number || "—"}</td>
+                      <td className="px-5 py-3.5 text-sm">
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold"
+                          style={{ backgroundColor: sb.bg, color: sb.color }}>
+                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sb.color }} />
+                          {sb.label}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-sm text-gray-600">—</td>
+                      <td className="px-5 py-3.5 text-sm text-gray-500">
+                        {c.created_at ? new Date(c.created_at).toLocaleDateString() : "—"}
+                      </td>
+                      <td className="px-5 py-3.5 text-sm">
+                        <button className="px-3 py-1.5 text-xs font-semibold rounded-md border transition-all hover:shadow-sm active:scale-95"
+                          style={{ backgroundColor: "#f0fdf4", borderColor: "#bbf7d0", color: DG }}>
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
             </tbody>
           </table>
         </div>
 
-        <CustomerPagination total={0} />
+        <CustomerPagination total={total} />
       </TableWrap>
     </div>
   )
 }
+

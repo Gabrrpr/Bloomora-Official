@@ -40,7 +40,7 @@ oauth.register(
 
 # Add this schema at the top with the others
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
     
 class SendOTPRequest(BaseModel):
@@ -170,11 +170,34 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+async def login(request: Request, db: Session = Depends(get_db)):
+    import json
+    content_type = request.headers.get("content-type", "")
+    body_bytes = await request.body()
+    data = {}
+
+    try:
+        if "application/json" in content_type:
+            data = json.loads(body_bytes.decode())
+        else:
+            # form-encoded (OAuth2 password flow from Swagger UI)
+            from urllib.parse import parse_qs
+            parsed = parse_qs(body_bytes.decode())
+            data = {k: v[0] if v else "" for k, v in parsed.items()}
+    except Exception:
+        raise HTTPException(status_code=422, detail="Invalid request body.")
+
+    # Support both JSON keys (email/password) and OAuth2 form keys (username/password)
+    email = data.get("email") or data.get("username")
+    password = data.get("password")
+
+    if not email or not password:
+        raise HTTPException(status_code=422, detail="Email/username and password are required.")
+
     user = db.query(User).filter(
-        (User.username == payload.email) | (User.email == payload.email)
+        (User.username == email) | (User.email == email)
     ).first()
-    if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
+    if not user or not user.password_hash or not verify_password(password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials.")
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user.")

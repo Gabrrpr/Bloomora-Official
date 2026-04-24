@@ -1,27 +1,45 @@
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { api } from "../../services/api.js"
 import { DG, G, StatusBadge, FilterBar, Pagination, TH, TD, ActionBtns, EmptyRow, TableWrap, ExportBtn } from "./_adminShared"
 
 // ── Add Product Modal ─────────────────────────────────────────────────────────
-const CATEGORIES = ["Roses", "Bouquets", "Tulips", "Sunflowers", "Arrangements", "Mixed Flowers", "Orchids", "Lilies", "Carnations", "Botanicals & Gifts"]
+const CATEGORIES = ["Flower", "Vase", "Wrapping", "Accessory", "Arrangement"]
 const AVAILABILITIES = ["Available", "Limited", "Out of Stock"]
 const STATUSES = ["Active", "Inactive"]
+
+// ── Product Pagination (matches Staff/Customers design) ───────────────────────
+function ProductPagination({ showing = "0 entries" }) {
+  const btnBase = "px-3 py-1.5 text-xs font-semibold border rounded-md transition-all"
+  const activeStyle = { borderColor: "#dde3ec", color: "#374151", cursor: "pointer" }
+
+  return (
+    <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: "1px solid #f1f5f9" }}>
+      <p className="text-xs text-gray-400">{showing}</p>
+      <div className="flex items-center gap-1">
+        {["← Prev", "1", "2", "3", "Next →"].map(lbl => (
+          <button
+            key={lbl}
+            className={btnBase}
+            style={activeStyle}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#f0fdf4"; e.currentTarget.style.borderColor = G; e.currentTarget.style.color = G }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = ""; e.currentTarget.style.borderColor = "#dde3ec"; e.currentTarget.style.color = "#374151" }}
+          >
+            {lbl}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 function AddProductModal({ onClose, onSave }) {
   const [form, setForm] = useState({
     name: "", category: "", price: "", originalPrice: "",
-    availability: "Available", status: "Active", description: "", image: null,
+    availability: "Available", status: "Active", description: "", image_url: "",
   })
   const [errors, setErrors] = useState({})
-  const [preview, setPreview] = useState(null)
 
   const set = (key) => (val) => setForm(f => ({ ...f, [key]: val }))
-
-  const handleImage = (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    setForm(f => ({ ...f, image: file }))
-    setPreview(URL.createObjectURL(file))
-  }
 
   const validate = () => {
     const err = {}
@@ -32,11 +50,26 @@ function AddProductModal({ onClose, onSave }) {
     return err
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const err = validate()
     if (Object.keys(err).length) { setErrors(err); return }
-    onSave(form)
-    onClose()
+    try {
+      const fd = new FormData()
+      fd.append("name", form.name)
+      fd.append("category", form.category.toLowerCase())
+      fd.append("price", form.price)
+      fd.append("status", form.status.toLowerCase())
+      fd.append("is_available", form.availability !== "Out of Stock")
+      if (form.description) fd.append("description", form.description)
+      if (form.image_url) fd.append("image_url", form.image_url)
+      const stock = form.availability === "Out of Stock" ? 0 : form.availability === "Limited" ? 5 : 50
+      fd.append("stock", String(stock))
+      const res = await api.createProduct(fd)
+      onSave(res.product)
+      onClose()
+    } catch (e) {
+      alert(e.message || "Failed to create product")
+    }
   }
 
   return (
@@ -63,24 +96,18 @@ function AddProductModal({ onClose, onSave }) {
         {/* Body */}
         <div className="overflow-y-auto p-6 space-y-4" style={{ maxHeight: "calc(90vh - 130px)" }}>
 
-          {/* Image upload */}
+          {/* Image URL */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-2">Product Image</label>
-            <label className="flex flex-col items-center justify-center cursor-pointer rounded-lg border-2 border-dashed transition-all hover:border-green-400"
-              style={{ borderColor: preview ? G : "#dde3ec", backgroundColor: preview ? "#f0fdf4" : "#fafbfc", height: "120px" }}>
-              {preview ? (
-                <img src={preview} alt="Preview" className="h-full w-full object-contain rounded-lg p-2" />
-              ) : (
-                <div className="text-center">
-                  <svg className="w-7 h-7 mx-auto mb-1.5 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <p className="text-xs font-medium text-gray-500">Click to upload image</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">PNG, JPG up to 5MB</p>
-                </div>
-              )}
-              <input type="file" accept="image/*" className="hidden" onChange={handleImage} />
-            </label>
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Image URL <span className="text-gray-400 font-normal">(optional)</span></label>
+            <input value={form.image_url} onChange={e => set("image_url")(e.target.value)}
+              placeholder="https://..."
+              className="w-full px-3 py-2.5 text-sm border rounded-md bg-white outline-none transition-all"
+              style={{ borderColor: "#dde3ec" }}
+              onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.10)` }}
+              onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }} />
+            {form.image_url && (
+              <img src={form.image_url} alt="Preview" className="mt-2 h-20 w-20 object-cover rounded-lg border border-gray-200" />
+            )}
           </div>
 
           {/* Product Name */}
@@ -218,23 +245,46 @@ export default function AdminProducts() {
   const [products, setProducts]     = useState([])
   const [totalCount, setTotalCount] = useState(0)
   const [lowCount, setLowCount]     = useState(0)
+  const [loading, setLoading]       = useState(true)
+
+  const fetchProducts = useCallback(async () => {
+    try {
+      const res = await api.getAdminProducts()
+      const data = Array.isArray(res) ? res : res.products || []
+      setProducts(data)
+      setTotalCount(data.length)
+      setLowCount(data.filter(p => p.stock <= (p.reorder_point || 10)).length)
+    } catch (e) {
+      console.error("Failed to fetch products", e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchProducts()
+  }, [fetchProducts])
 
   const handleSave = (newProduct) => {
-    setProducts(prev => [{ ...newProduct, id: Date.now() }, ...prev])
+    setProducts(prev => [newProduct, ...prev])
     setTotalCount(c => c + 1)
   }
 
-  const handleDelete = (id) => {
-    if (window.confirm("Delete this product?")) {
+  const handleDelete = async (id) => {
+    if (!window.confirm("Delete this product?")) return
+    try {
+      await api.deleteProduct(id)
       setProducts(prev => prev.filter(p => p.id !== id))
       setTotalCount(c => Math.max(0, c - 1))
+    } catch (e) {
+      alert(e.message || "Failed to delete product")
     }
   }
 
   // Filtered products
   const filtered = products.filter(p => {
     const matchSearch   = !search   || p.name?.toLowerCase().includes(search.toLowerCase())
-    const matchCategory = !category || p.category === category
+    const matchCategory = !category || p.category?.toLowerCase() === category.toLowerCase()
     const matchStatus   = !status   || p.status === status
     return matchSearch && matchCategory && matchStatus
   }).sort((a, b) => {
@@ -299,7 +349,7 @@ export default function AdminProducts() {
       </div>
 
       {/* Table */}
-      <TableWrap>
+      <TableWrap loading={loading}>
         <div className="p-4" style={{ borderBottom: "1px solid #f1f5f9", backgroundColor: "#fafbfc" }}>
           <div className="flex items-center gap-2 flex-wrap">
             {/* Category */}
@@ -381,48 +431,41 @@ export default function AdminProducts() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtered.length > 0 ? filtered.map(p => (
-                <tr key={p.id} className="hover:bg-gray-50 transition-colors">
-                  <TD>
-                    {p.image ? (
-                      <img src={URL.createObjectURL(p.image)} alt={p.name} className="w-10 h-10 rounded-lg object-cover" style={{ border: "1px solid #e8edf2" }} />
-                    ) : (
-                      <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0" }}>
-                        <svg className="w-5 h-5" style={{ color: DG }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01" />
-                        </svg>
+              {filtered.length > 0 ? filtered.map(p => {
+                const availability = !p.is_available ? "Out of stock" : p.stock <= (p.reorder_point || 10) ? "Low stock" : "In stock"
+                return (
+                  <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                    <TD>
+                      {p.image_url ? (
+                        <img src={p.image_url} alt={p.name} className="w-10 h-10 rounded-lg object-cover" style={{ border: "1px solid #e8edf2" }} />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+                          <svg className="w-5 h-5" style={{ color: DG }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01" />
+                          </svg>
+                        </div>
+                      )}
+                    </TD>
+                    <TD><span className="font-medium text-gray-800">{p.name}</span></TD>
+                    <TD><span className="text-gray-600">{p.category}</span></TD>
+                    <TD>
+                      <div>
+                        <span className="font-semibold text-gray-800">₱{(+p.price).toLocaleString()}</span>
+                        {p.original_price && <span className="block text-xs text-gray-400 line-through">₱{(+p.original_price).toLocaleString()}</span>}
                       </div>
-                    )}
-                  </TD>
-                  <TD><span className="font-medium text-gray-800">{p.name}</span></TD>
-                  <TD><span className="text-gray-600">{p.category}</span></TD>
-                  <TD>
-                    <div>
-                      <span className="font-semibold text-gray-800">₱{(+p.price).toLocaleString()}</span>
-                      {p.originalPrice && <span className="block text-xs text-gray-400 line-through">₱{(+p.originalPrice).toLocaleString()}</span>}
-                    </div>
-                  </TD>
-                  <TD><StatusBadge status={p.status} /></TD>
-                  <TD><StatusBadge status={p.availability} /></TD>
-                  <TD><ActionBtns onEdit={() => {}} onView={() => {}} onDelete={() => handleDelete(p.id)} /></TD>
-                </tr>
-              )) : (
+                    </TD>
+                    <TD><StatusBadge status={p.status} /></TD>
+                    <TD><StatusBadge status={availability} /></TD>
+                    <TD><ActionBtns onEdit={() => {}} onView={() => {}} onDelete={() => handleDelete(p.id)} /></TD>
+                  </tr>
+                )
+              }) : (
                 <EmptyRow cols={7} message="No products yet — click '+ Add Product' to add your first product." />
               )}
             </tbody>
           </table>
         </div>
-        <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100">
-          <span className="text-sm text-gray-400">Showing {filtered.length} of {products.length} entries</span>
-          <div className="flex items-center gap-1">
-            {["Previous","1","2","3",">","Next →"].map(p => (
-              <button key={p} className="px-2.5 py-1.5 rounded-md text-xs transition-all"
-                style={{ background: p === "1" ? `linear-gradient(135deg, ${DG}, ${G})` : "white", color: p === "1" ? "white" : "#6b7280", border: p === "1" ? "none" : "1px solid #e2e8f0", fontWeight: p === "1" ? 600 : 400 }}>
-                {p}
-              </button>
-            ))}
-          </div>
-        </div>
+        <ProductPagination showing={`Showing ${filtered.length} of ${products.length} entries`} />
       </TableWrap>
     </div>
   )

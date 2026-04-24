@@ -20,15 +20,16 @@ def create_session(
     return {"id": str(current_user.id)}
 
 @router.post("/messages", response_model=MessageOut)
-def create_message(
+async def create_message(                          # ← async now
     message: MessageCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    sender = 'customer' if current_user.role == RoleEnum.customer else 'staff'
     new_message = Chat(
         user_id=message.user_id,
         message=message.text,
-        sender='customer' if current_user.role == RoleEnum.customer else 'staff',
+        sender=sender,
         is_read=0
     )
     db.add(new_message)
@@ -37,18 +38,23 @@ def create_message(
 
     payload = {
         "id": str(new_message.id),
-        "user_id": str(new_message.user_id),
+        "customer_id": str(message.user_id),
+        "user_id": str(message.user_id),
         "message": new_message.message,
-        "sender": new_message.sender,
+        "sender": sender,
         "created_at": new_message.created_at.isoformat(),
         "is_read": new_message.is_read
     }
 
-    # Broadcast to sender and staff
-    manager.send_to_user(str(current_user.id), payload)
-    if new_message.sender == 'customer':
-        # Notify all staff
-        manager.broadcast_to_staff(payload)
+    # Send back to the customer
+    await manager.send_to_user(str(message.user_id), payload)
+
+    if sender == 'customer':
+        # Notify all connected staff
+        await manager.broadcast_to_staff(payload)
+    else:
+        # Staff replied — notify the customer
+        await manager.send_to_user(str(message.user_id), payload)
 
     return new_message
 
@@ -124,12 +130,30 @@ def mark_messages_as_read(
 
 # WebSocket
 @router.websocket("/ws/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, user_id: str):
-    await manager.connect(websocket)
+async def websocket_endpoint(
+    websocket: WebSocket,
+    user_id: str,
+    db: Session = Depends(get_db),
+):
+    # Determine if this user is staff/admin
+    user = db.query(User).filter(User.id == user_id).first()
+    is_staff = user and user.role in [RoleEnum.admin, RoleEnum.staff]
+
+    await manager.connect(websocket, user_id, is_staff=is_staff)
     try:
         while True:
             data = await websocket.receive_json()
-            manager.broadcast(data)
+            # Real-time: if message comes through WS directly
+            data["customer_id"] = data.get("customer_id", user_id)
+            if is_staff:
+                # Staff sending to a customer
+                target = data.get("customer_id")
+                if target:
+                    await manager.send_to_user(target, data)
+            else:
+                # Customer sending — notify all staff
+                await manager.broadcast_to_staff(data)
+                await manager.send_to_user(user_id, data)
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        manager.disconnect(websocket, user_id)
 

@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 from app.core.config import settings
-from app.api.v1.routes import auth, products, customization, chats, orders
+from app.api.v1.routes import auth, products, customization, chats, orders, users
 from app.core.dependencies import get_current_user
 
 app = FastAPI(
@@ -31,6 +31,7 @@ app.include_router(products.router, prefix="/api/v1/products", tags=["Products"]
 app.include_router(customization.router, prefix="/api/v1", tags=["customization"])
 app.include_router(chats.router, prefix="/api/v1", tags=["chats"])
 app.include_router(orders.router, prefix="/api/v1", tags=["orders"])
+app.include_router(users.router, prefix="/api/v1", tags=["users"])
 
 @app.get("/", tags=["Health"])
 def root():

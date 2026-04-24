@@ -179,11 +179,18 @@ export function EmptyRow({ cols, message = "No data yet — connect to the backe
 }
 
 // ── Table wrapper ─────────────────────────────────────────────────────────────
-export function TableWrap({ children }) {
+export function TableWrap({ children, loading }) {
   return (
     <div className="bg-white rounded-xl overflow-hidden"
       style={{ border: "1px solid #e8edf2", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-      {children}
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-14">
+          <div className="w-10 h-10 rounded-full border-2 border-green-100 border-t-green-600 animate-spin mb-3" />
+          <p className="text-sm font-medium text-gray-500">Loading products…</p>
+        </div>
+      ) : (
+        children
+      )}
     </div>
   )
 }
