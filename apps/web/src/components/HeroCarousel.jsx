@@ -21,6 +21,7 @@ const DEFAULT_HEROES = [
     description: "Since 1959, we've been part of countless moments big and small. Every arrangement is made by hand with fresh flowers and genuine care.",
     cta: "Shop Flowers",
     ctaSecondary: "View Occasions",
+    ctaSecondaryNav: "occasions",
     accent: "#2E8B34",
     image: heroBg1,
   },
@@ -31,6 +32,7 @@ const DEFAULT_HEROES = [
     description: "Whether it's an apology, a misunderstanding, or just a way to say \"I care,\" sending flowers is sometimes the simplest way to fix things without saying too much.",
     cta: "Shop Flowers",
     ctaSecondary: "Explore Collection",
+    ctaSecondaryNav: "shop",
     accent: "#e11d48",
     image: heroBg2,
   },
@@ -41,6 +43,7 @@ const DEFAULT_HEROES = [
     description: "Use our \"Make it Personal\" feature to describe your ideal bouquet, or build your own arrangement through our Mix and Match option. We'll turn your idea into something fresh and beautifully made.",
     cta: "Try It Now",
     ctaSecondary: "See Examples",
+    ctaSecondaryNav: "ai-gallery",
     accent: "#7c3aed",
     image: heroBg3,
   },
@@ -51,6 +54,7 @@ const DEFAULT_HEROES = [
     description: "From everyday surprises to life's biggest moments, we create fresh arrangements that help you express what you feel in a simple and meaningful way.",
     cta: "Shop Flowers",
     ctaSecondary: "View Occasions",
+    ctaSecondaryNav: "occasions",
     accent: "#d97706",
     image: heroBg4,
   },
@@ -65,7 +69,7 @@ function resolveImage(slide) {
   return heroBg1
 }
 
-export default function HeroCarousel() {
+export default function HeroCarousel({ onNavigate }) {
   const [heroes, setHeroes] = useState(DEFAULT_HEROES)
   const [current, setCurrent] = useState(0)
   const [prev, setPrev] = useState(null)
@@ -73,24 +77,17 @@ export default function HeroCarousel() {
   const [progress, setProgress] = useState(0)
   const [paused, setPaused] = useState(false)
 
-  // Fetch slides from API on mount
   useEffect(() => {
     api.getHeroSlides()
       .then((data) => {
         if (data?.slides && Array.isArray(data.slides) && data.slides.length > 0) {
-          const mapped = data.slides.map((s) => ({
-            ...s,
-            image: resolveImage(s),
-          }))
+          const mapped = data.slides.map((s) => ({ ...s, image: resolveImage(s) }))
           setHeroes(mapped)
         }
       })
-      .catch(() => {
-        // silently fall back to defaults
-      })
+      .catch(() => {})
   }, [])
 
-  // Auto-advance
   useEffect(() => {
     if (paused) return
     const interval = setInterval(() => {
@@ -99,7 +96,6 @@ export default function HeroCarousel() {
     return () => clearInterval(interval)
   }, [current, paused, heroes.length])
 
-  // Progress bar for dots
   useEffect(() => {
     if (paused) return
     setProgress(0)
@@ -118,13 +114,10 @@ export default function HeroCarousel() {
     setPrev(current)
     setAnimating(true)
     setCurrent(index)
-    setTimeout(() => {
-      setPrev(null)
-      setAnimating(false)
-    }, 600)
+    setTimeout(() => { setPrev(null); setAnimating(false) }, 600)
   }
 
-  const hero = heroes[current]
+  const hero     = heroes[current]
   const prevHero = prev !== null ? heroes[prev] : null
 
   return (
@@ -134,65 +127,38 @@ export default function HeroCarousel() {
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
-      {/* Background image slides */}
       {heroes.map((h, i) => (
-        <div
-          key={h.id}
-          className="absolute inset-0 transition-opacity duration-700"
-          style={{
-            backgroundImage: `url(${h.image})`,
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            opacity: i === current ? 1 : 0,
-            zIndex: 0,
-          }}
-        />
+        <div key={h.id} className="absolute inset-0 transition-opacity duration-700"
+          style={{ backgroundImage: `url(${h.image})`, backgroundSize: "cover", backgroundPosition: "center", opacity: i === current ? 1 : 0, zIndex: 0 }} />
       ))}
 
-      {/* Dark gradient overlay — stronger on left for text legibility */}
-      <div
-        className="absolute inset-0 z-10"
-        style={{ background: "linear-gradient(90deg, rgba(0,0,0,0.60) 0%, rgba(0,0,0,0.30) 50%, rgba(0,0,0,0.05) 100%)" }}
-      />
+      <div className="absolute inset-0 z-10"
+        style={{ background: "linear-gradient(90deg, rgba(0,0,0,0.60) 0%, rgba(0,0,0,0.30) 50%, rgba(0,0,0,0.05) 100%)" }} />
 
-      {/* ── Left arrow — pinned to left edge ── */}
-      <button
-        onClick={() => goTo((current - 1 + heroes.length) % heroes.length, "prev")}
+      <button onClick={() => goTo((current - 1 + heroes.length) % heroes.length, "prev")}
         className="absolute left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full flex items-center justify-center text-white border border-white/30 bg-black/20 hover:bg-black/40 backdrop-blur-sm transition-all duration-200 hover:scale-110"
-        aria-label="Previous slide"
-      >
+        aria-label="Previous slide">
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
       </button>
 
-      {/* ── Right arrow — pinned to right edge ── */}
-      <button
-        onClick={() => goTo((current + 1) % heroes.length, "next")}
+      <button onClick={() => goTo((current + 1) % heroes.length, "next")}
         className="absolute right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full flex items-center justify-center text-white border border-white/30 bg-black/20 hover:bg-black/40 backdrop-blur-sm transition-all duration-200 hover:scale-110"
-        aria-label="Next slide"
-      >
+        aria-label="Next slide">
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       </button>
 
-      {/* ── Text content ── */}
       <div className="relative z-20 h-full flex items-center">
         <div className="w-full max-w-7xl mx-auto px-16 sm:px-20 lg:px-24">
           <div className="max-w-xl">
-
-            {/* Exiting content */}
             {animating && prevHero && (
-              <div
-                key={`prev-${prev}`}
-                className="absolute"
-                style={{ animation: "slideOutLeft 0.55s cubic-bezier(0.4,0,0.2,1) forwards" }}
-              >
-                <span
-                  className="inline-block text-xs font-bold tracking-[0.2em] uppercase px-3 py-1 rounded-full mb-4 text-white"
-                  style={{ backgroundColor: prevHero.accent + "55", border: `1px solid ${prevHero.accent}99` }}
-                >
+              <div key={`prev-${prev}`} className="absolute"
+                style={{ animation: "slideOutLeft 0.55s cubic-bezier(0.4,0,0.2,1) forwards" }}>
+                <span className="inline-block text-xs font-bold tracking-[0.2em] uppercase px-3 py-1 rounded-full mb-4 text-white"
+                  style={{ backgroundColor: prevHero.accent + "55", border: `1px solid ${prevHero.accent}99` }}>
                   {prevHero.tag}
                 </span>
                 <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-4" style={{ textShadow: "0 2px 20px rgba(0,0,0,0.4)" }}>
@@ -202,36 +168,26 @@ export default function HeroCarousel() {
               </div>
             )}
 
-            {/* Entering content */}
-            <div
-              key={`curr-${current}`}
-              style={{
-                animation: animating ? "slideInRight 0.6s cubic-bezier(0.4,0,0.2,1) forwards" : "none",
-                opacity: animating ? 0 : 1,
-              }}
-            >
-              <span
-                className="inline-block text-xs font-bold tracking-[0.2em] uppercase px-3 py-1 rounded-full mb-5 text-white"
-                style={{ backgroundColor: hero.accent + "55", border: `1px solid ${hero.accent}99` }}
-              >
+            <div key={`curr-${current}`}
+              style={{ animation: animating ? "slideInRight 0.6s cubic-bezier(0.4,0,0.2,1) forwards" : "none", opacity: animating ? 0 : 1 }}>
+              <span className="inline-block text-xs font-bold tracking-[0.2em] uppercase px-3 py-1 rounded-full mb-5 text-white"
+                style={{ backgroundColor: hero.accent + "55", border: `1px solid ${hero.accent}99` }}>
                 {hero.tag}
               </span>
               <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-5" style={{ textShadow: "0 2px 20px rgba(0,0,0,0.4)" }}>
-                {hero.headline.split("\n").map((line, i) => (
-                  <span key={i} className="block">{line}</span>
-                ))}
+                {hero.headline.split("\n").map((line, i) => <span key={i} className="block">{line}</span>)}
               </h1>
-              <p className="text-white/80 text-base sm:text-lg leading-relaxed mb-8 max-w-md">
-                {hero.description}
-              </p>
+              <p className="text-white/80 text-base sm:text-lg leading-relaxed mb-8 max-w-md">{hero.description}</p>
               <div className="flex items-center gap-3 flex-wrap">
                 <button
+                  onClick={() => onNavigate && onNavigate("shop")}
                   className="px-7 py-3.5 text-sm font-bold text-white rounded-full shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl"
-                  style={{ backgroundColor: hero.accent }}
-                >
+                  style={{ backgroundColor: hero.accent }}>
                   {hero.cta}
                 </button>
-                <button className="px-7 py-3.5 text-sm font-semibold text-white rounded-full border border-white/40 backdrop-blur-sm hover:bg-white/10 transition-all duration-200">
+                <button
+                  onClick={() => onNavigate && hero.ctaSecondaryNav && onNavigate(hero.ctaSecondaryNav)}
+                  className="px-7 py-3.5 text-sm font-semibold text-white rounded-full border border-white/40 backdrop-blur-sm hover:bg-white/10 transition-all duration-200">
                   {hero.ctaSecondary}
                 </button>
               </div>
@@ -240,35 +196,20 @@ export default function HeroCarousel() {
         </div>
       </div>
 
-      {/* ── Dots — centered at bottom ── */}
       <div className="absolute bottom-6 left-0 right-0 z-20 flex items-center justify-center gap-2.5">
         {heroes.map((_, i) => (
-          <button
-            key={i}
-            onClick={() => goTo(i, i > current ? "next" : "prev")}
+          <button key={i} onClick={() => goTo(i, i > current ? "next" : "prev")}
             className="relative overflow-hidden rounded-full transition-all duration-300 flex-shrink-0"
-            style={{
-              width: i === current ? "28px" : "8px",
-              height: "8px",
-              backgroundColor: i === current ? "white" : "rgba(255,255,255,0.40)",
-            }}
-            aria-label={`Go to slide ${i + 1}`}
-          >
+            style={{ width: i === current ? "28px" : "8px", height: "8px", backgroundColor: i === current ? "white" : "rgba(255,255,255,0.40)" }}
+            aria-label={`Go to slide ${i + 1}`}>
             {i === current && !paused && (
-              <div
-                className="absolute inset-y-0 left-0 rounded-full"
-                style={{
-                  backgroundColor: "rgba(255,255,255,0.35)",
-                  width: `${progress}%`,
-                  transition: "width 0.1s linear",
-                }}
-              />
+              <div className="absolute inset-y-0 left-0 rounded-full"
+                style={{ backgroundColor: "rgba(255,255,255,0.35)", width: `${progress}%`, transition: "width 0.1s linear" }} />
             )}
           </button>
         ))}
       </div>
 
-      {/* CSS keyframes */}
       <style>{`
         @keyframes slideOutLeft {
           0%   { opacity: 1; transform: translateX(0) scale(1); }
@@ -282,4 +223,3 @@ export default function HeroCarousel() {
     </div>
   )
 }
-

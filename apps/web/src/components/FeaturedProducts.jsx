@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from "react"
+import ProductPreviewModal from "./ProductPreviewModal.jsx"
+
 import SpringFlowers_PurpleWrapper from "../assets/products/SpringFlowers_PurpleWrapper.png"
 import SpringFlowers_PinkWrapper from "../assets/products/SpringFlowers_PinkWrapper.png"
 import SpringFlowers_GreenWrapper from "../assets/products/SpringFlowers_GreenWrapper.png"
@@ -16,33 +18,33 @@ import Roses_6pcs_Purple from "../assets/products/6pcs_PurpleChinaRoses.png"
 import Sunflower_3pcs from "../assets/products/3pcs_Sunflower.png"
 import Tulips_3pc_Pink from "../assets/products/3pc_PinkTulips.png"
 
-const PRODUCTS = [
-  { id: 1,  name: "Spring Flowers Purple Wrapper", image: SpringFlowers_PurpleWrapper, price: 850,  original: 1100, rating: 4.9, reviews: 124, ribbon: "Best Seller" },
-  { id: 2,  name: "Spring Flowers Pink Wrapper",   image: SpringFlowers_PinkWrapper,   price: 850,  original: 1100, rating: 4.8, reviews: 98,  ribbon: "Best Seller" },
-  { id: 3,  name: "Spring Flowers Green Wrapper",  image: SpringFlowers_GreenWrapper,  price: 850,  original: 1100, rating: 4.7, reviews: 76,  ribbon: null },
-  { id: 4,  name: "Rainbow Ecuador Roses",         image: RainbowEquadorRoses,         price: 1299, original: 1599, rating: 5.0, reviews: 210, ribbon: "Top Pick" },
-  { id: 5,  name: "Mix Tulips",                    image: MixTulips,                   price: 750,  original: 950,  rating: 4.8, reviews: 88,  ribbon: "New" },
-  { id: 6,  name: "Dozen Yellow China Roses",      image: Dozen_YellowChinaRoses,      price: 699,  original: 899,  rating: 4.6, reviews: 57,  ribbon: null },
-  { id: 7,  name: "Dozen Red Ecuador Roses",       image: Dozen_RedEquadorRoses,       price: 999,  original: 1299, rating: 4.9, reviews: 183, ribbon: "Best Seller" },
-  { id: 8,  name: "Dozen Red China Roses",         image: Dozen_RedChinaRoses,         price: 699,  original: 899,  rating: 4.7, reviews: 65,  ribbon: null },
-  { id: 9,  name: "Dozen Pink China Roses",        image: Dozen_PinkChinaRoses,        price: 699,  original: 899,  rating: 4.8, reviews: 91,  ribbon: "Popular" },
-  { id: 10, name: "Dozen Orange China Roses",      image: Dozen_OrangeChinaRoses,      price: 699,  original: 899,  rating: 4.6, reviews: 44,  ribbon: null },
-  { id: 11, name: "24pcs Red Ecuador Roses",       image: Roses_24pcs_Red,             price: 1799, original: 2199, rating: 5.0, reviews: 156, ribbon: "Premium" },
-  { id: 12, name: "10pcs Blue China Roses",        image: Roses_10pcs_Blue,            price: 599,  original: 799,  rating: 4.7, reviews: 38,  ribbon: "Rare Find" },
-  { id: 13, name: "6pcs White Ecuador Roses",      image: Roses_6pcs_White,            price: 499,  original: 649,  rating: 4.8, reviews: 72,  ribbon: null },
-  { id: 14, name: "6pcs Purple China Roses",       image: Roses_6pcs_Purple,           price: 499,  original: 649,  rating: 4.9, reviews: 61,  ribbon: "Popular" },
-  { id: 15, name: "3pcs Sunflower",                image: Sunflower_3pcs,              price: 350,  original: 450,  rating: 4.9, reviews: 203, ribbon: "Best Seller" },
-  { id: 16, name: "3pcs Pink Tulips",              image: Tulips_3pc_Pink,             price: 350,  original: 450,  rating: 4.7, reviews: 49,  ribbon: "New" },
-]
-
-const RIBBON_STYLES = {
-  "Best Seller": { bg: "#2E8B34" },
-  "Top Pick":    { bg: "#0C573E" },
-  "New":         { bg: "#3b82f6" },
-  "Popular":     { bg: "#f59e0b" },
-  "Premium":     { bg: "#7c3aed" },
-  "Rare Find":   { bg: "#ec4899" },
+const RIBBON_COLORS = {
+  "Best Seller": "#2E8B34",
+  "Top Pick":    "#0C573E",
+  "New":         "#3b82f6",
+  "Popular":     "#f59e0b",
+  "Premium":     "#7c3aed",
+  "Rare Find":   "#ec4899",
 }
+
+const PRODUCTS = [
+  { id: 1,  name: "Spring Flowers Purple Wrapper", image: SpringFlowers_PurpleWrapper, price: 850,  original: 1100, rating: 4.9, reviews: 124, ribbon: "Best Seller", category: "Bouquets" },
+  { id: 2,  name: "Spring Flowers Pink Wrapper",   image: SpringFlowers_PinkWrapper,   price: 850,  original: 1100, rating: 4.8, reviews: 98,  ribbon: "Best Seller", category: "Bouquets" },
+  { id: 3,  name: "Spring Flowers Green Wrapper",  image: SpringFlowers_GreenWrapper,  price: 850,  original: 1100, rating: 4.7, reviews: 76,  ribbon: null,          category: "Bouquets" },
+  { id: 4,  name: "Rainbow Ecuador Roses",         image: RainbowEquadorRoses,         price: 1299, original: 1599, rating: 5.0, reviews: 210, ribbon: "Top Pick",    category: "Roses" },
+  { id: 5,  name: "Mix Tulips",                    image: MixTulips,                   price: 750,  original: 950,  rating: 4.8, reviews: 88,  ribbon: "New",         category: "Tulips" },
+  { id: 6,  name: "Dozen Yellow China Roses",      image: Dozen_YellowChinaRoses,      price: 699,  original: 899,  rating: 4.6, reviews: 57,  ribbon: null,          category: "Roses" },
+  { id: 7,  name: "Dozen Red Ecuador Roses",       image: Dozen_RedEquadorRoses,       price: 999,  original: 1299, rating: 4.9, reviews: 183, ribbon: "Best Seller", category: "Roses" },
+  { id: 8,  name: "Dozen Red China Roses",         image: Dozen_RedChinaRoses,         price: 699,  original: 899,  rating: 4.7, reviews: 65,  ribbon: null,          category: "Roses" },
+  { id: 9,  name: "Dozen Pink China Roses",        image: Dozen_PinkChinaRoses,        price: 699,  original: 899,  rating: 4.8, reviews: 91,  ribbon: "Popular",     category: "Roses" },
+  { id: 10, name: "Dozen Orange China Roses",      image: Dozen_OrangeChinaRoses,      price: 699,  original: 899,  rating: 4.6, reviews: 44,  ribbon: null,          category: "Roses" },
+  { id: 11, name: "24pcs Red Ecuador Roses",       image: Roses_24pcs_Red,             price: 1799, original: 2199, rating: 5.0, reviews: 156, ribbon: "Premium",     category: "Roses" },
+  { id: 12, name: "10pcs Blue China Roses",        image: Roses_10pcs_Blue,            price: 599,  original: 799,  rating: 4.7, reviews: 38,  ribbon: "Rare Find",   category: "Roses" },
+  { id: 13, name: "6pcs White Ecuador Roses",      image: Roses_6pcs_White,            price: 499,  original: 649,  rating: 4.8, reviews: 72,  ribbon: null,          category: "Roses" },
+  { id: 14, name: "6pcs Purple China Roses",       image: Roses_6pcs_Purple,           price: 499,  original: 649,  rating: 4.9, reviews: 61,  ribbon: "Popular",     category: "Roses" },
+  { id: 15, name: "3pcs Sunflower",                image: Sunflower_3pcs,              price: 350,  original: 450,  rating: 4.9, reviews: 203, ribbon: "Best Seller", category: "Arrangements" },
+  { id: 16, name: "3pcs Pink Tulips",              image: Tulips_3pc_Pink,             price: 350,  original: 450,  rating: 4.7, reviews: 49,  ribbon: "New",         category: "Tulips" },
+]
 
 function useScrollReveal(threshold = 0.15) {
   const ref = useRef(null)
@@ -74,14 +76,14 @@ function StarRating({ rating, reviews }) {
 }
 
 function Ribbon({ label }) {
-  const style = RIBBON_STYLES[label]
-  if (!style) return null
+  const color = RIBBON_COLORS[label]
+  if (!color) return null
   return (
     <div className="absolute top-3 left-0 z-10">
       <div
         className="text-[10px] font-bold text-white px-3 py-1 shadow-sm"
         style={{
-          backgroundColor: style.bg,
+          backgroundColor: color,
           clipPath: "polygon(0 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 0 100%)",
           paddingRight: "16px",
         }}
@@ -92,12 +94,13 @@ function Ribbon({ label }) {
   )
 }
 
-function ProductCard({ product, index, wishlist, toggleWishlist, addedToCart, handleAddToCart, discount }) {
+function ProductCard({ product, index, wishlist, toggleWishlist, addedToCart, handleAddToCart, discount, onPreview }) {
   const [ref, visible] = useScrollReveal(0.1)
+
   return (
     <div
       ref={ref}
-      className="bg-white group cursor-pointer hover:shadow-lg"
+      className="bg-white group hover:shadow-lg"
       style={{
         border: "1px solid #e5e7eb",
         borderRadius: "8px",
@@ -106,7 +109,10 @@ function ProductCard({ product, index, wishlist, toggleWishlist, addedToCart, ha
         opacity: visible ? 1 : 0,
         transform: visible ? "translateY(0)" : "translateY(24px)",
         transitionDelay: `${(index % 4) * 60}ms`,
+        cursor: "pointer",
       }}
+      // Clicking anywhere on the card opens the preview
+      onClick={() => onPreview(product)}
     >
       <div className="relative overflow-hidden bg-gray-50" style={{ aspectRatio: "1 / 1" }}>
         <img
@@ -121,8 +127,10 @@ function ProductCard({ product, index, wishlist, toggleWishlist, addedToCart, ha
         >
           -{discount(product.original, product.price)}%
         </div>
+
+        {/* Wishlist — stopPropagation so it doesn't trigger preview */}
         <button
-          onClick={() => toggleWishlist(product.id)}
+          onClick={(e) => { e.stopPropagation(); toggleWishlist(product.id) }}
           className="absolute bottom-2 left-2 w-7 h-7 bg-white flex items-center justify-center shadow opacity-0 group-hover:opacity-100 transition-opacity duration-200"
           style={{ borderRadius: "4px", border: "1px solid #e5e7eb" }}
         >
@@ -135,6 +143,19 @@ function ProductCard({ product, index, wishlist, toggleWishlist, addedToCart, ha
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
           </svg>
         </button>
+
+        {/* Hover overlay — "View Details" hint */}
+        <div
+          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+          style={{ background: "rgba(0,0,0,0.22)" }}
+        >
+          <span
+            className="text-white text-xs font-semibold px-3 py-1.5 rounded-full"
+            style={{ background: "rgba(0,0,0,0.45)", letterSpacing: "0.04em", backdropFilter: "blur(4px)" }}
+          >
+            View Details
+          </span>
+        </div>
       </div>
 
       <div className="p-3">
@@ -146,8 +167,10 @@ function ProductCard({ product, index, wishlist, toggleWishlist, addedToCart, ha
         <div className="mb-3">
           <StarRating rating={product.rating} reviews={product.reviews} />
         </div>
+
+        {/* Add to Cart — stopPropagation so it doesn't trigger preview */}
         <button
-          onClick={() => handleAddToCart(product.id)}
+          onClick={(e) => { e.stopPropagation(); handleAddToCart(product.id) }}
           className="w-full text-sm font-medium py-2 text-white transition-all duration-200 flex items-center justify-center gap-2"
           style={{ backgroundColor: addedToCart.includes(product.id) ? "#0C573E" : "#2E8B34", borderRadius: "6px" }}
         >
@@ -172,12 +195,14 @@ function ProductCard({ product, index, wishlist, toggleWishlist, addedToCart, ha
   )
 }
 
-export default function FeaturedProducts() {
-  const [wishlist, setWishlist] = useState([])
-  const [addedToCart, setAddedToCart] = useState([])
-  const [headerRef, headerVisible] = useScrollReveal(0.2)
+// ── Main export ───────────────────────────────────────────────────────────────
+export default function FeaturedProducts({ onNavigate }) {
+  const [wishlist, setWishlist]         = useState([])
+  const [addedToCart, setAddedToCart]   = useState([])
+  const [previewProduct, setPreviewProduct] = useState(null)
+  const [headerRef, headerVisible]      = useScrollReveal(0.2)
 
-  const toggleWishlist = (id) =>
+  const toggleWishlist  = (id) =>
     setWishlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
 
   const handleAddToCart = (id) => {
@@ -220,14 +245,12 @@ export default function FeaturedProducts() {
               addedToCart={addedToCart}
               handleAddToCart={handleAddToCart}
               discount={discount}
+              onPreview={setPreviewProduct}
             />
           ))}
         </div>
 
-        <div
-          className="text-center mt-10"
-          style={{ transition: "opacity 0.5s ease", opacity: 1 }}
-        >
+        <div className="text-center mt-10">
           <button
             className="px-8 py-2.5 text-sm font-medium border transition-all duration-200 hover:shadow-sm"
             style={{ borderColor: "#2E8B34", color: "#2E8B34", borderRadius: "6px" }}
@@ -238,6 +261,15 @@ export default function FeaturedProducts() {
           </button>
         </div>
       </div>
+
+      {/* Product Preview Modal */}
+      {previewProduct && (
+        <ProductPreviewModal
+          product={{ ...previewProduct, _ribbonColor: RIBBON_COLORS[previewProduct.ribbon] }}
+          onClose={() => setPreviewProduct(null)}
+          onNavigate={onNavigate}
+        />
+      )}
     </section>
   )
 }

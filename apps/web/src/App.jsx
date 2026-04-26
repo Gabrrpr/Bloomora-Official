@@ -23,6 +23,7 @@ import MixAndMatch from "./pages/MixAndMatch"
 import DescribeArrangement from "./pages/DescribeArrangement"
 import FAQ from "./pages/FAQ"
 import ReturnPolicy from "./pages/ReturnPolicy"
+import AIGalleryPage from "./pages/AIGalleryPage"   // ← ADD THIS
 import ChatWidget from "./components/ChatWidget"
 import CookieConsent from "./components/CookieConsent"
 import AdPopup from "./components/AdPopup"
@@ -62,7 +63,7 @@ function AppContent() {
             case "checkout":             return <Checkout onNavigate={navigate} />
             case "confirmation":         return <Confirmation onNavigate={navigate} />
             case "account":              return <AccountPage onNavigate={navigate} />
-            case "orders":               return <Orders onNavigate={navigate} />
+            case "orders":              return <Orders onNavigate={navigate} />
             case "wishlist":             return <Wishlist onNavigate={navigate} />
             case "settings":             return <Settings onNavigate={navigate} />
             case "about":                return <AboutUs onNavigate={navigate} />
@@ -73,6 +74,7 @@ function AppContent() {
             case "describe-arrangement": return <DescribeArrangement onNavigate={navigate} />
             case "faq":                  return <FAQ onNavigate={navigate} />
             case "return-policy":        return <ReturnPolicy onNavigate={navigate} />
+            case "ai-gallery":           return <AIGalleryPage onNavigate={navigate} />
             default:                     return <Home onNavigate={navigate} />
           }
         })()}
@@ -84,7 +86,6 @@ function AppContent() {
   return (
     <>
       {renderContent()}
-      {/* Popups — hidden on auth pages and admin dashboard */}
       {!AUTH_PAGES.includes(page) && page !== "admin" && <>
         <CookieConsent />
         <AdPopup />

@@ -10,7 +10,7 @@ import Footer from "../components/Footer.jsx"
 export default function Home({ onNavigate }) {
   return (
     <div>
-      <HeroCarousel />
+      <HeroCarousel onNavigate={onNavigate} />
       <TrustBar />
       <OccasionsStrip onNavigate={onNavigate} />
       <FeaturedProducts />

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { addToCart } from "../utils/cart.js"
+import ProductPreviewModal from "../components/ProductPreviewModal.jsx"
 import Footer from "../components/Footer"
 
 import SpringFlowers_PurpleWrapper from "../assets/products/SpringFlowers_PurpleWrapper.png"
@@ -50,7 +51,7 @@ const RIBBON_COLORS = {
   "Rare Find":   "#ec4899",
 }
 
-const CATEGORIES  = ["All", "Roses", "Bouquets", "Tulips", "Arrangements"]
+const CATEGORIES   = ["All", "Roses", "Bouquets", "Tulips", "Arrangements"]
 const SORT_OPTIONS = [
   { value: "best-selling", label: "Best Selling" },
   { value: "price-asc",    label: "Price: Low to High" },
@@ -58,6 +59,8 @@ const SORT_OPTIONS = [
   { value: "rating",       label: "Top Rated" },
   { value: "newest",       label: "Newest" },
 ]
+
+const discount = (orig, price) => Math.round((1 - price / orig) * 100)
 
 function Stars({ rating }) {
   return (
@@ -71,20 +74,19 @@ function Stars({ rating }) {
   )
 }
 
-const discount = (orig, price) => Math.round((1 - price / orig) * 100)
-
-// ── List card — matches reference: image left, ribbon on image, details right ──
-function ListCard({ product, wishlist, toggleWishlist, addedToCart, handleAddToCart }) {
+// ── List card ─────────────────────────────────────────────────────────────────
+function ListCard({ product, wishlist, toggleWishlist, addedToCart, handleAddToCart, onPreview }) {
   return (
-    <div className="bg-white flex gap-0 group hover:shadow-md transition-shadow duration-200"
-      style={{ border: "1px solid #e5e7eb", borderRadius: "8px", overflow: "hidden" }}>
-
-      {/* Image — fixed size, ribbon sits on top */}
+    <div
+      className="bg-white flex gap-0 group hover:shadow-md transition-shadow duration-200"
+      style={{ border: "1px solid #e5e7eb", borderRadius: "8px", overflow: "hidden", cursor: "pointer" }}
+      onClick={() => onPreview(product)}
+    >
+      {/* Image */}
       <div className="relative flex-shrink-0" style={{ width: "160px", minHeight: "160px", backgroundColor: "#f9fafb" }}>
         <img src={product.image} alt={product.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
           style={{ aspectRatio: "1/1" }} />
-        {/* Ribbon — top-left corner of image */}
         {product.ribbon && (
           <div className="absolute top-3 left-0 z-10">
             <div className="text-[10px] font-bold text-white px-2.5 py-1 shadow-sm"
@@ -97,10 +99,18 @@ function ListCard({ product, wishlist, toggleWishlist, addedToCart, handleAddToC
             </div>
           </div>
         )}
-        {/* Discount badge — top-right */}
         <div className="absolute top-2 right-2 text-white text-[10px] font-bold px-1.5 py-0.5 rounded"
           style={{ backgroundColor: DG }}>
           -{discount(product.original, product.price)}%
+        </div>
+
+        {/* View hint */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+          style={{ background: "rgba(0,0,0,0.2)" }}>
+          <span className="text-white text-[10px] font-semibold px-2 py-1 rounded-full"
+            style={{ background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}>
+            View Details
+          </span>
         </div>
       </div>
 
@@ -121,12 +131,14 @@ function ListCard({ product, wishlist, toggleWishlist, addedToCart, handleAddToC
         </div>
 
         <div className="flex items-center gap-2 mt-4">
-          <button onClick={() => handleAddToCart(product.id)}
+          <button
+            onClick={(e) => { e.stopPropagation(); handleAddToCart(product.id) }}
             className="px-5 py-2 text-sm font-semibold text-white rounded-md transition-all hover:opacity-90"
             style={{ backgroundColor: addedToCart.includes(product.id) ? DG : G }}>
             {addedToCart.includes(product.id) ? "Added!" : "Add to Cart"}
           </button>
-          <button onClick={() => toggleWishlist(product.id)}
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleWishlist(product.id) }}
             className="w-9 h-9 flex items-center justify-center rounded-md border transition-all hover:bg-gray-50"
             style={{ borderColor: "#e5e7eb" }}>
             <svg className="w-4 h-4"
@@ -144,10 +156,13 @@ function ListCard({ product, wishlist, toggleWishlist, addedToCart, handleAddToC
 }
 
 // ── Grid card ─────────────────────────────────────────────────────────────────
-function GridCard({ product, wishlist, toggleWishlist, addedToCart, handleAddToCart }) {
+function GridCard({ product, wishlist, toggleWishlist, addedToCart, handleAddToCart, onPreview }) {
   return (
-    <div className="bg-white group cursor-pointer hover:shadow-lg transition-shadow duration-200"
-      style={{ border: "1px solid #e5e7eb", borderRadius: "8px", overflow: "hidden" }}>
+    <div
+      className="bg-white group hover:shadow-lg transition-shadow duration-200"
+      style={{ border: "1px solid #e5e7eb", borderRadius: "8px", overflow: "hidden", cursor: "pointer" }}
+      onClick={() => onPreview(product)}
+    >
       <div className="relative overflow-hidden bg-gray-50" style={{ aspectRatio: "1/1" }}>
         <img src={product.image} alt={product.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -163,7 +178,10 @@ function GridCard({ product, wishlist, toggleWishlist, addedToCart, handleAddToC
           style={{ backgroundColor: DG, borderRadius: "4px" }}>
           -{discount(product.original, product.price)}%
         </div>
-        <button onClick={() => toggleWishlist(product.id)}
+
+        {/* Wishlist */}
+        <button
+          onClick={(e) => { e.stopPropagation(); toggleWishlist(product.id) }}
           className="absolute bottom-2 left-2 w-7 h-7 bg-white flex items-center justify-center shadow opacity-0 group-hover:opacity-100 transition-opacity duration-200"
           style={{ borderRadius: "4px", border: "1px solid #e5e7eb" }}>
           <svg className="w-4 h-4"
@@ -174,7 +192,17 @@ function GridCard({ product, wishlist, toggleWishlist, addedToCart, handleAddToC
               d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
           </svg>
         </button>
+
+        {/* View hint overlay */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
+          style={{ background: "rgba(0,0,0,0.22)" }}>
+          <span className="text-white text-xs font-semibold px-3 py-1.5 rounded-full"
+            style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}>
+            View Details
+          </span>
+        </div>
       </div>
+
       <div className="p-3">
         <div className="flex items-baseline gap-2 mb-1">
           <span className="text-base font-bold" style={{ color: G }}>₱{product.price.toLocaleString()}</span>
@@ -185,7 +213,8 @@ function GridCard({ product, wishlist, toggleWishlist, addedToCart, handleAddToC
           <Stars rating={product.rating} />
           <span className="text-xs text-gray-400">{product.rating} ({product.reviews})</span>
         </div>
-        <button onClick={() => handleAddToCart(product.id)}
+        <button
+          onClick={(e) => { e.stopPropagation(); handleAddToCart(product.id) }}
           className="w-full text-sm font-medium py-2 text-white transition-all duration-200 flex items-center justify-center gap-2"
           style={{ backgroundColor: addedToCart.includes(product.id) ? DG : G, borderRadius: "6px" }}>
           {addedToCart.includes(product.id)
@@ -198,7 +227,7 @@ function GridCard({ product, wishlist, toggleWishlist, addedToCart, handleAddToC
   )
 }
 
-// VIEW AS icon buttons
+// VIEW AS icon buttons (unchanged)
 const VIEW_OPTIONS = [
   { key: "list",  icon: (<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>) },
   { key: "grid2", icon: (<svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor"><rect x="0" y="0" width="7" height="7" rx="1" /><rect x="9" y="0" width="7" height="7" rx="1" /><rect x="0" y="9" width="7" height="7" rx="1" /><rect x="9" y="9" width="7" height="7" rx="1" /></svg>) },
@@ -206,6 +235,7 @@ const VIEW_OPTIONS = [
   { key: "grid4", icon: (<svg className="w-4 h-4" viewBox="0 0 18 15" fill="currentColor"><rect x="0"   y="0" width="3.5" height="6" rx="0.6" /><rect x="4.8" y="0" width="3.5" height="6" rx="0.6" /><rect x="9.6" y="0" width="3.5" height="6" rx="0.6" /><rect x="14.5" y="0" width="3.5" height="6" rx="0.6" /><rect x="0"   y="8" width="3.5" height="7" rx="0.6" /><rect x="4.8" y="8" width="3.5" height="7" rx="0.6" /><rect x="9.6" y="8" width="3.5" height="7" rx="0.6" /><rect x="14.5" y="8" width="3.5" height="7" rx="0.6" /></svg>) },
 ]
 
+// ── Main Shop page ────────────────────────────────────────────────────────────
 export default function Shop({ onNavigate }) {
   const [viewAs, setViewAs]               = useState("grid3")
   const [sortBy, setSortBy]               = useState("best-selling")
@@ -214,6 +244,7 @@ export default function Shop({ onNavigate }) {
   const [wishlist, setWishlist]           = useState([])
   const [addedToCart, setAddedToCart]     = useState([])
   const [sortOpen, setSortOpen]           = useState(false)
+  const [previewProduct, setPreviewProduct] = useState(null)
   const sortRef = useRef(null)
 
   useEffect(() => {
@@ -226,14 +257,8 @@ export default function Shop({ onNavigate }) {
   const handleAddToCart = (id) => {
     const product = ALL_PRODUCTS.find(p => p.id === id)
     if (product) {
-      addToCart({
-        id: product.id,
-        name: product.name,
-        price: product.price,
-        qty: 1,
-        img: product.image,
-        desc: product.category,
-      })
+      addToCart({ id: product.id, name: product.name, price: product.price, qty: 1, img: product.image, desc: product.category })
+      window.dispatchEvent(new Event("bloomora:cart-updated"))
     }
     setAddedToCart(prev => [...prev, id])
     setTimeout(() => setAddedToCart(prev => prev.filter(i => i !== id)), 1500)
@@ -250,7 +275,6 @@ export default function Shop({ onNavigate }) {
       return b.reviews - a.reviews
     })
 
-  // Grid columns via inline style (not Tailwind) so 4-col always works
   const gridStyle = {
     list:  { display: "flex", flexDirection: "column", gap: "12px" },
     grid2: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "16px" },
@@ -262,11 +286,10 @@ export default function Shop({ onNavigate }) {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* NO hero heading — go straight to content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex gap-8">
 
-          {/* ── Sidebar ── */}
+          {/* ── Sidebar (unchanged) ── */}
           <aside className="w-52 flex-shrink-0 hidden lg:block">
             <div className="mb-7">
               <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Category</p>
@@ -331,8 +354,6 @@ export default function Shop({ onNavigate }) {
 
             {/* Toolbar */}
             <div className="flex items-center justify-between gap-4 mb-6 pb-4" style={{ borderBottom: "1px solid #f0f0f0" }}>
-
-              {/* VIEW AS */}
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-gray-400 mr-1">View As</span>
                 <div className="flex items-center border rounded-lg overflow-hidden" style={{ borderColor: "#e5e7eb" }}>
@@ -351,7 +372,6 @@ export default function Shop({ onNavigate }) {
                 <span className="text-xs text-gray-400 ml-1">{filtered.length} products</span>
               </div>
 
-              {/* SORT BY */}
               <div className="flex items-center gap-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Sort By</span>
                 <div className="relative" ref={sortRef}>
@@ -386,7 +406,7 @@ export default function Shop({ onNavigate }) {
               </div>
             </div>
 
-            {/* Products — use inline style gridStyle so 4-col always works */}
+            {/* Products grid/list */}
             {filtered.length === 0 ? (
               <div className="text-center py-20">
                 <p className="text-gray-400 text-sm mb-3">No products match your filters.</p>
@@ -397,8 +417,8 @@ export default function Shop({ onNavigate }) {
               <div style={gridStyle[viewAs]}>
                 {filtered.map(product =>
                   viewAs === "list"
-                    ? <ListCard key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} addedToCart={addedToCart} handleAddToCart={handleAddToCart} />
-                    : <GridCard key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} addedToCart={addedToCart} handleAddToCart={handleAddToCart} />
+                    ? <ListCard key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} addedToCart={addedToCart} handleAddToCart={handleAddToCart} onPreview={setPreviewProduct} />
+                    : <GridCard key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} addedToCart={addedToCart} handleAddToCart={handleAddToCart} onPreview={setPreviewProduct} />
                 )}
               </div>
             )}
@@ -407,6 +427,15 @@ export default function Shop({ onNavigate }) {
       </div>
 
       <Footer onNavigate={onNavigate} />
+
+      {/* Product Preview Modal */}
+      {previewProduct && (
+        <ProductPreviewModal
+          product={{ ...previewProduct, _ribbonColor: RIBBON_COLORS[previewProduct.ribbon] }}
+          onClose={() => setPreviewProduct(null)}
+          onNavigate={onNavigate}
+        />
+      )}
     </div>
   )
 }

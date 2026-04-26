@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../context/AuthContext.jsx";
 import { getCartCount } from "../utils/cart.js";
 import estingsLogo from "../assets/EstingsLogo.svg";
 import estingsText from "../assets/Estings.svg";
@@ -44,8 +44,144 @@ const SOCIAL_LINKS = [
   { name: "Gmail",     href: "#", icon: (<svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 512 512"><path d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z" /></svg>) },
 ];
 
+// ── Make it Personal — side popout panel ─────────────────────────────────────
+const MIP_OPTIONS = [
+  {
+    page: "describe-arrangement",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
+      </svg>
+    ),
+    label: "Describe Arrangement",
+    desc: "Tell us what you have in mind and we'll bring it to life.",
+    accent: "#7c3aed",
+    accentBg: "#f5f3ff",
+  },
+  {
+    page: "mix-and-match",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+      </svg>
+    ),
+    label: "Mix & Match",
+    desc: "Pick your flowers and build your own bouquet your way.",
+    accent: SITE_GREEN,
+    accentBg: "#f0fdf4",
+  },
+  {
+    page: "ai-gallery",
+    icon: (
+      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+      </svg>
+    ),
+    label: "See Examples",
+    desc: "Browse arrangements made by our team for inspiration.",
+    accent: "#d97706",
+    accentBg: "#fffbeb",
+  },
+];
+
+function MakeItPersonalPopout({ onNavigate, onClose }) {
+  return (
+    <>
+      <style>{`
+        @keyframes mipSlideIn {
+          from { opacity: 0; transform: translateX(-12px) scale(0.97); }
+          to   { opacity: 1; transform: translateX(0)   scale(1);    }
+        }
+      `}</style>
+      {/* Connector bridge so mouse can travel from button → panel without gap */}
+      <div className="absolute" style={{ top: 0, right: "-12px", width: "16px", height: "100%", zIndex: 49 }} />
+
+      <div
+        className="absolute z-50"
+        style={{
+          top: "-8px",
+          left: "calc(100% + 12px)",
+          animation: "mipSlideIn 0.22s cubic-bezier(0.34,1.56,0.64,1) both",
+          filter: "drop-shadow(0 16px 40px rgba(0,0,0,0.13))",
+        }}
+      >
+        {/* Pointing arrow on the left side */}
+        <div
+          className="absolute"
+          style={{
+            left: "-7px",
+            top: "28px",
+            width: 0,
+            height: 0,
+            borderTop:    "7px solid transparent",
+            borderBottom: "7px solid transparent",
+            borderRight:  "7px solid white",
+            filter: "drop-shadow(-2px 0 2px rgba(0,0,0,0.06))",
+          }}
+        />
+
+        <div
+          className="bg-white overflow-hidden"
+          style={{
+            borderRadius: "16px",
+            border: "1px solid #e9f5ea",
+            width: "260px",
+          }}
+        >
+          {/* Header */}
+          <div className="px-4 pt-4 pb-3" style={{ borderBottom: "1px solid #f0fdf4" }}>
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md flex items-center justify-center"
+                style={{ background: "linear-gradient(135deg,#2E8B34,#0C573E)" }}>
+                <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                </svg>
+              </div>
+              <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">Make it Personal</p>
+            </div>
+            <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
+              Choose how you'd like to create your perfect arrangement.
+            </p>
+          </div>
+
+          {/* Options */}
+          <div className="py-2">
+            {MIP_OPTIONS.map((opt, i) => (
+              <button
+                key={opt.page}
+                onClick={() => { onNavigate(opt.page); onClose(); }}
+                className="w-full flex items-start gap-3 px-4 py-3 text-left transition-all group"
+                style={{ borderBottom: i < MIP_OPTIONS.length - 1 ? "1px solid #f9fafb" : "none" }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = opt.accentBg }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent" }}
+              >
+                {/* Icon pill */}
+                <div
+                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 transition-all group-hover:scale-110"
+                  style={{ backgroundColor: opt.accentBg, color: opt.accent, border: `1.5px solid ${opt.accent}22` }}
+                >
+                  {opt.icon}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-800 leading-snug">{opt.label}</p>
+                  <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{opt.desc}</p>
+                </div>
+                {/* Arrow */}
+                <svg className="w-3.5 h-3.5 text-gray-300 flex-shrink-0 mt-1.5 transition-all group-hover:translate-x-0.5"
+                  style={{ color: opt.accent }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── Promo Carousel ─────────────────────────────────────────────────────────────
-// Layout: [invisible spacer] | [← arrow · text · → arrow] centered | [social icons far right]
 function PromoCarousel({ onNavigate }) {
   const [current, setCurrent]     = useState(0);
   const [animating, setAnimating] = useState(false);
@@ -92,51 +228,32 @@ function PromoCarousel({ onNavigate }) {
 
   return (
     <div style={{ backgroundColor: "#0C573E", minHeight: "52px", display: "flex", alignItems: "center", padding: "0 16px" }}>
-
-      {/* Left spacer — matches right socials width to keep center group truly centered */}
       <div className="hidden sm:flex items-center gap-1.5" style={{ visibility: "hidden", flexShrink: 0 }}>
         {SOCIAL_LINKS.map(s => <div key={s.name} style={{ width: "28px", height: "28px" }} />)}
       </div>
-
-      {/* CENTER GROUP: left arrow + animated text + right arrow — all together */}
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}>
         {arrowBtn("prev")}
-
         <div style={{ overflow: "hidden" }}>
           <span
             className="text-xs sm:text-sm font-medium text-white"
             style={{
-              display: "inline-block",
-              whiteSpace: "nowrap",
+              display: "inline-block", whiteSpace: "nowrap",
               transition: animating ? "opacity 0.26s ease, transform 0.26s ease" : "none",
-              opacity:    animating ? 0 : 1,
-              transform:  animating
-                ? direction === "next" ? "translateX(-14px)" : "translateX(14px)"
-                : "translateX(0)",
+              opacity:   animating ? 0 : 1,
+              transform: animating ? (direction === "next" ? "translateX(-14px)" : "translateX(14px)") : "translateX(0)",
             }}
           >
-            {promo.text}&nbsp;
-            <strong>{promo.highlight}</strong>
-            {" — "}
+            {promo.text}&nbsp;<strong>{promo.highlight}</strong>{" — "}
             <button
               onClick={() => onNavigate?.(promo.page)}
-              style={{
-                fontWeight: 700, textDecoration: "underline", textUnderlineOffset: "2px",
-                background: "none", border: "none", color: "white", cursor: "pointer",
-                letterSpacing: "0.05em", padding: 0,
-              }}
+              style={{ fontWeight: 700, textDecoration: "underline", textUnderlineOffset: "2px", background: "none", border: "none", color: "white", cursor: "pointer", letterSpacing: "0.05em", padding: 0 }}
               onMouseEnter={e => e.currentTarget.style.opacity = "0.75"}
               onMouseLeave={e => e.currentTarget.style.opacity = "1"}
-            >
-              {promo.cta}
-            </button>
+            >{promo.cta}</button>
           </span>
         </div>
-
         {arrowBtn("next")}
       </div>
-
-      {/* RIGHT: social icons — far right */}
       <div className="hidden sm:flex items-center gap-1.5" style={{ flexShrink: 0 }}>
         {SOCIAL_LINKS.map(s => (
           <a key={s.name} href={s.href} title={s.name} target="_blank" rel="noopener noreferrer"
@@ -348,8 +465,10 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
   const [cartOpen, setCartOpen]                 = useState(false);
   const [userOpen, setUserOpen]                 = useState(false);
   const [searchOpen, setSearchOpen]             = useState(false);
-  const navRef = useRef(null), cartRef = useRef(null), userRef = useRef(null), locationRef = useRef(null);
-  const menuCloseTimer = useRef(null), cartCloseTimer = useRef(null), userCloseTimer = useRef(null);
+  const [mipOpen, setMipOpen]                   = useState(false); // Make it Personal popout
+
+  const navRef = useRef(null), cartRef = useRef(null), userRef = useRef(null), locationRef = useRef(null), mipRef = useRef(null);
+  const menuCloseTimer = useRef(null), cartCloseTimer = useRef(null), userCloseTimer = useRef(null), mipCloseTimer = useRef(null);
 
   const openMenuDelayed  = (l) => { clearTimeout(menuCloseTimer.current); setOpenMenu(l); };
   const closeMenuDelayed = ()  => { menuCloseTimer.current = setTimeout(() => setOpenMenu(null), 200); };
@@ -357,6 +476,8 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
   const closeCartDelayed = ()  => { cartCloseTimer.current = setTimeout(() => setCartOpen(false), 200); };
   const openUserDelayed  = ()  => { clearTimeout(userCloseTimer.current); setUserOpen(true); };
   const closeUserDelayed = ()  => { userCloseTimer.current = setTimeout(() => setUserOpen(false), 200); };
+  const openMipDelayed   = ()  => { clearTimeout(mipCloseTimer.current); setMipOpen(true); };
+  const closeMipDelayed  = ()  => { mipCloseTimer.current = setTimeout(() => setMipOpen(false), 220); };
 
   const handleLogout       = () => { logout(); setUserOpen(false); onNavigate?.("login"); };
   const handleNavClick     = (link) => { setActive(link.label); if (link.page) onNavigate?.(link.page); setMobileOpen(false); };
@@ -368,6 +489,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
       if (cartRef.current && !cartRef.current.contains(e.target)) setCartOpen(false);
       if (userRef.current && !userRef.current.contains(e.target)) setUserOpen(false);
       if (locationRef.current && !locationRef.current.contains(e.target)) setLocationOpen(false);
+      if (mipRef.current && !mipRef.current.contains(e.target)) setMipOpen(false);
     };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
@@ -383,12 +505,15 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
 
         <nav className="bg-white border-b px-4 sm:px-6 lg:px-8 py-3" style={{ borderColor: "#DAEDD5" }}>
           <div className="flex items-center justify-between gap-4">
+            {/* Logo */}
             <div className="flex items-center gap-2 flex-shrink-0 cursor-pointer" onClick={() => onNavigate?.("home")}>
               <img src={estingsLogo} alt="Esting's Logo" className="w-9 h-9 sm:w-10 sm:h-10 object-contain" />
               <img src={estingsText} alt="Esting's" className="h-6 sm:h-7 object-contain hidden sm:block" />
             </div>
 
+            {/* Desktop nav */}
             <div className="hidden lg:flex items-center gap-6 xl:gap-8">
+              {/* Location picker */}
               <div className="flex items-center gap-1.5" ref={locationRef}>
                 <span className="text-xs uppercase tracking-wide font-medium" style={{ color: SITE_GREEN }}>Deliver to</span>
                 <div className="relative">
@@ -407,6 +532,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                 </div>
               </div>
 
+              {/* Nav links */}
               <div className="flex items-center gap-5 xl:gap-7">
                 {NAV_LINKS.map(link => (
                   <div key={link.label} className="relative"
@@ -431,17 +557,41 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                     )}
                   </div>
                 ))}
-                <button onClick={() => onNavigate?.("make-it-personal")}
-                  className="whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full text-white flex items-center gap-1 transition-all hover:shadow-md hover:scale-105"
-                  style={{ background: "linear-gradient(135deg,#2E8B34,#0C573E)" }}>
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                  </svg>
-                  Make it Personal
-                </button>
+
+                {/* ── Make it Personal — side-popout button ── */}
+                <div
+                  className="relative"
+                  ref={mipRef}
+                  onMouseEnter={openMipDelayed}
+                  onMouseLeave={closeMipDelayed}
+                >
+                  <button
+                    onClick={() => onNavigate?.("make-it-personal")}
+                    className="whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full text-white flex items-center gap-1 transition-all hover:shadow-md hover:scale-105"
+                    style={{ background: "linear-gradient(135deg,#2E8B34,#0C573E)" }}
+                  >
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
+                    </svg>
+                    Make it Personal
+                    {/* Small chevron hinting at the popout */}
+                    <svg className="w-2.5 h-2.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+
+                  {/* Side popout — appears to the right */}
+                  {mipOpen && (
+                    <MakeItPersonalPopout
+                      onNavigate={onNavigate}
+                      onClose={() => setMipOpen(false)}
+                    />
+                  )}
+                </div>
               </div>
             </div>
 
+            {/* Right icons */}
             <div className="flex items-center gap-1 sm:gap-2">
               <button onClick={() => setSearchOpen(true)} className="hidden lg:flex w-9 h-9 items-center justify-center rounded-full hover:bg-gray-50 transition-colors text-gray-600">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" /></svg>
@@ -472,6 +622,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
             </div>
           </div>
 
+          {/* Mobile menu */}
           {mobileOpen && (
             <div className="lg:hidden mt-3 pt-3 border-t" style={{ borderColor: "#DAEDD5" }}>
               <div className="flex items-center gap-2 px-2 mb-3 flex-wrap">
@@ -495,7 +646,25 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                   )}
                 </div>
               ))}
-              <div className="px-2 py-3 border-t mt-1" style={{ borderColor: "#f3f4f6" }}>
+
+              {/* Make it Personal in mobile — flat list */}
+              <div className="px-2 py-3 border-t" style={{ borderColor: "#f3f4f6" }}>
+                <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: SITE_GREEN }}>Make it Personal</p>
+                <div className="space-y-1">
+                  {MIP_OPTIONS.map(opt => (
+                    <button
+                      key={opt.page}
+                      onClick={() => { onNavigate?.(opt.page); setMobileOpen(false); }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700 font-medium transition-all hover:bg-green-50"
+                    >
+                      <span style={{ color: opt.accent }}>{opt.icon}</span>
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="px-2 py-3 border-t" style={{ borderColor: "#f3f4f6" }}>
                 {user ? (
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 mb-3">
@@ -516,9 +685,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                     <button onClick={() => { onNavigate?.("register"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold rounded-lg border" style={{ borderColor: SITE_GREEN, color: SITE_GREEN }}>Sign Up</button>
                   </div>
                 )}
-              </div>
-              <div className="px-2 pb-3">
-                <button onClick={() => { onNavigate?.("make-it-personal"); setMobileOpen(false); }} className="inline-flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-full text-white" style={{ background: "linear-gradient(135deg,#2E8B34,#0C573E)" }}>Make it Personal</button>
               </div>
             </div>
           )}
