@@ -118,9 +118,9 @@ def send_otp(payload: SendOTPRequest, db: Session = Depends(get_db)):
         db.add(placeholder)
         db.commit()
 
-    sent = send_otp_email(payload.email, otp)
+    sent, error = send_otp_email(payload.email, otp)
     if not sent:
-        raise HTTPException(status_code=500, detail="Failed to send OTP email.")
+        raise HTTPException(status_code=500, detail=f"Failed to send OTP email: {error}")
 
     return {"status": "success", "message": "OTP sent to email."}
 

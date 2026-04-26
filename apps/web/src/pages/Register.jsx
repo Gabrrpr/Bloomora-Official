@@ -1,9 +1,12 @@
 import { useState } from "react"
 import { useAuth } from "../context/AuthContext"
+import { sendOtp, verifyOtp } from "../services/auth"
 import FlowerPanel from "../components/FlowerPanel"
 
 export default function Register({ onNavigate }) {
   const { register } = useAuth()
+  const [step, setStep] = useState("form")
+  const [otp, setOtp] = useState("")
   const [form, setForm] = useState({
     firstName: "",
     lastName: "",
@@ -17,25 +20,50 @@ export default function Register({ onNavigate }) {
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
-    setError("")
-
+  const validateForm = () => {
     if (form.password !== form.confirmPassword) {
       setError("Passwords do not match.")
-      return
+      return false
     }
     if (form.password.length < 6) {
       setError("Password must be at least 6 characters.")
-      return
+      return false
     }
     if (!agreeTerms) {
       setError("Please agree to the Terms & Conditions.")
+      return false
+    }
+    return true
+  }
+
+  const handleSendOtp = async (e) => {
+    e.preventDefault()
+    setError("")
+    if (!validateForm()) return
+
+    setLoading(true)
+    try {
+      await sendOtp(form.email)
+      setStep("otp")
+      setError("")
+    } catch (err) {
+      setError(err.message || "Failed to send OTP. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleVerifyAndRegister = async (e) => {
+    e.preventDefault()
+    setError("")
+    if (!otp || otp.length < 4) {
+      setError("Please enter the OTP sent to your email.")
       return
     }
 
     setLoading(true)
     try {
+      await verifyOtp(form.email, otp)
       const result = await register({
         first_name: form.firstName,
         last_name: form.lastName,
@@ -43,13 +71,13 @@ export default function Register({ onNavigate }) {
         phone: form.phone,
         password: form.password,
       })
-      if (result.success) {
+      if (result.success || result.status === "success") {
         onNavigate("home")
       } else {
         setError(result.message || "Registration failed. Please try again.")
       }
     } catch (err) {
-      setError("Something went wrong. Please try again.")
+      setError(err.message || "Invalid OTP or registration failed.")
     } finally {
       setLoading(false)
     }
@@ -67,91 +95,163 @@ export default function Register({ onNavigate }) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
               </svg>
             </div>
-            <h1 className="text-2xl font-bold text-gray-800">Create an account</h1>
-            <p className="text-gray-500 text-sm mt-1">Join us and start ordering beautiful flowers today.</p>
+            <h1 className="text-2xl font-bold text-gray-800">
+              {step === "otp" ? "Verify your email" : "Create an account"}
+            </h1>
+            <p className="text-gray-500 text-sm mt-1">
+              {step === "otp"
+                ? `Enter the OTP sent to ${form.email}`
+                : "Join us and start ordering beautiful flowers today."}
+            </p>
           </div>
 
           {error && (
             <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm text-center">{error}</div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
+          {step === "form" ? (
+            <form onSubmit={handleSendOtp} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">First Name</label>
+                  <input type="text" value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} placeholder="Juan" required
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Last Name</label>
+                  <input type="text" value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} placeholder="Dela Cruz" required
+                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
+                </div>
+              </div>
+
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">First Name</label>
-                <input type="text" value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} placeholder="Juan" required
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                  </span>
+                  <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="juan@example.com" required
+                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
+                  </span>
+                  <input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="0917 123 4567"
+                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                  </span>
+                  <input type={showPassword ? "text" : "password"} value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="••••••••" required
+                    className="w-full pl-10 pr-10 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
+                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Password</label>
+                <input type={showPassword ? "text" : "password"} value={form.confirmPassword} onChange={e => setForm({ ...form, confirmPassword: e.target.value })} placeholder="••••••••" required
                   className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
               </div>
+
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input type="checkbox" checked={agreeTerms} onChange={e => setAgreeTerms(e.target.checked)} className="w-4 h-4 rounded accent-green-600 mt-0.5" />
+                <span className="text-sm text-gray-600">
+                  I agree to the{" "}
+                  <button type="button" onClick={() => onNavigate("terms")} className="text-green-700 hover:underline font-medium">Terms & Conditions</button>
+                </span>
+              </label>
+
+              <button type="submit" disabled={loading}
+                className="w-full py-3 bg-green-700 hover:bg-green-800 text-white font-semibold rounded-xl transition disabled:opacity-60">
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+                    Sending OTP...
+                  </span>
+                ) : "Create Account"}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleVerifyAndRegister} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Last Name</label>
-                <input type="text" value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} placeholder="Dela Cruz" required
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
+                <label className="block text-sm font-medium text-gray-700 mb-3 text-center">OTP Code</label>
+                <div className="flex justify-center gap-3">
+                  {[0, 1, 2, 3].map((i) => (
+                    <input
+                      key={i}
+                      id={`otp-${i}`}
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={1}
+                      value={otp[i] || ""}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "")
+                        if (!val) return
+                        const newOtp = otp.split("")
+                        newOtp[i] = val[val.length - 1]
+                        const joined = newOtp.join("")
+                        setOtp(joined)
+                        if (i < 3 && val) {
+                          document.getElementById(`otp-${i + 1}`)?.focus()
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Backspace" && !otp[i] && i > 0) {
+                          const newOtp = otp.split("")
+                          newOtp[i - 1] = ""
+                          setOtp(newOtp.join(""))
+                          document.getElementById(`otp-${i - 1}`)?.focus()
+                        }
+                      }}
+                      onPaste={(e) => {
+                        e.preventDefault()
+                        const paste = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4)
+                        setOtp(paste)
+                        const focusIndex = Math.min(paste.length, 3)
+                        setTimeout(() => document.getElementById(`otp-${focusIndex}`)?.focus(), 0)
+                      }}
+                      className="w-14 h-14 text-center text-2xl font-bold border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
+                    />
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 mt-3 text-center">Check your email inbox for the verification code.</p>
               </div>
-            </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                </span>
-                <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="juan@example.com" required
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
-              </div>
-            </div>
+              <button type="submit" disabled={loading}
+                className="w-full py-3 bg-green-700 hover:bg-green-800 text-white font-semibold rounded-xl transition disabled:opacity-60">
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+                    Verifying...
+                  </span>
+                ) : "Verify & Create Account"}
+              </button>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
-                </span>
-                <input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="0917 123 4567"
-                  className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
-              <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                </span>
-                <input type={showPassword ? "text" : "password"} value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="••••••••" required
-                  className="w-full pl-10 pr-10 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
-                <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                  </svg>
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Password</label>
-              <input type={showPassword ? "text" : "password"} value={form.confirmPassword} onChange={e => setForm({ ...form, confirmPassword: e.target.value })} placeholder="••••••••" required
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
-            </div>
-
-            <label className="flex items-start gap-2 cursor-pointer">
-              <input type="checkbox" checked={agreeTerms} onChange={e => setAgreeTerms(e.target.checked)} className="w-4 h-4 rounded accent-green-600 mt-0.5" />
-              <span className="text-sm text-gray-600">
-                I agree to the{" "}
-                <button type="button" onClick={() => onNavigate("terms")} className="text-green-700 hover:underline font-medium">Terms & Conditions</button>
-              </span>
-            </label>
-
-            <button type="submit" disabled={loading}
-              className="w-full py-3 bg-green-700 hover:bg-green-800 text-white font-semibold rounded-xl transition disabled:opacity-60">
-              {loading ? (
-                <span className="flex items-center justify-center gap-2">
-                  <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
-                  Creating account...
-                </span>
-              ) : "Create Account"}
-            </button>
-          </form>
+              <button
+                type="button"
+                onClick={() => { setStep("form"); setOtp(""); setError("") }}
+                className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition"
+              >
+                ← Back to registration
+              </button>
+            </form>
+          )}
 
           <p className="text-center text-sm text-gray-500 mt-6">
             Already have an account?{" "}

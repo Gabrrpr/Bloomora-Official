@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from "react"
+import { createContext, useContext, useState, useEffect } from "react"
 import { loginUser, googleLogin as googleLoginApi, facebookLogin as facebookLoginApi } from "../services/auth"
 
 const AuthContext = createContext(null)
@@ -38,11 +38,22 @@ export function AuthProvider({ children }) {
   }
 
   const setUserFromToken = async (token) => {
+    if (!token || token === "null" || token === "undefined") {
+      localStorage.removeItem("access_token")
+      localStorage.removeItem("user")
+      setUser(null)
+      return null
+    }
     try {
       const profileRes = await fetch("http://localhost:8000/api/v1/auth/me", {
         headers: { Authorization: `Bearer ${token}` }
       })
-      if (!profileRes.ok) return null
+      if (!profileRes.ok) {
+        localStorage.removeItem("access_token")
+        localStorage.removeItem("user")
+        setUser(null)
+        return null
+      }
       const profile = await profileRes.json()
       const userData = {
         token,
@@ -55,6 +66,9 @@ export function AuthProvider({ children }) {
       setUser(userData)
       return userData
     } catch {
+      localStorage.removeItem("access_token")
+      localStorage.removeItem("user")
+      setUser(null)
       return null
     }
   }
@@ -72,6 +86,33 @@ export function AuthProvider({ children }) {
 
   const googleLogin = () => googleLoginApi()
   const facebookLogin = () => facebookLoginApi()
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const urlToken = params.get("token")
+    const urlRole = params.get("role")
+    console.log("[AuthContext] OAuth redirect check — token in URL:", !!urlToken, "role:", urlRole)
+
+    if (urlToken) {
+      localStorage.setItem("access_token", urlToken)
+      if (urlRole) localStorage.setItem("role", urlRole)
+      console.log("[AuthContext] Storing OAuth token, calling setUserFromToken...")
+      setUserFromToken(urlToken).then(result => {
+        console.log("[AuthContext] setUserFromToken result:", result)
+      })
+      window.history.replaceState({}, document.title, window.location.pathname)
+    } else {
+      const existingToken = localStorage.getItem("access_token")
+      const existingUser = localStorage.getItem("user")
+      console.log("[AuthContext] No URL token. existingToken:", !!existingToken, "existingUser:", !!existingUser)
+      if (existingToken && !existingUser) {
+        console.log("[AuthContext] Restoring session from stored token...")
+        setUserFromToken(existingToken).then(result => {
+          console.log("[AuthContext] setUserFromToken result:", result)
+        })
+      }
+    }
+  }, [])
 
   return (
     <AuthContext.Provider value={{ user, login, register, logout, googleLogin, facebookLogin, setUserFromToken }}>

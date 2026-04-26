@@ -25,7 +25,7 @@ class Settings(BaseSettings):
 
     # Email
     MAIL_USERNAME: str = "johngbatac@gmail.com"
-    MAIL_PASSWORD: str = "wlmp rfgh tkni synm"
+    MAIL_PASSWORD: str = "avwp fsqs okgn qowy"
     MAIL_FROM: str = "johngbatac@gmail.com"
     MAIL_SERVER: str = "smtp.gmail.com"
     MAIL_PORT: int = 587
