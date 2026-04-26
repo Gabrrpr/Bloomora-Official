@@ -28,6 +28,7 @@ const ARRANGEMENTS = [
 const N   = ARRANGEMENTS.length
 const mod = (a, b) => ((a % b) + b) % b
 const G   = "#2E8B34"
+const DG  = "#0C573E"
 
 export default function AIGalleryPage({ onNavigate }) {
   const [center,  setCenter]  = useState(0)
@@ -55,22 +56,20 @@ export default function AIGalleryPage({ onNavigate }) {
   const active = ARRANGEMENTS[center]
 
   return (
-    <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", background:"#070d07" }}>
+    <div style={{ minHeight:"100vh", display:"flex", flexDirection:"column", background:"#ffffff" }}>
       <style>{`
-        .ag-thumb { transition: all 0.22s ease; }
-        .ag-thumb:hover { opacity: 1 !important; transform: scale(1.06); }
-        .ag-arrow { transition: all 0.2s ease; }
-        .ag-arrow:hover { background: rgba(255,255,255,0.15) !important; transform: translateY(-50%) scale(1.08); }
-        .ag-cta:hover { box-shadow: 0 12px 32px rgba(46,139,52,0.5) !important; transform: translateY(-2px); }
-        @keyframes ag-in { from { opacity:0; transform:translateY(32px); } to { opacity:1; transform:translateY(0); } }
-        .ag-content-enter { animation: ag-in 0.7s cubic-bezier(0.22,1,0.36,1) both; }
+        .ag-thumb { transition: all 0.2s ease; }
+        .ag-thumb:hover { opacity: 1 !important; transform: scale(1.07); }
+        .ag-arrow { transition: all 0.18s ease; }
+        .ag-arrow:hover { background: rgba(46,139,52,0.08) !important; border-color: ${G} !important; }
+        .ag-cta:hover { box-shadow: 0 10px 28px rgba(46,139,52,0.35) !important; transform: translateY(-2px); }
+        @keyframes ag-fade { from { opacity:0; } to { opacity:1; } }
         @media (max-width: 768px) {
           .ag-layout { flex-direction: column !important; }
-          .ag-image-panel { width: 100% !important; height: 55vw !important; min-height: 280px !important; position: relative !important; }
-          .ag-content-panel { width: 100% !important; padding: 32px 24px 48px !important; min-height: unset !important; }
-          .ag-counter { display: none !important; }
+          .ag-image-panel { width: 100% !important; height: 56vw !important; min-height: 260px !important; position: relative !important; }
+          .ag-content-panel { width: 100% !important; padding: 28px 24px 48px !important; }
           .ag-thumbs { gap: 6px !important; }
-          .ag-thumb { width: 40px !important; height: 40px !important; border-radius: 7px !important; }
+          .ag-thumb { width: 38px !important; height: 38px !important; border-radius: 6px !important; }
         }
       `}</style>
 
@@ -80,11 +79,11 @@ export default function AIGalleryPage({ onNavigate }) {
           {/* ── IMAGE PANEL ─────────────────────────────────────────────────── */}
           <div
             className="ag-image-panel"
-            style={{ width:"56%", position:"relative", overflow:"hidden" }}
+            style={{ width:"55%", position:"relative", overflow:"hidden", background:"#f3f4f6" }}
             onTouchStart={onTouchStart}
             onTouchEnd={onTouchEnd}
           >
-            {/* All images — CSS crossfade, buttery smooth */}
+            {/* CSS crossfade — only images move */}
             {ARRANGEMENTS.map((arr, i) => (
               <div
                 key={arr.id}
@@ -94,124 +93,116 @@ export default function AIGalleryPage({ onNavigate }) {
                   backgroundSize:"cover",
                   backgroundPosition:"center",
                   opacity: i === center ? 1 : 0,
-                  transition:"opacity 0.85s cubic-bezier(0.4,0,0.2,1)",
+                  transition:"opacity 0.75s cubic-bezier(0.4,0,0.2,1)",
                   willChange:"opacity",
                 }}
               />
             ))}
 
-            {/* Right-edge gradient blends into dark content panel */}
-            <div style={{ position:"absolute", inset:0, background:"linear-gradient(to right, rgba(0,0,0,0) 30%, #070d07 100%)", pointerEvents:"none" }} />
-            {/* Bottom gradient for text legibility */}
-            <div style={{ position:"absolute", inset:0, background:"linear-gradient(to top, rgba(0,0,0,0.72) 0%, rgba(0,0,0,0.12) 40%, transparent 70%)", pointerEvents:"none" }} />
+            {/* Subtle right-edge blend into white panel */}
+            <div style={{ position:"absolute", inset:0, background:"linear-gradient(to right, transparent 60%, rgba(255,255,255,0.5) 100%)", pointerEvents:"none" }} />
+            {/* Bottom scrim for overlay legibility */}
+            <div style={{ position:"absolute", inset:0, background:"linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 50%)", pointerEvents:"none" }} />
 
             {/* Back button */}
             <button
               onClick={() => onNavigate?.("home")}
               className="ag-arrow"
-              style={{ position:"absolute", top:24, left:24, zIndex:20, display:"inline-flex", alignItems:"center", gap:7, color:"rgba(255,255,255,0.7)", background:"rgba(0,0,0,0.25)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:"1px solid rgba(255,255,255,0.15)", borderRadius:50, padding:"8px 14px", fontSize:12, fontWeight:600, cursor:"pointer", letterSpacing:"0.02em" }}
+              style={{ position:"absolute", top:20, left:20, zIndex:20, display:"inline-flex", alignItems:"center", gap:6, color:"#374151", background:"rgba(255,255,255,0.88)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:"1px solid #e5e7eb", borderRadius:50, padding:"7px 14px", fontSize:12, fontWeight:600, cursor:"pointer" }}
             >
-              <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
               </svg>
               Back
             </button>
 
             {/* Nav arrows */}
-            {[{ dir:"left", d:"M15 19l-7-7 7-7", pos:"left:20px" }, { dir:"right", d:"M9 5l7 7-7 7", pos:"right:20px" }].map(({ dir, d, pos }) => (
+            {[{ dir:"left", d:"M15 19l-7-7 7-7" }, { dir:"right", d:"M9 5l7 7-7 7" }].map(({ dir, d }) => (
               <button
                 key={dir}
                 onClick={() => navigate(dir)}
                 className="ag-arrow"
-                style={{ position:"absolute", top:"50%", transform:"translateY(-50%)", zIndex:20, [dir==="left"?"left":"right"]:20, width:44, height:44, borderRadius:"50%", border:"1px solid rgba(255,255,255,0.2)", background:"rgba(0,0,0,0.28)", backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"white" }}
+                style={{ position:"absolute", top:"50%", transform:"translateY(-50%)", zIndex:20, [dir==="left"?"left":"right"]:16, width:40, height:40, borderRadius:"50%", border:"1.5px solid rgba(255,255,255,0.6)", background:"rgba(255,255,255,0.75)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#374151" }}
               >
-                <svg width="17" height="17" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={d}/>
                 </svg>
               </button>
             ))}
 
-            {/* Arrangement info overlay — bottom left */}
-            <div style={{ position:"absolute", bottom:0, left:0, right:0, padding:"32px 36px", zIndex:10 }}>
-              {/* Palette dots */}
-              <div style={{ display:"flex", gap:7, marginBottom:12 }}>
+            {/* Title + palette overlay — bottom of image only */}
+            <div style={{ position:"absolute", bottom:0, left:0, right:0, padding:"24px 28px", zIndex:10 }}>
+              <div style={{ display:"flex", gap:6, marginBottom:8 }}>
                 {active.palette.map((c, i) => (
-                  <div key={i} style={{ width:10, height:10, borderRadius:"50%", background:c, boxShadow:"0 0 0 2px rgba(255,255,255,0.2)" }} />
+                  <div key={i} style={{ width:9, height:9, borderRadius:"50%", background:c, boxShadow:"0 0 0 1.5px rgba(255,255,255,0.4)" }} />
                 ))}
               </div>
-              <p style={{ color:"rgba(255,255,255,0.45)", fontSize:10, fontWeight:800, letterSpacing:"0.22em", textTransform:"uppercase", marginBottom:6 }}>
+              <p style={{ color:"rgba(255,255,255,0.6)", fontSize:10, fontWeight:700, letterSpacing:"0.2em", textTransform:"uppercase", marginBottom:4 }}>
                 {active.mood} · AI-Generated
               </p>
-              <h3 style={{ color:"white", fontSize:"clamp(22px,2.8vw,36px)", fontWeight:900, lineHeight:1.1, margin:0, textShadow:"0 2px 20px rgba(0,0,0,0.5)" }}>
+              <h3 style={{ color:"white", fontSize:"clamp(20px,2.4vw,30px)", fontWeight:900, lineHeight:1.1, margin:0, textShadow:"0 2px 12px rgba(0,0,0,0.4)" }}>
                 {active.title}
               </h3>
             </div>
           </div>
 
-          {/* ── CONTENT PANEL ───────────────────────────────────────────────── */}
+          {/* ── CONTENT PANEL — static, never re-mounts ─────────────────────── */}
           <div
             className="ag-content-panel"
-            style={{ width:"44%", display:"flex", flexDirection:"column", justifyContent:"center", padding:"60px 52px 60px 48px", position:"relative", overflow:"hidden" }}
+            style={{ width:"45%", display:"flex", flexDirection:"column", justifyContent:"center", padding:"60px 52px 60px 48px", position:"relative", overflow:"hidden", background:"white", borderLeft:"1px solid #f0ede6" }}
           >
-            {/* Subtle grain texture overlay */}
-            <div style={{ position:"absolute", inset:0, backgroundImage:"url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E\")", opacity:1, pointerEvents:"none" }} />
-
-            {/* Large decorative counter — editorial touch */}
-            <div
-              className="ag-counter"
-              style={{ position:"absolute", bottom:-20, right:-10, fontSize:220, fontWeight:900, lineHeight:1, color:"rgba(46,139,52,0.045)", userSelect:"none", pointerEvents:"none", letterSpacing:"-0.05em" }}
-            >
-              {String(center + 1).padStart(2, "0")}
+            {/* Decorative large number — very subtle */}
+            <div style={{ position:"absolute", bottom:-10, right:-8, fontSize:180, fontWeight:900, lineHeight:1, color:"rgba(46,139,52,0.04)", userSelect:"none", pointerEvents:"none", letterSpacing:"-0.05em" }}>
+              {String(center + 1).padStart(2,"0")}
             </div>
 
-            <div
-              key={center} // remount triggers animation on slide change
-              className="ag-content-enter"
-              style={{ position:"relative", zIndex:1, opacity:visible?1:0, transition:"opacity 0.5s ease" }}
-            >
+            {/* All content is static — only the decorative number and thumbnails react to slide changes */}
+            <div style={{ position:"relative", zIndex:1, opacity:visible?1:0, transition:"opacity 0.4s ease" }}>
+
               {/* Section marker */}
-              <div style={{ display:"inline-flex", alignItems:"center", gap:10, marginBottom:28 }}>
-                <div style={{ width:28, height:1.5, background:G }} />
-                <span style={{ color:G, fontSize:10, fontWeight:800, letterSpacing:"0.28em", textTransform:"uppercase" }}>
+              <div style={{ display:"inline-flex", alignItems:"center", gap:10, marginBottom:24 }}>
+                <div style={{ width:24, height:1.5, background:G }} />
+                <span style={{ color:G, fontSize:10, fontWeight:800, letterSpacing:"0.26em", textTransform:"uppercase" }}>
                   AI-Crafted Arrangements
                 </span>
               </div>
 
-              {/* Headline */}
-              <h1 style={{ color:"white", fontSize:"clamp(34px,3.8vw,58px)", fontWeight:900, lineHeight:1.04, letterSpacing:"-0.025em", margin:"0 0 16px" }}>
+              {/* Headline — static, does not change on slide */}
+              <h1 style={{ color:"#111827", fontSize:"clamp(30px,3.2vw,50px)", fontWeight:900, lineHeight:1.06, letterSpacing:"-0.025em", margin:"0 0 14px" }}>
                 Your Vision,
                 <br />
                 <span style={{ color:G }}>Brought to Bloom</span>
               </h1>
 
-              {/* Description */}
-              <p style={{ color:"rgba(255,255,255,0.48)", fontSize:"clamp(13px,1.3vw,15px)", lineHeight:1.85, maxWidth:360, margin:"0 0 36px" }}>
+              {/* Static description */}
+              <p style={{ color:"#6b7280", fontSize:"clamp(13px,1.2vw,14.5px)", lineHeight:1.8, maxWidth:360, margin:"0 0 28px" }}>
                 Describe your ideal bouquet and our AI creates a bespoke arrangement
                 just for you — no two alike, every one made with care.
               </p>
 
-              {/* Prompt callout — editorial left-border style */}
-              <div style={{ borderLeft:`2px solid rgba(46,139,52,0.45)`, paddingLeft:18, marginBottom:40 }}>
-                <p style={{ color:"rgba(255,255,255,0.28)", fontSize:9, fontWeight:800, letterSpacing:"0.24em", textTransform:"uppercase", marginBottom:7 }}>
+              {/* Prompt callout — updates with slide but no layout shift */}
+              <div style={{ borderLeft:`2px solid ${G}40`, paddingLeft:16, marginBottom:36, minHeight:56 }}>
+                <p style={{ color:"#9ca3af", fontSize:9, fontWeight:800, letterSpacing:"0.22em", textTransform:"uppercase", marginBottom:5 }}>
                   Try prompting:
                 </p>
-                <p style={{ color:"rgba(255,255,255,0.72)", fontSize:"clamp(12px,1.1vw,13.5px)", lineHeight:1.72, fontStyle:"italic", margin:0 }}>
+                <p style={{ color:"#374151", fontSize:"clamp(12px,1vw,13px)", lineHeight:1.7, fontStyle:"italic", margin:0 }}>
                   "{active.prompt}"
                 </p>
               </div>
 
-              {/* Thumbnail grid — elegant, compact */}
-              <div className="ag-thumbs" style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:44 }}>
+              {/* Thumbnail grid */}
+              <div className="ag-thumbs" style={{ display:"flex", flexWrap:"wrap", gap:7, marginBottom:40 }}>
                 {ARRANGEMENTS.map((arr, i) => (
                   <button
                     key={arr.id}
                     onClick={() => setCenter(i)}
                     className="ag-thumb"
                     style={{
-                      width:48, height:48, borderRadius:10, overflow:"hidden", padding:0,
-                      border:`2px solid ${i === center ? G : "rgba(255,255,255,0.08)"}`,
-                      opacity: i === center ? 1 : 0.38,
+                      width:44, height:44, borderRadius:8, overflow:"hidden", padding:0,
+                      border:`2px solid ${i === center ? G : "#e5e7eb"}`,
+                      opacity: i === center ? 1 : 0.55,
                       cursor:"pointer", flexShrink:0,
+                      transition:"all 0.18s ease",
                     }}
                     title={arr.title}
                   >
@@ -220,26 +211,27 @@ export default function AIGalleryPage({ onNavigate }) {
                 ))}
               </div>
 
-              {/* CTA */}
-              <div style={{ display:"flex", alignItems:"center", gap:14 }}>
+              {/* CTA row */}
+              <div style={{ display:"flex", alignItems:"center", gap:16 }}>
                 <button
                   onClick={() => onNavigate?.("make-it-personal")}
                   className="ag-cta"
-                  style={{ display:"inline-flex", alignItems:"center", gap:9, padding:"13px 26px", borderRadius:50, background:G, color:"white", fontSize:13, fontWeight:700, border:"none", cursor:"pointer", boxShadow:"0 6px 20px rgba(46,139,52,0.3)", transition:"all 0.22s ease", letterSpacing:"0.01em" }}
+                  style={{ display:"inline-flex", alignItems:"center", gap:8, padding:"12px 24px", borderRadius:50, background:G, color:"white", fontSize:13, fontWeight:700, border:"none", cursor:"pointer", boxShadow:`0 6px 18px rgba(46,139,52,0.28)`, transition:"all 0.2s ease" }}
                 >
                   Try It Now
-                  <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M13 7l5 5m0 0l-5 5m5-5H6"/>
                   </svg>
                 </button>
 
                 {/* Progress indicator */}
-                <span style={{ color:"rgba(255,255,255,0.22)", fontSize:11, fontWeight:600, letterSpacing:"0.08em" }}>
+                <span style={{ color:"#9ca3af", fontSize:11, fontWeight:600, letterSpacing:"0.08em" }}>
                   {String(center + 1).padStart(2,"0")} / {String(N).padStart(2,"0")}
                 </span>
               </div>
             </div>
           </div>
+
         </div>
       </main>
     </div>
