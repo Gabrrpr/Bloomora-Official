@@ -1,12 +1,14 @@
 import { useState, useEffect } from "react"
 import { api } from "../services/api.js"
 import { getCart, clearCart } from "../utils/cart.js"
+import { useAuth } from "../context/AuthContext"
 
 const G = "#2E8B34"
 
 const DELIVERY_TIMES = ["Anytime (9PM–6PM)", "7AM–10AM", "10AM–1PM", "1PM–4PM", "4PM–8PM", "8PM–11PM"]
 
 export default function Checkout({ onNavigate }) {
+  const { user } = useAuth()
   const [cartItems, setCartItems] = useState([])
   const [deliveryTime, setDeliveryTime] = useState("Anytime (9PM–6PM)")
   const [paymentMethod, setPaymentMethod] = useState("qrph")
@@ -14,9 +16,43 @@ export default function Checkout({ onNavigate }) {
   const [placing, setPlacing] = useState(false)
   const [error, setError] = useState("")
 
+  const [customer, setCustomer] = useState(null)
+  const [loadingProfile, setLoadingProfile] = useState(true)
+  const [showAddressModal, setShowAddressModal] = useState(false)
+  const [addressForm, setAddressForm] = useState({ phone: "", address: "" })
+  const [savingAddress, setSavingAddress] = useState(false)
+
   useEffect(() => {
     const items = getCart().filter(i => i.checked)
     setCartItems(items)
+  }, [])
+
+  useEffect(() => {
+    async function fetchProfile() {
+      const token = localStorage.getItem("access_token")
+      if (!token) {
+        setLoadingProfile(false)
+        return
+      }
+      try {
+        const res = await fetch("http://localhost:8000/api/v1/auth/me", {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (res.ok) {
+          const profile = await res.json()
+          setCustomer(profile)
+          setAddressForm({
+            phone: profile.phone_number || "",
+            address: profile.address || "",
+          })
+        }
+      } catch (e) {
+        console.error("Failed to fetch profile", e)
+      } finally {
+        setLoadingProfile(false)
+      }
+    }
+    fetchProfile()
   }, [])
 
   const subtotal = cartItems.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0)
@@ -28,9 +64,40 @@ export default function Checkout({ onNavigate }) {
   const fmt = (d) => d.toLocaleDateString("en-PH", { month: "long", day: "numeric" })
   const fmtDay = (d) => d.toLocaleDateString("en-PH", { weekday: "long" })
 
+  const fullName = customer
+    ? `${customer.first_name || ""} ${customer.last_name || ""}`.trim()
+    : user
+    ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
+    : "Guest"
+  const phone = customer?.phone_number || user?.phoneNumber || ""
+  const address = customer?.address || user?.address || ""
+
+  const handleSaveAddress = async (e) => {
+    e.preventDefault()
+    setSavingAddress(true)
+    setError("")
+    try {
+      const updated = await api.updateProfile({
+        phone_number: addressForm.phone,
+        address: addressForm.address,
+      })
+      setCustomer(updated.user)
+      setShowAddressModal(false)
+    } catch (err) {
+      setError(err.message || "Failed to save address.")
+    } finally {
+      setSavingAddress(false)
+    }
+  }
+
   const handlePlaceOrder = async () => {
     if (cartItems.length === 0) {
       setError("Your cart is empty.")
+      return
+    }
+    if (!address || !phone) {
+      setShowAddressModal(true)
+      setError("Please provide your delivery address and phone number before placing an order.")
       return
     }
     setPlacing(true)
@@ -46,12 +113,11 @@ export default function Checkout({ onNavigate }) {
           qty: i.qty,
           img: i.img,
         })),
-        delivery_address: "60 Friendship Highway, Clark Freeport Zone, Pampanga, Angeles City, 2009",
+        delivery_address: address,
         delivery_notes: `Delivery time: ${deliveryTime}`,
         scheduled_at: tomorrow.toISOString(),
       })
 
-      // Store order details for confirmation page
       const orderData = {
         orderIds: res.order_ids || [],
         items: cartItems,
@@ -59,7 +125,7 @@ export default function Checkout({ onNavigate }) {
         shipping,
         total,
         deliveryTime,
-        deliveryAddress: "60 Friendship Highway, Clark Freeport Zone, Pampanga, Angeles City, 2009",
+        deliveryAddress: address,
         scheduledDate: fmt(tomorrow),
         placedAt: new Date().toISOString(),
       }
@@ -92,18 +158,33 @@ export default function Checkout({ onNavigate }) {
                   <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                   <h2 className="text-sm font-semibold text-gray-700">Shipping Address</h2>
                 </div>
-                <button className="text-xs font-semibold hover:underline" style={{ color: G }}>EDIT</button>
+                <button
+                  onClick={() => setShowAddressModal(true)}
+                  className="text-xs font-semibold hover:underline"
+                  style={{ color: G }}
+                >
+                  EDIT
+                </button>
               </div>
               <div className="flex items-start gap-4 text-sm">
                 <div className="min-w-0">
-                  <div className="flex items-center gap-4 mb-2">
-                    <span className="font-semibold text-gray-800">Juan dela Cruz</span>
-                    <span className="text-gray-500">09876543210</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-white px-2 py-0.5 rounded" style={{ backgroundColor: G }}>ADDRESS</span>
-                    <span className="text-gray-600">60 Friendship Highway, Clark Freeport Zone, Pampanga, Angeles City, 2009</span>
-                  </div>
+                  {loadingProfile ? (
+                    <p className="text-gray-400">Loading address...</p>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-4 mb-2">
+                        <span className="font-semibold text-gray-800">{fullName || "Guest"}</span>
+                        <span className="text-gray-500">{phone || "No phone number"}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-white px-2 py-0.5 rounded" style={{ backgroundColor: G }}>ADDRESS</span>
+                        <span className="text-gray-600">{address || "No delivery address set."}</span>
+                      </div>
+                      {(!address || !phone) && (
+                        <p className="text-xs text-red-500 mt-2">Please add your delivery address and phone number to continue.</p>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -276,6 +357,58 @@ export default function Checkout({ onNavigate }) {
           </div>
         </div>
       </div>
+
+      {/* Address Modal */}
+      {showAddressModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-800 mb-1">Delivery Details</h3>
+            <p className="text-sm text-gray-400 mb-4">Please provide your phone number and delivery address.</p>
+            <form onSubmit={handleSaveAddress} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Phone Number</label>
+                <input
+                  type="tel"
+                  value={addressForm.phone}
+                  onChange={e => setAddressForm({ ...addressForm, phone: e.target.value })}
+                  placeholder="0917 123 4567"
+                  required
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Delivery Address</label>
+                <textarea
+                  value={addressForm.address}
+                  onChange={e => setAddressForm({ ...addressForm, address: e.target.value })}
+                  placeholder="Street, Barangay, City, Province, ZIP"
+                  required
+                  rows={3}
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 resize-none"
+                />
+              </div>
+              {error && <p className="text-xs text-red-500">{error}</p>}
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowAddressModal(false)}
+                  className="flex-1 py-2.5 text-sm font-semibold border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingAddress}
+                  className="flex-1 py-2.5 text-sm font-semibold text-white rounded-lg transition hover:brightness-105 disabled:opacity-50"
+                  style={{ backgroundColor: G }}
+                >
+                  {savingAddress ? "Saving..." : "Save Details"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

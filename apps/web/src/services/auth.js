@@ -52,3 +52,29 @@ export function facebookLogin() {
   window.location.href = `${API_BASE}/auth/facebook`;
 }
 
+export async function sendForgotPasswordOtp(email) {
+  const response = await fetch(`${API_BASE}/auth/forgot-password/send-otp`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email })
+  })
+  if (!response.ok) {
+    const err = await response.json()
+    throw new Error(err.detail || 'Failed to send OTP')
+  }
+  return response.json()
+}
+
+export async function resetPassword(email, otp, newPassword) {
+  const response = await fetch(`${API_BASE}/auth/forgot-password/reset`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, otp, new_password: newPassword })
+  })
+  if (!response.ok) {
+    const err = await response.json()
+    throw new Error(err.detail || 'Failed to reset password')
+  }
+  return response.json()
+}
+

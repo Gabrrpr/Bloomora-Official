@@ -62,6 +62,11 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
 
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    otp: str
+    new_password: str
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 def hash_password(password: str) -> str:
@@ -167,6 +172,50 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     db.refresh(user)
 
     return {"status": "success", "message": "Account created successfully.", "user_id": str(user.id)}
+
+
+@router.post("/forgot-password/send-otp")
+def forgot_password_send_otp(payload: SendOTPRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == payload.email).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Email not found.")
+    if not user.is_verified:
+        raise HTTPException(status_code=400, detail="Email not verified. Please register first.")
+
+    otp = generate_otp()
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+
+    user.otp_code = otp
+    user.otp_expires_at = expires_at
+    db.commit()
+
+    sent, error = send_otp_email(payload.email, otp, first_name=user.first_name)
+    if not sent:
+        raise HTTPException(status_code=500, detail=f"Failed to send OTP email: {error}")
+
+    return {"status": "success", "message": "OTP sent to email."}
+
+
+@router.post("/forgot-password/reset")
+def forgot_password_reset(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.email == payload.email).first()
+
+    if not user:
+        raise HTTPException(status_code=404, detail="Email not found.")
+    if user.otp_code != payload.otp:
+        raise HTTPException(status_code=400, detail="Invalid OTP.")
+    if user.otp_expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="OTP has expired.")
+    if len(payload.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
+
+    user.password_hash = hash_password(payload.new_password)
+    user.otp_code = None
+    user.otp_expires_at = None
+    db.commit()
+
+    return {"status": "success", "message": "Password reset successfully."}
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -323,4 +372,6 @@ def get_me(current_user: User = Depends(get_current_user)):
         "last_name": current_user.last_name,
         "role": current_user.role.value if hasattr(current_user.role, 'value') else current_user.role,
         "username": current_user.username,
+        "phone_number": current_user.phone_number,
+        "address": current_user.address,
     }

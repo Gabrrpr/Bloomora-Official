@@ -25,6 +25,8 @@ export function AuthProvider({ children }) {
         firstName: profile.first_name,
         lastName: profile.last_name,
         email: profile.email,
+        phoneNumber: profile.phone_number,
+        address: profile.address,
       }
       localStorage.setItem("access_token", token)
       localStorage.setItem("user", JSON.stringify(userData))
@@ -61,6 +63,8 @@ export function AuthProvider({ children }) {
         firstName: profile.first_name,
         lastName: profile.last_name,
         email: profile.email,
+        phoneNumber: profile.phone_number,
+        address: profile.address,
       }
       localStorage.setItem("user", JSON.stringify(userData))
       setUser(userData)

@@ -1,24 +1,41 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useAuth } from "../context/AuthContext"
 import { sendOtp, verifyOtp } from "../services/auth"
 import FlowerPanel from "../components/FlowerPanel"
+
+const STORAGE_KEY = "register_form_draft"
 
 export default function Register({ onNavigate }) {
   const { register } = useAuth()
   const [step, setStep] = useState("form")
   const [otp, setOtp] = useState("")
-  const [form, setForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    password: "",
-    confirmPassword: "",
+  const [form, setForm] = useState(() => {
+    const saved = sessionStorage.getItem(STORAGE_KEY)
+    return saved ? JSON.parse(saved) : {
+      firstName: "",
+      lastName: "",
+      email: "",
+      phone: "",
+      password: "",
+      confirmPassword: "",
+    }
   })
   const [showPassword, setShowPassword] = useState(false)
   const [agreeTerms, setAgreeTerms] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(form))
+  }, [form])
+
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      sessionStorage.removeItem(STORAGE_KEY)
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
+  }, [])
 
   const validateForm = () => {
     if (form.password !== form.confirmPassword) {

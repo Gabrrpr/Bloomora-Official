@@ -1,5 +1,6 @@
 import { useState } from "react"
 import FlowerPanel from "../components/FlowerPanel"
+import { sendForgotPasswordOtp, resetPassword } from "../services/auth"
 
 export default function ForgotPassword({ onNavigate }) {
   const [step, setStep] = useState(0) // 0: email, 1: otp, 2: new password, 3: success
@@ -9,7 +10,6 @@ export default function ForgotPassword({ onNavigate }) {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
-  const DEMO_OTP = "6789"
 
   const passwordChecks = {
     length: password.length >= 8,
@@ -27,6 +27,47 @@ export default function ForgotPassword({ onNavigate }) {
     next[i] = val
     setOtp(next)
     if (val && i < 3) document.getElementById(`fp-otp-${i + 1}`)?.focus()
+  }
+
+  const handleSendOtp = async () => {
+    if (!email || !/\S+@\S+\.\S+/.test(email)) {
+      return setError("Enter a valid email address.")
+    }
+    setLoading(true)
+    setError("")
+    try {
+      await sendForgotPasswordOtp(email)
+      setStep(1)
+    } catch (err) {
+      setError(err.message || "Failed to send OTP. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleVerifyOtp = async () => {
+    const code = otp.join("")
+    if (code.length !== 4) {
+      return setError("Please enter the 4-digit OTP.")
+    }
+    setStep(2)
+    setError("")
+  }
+
+  const handleResetPassword = async () => {
+    if (!passwordChecks.length || !passwordChecks.upper || !passwordChecks.lower || !passwordChecks.number) {
+      return setError("Password does not meet all requirements.")
+    }
+    setLoading(true)
+    setError("")
+    try {
+      await resetPassword(email, otp.join(""), password)
+      setStep(3)
+    } catch (err) {
+      setError(err.message || "Failed to reset password. Please try again.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -63,11 +104,7 @@ export default function ForgotPassword({ onNavigate }) {
                   </div>
                 </div>
                 <button
-                  onClick={() => {
-                    if (!email || !/\S+@\S+\.\S+/.test(email)) return setError("Enter a valid email address.")
-                    setLoading(true); setError("")
-                    setTimeout(() => { setLoading(false); setStep(1) }, 800)
-                  }}
+                  onClick={handleSendOtp}
                   disabled={loading}
                   className="w-full py-3 bg-green-700 hover:bg-green-800 text-white font-semibold rounded-xl transition disabled:opacity-60"
                 >
@@ -91,7 +128,6 @@ export default function ForgotPassword({ onNavigate }) {
                 </div>
                 <h1 className="text-2xl font-bold text-gray-800">Enter your code</h1>
                 <p className="text-gray-500 text-sm mt-1">We sent a code to <span className="font-medium text-gray-700">{email}</span></p>
-                <p className="text-xs text-green-600 mt-1">(Demo code: <strong>6789</strong>)</p>
               </div>
               {error && <p className="mb-3 text-sm text-red-500 text-center bg-red-50 p-2 rounded-xl">{error}</p>}
               <div className="flex justify-center gap-3 mb-6">
@@ -103,11 +139,11 @@ export default function ForgotPassword({ onNavigate }) {
                 ))}
               </div>
               <p className="text-center text-sm text-gray-500 mb-4">
-                Didn't receive the email? <button className="text-green-700 font-semibold hover:underline">Resend</button>
+                Didn't receive the email? <button onClick={handleSendOtp} disabled={loading} className="text-green-700 font-semibold hover:underline disabled:opacity-60">{loading ? "Sending..." : "Resend"}</button>
               </p>
               <div className="flex gap-3">
                 <button onClick={() => setStep(0)} className="flex-1 py-3 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition">Back</button>
-                <button onClick={() => { if (otp.join("") !== DEMO_OTP) return setError("Invalid code. Try: 6789"); setError(""); setStep(2) }}
+                <button onClick={handleVerifyOtp}
                   className="flex-1 py-3 bg-green-700 hover:bg-green-800 text-white font-semibold rounded-xl transition">Continue</button>
               </div>
             </>
@@ -179,12 +215,7 @@ export default function ForgotPassword({ onNavigate }) {
                 <div className="flex gap-3 pt-2">
                   <button onClick={() => setStep(1)} className="flex-1 py-3 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition">Back</button>
                   <button
-                    onClick={() => {
-                      if (!passwordChecks.length || !passwordChecks.upper || !passwordChecks.lower || !passwordChecks.number)
-                        return setError("Password does not meet all requirements.")
-                      setError(""); setLoading(true)
-                      setTimeout(() => { setLoading(false); setStep(3) }, 800)
-                    }}
+                    onClick={handleResetPassword}
                     disabled={loading}
                     className="flex-1 py-3 bg-green-700 hover:bg-green-800 text-white font-semibold rounded-xl transition disabled:opacity-60"
                   >
@@ -215,3 +246,4 @@ export default function ForgotPassword({ onNavigate }) {
     </div>
   )
 }
+

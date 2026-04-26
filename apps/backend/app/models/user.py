@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Enum, Boolean, ForeignKey, DateTime
+from sqlalchemy import Column, String, Text, Enum, Boolean, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from .base import Base, now_utc
@@ -33,6 +33,7 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     date_of_birth = Column(String(20), nullable=True)
     gender = Column(String(20), nullable=True)
+    address = Column(Text, nullable=True)
     role = Column(Enum(RoleEnum), nullable=False, default=RoleEnum.customer)
     branch = Column(Enum(BranchEnum), nullable=True)
     is_active = Column(Boolean, default=True)

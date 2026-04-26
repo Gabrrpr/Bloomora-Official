@@ -83,6 +83,10 @@ export const api = {
     return this.patch(`/users/${userId}`, data);
   },
 
+  async updateProfile(data) {
+    return this.patch('/users/me', data);
+  },
+
   // ── Products (Admin) ──────────────────────────────────────────────────────
   async getAdminProducts() {
     return this.get('/products/admin/all');

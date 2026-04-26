@@ -28,6 +28,7 @@ def serialize_user(u: User) -> dict:
         "username": u.username,
         "email": u.email,
         "phone_number": u.phone_number,
+        "address": u.address,
         "role": u.role.value if hasattr(u.role, "value") else u.role,
         "branch": u.branch.value if u.branch and hasattr(u.branch, "value") else u.branch,
         "is_active": u.is_active,
@@ -64,6 +65,7 @@ class UserUpdateRequest(BaseModel):
     role: Optional[str] = None
     branch: Optional[str] = None
     phone_number: Optional[str] = None
+    address: Optional[str] = None
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None
     must_change_password: Optional[bool] = None
@@ -187,6 +189,33 @@ def create_staff(
     return {"status": "success", "user_id": str(new_user.id), "message": "Staff account created successfully."}
 
 
+@router.patch("/me", response_model=dict)
+def update_me(
+    payload: UserUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update the current user's own profile."""
+    user = current_user
+
+    if payload.first_name is not None:
+        user.first_name = payload.first_name
+    if payload.middle_name is not None:
+        user.middle_name = payload.middle_name
+    if payload.last_name is not None:
+        user.last_name = payload.last_name
+    if payload.phone_number is not None:
+        user.phone_number = payload.phone_number
+    if payload.address is not None:
+        user.address = payload.address
+
+    user.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(user)
+
+    return {"status": "success", "message": "Profile updated successfully.", "user": serialize_user(user)}
+
+
 @router.patch("/{user_id}", response_model=dict)
 def update_user(
     user_id: str,
@@ -209,6 +238,8 @@ def update_user(
         user.last_name = payload.last_name
     if payload.phone_number is not None:
         user.phone_number = payload.phone_number
+    if payload.address is not None:
+        user.address = payload.address
     if payload.is_active is not None:
         user.is_active = payload.is_active
     if payload.is_verified is not None:

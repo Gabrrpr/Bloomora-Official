@@ -1,5 +1,6 @@
 import { useState, useRef } from "react"
 import { useAuth } from "../context/AuthContext"
+import { api } from "../services/api"
 
 const G = "#2E8B34"
 const DG = "#0C573E"
@@ -27,9 +28,9 @@ export default function Profile({ onNavigate }) {
     middleName: user?.middleName || "",
     lastName: user?.lastName || "",
     email: user?.email || "",
-    phone: "",
+    phone: user?.phoneNumber || "",
     birthdate: "",
-    address: "",
+    address: user?.address || "",
   })
 
   // Keep a "saved" snapshot to allow cancel
@@ -63,12 +64,23 @@ export default function Profile({ onNavigate }) {
     setEditing(false)
   }
 
-  const handleSave = () => {
-    // Persist to savedForm (simulates save; swap with API call when backend ready)
-    setSavedForm({ ...form })
-    setEditing(false)
-    setSaved(true)
-    setTimeout(() => setSaved(false), 3000)
+  const handleSave = async () => {
+    try {
+      await api.updateProfile({
+        first_name: form.firstName,
+        middle_name: form.middleName,
+        last_name: form.lastName,
+        phone_number: form.phone,
+        address: form.address,
+      })
+      setSavedForm({ ...form })
+      setEditing(false)
+      setSaved(true)
+      setTimeout(() => setSaved(false), 3000)
+    } catch (err) {
+      console.error("Failed to save profile:", err)
+      alert("Failed to save profile. Please try again.")
+    }
   }
 
   const inputStyle = (active) => ({
