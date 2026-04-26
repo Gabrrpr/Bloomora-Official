@@ -31,7 +31,7 @@ const AUTH_PAGES = ["login", "register", "forgot-password", "terms"]
 
 function AppContent() {
   const { user } = useAuth()
-  const [page, setPage] = useState("login")
+  const [page, setPage] = useState("home")
   const [cartCount, setCartCount] = useState(0)
   const [prevPage, setPrevPage] = useState("login")
 
@@ -84,9 +84,11 @@ function AppContent() {
   return (
     <>
       {renderContent()}
-      {/* Always render these regardless of page so they show on login too */}
-      <CookieConsent />
-      <AdPopup />
+      {/* Popups — hidden on auth pages and admin dashboard */}
+      {!AUTH_PAGES.includes(page) && page !== "admin" && <>
+        <CookieConsent />
+        <AdPopup />
+      </>}
     </>
   )
 }

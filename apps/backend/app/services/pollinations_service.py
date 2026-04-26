@@ -40,14 +40,23 @@ class PollinationsService:
         base_prompt = arrangement.prompt_text if arrangement.prompt_text else "A beautiful floral arrangement"
 
         materials_desc = ", ".join(prompt_parts) if prompt_parts else ""
+        
+        # Build florist-executable, consistent prompt
         full_prompt = (
-            f"A realistic professional photograph of a floral arrangement. "
+            f"Professional studio product photograph of a realistic floral bouquet arrangement, "
+            f"top-down angled view at 45 degrees, centered in frame. "
             f"{base_prompt}. "
             f"{materials_desc}. "
-            "Pure white background, studio product photography, soft diffused lighting, "
-            "sharp focus, photorealistic, no illustrations, no digital art, no watercolor, "
-            "achievable real-world bouquet using actual flowers available in a flower shop, "
-            "natural stems and leaves visible, elegant composition, 8k resolution."
+            f"The arrangement is built by a professional florist using real, fresh flowers and materials "
+            f"currently in stock at a flower shop. Each flower has natural coloration — no neon, glitter, "
+            f"or fantasy hues. Stems are freshly cut at natural lengths, leaves are healthy and green. "
+            f"The bouquet is wrapped and arranged in a style that a florist can actually recreate by hand. "
+            f"Pure white seamless background. Soft diffused natural lighting from upper left. "
+            f"Sharp focus on the entire bouquet, gentle shadow beneath. Photorealistic, high detail, "
+            f"8k product photography. "
+            f"NO illustrations, NO digital art, NO watercolor, NO anime, NO fantasy elements, "
+            f"NO glowing or unnatural colors, NO impossible flower combinations, "
+            f"NO text, NO watermark, NO logo, NO frame."
         )
 
         # 3. Call Pollinations.ai to get image URL

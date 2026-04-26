@@ -12,6 +12,7 @@ import AdminTransactions from "./AdminTransactions"
 import AdminDelivery     from "./AdminDelivery"
 import AdminActivityLogs from "./AdminActivityLogs"
 import AdminSettings     from "./AdminSettings"
+import AdminHero         from "./AdminHero"
 import { GreenCard, WhiteCard, ComingSoon } from "./_adminShared"
 
 const DG = "#0C573E"
@@ -30,6 +31,7 @@ const NAV = [
   { label: "Activity Logs", d: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
   { label: "Transactions",  d: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" },
   { label: "Delivery",      d: "M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8" },
+  { label: "Hero Section",  d: "M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" },
 ]
 
 function NavIcon({ d }) {
@@ -515,6 +517,7 @@ export default function AdminDashboard({ onNavigate }) {
       case "Transactions": return <AdminTransactions />
       case "Delivery":     return <AdminDelivery />
       case "Settings":     return <AdminSettings />
+      case "Hero Section": return <AdminHero />
       default:             return <ComingSoon label={active} />
     }
   }

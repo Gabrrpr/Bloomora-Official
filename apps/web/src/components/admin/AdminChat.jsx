@@ -10,7 +10,7 @@ const QUICK_REPLIES = [
   "Your order is being prepared and will be delivered soon.",
   "Same-day delivery is available for orders before 9AM.",
   "We'd love to help you customize a bouquet! What's the occasion?",
-  "Our price range starts at PHP500 for small arrangements.",
+  "Our price range starts at ₱500 for small arrangements.",
 ]
 
 function InitialsAvatar({ name = "?", size = 38 }) {
@@ -77,12 +77,52 @@ export default function AdminChat() {
   const [loadingMsgs, setLoadingMsgs] = useState(false)
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
+  const wsRef = useRef(null)
 
   const activeConvo = conversations.find(c => c.customer_id === activeId)
   const filtered = conversations.filter(c => c.user_name?.toLowerCase().includes(searchQuery.toLowerCase()))
 
-  // ... (Keep your loadConversations and useEffects as they were)
+  // ── Load conversations ────────────────────────────────────────────────────
+  const loadConversations = useCallback(async () => {
+    if (!user || !['admin', 'staff'].includes(user.role)) return
+    setLoadingConvos(true)
+    try {
+      const data = await api.getConversations()
+      const convos = data.conversations || []
+      setConversations(convos)
+    } catch (err) {
+      console.error('Load conversations error:', err)
+    } finally {
+      setLoadingConvos(false)
+    }
+  }, [user])
 
+  // ── Load messages for active conversation ─────────────────────────────────
+  const loadMessages = useCallback(async (customerId) => {
+    if (!customerId) return
+    setLoadingMsgs(true)
+    try {
+      const data = await api.getChatHistory(customerId)
+      const msgs = (data || []).map(msg => ({
+        id: msg.id,
+        sender: msg.sender === 'customer' ? 'customer' : 'staff',
+        text: msg.message,
+        time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : '',
+      }))
+      setMessages(msgs)
+      // Mark as read
+      await api.markRead(customerId)
+      setConversations(prev => prev.map(c =>
+        c.customer_id === customerId ? { ...c, unread_count: 0 } : c
+      ))
+    } catch (err) {
+      console.error('Load messages error:', err)
+    } finally {
+      setLoadingMsgs(false)
+    }
+  }, [])
+
+  // ── Send message ──────────────────────────────────────────────────────────
   const sendMessage = async (text) => {
     if (!text.trim() || !activeId) return
     const newMsg = {
@@ -100,10 +140,64 @@ export default function AdminChat() {
       setConversations(prev => prev.map(c =>
         c.customer_id === activeId ? { ...c, last_message: text, last_message_from_staff: true, time: newMsg.time } : c
       ))
-    } catch (err) { console.error("Failed to send message:", err) }
+    } catch (err) {
+      console.error("Failed to send message:", err)
+    }
   }
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }) }, [messages, typing])
+  // ── WebSocket connection ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!user || !['admin', 'staff'].includes(user.role) || wsRef.current) return
+
+    const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/admin`)
+    wsRef.current = websocket
+
+    websocket.onopen = () => console.log('Admin WS connected')
+    websocket.onmessage = (event) => {
+      const data = JSON.parse(event.data)
+      console.log('Admin WS message:', data)
+
+      // If message is for active conversation, add it
+      if (activeId && data.user_id === activeId) {
+        setMessages(prev => {
+          // Deduplicate
+          if (prev.find(m => m.id === data.id)) return prev
+          return [...prev, {
+            id: data.id,
+            sender: 'customer',
+            text: data.message,
+            time: new Date(data.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          }]
+        })
+      }
+
+      // Refresh conversation list
+      loadConversations()
+    }
+    websocket.onerror = (err) => console.error('Admin WS error:', err)
+    websocket.onclose = () => { wsRef.current = null }
+
+    setWs(websocket)
+    return () => websocket.close()
+  }, [user, activeId, loadConversations])
+
+  // ── Load conversations on mount ───────────────────────────────────────────
+  useEffect(() => {
+    if (user && ['admin', 'staff'].includes(user.role)) {
+      loadConversations()
+    }
+  }, [loadConversations, user])
+
+  // ── Load messages when active conversation changes ────────────────────────
+  useEffect(() => {
+    if (activeId) {
+      loadMessages(activeId)
+    }
+  }, [activeId, loadMessages])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages, typing])
 
   const handleKeyDown = (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input) }
@@ -277,12 +371,63 @@ export default function AdminChat() {
                 <div ref={bottomRef} />
               </div>
 
-              {/* Quick replies & Input bar (Keep the rest of your UI) */}
-              {/* ... */}
+              {/* Quick replies */}
+              {showQuickReplies && (
+                <div className="px-4 py-2.5 flex flex-wrap gap-1.5 border-t" style={{ backgroundColor: "white", borderColor: "#f1f5f9" }}>
+                  {QUICK_REPLIES.map(q => (
+                    <button
+                      key={q}
+                      onClick={() => sendMessage(q)}
+                      className="px-3 py-1.5 text-xs font-medium rounded-full border transition-all hover:border-green-500 hover:text-green-700 hover:bg-green-50"
+                      style={{ borderColor: "#d1fae5", color: "#374151", backgroundColor: "#f9fafb" }}
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Input bar */}
+              <div className="flex items-center gap-2 px-4 py-3 flex-shrink-0" style={{ borderTop: "1px solid #f1f5f9", backgroundColor: "white" }}>
+                <button
+                  onClick={() => setShowQuickReplies(p => !p)}
+                  className="w-9 h-9 flex items-center justify-center rounded-xl transition-all hover:bg-green-50 text-gray-400 hover:text-green-700 flex-shrink-0"
+                  title="Quick replies"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                </button>
+                <input
+                  ref={inputRef}
+                  type="text"
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder={`Reply to ${activeConvo.user_name}...`}
+                  className="flex-1 text-sm outline-none bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
+                />
+                <button
+                  onClick={() => sendMessage(input)}
+                  disabled={!input.trim()}
+                  className="w-9 h-9 flex items-center justify-center rounded-xl text-white transition-all flex-shrink-0 disabled:opacity-50"
+                  style={{ backgroundColor: input.trim() ? DG : "#d1d5db" }}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
+                  </svg>
+                </button>
+              </div>
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-               {/* Empty State UI */}
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: "linear-gradient(135deg, #f0fdf4, #dcfce7)" }}>
+                <svg className="w-8 h-8" style={{ color: DG }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+              </div>
+              <p className="text-sm font-medium text-gray-500">Select a conversation</p>
+              <p className="text-xs text-gray-400 mt-1">Choose a customer from the sidebar to start chatting</p>
             </div>
           )}
         </div>
@@ -291,3 +436,4 @@ export default function AdminChat() {
     </div>
   )
 }
+

@@ -1,16 +1,24 @@
 import { useState, useEffect } from "react"
+import { api } from "../services/api.js"
 
 import heroBg1 from "../assets/HeroBG1.png"
 import heroBg2 from "../assets/HeroBG2.png"
 import heroBg3 from "../assets/HeroBG3.png"
 import heroBg4 from "../assets/HeroBG4.png"
 
-const HEROES = [
+const IMAGE_MAP = {
+  "HeroBG1.png": heroBg1,
+  "HeroBG2.png": heroBg2,
+  "HeroBG3.png": heroBg3,
+  "HeroBG4.png": heroBg4,
+}
+
+const DEFAULT_HEROES = [
   {
     id: 1,
     tag: "Esting's Flower International Inc.",
     headline: "Fresh Blooms,\nSince 1959",
-    description: "Since 1959, we’ve been part of countless moments big and small. Every arrangement is made by hand with fresh flowers and genuine care.",
+    description: "Since 1959, we've been part of countless moments big and small. Every arrangement is made by hand with fresh flowers and genuine care.",
     cta: "Shop Flowers",
     ctaSecondary: "View Occasions",
     accent: "#2E8B34",
@@ -20,7 +28,7 @@ const HEROES = [
     id: 2,
     tag: "Made a mistake?",
     headline: "Let flowers\ndo the talking",
-    description: "Whether it’s an apology, a misunderstanding, or just a way to say “I care,” sending flowers is sometimes the simplest way to fix things without saying too much.",
+    description: "Whether it's an apology, a misunderstanding, or just a way to say \"I care,\" sending flowers is sometimes the simplest way to fix things without saying too much.",
     cta: "Shop Flowers",
     ctaSecondary: "Explore Collection",
     accent: "#e11d48",
@@ -30,7 +38,7 @@ const HEROES = [
     id: 3,
     tag: "Make It Personal",
     headline: "Flowers,\nMade Your Way",
-    description: "Use our “Make it Personal” feature to describe your ideal bouquet, or build your own arrangement through our Mix and Match option. We’ll turn your idea into something fresh and beautifully made.",
+    description: "Use our \"Make it Personal\" feature to describe your ideal bouquet, or build your own arrangement through our Mix and Match option. We'll turn your idea into something fresh and beautifully made.",
     cta: "Try It Now",
     ctaSecondary: "See Examples",
     accent: "#7c3aed",
@@ -40,7 +48,7 @@ const HEROES = [
     id: 4,
     tag: "Fresh Flowers, For Any Moment",
     headline: "Simple Ways\nto Show You Care",
-    description: "From everyday surprises to life’s biggest moments, we create fresh arrangements that help you express what you feel in a simple and meaningful way.",
+    description: "From everyday surprises to life's biggest moments, we create fresh arrangements that help you express what you feel in a simple and meaningful way.",
     cta: "Shop Flowers",
     ctaSecondary: "View Occasions",
     accent: "#d97706",
@@ -50,21 +58,46 @@ const HEROES = [
 
 const AUTO_PLAY_MS = 5000
 
+function resolveImage(slide) {
+  if (!slide.image) return heroBg1
+  if (IMAGE_MAP[slide.image]) return IMAGE_MAP[slide.image]
+  if (slide.image.startsWith("http")) return slide.image
+  return heroBg1
+}
+
 export default function HeroCarousel() {
+  const [heroes, setHeroes] = useState(DEFAULT_HEROES)
   const [current, setCurrent] = useState(0)
   const [prev, setPrev] = useState(null)
   const [animating, setAnimating] = useState(false)
   const [progress, setProgress] = useState(0)
   const [paused, setPaused] = useState(false)
 
+  // Fetch slides from API on mount
+  useEffect(() => {
+    api.getHeroSlides()
+      .then((data) => {
+        if (data?.slides && Array.isArray(data.slides) && data.slides.length > 0) {
+          const mapped = data.slides.map((s) => ({
+            ...s,
+            image: resolveImage(s),
+          }))
+          setHeroes(mapped)
+        }
+      })
+      .catch(() => {
+        // silently fall back to defaults
+      })
+  }, [])
+
   // Auto-advance
   useEffect(() => {
     if (paused) return
     const interval = setInterval(() => {
-      goTo((current + 1) % HEROES.length, "next")
+      goTo((current + 1) % heroes.length, "next")
     }, AUTO_PLAY_MS)
     return () => clearInterval(interval)
-  }, [current, paused])
+  }, [current, paused, heroes.length])
 
   // Progress bar for dots
   useEffect(() => {
@@ -91,8 +124,8 @@ export default function HeroCarousel() {
     }, 600)
   }
 
-  const hero = HEROES[current]
-  const prevHero = prev !== null ? HEROES[prev] : null
+  const hero = heroes[current]
+  const prevHero = prev !== null ? heroes[prev] : null
 
   return (
     <div
@@ -102,7 +135,7 @@ export default function HeroCarousel() {
       onMouseLeave={() => setPaused(false)}
     >
       {/* Background image slides */}
-      {HEROES.map((h, i) => (
+      {heroes.map((h, i) => (
         <div
           key={h.id}
           className="absolute inset-0 transition-opacity duration-700"
@@ -124,7 +157,7 @@ export default function HeroCarousel() {
 
       {/* ── Left arrow — pinned to left edge ── */}
       <button
-        onClick={() => goTo((current - 1 + HEROES.length) % HEROES.length, "prev")}
+        onClick={() => goTo((current - 1 + heroes.length) % heroes.length, "prev")}
         className="absolute left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full flex items-center justify-center text-white border border-white/30 bg-black/20 hover:bg-black/40 backdrop-blur-sm transition-all duration-200 hover:scale-110"
         aria-label="Previous slide"
       >
@@ -135,7 +168,7 @@ export default function HeroCarousel() {
 
       {/* ── Right arrow — pinned to right edge ── */}
       <button
-        onClick={() => goTo((current + 1) % HEROES.length, "next")}
+        onClick={() => goTo((current + 1) % heroes.length, "next")}
         className="absolute right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full flex items-center justify-center text-white border border-white/30 bg-black/20 hover:bg-black/40 backdrop-blur-sm transition-all duration-200 hover:scale-110"
         aria-label="Next slide"
       >
@@ -209,7 +242,7 @@ export default function HeroCarousel() {
 
       {/* ── Dots — centered at bottom ── */}
       <div className="absolute bottom-6 left-0 right-0 z-20 flex items-center justify-center gap-2.5">
-        {HEROES.map((_, i) => (
+        {heroes.map((_, i) => (
           <button
             key={i}
             onClick={() => goTo(i, i > current ? "next" : "prev")}
@@ -249,3 +282,4 @@ export default function HeroCarousel() {
     </div>
   )
 }
+

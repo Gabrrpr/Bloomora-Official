@@ -129,13 +129,20 @@ export const api = {
     return this.get('/products/');
   },
 
-  // ── Customization / AI Generation ────────────────────────────────────────
-  async checkAndGenerate(data) {
-    return this.post('/customization/check-and-generate', data);
+  async getCustomizationProducts() {
+    return this.get('/products/customization/all');
   },
 
-  async getAiUsage() {
-    return this.get('/customization/ai-usage');
+  // ── Site Customization ──────────────────────────────────────────────────
+  async getHeroSlides() {
+    return this.get('/site-customization/hero');
+  },
+
+  async updateHeroSlides(data) {
+    return this.request('/site-customization/hero', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
   },
 };
 

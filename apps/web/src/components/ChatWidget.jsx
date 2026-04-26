@@ -36,9 +36,14 @@ export default function ChatWidget() {
   const [typing, setTyping] = useState(false)
   const [sessionId, setSessionId] = useState(null)
   const [ws, setWs] = useState(null)
-  const [attachedImage, setAttachedImage] = useState(null) // { file, previewUrl }
+  const [attachedImage, setAttachedImage] = useState(null)
+  const [sending, setSending] = useState(false)
   const bottomRef = useRef(null)
   const fileInputRef = useRef(null)
+
+  // Track sent messages to prevent duplicates
+  const sentMessagesRef = useRef(new Set())
+  const wsRef = useRef(null)
 
   useEffect(() => {
     const handleOpenChat = () => setOpen(true)
@@ -47,22 +52,50 @@ export default function ChatWidget() {
   }, [])
 
   const createSession = useCallback(async () => {
-    if (!user || sessionId) return
+    if (!user || sessionId || wsRef.current) return
     try {
       const data = await api.createSession()
       const newSessionId = data.id
       setSessionId(newSessionId)
-      const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/${user.email}`)
+
+      // Load previous chat history
+      try {
+        const history = await api.getChatHistory(newSessionId)
+        if (history && history.length > 0) {
+          const formatted = history.map(msg => ({
+            id: msg.id,
+            from: msg.sender === 'customer' ? 'user' : 'bot',
+            text: msg.message,
+            time: msg.created_at,
+          }))
+          setMessages(prev => [WELCOME_MESSAGE, ...formatted])
+        }
+      } catch (histErr) {
+        console.error('History load error:', histErr)
+      }
+
+      // Use user.id (UUID) for WebSocket, not email
+      const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/${newSessionId}`)
+      wsRef.current = websocket
+
       websocket.onopen = () => console.log('WS connected')
       websocket.onmessage = (event) => {
         const data = JSON.parse(event.data)
-        setMessages(prev => [...prev, {
-          id: data.id,
-          from: data.sender === 'admin' ? 'bot' : 'user',
-          text: data.message
-        }])
+        // Skip echo of our own messages (already added optimistically)
+        if (data.sender === 'customer') return
+        setMessages(prev => {
+          // Extra dedup: don't add if same text from bot already exists as last message
+          const last = prev[prev.length - 1]
+          if (last && last.from === 'bot' && last.text === data.message) return prev
+          return [...prev, {
+            id: data.id || Date.now(),
+            from: 'bot',
+            text: data.message
+          }]
+        })
       }
       websocket.onerror = (err) => console.error('WS error:', err)
+      websocket.onclose = () => { wsRef.current = null }
       setWs(websocket)
     } catch (err) {
       console.error('Session create error:', err)
@@ -71,7 +104,15 @@ export default function ChatWidget() {
   }, [user, sessionId])
 
   const sendMessage = useCallback(async (text, imageData = null) => {
-    if ((!text.trim() && !imageData) || !sessionId) return
+    if ((!text.trim() && !imageData) || !sessionId || sending) return
+
+    // Prevent duplicate sends of same text within 2 seconds
+    const trimmedText = text.trim()
+    if (sentMessagesRef.current.has(trimmedText)) return
+    sentMessagesRef.current.add(trimmedText)
+    setTimeout(() => sentMessagesRef.current.delete(trimmedText), 2000)
+
+    setSending(true)
     const newMsg = {
       id: Date.now(),
       from: "user",
@@ -88,8 +129,10 @@ export default function ChatWidget() {
     } catch (err) {
       console.error('Message send error:', err)
       setTyping(false)
+    } finally {
+      setSending(false)
     }
-  }, [sessionId])
+  }, [sessionId, sending])
 
   const handleSend = () => {
     if (!input.trim() && !attachedImage) return
@@ -102,7 +145,6 @@ export default function ChatWidget() {
     if (!file.type.startsWith("image/")) return
     const previewUrl = URL.createObjectURL(file)
     setAttachedImage({ file, previewUrl })
-    // reset input so same file can be re-selected
     e.target.value = ""
   }
 
@@ -347,9 +389,9 @@ export default function ChatWidget() {
               />
               <button
                 onClick={handleSend}
-                disabled={(!input.trim() && !attachedImage) || !user || !sessionId}
+                disabled={(!input.trim() && !attachedImage) || !user || !sessionId || sending}
                 className="w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
-                style={{ background: ((input.trim() || attachedImage) && user && sessionId) ? `linear-gradient(135deg, ${DG}, ${G})` : "#e5e7eb" }}
+                style={{ background: ((input.trim() || attachedImage) && user && sessionId && !sending) ? `linear-gradient(135deg, ${DG}, ${G})` : "#e5e7eb" }}
               >
                 <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
@@ -381,3 +423,4 @@ export default function ChatWidget() {
     </>
   )
 }
+

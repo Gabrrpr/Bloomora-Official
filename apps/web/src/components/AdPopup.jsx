@@ -1,24 +1,18 @@
 import { useState, useEffect } from "react"
 import adImage from "../assets/advertisement1.png"
 
-// Changed to v2 key — clears old stored values so popup shows again
-const STORAGE_KEY = "bloomora_ad_v2"
-
 export default function AdPopup() {
   const [visible, setVisible] = useState(false)
   const [hiding, setHiding]   = useState(false)
 
   useEffect(() => {
-    const seen = sessionStorage.getItem(STORAGE_KEY)
-    if (!seen) {
-      const t = setTimeout(() => setVisible(true), 2500)
-      return () => clearTimeout(t)
-    }
+    // Show ad on every page load / refresh
+    const t = setTimeout(() => setVisible(true), 2500)
+    return () => clearTimeout(t)
   }, [])
 
   const dismiss = () => {
     setHiding(true)
-    sessionStorage.setItem(STORAGE_KEY, "1")
     setTimeout(() => setVisible(false), 350)
   }
 
@@ -67,3 +61,4 @@ export default function AdPopup() {
     </div>
   )
 }
+

@@ -50,6 +50,72 @@ def get_products(db: Session = Depends(get_db)):
     } for p in products]
 
 
+@router.get("/customization/all", response_model=List[dict])
+def get_customization_products(db: Session = Depends(get_db)):
+    """Get all available products with customization attributes and stock for Mix & Match."""
+    products = (
+        db.query(Product)
+        .filter(Product.is_available == True)
+        .order_by(Product.category, Product.name)
+        .all()
+    )
+
+    result = []
+    for p in products:
+        inv = p.inventory
+        stock = inv.current_stock if inv else 0
+        reorder = inv.reorder_point if inv else 10
+        stock_status = "out_of_stock" if stock <= 0 else "low_stock" if stock <= reorder else "in_stock"
+
+        item = {
+            "id": str(p.id),
+            "name": p.name,
+            "price": float(p.price) if p.price else 0,
+            "category": p.category.value if hasattr(p.category, "value") else p.category,
+            "image_url": p.image_url,
+            "is_available": p.is_available,
+            "stock": stock,
+            "stock_status": stock_status,
+        }
+
+        # Add category-specific attributes
+        if p.flower:
+            item["attrs"] = {
+                "color": p.flower.color,
+                "style": p.flower.style,
+                "size": p.flower.size,
+                "quantity": p.flower.quantity,
+            }
+        elif p.vase:
+            item["attrs"] = {
+                "style": p.vase.style,
+                "material": p.vase.material,
+                "color": p.vase.color,
+                "size": p.vase.size,
+                "quantity": p.vase.quantity,
+            }
+        elif p.wrapping:
+            item["attrs"] = {
+                "style": p.wrapping.style,
+                "color": p.wrapping.color,
+                "material": p.wrapping.material,
+                "size": p.wrapping.size,
+                "quantity": p.wrapping.quantity,
+            }
+        elif p.accessory:
+            item["attrs"] = {
+                "name": p.accessory.name,
+                "style": p.accessory.style,
+                "color": p.accessory.color,
+                "size": p.accessory.size,
+                "quantity": p.accessory.quantity,
+            }
+
+        result.append(item)
+
+    return result
+
+
 @router.get("/{product_id}", response_model=dict)
 def get_product(product_id: str, db: Session = Depends(get_db)):
     """Get single product details."""

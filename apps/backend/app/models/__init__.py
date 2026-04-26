@@ -5,6 +5,7 @@ from .order import Order, Transaction, Delivery
 from .arrangement import Arrangement, Flower, Vase, Wrapping, Accessory
 from .support import Review, Chat, ActivityLog, SenderEnum
 from .ai_usage_log import AIUsageLog
+from .site_customization import SiteCustomization
 
 __all__ = [
     "Base",
@@ -19,4 +20,6 @@ __all__ = [
     "Arrangement", "Flower", "Vase", "Wrapping", "Accessory",
     # Support
     "Review", "Chat", "ActivityLog", "SenderEnum",
+    # Site Customization
+    "SiteCustomization",
 ]
