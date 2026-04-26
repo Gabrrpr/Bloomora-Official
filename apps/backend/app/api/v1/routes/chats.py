@@ -106,9 +106,9 @@ def get_all_conversations(
             unread_count=unread_count,
             last_message=recent_message.message if recent_message else "",
             recent_orders=[{
-                "order_number": o.order_number,
-                "product": o.product.name if o.product else "Custom",
-                "status": o.status.value,
+                "order_number": f"ORD-{o.id.hex[:8].upper()}",
+                "product": o.product.name if o.product else (o.arrangement.name if o.arrangement else "Custom"),
+                "status": o.status.value if hasattr(o.status, 'value') else str(o.status),
                 "total_amount": float(o.total_amount)
             } for o in recent_orders]
         ))

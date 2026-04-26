@@ -2,6 +2,48 @@ import { useState, useEffect, useCallback } from "react"
 import { api } from "../../services/api.js"
 import { DG, G, StatusBadge, FilterBar, Pagination, TH, TD, ActionBtns, EmptyRow, TableWrap, ExportBtn } from "./_adminShared"
 
+// ── Product images (same as Shop.jsx) ───────────────────────────────────────
+import SpringFlowers_PurpleWrapper from "../../assets/products/SpringFlowers_PurpleWrapper.png"
+import SpringFlowers_PinkWrapper   from "../../assets/products/SpringFlowers_PinkWrapper.png"
+import SpringFlowers_GreenWrapper  from "../../assets/products/SpringFlowers_GreenWrapper.png"
+import RainbowEquadorRoses         from "../../assets/products/RainbowEquadorRoses.png"
+import MixTulips                   from "../../assets/products/MixTulips.png"
+import Dozen_YellowChinaRoses      from "../../assets/products/Dozen_YellowChinaRoses.png"
+import Dozen_RedEquadorRoses       from "../../assets/products/Dozen_RedEquadorRoses.png"
+import Dozen_RedChinaRoses         from "../../assets/products/Dozen_RedChinaRoses.png"
+import Dozen_PinkChinaRoses        from "../../assets/products/Dozen_PinkChinaRoses.png"
+import Dozen_OrangeChinaRoses      from "../../assets/products/Dozen_OrangeChinaRoses.png"
+import Roses_24pcs_Red             from "../../assets/products/24pcs_RedEquadorRoses.png"
+import Roses_10pcs_Blue            from "../../assets/products/10pcs_BlueChinaRoses.png"
+import Roses_6pcs_White            from "../../assets/products/6pcs_WhiteEquadorRoses.png"
+import Roses_6pcs_Purple           from "../../assets/products/6pcs_PurpleChinaRoses.png"
+import Sunflower_3pcs              from "../../assets/products/3pcs_Sunflower.png"
+import Tulips_3pc_Pink             from "../../assets/products/3pc_PinkTulips.png"
+
+const PRODUCT_IMAGE_MAP = {
+  "Spring Flowers Purple Wrapper": SpringFlowers_PurpleWrapper,
+  "Spring Flowers Pink Wrapper":   SpringFlowers_PinkWrapper,
+  "Spring Flowers Green Wrapper":  SpringFlowers_GreenWrapper,
+  "Rainbow Ecuador Roses":         RainbowEquadorRoses,
+  "Mix Tulips":                    MixTulips,
+  "Dozen Yellow China Roses":      Dozen_YellowChinaRoses,
+  "Dozen Red Ecuador Roses":       Dozen_RedEquadorRoses,
+  "Dozen Red China Roses":         Dozen_RedChinaRoses,
+  "Dozen Pink China Roses":        Dozen_PinkChinaRoses,
+  "Dozen Orange China Roses":      Dozen_OrangeChinaRoses,
+  "24pcs Red Ecuador Roses":       Roses_24pcs_Red,
+  "10pcs Blue China Roses":        Roses_10pcs_Blue,
+  "6pcs White Ecuador Roses":      Roses_6pcs_White,
+  "6pcs Purple China Roses":       Roses_6pcs_Purple,
+  "3pcs Sunflower":                Sunflower_3pcs,
+  "3pcs Pink Tulips":              Tulips_3pc_Pink,
+}
+
+function getProductImage(product) {
+  if (product.image_url) return product.image_url
+  return PRODUCT_IMAGE_MAP[product.name] || null
+}
+
 // ── Add Product Modal ─────────────────────────────────────────────────────────
 const CATEGORIES = ["Flower", "Vase", "Wrapping", "Accessory", "Arrangement"]
 const AVAILABILITIES = ["Available", "Limited", "Out of Stock"]
@@ -245,7 +287,7 @@ function EditProductModal({ product, onClose, onSave }) {
     availability: !product.is_available ? "Out of Stock" : product.stock <= (product.reorder_point || 10) ? "Limited" : "Available",
     status: product.status === "active" || product.status === "Active" ? "Active" : "Inactive",
     description: product.description || "",
-    image_url: product.image_url || "",
+    image_url: getProductImage(product) || "",
   })
   const [errors, setErrors] = useState({})
 
@@ -454,8 +496,8 @@ function ViewProductModal({ product, onClose }) {
           </button>
         </div>
         <div className="p-6 space-y-4">
-          {product.image_url ? (
-            <img src={product.image_url} alt={product.name} className="w-full h-48 object-cover rounded-lg" style={{ border: "1px solid #e8edf2" }} />
+          {getProductImage(product) ? (
+            <img src={getProductImage(product)} alt={product.name} className="w-full h-48 object-cover rounded-lg" style={{ border: "1px solid #e8edf2" }} />
           ) : (
             <div className="w-full h-48 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0" }}>
               <svg className="w-12 h-12" style={{ color: DG }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -716,8 +758,8 @@ export default function AdminProducts() {
                 return (
                   <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                     <TD>
-                      {p.image_url ? (
-                        <img src={p.image_url} alt={p.name} className="w-10 h-10 rounded-lg object-cover" style={{ border: "1px solid #e8edf2" }} />
+                      {getProductImage(p) ? (
+                        <img src={getProductImage(p)} alt={p.name} className="w-10 h-10 rounded-lg object-cover" style={{ border: "1px solid #e8edf2" }} />
                       ) : (
                         <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0" }}>
                           <svg className="w-5 h-5" style={{ color: DG }} fill="none" stroke="currentColor" viewBox="0 0 24 24">

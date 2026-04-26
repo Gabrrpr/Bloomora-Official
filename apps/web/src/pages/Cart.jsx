@@ -1,35 +1,8 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { getCart, setCart, removeFromCart, getCartCount } from "../utils/cart.js"
 
 const G = "#2E8B34"
 const DG = "#0C573E"
-
-// Mock cart items matching the PDF structure
-const MOCK_ITEMS = [
-  {
-    id: 1,
-    group: "Mix and Match",
-    groupIcon: "🌸",
-    name: "China Red Roses",
-    desc: "A medium wrapped bouquet of Ecuador roses with baby's breath, finished with white wrap and a soft pink ribbon.",
-    qty: 1,
-    price: 2300,
-    checked: true,
-    img: null,
-    imgLabel: "China Red Roses",
-  },
-  {
-    id: 2,
-    group: "Describe your arrangement",
-    groupIcon: "✨",
-    name: "Blush Elegance Ecuador Roses",
-    desc: "A medium wrapped bouquet of Ecuador roses with baby's breath, finished with white wrap and a soft pink ribbon.",
-    qty: 1,
-    price: 2720,
-    checked: true,
-    img: null,
-    imgLabel: "Blush Ecuador Roses",
-  },
-]
 
 function QtyControl({ qty, onDecrease, onIncrease }) {
   return (
@@ -41,25 +14,57 @@ function QtyControl({ qty, onDecrease, onIncrease }) {
   )
 }
 
-export default function Cart({ onNavigate }) {
-  const [items, setItems] = useState(MOCK_ITEMS)
+export default function Cart({ onNavigate, cartCount, setCartCount }) {
+  const [items, setItems] = useState([])
   const [selectAll, setSelectAll] = useState(false)
   const [catalogOpen, setCatalogOpen] = useState(false)
 
+  useEffect(() => {
+    const cart = getCart()
+    setItems(cart)
+    setCartCount(getCartCount())
+  }, [setCartCount])
+
+  const persist = (newItems) => {
+    setItems(newItems)
+    setCart(newItems)
+    setCartCount(getCartCount())
+  }
+
   const checkedItems = items.filter(i => i.checked)
-  const subtotal = checkedItems.reduce((s, i) => s + i.price * i.qty, 0)
+  const subtotal = checkedItems.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0)
   const shipping = checkedItems.length > 0 ? 100 : 0
   const total = subtotal + shipping
 
-  const toggleItem = (id) => setItems(prev => prev.map(i => i.id === id ? {...i, checked: !i.checked} : i))
-  const toggleAll = () => { setSelectAll(p => !p); setItems(prev => prev.map(i => ({...i, checked: !selectAll}))) }
-  const updateQty = (id, delta) => setItems(prev => prev.map(i => i.id === id ? {...i, qty: Math.max(1, i.qty + delta)} : i))
-  const removeItem = (id) => setItems(prev => prev.filter(i => i.id !== id))
+  const toggleItem = (id, group) => {
+    const newItems = items.map(i => (i.id === id && i.group === group) ? { ...i, checked: !i.checked } : i)
+    persist(newItems)
+  }
+  const toggleAll = () => {
+    const newState = !selectAll
+    setSelectAll(newState)
+    persist(items.map(i => ({ ...i, checked: newState })))
+  }
+  const handleUpdateQty = (id, group, delta) => {
+    const newItems = items.map(i => {
+      if (i.id === id && i.group === group) {
+        return { ...i, qty: Math.max(1, (i.qty || 1) + delta) }
+      }
+      return i
+    })
+    persist(newItems)
+  }
+  const handleRemove = (id, group) => {
+    const newItems = items.filter(i => !(i.id === id && i.group === group))
+    persist(newItems)
+    removeFromCart(id, group)
+  }
 
   // Group items by group name
   const groups = items.reduce((acc, item) => {
-    if (!acc[item.group]) acc[item.group] = []
-    acc[item.group].push(item)
+    const g = item.group || "Others"
+    if (!acc[g]) acc[g] = []
+    acc[g].push(item)
     return acc
   }, {})
 
@@ -84,7 +89,7 @@ export default function Cart({ onNavigate }) {
                 </span>
               </label>
               <button
-                onClick={() => setItems(prev => prev.filter(i => !i.checked))}
+                onClick={() => persist(items.filter(i => !i.checked))}
                 className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-red-500 transition"
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
@@ -101,7 +106,7 @@ export default function Cart({ onNavigate }) {
                     checked={groupItems.every(i => i.checked)}
                     onChange={() => {
                       const allChecked = groupItems.every(i => i.checked)
-                      setItems(prev => prev.map(i => groupItems.find(g => g.id === i.id) ? {...i, checked: !allChecked} : i))
+                      persist(items.map(i => groupItems.find(g => g.id === i.id && g.group === i.group) ? { ...i, checked: !allChecked } : i))
                     }}
                     className="w-4 h-4 rounded accent-green-700 cursor-pointer"
                   />
@@ -110,13 +115,17 @@ export default function Cart({ onNavigate }) {
 
                 {/* Group items */}
                 {groupItems.map(item => (
-                  <div key={item.id} className="px-4 py-4 flex items-start gap-4 border-b border-gray-50 last:border-0">
-                    <input type="checkbox" checked={item.checked} onChange={() => toggleItem(item.id)}
+                  <div key={`${item.id}-${item.group}`} className="px-4 py-4 flex items-start gap-4 border-b border-gray-50 last:border-0">
+                    <input type="checkbox" checked={item.checked} onChange={() => toggleItem(item.id, item.group)}
                       className="w-4 h-4 mt-1 rounded accent-green-700 cursor-pointer flex-shrink-0" />
 
-                    {/* Image placeholder */}
+                    {/* Image */}
                     <div className="w-16 h-16 rounded-lg bg-gradient-to-br from-pink-50 to-rose-100 flex-shrink-0 flex items-center justify-center overflow-hidden border border-gray-100">
-                      <span className="text-xs text-gray-400 text-center leading-tight px-1">{item.imgLabel}</span>
+                      {item.img ? (
+                        <img src={item.img} alt={item.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <span className="text-xs text-gray-400 text-center leading-tight px-1">{item.imgLabel || item.name?.slice(0, 12) || "Product"}</span>
+                      )}
                     </div>
 
                     {/* Details */}
@@ -127,17 +136,26 @@ export default function Cart({ onNavigate }) {
 
                     {/* Controls */}
                     <div className="flex flex-col items-end gap-2 flex-shrink-0">
-                      <QtyControl qty={item.qty} onDecrease={() => updateQty(item.id, -1)} onIncrease={() => updateQty(item.id, 1)} />
-                      <span className="text-sm font-semibold text-gray-800">₱{(item.price * item.qty).toLocaleString()}</span>
+                      <QtyControl qty={item.qty || 1} onDecrease={() => handleUpdateQty(item.id, item.group, -1)} onIncrease={() => handleUpdateQty(item.id, item.group, 1)} />
+                      <span className="text-sm font-semibold text-gray-800">₱{((item.price || 0) * (item.qty || 1)).toLocaleString()}</span>
                     </div>
 
-                    <button onClick={() => removeItem(item.id)} className="text-gray-300 hover:text-red-400 transition mt-0.5 flex-shrink-0">
+                    <button onClick={() => handleRemove(item.id, item.group)} className="text-gray-300 hover:text-red-400 transition mt-0.5 flex-shrink-0">
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                   </div>
                 ))}
               </div>
             ))}
+
+            {items.length === 0 && (
+              <div className="bg-white border border-gray-200 rounded-xl p-8 text-center">
+                <p className="text-sm text-gray-400 mb-3">Your cart is empty.</p>
+                <button onClick={() => onNavigate("shop")} className="px-4 py-2 text-sm font-semibold text-white rounded-lg" style={{ backgroundColor: G }}>
+                  Start Shopping
+                </button>
+              </div>
+            )}
 
             {/* From the catalog — collapsed section */}
             <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -209,3 +227,4 @@ export default function Cart({ onNavigate }) {
     </div>
   )
 }
+

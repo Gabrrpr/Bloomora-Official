@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react"
+import { addToCart } from "../utils/cart.js"
 import Footer from "../components/Footer"
 
 import SpringFlowers_PurpleWrapper from "../assets/products/SpringFlowers_PurpleWrapper.png"
@@ -223,6 +224,17 @@ export default function Shop({ onNavigate }) {
 
   const toggleWishlist  = (id) => setWishlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
   const handleAddToCart = (id) => {
+    const product = ALL_PRODUCTS.find(p => p.id === id)
+    if (product) {
+      addToCart({
+        id: product.id,
+        name: product.name,
+        price: product.price,
+        qty: 1,
+        img: product.image,
+        desc: product.category,
+      })
+    }
     setAddedToCart(prev => [...prev, id])
     setTimeout(() => setAddedToCart(prev => prev.filter(i => i !== id)), 1500)
   }

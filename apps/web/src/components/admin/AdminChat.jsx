@@ -149,7 +149,7 @@ export default function AdminChat() {
   useEffect(() => {
     if (!user || !['admin', 'staff'].includes(user.role) || wsRef.current) return
 
-    const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/admin`)
+    const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/${user.id}`)
     wsRef.current = websocket
 
     websocket.onopen = () => console.log('Admin WS connected')

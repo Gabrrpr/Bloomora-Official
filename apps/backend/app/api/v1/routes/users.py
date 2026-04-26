@@ -10,7 +10,7 @@ from app.models import User, RoleEnum, BranchEnum
 from app.api.v1.routes.auth import hash_password, generate_username
 from pydantic import BaseModel, EmailStr
 
-router = APIRouter(prefix="/users", tags=["Users"])
+router = APIRouter(tags=["Users"])
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────

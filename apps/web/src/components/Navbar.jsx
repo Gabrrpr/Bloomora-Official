@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
+import { getCartCount } from "../utils/cart.js";
 import estingsLogo from "../assets/EstingsLogo.svg";
 import estingsText from "../assets/Estings.svg";
 
@@ -321,8 +322,24 @@ function LocationDropdown({ selected, onChange, onClose }) {
   );
 }
 
-export default function Navbar({ cartCount = 0, onNavigate }) {
+function useCartCount() {
+  const [count, setCount] = useState(getCartCount)
+  useEffect(() => {
+    const update = () => setCount(getCartCount())
+    window.addEventListener("bloomora:cart-updated", update)
+    window.addEventListener("storage", update)
+    return () => {
+      window.removeEventListener("bloomora:cart-updated", update)
+      window.removeEventListener("storage", update)
+    }
+  }, [])
+  return count
+}
+
+export default function Navbar({ cartCount: propCartCount, onNavigate }) {
   const { user, logout } = useAuth();
+  const liveCartCount = useCartCount()
+  const cartCount = propCartCount ?? liveCartCount
   const [active, setActive]                     = useState("Home");
   const [locationOpen, setLocationOpen]         = useState(false);
   const [selectedLocation, setSelectedLocation] = useState("Manila");

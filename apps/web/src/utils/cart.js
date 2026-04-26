@@ -1,5 +1,9 @@
 const CART_KEY = "bloomora_cart"
 
+function broadcastCartUpdate() {
+  window.dispatchEvent(new CustomEvent("bloomora:cart-updated"))
+}
+
 export function getCart() {
   try {
     return JSON.parse(localStorage.getItem(CART_KEY)) || []
@@ -8,8 +12,14 @@ export function getCart() {
   }
 }
 
+export function clearCart() {
+  localStorage.removeItem(CART_KEY)
+  broadcastCartUpdate()
+}
+
 export function setCart(items) {
   localStorage.setItem(CART_KEY, JSON.stringify(items))
+  broadcastCartUpdate()
 }
 
 export function getCartCount() {

@@ -1,27 +1,78 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { api } from "../services/api.js"
+import { getCart, clearCart } from "../utils/cart.js"
 
 const G = "#2E8B34"
 
 const DELIVERY_TIMES = ["Anytime (9PM–6PM)", "7AM–10AM", "10AM–1PM", "1PM–4PM", "4PM–8PM", "8PM–11PM"]
 
-const MOCK_ORDER = [
-  { name: "China Red Roses (Customized)", desc: "A medium wrapped bouquet of Ecuador roses with baby's breath, finished with white wrap and a soft pink ribbon.", qty: 1, price: 2300 },
-  { name: "Blush Elegance Ecuador Roses (Customized)", desc: "A medium wrapped bouquet of Ecuador roses with baby's breath, finished with white wrap and a soft pink ribbon.", qty: 1, price: 2720 },
-]
-
 export default function Checkout({ onNavigate }) {
+  const [cartItems, setCartItems] = useState([])
   const [deliveryTime, setDeliveryTime] = useState("Anytime (9PM–6PM)")
   const [paymentMethod, setPaymentMethod] = useState("qrph")
   const [voucher, setVoucher] = useState("")
+  const [placing, setPlacing] = useState(false)
+  const [error, setError] = useState("")
 
-  const subtotal = MOCK_ORDER.reduce((s, i) => s + i.price * i.qty, 0)
-  const shipping = 100
+  useEffect(() => {
+    const items = getCart().filter(i => i.checked)
+    setCartItems(items)
+  }, [])
+
+  const subtotal = cartItems.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0)
+  const shipping = cartItems.length > 0 ? 100 : 0
   const total = subtotal + shipping
 
   const today = new Date()
   const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
   const fmt = (d) => d.toLocaleDateString("en-PH", { month: "long", day: "numeric" })
   const fmtDay = (d) => d.toLocaleDateString("en-PH", { weekday: "long" })
+
+  const handlePlaceOrder = async () => {
+    if (cartItems.length === 0) {
+      setError("Your cart is empty.")
+      return
+    }
+    setPlacing(true)
+    setError("")
+    try {
+      const res = await api.createOrder({
+        items: cartItems.map(i => ({
+          id: i.id,
+          group: i.group,
+          name: i.name,
+          desc: i.desc,
+          price: i.price,
+          qty: i.qty,
+          img: i.img,
+        })),
+        delivery_address: "60 Friendship Highway, Clark Freeport Zone, Pampanga, Angeles City, 2009",
+        delivery_notes: `Delivery time: ${deliveryTime}`,
+        scheduled_at: tomorrow.toISOString(),
+      })
+
+      // Store order details for confirmation page
+      const orderData = {
+        orderIds: res.order_ids || [],
+        items: cartItems,
+        subtotal,
+        shipping,
+        total,
+        deliveryTime,
+        deliveryAddress: "60 Friendship Highway, Clark Freeport Zone, Pampanga, Angeles City, 2009",
+        scheduledDate: fmt(tomorrow),
+        placedAt: new Date().toISOString(),
+      }
+      localStorage.setItem("bloomora_last_order", JSON.stringify(orderData))
+
+      clearCart()
+      onNavigate("confirmation")
+    } catch (e) {
+      setError(e.message || "Failed to place order. Please try again.")
+    } finally {
+      setPlacing(false)
+    }
+  }
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#F7F8FA" }}>
@@ -85,25 +136,41 @@ export default function Checkout({ onNavigate }) {
               </div>
 
               {/* Order items */}
-              {MOCK_ORDER.map((item, i) => (
-                <div key={i} className="flex items-start gap-3 py-3 border-t border-gray-100 first:border-0">
-                  <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-pink-50 to-rose-100 flex-shrink-0 flex items-center justify-center border border-gray-100">
-                    <span className="text-xs text-gray-400 text-center px-1 leading-tight">{item.name.split(" ").slice(0, 2).join(" ")}</span>
+              {cartItems.map((item, i) => (
+                <div key={`${item.id}-${i}`} className="flex items-start gap-3 py-3 border-t border-gray-100 first:border-0">
+                  <div className="w-14 h-14 rounded-lg bg-gradient-to-br from-pink-50 to-rose-100 flex-shrink-0 flex items-center justify-center border border-gray-100 overflow-hidden">
+                    {item.img ? (
+                      <img src={item.img} alt="" className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-xs text-gray-400 text-center px-1 leading-tight">{item.name?.split(" ").slice(0, 2).join(" ")}</span>
+                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-800 mb-0.5">{item.name}</p>
                     <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">{item.desc}</p>
-                    <p className="text-xs text-gray-500 mt-1">Qty: {item.qty}</p>
+                    <p className="text-xs text-gray-500 mt-1">Qty: {item.qty || 1}</p>
                   </div>
                   <div className="flex items-start gap-2 flex-shrink-0">
-                    <span className="text-sm font-semibold text-gray-800">₱{item.price.toLocaleString()}</span>
-                    <button className="text-gray-300 hover:text-red-400 transition mt-0.5">
-                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
+                    <span className="text-sm font-semibold text-gray-800">₱{((item.price || 0) * (item.qty || 1)).toLocaleString()}</span>
                   </div>
                 </div>
               ))}
+
+              {cartItems.length === 0 && (
+                <div className="py-4 text-center">
+                  <p className="text-sm text-gray-400">No items selected for checkout.</p>
+                  <button onClick={() => onNavigate("cart")} className="mt-2 px-4 py-2 text-xs font-semibold text-white rounded-lg" style={{ backgroundColor: G }}>
+                    Back to Cart
+                  </button>
+                </div>
+              )}
             </div>
+
+            {error && (
+              <div className="bg-white border border-red-200 rounded-xl p-4 text-sm text-red-600">
+                {error}
+              </div>
+            )}
           </div>
 
           {/* ── Right: delivery date + payment + summary ── */}
@@ -166,7 +233,7 @@ export default function Checkout({ onNavigate }) {
               </div>
               <div className="border-2 rounded-lg p-3 flex items-center gap-2" style={{ borderColor: G, backgroundColor: "#F0F7F1" }}>
                 <div className="w-8 h-8 rounded bg-white flex items-center justify-center border border-gray-100 flex-shrink-0">
-                  <svg className="w-4 h-4" style={{ color: G }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+                  <svg className="w-4 h-4" style={{ color: G }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
                 </div>
                 <div className="flex-1">
                   <p className="text-xs font-semibold text-gray-800">QR Ph</p>
@@ -191,18 +258,19 @@ export default function Checkout({ onNavigate }) {
             {/* Summary + Place Order */}
             <div className="bg-white border border-gray-200 rounded-xl p-5">
               <div className="space-y-2.5 text-sm mb-4">
-                <div className="flex justify-between text-gray-500"><span>Subtotal (2 items)</span><span className="font-medium text-gray-700">₱{subtotal.toLocaleString()}.00</span></div>
+                <div className="flex justify-between text-gray-500"><span>Subtotal ({cartItems.length} item{cartItems.length !== 1 ? "s" : ""})</span><span className="font-medium text-gray-700">₱{subtotal.toLocaleString()}.00</span></div>
                 <div className="flex justify-between text-gray-500"><span>Shipping Fee</span><span className="font-medium text-gray-700">₱{shipping}.00</span></div>
                 <div className="h-px bg-gray-100" />
                 <div className="flex justify-between font-semibold text-gray-800"><span>Order total</span><span style={{ color: G }}>₱{total.toLocaleString()}.00</span></div>
                 <p className="text-xs text-gray-400">VAT included, where applicable</p>
               </div>
               <button
-                onClick={() => onNavigate("confirmation")}
-                className="w-full py-2.5 text-sm font-semibold text-white rounded-lg transition-all hover:brightness-105 active:scale-[0.98]"
+                onClick={handlePlaceOrder}
+                disabled={placing || cartItems.length === 0}
+                className="w-full py-2.5 text-sm font-semibold text-white rounded-lg transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-50"
                 style={{ backgroundColor: G }}
               >
-                PLACE ORDER NOW
+                {placing ? "Placing order..." : "PLACE ORDER NOW"}
               </button>
             </div>
           </div>
@@ -211,3 +279,4 @@ export default function Checkout({ onNavigate }) {
     </div>
   )
 }
+

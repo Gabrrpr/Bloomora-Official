@@ -124,6 +124,27 @@ export const api = {
     return this.delete(`/products/admin/${productId}`);
   },
 
+  // ── Orders ────────────────────────────────────────────────────────────────
+  async createOrder({ items, delivery_address, delivery_notes, scheduled_at }) {
+    return this.post('/orders/', { items, delivery_address, delivery_notes, scheduled_at });
+  },
+
+  async getMyOrders(status) {
+    const params = new URLSearchParams();
+    if (status && status !== 'All') params.append('status', status.toLowerCase());
+    return this.get(`/orders/my?${params.toString()}`);
+  },
+
+  async getAdminOrders({ status, search, branch, limit = 100, offset = 0 } = {}) {
+    const params = new URLSearchParams();
+    if (status && status !== 'All') params.append('status', status.toLowerCase().replace(/ /g, '_'));
+    if (search) params.append('search', search);
+    if (branch && branch !== 'All Branches') params.append('branch', branch.toLowerCase());
+    params.append('limit', String(limit));
+    params.append('offset', String(offset));
+    return this.get(`/orders/?${params.toString()}`);
+  },
+
   // ── Products (Public) ───────────────────────────────────────────────────
   async getProducts() {
     return this.get('/products/');
@@ -131,6 +152,15 @@ export const api = {
 
   async getCustomizationProducts() {
     return this.get('/products/customization/all');
+  },
+
+  // ── Customization ───────────────────────────────────────────────────────
+  async getAiUsage() {
+    return this.get('/customization/ai-usage');
+  },
+
+  async checkAndGenerate(data) {
+    return this.post('/customization/check-and-generate', data);
   },
 
   // ── Site Customization ──────────────────────────────────────────────────

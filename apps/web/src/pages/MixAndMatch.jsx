@@ -100,6 +100,7 @@ export default function MixAndMatch({ onNavigate }) {
   const [error, setError] = useState("")
   const [unavailableItems, setUnavailableItems] = useState([])
   const [aiUsage, setAiUsage] = useState(null)
+  const [customName, setCustomName] = useState("")
 
   useEffect(() => {
     async function load() {
@@ -162,6 +163,7 @@ export default function MixAndMatch({ onNavigate }) {
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
       } else if (data.success) {
         setResult(data)
+        setCustomName(data.price_breakdown?.items?.[0]?.product_name || "Custom Arrangement")
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
         setCompleted(true)
       } else {
@@ -184,7 +186,7 @@ export default function MixAndMatch({ onNavigate }) {
     const names = result.price_breakdown?.items?.map(i => i.product_name).join(", ") || "Custom"
     addToCart({
       id: result.arrangement_id || `arr-${Date.now()}`,
-      group: "Mix and Match", groupIcon: "", name: result.price_breakdown?.items?.[0]?.product_name || "Custom Arrangement",
+      group: "Mix and Match", groupIcon: "", name: customName || "Custom Arrangement",
       desc: `Mix & Match: ${names}`, qty: 1, price: result.price_breakdown?.total_price || 0,
       checked: true, img: result.generated_image_url, imgLabel: null,
     })
@@ -221,9 +223,16 @@ export default function MixAndMatch({ onNavigate }) {
               </div>
 
               <div className="flex-1 min-w-0">
-                <h3 className="text-base font-semibold text-gray-800 mb-1">
-                  {result.price_breakdown?.items?.[0]?.product_name || "Custom Arrangement"}
-                </h3>
+                <div className="mb-2">
+                  <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Arrangement Name</label>
+                  <input
+                    type="text"
+                    value={customName}
+                    onChange={e => setCustomName(e.target.value)}
+                    className="w-full mt-1 px-3 py-2 text-sm font-semibold text-gray-800 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition"
+                    placeholder="Name your arrangement"
+                  />
+                </div>
 
                 {result.price_breakdown?.items?.length > 0 && (
                   <>
@@ -310,7 +319,12 @@ export default function MixAndMatch({ onNavigate }) {
               <span className="text-sm font-semibold text-gray-700">Mix and Match</span>
               <span className="text-xs text-gray-400">Build your bouquet step by step</span>
             </div>
-            <span className="text-xs text-gray-400">Step {step + 1} of {STEPS.length}</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-500">
+                {aiUsage ? `${aiUsage.remaining} / ${aiUsage.limit} AI left` : "Loading AI usage..."}
+              </span>
+              <span className="text-xs text-gray-400">Step {step + 1} of {STEPS.length}</span>
+            </div>
           </div>
           <StepDots current={step} />
         </div>

@@ -1,13 +1,117 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy import or_, func, String
+from typing import List, Optional
+from decimal import Decimal
+import uuid
 
 from app.core.dependencies import get_db, get_current_user
-from app.models import User, RoleEnum, Order
-# from app.schemas.order_schemas import RecentOrderOut  # No schema needed for dict response
+from app.models import User, RoleEnum, Order, OrderStatusEnum, Arrangement
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
+
+def serialize_order(o: Order) -> dict:
+    """Serialize an Order for API responses."""
+    product_name = None
+    if o.product:
+        product_name = o.product.name
+    elif o.arrangement:
+        product_name = o.arrangement.name
+    else:
+        product_name = "Custom Arrangement"
+
+    return {
+        "id": str(o.id),
+        "order_number": f"ORD-{o.id.hex[:8].upper()}",
+        "user_id": str(o.user_id),
+        "customer_name": f"{o.user.first_name or ''} {o.user.last_name or ''}".strip() or o.user.email,
+        "customer_email": o.user.email,
+        "customer_phone": o.user.phone_number,
+        "branch": o.user.branch.value if o.user.branch and hasattr(o.user.branch, "value") else (o.user.branch or "—"),
+        "product_name": product_name,
+        "quantity": o.quantity,
+        "total_amount": float(o.total_amount),
+        "status": o.status.value if hasattr(o.status, "value") else o.status,
+        "delivery_address": o.delivery_address,
+        "delivery_notes": o.delivery_notes,
+        "scheduled_at": o.scheduled_at.isoformat() if o.scheduled_at else None,
+        "payment_status": o.transaction.status.value if o.transaction and hasattr(o.transaction.status, "value") else "pending",
+        "created_at": o.created_at.isoformat() if o.created_at else None,
+        "updated_at": o.updated_at.isoformat() if o.updated_at else None,
+    }
+
+
+def require_admin_or_staff(current_user: User):
+    if current_user.role not in [RoleEnum.admin, RoleEnum.staff]:
+        raise HTTPException(status_code=403, detail="Admin or staff access required.")
+
+
+# ── Public: My Orders ───────────────────────────────────────────────────────
+@router.get("/my", response_model=List[dict])
+def get_my_orders(
+    status: Optional[str] = Query(None, description="Filter by status"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get all orders for the currently authenticated user."""
+    query = db.query(Order).filter(Order.user_id == current_user.id)
+
+    if status:
+        try:
+            query = query.filter(Order.status == OrderStatusEnum(status.lower()))
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+
+    orders = query.order_by(Order.created_at.desc()).all()
+    return [serialize_order(o) for o in orders]
+
+
+# ── Admin: All Orders ───────────────────────────────────────────────────────
+@router.get("/", response_model=List[dict])
+def list_orders(
+    status: Optional[str] = Query(None, description="Filter by status: pending, confirmed, preparing, out_for_delivery, delivered, cancelled"),
+    search: Optional[str] = Query(None, description="Search by order number or customer name/email"),
+    branch: Optional[str] = Query(None, description="Filter by branch"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List all orders. Admin/Staff only."""
+    require_admin_or_staff(current_user)
+
+    query = db.query(Order)
+
+    if status:
+        try:
+            query = query.filter(Order.status == OrderStatusEnum(status.lower()))
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+
+    if branch:
+        from app.models import BranchEnum
+        try:
+            query = query.join(User).filter(User.branch == BranchEnum(branch.lower()))
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid branch: {branch}")
+
+    if search:
+        search_term = f"%{search}%"
+        query = query.join(User).filter(
+            or_(
+                func.cast(Order.id, String).ilike(search_term),
+                User.first_name.ilike(search_term),
+                User.last_name.ilike(search_term),
+                User.email.ilike(search_term),
+            )
+        )
+
+    orders = query.order_by(Order.created_at.desc()).offset(offset).limit(limit).all()
+    return [serialize_order(o) for o in orders]
+
+
+# ── Admin/Staff: Get recent orders for a customer ───────────────────────────
 @router.get("/{customer_id}/recent", response_model=List[dict])
 def get_customer_recent_orders(
     customer_id: str,
@@ -15,23 +119,98 @@ def get_customer_recent_orders(
     current_user: User = Depends(get_current_user)
 ):
     """Get last 5 recent orders for a customer (staff/admin only)."""
-    
-    if current_user.role not in [RoleEnum.admin, RoleEnum.staff]:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
+    require_admin_or_staff(current_user)
+
     orders = db.query(Order)\
-        .filter(Order.customer_id == customer_id)\
+        .filter(Order.user_id == customer_id)\
         .order_by(Order.created_at.desc())\
         .limit(5)\
         .all()
-    
-    # Simple response with product info
-    return [{
-        "id": str(o.id),
-        "order_number": f"ORD-{o.id.hex[:8].upper()}",
-        "status": o.status.value,
-        "product": o.product.name if o.product else "Custom Arrangement",
-        "amount": float(o.total_amount),
-        "created_at": o.created_at.isoformat()
-    } for o in orders]
+
+    return [serialize_order(o) for o in orders]
+
+
+# ── Create Orders from Cart ─────────────────────────────────────────────────
+@router.post("/", response_model=dict, status_code=201)
+def create_orders(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Create orders from cart items. Returns created order IDs."""
+    cart_items = payload.get("items", [])
+    delivery_address = payload.get("delivery_address", "")
+    delivery_notes = payload.get("delivery_notes", "")
+    scheduled_at = payload.get("scheduled_at")
+
+    if not cart_items:
+        raise HTTPException(status_code=400, detail="Cart is empty.")
+
+    created_orders = []
+
+    for item in cart_items:
+        arrangement_id = None
+        product_id = None
+
+        item_id = item.get("id", "")
+        group = item.get("group", "")
+        name = item.get("name", "Custom Arrangement")
+        desc = item.get("desc", "")
+        price = Decimal(str(item.get("price", 0)))
+        qty = int(item.get("qty", 1))
+        img = item.get("img", "")
+
+        # If it's a custom arrangement, create arrangement record
+        if group in ("Describe your arrangement", "Mix and Match") or str(item_id).startswith("arr-"):
+            arrangement = Arrangement(
+                id=uuid.uuid4(),
+                name=name,
+                description=desc,
+                generated_image_url=img,
+                estimated_price=price,
+            )
+            db.add(arrangement)
+            db.commit()
+            db.refresh(arrangement)
+            arrangement_id = arrangement.id
+        else:
+            # Try to parse as product UUID
+            try:
+                product_id = uuid.UUID(str(item_id))
+            except ValueError:
+                # Fallback: create arrangement
+                arrangement = Arrangement(
+                    id=uuid.uuid4(),
+                    name=name,
+                    description=desc,
+                    generated_image_url=img,
+                    estimated_price=price,
+                )
+                db.add(arrangement)
+                db.commit()
+                db.refresh(arrangement)
+                arrangement_id = arrangement.id
+
+        order = Order(
+            id=uuid.uuid4(),
+            user_id=current_user.id,
+            product_id=product_id,
+            arrangement_id=arrangement_id,
+            quantity=qty,
+            total_amount=price * qty,
+            status=OrderStatusEnum.pending,
+            delivery_address=delivery_address,
+            delivery_notes=delivery_notes,
+            scheduled_at=scheduled_at,
+        )
+        db.add(order)
+        db.commit()
+        db.refresh(order)
+        created_orders.append(str(order.id))
+
+    return {
+        "status": "success",
+        "message": f"{len(created_orders)} order(s) created successfully.",
+        "order_ids": created_orders,
+    }
 

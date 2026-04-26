@@ -36,6 +36,7 @@ export default function DescribeArrangement({ onNavigate }) {
   const [unavailableItems, setUnavailableItems] = useState([])
   const [fetchingProducts, setFetchingProducts] = useState(true)
   const [lightboxOpen, setLightboxOpen] = useState(false)
+  const [customName, setCustomName] = useState("")
   const MAX = 500
 
   useEffect(() => {
@@ -115,6 +116,7 @@ export default function DescribeArrangement({ onNavigate }) {
           )
         }
         setResult(data)
+        setCustomName(data.price_breakdown?.items?.[0]?.product_name || "AI Arrangement")
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
       } else {
         setError(data.message || "Generation failed. Please try again.")
@@ -133,7 +135,7 @@ export default function DescribeArrangement({ onNavigate }) {
       id: result.arrangement_id || `arr-${Date.now()}`,
       group: "Describe your arrangement",
       groupIcon: "✨",
-      name: result.price_breakdown?.items?.[0]?.product_name || "AI Arrangement",
+      name: customName || arrangementName,
       desc: `Custom arrangement: ${breakdownNames}. ${prompt.trim()}`,
       qty: 1,
       price: result.price_breakdown?.total_price || 0,
@@ -272,11 +274,15 @@ export default function DescribeArrangement({ onNavigate }) {
               )}
 
               <div className="flex items-center justify-between mt-4">
-                <div className="flex items-center gap-1.5 text-xs text-gray-400">
+                <div className="flex items-center gap-1.5 text-xs text-gray-500">
                   <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24" style={{ color: G }}>
                     <path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
                   </svg>
-                  More than 1,000+ Images Generated
+                  {aiUsage ? (
+                    <span>{aiUsage.remaining} / {aiUsage.limit} AI generations left today</span>
+                  ) : (
+                    <span>Loading AI usage...</span>
+                  )}
                 </div>
                 <button
                   onClick={handleGenerate}
@@ -393,7 +399,16 @@ export default function DescribeArrangement({ onNavigate }) {
                   </div>
 
                   <div className="flex-1">
-                    <h3 className="text-base font-semibold text-gray-800 mb-1">{arrangementName}</h3>
+                    <div className="mb-2">
+                      <label className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Arrangement Name</label>
+                      <input
+                        type="text"
+                        value={customName}
+                        onChange={e => setCustomName(e.target.value)}
+                        className="w-full mt-1 px-3 py-2 text-sm font-semibold text-gray-800 border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition"
+                        placeholder="Name your arrangement"
+                      />
+                    </div>
                     <p className="text-xs text-gray-500 leading-relaxed mb-4">{arrangementDesc}</p>
 
                     {/* Materials Used */}

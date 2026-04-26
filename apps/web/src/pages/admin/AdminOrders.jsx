@@ -1,12 +1,10 @@
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
+import { api } from "../../services/api.js"
 import { DG, G, StatusBadge, Pagination, TH, TD, EmptyRow, TableWrap, ExportBtn } from "./_adminShared"
 
-const ORDER_STATUSES = ["All", "Preparing", "Pending", "Out for Delivery", "Delivered", "Cancelled"]
+const ORDER_STATUSES = ["All", "Pending", "Preparing", "Out for Delivery", "Delivered", "Cancelled"]
 const BRANCHES       = ["All Branches", "Manila", "Pampanga"]
 const DATE_RANGES    = ["All Time", "Today", "This Week", "This Month", "Last 30 Days"]
-
-// Mock empty orders — real data comes from backend
-const MOCK_ORDERS = []
 
 function SelectFilter({ value, onChange, options, minWidth = "130px" }) {
   return (
@@ -25,26 +23,58 @@ function SelectFilter({ value, onChange, options, minWidth = "130px" }) {
   )
 }
 
+function formatStatus(status) {
+  if (!status) return "Pending"
+  return status.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
+}
+
 export default function AdminOrders() {
   const [search, setSearch]       = useState("")
   const [statusFilter, setStatus] = useState("All")
   const [branch, setBranch]       = useState("All Branches")
   const [dateRange, setDateRange] = useState("All Time")
-  const [orders]                  = useState(MOCK_ORDERS)
+  const [orders, setOrders]       = useState([])
+  const [loading, setLoading]     = useState(false)
+  const [error, setError]         = useState(null)
+
+  const fetchOrders = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await api.getAdminOrders({
+        status: statusFilter,
+        search: search.trim() || undefined,
+        branch: branch,
+      })
+      setOrders(Array.isArray(data) ? data : [])
+    } catch (e) {
+      setError(e.message || "Failed to load orders")
+      setOrders([])
+    } finally {
+      setLoading(false)
+    }
+  }, [statusFilter, search, branch])
+
+  useEffect(() => {
+    fetchOrders()
+  }, [fetchOrders])
 
   // Counts per status (for the stat cards)
   const counts = {
-    "Out for Delivery": orders.filter(o => o.status === "Out for Delivery").length,
-    "Pending":          orders.filter(o => o.status === "Pending").length,
-    "Preparing":        orders.filter(o => o.status === "Preparing").length,
-    "Cancelled":        orders.filter(o => o.status === "Cancelled").length,
+    "Out for Delivery": orders.filter(o => formatStatus(o.status) === "Out For Delivery").length,
+    "Pending":          orders.filter(o => formatStatus(o.status) === "Pending").length,
+    "Preparing":        orders.filter(o => formatStatus(o.status) === "Preparing").length,
+    "Cancelled":        orders.filter(o => formatStatus(o.status) === "Cancelled").length,
   }
 
-  // Filter logic
+  // Filter logic (client-side for date range since backend doesn't filter by date yet)
   const filtered = orders.filter(o => {
-    const matchStatus = statusFilter === "All" || o.status === statusFilter
-    const matchBranch = branch === "All Branches" || o.branch === branch
-    const matchSearch = !search || o.orderId?.toLowerCase().includes(search.toLowerCase()) || o.customer?.toLowerCase().includes(search.toLowerCase())
+    const matchStatus = statusFilter === "All" || formatStatus(o.status) === statusFilter
+    const matchBranch = branch === "All Branches" || (o.branch || "").toLowerCase() === branch.toLowerCase()
+    const matchSearch = !search ||
+      (o.order_number || "").toLowerCase().includes(search.toLowerCase()) ||
+      (o.customer_name || "").toLowerCase().includes(search.toLowerCase()) ||
+      (o.customer_email || "").toLowerCase().includes(search.toLowerCase())
     return matchStatus && matchBranch && matchSearch
   })
 
@@ -129,6 +159,12 @@ export default function AdminOrders() {
         </div>
       )}
 
+      {error && (
+        <div className="px-4 py-3 text-sm text-red-600 bg-red-50 rounded-md border border-red-100">
+          {error}
+        </div>
+      )}
+
       {/* Table */}
       <TableWrap>
         <div className="p-4" style={{ borderBottom: "1px solid #f1f5f9", backgroundColor: "#fafbfc" }}>
@@ -154,9 +190,10 @@ export default function AdminOrders() {
                 onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }} />
             </div>
 
-            <button className="px-4 py-2 text-sm font-semibold text-white rounded-md transition-all hover:opacity-90 active:scale-95"
+            <button onClick={fetchOrders}
+              className="px-4 py-2 text-sm font-semibold text-white rounded-md transition-all hover:opacity-90 active:scale-95"
               style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
-              Filter
+              Refresh
             </button>
             <ExportBtn />
           </div>
@@ -176,14 +213,25 @@ export default function AdminOrders() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtered.length > 0 ? filtered.map(o => (
-                <tr key={o.orderId} className="hover:bg-gray-50 transition-colors">
-                  <TD><span className="font-mono text-xs text-gray-500">{o.orderId}</span></TD>
-                  <TD><span className="font-medium text-gray-800">{o.customer}</span></TD>
-                  <TD><StatusBadge status={o.paymentStatus} /></TD>
-                  <TD><StatusBadge status={o.status} /></TD>
-                  <TD><span className="font-semibold text-gray-800">₱{o.total?.toLocaleString()}</span></TD>
-                  <TD><span className="text-gray-500">{o.date}</span></TD>
+              {loading ? (
+                <tr><td colSpan={7} className="px-5 py-10 text-center text-sm text-gray-400">Loading orders...</td></tr>
+              ) : filtered.length > 0 ? filtered.map(o => (
+                <tr key={o.id} className="hover:bg-gray-50 transition-colors">
+                  <TD><span className="font-mono text-xs text-gray-500">{o.order_number}</span></TD>
+                  <TD>
+                    <div>
+                      <span className="font-medium text-gray-800 block">{o.customer_name || "—"}</span>
+                      <span className="text-xs text-gray-400">{o.customer_email || "—"}</span>
+                    </div>
+                  </TD>
+                  <TD><StatusBadge status={o.payment_status || "pending"} /></TD>
+                  <TD><StatusBadge status={formatStatus(o.status)} /></TD>
+                  <TD><span className="font-semibold text-gray-800">₱{(o.total_amount || 0).toLocaleString()}</span></TD>
+                  <TD>
+                    <span className="text-gray-500">
+                      {o.created_at ? new Date(o.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                    </span>
+                  </TD>
                   <TD>
                     <button className="px-3 py-1.5 text-xs font-semibold rounded-md border transition-all hover:shadow-sm active:scale-95"
                       style={{ backgroundColor: "#f0fdf4", borderColor: "#bbf7d0", color: DG }}>
@@ -192,7 +240,7 @@ export default function AdminOrders() {
                   </TD>
                 </tr>
               )) : (
-                <EmptyRow cols={7} message="No orders match your filters — connect to the backend to load order data." />
+                <EmptyRow cols={7} message="No orders match your filters." />
               )}
             </tbody>
           </table>
@@ -213,3 +261,4 @@ export default function AdminOrders() {
     </div>
   )
 }
+
