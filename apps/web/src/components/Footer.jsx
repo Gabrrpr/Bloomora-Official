@@ -75,17 +75,17 @@ const C = {
 const FOOTER_CSS = `
   .ft-outer { max-width: 1400px; margin: 0 auto; padding: 36px 32px 0; }
 
-  /* ── Brand row: logo + description + socials, full width ── */
+  /* ── Brand row: 3 sections spanning full width ── */
   .ft-brand-row {
     display: flex;
-    align-items: flex-start;
-    gap: 32px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 40px;
     padding-bottom: 24px;
-    border-bottom: 1px solid rgba(255,255,255,0.09);
     margin-bottom: 28px;
   }
-  .ft-brand-text { flex: 0 0 280px; }
-  .ft-brand-social-wrap { flex: 0 0 auto; }
+  .ft-brand-text       { flex: 0 0 280px; }
+  .ft-brand-social-wrap{ flex: 0 0 auto; }
 
   /* ── Nav row: 6 equal columns, always one row ── */
   .ft-nav-row {
@@ -93,6 +93,7 @@ const FOOTER_CSS = `
     grid-template-columns: repeat(6, 1fr);
     gap: 20px;
     align-items: start;
+    padding-bottom: 8px;
   }
   /* Quick Links gets extra left breathing room */
   .ft-nav-row > *:first-child { padding-left: 0; }
@@ -102,6 +103,7 @@ const FOOTER_CSS = `
     display: flex; align-items: stretch;
     border: 1px solid rgba(255,255,255,0.09);
     border-radius: 10px; overflow: hidden;
+    margin-top: 28px;
     margin-bottom: 24px;
   }
   .ft-strip-panel { flex: 1; padding: 15px 18px; border-right: 1px solid rgba(255,255,255,0.09); }
@@ -118,8 +120,8 @@ const FOOTER_CSS = `
 
   /* ── Tablet ≤1024px: nav wraps to 3+3 ── */
   @media (max-width: 1024px) {
-    .ft-brand-row { flex-direction: column; gap: 16px; }
-    .ft-brand-text { flex: none; }
+    .ft-brand-row { flex-wrap: wrap; justify-content: flex-start; gap: 24px; }
+    .ft-brand-text { flex: 0 0 100%; }
     .ft-nav-row { grid-template-columns: repeat(3, 1fr); gap: 24px; }
     .ft-strip { flex-wrap: wrap; }
     .ft-strip-panel { flex: 1 1 48%; min-width: 180px; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.09); }
@@ -231,26 +233,25 @@ export default function Footer({ onNavigate }) {
         {/* ── Brand row: description + socials side by side, above nav ── */}
         <div className="ft-brand-row">
           <div className="ft-brand-text">
-            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
-              <img src="/src/assets/EstingsLogo.svg" alt="" style={{ width: "34px", height: "34px", objectFit: "contain" }} onError={e => e.target.style.display = "none"} />
-              <img src="/src/assets/Estings.svg" alt="Esting's" style={{ height: "22px", objectFit: "contain", filter: "brightness(0) invert(1)" }} onError={e => e.target.style.display = "none"} />
+            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+              <img src="/src/assets/EstingsLogo.svg" alt="" style={{ width: "44px", height: "44px", objectFit: "contain" }} onError={e => e.target.style.display = "none"} />
+              <img src="/src/assets/Estings.svg" alt="Esting's" style={{ height: "36px", objectFit: "contain", filter: "brightness(0) invert(1)" }} onError={e => e.target.style.display = "none"} />
             </div>
-            <p style={{ fontSize: "12px", lineHeight: "1.75", color: C.textMid, margin: 0 }}>
-              Since 1959, Esting's Flower International Inc. has been delivering fresh, quality flowers.
-            </p>
           </div>
 
           <div className="ft-brand-social-wrap">
-            <p style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: C.accentLight, marginBottom: "8px" }}>
-              Follow Us On
-            </p>
-            <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-              {SOCIAL_LINKS.map(s => (
-                <a key={s.name} href={s.href} title={s.name} target="_blank" rel="noopener noreferrer"
-                  className="ft-social"
-                  style={{ background: C.cardBg, border: `1px solid ${C.border}`, color: C.textMid }}
-                >{s.icon}</a>
-              ))}
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
+              <p style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: C.accentLight, margin: 0, whiteSpace: "nowrap" }}>
+                Follow Us On
+              </p>
+              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+                {SOCIAL_LINKS.map(s => (
+                  <a key={s.name} href={s.href} title={s.name} target="_blank" rel="noopener noreferrer"
+                    className="ft-social"
+                    style={{ background: C.cardBg, border: `1px solid ${C.border}`, color: C.textMid }}
+                  >{s.icon}</a>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -264,9 +265,6 @@ export default function Footer({ onNavigate }) {
           <NavCol title="Make it Personal"   links={MAKE_IT_PERSONAL} go={go} />
           <NavCol title="Customer Care"      links={CUSTOMER_CARE}    go={go} />
         </div>
-
-        {/* Divider */}
-        <div style={{ height: "1px", background: C.border, margin: "28px 0" }} />
 
         {/* ── Strip ── */}
         <div className="ft-strip">
