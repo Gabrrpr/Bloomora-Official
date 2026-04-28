@@ -23,10 +23,11 @@ import MixAndMatch from "./pages/MixAndMatch"
 import DescribeArrangement from "./pages/DescribeArrangement"
 import FAQ from "./pages/FAQ"
 import ReturnPolicy from "./pages/ReturnPolicy"
-import AIGalleryPage from "./pages/AIGalleryPage"   // ← ADD THIS
+import AIGalleryPage from "./pages/AIGalleryPage"
 import ChatWidget from "./components/ChatWidget"
 import CookieConsent from "./components/CookieConsent"
 import AdPopup from "./components/AdPopup"
+import WorldClock    from "./pages/WorldClock"    
 
 const AUTH_PAGES = ["login", "register", "forgot-password", "terms"]
 
@@ -76,6 +77,7 @@ function AppContent() {
             case "return-policy":        return <ReturnPolicy onNavigate={navigate} />
             case "ai-gallery":           return <AIGalleryPage onNavigate={navigate} />
             default:                     return <Home onNavigate={navigate} />
+            case "world-clock":   return <WorldClock onNavigate={navigate} />  
           }
         })()}
         <ChatWidget />

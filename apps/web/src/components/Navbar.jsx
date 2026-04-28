@@ -34,7 +34,7 @@ const NAV_LINKS = [
   },
   { label: "About Us", page: "about" },
   { label: "Contact Us", page: "contact" },
-  { label: "Help Center", page: null, dropdown: [{ label: "FAQs", page: "faq" }, { label: "Track My Order", page: "orders" }, { label: "Return Policy", page: "return-policy" }] },
+  { label: "Help Center", page: null, dropdown: [{ label: "FAQs", page: "faq" }, { label: "Track My Order", page: "orders" }, { label: "Return Policy", page: "return-policy" }, { label: "World Clock",   page: "world-clock" }] },
 ];
 
 const SOCIAL_LINKS = [

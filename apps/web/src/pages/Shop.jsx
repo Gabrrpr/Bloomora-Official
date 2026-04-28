@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react"
-import { addToCart } from "../utils/cart.js"
 import ProductPreviewModal from "../components/ProductPreviewModal.jsx"
-import Footer from "../components/Footer"
+import Footer from "../components/Footer.jsx"
 
 import SpringFlowers_PurpleWrapper from "../assets/products/SpringFlowers_PurpleWrapper.png"
 import SpringFlowers_PinkWrapper   from "../assets/products/SpringFlowers_PinkWrapper.png"
@@ -74,27 +73,46 @@ function Stars({ rating }) {
   )
 }
 
+// ── Wishlist heart button (reusable) ──────────────────────────────────────────
+function WishlistBtn({ id, wishlist, toggleWishlist, size = "sm" }) {
+  const wishlisted = wishlist.includes(id)
+  const dim = size === "sm" ? "w-7 h-7" : "w-8 h-8"
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); toggleWishlist(id) }}
+      className={`${dim} flex items-center justify-center rounded-md transition-all`}
+      style={{
+        backgroundColor: wishlisted ? "#fef2f2" : "#f9fafb",
+        border: wishlisted ? "1px solid #fecaca" : "1px solid #e5e7eb",
+      }}>
+      <svg className="w-4 h-4 transition-all"
+        fill={wishlisted ? "#e11d48" : "none"}
+        stroke={wishlisted ? "#e11d48" : "#9ca3af"}
+        strokeWidth={2} viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round"
+          d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+      </svg>
+    </button>
+  )
+}
+
 // ── List card ─────────────────────────────────────────────────────────────────
-function ListCard({ product, wishlist, toggleWishlist, addedToCart, handleAddToCart, onPreview }) {
+function ListCard({ product, wishlist, toggleWishlist, onPreview }) {
   return (
     <div
-      className="bg-white flex gap-0 group hover:shadow-md transition-shadow duration-200"
-      style={{ border: "1px solid #e5e7eb", borderRadius: "8px", overflow: "hidden", cursor: "pointer" }}
+      className="bg-white flex group hover:shadow-md transition-shadow duration-200"
+      style={{ border: "1px solid #e5e7eb", borderRadius: "10px", overflow: "hidden", cursor: "pointer" }}
       onClick={() => onPreview(product)}
     >
       {/* Image */}
-      <div className="relative flex-shrink-0" style={{ width: "160px", minHeight: "160px", backgroundColor: "#f9fafb" }}>
+      <div className="relative flex-shrink-0" style={{ width: "180px", backgroundColor: "#f9fafb" }}>
         <img src={product.image} alt={product.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          style={{ aspectRatio: "1/1" }} />
+          style={{ display: "block", aspectRatio: "1/1" }} />
         {product.ribbon && (
           <div className="absolute top-3 left-0 z-10">
-            <div className="text-[10px] font-bold text-white px-2.5 py-1 shadow-sm"
-              style={{
-                backgroundColor: RIBBON_COLORS[product.ribbon],
-                clipPath: "polygon(0 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 0 100%)",
-                paddingRight: "14px",
-              }}>
+            <div className="text-[10px] font-bold text-white shadow-sm"
+              style={{ backgroundColor: RIBBON_COLORS[product.ribbon], clipPath: "polygon(0 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 0 100%)", padding: "3px 16px 3px 9px" }}>
               {product.ribbon}
             </div>
           </div>
@@ -103,51 +121,40 @@ function ListCard({ product, wishlist, toggleWishlist, addedToCart, handleAddToC
           style={{ backgroundColor: DG }}>
           -{discount(product.original, product.price)}%
         </div>
-
-        {/* View hint */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-          style={{ background: "rgba(0,0,0,0.2)" }}>
-          <span className="text-white text-[10px] font-semibold px-2 py-1 rounded-full"
-            style={{ background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }}>
-            View Details
-          </span>
-        </div>
       </div>
 
       {/* Details */}
-      <div className="flex-1 p-4 flex flex-col justify-between min-w-0">
-        <div>
-          <p className="text-base font-semibold text-gray-800 mb-1.5 leading-snug">{product.name}</p>
-          <div className="flex items-center gap-1.5 mb-3">
-            <Stars rating={product.rating} />
-            <span className="text-xs text-gray-400">{product.rating} ({product.reviews})</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-lg font-bold" style={{ color: G }}>₱{product.price.toLocaleString()}</span>
-            <span className="text-sm text-gray-400 line-through">₱{product.original.toLocaleString()}</span>
-            <span className="text-[11px] font-bold text-white px-1.5 py-0.5 rounded"
-              style={{ backgroundColor: DG }}>-{discount(product.original, product.price)}%</span>
-          </div>
+      <div className="flex-1 flex flex-col justify-center min-w-0" style={{ padding: "16px 20px", gap: "6px" }}>
+        <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: G, margin: 0 }}>{product.category}</p>
+        <p className="text-base font-bold text-gray-900 leading-snug" style={{ margin: 0 }}>{product.name}</p>
+        <div className="flex items-center gap-1.5">
+          <Stars rating={product.rating} />
+          <span className="text-xs text-gray-500">{product.rating}</span>
+          <span className="text-xs text-gray-400">({product.reviews})</span>
         </div>
 
-        <div className="flex items-center gap-2 mt-4">
+        {/* Price + wishlist */}
+        <div className="flex items-center justify-between" style={{ marginTop: "2px" }}>
+          <div className="flex items-baseline gap-2">
+            <span className="text-lg font-bold" style={{ color: G }}>₱{product.price.toLocaleString()}</span>
+            <span className="text-sm text-gray-400 line-through">₱{product.original.toLocaleString()}</span>
+          </div>
+          <WishlistBtn id={product.id} wishlist={wishlist} toggleWishlist={toggleWishlist} size="sm" />
+        </div>
+
+        {/* View Details — inline width, not full stretch */}
+        <div style={{ marginTop: "6px" }}>
           <button
-            onClick={(e) => { e.stopPropagation(); handleAddToCart(product.id) }}
-            className="px-5 py-2 text-sm font-semibold text-white rounded-md transition-all hover:opacity-90"
-            style={{ backgroundColor: addedToCart.includes(product.id) ? DG : G }}>
-            {addedToCart.includes(product.id) ? "Added!" : "Add to Cart"}
-          </button>
-          <button
-            onClick={(e) => { e.stopPropagation(); toggleWishlist(product.id) }}
-            className="w-9 h-9 flex items-center justify-center rounded-md border transition-all hover:bg-gray-50"
-            style={{ borderColor: "#e5e7eb" }}>
-            <svg className="w-4 h-4"
-              fill={wishlist.includes(product.id) ? "#e11d48" : "none"}
-              stroke={wishlist.includes(product.id) ? "#e11d48" : "#9ca3af"}
-              viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+            onClick={e => { e.stopPropagation(); onPreview(product) }}
+            className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg transition-all"
+            style={{ backgroundColor: G }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = DG}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = G}>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
             </svg>
+            View Details
           </button>
         </div>
       </div>
@@ -156,13 +163,14 @@ function ListCard({ product, wishlist, toggleWishlist, addedToCart, handleAddToC
 }
 
 // ── Grid card ─────────────────────────────────────────────────────────────────
-function GridCard({ product, wishlist, toggleWishlist, addedToCart, handleAddToCart, onPreview }) {
+function GridCard({ product, wishlist, toggleWishlist, onPreview }) {
   return (
     <div
       className="bg-white group hover:shadow-lg transition-shadow duration-200"
       style={{ border: "1px solid #e5e7eb", borderRadius: "8px", overflow: "hidden", cursor: "pointer" }}
       onClick={() => onPreview(product)}
     >
+      {/* Image — zoom on hover only, no overlay */}
       <div className="relative overflow-hidden bg-gray-50" style={{ aspectRatio: "1/1" }}>
         <img src={product.image} alt={product.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -178,56 +186,46 @@ function GridCard({ product, wishlist, toggleWishlist, addedToCart, handleAddToC
           style={{ backgroundColor: DG, borderRadius: "4px" }}>
           -{discount(product.original, product.price)}%
         </div>
-
-        {/* Wishlist */}
-        <button
-          onClick={(e) => { e.stopPropagation(); toggleWishlist(product.id) }}
-          className="absolute bottom-2 left-2 w-7 h-7 bg-white flex items-center justify-center shadow opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-          style={{ borderRadius: "4px", border: "1px solid #e5e7eb" }}>
-          <svg className="w-4 h-4"
-            fill={wishlist.includes(product.id) ? "#e11d48" : "none"}
-            stroke={wishlist.includes(product.id) ? "#e11d48" : "#9ca3af"}
-            viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-          </svg>
-        </button>
-
-        {/* View hint overlay */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-          style={{ background: "rgba(0,0,0,0.22)" }}>
-          <span className="text-white text-xs font-semibold px-3 py-1.5 rounded-full"
-            style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)" }}>
-            View Details
-          </span>
-        </div>
       </div>
 
+      {/* Card body */}
       <div className="p-3">
-        <div className="flex items-baseline gap-2 mb-1">
-          <span className="text-base font-bold" style={{ color: G }}>₱{product.price.toLocaleString()}</span>
-          <span className="text-xs text-gray-400 line-through">₱{product.original.toLocaleString()}</span>
+        {/* Price row + wishlist — always visible */}
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-baseline gap-2">
+            <span className="text-base font-bold" style={{ color: G }}>₱{product.price.toLocaleString()}</span>
+            <span className="text-xs text-gray-400 line-through">₱{product.original.toLocaleString()}</span>
+          </div>
+          <WishlistBtn id={product.id} wishlist={wishlist} toggleWishlist={toggleWishlist} size="sm" />
         </div>
+
         <p className="text-sm font-medium text-gray-800 leading-snug mb-1.5 line-clamp-2">{product.name}</p>
+
         <div className="flex items-center gap-1 mb-3">
           <Stars rating={product.rating} />
           <span className="text-xs text-gray-400">{product.rating} ({product.reviews})</span>
         </div>
+
+        {/* View Details — full green, opens modal */}
         <button
-          onClick={(e) => { e.stopPropagation(); handleAddToCart(product.id) }}
-          className="w-full text-sm font-medium py-2 text-white transition-all duration-200 flex items-center justify-center gap-2"
-          style={{ backgroundColor: addedToCart.includes(product.id) ? DG : G, borderRadius: "6px" }}>
-          {addedToCart.includes(product.id)
-            ? <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>Added!</>
-            : <><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" /></svg>Add to Cart</>
-          }
+          onClick={e => { e.stopPropagation(); onPreview(product) }}
+          className="w-full text-sm font-semibold py-2 text-white transition-all flex items-center justify-center gap-2"
+          style={{ backgroundColor: G, borderRadius: "6px" }}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = DG}
+          onMouseLeave={e => e.currentTarget.style.backgroundColor = G}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+          View Details
         </button>
       </div>
     </div>
   )
 }
 
-// VIEW AS icon buttons (unchanged)
 const VIEW_OPTIONS = [
   { key: "list",  icon: (<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>) },
   { key: "grid2", icon: (<svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor"><rect x="0" y="0" width="7" height="7" rx="1" /><rect x="9" y="0" width="7" height="7" rx="1" /><rect x="0" y="9" width="7" height="7" rx="1" /><rect x="9" y="9" width="7" height="7" rx="1" /></svg>) },
@@ -235,34 +233,23 @@ const VIEW_OPTIONS = [
   { key: "grid4", icon: (<svg className="w-4 h-4" viewBox="0 0 18 15" fill="currentColor"><rect x="0"   y="0" width="3.5" height="6" rx="0.6" /><rect x="4.8" y="0" width="3.5" height="6" rx="0.6" /><rect x="9.6" y="0" width="3.5" height="6" rx="0.6" /><rect x="14.5" y="0" width="3.5" height="6" rx="0.6" /><rect x="0"   y="8" width="3.5" height="7" rx="0.6" /><rect x="4.8" y="8" width="3.5" height="7" rx="0.6" /><rect x="9.6" y="8" width="3.5" height="7" rx="0.6" /><rect x="14.5" y="8" width="3.5" height="7" rx="0.6" /></svg>) },
 ]
 
-// ── Main Shop page ────────────────────────────────────────────────────────────
 export default function Shop({ onNavigate }) {
   const [viewAs, setViewAs]               = useState("grid3")
   const [sortBy, setSortBy]               = useState("best-selling")
   const [activeCategory, setActiveCategory] = useState("All")
   const [priceRange, setPriceRange]       = useState([0, 2500])
   const [wishlist, setWishlist]           = useState([])
-  const [addedToCart, setAddedToCart]     = useState([])
   const [sortOpen, setSortOpen]           = useState(false)
   const [previewProduct, setPreviewProduct] = useState(null)
   const sortRef = useRef(null)
 
   useEffect(() => {
-    const handleClick = (e) => { if (sortRef.current && !sortRef.current.contains(e.target)) setSortOpen(false) }
+    const handleClick = e => { if (sortRef.current && !sortRef.current.contains(e.target)) setSortOpen(false) }
     document.addEventListener("mousedown", handleClick)
     return () => document.removeEventListener("mousedown", handleClick)
   }, [])
 
-  const toggleWishlist  = (id) => setWishlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
-  const handleAddToCart = (id) => {
-    const product = ALL_PRODUCTS.find(p => p.id === id)
-    if (product) {
-      addToCart({ id: product.id, name: product.name, price: product.price, qty: 1, img: product.image, desc: product.category })
-      window.dispatchEvent(new Event("bloomora:cart-updated"))
-    }
-    setAddedToCart(prev => [...prev, id])
-    setTimeout(() => setAddedToCart(prev => prev.filter(i => i !== id)), 1500)
-  }
+  const toggleWishlist = id => setWishlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
 
   const filtered = ALL_PRODUCTS
     .filter(p => activeCategory === "All" || p.category === activeCategory)
@@ -289,7 +276,7 @@ export default function Shop({ onNavigate }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex gap-8">
 
-          {/* ── Sidebar (unchanged) ── */}
+          {/* ── Sidebar ── */}
           <aside className="w-52 flex-shrink-0 hidden lg:block">
             <div className="mb-7">
               <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Category</p>
@@ -297,13 +284,9 @@ export default function Shop({ onNavigate }) {
                 {CATEGORIES.map(cat => (
                   <button key={cat} onClick={() => setActiveCategory(cat)}
                     className="text-left px-3 py-2 rounded-lg text-sm transition-all"
-                    style={{
-                      fontWeight: activeCategory === cat ? 600 : 400,
-                      color: activeCategory === cat ? "white" : "#4b5563",
-                      backgroundColor: activeCategory === cat ? G : "transparent",
-                    }}
-                    onMouseEnter={e => { if (activeCategory !== cat) e.currentTarget.style.backgroundColor = "#f3f4f6"; }}
-                    onMouseLeave={e => { if (activeCategory !== cat) e.currentTarget.style.backgroundColor = "transparent"; }}>
+                    style={{ fontWeight: activeCategory === cat ? 600 : 400, color: activeCategory === cat ? "white" : "#4b5563", backgroundColor: activeCategory === cat ? G : "transparent" }}
+                    onMouseEnter={e => { if (activeCategory !== cat) e.currentTarget.style.backgroundColor = "#f3f4f6" }}
+                    onMouseLeave={e => { if (activeCategory !== cat) e.currentTarget.style.backgroundColor = "transparent" }}>
                     {cat}
                   </button>
                 ))}
@@ -316,25 +299,17 @@ export default function Shop({ onNavigate }) {
                 {[[0, 500], [500, 1000], [1000, 1500], [1500, 2500]].map(([min, max]) => (
                   <button key={`${min}-${max}`} onClick={() => setPriceRange([min, max])}
                     className="text-left px-3 py-2 rounded-lg text-sm transition-all"
-                    style={{
-                      fontWeight: priceRange[0] === min && priceRange[1] === max ? 600 : 400,
-                      color: priceRange[0] === min && priceRange[1] === max ? "white" : "#4b5563",
-                      backgroundColor: priceRange[0] === min && priceRange[1] === max ? G : "transparent",
-                    }}
-                    onMouseEnter={e => { if (priceRange[0] !== min || priceRange[1] !== max) e.currentTarget.style.backgroundColor = "#f3f4f6"; }}
-                    onMouseLeave={e => { if (priceRange[0] !== min || priceRange[1] !== max) e.currentTarget.style.backgroundColor = "transparent"; }}>
+                    style={{ fontWeight: priceRange[0] === min && priceRange[1] === max ? 600 : 400, color: priceRange[0] === min && priceRange[1] === max ? "white" : "#4b5563", backgroundColor: priceRange[0] === min && priceRange[1] === max ? G : "transparent" }}
+                    onMouseEnter={e => { if (priceRange[0] !== min || priceRange[1] !== max) e.currentTarget.style.backgroundColor = "#f3f4f6" }}
+                    onMouseLeave={e => { if (priceRange[0] !== min || priceRange[1] !== max) e.currentTarget.style.backgroundColor = "transparent" }}>
                     ₱{min.toLocaleString()} – ₱{max.toLocaleString()}
                   </button>
                 ))}
                 <button onClick={() => setPriceRange([0, 2500])}
                   className="text-left px-3 py-2 rounded-lg text-sm transition-all"
-                  style={{
-                    fontWeight: priceRange[0] === 0 && priceRange[1] === 2500 ? 600 : 400,
-                    color: priceRange[0] === 0 && priceRange[1] === 2500 ? "white" : "#4b5563",
-                    backgroundColor: priceRange[0] === 0 && priceRange[1] === 2500 ? G : "transparent",
-                  }}
-                  onMouseEnter={e => { if (priceRange[0] !== 0 || priceRange[1] !== 2500) e.currentTarget.style.backgroundColor = "#f3f4f6"; }}
-                  onMouseLeave={e => { if (priceRange[0] !== 0 || priceRange[1] !== 2500) e.currentTarget.style.backgroundColor = "transparent"; }}>
+                  style={{ fontWeight: priceRange[0] === 0 && priceRange[1] === 2500 ? 600 : 400, color: priceRange[0] === 0 && priceRange[1] === 2500 ? "white" : "#4b5563", backgroundColor: priceRange[0] === 0 && priceRange[1] === 2500 ? G : "transparent" }}
+                  onMouseEnter={e => { if (priceRange[0] !== 0 || priceRange[1] !== 2500) e.currentTarget.style.backgroundColor = "#f3f4f6" }}
+                  onMouseLeave={e => { if (priceRange[0] !== 0 || priceRange[1] !== 2500) e.currentTarget.style.backgroundColor = "transparent" }}>
                   All Prices
                 </button>
               </div>
@@ -360,11 +335,7 @@ export default function Shop({ onNavigate }) {
                   {VIEW_OPTIONS.map(({ key, icon }, idx) => (
                     <button key={key} onClick={() => setViewAs(key)}
                       className="flex items-center justify-center w-8 h-8 transition-all"
-                      style={{
-                        backgroundColor: viewAs === key ? G : "white",
-                        color: viewAs === key ? "white" : "#6b7280",
-                        borderRight: idx < VIEW_OPTIONS.length - 1 ? "1px solid #e5e7eb" : "none",
-                      }}>
+                      style={{ backgroundColor: viewAs === key ? G : "white", color: viewAs === key ? "white" : "#6b7280", borderRight: idx < VIEW_OPTIONS.length - 1 ? "1px solid #e5e7eb" : "none" }}>
                       {icon}
                     </button>
                   ))}
@@ -388,15 +359,11 @@ export default function Shop({ onNavigate }) {
                     <div className="absolute top-full right-0 mt-1 bg-white z-30 w-48 overflow-hidden shadow-lg"
                       style={{ border: "1px solid #e5e7eb", borderRadius: "10px" }}>
                       {SORT_OPTIONS.map(opt => (
-                        <button key={opt.value} onClick={() => { setSortBy(opt.value); setSortOpen(false); }}
+                        <button key={opt.value} onClick={() => { setSortBy(opt.value); setSortOpen(false) }}
                           className="w-full text-left px-4 py-2.5 text-sm transition-all"
-                          style={{
-                            color: sortBy === opt.value ? G : "#4b5563",
-                            fontWeight: sortBy === opt.value ? 600 : 400,
-                            backgroundColor: sortBy === opt.value ? "#f0fdf4" : "white",
-                          }}
-                          onMouseEnter={e => { if (sortBy !== opt.value) e.currentTarget.style.backgroundColor = "#f9fafb"; }}
-                          onMouseLeave={e => { if (sortBy !== opt.value) e.currentTarget.style.backgroundColor = "white"; }}>
+                          style={{ color: sortBy === opt.value ? G : "#4b5563", fontWeight: sortBy === opt.value ? 600 : 400, backgroundColor: sortBy === opt.value ? "#f0fdf4" : "white" }}
+                          onMouseEnter={e => { if (sortBy !== opt.value) e.currentTarget.style.backgroundColor = "#f9fafb" }}
+                          onMouseLeave={e => { if (sortBy !== opt.value) e.currentTarget.style.backgroundColor = "white" }}>
                           {opt.label}
                         </button>
                       ))}
@@ -406,19 +373,19 @@ export default function Shop({ onNavigate }) {
               </div>
             </div>
 
-            {/* Products grid/list */}
+            {/* Products */}
             {filtered.length === 0 ? (
               <div className="text-center py-20">
                 <p className="text-gray-400 text-sm mb-3">No products match your filters.</p>
-                <button onClick={() => { setActiveCategory("All"); setPriceRange([0, 2500]); }}
+                <button onClick={() => { setActiveCategory("All"); setPriceRange([0, 2500]) }}
                   className="text-sm font-semibold hover:underline" style={{ color: G }}>Clear filters</button>
               </div>
             ) : (
               <div style={gridStyle[viewAs]}>
                 {filtered.map(product =>
                   viewAs === "list"
-                    ? <ListCard key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} addedToCart={addedToCart} handleAddToCart={handleAddToCart} onPreview={setPreviewProduct} />
-                    : <GridCard key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} addedToCart={addedToCart} handleAddToCart={handleAddToCart} onPreview={setPreviewProduct} />
+                    ? <ListCard key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct} />
+                    : <GridCard key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct} />
                 )}
               </div>
             )}
@@ -428,7 +395,6 @@ export default function Shop({ onNavigate }) {
 
       <Footer onNavigate={onNavigate} />
 
-      {/* Product Preview Modal */}
       {previewProduct && (
         <ProductPreviewModal
           product={{ ...previewProduct, _ribbonColor: RIBBON_COLORS[previewProduct.ribbon] }}

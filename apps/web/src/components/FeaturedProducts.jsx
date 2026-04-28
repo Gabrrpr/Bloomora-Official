@@ -94,8 +94,9 @@ function Ribbon({ label }) {
   )
 }
 
-function ProductCard({ product, index, wishlist, toggleWishlist, addedToCart, handleAddToCart, discount, onPreview }) {
+function ProductCard({ product, index, wishlist, toggleWishlist, discount, onPreview }) {
   const [ref, visible] = useScrollReveal(0.1)
+  const wishlisted = wishlist.includes(product.id)
 
   return (
     <div
@@ -111,9 +112,9 @@ function ProductCard({ product, index, wishlist, toggleWishlist, addedToCart, ha
         transitionDelay: `${(index % 4) * 60}ms`,
         cursor: "pointer",
       }}
-      // Clicking anywhere on the card opens the preview
       onClick={() => onPreview(product)}
     >
+      {/* ── Image ── */}
       <div className="relative overflow-hidden bg-gray-50" style={{ aspectRatio: "1 / 1" }}>
         <img
           src={product.image}
@@ -128,67 +129,64 @@ function ProductCard({ product, index, wishlist, toggleWishlist, addedToCart, ha
           -{discount(product.original, product.price)}%
         </div>
 
-        {/* Wishlist — stopPropagation so it doesn't trigger preview */}
-        <button
-          onClick={(e) => { e.stopPropagation(); toggleWishlist(product.id) }}
-          className="absolute bottom-2 left-2 w-7 h-7 bg-white flex items-center justify-center shadow opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-          style={{ borderRadius: "4px", border: "1px solid #e5e7eb" }}
-        >
-          <svg
-            className="w-4 h-4"
-            fill={wishlist.includes(product.id) ? "#e11d48" : "none"}
-            stroke={wishlist.includes(product.id) ? "#e11d48" : "#9ca3af"}
-            viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
-          </svg>
-        </button>
 
-        {/* Hover overlay — "View Details" hint */}
-        <div
-          className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-          style={{ background: "rgba(0,0,0,0.22)" }}
-        >
-          <span
-            className="text-white text-xs font-semibold px-3 py-1.5 rounded-full"
-            style={{ background: "rgba(0,0,0,0.45)", letterSpacing: "0.04em", backdropFilter: "blur(4px)" }}
-          >
-            View Details
-          </span>
-        </div>
       </div>
 
+      {/* ── Card body ── */}
       <div className="p-3">
-        <div className="flex items-baseline gap-2 mb-1">
-          <span className="text-base font-bold" style={{ color: "#2E8B34" }}>₱{product.price.toLocaleString()}</span>
-          <span className="text-xs text-gray-400 line-through">₱{product.original.toLocaleString()}</span>
+
+        {/* Price row — with heart icon on the right */}
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-baseline gap-2">
+            <span className="text-base font-bold" style={{ color: "#2E8B34" }}>
+              ₱{product.price.toLocaleString()}
+            </span>
+            <span className="text-xs text-gray-400 line-through">
+              ₱{product.original.toLocaleString()}
+            </span>
+          </div>
+
+          {/* Heart icon — always visible, never blocked by overlay */}
+          <button
+            onClick={(e) => { e.stopPropagation(); toggleWishlist(product.id) }}
+            className="flex-shrink-0 w-7 h-7 flex items-center justify-center rounded-md transition-all duration-200"
+            style={{
+              backgroundColor: wishlisted ? "#fef2f2" : "#f9fafb",
+              border: wishlisted ? "1px solid #fecaca" : "1px solid #e5e7eb",
+            }}
+            title={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+          >
+            <svg
+              className="w-4 h-4 transition-all duration-200"
+              fill={wishlisted ? "#e11d48" : "none"}
+              stroke={wishlisted ? "#e11d48" : "#9ca3af"}
+              strokeWidth={2}
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+            </svg>
+          </button>
         </div>
+
         <p className="text-sm font-medium text-gray-800 leading-snug mb-1.5 line-clamp-2">{product.name}</p>
+
         <div className="mb-3">
           <StarRating rating={product.rating} reviews={product.reviews} />
         </div>
 
-        {/* Add to Cart — stopPropagation so it doesn't trigger preview */}
+        {/* View Details — full green filled button */}
         <button
-          onClick={(e) => { e.stopPropagation(); handleAddToCart(product.id) }}
+          onClick={(e) => { e.stopPropagation(); onPreview(product) }}
           className="w-full text-sm font-medium py-2 text-white transition-all duration-200 flex items-center justify-center gap-2"
-          style={{ backgroundColor: addedToCart.includes(product.id) ? "#0C573E" : "#2E8B34", borderRadius: "6px" }}
+          style={{ backgroundColor: "#2E8B34", borderRadius: "6px", border: "none" }}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = "#0C573E"}
+          onMouseLeave={e => e.currentTarget.style.backgroundColor = "#2E8B34"}
         >
-          {addedToCart.includes(product.id) ? (
-            <>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-              Added!
-            </>
-          ) : (
-            <>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
-              Add to Cart
-            </>
-          )}
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+          View Details
         </button>
       </div>
     </div>
@@ -197,25 +195,19 @@ function ProductCard({ product, index, wishlist, toggleWishlist, addedToCart, ha
 
 // ── Main export ───────────────────────────────────────────────────────────────
 export default function FeaturedProducts({ onNavigate }) {
-  const [wishlist, setWishlist]         = useState([])
-  const [addedToCart, setAddedToCart]   = useState([])
+  const [wishlist, setWishlist]             = useState([])
   const [previewProduct, setPreviewProduct] = useState(null)
-  const [headerRef, headerVisible]      = useScrollReveal(0.2)
+  const [headerRef, headerVisible]          = useScrollReveal(0.2)
 
-  const toggleWishlist  = (id) =>
+  const toggleWishlist = (id) =>
     setWishlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
-
-  const handleAddToCart = (id) => {
-    setAddedToCart(prev => [...prev, id])
-    setTimeout(() => setAddedToCart(prev => prev.filter(i => i !== id)), 1500)
-  }
 
   const discount = (orig, price) => Math.round((1 - price / orig) * 100)
 
   return (
     <section className="py-12 px-8 bg-white">
       <div className="max-w-7xl mx-auto">
-        
+
         <div
           ref={headerRef}
           className="text-center mb-10"
@@ -223,11 +215,11 @@ export default function FeaturedProducts({ onNavigate }) {
             transition: "opacity 0.6s ease, transform 0.6s ease",
             opacity: headerVisible ? 1 : 0,
             transform: headerVisible ? "translateY(0)" : "translateY(20px)",
-            
           }}
         >
           <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: "#2E8B34" }}>
-            Handpicked for You </p>
+            Handpicked for You
+          </p>
           <h2 className="text-3xl font-bold text-gray-800 mb-2">Featured Products</h2>
           <p className="text-gray-400 text-sm">Our most-loved flowers, all in one place.</p>
           <div className="mt-4 w-12 h-0.5 mx-auto rounded-full" style={{ backgroundColor: "#2E8B34" }} />
@@ -241,8 +233,6 @@ export default function FeaturedProducts({ onNavigate }) {
               index={index}
               wishlist={wishlist}
               toggleWishlist={toggleWishlist}
-              addedToCart={addedToCart}
-              handleAddToCart={handleAddToCart}
               discount={discount}
               onPreview={setPreviewProduct}
             />
@@ -255,13 +245,13 @@ export default function FeaturedProducts({ onNavigate }) {
             style={{ borderColor: "#2E8B34", color: "#2E8B34", borderRadius: "6px" }}
             onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#2E8B34"; e.currentTarget.style.color = "white" }}
             onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#2E8B34" }}
+            onClick={() => onNavigate?.("shop")}
           >
             View All Products →
           </button>
         </div>
       </div>
 
-      {/* Product Preview Modal */}
       {previewProduct && (
         <ProductPreviewModal
           product={{ ...previewProduct, _ribbonColor: RIBBON_COLORS[previewProduct.ribbon] }}
