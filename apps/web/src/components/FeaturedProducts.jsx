@@ -215,6 +215,7 @@ export default function FeaturedProducts({ onNavigate }) {
   return (
     <section className="py-12 px-8 bg-white">
       <div className="max-w-7xl mx-auto">
+        
         <div
           ref={headerRef}
           className="text-center mb-10"
@@ -222,16 +223,14 @@ export default function FeaturedProducts({ onNavigate }) {
             transition: "opacity 0.6s ease, transform 0.6s ease",
             opacity: headerVisible ? 1 : 0,
             transform: headerVisible ? "translateY(0)" : "translateY(20px)",
+            
           }}
         >
-          <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: "#2E8B34" }}>
-            Handpicked for You
-          </p>
-          <h2 className="text-3xl font-bold text-gray-800 mb-2" style={{ fontFamily: "Georgia, serif" }}>
-            Featured Products
-          </h2>
+          <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: "#2E8B34" }}>
+            Handpicked for You </p>
+          <h2 className="text-3xl font-bold text-gray-800 mb-2">Featured Products</h2>
           <p className="text-gray-400 text-sm">Our most-loved flowers, all in one place.</p>
-          <div className="mt-4 w-12 h-0.5 mx-auto" style={{ backgroundColor: "#2E8B34" }} />
+          <div className="mt-4 w-12 h-0.5 mx-auto rounded-full" style={{ backgroundColor: "#2E8B34" }} />
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">

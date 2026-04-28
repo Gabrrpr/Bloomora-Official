@@ -131,9 +131,13 @@ export default function Testimonials() {
           style={{ transition: "opacity 0.6s ease, transform 0.6s ease", opacity: headerVisible ? 1 : 0, transform: headerVisible ? "translateY(0)" : "translateY(20px)" }}>
           <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: G }}>Customer Reviews</p>
           <h2 className="text-3xl sm:text-4xl font-bold text-gray-800 mb-2">What Our Customers Say</h2>
-          <div className="w-12 h-0.5 mx-auto mb-2" style={{ backgroundColor: G }} />
-          <p className="text-gray-400 text-sm">Real feedback from real customers.</p>
+          <p className="text-gray-400 text-sm mb-4">
+  Real feedback from real customers.
+</p>
+<div className="w-12 h-0.5 mx-auto" style={{ backgroundColor: G }} />
+      
         </div>
+        
 
         {/* Carousel */}
         <div ref={cardsRef}

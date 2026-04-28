@@ -79,6 +79,7 @@ export default function OccasionsStrip({ onNavigate }) {
           <h2 className="text-2xl sm:text-3xl font-bold text-gray-800 mb-3">What’s the Occasion?</h2>
           <p className="text-sm text-gray-500 mb-4">Whatever it is, we’ve got flowers for it.</p>
           <div className="mx-auto rounded-full" style={{ width: "48px", height: "3px", backgroundColor: G }} />
+          
         </div>
 
         {/* Cards */}

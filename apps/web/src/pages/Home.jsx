@@ -6,11 +6,18 @@ import Testimonials from "../components/Testimonials.jsx"
 import SocialFeed from "../components/SocialFeed.jsx"
 import HomeFAQ from "../components/HomeFAQ.jsx"
 import Footer from "../components/Footer.jsx"
+import FallingRoses from "../components/FallingRoses.jsx"
 
 export default function Home({ onNavigate }) {
   return (
     <div>
-      <HeroCarousel onNavigate={onNavigate} />
+
+      {/* Hero with falling roses layered behind the carousel */}
+      <div className="relative overflow-hidden">
+        <FallingRoses />
+        <HeroCarousel onNavigate={onNavigate} />
+      </div>
+
       <TrustBar />
       <OccasionsStrip onNavigate={onNavigate} />
       <FeaturedProducts />
