@@ -35,6 +35,7 @@ class Chat(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     message = Column(Text, nullable=False)
     sender = Column(Enum(SenderEnum), nullable=False)   # who sent this message
+    image_url = Column(Text, nullable=True)             # URL to attached image
     is_read = Column(Integer, default=0)                # 0 = unread, 1 = read
     created_at = Column(DateTime(timezone=True), default=now_utc)
 

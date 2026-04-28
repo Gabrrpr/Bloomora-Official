@@ -1,36 +1,36 @@
-import { useState } from "react"
-
-import ad1 from "../../assets/ads/advertisement1.png"
-import ad2 from "../../assets/ads/advertisement2.png"
-import ad3 from "../../assets/ads/advertisement3.png"
-import ad4 from "../../assets/ads/advertisement4.png"
-import ad5 from "../../assets/ads/advertisement5.png"
-import ad6 from "../../assets/ads/advertisement6.png"
-import ad7 from "../../assets/ads/advertisement7.png"
-import ad8 from "../../assets/ads/advertisement8.png"
-import ad9 from "../../assets/ads/advertisement9.png"
+import { useState, useMemo } from "react"
 
 const DG = "#0C573E"
 const G  = "#2E8B34"
 
+
 const ADS = [
-  { id: 1, src: ad1, title: "Happy Mother's Day" },
-  { id: 2, src: ad2, title: "Happy Father's Day" },
-  { id: 3, src: ad3, title: "Happy Valentine's Day" },
-  { id: 4, src: ad4, title: "Birthday" },
-  { id: 5, src: ad5, title: "Happy Valentine's Day" },
-  { id: 6, src: ad6, title: "Happy Chinese New Year" },
-  { id: 7, src: ad7, title: "Happy Teacher's Day" },
-  { id: 8, src: ad8, title: "Ribbon Cutting Ceremony" },
-  { id: 9, src: ad9, title: "Graduation Day" },
+  { id: 1, title: "Happy Mother's Day" },
+  { id: 2, title: "Happy Father's Day" },
+  { id: 3, title: "Happy Valentine's Day" },
+  { id: 4, title: "Birthday" },
+  { id: 5, title: "Happy Valentine's Day" },
+  { id: 6, title: "Happy Chinese New Year" },
+  { id: 7, title: "Happy Teacher's Day" },
+  { id: 8, title: "Ribbon Cutting Ceremony" },
+  { id: 9, title: "Graduation Day" },
 ]
+
+/* Build src paths dynamically — works with both /public and src/assets */
+const getAdSrc = (id) => {
+  // Option A: images live in public/ads/  (RECOMMENDED — zero bundle impact)
+  // return `/ads/advertisement${id}.png`
+
+  // Option B: images live in src/assets/ads/  (still lazy, but bloats bundle slightly)
+  return new URL(`../../assets/ads/advertisement${id}.png`, import.meta.url).href
+}
 
 export default function AdminAdvertisements() {
   const [active,  setActive]  = useState(1)
   const [preview, setPreview] = useState(null)
   const [saved,   setSaved]   = useState(false)
 
-  const activeAd = ADS.find(a => a.id === active)
+  const activeAd = useMemo(() => ADS.find(a => a.id === active), [active])
 
   const handleSetActive = (id) => { setActive(id); setSaved(false) }
 
@@ -79,11 +79,12 @@ export default function AdminAdvertisements() {
           {/* Col 1 — Big image */}
           <div className="flex items-center justify-center bg-gray-50 p-8">
             <img
-              src={activeAd.src}
+              src={getAdSrc(activeAd.id)}
               alt={activeAd.title}
               className="rounded-xl object-contain cursor-pointer hover:scale-[1.02] transition-transform duration-200"
               style={{ maxHeight: "340px", width: "100%", boxShadow: "0 8px 32px rgba(0,0,0,0.12)" }}
               onClick={() => setPreview(activeAd)}
+              decoding="async"
             />
           </div>
 
@@ -167,7 +168,13 @@ export default function AdminAdvertisements() {
               >
                 {/* Image */}
                 <div className="relative bg-gray-50" style={{ aspectRatio: "4/3" }}>
-                  <img src={ad.src} alt={ad.title} className="w-full h-full object-cover" />
+                  <img
+                    src={getAdSrc(ad.id)}
+                    alt={ad.title}
+                    className="w-full h-full object-cover"
+                    loading="lazy"
+                    decoding="async"
+                  />
 
                   {/* Active badge */}
                   {isActive && (
@@ -239,7 +246,13 @@ export default function AdminAdvertisements() {
               </button>
             </div>
             <div className="bg-gray-50 p-6 flex items-center justify-center">
-              <img src={preview.src} alt={preview.title} className="rounded-lg max-h-96 w-full object-contain" style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.10)" }} />
+              <img
+                src={getAdSrc(preview.id)}
+                alt={preview.title}
+                className="rounded-lg max-h-96 w-full object-contain"
+                style={{ boxShadow: "0 4px 20px rgba(0,0,0,0.10)" }}
+                decoding="async"
+              />
             </div>
             <div className="flex items-center justify-between px-5 py-3.5" style={{ borderTop: "1px solid #f1f5f9", backgroundColor: "#fafbfc" }}>
               {active === preview.id ? (

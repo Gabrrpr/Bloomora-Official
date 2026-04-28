@@ -1,9 +1,11 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List
 from uuid import UUID
 from datetime import datetime, timezone
+import os
+import shutil
 
 from app.core.dependencies import get_db, get_current_user
 from app.core.connection_manager import manager
@@ -12,6 +14,10 @@ from app.schemas.chat_schemas import MessageCreate, MessageOut, ConversationList
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
 
+# Ensure upload directory exists
+UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "chat_images")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
 
 @router.post("/sessions")
 def create_session(
@@ -19,8 +25,28 @@ def create_session(
 ):
     return {"id": str(current_user.id)}
 
+@router.post("/upload", response_model=dict)
+async def upload_chat_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload an image for chat messages. Returns the public URL."""
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image files are allowed")
+
+    # Generate unique filename
+    ext = file.filename.split(".")[-1] if "." in file.filename else "png"
+    filename = f"{current_user.id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}.{ext}"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # Return the public URL path
+    return {"image_url": f"/uploads/chat_images/{filename}"}
+
 @router.post("/messages", response_model=MessageOut)
-async def create_message(                          # ← async now
+async def create_message(
     message: MessageCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -30,6 +56,7 @@ async def create_message(                          # ← async now
         user_id=message.user_id,
         message=message.text,
         sender=sender,
+        image_url=message.image_url,
         is_read=0
     )
     db.add(new_message)
@@ -41,6 +68,7 @@ async def create_message(                          # ← async now
         "customer_id": str(message.user_id),
         "user_id": str(message.user_id),
         "message": new_message.message,
+        "image_url": new_message.image_url,
         "sender": sender,
         "created_at": new_message.created_at.isoformat(),
         "is_read": new_message.is_read

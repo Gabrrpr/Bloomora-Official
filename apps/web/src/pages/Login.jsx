@@ -1,15 +1,27 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useAuth } from "../context/AuthContext"
 import FlowerPanel from "../components/FlowerPanel"
 import Footer from "../components/Footer"
 
 export default function Login({ onNavigate }) {
   const { login, googleLogin, facebookLogin } = useAuth()
-  const [form, setForm] = useState({ email: "", password: "" })
+  const [form, setForm] = useState(() => {
+    const savedEmail = sessionStorage.getItem("registerEmail")
+    const savedPassword = sessionStorage.getItem("registerPassword")
+    return {
+      email: savedEmail || "",
+      password: savedPassword || "",
+    }
+  })
   const [showPassword, setShowPassword] = useState(false)
   const [rememberMe, setRememberMe] = useState(false)
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    sessionStorage.removeItem("registerEmail")
+    sessionStorage.removeItem("registerPassword")
+  }, [])
 
   const handleSubmit = async (e) => {
     e.preventDefault()

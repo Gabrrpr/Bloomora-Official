@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
-import { getCartCount } from "../utils/cart.js";
+import { getCartCount, getCart } from "../utils/cart.js";
 import estingsLogo from "../assets/EstingsLogo.svg";
 import estingsText from "../assets/Estings.svg";
 
@@ -349,6 +349,9 @@ function DropdownMenu({ items, categories, onNavigate, onClose }) {
 }
 
 function CartDropdown({ cartCount, onNavigate }) {
+  const cartItems = getCart()
+  const subtotal = cartItems.reduce((sum, item) => sum + (item.price || 0) * (item.qty || 1), 0)
+
   return (
     <div className="absolute top-full right-0 mt-2 bg-white z-50 w-72 overflow-hidden"
       style={{ border: "1px solid #e5e7eb", borderRadius: "14px", boxShadow: "0 12px 32px rgba(0,0,0,0.12)", animation: "dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards" }}>
@@ -367,12 +370,32 @@ function CartDropdown({ cartCount, onNavigate }) {
           <p className="text-xs text-gray-400">Browse our collection and add something you love.</p>
         </div>
       ) : (
-        <div className="px-4 py-3 text-sm text-gray-500">{cartCount} item(s) in cart</div>
+        <div className="max-h-48 overflow-y-auto">
+          {cartItems.slice(0, 4).map((item, idx) => (
+            <div key={`${item.id}-${item.group}-${idx}`} className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-0">
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-pink-50 to-rose-100 flex items-center justify-center flex-shrink-0 overflow-hidden border border-gray-100">
+                {item.img ? (
+                  <img src={item.img} alt={item.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-[10px] text-gray-400 text-center leading-tight px-1">{item.name?.slice(0, 8) || "Item"}</span>
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-gray-800 truncate">{item.name}</p>
+                <p className="text-[11px] text-gray-400">Qty: {item.qty || 1}</p>
+              </div>
+              <span className="text-xs font-semibold text-gray-700">₱{((item.price || 0) * (item.qty || 1)).toLocaleString()}</span>
+            </div>
+          ))}
+          {cartItems.length > 4 && (
+            <p className="px-4 py-2 text-[11px] text-gray-400 text-center">+{cartItems.length - 4} more item(s)</p>
+          )}
+        </div>
       )}
       <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 rounded-b-xl">
         <div className="flex items-center justify-between mb-2">
           <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Subtotal</span>
-          <span className="text-sm font-bold text-gray-800">₱0.00</span>
+          <span className="text-sm font-bold text-gray-800">₱{subtotal.toLocaleString()}.00</span>
         </div>
         <p className="text-xs text-gray-400 mb-3">Shipping and taxes calculated at checkout.</p>
         <button onClick={() => onNavigate?.("cart")} className="w-full py-2 text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90" style={{ backgroundColor: SITE_GREEN }}>View Cart</button>

@@ -16,6 +16,7 @@ export default function Register({ onNavigate }) {
       lastName: "",
       email: "",
       phone: "",
+      username: "",
       password: "",
       confirmPassword: "",
     }
@@ -85,11 +86,14 @@ export default function Register({ onNavigate }) {
         first_name: form.firstName,
         last_name: form.lastName,
         email: form.email,
-        phone: form.phone,
+        phone_number: form.phone,
+        username: form.username || undefined,
         password: form.password,
       })
       if (result.success || result.status === "success") {
-        onNavigate("home")
+        sessionStorage.setItem("registerEmail", form.email)
+        sessionStorage.setItem("registerPassword", form.password)
+        onNavigate("login")
       } else {
         setError(result.message || "Registration failed. Please try again.")
       }
@@ -161,6 +165,18 @@ export default function Register({ onNavigate }) {
                   <input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} placeholder="0917 123 4567"
                     className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Username</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                  </span>
+                  <input type="text" value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} placeholder="juandelacruz"
+                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
+                </div>
+                <p className="text-xs text-gray-400 mt-1">Leave blank to auto-generate from email.</p>
               </div>
 
               <div>

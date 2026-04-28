@@ -31,6 +31,7 @@ export function AuthProvider({ children }) {
       localStorage.setItem("access_token", token)
       localStorage.setItem("user", JSON.stringify(userData))
       setUser(userData)
+      window.dispatchEvent(new CustomEvent("bloomora:cart-updated"))
       console.log("USER SET with real role:", userData)
       return { success: true, role: profile.role }
     } catch (err) {
@@ -86,6 +87,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("access_token")
     localStorage.removeItem("user")
     setUser(null)
+    window.dispatchEvent(new CustomEvent("bloomora:cart-updated"))
   }
 
   const googleLogin = () => googleLoginApi()

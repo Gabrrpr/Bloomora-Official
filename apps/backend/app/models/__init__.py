@@ -1,5 +1,6 @@
 from .base import Base
 from .user import User, RoleEnum, BranchEnum
+from .address import Address
 from .product import Product, Inventory, ProductCategoryEnum, ProductStatusEnum
 from .order import Order, Transaction, Delivery, OrderStatusEnum, PaymentMethodEnum, PaymentStatusEnum, DeliveryStatusEnum
 from .arrangement import Arrangement, Flower, Vase, Wrapping, Accessory
@@ -11,6 +12,8 @@ __all__ = [
     "Base",
     # User
     "User", "RoleEnum", "BranchEnum",
+    # Address
+    "Address",
     # Product
     "Product", "Inventory", "ProductCategoryEnum", "ProductStatusEnum",
     # Order

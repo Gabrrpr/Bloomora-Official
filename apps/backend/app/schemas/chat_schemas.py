@@ -6,12 +6,14 @@ from datetime import datetime
 class MessageCreate(BaseModel):
     user_id: UUID
     text: str
+    image_url: str | None = None
 
 class MessageOut(BaseModel):
     id: UUID
     user_id: UUID
     message: str
     sender: str
+    image_url: str | None = None
     is_read: int
     created_at: datetime
 

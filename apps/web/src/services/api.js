@@ -47,8 +47,26 @@ export const api = {
     return this.post('/chats/sessions');
   },
 
-  async sendMessage(user_id, text) {
-    return this.post('/chats/messages', { user_id, text });
+  async sendMessage(user_id, text, image_url = null) {
+    return this.post('/chats/messages', { user_id, text, image_url });
+  },
+
+  async uploadChatImage(file) {
+    const token = localStorage.getItem('access_token');
+    const url = `${API_BASE}/chats/upload`;
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: formData,
+    });
+    if (!response.ok) {
+      throw new Error(`API Error: ${response.status}`);
+    }
+    return response.json();
   },
 
   async getChatHistory(user_id) {
@@ -167,6 +185,27 @@ export const api = {
     return this.post('/customization/check-and-generate', data);
   },
 
+  // ── Addresses ───────────────────────────────────────────────────────────
+  async getAddresses() {
+    return this.get('/addresses/');
+  },
+
+  async createAddress(data) {
+    return this.post('/addresses/', data);
+  },
+
+  async updateAddress(addressId, data) {
+    return this.patch(`/addresses/${addressId}`, data);
+  },
+
+  async deleteAddress(addressId) {
+    return this.delete(`/addresses/${addressId}`);
+  },
+
+  async setDefaultAddress(addressId) {
+    return this.patch(`/addresses/${addressId}/set-default`, {});
+  },
+
   // ── Site Customization ──────────────────────────────────────────────────
   async getHeroSlides() {
     return this.get('/site-customization/hero');
@@ -179,4 +218,3 @@ export const api = {
     });
   },
 };
-

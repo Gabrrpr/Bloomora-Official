@@ -57,6 +57,8 @@ class RegisterRequest(BaseModel):
     password: str
     middle_name: Optional[str] = None
     phone_number: Optional[str] = None
+    address: Optional[str] = None
+    username: Optional[str] = None
 
 class TokenResponse(BaseModel):
     access_token: str
@@ -162,9 +164,15 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     user.first_name = payload.first_name
     user.middle_name = payload.middle_name
     user.last_name = payload.last_name
-    user.username = generate_username(payload.email, db)
+    if payload.username:
+        if db.query(User).filter(User.username == payload.username).first():
+            raise HTTPException(status_code=400, detail="Username already taken.")
+        user.username = payload.username
+    else:
+        user.username = generate_username(payload.email, db)
     user.password_hash = hash_password(payload.password)
     user.phone_number = payload.phone_number
+    user.address = payload.address
     user.is_verified = True
     user.is_active = True
     user.role = RoleEnum.customer

@@ -51,3 +51,4 @@ class User(Base):
     chats = relationship("Chat", back_populates="user")
     activity_logs = relationship("ActivityLog", back_populates="user")
     ai_usage_logs = relationship("AIUsageLog", back_populates="user")
+    addresses = relationship("Address", back_populates="user", cascade="all, delete-orphan")

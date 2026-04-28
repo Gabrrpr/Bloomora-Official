@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from "react"
+﻿import { useState, useRef, useEffect, useCallback } from "react"
 import { useAuth } from '../context/AuthContext.jsx'
 import { api } from '../services/api.js'
 
@@ -41,7 +41,6 @@ export default function ChatWidget() {
   const bottomRef = useRef(null)
   const fileInputRef = useRef(null)
 
-  // Track sent messages to prevent duplicates
   const sentMessagesRef = useRef(new Set())
   const wsRef = useRef(null)
 
@@ -58,7 +57,6 @@ export default function ChatWidget() {
       const newSessionId = data.id
       setSessionId(newSessionId)
 
-      // Load previous chat history
       try {
         const history = await api.getChatHistory(newSessionId)
         if (history && history.length > 0) {
@@ -66,6 +64,7 @@ export default function ChatWidget() {
             id: msg.id,
             from: msg.sender === 'customer' ? 'user' : 'bot',
             text: msg.message,
+            image: msg.image_url,
             time: msg.created_at,
           }))
           setMessages(prev => [WELCOME_MESSAGE, ...formatted])
@@ -74,23 +73,21 @@ export default function ChatWidget() {
         console.error('History load error:', histErr)
       }
 
-      // Use user.id (UUID) for WebSocket, not email
       const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/${newSessionId}`)
       wsRef.current = websocket
 
       websocket.onopen = () => console.log('WS connected')
       websocket.onmessage = (event) => {
         const data = JSON.parse(event.data)
-        // Skip echo of our own messages (already added optimistically)
         if (data.sender === 'customer') return
         setMessages(prev => {
-          // Extra dedup: don't add if same text from bot already exists as last message
           const last = prev[prev.length - 1]
-          if (last && last.from === 'bot' && last.text === data.message) return prev
+          if (last && last.from === 'bot' && last.text === data.message && last.image === data.image_url) return prev
           return [...prev, {
             id: data.id || Date.now(),
             from: 'bot',
-            text: data.message
+            text: data.message,
+            image: data.image_url,
           }]
         })
       }
@@ -106,7 +103,6 @@ export default function ChatWidget() {
   const sendMessage = useCallback(async (text, imageData = null) => {
     if ((!text.trim() && !imageData) || !sessionId || sending) return
 
-    // Prevent duplicate sends of same text within 2 seconds
     const trimmedText = text.trim()
     if (sentMessagesRef.current.has(trimmedText)) return
     sentMessagesRef.current.add(trimmedText)
@@ -124,7 +120,7 @@ export default function ChatWidget() {
     setAttachedImage(null)
     setTyping(true)
     try {
-      await api.sendMessage(sessionId, text)
+      await api.sendMessage(sessionId, text, imageData)
       setTyping(false)
     } catch (err) {
       console.error('Message send error:', err)
@@ -134,9 +130,20 @@ export default function ChatWidget() {
     }
   }, [sessionId, sending])
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!input.trim() && !attachedImage) return
-    sendMessage(input, attachedImage?.previewUrl || null)
+    let imageUrl = null
+    if (attachedImage?.file) {
+      try {
+        const result = await api.uploadChatImage(attachedImage.file)
+        imageUrl = result.image_url
+      } catch (err) {
+        console.error('Image upload failed:', err)
+        setMessages(prev => [...prev, { id: Date.now(), from: 'bot', text: 'Failed to upload image. Please try again.' }])
+        return
+      }
+    }
+    sendMessage(input, imageUrl)
   }
 
   const handleFileChange = (e) => {
@@ -197,7 +204,6 @@ export default function ChatWidget() {
               border: "1px solid #e0f0e8",
             }}
           >
-            {/* ── Header ── */}
             <div
               className="flex items-center justify-between px-4 py-3 flex-shrink-0"
               style={{ background: `linear-gradient(135deg, ${DG} 0%, ${G} 100%)` }}
@@ -248,7 +254,6 @@ export default function ChatWidget() {
               </div>
             </div>
 
-            {/* ── Messages ── */}
             <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3" style={{ backgroundColor: "#f7faf8" }}>
               {messages.map(msg => (
                 <div key={msg.id} className={`flex items-end gap-2 ${msg.from === "user" ? "justify-end" : "justify-start"}`}>
@@ -261,7 +266,6 @@ export default function ChatWidget() {
                     </div>
                   )}
                   <div style={{ maxWidth: "78%" }}>
-                    {/* Image attachment */}
                     {msg.image && (
                       <div className={`mb-1 ${msg.from === "user" ? "flex justify-end" : ""}`}>
                         <img
@@ -277,7 +281,6 @@ export default function ChatWidget() {
                         />
                       </div>
                     )}
-                    {/* Text bubble */}
                     {msg.text && (
                       <div
                         className="px-3.5 py-2.5 text-sm leading-relaxed"
@@ -311,7 +314,6 @@ export default function ChatWidget() {
               <div ref={bottomRef} />
             </div>
 
-            {/* ── Quick replies ── */}
             {messages.length === 1 && size !== "small" && (
               <div className="px-4 py-2.5 flex flex-wrap gap-1.5 border-t" style={{ backgroundColor: "white", borderColor: "#e9f5ea" }}>
                 {QUICK_REPLIES.map(q => (
@@ -327,7 +329,6 @@ export default function ChatWidget() {
               </div>
             )}
 
-            {/* ── Image preview strip (shown when image is attached) ── */}
             {attachedImage && (
               <div className="px-3 pt-2 flex items-center gap-2 border-t" style={{ backgroundColor: "white", borderColor: "#e9f5ea" }}>
                 <div className="relative flex-shrink-0">
@@ -351,9 +352,7 @@ export default function ChatWidget() {
               </div>
             )}
 
-            {/* ── Input ── */}
             <div className="flex items-center gap-2 px-3 py-3 border-t" style={{ backgroundColor: "white", borderColor: "#e9f5ea" }}>
-              {/* Hidden file input */}
               <input
                 ref={fileInputRef}
                 type="file"
@@ -362,7 +361,6 @@ export default function ChatWidget() {
                 onChange={handleFileChange}
               />
 
-              {/* Attach photo button */}
               <button
                 onClick={() => fileInputRef.current?.click()}
                 disabled={!user}
@@ -399,7 +397,6 @@ export default function ChatWidget() {
               </button>
             </div>
           </div>
-
         ) : (
           <button
             onClick={() => setOpen(true)}
@@ -423,4 +420,3 @@ export default function ChatWidget() {
     </>
   )
 }
-

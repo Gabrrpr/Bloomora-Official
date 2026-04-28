@@ -1,4 +1,10 @@
-const CART_KEY = "bloomora_cart"
+function getCartKey() {
+  try {
+    const user = JSON.parse(localStorage.getItem("user"))
+    if (user?.email) return `bloomora_cart_${user.email}`
+  } catch {}
+  return "bloomora_cart_guest"
+}
 
 function broadcastCartUpdate() {
   window.dispatchEvent(new CustomEvent("bloomora:cart-updated"))
@@ -6,19 +12,19 @@ function broadcastCartUpdate() {
 
 export function getCart() {
   try {
-    return JSON.parse(localStorage.getItem(CART_KEY)) || []
+    return JSON.parse(localStorage.getItem(getCartKey())) || []
   } catch {
     return []
   }
 }
 
 export function clearCart() {
-  localStorage.removeItem(CART_KEY)
+  localStorage.removeItem(getCartKey())
   broadcastCartUpdate()
 }
 
 export function setCart(items) {
-  localStorage.setItem(CART_KEY, JSON.stringify(items))
+  localStorage.setItem(getCartKey(), JSON.stringify(items))
   broadcastCartUpdate()
 }
 

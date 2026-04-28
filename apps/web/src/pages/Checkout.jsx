@@ -18,9 +18,24 @@ export default function Checkout({ onNavigate }) {
 
   const [customer, setCustomer] = useState(null)
   const [loadingProfile, setLoadingProfile] = useState(true)
-  const [showAddressModal, setShowAddressModal] = useState(false)
-  const [addressForm, setAddressForm] = useState({ phone: "", address: "" })
-  const [savingAddress, setSavingAddress] = useState(false)
+
+  // ── Recipient type & addresses ────────────────────────────────────────────
+  const [recipientType, setRecipientType] = useState("myself") // "myself" | "someone_else"
+  const [addresses, setAddresses] = useState([])
+  const [selectedAddressId, setSelectedAddressId] = useState(null)
+  const [loadingAddresses, setLoadingAddresses] = useState(true)
+
+  // Manual address form for "someone else"
+  const [showManualModal, setShowManualModal] = useState(false)
+  const [manualForm, setManualForm] = useState({
+    recipient_name: "",
+    phone: "",
+    street: "",
+    barangay: "",
+    city: "",
+    province: "",
+    zip: "",
+  })
 
   useEffect(() => {
     const items = getCart().filter(i => i.checked)
@@ -41,10 +56,6 @@ export default function Checkout({ onNavigate }) {
         if (res.ok) {
           const profile = await res.json()
           setCustomer(profile)
-          setAddressForm({
-            phone: profile.phone_number || "",
-            address: profile.address || "",
-          })
         }
       } catch (e) {
         console.error("Failed to fetch profile", e)
@@ -53,6 +64,33 @@ export default function Checkout({ onNavigate }) {
       }
     }
     fetchProfile()
+  }, [])
+
+  // Load saved addresses
+  useEffect(() => {
+    async function loadAddresses() {
+      const token = localStorage.getItem("access_token")
+      if (!token) {
+        setLoadingAddresses(false)
+        return
+      }
+      try {
+        const res = await api.getAddresses()
+        const addrs = res.addresses || []
+        setAddresses(addrs)
+        const defaultAddr = addrs.find(a => a.is_default)
+        if (defaultAddr) {
+          setSelectedAddressId(defaultAddr.id)
+        } else if (addrs.length > 0) {
+          setSelectedAddressId(addrs[0].id)
+        }
+      } catch (e) {
+        console.error("Failed to load addresses", e)
+      } finally {
+        setLoadingAddresses(false)
+      }
+    }
+    loadAddresses()
   }, [])
 
   const subtotal = cartItems.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0)
@@ -69,35 +107,42 @@ export default function Checkout({ onNavigate }) {
     : user
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
     : "Guest"
-  const phone = customer?.phone_number || user?.phoneNumber || ""
-  const address = customer?.address || user?.address || ""
 
-  const handleSaveAddress = async (e) => {
-    e.preventDefault()
-    setSavingAddress(true)
-    setError("")
-    try {
-      const updated = await api.updateProfile({
-        phone_number: addressForm.phone,
-        address: addressForm.address,
-      })
-      setCustomer(updated.user)
-      setShowAddressModal(false)
-    } catch (err) {
-      setError(err.message || "Failed to save address.")
-    } finally {
-      setSavingAddress(false)
+  const selectedAddress = addresses.find(a => a.id === selectedAddressId)
+
+  const getDeliveryDetails = () => {
+    if (recipientType === "myself") {
+      if (selectedAddress) {
+        return {
+          name: selectedAddress.recipient_name,
+          phone: selectedAddress.phone,
+          address: [selectedAddress.street, selectedAddress.barangay, selectedAddress.city, selectedAddress.province, selectedAddress.zip_code].filter(Boolean).join(", "),
+        }
+      }
+      // fallback to legacy profile address
+      return {
+        name: fullName,
+        phone: customer?.phone_number || user?.phoneNumber || "",
+        address: customer?.address || user?.address || "",
+      }
+    } else {
+      return {
+        name: manualForm.recipient_name,
+        phone: manualForm.phone,
+        address: [manualForm.street, manualForm.barangay, manualForm.city, manualForm.province, manualForm.zip].filter(Boolean).join(", "),
+      }
     }
   }
+
+  const deliveryDetails = getDeliveryDetails()
 
   const handlePlaceOrder = async () => {
     if (cartItems.length === 0) {
       setError("Your cart is empty.")
       return
     }
-    if (!address || !phone) {
-      setShowAddressModal(true)
-      setError("Please provide your delivery address and phone number before placing an order.")
+    if (!deliveryDetails.address || !deliveryDetails.phone) {
+      setError("Please provide a complete delivery address and phone number before placing an order.")
       return
     }
     setPlacing(true)
@@ -113,8 +158,8 @@ export default function Checkout({ onNavigate }) {
           qty: i.qty,
           img: i.img,
         })),
-        delivery_address: address,
-        delivery_notes: `Delivery time: ${deliveryTime}`,
+        delivery_address: deliveryDetails.address,
+        delivery_notes: `Delivery time: ${deliveryTime} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone})`,
         scheduled_at: tomorrow.toISOString(),
       })
 
@@ -125,7 +170,7 @@ export default function Checkout({ onNavigate }) {
         shipping,
         total,
         deliveryTime,
-        deliveryAddress: address,
+        deliveryAddress: deliveryDetails.address,
         scheduledDate: fmt(tomorrow),
         placedAt: new Date().toISOString(),
       }
@@ -153,40 +198,121 @@ export default function Checkout({ onNavigate }) {
 
             {/* Shipping Address */}
             <div className="bg-white border border-gray-200 rounded-xl p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                  <h2 className="text-sm font-semibold text-gray-700">Shipping Address</h2>
-                </div>
+              <div className="flex items-center gap-2 mb-4">
+                <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                <h2 className="text-sm font-semibold text-gray-700">Shipping Address</h2>
+              </div>
+
+              {/* Recipient type toggle */}
+              <div className="flex gap-2 mb-4 p-1 bg-gray-100 rounded-lg">
                 <button
-                  onClick={() => setShowAddressModal(true)}
-                  className="text-xs font-semibold hover:underline"
-                  style={{ color: G }}
+                  onClick={() => setRecipientType("myself")}
+                  className="flex-1 py-2 text-xs font-semibold rounded-md transition"
+                  style={{
+                    backgroundColor: recipientType === "myself" ? "white" : "transparent",
+                    color: recipientType === "myself" ? G : "#6b7280",
+                    boxShadow: recipientType === "myself" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+                  }}
                 >
-                  EDIT
+                  📦 For Myself
+                </button>
+                <button
+                  onClick={() => setRecipientType("someone_else")}
+                  className="flex-1 py-2 text-xs font-semibold rounded-md transition"
+                  style={{
+                    backgroundColor: recipientType === "someone_else" ? "white" : "transparent",
+                    color: recipientType === "someone_else" ? G : "#6b7280",
+                    boxShadow: recipientType === "someone_else" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
+                  }}
+                >
+                  🎁 For Someone Else
                 </button>
               </div>
-              <div className="flex items-start gap-4 text-sm">
-                <div className="min-w-0">
-                  {loadingProfile ? (
-                    <p className="text-gray-400">Loading address...</p>
+
+              {recipientType === "myself" ? (
+                <div>
+                  {loadingAddresses ? (
+                    <p className="text-sm text-gray-400">Loading addresses...</p>
+                  ) : addresses.length === 0 ? (
+                    <div className="text-center py-4">
+                      <p className="text-sm text-gray-500 mb-2">No saved addresses yet</p>
+                      <button
+                        onClick={() => onNavigate("profile")}
+                        className="px-4 py-2 text-xs font-semibold text-white rounded-lg"
+                        style={{ backgroundColor: G }}
+                      >
+                        Add Address in Profile
+                      </button>
+                    </div>
                   ) : (
-                    <>
-                      <div className="flex items-center gap-4 mb-2">
-                        <span className="font-semibold text-gray-800">{fullName || "Guest"}</span>
-                        <span className="text-gray-500">{phone || "No phone number"}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold text-white px-2 py-0.5 rounded" style={{ backgroundColor: G }}>ADDRESS</span>
-                        <span className="text-gray-600">{address || "No delivery address set."}</span>
-                      </div>
-                      {(!address || !phone) && (
-                        <p className="text-xs text-red-500 mt-2">Please add your delivery address and phone number to continue.</p>
-                      )}
-                    </>
+                    <div className="space-y-2">
+                      {addresses.map((addr) => (
+                        <div
+                          key={addr.id}
+                          onClick={() => setSelectedAddressId(addr.id)}
+                          className={`border rounded-lg p-3 cursor-pointer transition ${selectedAddressId === addr.id ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-gray-300"}`}
+                        >
+                          <div className="flex items-start gap-2">
+                            <div className="mt-0.5 flex-shrink-0">
+                              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${selectedAddressId === addr.id ? "border-green-500" : "border-gray-300"}`}>
+                                {selectedAddressId === addr.id && <div className="w-2 h-2 rounded-full" style={{ backgroundColor: G }} />}
+                              </div>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-sm font-semibold text-gray-800">{addr.label}</span>
+                                {addr.is_default && (
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: G }}>Default</span>
+                                )}
+                              </div>
+                              <p className="text-xs text-gray-700">{addr.recipient_name} — {addr.phone}</p>
+                              <p className="text-xs text-gray-500 truncate">
+                                {addr.street}{addr.barangay ? `, ${addr.barangay}` : ""}, {addr.city}, {addr.province}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => onNavigate("profile")}
+                        className="w-full py-2 text-xs font-semibold text-gray-500 border border-dashed border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                      >
+                        + Manage Addresses
+                      </button>
+                    </div>
                   )}
                 </div>
-              </div>
+              ) : (
+                <div>
+                  {manualForm.recipient_name && manualForm.phone && manualForm.street ? (
+                    <div className="border border-green-200 bg-green-50 rounded-lg p-3 mb-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-800">{manualForm.recipient_name}</p>
+                          <p className="text-xs text-gray-600">{manualForm.phone}</p>
+                          <p className="text-xs text-gray-500">
+                            {[manualForm.street, manualForm.barangay, manualForm.city, manualForm.province, manualForm.zip].filter(Boolean).join(", ")}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setShowManualModal(true)}
+                          className="text-xs font-semibold hover:underline"
+                          style={{ color: G }}
+                        >
+                          EDIT
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setShowManualModal(true)}
+                      className="w-full py-3 text-sm font-semibold border-2 border-dashed border-gray-300 rounded-lg hover:border-green-400 hover:bg-green-50 transition text-gray-500"
+                    >
+                      + Enter Recipient Details
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Package */}
@@ -358,51 +484,106 @@ export default function Checkout({ onNavigate }) {
         </div>
       </div>
 
-      {/* Address Modal */}
-      {showAddressModal && (
+      {/* Manual Recipient Modal */}
+      {showManualModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-gray-800 mb-1">Delivery Details</h3>
-            <p className="text-sm text-gray-400 mb-4">Please provide your phone number and delivery address.</p>
-            <form onSubmit={handleSaveAddress} className="space-y-4">
+          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold text-gray-800 mb-1">Recipient Details</h3>
+            <p className="text-sm text-gray-400 mb-4">Enter the delivery details for the recipient.</p>
+            <form onSubmit={(e) => { e.preventDefault(); setShowManualModal(false); }} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Phone Number</label>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Recipient Name *</label>
+                <input
+                  type="text"
+                  value={manualForm.recipient_name}
+                  onChange={e => setManualForm({ ...manualForm, recipient_name: e.target.value })}
+                  placeholder="Full name of recipient"
+                  required
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Phone Number *</label>
                 <input
                   type="tel"
-                  value={addressForm.phone}
-                  onChange={e => setAddressForm({ ...addressForm, phone: e.target.value })}
+                  value={manualForm.phone}
+                  onChange={e => setManualForm({ ...manualForm, phone: e.target.value })}
                   placeholder="0917 123 4567"
                   required
                   className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-500 mb-1.5">Delivery Address</label>
-                <textarea
-                  value={addressForm.address}
-                  onChange={e => setAddressForm({ ...addressForm, address: e.target.value })}
-                  placeholder="Street, Barangay, City, Province, ZIP"
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Street Address *</label>
+                <input
+                  type="text"
+                  value={manualForm.street}
+                  onChange={e => setManualForm({ ...manualForm, street: e.target.value })}
+                  placeholder="123 Main St, Building Name"
                   required
-                  rows={3}
-                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 resize-none"
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
                 />
               </div>
-              {error && <p className="text-xs text-red-500">{error}</p>}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Barangay</label>
+                  <input
+                    type="text"
+                    value={manualForm.barangay}
+                    onChange={e => setManualForm({ ...manualForm, barangay: e.target.value })}
+                    placeholder="Barangay Malabanias"
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">City / Municipality *</label>
+                  <input
+                    type="text"
+                    value={manualForm.city}
+                    onChange={e => setManualForm({ ...manualForm, city: e.target.value })}
+                    placeholder="Angeles"
+                    required
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">Province *</label>
+                  <input
+                    type="text"
+                    value={manualForm.province}
+                    onChange={e => setManualForm({ ...manualForm, province: e.target.value })}
+                    placeholder="Pampanga"
+                    required
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-500 mb-1.5">ZIP Code</label>
+                  <input
+                    type="text"
+                    value={manualForm.zip}
+                    onChange={e => setManualForm({ ...manualForm, zip: e.target.value })}
+                    placeholder="2009"
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                  />
+                </div>
+              </div>
               <div className="flex gap-3 pt-1">
                 <button
                   type="button"
-                  onClick={() => setShowAddressModal(false)}
+                  onClick={() => setShowManualModal(false)}
                   className="flex-1 py-2.5 text-sm font-semibold border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={savingAddress}
-                  className="flex-1 py-2.5 text-sm font-semibold text-white rounded-lg transition hover:brightness-105 disabled:opacity-50"
+                  className="flex-1 py-2.5 text-sm font-semibold text-white rounded-lg transition hover:brightness-105"
                   style={{ backgroundColor: G }}
                 >
-                  {savingAddress ? "Saving..." : "Save Details"}
+                  Save Details
                 </button>
               </div>
             </form>
