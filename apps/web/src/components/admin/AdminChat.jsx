@@ -78,6 +78,7 @@ export default function AdminChat() {
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
   const wsRef = useRef(null)
+  const activeIdRef = useRef(activeId)
 
   const activeConvo = conversations.find(c => c.customer_id === activeId)
   const filtered = conversations.filter(c => c.user_name?.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -145,9 +146,13 @@ export default function AdminChat() {
     }
   }
 
+  // Sync activeIdRef
+  useEffect(() => { activeIdRef.current = activeId }, [activeId])
+
   // ── WebSocket connection ──────────────────────────────────────────────────
   useEffect(() => {
-    if (!user || !['admin', 'staff'].includes(user.role) || wsRef.current) return
+    if (!user || !['admin', 'staff'].includes(user.role)) return
+    if (wsRef.current) return
 
     const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/${user.id}`)
     wsRef.current = websocket
@@ -158,7 +163,8 @@ export default function AdminChat() {
       console.log('Admin WS message:', data)
 
       // If message is for active conversation, add it
-      if (activeId && data.user_id === activeId) {
+      const currentActiveId = activeIdRef.current
+      if (currentActiveId && data.user_id === currentActiveId) {
         setMessages(prev => {
           // Deduplicate
           if (prev.find(m => m.id === data.id)) return prev
@@ -179,7 +185,7 @@ export default function AdminChat() {
 
     setWs(websocket)
     return () => websocket.close()
-  }, [user, activeId, loadConversations])
+  }, [user, loadConversations])
 
   // ── Load conversations on mount ───────────────────────────────────────────
   useEffect(() => {

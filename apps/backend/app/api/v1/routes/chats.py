@@ -19,6 +19,19 @@ UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
+def serialize_chat(msg: Chat) -> dict:
+    """Convert a Chat ORM object to a plain dict compatible with MessageOut."""
+    return {
+        "id": msg.id,
+        "user_id": msg.user_id,
+        "message": msg.message,
+        "sender": msg.sender.value if hasattr(msg.sender, "value") else str(msg.sender),
+        "image_url": msg.image_url,
+        "is_read": msg.is_read,
+        "created_at": msg.created_at,
+    }
+
+
 @router.post("/sessions")
 def create_session(
     current_user: User = Depends(get_current_user),
@@ -74,17 +87,25 @@ async def create_message(
         "is_read": new_message.is_read
     }
 
-    # Send back to the customer
-    await manager.send_to_user(str(message.user_id), payload)
-
     if sender == 'customer':
+        # Echo back to the customer
+        try:
+            await manager.send_to_user(str(message.user_id), payload)
+        except Exception:
+            pass
         # Notify all connected staff
-        await manager.broadcast_to_staff(payload)
+        try:
+            await manager.broadcast_to_staff(payload)
+        except Exception:
+            pass
     else:
-        # Staff replied — notify the customer
-        await manager.send_to_user(str(message.user_id), payload)
+        # Staff replied — notify only the customer
+        try:
+            await manager.send_to_user(str(message.user_id), payload)
+        except Exception:
+            pass
 
-    return new_message
+    return serialize_chat(new_message)
 
 @router.get("/history/{user_id}", response_model=List[MessageOut])
 def get_chat_history(
@@ -97,7 +118,7 @@ def get_chat_history(
             raise HTTPException(status_code=403, detail="Access denied")
 
     messages = db.query(Chat).filter(Chat.user_id == user_id).order_by(Chat.created_at.asc()).all()
-    return messages
+    return [serialize_chat(m) for m in messages]
 
 @router.get("/conversations", response_model=ConversationList)
 def get_all_conversations(

@@ -27,6 +27,8 @@ const SIZES = {
   large:  { w: 440, h: 620 },
 }
 
+const CHAT_SESSION_KEY = 'bloomora_chat_session'
+
 export default function ChatWidget() {
   const { user } = useAuth()
   const [open, setOpen] = useState(false)
@@ -34,7 +36,12 @@ export default function ChatWidget() {
   const [messages, setMessages] = useState([WELCOME_MESSAGE])
   const [input, setInput] = useState("")
   const [typing, setTyping] = useState(false)
-  const [sessionId, setSessionId] = useState(null)
+  const [sessionId, setSessionId] = useState(() => {
+    try {
+      const saved = localStorage.getItem(CHAT_SESSION_KEY)
+      return saved ? JSON.parse(saved).id : null
+    } catch { return null }
+  })
   const [ws, setWs] = useState(null)
   const [attachedImage, setAttachedImage] = useState(null)
   const [sending, setSending] = useState(false)
@@ -51,14 +58,19 @@ export default function ChatWidget() {
   }, [])
 
   const createSession = useCallback(async () => {
-    if (!user || sessionId || wsRef.current) return
+    if (!user) return
     try {
-      const data = await api.createSession()
-      const newSessionId = data.id
-      setSessionId(newSessionId)
+      let currentSessionId = sessionId
+      if (!currentSessionId) {
+        const data = await api.createSession()
+        currentSessionId = data.id
+        setSessionId(currentSessionId)
+        localStorage.setItem(CHAT_SESSION_KEY, JSON.stringify({ id: currentSessionId }))
+      }
 
+      // Always refresh history when chat opens
       try {
-        const history = await api.getChatHistory(newSessionId)
+        const history = await api.getChatHistory(currentSessionId)
         if (history && history.length > 0) {
           const formatted = history.map(msg => ({
             id: msg.id,
@@ -67,33 +79,36 @@ export default function ChatWidget() {
             image: msg.image_url,
             time: msg.created_at,
           }))
-          setMessages(prev => [WELCOME_MESSAGE, ...formatted])
+          setMessages([WELCOME_MESSAGE, ...formatted])
         }
       } catch (histErr) {
         console.error('History load error:', histErr)
       }
 
-      const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/${newSessionId}`)
-      wsRef.current = websocket
+      // Connect WS only if not already connected
+      if (!wsRef.current) {
+        const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/${currentSessionId}`)
+        wsRef.current = websocket
 
-      websocket.onopen = () => console.log('WS connected')
-      websocket.onmessage = (event) => {
-        const data = JSON.parse(event.data)
-        if (data.sender === 'customer') return
-        setMessages(prev => {
-          const last = prev[prev.length - 1]
-          if (last && last.from === 'bot' && last.text === data.message && last.image === data.image_url) return prev
-          return [...prev, {
-            id: data.id || Date.now(),
-            from: 'bot',
-            text: data.message,
-            image: data.image_url,
-          }]
-        })
+        websocket.onopen = () => console.log('WS connected')
+        websocket.onmessage = (event) => {
+          const data = JSON.parse(event.data)
+          if (data.sender === 'customer') return
+          setMessages(prev => {
+            const last = prev[prev.length - 1]
+            if (last && last.from === 'bot' && last.text === data.message && last.image === data.image_url) return prev
+            return [...prev, {
+              id: data.id || Date.now(),
+              from: 'bot',
+              text: data.message,
+              image: data.image_url,
+            }]
+          })
+        }
+        websocket.onerror = (err) => console.error('WS error:', err)
+        websocket.onclose = () => { wsRef.current = null }
+        setWs(websocket)
       }
-      websocket.onerror = (err) => console.error('WS error:', err)
-      websocket.onclose = () => { wsRef.current = null }
-      setWs(websocket)
     } catch (err) {
       console.error('Session create error:', err)
       setMessages(prev => [...prev, { id: Date.now(), from: 'bot', text: 'Sorry, chat service temporarily unavailable.' }])
@@ -162,8 +177,18 @@ export default function ChatWidget() {
 
   useEffect(() => {
     if (open) createSession()
-    return () => { if (ws) ws.close() }
-  }, [open])
+  }, [open, createSession])
+
+  useEffect(() => {
+    if (!user) {
+      localStorage.removeItem(CHAT_SESSION_KEY)
+      setSessionId(null)
+      if (wsRef.current) {
+        wsRef.current.close()
+        wsRef.current = null
+      }
+    }
+  }, [user])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
