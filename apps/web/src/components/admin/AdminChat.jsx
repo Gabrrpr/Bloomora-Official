@@ -5,6 +5,7 @@ import { api } from "../../services/api.js"
 const DG = "#0C573E"
 const G  = "#2E8B34"
 
+// Should be customizable by admin in the future, but for now these are some common replies we can offer with one click to speed up response time and maintain consistency in communication
 const QUICK_REPLIES = [
   "Thank you for reaching out! How can I help you today?",
   "Your order is being prepared and will be delivered soon.",

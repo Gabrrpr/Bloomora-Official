@@ -14,7 +14,9 @@ import AdminActivityLogs from "./AdminActivityLogs"
 import AdminSettings     from "./AdminSettings"
 import AdminHero         from "./AdminHero"
 import AdminAdvertisements from "./AdminAdvertisements"
+import { api } from "../../services/api.js"
 import { GreenCard, WhiteCard, ComingSoon } from "./_adminShared"
+
 
 const DG = "#0C573E"
 const G  = "#2E8B34"
@@ -302,19 +304,46 @@ function UserDropdown({ user, onLogout, onProfile, onSettings }) {
 
 // ── Dashboard Panel ───────────────────────────────────────────────────────────
 function DashboardPanel({ user }) {
+  const [lowStock, setLowStock] = useState([])
+  const [lowStockCount, setLowStockCount] = useState(0)
+  const [ordersToday, setOrdersToday] = useState(0)
+  const [pendingOrders, setPendingOrders] = useState(0)
+  const [recentOrders, setRecentOrders] = useState([])
   const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
   const todayIdx = (() => { const d = new Date().getDay(); return d === 0 ? 6 : d - 1 })()
   const CHART_HEIGHT = 160
   const Y_LABELS = ["₱15k", "₱10k", "₱5k", "₱0"]
 
+  useEffect(() => {
+
+    // Fetch low stock - disabled due to DB table missing
+
+
+
+    // Fetch orders
+    api.getMyOrders('today').then(data => {
+      setOrdersToday(data.length || 0)
+    }).catch(() => setOrdersToday(0))
+
+    api.getAdminOrders({ status: 'pending' }).then(data => {
+      setPendingOrders(data.length || 0)
+      setRecentOrders(data.slice(0,5) || [])
+    }).catch(() => {
+      setPendingOrders(0)
+      setRecentOrders([])
+    })
+  }, [])
+
   return (
+
     <div className="space-y-5">
       <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <GreenCard label="Total Revenue Today" value="₱0" sub="↑ ₱0 vs yesterday" />
         <WhiteCard label="Orders Today"    value={0} sub="+0 vs yesterday" accentColor="#3b82f6" />
         <WhiteCard label="Pending Orders"  value={0} sub="−0 vs yesterday" subUp={false} accentColor="#f59e0b" />
-        <WhiteCard label="Low Stock Alerts" value={0} sub="Needs restock today" subGray accentColor="#ef4444" />
+        <WhiteCard label="Low Stock Alerts" value={lowStockCount || 0} sub="Needs restock today" subGray accentColor="#ef4444" />
+
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4">
@@ -402,7 +431,27 @@ function DashboardPanel({ user }) {
             <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Product</span>
             <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Stock</span>
           </div>
-          <p className="px-5 py-8 text-center text-sm text-gray-400">No low stock items</p>
+{lowStock.length === 0 ? (
+  <p className="px-5 py-8 text-center text-sm text-gray-400">No low stock items</p>
+) : (
+  lowStock.slice(0, 5).map((item) => (
+    <div key={item.id} className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
+      <div className="w-8 h-8 rounded-lg flex-shrink-0 bg-orange-50 border border-orange-200 flex items-center justify-center">
+        <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-2.048-.833-2.818 0L3.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+        </svg>
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+        <p className="text-xs text-gray-500">Stock: {item.stock}/{item.reorder_point}</p>
+      </div>
+      <span className="text-xs font-semibold text-red-600 px-2 py-0.5 rounded-full bg-red-50">
+        {item.stock === 0 ? 'Out' : `${item.stock}`}
+      </span>
+    </div>
+  ))
+)}
+
         </div>
       </div>
     </div>

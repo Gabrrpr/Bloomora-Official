@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8001/api/v1';
+const API_BASE = 'http://localhost:8000/api/v1';
 
 export const api = {
   async request(endpoint, options = {}) {
@@ -110,6 +110,11 @@ export const api = {
     return this.get('/products/admin/all');
   },
 
+
+
+
+
+
   async createProduct(formData) {
     const token = localStorage.getItem('access_token');
     const url = `${API_BASE}/products/admin`;
@@ -151,11 +156,13 @@ export const api = {
     return this.post('/orders/', { items, delivery_address, delivery_notes, scheduled_at });
   },
 
+
   async getMyOrders(status) {
     const params = new URLSearchParams();
-    if (status && status !== 'All') params.append('status', status.toLowerCase());
+    if (status && status !== 'All' && status !== 'today') params.append('status', status.toLowerCase().replace(/ /g, '_'));
     return this.get(`/orders/my?${params.toString()}`);
   },
+
 
   async getAdminOrders({ status, search, branch, limit = 100, offset = 0 } = {}) {
     const params = new URLSearchParams();

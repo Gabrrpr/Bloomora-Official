@@ -146,6 +146,32 @@ def get_admin_products(
     return [serialize_product(p) for p in products]
 
 
+@router.get("/low-stock", response_model=List[dict])
+def get_low_stock(
+    limit: int = 5,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get low stock products (current_stock <= reorder_point). Admin/Staff only."""
+    require_admin_or_staff(current_user)
+    from sqlalchemy import and_
+    products = (
+        db.query(Product)
+        .outerjoin(Inventory, Product.id == Inventory.product_id)
+        .filter(
+            and_(
+                Inventory.current_stock <= Inventory.reorder_point,
+                Product.status != ProductStatusEnum.inactive
+            )
+        )
+        .order_by(Inventory.current_stock.asc())
+        .limit(limit)
+        .all()
+    )
+    return [serialize_product(p) for p in products]
+
+
+
 @router.post("/admin", response_model=dict, status_code=201)
 def create_product(
     name: str = Form(...),
