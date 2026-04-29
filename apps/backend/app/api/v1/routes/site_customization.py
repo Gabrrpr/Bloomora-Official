@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_db, get_current_user
 from app.models import User, RoleEnum, SiteCustomization
 from app.schemas.site_customization import HeroCustomizationResponse, HeroCustomizationUpdate, HeroSlide
+from app.schemas.customization_toggle import CustomizationToggleResponse, CustomizationToggleUpdate
+
 
 router = APIRouter(prefix="/site-customization", tags=["Site Customization"])
 
@@ -96,4 +98,47 @@ def update_hero_slides(
     db.refresh(row)
 
     return {"slides": json.loads(row.value)}
+
+
+def _get_or_seed_toggle(db: Session):
+    row = db.query(SiteCustomization).filter(SiteCustomization.key == "customization_enabled").first()
+    if not row:
+        row = SiteCustomization(
+            key="customization_enabled",
+            value=json.dumps({"enabled": true}),
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+    return row
+
+
+@router.get("/customization/toggle", response_model=CustomizationToggleResponse)
+def get_customization_toggle(db: Session = Depends(get_db)):
+    """Public endpoint to check if customization is enabled."""
+    row = _get_or_seed_toggle(db)
+    try:
+        data = json.loads(row.value)
+        return CustomizationToggleResponse(enabled=data.get("enabled", true))
+    except json.JSONDecodeError:
+        return CustomizationToggleResponse(enabled=true)
+
+
+@router.put("/customization/toggle", response_model=CustomizationToggleResponse)
+def update_customization_toggle(
+    payload: CustomizationToggleUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update customization toggle. Admin/Staff only."""
+    require_admin_or_staff(current_user)
+
+    row = _get_or_seed_toggle(db)
+    row.value = json.dumps(payload.model_dump())
+    db.commit()
+    db.refresh(row)
+
+    data = json.loads(row.value)
+    return CustomizationToggleResponse(enabled=data["enabled"])
+
 

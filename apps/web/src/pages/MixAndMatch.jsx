@@ -102,24 +102,30 @@ export default function MixAndMatch({ onNavigate }) {
   const [aiUsage, setAiUsage] = useState(null)
   const [customName, setCustomName] = useState("")
 
+  const [customizationEnabled, setCustomizationEnabled] = useState(true)
+
   useEffect(() => {
     async function load() {
       try {
-        const [prodRes, usageRes] = await Promise.all([
+        const [toggleRes, prodRes, usageRes] = await Promise.all([
+          api.isCustomizationEnabled().catch(() => ({ enabled: true })),
           api.getCustomizationProducts(),
           api.getAiUsage().catch(() => ({ remaining: 5, limit: 5 })),
         ])
+        setCustomizationEnabled(toggleRes.enabled)
         setProducts(Array.isArray(prodRes) ? prodRes : [])
         setAiUsage(usageRes)
       } catch (e) {
         console.error("Failed to load products", e)
         setError("Failed to load products. Please refresh.")
+        setCustomizationEnabled(true)
       } finally {
         setLoading(false)
       }
     }
     load()
   }, [])
+
 
   const getByCategory = (cat) => products.filter(p => p.category === cat)
   const selProd = (cat) => products.find(p => p.id === selections[cat])
@@ -141,6 +147,10 @@ export default function MixAndMatch({ onNavigate }) {
   }
 
   const handleGenerate = async () => {
+    if (!customizationEnabled) {
+      setError("AI Customization is temporarily disabled during peak seasons.")
+      return
+    }
     setGenerating(true); setError(""); setUnavailableItems([])
     const parts = []
     const flower = selProd("flower"), vase = selProd("vase"), wrapping = selProd("wrapping"), accessory = selProd("accessory")
@@ -175,6 +185,7 @@ export default function MixAndMatch({ onNavigate }) {
       setGenerating(false)
     }
   }
+
 
   const handleTryAlt = (field, id) => {
     const m = { flower_id: "flower", vase_id: "vase", wrapping_id: "wrapping", accessory_id: "accessory" }

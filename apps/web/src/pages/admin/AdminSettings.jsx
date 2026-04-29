@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
+
 
 const DG = "#0C573E"
 const G  = "#2E8B34"
@@ -96,6 +97,10 @@ function SaveBtn({ onClick, saved }) {
   )
 }
 
+import { api } from "../../services/api.js"
+
+
+
 export default function AdminSettings() {
   // Store info
   const [storeName, setStoreName] = useState("Esting's Flower International Inc.")
@@ -124,6 +129,11 @@ export default function AdminSettings() {
   const [sameDayCutoff, setSameDayCutoff] = useState("09:00")
   const [delivSaved, setDelivSaved]     = useState(false)
 
+  // Customization Toggle
+  const [customizationEnabled, setCustomizationEnabled] = useState(true)
+  const [toggleSaved, setToggleSaved] = useState(false)
+  const [toggleLoading, setToggleLoading] = useState(false)
+
   // Password
   const [curPwd, setCurPwd]     = useState("")
   const [newPwd, setNewPwd]     = useState("")
@@ -145,7 +155,29 @@ export default function AdminSettings() {
     save(setPwdSaved)
   }
 
+  // Load toggle state
+  useEffect(() => {
+    api.isCustomizationEnabled()
+      .then(data => setCustomizationEnabled(data.enabled))
+      .catch(() => setCustomizationEnabled(true))
+  }, [])
+
+  const handleToggleCustomization = async () => {
+    setToggleLoading(true)
+    try {
+      await api.setCustomizationEnabled(!customizationEnabled)
+      setCustomizationEnabled(!customizationEnabled)
+      setToggleSaved(true)
+      setTimeout(() => setToggleSaved(false), 2000)
+    } catch (e) {
+      alert("Failed to update toggle: " + e.message)
+    } finally {
+      setToggleLoading(false)
+    }
+  }
+
   return (
+
     <div className="space-y-5">
       <h1 className="text-xl font-bold text-gray-900">Settings</h1>
 
@@ -270,6 +302,22 @@ export default function AdminSettings() {
         </SectionCard>
       </div>
 
+      {/* Site Features Toggle */}
+      <SectionCard
+        title="Site Features"
+        subtitle="Control which features are available to customers"
+        icon="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z">
+        <Toggle
+          checked={customizationEnabled}
+          onChange={handleToggleCustomization}
+          label="AI Customization (Describe & Mix/Match)"
+          hint={toggleLoading ? "Saving..." : toggleSaved ? "Saved!" : "Disable during peak seasons to manage workload"}
+        />
+        <p className="text-xs text-gray-500 mt-2">
+          When disabled, customers will see a message and grayed-out buttons on DescribeArrangement and MixAndMatch pages.
+        </p>
+      </SectionCard>
+
       {/* Change Password — full width */}
       <SectionCard
         title="Account Security"
@@ -297,6 +345,7 @@ export default function AdminSettings() {
           <SaveBtn onClick={savePassword} saved={pwdSaved} />
         </div>
       </SectionCard>
+
 
       {/* Danger zone */}
       <div className="bg-white rounded-xl overflow-hidden" style={{ border: "1px solid #fecaca", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>

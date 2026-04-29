@@ -224,4 +224,18 @@ export const api = {
       body: JSON.stringify(data),
     });
   },
+
+  // ── Customization Toggle ─────────────────────────────────────────────────
+  async isCustomizationEnabled() {
+    return this.get('/site-customization/customization/toggle');
+  },
+
+  async setCustomizationEnabled(enabled) {
+    return this.request('/site-customization/customization/toggle', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    });
+  },
+
 };
+

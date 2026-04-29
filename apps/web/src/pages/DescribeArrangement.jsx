@@ -32,6 +32,7 @@ export default function DescribeArrangement({ onNavigate }) {
   const [products, setProducts] = useState([])
   const [selectedMaterials, setSelectedMaterials] = useState({ flower: null, vase: null, wrapping: null, accessory: null })
   const [showMaterials, setShowMaterials] = useState(false)
+  const [customizationEnabled, setCustomizationEnabled] = useState(true)
   const [aiUsage, setAiUsage] = useState(null)
   const [unavailableItems, setUnavailableItems] = useState([])
   const [fetchingProducts, setFetchingProducts] = useState(true)
@@ -42,20 +43,24 @@ export default function DescribeArrangement({ onNavigate }) {
   useEffect(() => {
     async function load() {
       try {
-        const [productsRes, usageRes] = await Promise.all([
+        const [toggleRes, productsRes, usageRes] = await Promise.all([
+          api.isCustomizationEnabled().catch(() => ({ enabled: true })),
           api.getProducts(),
           api.getAiUsage().catch(() => ({ remaining: 5, limit: 5 })),
         ])
+        setCustomizationEnabled(toggleRes.enabled)
         setProducts(Array.isArray(productsRes) ? productsRes : productsRes.products || [])
         setAiUsage(usageRes)
       } catch (e) {
-        console.error("Failed to load products", e)
+        console.error("Failed to load", e)
+        setCustomizationEnabled(true)
       } finally {
         setFetchingProducts(false)
       }
     }
     load()
   }, [])
+
 
   const getProductsByCategory = (category) =>
     products.filter(p => p.category === category && p.is_available)
@@ -79,6 +84,10 @@ export default function DescribeArrangement({ onNavigate }) {
   }
 
   const handleGenerate = async () => {
+    if (!customizationEnabled) {
+      setError("AI Customization is temporarily disabled during peak seasons.")
+      return
+    }
     if (!prompt.trim()) return
     setLoading(true)
     setError(null)
@@ -127,6 +136,7 @@ export default function DescribeArrangement({ onNavigate }) {
       setLoading(false)
     }
   }
+
 
   const handleAddToCart = () => {
     if (!result) return
@@ -286,10 +296,11 @@ export default function DescribeArrangement({ onNavigate }) {
                 </div>
                 <button
                   onClick={handleGenerate}
-                  disabled={!prompt.trim() || loading || (aiUsage?.remaining === 0)}
+                  disabled={!customizationEnabled || !prompt.trim() || loading || (aiUsage?.remaining === 0)}
                   className="flex items-center gap-2 px-5 py-2.5 text-sm font-semibold text-white rounded-xl transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-50"
-                  style={{ background: prompt.trim() && aiUsage?.remaining !== 0 ? "linear-gradient(135deg, #e879a0, #f43f5e)" : "#d1d5db" }}
+                  style={{ background: customizationEnabled && prompt.trim() && aiUsage?.remaining !== 0 ? "linear-gradient(135deg, #e879a0, #f43f5e)" : "#d1d5db" }}
                 >
+
                   {loading ? (
                     <>
                       <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none">
