@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Text, Numeric, Enum, Integer, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, Numeric, Enum, Integer, Boolean, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from .base import Base, now_utc
@@ -51,6 +51,8 @@ class Order(Base):
     delivery_address = Column(Text, nullable=True)
     delivery_notes = Column(Text, nullable=True)
     scheduled_at = Column(DateTime(timezone=True), nullable=True)
+    can_review = Column(Boolean, default=False)
+    has_reviewed = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
@@ -70,7 +72,7 @@ class Transaction(Base):
     payment_method = Column(Enum(PaymentMethodEnum), nullable=False)
     total_amount = Column(Numeric(10, 2), nullable=False)
     status = Column(Enum(PaymentStatusEnum), default=PaymentStatusEnum.pending)
-    reference_number = Column(String(255), nullable=True)   # for e-wallet / bank transfers
+    reference_number = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
@@ -86,7 +88,7 @@ class Delivery(Base):
     rider_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     assigned_area = Column(String(255), nullable=True)
     status = Column(Enum(DeliveryStatusEnum), default=DeliveryStatusEnum.assigned)
-    lalamove_order_id = Column(String(255), nullable=True)  # from Lalamove API
+    lalamove_order_id = Column(String(255), nullable=True)
     delivery_fee = Column(Numeric(10, 2), nullable=True)
     estimated_arrival = Column(DateTime(timezone=True), nullable=True)
     delivered_at = Column(DateTime(timezone=True), nullable=True)

@@ -102,10 +102,26 @@ export default function Orders({ onNavigate }) {
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${s.bg} ${s.text}`}>{formatStatus(order.status)}</span>
                     </div>
                     <p className="text-sm text-gray-500 truncate">{order.product_name} × {order.quantity}</p>
-                    <div className="flex items-center justify-between mt-1">
+<div className="flex items-center justify-between mt-1">
                       <span className="text-xs text-gray-400">{dateStr}</span>
                       <span className="text-sm font-bold text-gray-800">₱{(order.total_amount || 0).toLocaleString()}</span>
                     </div>
+                    {/* Review Button - show for delivered orders */}
+                    {order.status === "delivered" && (
+                      <div className="mt-2">
+                        {order.has_reviewed ? (
+                          <span className="text-xs text-green-600 font-medium">✓ You reviewed this order</span>
+                        ) : (
+                          <button
+                            onClick={() => onNavigate("write-review", order.id)}
+                            className="text-xs font-semibold hover:underline"
+                            style={{ color: G }}
+                          >
+                            Write a Review →
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
               )

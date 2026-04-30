@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List, Optional
 from decimal import Decimal
 import uuid
@@ -142,7 +142,12 @@ def get_admin_products(
 ):
     """Get all products (including inactive) for admin panel."""
     require_admin_or_staff(current_user)
-    products = db.query(Product).order_by(Product.created_at.desc()).all()
+    products = (
+        db.query(Product)
+        .options(joinedload(Product.inventory))
+        .order_by(Product.created_at.desc())
+        .all()
+    )
     return [serialize_product(p) for p in products]
 
 

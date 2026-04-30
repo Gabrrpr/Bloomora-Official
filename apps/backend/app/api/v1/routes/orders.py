@@ -30,6 +30,7 @@ def serialize_order(o: Order) -> dict:
         "customer_phone": o.user.phone_number,
         "branch": o.user.branch.value if o.user.branch and hasattr(o.user.branch, "value") else (o.user.branch or "—"),
         "product_name": product_name,
+        "product": {"id": str(o.product.id), "name": o.product.name, "image_url": o.product.image_url} if o.product else None,
         "quantity": o.quantity,
         "total_amount": float(o.total_amount),
         "status": o.status.value if hasattr(o.status, "value") else o.status,
@@ -37,6 +38,8 @@ def serialize_order(o: Order) -> dict:
         "delivery_notes": o.delivery_notes,
         "scheduled_at": o.scheduled_at.isoformat() if o.scheduled_at else None,
         "payment_status": o.transaction.status.value if o.transaction and hasattr(o.transaction.status, "value") else "pending",
+        "can_review": o.can_review,
+        "has_reviewed": o.has_reviewed,
         "created_at": o.created_at.isoformat() if o.created_at else None,
         "updated_at": o.updated_at.isoformat() if o.updated_at else None,
     }
@@ -112,6 +115,30 @@ def list_orders(
 
 
 # ── Admin/Staff: Get recent orders for a customer ───────────────────────────
+# ── Get Single Order ─────────────────────────────────────────────────────
+@router.get("/{order_id}", response_model=dict)
+def get_order(
+    order_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get a single order by ID. Only the order owner or admin can view."""
+    try:
+        order_uuid = uuid.UUID(order_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid order ID")
+
+    order = db.query(Order).filter(Order.id == order_uuid).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    # Check if user owns the order or is admin
+    if order.user_id != current_user.id and current_user.role not in [RoleEnum.admin, RoleEnum.staff]:
+        raise HTTPException(status_code=403, detail="Not authorized to view this order")
+
+    return serialize_order(order)
+
+
 @router.get("/{customer_id}/recent", response_model=List[dict])
 def get_customer_recent_orders(
     customer_id: str,
@@ -213,4 +240,3 @@ def create_orders(
         "message": f"{len(created_orders)} order(s) created successfully.",
         "order_ids": created_orders,
     }
-

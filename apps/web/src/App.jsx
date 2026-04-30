@@ -1,4 +1,4 @@
-import { useState } from "react"
+ import { useState } from "react"
 import { AuthProvider, useAuth } from "./context/AuthContext"
 import Navbar from "./components/Navbar"
 import Home from "./pages/Home"
@@ -30,6 +30,7 @@ import AdPopup from "./components/AdPopup"
 import WorldClock    from "./pages/WorldClock"    
 import VasesPage from "./pages/VasesPage"
 import AddonsPage from "./pages/AddonsPage"
+import WriteReviewPage from "./pages/WriteReviewPage"
 
 const AUTH_PAGES = ["login", "register", "forgot-password", "terms"]
 
@@ -38,8 +39,10 @@ function AppContent() {
   const [page, setPage] = useState("home")
   const [cartCount, setCartCount] = useState(0)
   const [prevPage, setPrevPage] = useState("login")
+  const [selectedOrderId, setSelectedOrderId] = useState(null)
 
-  const navigate = (to) => {
+const navigate = (to, orderId = null) => {
+    if (orderId) setSelectedOrderId(orderId)
     setPrevPage(page)
     setPage(to)
     window.scrollTo({ top: 0, behavior: "smooth" })
@@ -80,8 +83,9 @@ function AppContent() {
             case "ai-gallery":           return <AIGalleryPage onNavigate={navigate} />
             default:                     return <Home onNavigate={navigate} />
             case "world-clock":   return <WorldClock onNavigate={navigate} />  
-            case "vases": return <VasesPage onNavigate={navigate} />
+case "vases": return <VasesPage onNavigate={navigate} />
             case "addons": return <AddonsPage onNavigate={navigate} />
+case "write-review": return <WriteReviewPage onNavigate={navigate} orderId={selectedOrderId} />
           }
         })()}
         <ChatWidget />
