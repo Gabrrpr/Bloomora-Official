@@ -28,6 +28,8 @@ import ChatWidget from "./components/ChatWidget"
 import CookieConsent from "./components/CookieConsent"
 import AdPopup from "./components/AdPopup"
 import WorldClock    from "./pages/WorldClock"    
+import VasesPage from "./pages/VasesPage"
+import AddonsPage from "./pages/AddonsPage"
 
 const AUTH_PAGES = ["login", "register", "forgot-password", "terms"]
 
@@ -78,6 +80,8 @@ function AppContent() {
             case "ai-gallery":           return <AIGalleryPage onNavigate={navigate} />
             default:                     return <Home onNavigate={navigate} />
             case "world-clock":   return <WorldClock onNavigate={navigate} />  
+            case "vases": return <VasesPage onNavigate={navigate} />
+            case "addons": return <AddonsPage onNavigate={navigate} />
           }
         })()}
         <ChatWidget />

@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from "react"
 import Footer from "../components/Footer.jsx"
 
-import c1  from "../assets/customized/customized1.png"
-import c2  from "../assets/customized/customized2.png"
-import c3  from "../assets/customized/customized3.png"
-import c4  from "../assets/customized/customized4.png"
-import c5  from "../assets/customized/customized5.png"
-import c6  from "../assets/customized/customized6.png"
-import c7  from "../assets/customized/customized7.png"
-import c8  from "../assets/customized/customized8.png"
-import c9  from "../assets/customized/customized9.png"
-import c10 from "../assets/customized/customized10.png"
+import c1  from "../assets/customized/customized1.webp"
+import c2  from "../assets/customized/customized2.webp"
+import c3  from "../assets/customized/customized3.webp"
+import c4  from "../assets/customized/customized4.webp"
+import c5  from "../assets/customized/customized5.webp"
+import c6  from "../assets/customized/customized6.webp"
+import c7  from "../assets/customized/customized7.webp"
+import c8  from "../assets/customized/customized8.webp"
+import c9  from "../assets/customized/customized9.webp"
+import c10 from "../assets/customized/customized10.webp"
 
 const ARRANGEMENTS = [
   { id:1,  src:c1,  title:"Rose Cascade",   mood:"Romantic",   palette:["#e11d48","#f43f5e","#fda4af"], prompt:"A sweeping cascade of deep red roses with soft pink tips, perfect for a romantic anniversary" },
@@ -76,61 +76,29 @@ export default function AIGalleryPage({ onNavigate }) {
       <main style={{ flex:1, display:"flex", flexDirection:"column" }}>
         <div className="ag-layout" style={{ flex:1, display:"flex", flexDirection:"row", minHeight:"100vh" }}>
 
-          {/* ── IMAGE PANEL ─────────────────────────────────────────────────── */}
-          <div
-            className="ag-image-panel"
+          {/* ── IMAGE PANEL ── */}
+          <div className="ag-image-panel"
             style={{ width:"55%", position:"relative", overflow:"hidden", background:"#f3f4f6" }}
-            onTouchStart={onTouchStart}
-            onTouchEnd={onTouchEnd}
-          >
-            {/* CSS crossfade — only images move */}
+            onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
             {ARRANGEMENTS.map((arr, i) => (
-              <div
-                key={arr.id}
-                style={{
-                  position:"absolute", inset:0,
-                  backgroundImage:`url(${arr.src})`,
-                  backgroundSize:"cover",
-                  backgroundPosition:"center",
-                  opacity: i === center ? 1 : 0,
-                  transition:"opacity 0.75s cubic-bezier(0.4,0,0.2,1)",
-                  willChange:"opacity",
-                }}
-              />
+              <div key={arr.id} style={{ position:"absolute", inset:0, backgroundImage:`url(${arr.src})`, backgroundSize:"cover", backgroundPosition:"center", opacity: i === center ? 1 : 0, transition:"opacity 0.75s cubic-bezier(0.4,0,0.2,1)", willChange:"opacity" }} />
             ))}
-
-            {/* Subtle right-edge blend into white panel */}
             <div style={{ position:"absolute", inset:0, background:"linear-gradient(to right, transparent 60%, rgba(255,255,255,0.5) 100%)", pointerEvents:"none" }} />
-            {/* Bottom scrim for overlay legibility */}
             <div style={{ position:"absolute", inset:0, background:"linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 50%)", pointerEvents:"none" }} />
 
-            {/* Back button */}
-            <button
-              onClick={() => onNavigate?.("home")}
-              className="ag-arrow"
-              style={{ position:"absolute", top:20, left:20, zIndex:20, display:"inline-flex", alignItems:"center", gap:6, color:"#374151", background:"rgba(255,255,255,0.88)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:"1px solid #e5e7eb", borderRadius:50, padding:"7px 14px", fontSize:12, fontWeight:600, cursor:"pointer" }}
-            >
-              <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/>
-              </svg>
+            <button onClick={() => onNavigate?.("home")} className="ag-arrow"
+              style={{ position:"absolute", top:20, left:20, zIndex:20, display:"inline-flex", alignItems:"center", gap:6, color:"#374151", background:"rgba(255,255,255,0.88)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:"1px solid #e5e7eb", borderRadius:50, padding:"7px 14px", fontSize:12, fontWeight:600, cursor:"pointer" }}>
+              <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
               Back
             </button>
 
-            {/* Nav arrows */}
             {[{ dir:"left", d:"M15 19l-7-7 7-7" }, { dir:"right", d:"M9 5l7 7-7 7" }].map(({ dir, d }) => (
-              <button
-                key={dir}
-                onClick={() => navigate(dir)}
-                className="ag-arrow"
-                style={{ position:"absolute", top:"50%", transform:"translateY(-50%)", zIndex:20, [dir==="left"?"left":"right"]:16, width:40, height:40, borderRadius:"50%", border:"1.5px solid rgba(255,255,255,0.6)", background:"rgba(255,255,255,0.75)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#374151" }}
-              >
-                <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={d}/>
-                </svg>
+              <button key={dir} onClick={() => navigate(dir)} className="ag-arrow"
+                style={{ position:"absolute", top:"50%", transform:"translateY(-50%)", zIndex:20, [dir==="left"?"left":"right"]:16, width:40, height:40, borderRadius:"50%", border:"1.5px solid rgba(255,255,255,0.6)", background:"rgba(255,255,255,0.75)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer", color:"#374151" }}>
+                <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={d}/></svg>
               </button>
             ))}
 
-            {/* Title + palette overlay — bottom of image only */}
             <div style={{ position:"absolute", bottom:0, left:0, right:0, padding:"24px 28px", zIndex:10 }}>
               <div style={{ display:"flex", gap:6, marginBottom:8 }}>
                 {active.palette.map((c, i) => (
@@ -146,92 +114,48 @@ export default function AIGalleryPage({ onNavigate }) {
             </div>
           </div>
 
-          {/* ── CONTENT PANEL — static, never re-mounts ─────────────────────── */}
-          <div
-            className="ag-content-panel"
-            style={{ width:"45%", display:"flex", flexDirection:"column", justifyContent:"center", padding:"60px 52px 60px 48px", position:"relative", overflow:"hidden", background:"white", borderLeft:"1px solid #f0ede6" }}
-          >
-            {/* Decorative large number — very subtle */}
+          {/* ── CONTENT PANEL ── */}
+          <div className="ag-content-panel"
+            style={{ width:"45%", display:"flex", flexDirection:"column", justifyContent:"center", padding:"60px 52px 60px 48px", position:"relative", overflow:"hidden", background:"white", borderLeft:"1px solid #f0ede6" }}>
             <div style={{ position:"absolute", bottom:-10, right:-8, fontSize:180, fontWeight:900, lineHeight:1, color:"rgba(46,139,52,0.04)", userSelect:"none", pointerEvents:"none", letterSpacing:"-0.05em" }}>
               {String(center + 1).padStart(2,"0")}
             </div>
-
-            {/* All content is static — only the decorative number and thumbnails react to slide changes */}
             <div style={{ position:"relative", zIndex:1, opacity:visible?1:0, transition:"opacity 0.4s ease" }}>
-
-              {/* Section marker */}
               <div style={{ display:"inline-flex", alignItems:"center", gap:10, marginBottom:24 }}>
                 <div style={{ width:24, height:1.5, background:G }} />
-                <span style={{ color:G, fontSize:10, fontWeight:800, letterSpacing:"0.26em", textTransform:"uppercase" }}>
-                  AI-Crafted Arrangements
-                </span>
+                <span style={{ color:G, fontSize:10, fontWeight:800, letterSpacing:"0.26em", textTransform:"uppercase" }}>AI-Crafted Arrangements</span>
               </div>
-
-              {/* Headline — static, does not change on slide */}
               <h1 style={{ color:"#111827", fontSize:"clamp(30px,3.2vw,50px)", fontWeight:900, lineHeight:1.06, letterSpacing:"-0.025em", margin:"0 0 14px" }}>
-                Your Vision,
-                <br />
-                <span style={{ color:G }}>Brought to Bloom</span>
+                Your Vision,<br /><span style={{ color:G }}>Brought to Bloom</span>
               </h1>
-
-              {/* Static description */}
               <p style={{ color:"#6b7280", fontSize:"clamp(13px,1.2vw,14.5px)", lineHeight:1.8, maxWidth:360, margin:"0 0 28px" }}>
-                Describe your ideal bouquet and our AI creates a bespoke arrangement
-                just for you — no two alike, every one made with care.
+                Describe your ideal bouquet and our AI creates a bespoke arrangement just for you — no two alike, every one made with care.
               </p>
-
-              {/* Prompt callout — updates with slide but no layout shift */}
               <div style={{ borderLeft:`2px solid ${G}40`, paddingLeft:16, marginBottom:36, minHeight:56 }}>
-                <p style={{ color:"#9ca3af", fontSize:9, fontWeight:800, letterSpacing:"0.22em", textTransform:"uppercase", marginBottom:5 }}>
-                  Try prompting:
-                </p>
-                <p style={{ color:"#374151", fontSize:"clamp(12px,1vw,13px)", lineHeight:1.7, fontStyle:"italic", margin:0 }}>
-                  "{active.prompt}"
-                </p>
+                <p style={{ color:"#9ca3af", fontSize:9, fontWeight:800, letterSpacing:"0.22em", textTransform:"uppercase", marginBottom:5 }}>Try prompting:</p>
+                <p style={{ color:"#374151", fontSize:"clamp(12px,1vw,13px)", lineHeight:1.7, fontStyle:"italic", margin:0 }}>"{active.prompt}"</p>
               </div>
-
-              {/* Thumbnail grid */}
               <div className="ag-thumbs" style={{ display:"flex", flexWrap:"wrap", gap:7, marginBottom:40 }}>
                 {ARRANGEMENTS.map((arr, i) => (
-                  <button
-                    key={arr.id}
-                    onClick={() => setCenter(i)}
-                    className="ag-thumb"
-                    style={{
-                      width:44, height:44, borderRadius:8, overflow:"hidden", padding:0,
-                      border:`2px solid ${i === center ? G : "#e5e7eb"}`,
-                      opacity: i === center ? 1 : 0.55,
-                      cursor:"pointer", flexShrink:0,
-                      transition:"all 0.18s ease",
-                    }}
-                    title={arr.title}
-                  >
+                  <button key={arr.id} onClick={() => setCenter(i)} className="ag-thumb"
+                    style={{ width:44, height:44, borderRadius:8, overflow:"hidden", padding:0, border:`2px solid ${i === center ? G : "#e5e7eb"}`, opacity: i === center ? 1 : 0.55, cursor:"pointer", flexShrink:0, transition:"all 0.18s ease" }}
+                    title={arr.title}>
                     <img src={arr.src} alt={arr.title} style={{ width:"100%", height:"100%", objectFit:"cover", display:"block" }} />
                   </button>
                 ))}
               </div>
-
-              {/* CTA row */}
               <div style={{ display:"flex", alignItems:"center", gap:16 }}>
-                <button
-                  onClick={() => onNavigate?.("make-it-personal")}
-                  className="ag-cta"
-                  style={{ display:"inline-flex", alignItems:"center", gap:8, padding:"12px 24px", borderRadius:50, background:G, color:"white", fontSize:13, fontWeight:700, border:"none", cursor:"pointer", boxShadow:`0 6px 18px rgba(46,139,52,0.28)`, transition:"all 0.2s ease" }}
-                >
+                <button onClick={() => onNavigate?.("make-it-personal")} className="ag-cta"
+                  style={{ display:"inline-flex", alignItems:"center", gap:8, padding:"12px 24px", borderRadius:50, background:G, color:"white", fontSize:13, fontWeight:700, border:"none", cursor:"pointer", boxShadow:`0 6px 18px rgba(46,139,52,0.28)`, transition:"all 0.2s ease" }}>
                   Try It Now
-                  <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M13 7l5 5m0 0l-5 5m5-5H6"/>
-                  </svg>
+                  <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg>
                 </button>
-
-                {/* Progress indicator */}
                 <span style={{ color:"#9ca3af", fontSize:11, fontWeight:600, letterSpacing:"0.08em" }}>
                   {String(center + 1).padStart(2,"0")} / {String(N).padStart(2,"0")}
                 </span>
               </div>
             </div>
           </div>
-
         </div>
       </main>
     </div>

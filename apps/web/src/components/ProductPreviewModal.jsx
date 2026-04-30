@@ -1,29 +1,41 @@
 import { useState, useEffect, useRef } from "react"
 import { addToCart } from "../utils/cart.js"
 
-// Add-on images — place in src/assets/addons/
-import ferrero8Img    from "../assets/addons/ferrero8pcs.png"
-import ferrero12Img   from "../assets/addons/ferrero12pcs.png"
-import ferrero24Img   from "../assets/addons/ferrero24pcs.png"
-import hersheyOrgImg  from "../assets/addons/hersheyOriginal.png"
-import herseyCncImg   from "../assets/addons/hersheyCnC.png"
-import twixImg        from "../assets/addons/twix.png"
+// Add-on images — place in src/assets/products/addons/
+import ferrero8Img    from "../assets/products/addons/ferrero8pcs.webp"
+import ferrero12Img   from "../assets/products/addons/ferrero12pcs.webp"
+import ferrero24Img   from "../assets/products/addons/ferrero24pcs.webp"
+import hersheyOrgImg  from "../assets/products/addons/hersheyOriginal.webp"
+import herseyCncImg   from "../assets/products/addons/hersheyCnC.webp"
+import twixImg        from "../assets/products/addons/twix.webp"
+import cadburyFNImg   from "../assets/products/addons/CadburyFruit&Nut.webp"
+import cadburyMCImg   from "../assets/products/addons/CadburyMilkChoc.webp"
+import mnmsMilkImg    from "../assets/products/addons/M&MsMilkChoc.webp"
+import mnmsPeanutImg  from "../assets/products/addons/M&MsPeanut.webp"
+import snickersImg    from "../assets/products/addons/Snickers.webp"
+import tobleroneImg   from "../assets/products/addons/Toblerone.webp"
 
 // Card choice images — place in src/assets/cards/
-import withCardImg    from "../assets/cards/withCard.png"
-import noCardImg      from "../assets/cards/noCard.png"
+import withCardImg    from "../assets/products/cards/withCard.webp"
+import noCardImg      from "../assets/products/cards/noCard.webp"
 
 const G   = "#2E8B34"
 const DG  = "#0C573E"
 const ERR = "#ef4444"
 
 const ALL_ADD_ONS = [
-  { id:"ferrero8",   label:"Ferrero Rocher",     sub:"8 pieces",             price:199, img:ferrero8Img   },
-  { id:"ferrero12",  label:"Ferrero Rocher",     sub:"12 pieces",            price:349, img:ferrero12Img  },
-  { id:"ferrero24",  label:"Ferrero Rocher",     sub:"24 pieces",            price:599, img:ferrero24Img  },
-  { id:"hersheyOrg", label:"Hershey's Original", sub:"Chocolate bar",        price:149, img:hersheyOrgImg },
-  { id:"herseyCnC",  label:"Hershey's C&C",      sub:"Cookies & Cream",      price:149, img:herseyCncImg  },
-  { id:"twix",       label:"Twix",               sub:"Caramel chocolate bar", price:149, img:twixImg       },
+  { id:"ferrero8",    label:"Ferrero Rocher",      sub:"8 pieces",           price:199, img:ferrero8Img    },
+  { id:"ferrero12",   label:"Ferrero Rocher",      sub:"12 pieces",          price:349, img:ferrero12Img   },
+  { id:"ferrero24",   label:"Ferrero Rocher",      sub:"24 pieces",          price:599, img:ferrero24Img   },
+  { id:"hersheyOrg",  label:"Hershey's Original",  sub:"Chocolate bar",      price:149, img:hersheyOrgImg  },
+  { id:"herseyCnC",   label:"Hershey's C&C",       sub:"Cookies & Cream",    price:149, img:herseyCncImg   },
+  { id:"twix",        label:"Twix",                sub:"Caramel chocolate",   price:149, img:twixImg        },
+  { id:"cadburyFN",   label:"Cadbury Fruit & Nut", sub:"Chocolate bar",      price:169, img:cadburyFNImg   },
+  { id:"cadburyMC",   label:"Cadbury Milk Choc",   sub:"Chocolate bar",      price:149, img:cadburyMCImg   },
+  { id:"mnmsMilk",    label:"M&M's Milk Choc",     sub:"Chocolate pouch",    price:179, img:mnmsMilkImg    },
+  { id:"mnmsPeanut",  label:"M&M's Peanut",        sub:"Chocolate pouch",    price:179, img:mnmsPeanutImg  },
+  { id:"snickers",    label:"Snickers",             sub:"Caramel & peanut",   price:149, img:snickersImg    },
+  { id:"toblerone",   label:"Toblerone",            sub:"Swiss chocolate",    price:199, img:tobleroneImg   },
 ]
 
 const INITIAL_ADDON_COUNT = 4
@@ -148,6 +160,165 @@ function Confetti() {
 }
 
 
+// ── AI Message Generator ──────────────────────────────────────────────────────
+const RELATIONSHIP_OPTIONS = ["Best Friend","Partner / Lover","Spouse","Mother","Father","Sibling","Grandparent","Child","Colleague","Boss","Teacher","Mentor","Classmate","Neighbor","Acquaintance"]
+const OCCASION_OPTIONS     = ["Birthday","Anniversary","Valentine's Day","Mother's Day","Father's Day","Graduation","Get Well Soon","Thank You","Congratulations","Just Because","Sympathy","Wedding","New Baby","Farewell"]
+const TONE_OPTIONS         = [
+  { value:"warm",    label:"Warm & Heartfelt" },
+  { value:"playful", label:"Playful & Fun"    },
+  { value:"elegant", label:"Elegant & Formal" },
+  { value:"simple",  label:"Simple & Sweet"   },
+]
+
+function AIMessageGenerator({ onUse, onClose }) {
+  const [relationship, setRelationship] = useState("")
+  const [occasion,     setOccasion]     = useState("")
+  const [tone,         setTone]         = useState("warm")
+  const [extra,        setExtra]        = useState("")
+  const [loading,      setLoading]      = useState(false)
+  const [generated,    setGenerated]    = useState("")
+  const [err,          setErr]          = useState("")
+
+  const generate = async () => {
+    if (!relationship || !occasion) { setErr("Please select a relationship and occasion."); return }
+    setErr(""); setLoading(true); setGenerated("")
+    const toneLabel = TONE_OPTIONS.find(t => t.value === tone)?.label || "Warm & Heartfelt"
+    const prompt = `Write a short, genuine greeting card message for someone's ${occasion}. The sender's relationship to the recipient is: ${relationship}. Tone: ${toneLabel}.${extra ? ` Extra context: ${extra}.` : ""} Keep it 2–4 sentences, personal, and sincere. Write only the message itself — no quotes, no label, no explanation.`
+    try {
+      const res  = await fetch("https://api.anthropic.com/v1/messages", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          model:"claude-sonnet-4-20250514",
+          max_tokens:200,
+          system:"You write short, heartfelt greeting card messages. Never include hate, harmful content, or inappropriate language. Always be kind, genuine, and appropriate for the occasion. Respond with only the message text — no preamble, no quotation marks.",
+          messages:[{ role:"user", content:prompt }]
+        })
+      })
+      const data = await res.json()
+      const text = data?.content?.[0]?.text?.trim() || ""
+      if (!text) throw new Error("Empty response")
+      setGenerated(text)
+    } catch(e) {
+      setErr("Could not generate message. Please try again.")
+    }
+    setLoading(false)
+  }
+
+  const sel = (val, setter, list) => ({
+    value: val,
+    onChange: e => setter(e.target.value),
+    style: { width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"8px 12px", fontSize:13, color: val?"#1f2937":"#9ca3af", outline:"none", background:"white", fontFamily:"inherit", cursor:"pointer" }
+  })
+
+  return (
+    <div style={{ position:"fixed", inset:0, zIndex:300, display:"flex", alignItems:"center", justifyContent:"center", padding:16, backgroundColor:"rgba(0,0,0,0.45)", backdropFilter:"blur(5px)" }} onClick={onClose}>
+      <div onClick={e=>e.stopPropagation()} style={{ background:"white", borderRadius:14, width:"100%", maxWidth:440, boxShadow:"0 20px 60px rgba(0,0,0,0.18)", overflow:"hidden" }}>
+
+        {/* Header */}
+        <div style={{ padding:"18px 22px 14px", borderBottom:"1px solid #f3f4f6" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{ width:32, height:32, borderRadius:8, background:`linear-gradient(135deg,${DG},${G})`, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <svg width="16" height="16" fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+              </div>
+              <div>
+                <p style={{ fontSize:14, fontWeight:700, color:"#111827", margin:0, fontFamily:"inherit" }}>AI Message Writer</p>
+                <p style={{ fontSize:11, color:"#9ca3af", margin:0, fontFamily:"inherit" }}>Generate a heartfelt message in seconds</p>
+              </div>
+            </div>
+            <button onClick={onClose} style={{ width:26, height:26, borderRadius:"50%", border:"1px solid #e5e7eb", background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
+              <svg width="10" height="10" fill="none" stroke="#374151" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Form */}
+        <div style={{ padding:"18px 22px" }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+            <div>
+              <label style={{ display:"block", fontSize:10, fontWeight:600, color:"#374151", letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:4, fontFamily:"inherit" }}>Relationship *</label>
+              <select {...sel(relationship, setRelationship, RELATIONSHIP_OPTIONS)} onChange={e=>{setRelationship(e.target.value);setErr("")}}>
+                <option value="">Select...</option>
+                {RELATIONSHIP_OPTIONS.map(r=><option key={r} value={r}>{r}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ display:"block", fontSize:10, fontWeight:600, color:"#374151", letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:4, fontFamily:"inherit" }}>Occasion *</label>
+              <select {...sel(occasion, setOccasion, OCCASION_OPTIONS)} onChange={e=>{setOccasion(e.target.value);setErr("")}}>
+                <option value="">Select...</option>
+                {OCCASION_OPTIONS.map(o=><option key={o} value={o}>{o}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* Tone */}
+          <div style={{ marginBottom:10 }}>
+            <label style={{ display:"block", fontSize:10, fontWeight:600, color:"#374151", letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:6, fontFamily:"inherit" }}>Tone</label>
+            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+              {TONE_OPTIONS.map(t=>(
+                <button key={t.value} onClick={()=>setTone(t.value)}
+                  style={{ padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:tone===t.value?600:400, border:`1px solid ${tone===t.value?G:"#e5e7eb"}`, background:tone===t.value?"#f0fdf4":"white", color:tone===t.value?G:"#374151", cursor:"pointer", transition:"all 0.12s", fontFamily:"inherit" }}>
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Extra context */}
+          <div style={{ marginBottom:14 }}>
+            <label style={{ display:"block", fontSize:10, fontWeight:600, color:"#374151", letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:4, fontFamily:"inherit" }}>Extra context <span style={{ fontWeight:400, color:"#9ca3af", textTransform:"none", letterSpacing:0 }}>(optional)</span></label>
+            <input placeholder="e.g. She loves sunflowers, we've been friends for 10 years..." value={extra} onChange={e=>setExtra(e.target.value)}
+              style={{ width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"8px 12px", fontSize:12, color:"#374151", outline:"none", background:"white", boxSizing:"border-box", fontFamily:"inherit" }}
+              onFocus={e=>e.target.style.borderColor=G} onBlur={e=>e.target.style.borderColor="#e5e7eb"}/>
+          </div>
+
+          {err && <p style={{ fontSize:11, color:"#ef4444", marginBottom:8, fontFamily:"inherit" }}>{err}</p>}
+
+          {/* Generate button */}
+          <button onClick={generate} disabled={loading}
+            style={{ width:"100%", padding:"11px", borderRadius:8, border:"none", background:loading?"#e5e7eb":`linear-gradient(135deg,${DG},${G})`, color:loading?"#9ca3af":"white", fontSize:13, fontWeight:600, cursor:loading?"default":"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8, transition:"opacity 0.15s", fontFamily:"inherit" }}>
+            {loading ? (
+              <>
+                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" style={{ animation:"spin 1s linear infinite" }}><circle cx="12" cy="12" r="10" stroke="#d1d5db" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke={G} strokeWidth="3" strokeLinecap="round"/></svg>
+                Generating...
+              </>
+            ) : (
+              <>
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                {generated ? "Regenerate" : "Generate Message"}
+              </>
+            )}
+          </button>
+
+          {/* Generated result */}
+          {generated && (
+            <div style={{ marginTop:12, border:`1px solid ${G}30`, borderRadius:10, overflow:"hidden" }}>
+              <div style={{ padding:"10px 14px", background:"#f0fdf4", borderBottom:`1px solid ${G}20` }}>
+                <p style={{ fontSize:10, fontWeight:600, color:G, letterSpacing:"0.08em", textTransform:"uppercase", margin:0, fontFamily:"inherit" }}>Generated Message</p>
+              </div>
+              <div style={{ padding:"12px 14px", background:"white" }}>
+                <p style={{ fontSize:13, color:"#374151", lineHeight:1.7, margin:"0 0 12px", fontFamily:"inherit", fontStyle:"italic" }}>"{generated}"</p>
+                <div style={{ display:"flex", gap:8 }}>
+                  <button onClick={()=>{ onUse(generated); onClose() }}
+                    style={{ flex:1, padding:"9px", borderRadius:7, border:"none", background:`linear-gradient(135deg,${DG},${G})`, color:"white", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                    Use this message
+                  </button>
+                  <button onClick={generate}
+                    style={{ padding:"9px 12px", borderRadius:7, border:"1px solid #e5e7eb", background:"white", color:"#374151", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
+                    Try again
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  )
+}
+
 // ── Card Choice Step ───────────────────────────────────────────────────────────
 function CardStep({ delivLabel, dest, onClose, onNavigate }) {
   const [phase,   setPhase]   = useState("choice")   // "choice" | "form" | "done"
@@ -155,6 +326,7 @@ function CardStep({ delivLabel, dest, onClose, onNavigate }) {
   const [formErr, setFormErr] = useState({})
   const [hovered, setHovered] = useState(null)
   const [choice,  setChoice]  = useState(null)        // true = with card, false = without
+  const [showAI,  setShowAI]  = useState(false)
 
   const inp = (err) => ({
     width:"100%", border:`1px solid ${err?"#fca5a5":"#e5e7eb"}`, borderRadius:8,
@@ -280,7 +452,14 @@ function CardStep({ delivLabel, dest, onClose, onNavigate }) {
               Message <span style={{color:"#ef4444"}}>*</span>
               {formErr.msg&&<span style={{fontWeight:500,textTransform:"none",letterSpacing:0,fontSize:10}}>— required</span>}
             </label>
-            <span style={{fontSize:10,color:form.msg.length>MSG_MAX*0.9?"#ef4444":"#9ca3af",fontFamily:"inherit"}}>{form.msg.length}/{MSG_MAX}</span>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <button onClick={()=>setShowAI(true)}
+                style={{display:"flex",alignItems:"center",gap:4,background:"none",border:"none",cursor:"pointer",padding:0,fontSize:10,fontWeight:600,color:G,fontFamily:"inherit",textDecoration:"underline",textUnderlineOffset:"2px"}}>
+                <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                No idea what to write?
+              </button>
+              <span style={{fontSize:10,color:form.msg.length>MSG_MAX*0.9?"#ef4444":"#9ca3af",fontFamily:"inherit"}}>{form.msg.length}/{MSG_MAX}</span>
+            </div>
           </div>
           <textarea rows={3} placeholder="Write a warm, kind message..." value={form.msg} maxLength={MSG_MAX}
             onChange={e=>{setForm(f=>({...f,msg:e.target.value}));setFormErr(e=>({...e,msg:false}))}}
@@ -319,6 +498,13 @@ function CardStep({ delivLabel, dest, onClose, onNavigate }) {
           ← Back
         </button>
       </div>
+
+      {showAI && (
+        <AIMessageGenerator
+          onUse={(msg) => { setForm(f=>({...f,msg})); setFormErr(e=>({...e,msg:false})) }}
+          onClose={() => setShowAI(false)}
+        />
+      )}
     </div>
   )
 }
