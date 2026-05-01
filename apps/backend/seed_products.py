@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from sqlalchemy.orm import Session
 from app.core.database import engine, SessionLocal
 from app.models.product import Product, Inventory, ProductCategoryEnum, ProductStatusEnum
+from app.models.arrangement import Vase
 
 
 # ── VASES DATA (from VasesPage.jsx) ───────────────────────────────────────────────
@@ -59,12 +60,12 @@ ADDONS = [
 def seed_products():
     """Seed vases and add-ons to the database."""
     db = SessionLocal()
-    
+
     try:
         # Get existing product names to avoid duplicates
         existing_vase_names = {p.name for p in db.query(Product).filter(Product.category == ProductCategoryEnum.vase).all()}
         existing_addon_names = {p.name for p in db.query(Product).filter(Product.category == ProductCategoryEnum.accessory).all()}
-        
+
         # Add vases that don't exist yet
         vases_to_add = [v for v in VASES if v["name"] not in existing_vase_names]
         if vases_to_add:
@@ -82,7 +83,7 @@ def seed_products():
                 )
                 db.add(product)
                 db.flush()
-                
+
                 # Add inventory
                 inventory = Inventory(
                     product_id=product.id,
@@ -91,12 +92,62 @@ def seed_products():
                     unit_type="pieces",
                 )
                 db.add(inventory)
-            
+
+                # Add Vase record in vases table with all the extra fields
+                vase = Vase(
+                    id=uuid.uuid4(),
+                    product_id=product.id,
+                    style=None,  # Can be set based on vase name
+                    material=vase_data.get("category"),  # Use category as material
+                    color=None,  # Can be set based on vase type
+                    size=None,
+                    quantity=1,
+                    unit_price=Decimal(str(vase_data["price"])),
+                    original_price=Decimal(str(vase_data.get("original", vase_data["price"]))),
+                    rating=Decimal(str(vase_data.get("rating", 0))),
+                    reviews=vase_data.get("reviews", 0),
+                    ribbon=vase_data.get("ribbon"),
+                    category=vase_data.get("category"),
+                )
+                db.add(vase)
+
             db.commit()
             print(f"Added {len(vases_to_add)} vases to database")
         else:
             print("All vases already exist in database")
-        
+
+            # Even if products exist, check if vase records exist and create them if needed
+            existing_vase_ids = {v.product_id for v in db.query(Vase).all()}
+            vases_needing_records = db.query(Product).filter(
+                Product.category == ProductCategoryEnum.vase,
+                Product.id.notin_(existing_vase_ids)
+            ).all()
+
+            if vases_needing_records:
+                print(f"Creating vase records for {len(vases_needing_records)} existing vase products...")
+                for product in vases_needing_records:
+                    # Find matching vase data from VASES list
+                    matching_vase = next((v for v in VASES if v["name"] == product.name), None)
+                    if matching_vase:
+                        vase = Vase(
+                            id=uuid.uuid4(),
+                            product_id=product.id,
+                            style=None,
+                            material=matching_vase.get("category"),
+                            color=None,
+                            size=None,
+                            quantity=1,
+                            unit_price=product.price,
+                            original_price=Decimal(str(matching_vase.get("original", matching_vase["price"]))),
+                            rating=Decimal(str(matching_vase.get("rating", 0))),
+                            reviews=matching_vase.get("reviews", 0),
+                            ribbon=matching_vase.get("ribbon"),
+                            category=matching_vase.get("category"),
+                        )
+                        db.add(vase)
+                db.commit()
+                print(f"Created vase records for {len(vases_needing_records)} vases")
+
         # Add add-ons that don't exist yet
         addons_to_add = [a for a in ADDONS if a["name"] not in existing_addon_names]
         if addons_to_add:
@@ -114,7 +165,7 @@ def seed_products():
                 )
                 db.add(product)
                 db.flush()
-                
+
                 # Add inventory
                 inventory = Inventory(
                     product_id=product.id,
@@ -123,16 +174,16 @@ def seed_products():
                     unit_type="pieces",
                 )
                 db.add(inventory)
-            
+
             db.commit()
             print(f"Added {len(addons_to_add)} add-ons to database")
         else:
             print("All add-ons already exist in database")
-        
+
         # Summary
         total = db.query(Product).count()
         print(f"Total products in database: {total}")
-        
+
     except Exception as e:
         db.rollback()
         print(f"Error seeding products: {e}")

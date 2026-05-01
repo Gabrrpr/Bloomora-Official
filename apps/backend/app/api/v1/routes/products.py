@@ -151,6 +151,46 @@ def get_admin_products(
     return [serialize_product(p) for p in products]
 
 
+@router.get("/vases", response_model=List[dict])
+def get_vases(db: Session = Depends(get_db)):
+    """Get all available vases with product data for VasesPage."""
+    from app.models.arrangement import Vase
+    
+    vases = (
+        db.query(Vase)
+        .join(Product)
+        .filter(Product.is_available == True)
+        .order_by(Vase.category, Product.name)
+        .all()
+    )
+    
+    result = []
+    for v in vases:
+        product = v.product
+        inv = product.inventory if product else None
+        stock = inv.current_stock if inv else 0
+        
+        result.append({
+            "id": str(v.id),
+            "product_id": str(v.product_id),
+            "name": product.name if product else None,
+            "price": float(v.unit_price) if v.unit_price else 0,
+            "original": float(v.original_price) if v.original_price else float(v.unit_price) * 1.2 if v.unit_price else 0,
+            "rating": float(v.rating) if v.rating else 0,
+            "reviews": v.reviews or 0,
+            "ribbon": v.ribbon,
+            "category": v.category or product.category.value if product and hasattr(product.category, 'value') else "Uncategorized",
+            "image": product.image_url if product else None,
+            "style": v.style,
+            "material": v.material,
+            "color": v.color,
+            "size": v.size,
+            "stock": stock,
+        })
+    
+    return result
+
+
 @router.get("/low-stock", response_model=List[dict])
 def get_low_stock(
     limit: int = 5,

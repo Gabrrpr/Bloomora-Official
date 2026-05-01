@@ -174,13 +174,27 @@ export const api = {
     return this.get(`/orders/?${params.toString()}`);
   },
 
-  // ── Products (Public) ───────────────────────────────────────────────────
+// ── Products (Public) ───────────────────────────────────────────────────
   async getProducts() {
     return this.get('/products/');
   },
 
   async getCustomizationProducts() {
     return this.get('/products/customization/all');
+  },
+
+// ── Vases ────────────────────────────────────────────────────────────────
+  async getVases(category = null, minPrice = null, maxPrice = null) {
+    const params = new URLSearchParams();
+    if (category && category !== 'All') params.append('category', category);
+    if (minPrice !== null) params.append('min_price', String(minPrice));
+    if (maxPrice !== null) params.append('max_price', String(maxPrice));
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return this.get(`/vases/${query}`);
+  },
+
+  async getVaseCategories() {
+    return this.get('/vases/categories/all');
   },
 
   // ── Customization ───────────────────────────────────────────────────────

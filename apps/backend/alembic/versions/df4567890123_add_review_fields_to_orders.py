@@ -1,8 +1,9 @@
 """Add can_review and has_reviewed to orders
 
 Revision ID: df4567890123
-Revises: 
+Revises: b2c3d4e5f6a7
 Create Date: 2024-01-01 00:00:00.000000
+
 """
 from alembic import op
 import sqlalchemy as sa
@@ -10,7 +11,7 @@ from sqlalchemy.dialects import postgresql
 
 # revision identifiers, used by alembic.
 revision = 'df4567890123'
-down_revision = None  # Set to the latest migration hash
+down_revision = 'b2c3d4e5f6a7'
 branch_labels = None
 depends_on = None
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import ProductPreviewModal from "../components/ProductPreviewModal.jsx"
 import Footer from "../components/Footer.jsx"
+import { api } from "../services/api.js"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -9,7 +10,7 @@ const DG = "#0C573E"
 const vaseImg = (filename) =>
   new URL(`../assets/products/vases/${filename}`, import.meta.url).href
 
-// ── Vase catalog ──────────────────────────────────────────────────────────────
+// ── Vase catalog (fallback if API fails) ─────────────────────────────────
 const ALL_VASES = [
   { id:1,  image:vaseImg("BlackGoldLargeVase580.webp"),   name:"Black Gold Large Vase",   price:580,  original:750,  rating:4.8, reviews:32, ribbon:"Premium",     category:"Gold"   },
   { id:2,  image:vaseImg("BlackGoldRegularVase280.webp"),  name:"Black Gold Regular Vase", price:280,  original:360,  rating:4.6, reviews:18, ribbon:null,           category:"Gold"   },
@@ -211,6 +212,8 @@ export default function VasesPage({ onNavigate }) {
   const [wishlist, setWishlist] = useState([])
   const [sortOpen, setSortOpen] = useState(false)
   const [preview,  setPreview]  = useState(null)
+  const [vases, setVases] = useState([])
+  const [loading, setLoading] = useState(true)
   const sortRef = useRef(null)
 
   useEffect(() => {
@@ -219,9 +222,39 @@ export default function VasesPage({ onNavigate }) {
     return () => document.removeEventListener("mousedown", h)
   }, [])
 
+// Fetch vases from API
+  useEffect(() => {
+    api.getVases()
+      .then(data => {
+        // Transform API response to match component format
+        const transformed = data.map(v => ({
+          id: v.id,
+          product_id: v.product_id,
+          name: v.name,
+          price: v.price,
+          original: v.original,
+          rating: v.rating,
+          reviews: v.reviews,
+          ribbon: v.ribbon,
+          category: v.category,
+          image: v.image,
+          style: v.style,
+          material: v.material,
+          color: v.color,
+          size: v.size,
+        }))
+        setVases(transformed)
+      })
+      .catch(() => {
+        // Fallback to hardcoded data if API fails
+        setVases(ALL_VASES)
+      })
+      .finally(() => setLoading(false))
+  }, [])
+
   const toggleWishlist = id => setWishlist(p => p.includes(id) ? p.filter(i=>i!==id) : [...p,id])
 
-  const filtered = ALL_VASES
+  const filtered = (vases.length > 0 ? vases : ALL_VASES)
     .filter(v => category==="All" || v.category===category)
     .filter(v => v.price>=priceRange[0] && v.price<=priceRange[1])
     .sort((a,b) => {

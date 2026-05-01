@@ -52,15 +52,20 @@ class Flower(Base):
 class Vase(Base):
     __tablename__ = "vases"
 
-    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    product_id  = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
-    style       = Column(String(100), nullable=True)
-    material    = Column(String(100), nullable=True)
-    color       = Column(String(100), nullable=True)
-    size        = Column(String(100), nullable=True)
-    quantity    = Column(Integer, default=1)
-    unit_price  = Column(Numeric(10, 2), nullable=False)
-    created_at  = Column(DateTime(timezone=True), default=now_utc)
+    id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    product_id   = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    style        = Column(String(100), nullable=True)
+    material     = Column(String(100), nullable=True)
+    color        = Column(String(100), nullable=True)
+    size         = Column(String(100), nullable=True)
+    quantity     = Column(Integer, default=1)
+    unit_price   = Column(Numeric(10, 2), nullable=False)
+    original_price = Column(Numeric(10, 2), nullable=True)  # Original price before discount
+    rating       = Column(Numeric(2, 1), nullable=True)   # Rating (e.g., 4.8)
+    reviews      = Column(Integer, default=0)              # Number of reviews
+    ribbon       = Column(String(50), nullable=True)          # Ribbon text (e.g., "Best Seller", "Premium")
+    category     = Column(String(50), nullable=True)        # Category (e.g., "Gold", "Green", "White")
+    created_at   = Column(DateTime(timezone=True), default=now_utc)
 
     # Relationships
     product      = relationship("Product", back_populates="vase")
