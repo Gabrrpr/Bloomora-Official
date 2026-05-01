@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     # Pollinations
     POLLINATIONS_API_URL: str = "https://image.pollinations.ai/prompt"
-    
+
     # Supabase Storage
     SUPABASE_BUCKET: str = "arrangements"
 
@@ -33,12 +33,14 @@ class Settings(BaseSettings):
     # OAuth
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
-    FACEBOOK_CLIENT_ID: str = "your_fb_app_id"
-    FACEBOOK_CLIENT_SECRET: str = "your_fb_secret"
+    FACEBOOK_CLIENT_ID: str = ""
+    FACEBOOK_CLIENT_SECRET: str = ""
+    FACEBOOK_REDIRECT_URI: str = ""
     OAUTH_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth"
 
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 
 settings = Settings()

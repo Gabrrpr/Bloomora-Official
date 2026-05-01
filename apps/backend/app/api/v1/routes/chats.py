@@ -132,35 +132,63 @@ def get_all_conversations(
     users_with_chats = db.query(Chat.user_id.distinct()).all()
 
     for u_id in users_with_chats:
-        customer_id = str(u_id[0])
-        customer = db.query(User).filter(User.id == customer_id).first()
-        if not customer:
+        try:
+            customer_id = str(u_id[0])
+            customer = db.query(User).filter(User.id == customer_id).first()
+            if not customer:
+                continue
+
+            unread_count = db.query(Chat).filter(
+                Chat.user_id == customer_id,
+                Chat.sender == 'customer',
+                Chat.is_read == 0
+            ).count()
+
+            recent_message = db.query(Chat).filter(Chat.user_id == customer_id)\
+                .order_by(desc(Chat.created_at)).first()
+
+            recent_orders = db.query(Order).filter(Order.user_id == customer_id)\
+                .order_by(desc(Order.created_at)).limit(3).all()
+
+            # Build recent_orders safely with defensive checks
+            orders_list = []
+            for o in recent_orders:
+                try:
+                    # Safely get product/arrangement names with defensive checks
+                    product_name = "Custom"
+                    if o.product_id and o.product:
+                        try:
+                            product_name = o.product.name
+                        except Exception:
+                            product_name = "Custom"
+                    elif o.arrangement_id and o.arrangement:
+                        try:
+                            product_name = o.arrangement.name
+                        except Exception:
+                            product_name = "Custom"
+                    
+                    orders_list.append({
+                        "order_number": f"ORD-{o.id.hex[:8].upper()}",
+                        "product": product_name,
+                        "status": o.status.value if hasattr(o.status, 'value') else str(o.status),
+                        "total_amount": float(o.total_amount)
+                    })
+                except Exception as e:
+                    # Skip this order but don't break the entire conversation list
+                    print(f"Error processing order {o.id}: {e}")
+                    continue
+
+            conversations.append(ConversationOut(
+                customer_id=UUID(customer_id),
+                user_name=f"{customer.first_name or ''} {customer.last_name or ''}".strip() or customer.username,
+                unread_count=unread_count,
+                last_message=recent_message.message if recent_message else "",
+                recent_orders=orders_list
+            ))
+        except Exception as e:
+            # Log the error but continue processing other conversations
+            print(f"Error building conversation for user {u_id[0]}: {e}")
             continue
-
-        unread_count = db.query(Chat).filter(
-            Chat.user_id == customer_id,
-            Chat.sender == 'customer',
-            Chat.is_read == 0
-        ).count()
-
-        recent_message = db.query(Chat).filter(Chat.user_id == customer_id)\
-            .order_by(desc(Chat.created_at)).first()
-
-        recent_orders = db.query(Order).filter(Order.user_id == customer_id)\
-            .order_by(desc(Order.created_at)).limit(3).all()
-
-        conversations.append(ConversationOut(
-            customer_id=UUID(customer_id),
-            user_name=f"{customer.first_name or ''} {customer.last_name or ''}".strip() or customer.username,
-            unread_count=unread_count,
-            last_message=recent_message.message if recent_message else "",
-            recent_orders=[{
-                "order_number": f"ORD-{o.id.hex[:8].upper()}",
-                "product": o.product.name if o.product else (o.arrangement.name if o.arrangement else "Custom"),
-                "status": o.status.value if hasattr(o.status, 'value') else str(o.status),
-                "total_amount": float(o.total_amount)
-            } for o in recent_orders]
-        ))
 
     return ConversationList(conversations=conversations)
 
