@@ -1,27 +1,21 @@
-# TODO: Move vases from products table to vases table in Supabase
+# Implementation TODO
 
-## Task Summary
-Move vases from hardcoded data in VasesPage.jsx to be fetched from the vases table in Supabase database.
+## Task: Payment-First Ordering System
 
-## Steps to Complete:
+### Backend Changes
 
-### Step 1: Update Vase Model
-- [ ] Add missing fields to Vase model: original_price, rating, reviews, ribbon, category
+- [x] 1. Remove COD (`cash_on_delivery`) from PaymentMethodEnum in `apps/backend/app/models/order.py`
+- [x] 2. Add payment processing to `create_orders` endpoint in `apps/backend/app/api/v1/routes/orders.py`
+- [x] 3. Add new `POST /orders/{order_id}/pay` endpoint for payment confirmation in `apps/backend/app/api/v1/routes/orders.py`
 
-### Step 2: Create Database Migration
-- [ ] Create alembic migration to add new columns to vases table
+### Frontend Changes
 
-### Step 3: Update Seed Script
-- [ ] Modify seed_products.py to also create Vase records in vases table
+- [x] 4. Add payment confirmation step in `apps/web/src/pages/Checkout.jsx` - require payment confirmation before order creation
 
-### Step 4: Add API Endpoint
-- [ ] Add new /vases endpoints in products.py or create vases.py route
+### Additional Improvements Made
 
-### Step 5: Update Frontend
-- [ ] Update VasesPage.jsx to fetch from API instead of hardcoded data
+- [x] 5. Added "Save to address book" checkbox feature in Checkout.jsx for recipient addresses
 
-### Step 6: Test and Verify
-- [ ] Run migration to apply schema changes
-- [ ] Run seed script to populate vases table
-- [ ] Test API returns correct data
-- [ ] Verify frontend displays vases correctly
+### Follow-up Steps
+- [ ] Test the checkout flow end-to-end
+- [ ] Verify orders only created after payment is confirmed

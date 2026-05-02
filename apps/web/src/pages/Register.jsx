@@ -151,6 +151,11 @@ export default function Register({ onNavigate }) {
     setLoading(true)
     try {
       await verifyOtp(form.email, otp)
+// Convert address object to string format
+      const addressStr = form.address.street 
+        ? `${form.address.street}, ${form.address.city}, ${form.address.provinceId || ''} ${form.address.zip_code || ''}`.trim()
+        : undefined
+      
       const result = await register({
         first_name: form.firstName,
         last_name: form.lastName,
@@ -158,7 +163,7 @@ export default function Register({ onNavigate }) {
         phone_number: form.phone,
         username: form.username || undefined,
         password: form.password,
-        address: form.address // New field
+        address: addressStr
       })
       if (result.success || result.status === "success") {
         sessionStorage.setItem("registerEmail", form.email)

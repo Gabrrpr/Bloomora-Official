@@ -4,9 +4,10 @@ from sqlalchemy import or_, func, String
 from typing import List, Optional
 from decimal import Decimal
 import uuid
+import secrets
 
 from app.core.dependencies import get_db, get_current_user
-from app.models import User, RoleEnum, Order, OrderStatusEnum, Arrangement
+from app.models import User, RoleEnum, Order, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -164,11 +165,12 @@ def create_orders(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Create orders from cart items. Returns created order IDs."""
+    """Create orders from cart items. Orders are created with 'pending' status and await payment."""
     cart_items = payload.get("items", [])
     delivery_address = payload.get("delivery_address", "")
     delivery_notes = payload.get("delivery_notes", "")
     scheduled_at = payload.get("scheduled_at")
+    payment_method = payload.get("payment_method", "qrph")
 
     if not cart_items:
         raise HTTPException(status_code=400, detail="Cart is empty.")
@@ -233,10 +235,75 @@ def create_orders(
         db.add(order)
         db.commit()
         db.refresh(order)
+
+        # Create a transaction record for this order
+        try:
+            pm = PaymentMethodEnum(payment_method)
+        except ValueError:
+            pm = PaymentMethodEnum.qrph
+
+        transaction = Transaction(
+            id=uuid.uuid4(),
+            order_id=order.id,
+            payment_method=pm,
+            total_amount=order.total_amount,
+            status=PaymentStatusEnum.pending,
+            reference_number=f"REF-{secrets.token_hex(6).upper()}",
+        )
+        db.add(transaction)
+        db.commit()
+
         created_orders.append(str(order.id))
 
     return {
         "status": "success",
-        "message": f"{len(created_orders)} order(s) created successfully.",
+        "message": f"{len(created_orders)} order(s) created. Please confirm payment to proceed.",
         "order_ids": created_orders,
+    }
+
+
+# ── Confirm Payment for Order ───────────────────────────────────────────────────
+@router.post("/{order_id}/pay", response_model=dict)
+def confirm_payment(
+    order_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Confirm payment for an order. Updates transaction status and order status."""
+    try:
+        order_uuid = uuid.UUID(order_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid order ID")
+
+    order = db.query(Order).filter(Order.id == order_uuid).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    # Verify ownership
+    if order.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    # Check if transaction exists
+    if not order.transaction:
+        raise HTTPException(status_code=400, detail="No transaction found for this order")
+
+    # Check if already paid
+    if order.transaction.status == PaymentStatusEnum.paid:
+        raise HTTPException(status_code=400, detail="Payment already confirmed for this order")
+
+    # Update transaction to paid
+    order.transaction.status = PaymentStatusEnum.paid
+    # Update order status to confirmed
+    order.status = OrderStatusEnum.confirmed
+    db.commit()
+    db.refresh(order)
+    db.refresh(order.transaction)
+
+    return {
+        "status": "success",
+        "message": "Payment confirmed successfully",
+        "order_id": str(order.id),
+        "order_number": f"ORD-{order.id.hex[:8].upper()}",
+        "payment_status": order.transaction.status.value,
+        "order_status": order.status.value,
     }

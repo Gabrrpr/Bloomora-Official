@@ -52,7 +52,8 @@ export default function Profile({ onNavigate }) {
   const [showAddressModal, setShowAddressModal] = useState(false)
   const [editingAddress, setEditingAddress] = useState(null)
   const [addressForm, setAddressForm] = useState({ ...EMPTY_ADDRESS })
-  const [savingAddress, setSavingAddress] = useState(false)
+const [savingAddress, setSavingAddress] = useState(false)
+  const [addressError, setAddressError] = useState("")
 
   useEffect(() => {
     loadAddresses()
@@ -92,10 +93,12 @@ export default function Profile({ onNavigate }) {
     setShowAddressModal(true)
   }
 
-  const handleSaveAddress = async (e) => {
+const handleSaveAddress = async (e) => {
     e.preventDefault()
+    setAddressError("")
     setSavingAddress(true)
     try {
+      console.log("Saving address with data:", addressForm)
       if (editingAddress) {
         await api.updateAddress(editingAddress.id, addressForm)
       } else {
@@ -105,7 +108,9 @@ export default function Profile({ onNavigate }) {
       setShowAddressModal(false)
     } catch (err) {
       console.error("Failed to save address:", err)
-      alert("Failed to save address. Please try again.")
+      const errorMsg = err.message || "Failed to save address. Please try again."
+      setAddressError(errorMsg)
+      alert(errorMsg)
     } finally {
       setSavingAddress(false)
     }

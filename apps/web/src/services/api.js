@@ -1,7 +1,7 @@
 const API_BASE = 'http://localhost:8000/api/v1';
 
 export const api = {
-  async request(endpoint, options = {}) {
+async request(endpoint, options = {}) {
     const token = localStorage.getItem('access_token');
     const url = `${API_BASE}${endpoint}`;
     const config = {
@@ -15,7 +15,14 @@ export const api = {
 
     const response = await fetch(url, config);
     if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`);
+      let errorMsg = `API Error: ${response.status}`;
+      try {
+        const errorData = await response.json();
+        errorMsg = errorData.detail || JSON.stringify(errorData);
+      } catch (e) {
+        // Ignore parse errors
+      }
+      throw new Error(errorMsg);
     }
     return response.json();
   },
@@ -151,9 +158,13 @@ export const api = {
     return this.delete(`/products/admin/${productId}`);
   },
 
-  // ── Orders ────────────────────────────────────────────────────────────────
-  async createOrder({ items, delivery_address, delivery_notes, scheduled_at }) {
-    return this.post('/orders/', { items, delivery_address, delivery_notes, scheduled_at });
+// ── Orders ────────────────────────────────────────────────────────────────
+  async createOrder({ items, delivery_address, delivery_notes, scheduled_at, payment_method }) {
+    return this.post('/orders/', { items, delivery_address, delivery_notes, scheduled_at, payment_method });
+  },
+
+  async confirmPayment(orderId) {
+    return this.post(`/orders/${orderId}/pay`, {});
   },
 
 

@@ -20,7 +20,7 @@ class PaymentMethodEnum(str, enum.Enum):
     ewallet = "ewallet"
     card = "card"
     bank_transfer = "bank_transfer"
-    cash_on_delivery = "cash_on_delivery"
+    qrph = "qrph"
 
 
 class PaymentStatusEnum(str, enum.Enum):

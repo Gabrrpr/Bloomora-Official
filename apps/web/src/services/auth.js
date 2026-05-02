@@ -6,7 +6,16 @@ export async function sendOtp(email) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email })
   })
-  if (!response.ok) throw new Error('Failed to send OTP')
+  if (!response.ok) {
+    let errorMsg = 'Failed to send OTP'
+    try {
+      const errorData = await response.json()
+      errorMsg = errorData.detail || JSON.stringify(errorData)
+    } catch (e) {
+      // Ignore
+    }
+    throw new Error(errorMsg)
+  }
   return response.json()
 }
 
@@ -16,7 +25,16 @@ export async function verifyOtp(email, otp) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, otp })
   })
-  if (!response.ok) throw new Error('Invalid or expired OTP')
+  if (!response.ok) {
+    let errorMsg = 'Invalid or expired OTP'
+    try {
+      const errorData = await response.json()
+      errorMsg = errorData.detail || JSON.stringify(errorData)
+    } catch (e) {
+      // Ignore
+    }
+    throw new Error(errorMsg)
+  }
   return response.json()
 }
 
@@ -26,7 +44,16 @@ export async function registerUser(userData) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(userData)
   })
-  if (!response.ok) throw new Error('Registration failed')
+  if (!response.ok) {
+    let errorMsg = 'Registration failed'
+    try {
+      const errorData = await response.json()
+      errorMsg = errorData.detail || JSON.stringify(errorData)
+    } catch (e) {
+      // Ignore
+    }
+    throw new Error(errorMsg)
+  }
   return response.json()
 }
 

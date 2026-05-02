@@ -25,8 +25,9 @@ export default function Checkout({ onNavigate }) {
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [loadingAddresses, setLoadingAddresses] = useState(true)
 
-  // Manual address form for "someone else"
+// Manual address form for "someone else"
   const [showManualModal, setShowManualModal] = useState(false)
+  const [saveAddressToBook, setSaveAddressToBook] = useState(false)
   const [manualForm, setManualForm] = useState({
     recipient_name: "",
     phone: "",
@@ -136,7 +137,7 @@ export default function Checkout({ onNavigate }) {
 
   const deliveryDetails = getDeliveryDetails()
 
-  const handlePlaceOrder = async () => {
+const handlePlaceOrder = async () => {
     if (cartItems.length === 0) {
       setError("Your cart is empty.")
       return
@@ -148,6 +149,30 @@ export default function Checkout({ onNavigate }) {
     setPlacing(true)
     setError("")
     try {
+      // Save recipient address to address book if checkbox is checked
+      if (saveAddressToBook && recipientType === "someone_else" && manualForm.recipient_name && manualForm.phone && manualForm.street) {
+        try {
+          await api.createAddress({
+            label: `To: ${manualForm.recipient_name}`,
+            recipient_name: manualForm.recipient_name,
+            phone: manualForm.phone,
+            street: manualForm.street,
+            barangay: manualForm.barangay || "",
+            city: manualForm.city,
+            province: manualForm.province,
+            zip_code: manualForm.zip || "",
+            is_default: false,
+          })
+          // Refresh addresses list
+          const res = await api.getAddresses()
+          setAddresses(res.addresses || [])
+        } catch (addrErr) {
+          console.error("Failed to save address to book:", addrErr)
+          // Continue with order even if address save fails
+        }
+      }
+      
+      // Create orders with payment method
       const res = await api.createOrder({
         items: cartItems.map(i => ({
           id: i.id,
@@ -161,10 +186,22 @@ export default function Checkout({ onNavigate }) {
         delivery_address: deliveryDetails.address,
         delivery_notes: `Delivery time: ${deliveryTime} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone})`,
         scheduled_at: tomorrow.toISOString(),
+        payment_method: paymentMethod,
       })
 
+      const orderIds = res.order_ids || []
+      
+      // Confirm payment for each order
+      for (const orderId of orderIds) {
+        try {
+          await api.confirmPayment(orderId)
+        } catch (payErr) {
+          console.error(`Failed to confirm payment for order ${orderId}:`, payErr)
+        }
+      }
+
       const orderData = {
-        orderIds: res.order_ids || [],
+        orderIds: orderIds,
         items: cartItems,
         subtotal,
         shipping,
@@ -547,7 +584,7 @@ export default function Checkout({ onNavigate }) {
                   />
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-3">
+<div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1.5">Province *</label>
                   <input
@@ -570,7 +607,22 @@ export default function Checkout({ onNavigate }) {
                   />
                 </div>
               </div>
-              <div className="flex gap-3 pt-1">
+              
+              {/* Save to address book checkbox */}
+              <div className="flex items-center gap-2 pt-2">
+                <input
+                  type="checkbox"
+                  id="saveToBook"
+                  checked={saveAddressToBook}
+                  onChange={e => setSaveAddressToBook(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                />
+                <label htmlFor="saveToBook" className="text-xs text-gray-600">
+                  Save to my address book for future orders
+                </label>
+              </div>
+              
+              <div className="flex gap-3 pt-3">
                 <button
                   type="button"
                   onClick={() => setShowManualModal(false)}
