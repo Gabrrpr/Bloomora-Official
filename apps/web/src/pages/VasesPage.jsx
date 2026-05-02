@@ -10,6 +10,28 @@ const DG = "#0C573E"
 const vaseImg = (filename) =>
   new URL(`../assets/products/vases/${filename}`, import.meta.url).href
 
+const VASE_IMAGE_MAP = {
+  "Black Gold Large Vase":    vaseImg("BlackGoldLargeVase580.webp"),
+  "Black Gold Regular Vase":  vaseImg("BlackGoldRegularVase280.webp"),
+  "Green Fountain Vase":      vaseImg("GreenFountainVase.webp"),
+  "Green Grainy Curvy Vase":  vaseImg("GreenGrainyCurvyVase.webp"),
+  "Green Grainy Line Vase":   vaseImg("GreenGrainyLineVase.webp"),
+  "Green Grainy Vase":        vaseImg("GreenGrainyVase.webp"),
+  "Green Leaf Vase":          vaseImg("GreenLeafVase.webp"),
+  "Green Rectangle Vase":     vaseImg("GreenRectangleVase.webp"),
+  "Green Tulip Vase":         vaseImg("GreenTulipVase480.webp"),
+  "Marble Hexagon Vase":      vaseImg("MarbleHexagonVase380.webp"),
+  "Marble Line Vase":         vaseImg("MarbleLineVase.webp"),
+  "Mint Green Simple Vase":   vaseImg("MintGreenSimpleVase.webp"),
+  "Pink Abstract Vase":       vaseImg("PinkAbstractVase380.webp"),
+  "White Abstract Vase":      vaseImg("WhiteAbstractVase300.webp"),
+  "White Circular Vase S":    vaseImg("WhiteCircularVase80.webp"),
+  "White Circular Vase L":    vaseImg("WhiteCircularVase1000.webp"),
+  "White Circular Vase XL":   vaseImg("WhiteCircularVase1350.webp"),
+  "White Hexagon Vase":       vaseImg("WhiteHexagonVase80.webp"),
+  "White Tulip Vase":         vaseImg("WhiteTulipVase480.webp"),
+}
+
 // ── Vase catalog (fallback if API fails) ─────────────────────────────────
 const ALL_VASES = [
   { id:1,  image:vaseImg("BlackGoldLargeVase580.webp"),   name:"Black Gold Large Vase",   price:580,  original:750,  rating:4.8, reviews:32, ribbon:"Premium",     category:"Gold"   },
@@ -226,27 +248,28 @@ export default function VasesPage({ onNavigate }) {
   useEffect(() => {
     api.getVases()
       .then(data => {
-        // Transform API response to match component format
-        const transformed = data.map(v => ({
-          id: v.id,
-          product_id: v.product_id,
-          name: v.name,
-          price: v.price,
-          original: v.original,
-          rating: v.rating,
-          reviews: v.reviews,
-          ribbon: v.ribbon,
-          category: v.category,
-          image: v.image,
-          style: v.style,
-          material: v.material,
-          color: v.color,
-          size: v.size,
-        }))
+        const transformed = data.map(v => {
+          // find matching fallback for image + rating + reviews
+          const fallback = ALL_VASES.find(f => f.name === v.name) || {}
+          return {
+            id: v.id,
+            name: v.name,
+            price: v.price || fallback.price || 0,
+            original: v.original || fallback.original || (v.price * 1.2),
+            rating: fallback.rating || 4.5,
+            reviews: fallback.reviews || 0,
+            ribbon: fallback.ribbon || null,
+            category: v.category || fallback.category || "Uncategorized",
+            image: v.image_url || fallback.image || null,  // ← map image_url to image
+            style: v.style,
+            material: v.material,
+            color: v.color,
+            size: v.size,
+          }
+        })
         setVases(transformed)
       })
       .catch(() => {
-        // Fallback to hardcoded data if API fails
         setVases(ALL_VASES)
       })
       .finally(() => setLoading(false))

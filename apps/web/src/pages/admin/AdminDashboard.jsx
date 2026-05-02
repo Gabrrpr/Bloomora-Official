@@ -35,7 +35,8 @@ const NAV = [
   { label: "Transactions",  d: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" },
   { label: "Delivery",      d: "M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8" },
   { label: "Hero Section",  d: "M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" },
- { label: "Advertisements", d: "M3 7h18M3 7a2 2 0 00-2 2v8a2 2 0 002 2h18a2 2 0 002-2V9a2 2 0 00-2-2M3 7V5a2 2 0 012-2h14a2 2 0 012 2v2M8 13h4m-4 3h8" },
+  { label: "Advertisements", d: "M3 7h18M3 7a2 2 0 00-2 2v8a2 2 0 002 2h18a2 2 0 002-2V9a2 2 0 00-2-2M3 7V5a2 2 0 012-2h14a2 2 0 012 2v2M8 13h4m-4 3h8" },
+  { label: "Preview Site",   d: "M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z", preview: true },
 ]
 
 function NavIcon({ d }) {
@@ -458,6 +459,63 @@ function DashboardPanel({ user }) {
   )
 }
 
+// ── Preview Site Panel ─────────────────────────────────────────────────────────
+function PreviewSitePanel({ onBack }) {
+  const [iframeLoaded, setIframeLoaded] = useState(false)
+  
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-bold text-gray-900">Preview Site</h1>
+        <button
+          onClick={onBack}
+          className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md hover:bg-gray-50 transition-all text-gray-600"
+          style={{ borderColor: "#dde3ec" }}
+        >
+          ← Back to Dashboard
+        </button>
+      </div>
+      
+      <p className="text-sm text-gray-500">
+        Viewing the customer landing page. Use the button above or the floating button to return to admin.
+      </p>
+      
+      <div className="relative bg-white rounded-xl overflow-hidden" style={{ border: "1px solid #e8edf2", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", height: "calc(100vh - 180px)" }}>
+        {/* Loading indicator */}
+        {!iframeLoaded && (
+          <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
+            <div className="flex flex-col items-center gap-3">
+              <div className="w-8 h-8 border-2 border-gray-300 border-t-green-600 rounded-full animate-spin" />
+              <p className="text-sm text-gray-500">Loading preview...</p>
+            </div>
+          </div>
+        )}
+        
+        {/* Iframe to customer site */}
+        <iframe
+          src="http://localhost:5173"
+          title="Customer Site Preview"
+          className="w-full h-full"
+          style={{ border: "none" }}
+          onLoad={() => setIframeLoaded(true)}
+        />
+        
+        {/* Floating back button */}
+        <button
+          onClick={onBack}
+          className="absolute bottom-4 right-4 flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white rounded-lg shadow-lg transition-all hover:opacity-90 hover:scale-105"
+          style={{ background: `linear-gradient(135deg, ${DG}, ${G})`, zIndex: 10 }}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 17l-5-5 5-5M18 17l-5-5 5-5" />
+          </svg>
+          Back to Admin
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Sidebar ───────────────────────────────────────────────────────────────────
 function SidebarContent({ active, setActive, collapsed, onLogout }) {
   return (
@@ -567,9 +625,10 @@ export default function AdminDashboard({ onNavigate }) {
       case "Activity Logs":return <AdminActivityLogs />
       case "Transactions": return <AdminTransactions />
       case "Delivery":     return <AdminDelivery />
-      case "Settings":     return <AdminSettings />
+case "Settings":     return <AdminSettings />
       case "Hero Section": return <AdminHero />
       case "Advertisements": return <AdminAdvertisements />
+      case "Preview Site":  return <PreviewSitePanel onBack={() => goTo("Dashboard")} />
       default:             return <ComingSoon label={active} />
     }
   }

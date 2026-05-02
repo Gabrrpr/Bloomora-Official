@@ -5,7 +5,6 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from .base import Base, now_utc
 
-
 class RoleEnum(str, enum.Enum):
     admin = "admin"
     staff = "staff"
@@ -52,3 +51,4 @@ class User(Base):
     activity_logs = relationship("ActivityLog", back_populates="user")
     ai_usage_logs = relationship("AIUsageLog", back_populates="user")
     addresses = relationship("Address", back_populates="user", cascade="all, delete-orphan")
+    arrangements = relationship("Arrangement", back_populates="user")

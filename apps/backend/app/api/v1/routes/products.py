@@ -1,5 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Form
 from sqlalchemy.orm import Session, joinedload
+from sqlalchemy import and_
 from typing import List, Optional
 from decimal import Decimal
 import uuid
@@ -10,7 +11,7 @@ from app.models import User, RoleEnum, Product, Inventory, ProductCategoryEnum, 
 router = APIRouter()
 
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 def require_admin_or_staff(current_user: User):
     if current_user.role not in [RoleEnum.admin, RoleEnum.staff]:
         raise HTTPException(status_code=403, detail="Admin or staff access required.")
@@ -23,7 +24,7 @@ def serialize_product(p: Product) -> dict:
         "name": p.name,
         "description": p.description,
         "price": float(p.price) if p.price else 0,
-        "original_price": float(p.price) * 1.2 if p.price else 0,  # placeholder markup
+        "original_price": float(p.price) * 1.2 if p.price else 0,
         "category": p.category.value if hasattr(p.category, "value") else p.category,
         "image_url": p.image_url,
         "is_available": p.is_available,
@@ -35,13 +36,13 @@ def serialize_product(p: Product) -> dict:
     }
 
 
-# ── Public catalog endpoints ─────────────────────────────────────────────────
+# ── Public endpoints ──────────────────────────────────────────────────────────
 @router.get("/", response_model=List[dict])
 def get_products(db: Session = Depends(get_db)):
     """Get all available products for public catalog."""
     products = db.query(Product).filter(Product.is_available == True).all()
     return [{
-        "id": p.id,
+        "id": str(p.id),
         "name": p.name,
         "price": float(p.price) if p.price else 0,
         "category": p.category.value if hasattr(p.category, "value") else p.category,
@@ -52,7 +53,7 @@ def get_products(db: Session = Depends(get_db)):
 
 @router.get("/customization/all", response_model=List[dict])
 def get_customization_products(db: Session = Depends(get_db)):
-    """Get all available products with customization attributes and stock for Mix & Match."""
+    """Get all available products with customization attributes for Mix & Match."""
     products = (
         db.query(Product)
         .filter(Product.is_available == True)
@@ -78,21 +79,12 @@ def get_customization_products(db: Session = Depends(get_db)):
             "stock_status": stock_status,
         }
 
-        # Add category-specific attributes
         if p.flower:
             item["attrs"] = {
                 "color": p.flower.color,
                 "style": p.flower.style,
                 "size": p.flower.size,
                 "quantity": p.flower.quantity,
-            }
-        elif p.vase:
-            item["attrs"] = {
-                "style": p.vase.style,
-                "material": p.vase.material,
-                "color": p.vase.color,
-                "size": p.vase.size,
-                "quantity": p.vase.quantity,
             }
         elif p.wrapping:
             item["attrs"] = {
@@ -116,31 +108,13 @@ def get_customization_products(db: Session = Depends(get_db)):
     return result
 
 
-@router.get("/{product_id}", response_model=dict)
-def get_product(product_id: str, db: Session = Depends(get_db)):
-    """Get single product details."""
-    product = db.query(Product).filter(Product.id == product_id).first()
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    return {
-        "id": product.id,
-        "name": product.name,
-        "description": product.description,
-        "price": float(product.price) if product.price else 0,
-        "category": product.category.value if hasattr(product.category, "value") else product.category,
-        "image_url": product.image_url,
-        "is_available": product.is_available,
-        "status": product.status.value if hasattr(product.status, "value") else product.status,
-    }
-
-
-# ── Admin endpoints ──────────────────────────────────────────────────────────
+# ── Admin endpoints ───────────────────────────────────────────────────────────
 @router.get("/admin/all", response_model=List[dict])
 def get_admin_products(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get all products (including inactive) for admin panel."""
+    """Get all products including inactive for admin panel."""
     require_admin_or_staff(current_user)
     products = (
         db.query(Product)
@@ -151,55 +125,14 @@ def get_admin_products(
     return [serialize_product(p) for p in products]
 
 
-@router.get("/vases", response_model=List[dict])
-def get_vases(db: Session = Depends(get_db)):
-    """Get all available vases with product data for VasesPage."""
-    from app.models.arrangement import Vase
-    
-    vases = (
-        db.query(Vase)
-        .join(Product)
-        .filter(Product.is_available == True)
-        .order_by(Vase.category, Product.name)
-        .all()
-    )
-    
-    result = []
-    for v in vases:
-        product = v.product
-        inv = product.inventory if product else None
-        stock = inv.current_stock if inv else 0
-        
-        result.append({
-            "id": str(v.id),
-            "product_id": str(v.product_id),
-            "name": product.name if product else None,
-            "price": float(v.unit_price) if v.unit_price else 0,
-            "original": float(v.original_price) if v.original_price else float(v.unit_price) * 1.2 if v.unit_price else 0,
-            "rating": float(v.rating) if v.rating else 0,
-            "reviews": v.reviews or 0,
-            "ribbon": v.ribbon,
-            "category": v.category or product.category.value if product and hasattr(product.category, 'value') else "Uncategorized",
-            "image": product.image_url if product else None,
-            "style": v.style,
-            "material": v.material,
-            "color": v.color,
-            "size": v.size,
-            "stock": stock,
-        })
-    
-    return result
-
-
 @router.get("/low-stock", response_model=List[dict])
 def get_low_stock(
     limit: int = 5,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get low stock products (current_stock <= reorder_point). Admin/Staff only."""
+    """Get low stock products. Admin/Staff only."""
     require_admin_or_staff(current_user)
-    from sqlalchemy import and_
     products = (
         db.query(Product)
         .outerjoin(Inventory, Product.id == Inventory.product_id)
@@ -216,7 +149,26 @@ def get_low_stock(
     return [serialize_product(p) for p in products]
 
 
+# ── Wildcard route — MUST be last ─────────────────────────────────────────────
+@router.get("/{product_id}", response_model=dict)
+def get_product(product_id: str, db: Session = Depends(get_db)):
+    """Get single product details."""
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return {
+        "id": str(product.id),
+        "name": product.name,
+        "description": product.description,
+        "price": float(product.price) if product.price else 0,
+        "category": product.category.value if hasattr(product.category, "value") else product.category,
+        "image_url": product.image_url,
+        "is_available": product.is_available,
+        "status": product.status.value if hasattr(product.status, "value") else product.status,
+    }
 
+
+# ── Admin CRUD ────────────────────────────────────────────────────────────────
 @router.post("/admin", response_model=dict, status_code=201)
 def create_product(
     name: str = Form(...),
@@ -262,7 +214,6 @@ def create_product(
     db.commit()
     db.refresh(new_product)
 
-    # Create inventory entry
     inventory = Inventory(
         product_id=new_product.id,
         current_stock=stock,
@@ -340,7 +291,7 @@ def delete_product(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Soft-delete a product by setting inactive. Admin/Staff only."""
+    """Soft-delete a product. Admin/Staff only."""
     require_admin_or_staff(current_user)
 
     product = db.query(Product).filter(Product.id == product_id).first()
@@ -352,4 +303,3 @@ def delete_product(
     db.commit()
 
     return {"status": "success", "message": "Product deactivated successfully."}
-

@@ -39,9 +39,9 @@ class Product(Base):
     reviews = relationship("Review", back_populates="product")
     order_items = relationship("Order", back_populates="product")
     flower = relationship("Flower", back_populates="product", uselist=False)
-    vase = relationship("Vase", back_populates="product", uselist=False)
     wrapping = relationship("Wrapping", back_populates="product", uselist=False)
     accessory = relationship("Accessory", back_populates="product", uselist=False)
+    discounts = relationship("Discount", back_populates="product")
 
 
 class Inventory(Base):
@@ -59,3 +59,18 @@ class Inventory(Base):
 
     # Relationships
     product = relationship("Product", back_populates="inventory")
+
+class Discount(Base):
+    __tablename__ = "discounts"
+
+    id             = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    product_id     = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=True)
+    discount_type  = Column(String(50), nullable=False)      # 'percentage' | 'fixed'
+    discount_value = Column(Numeric(10, 2), nullable=False)
+    start_date     = Column(DateTime(timezone=True), nullable=True)
+    end_date       = Column(DateTime(timezone=True), nullable=True)
+    status         = Column(String(20), default="active")
+    created_at     = Column(DateTime(timezone=True), default=now_utc)
+
+    # Relationships
+    product = relationship("Product", back_populates="discounts")

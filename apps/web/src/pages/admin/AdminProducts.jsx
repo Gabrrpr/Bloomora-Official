@@ -562,20 +562,35 @@ export default function AdminProducts() {
   const [lowCount, setLowCount]     = useState(0)
   const [loading, setLoading]       = useState(true)
 
-  const fetchProducts = useCallback(async () => {
-    try {
-      const res = await api.getAdminProducts()
-      const data = Array.isArray(res) ? res : res.products || []
-      setProducts(data)
-      setTotalCount(data.length)
-      setLowCount(data.filter(p => p.stock <= (p.reorder_point || 10)).length)
-    } catch (e) {
-      console.error("Failed to fetch products", e)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+const fetchProducts = useCallback(async () => {
+  setLoading(true)
+  try {
+    const [productsRes, vasesRes] = await Promise.all([
+      api.getAdminProducts(),
+      api.get("/vases/admin/all"),  // fetch vases separately
+    ])
 
+    const products = productsRes.data || productsRes
+    const vases = (vasesRes.data || vasesRes).map(v => ({
+      ...v,
+      category: "vase",           // normalize category
+      status: v.is_available ? "active" : "inactive",
+      stock: v.quantity || 0,
+      reorder_point: 10,
+    }))
+
+    const combined = [...products, ...vases]
+    setProducts(combined)
+    setTotalCount(combined.length)
+    setLowCount(combined.filter(p => p.stock <= (p.reorder_point || 10)).length)
+  } catch (e) {
+    console.error("Failed to fetch products", e)
+  } finally {
+    setLoading(false)
+  }
+}, [])
+
+  // Fetch products on mount
   useEffect(() => {
     fetchProducts()
   }, [fetchProducts])

@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Text, Numeric, Integer, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, Numeric, Integer, Boolean, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.models.base import Base, now_utc
@@ -9,6 +9,7 @@ class Arrangement(Base):
     __tablename__ = "arrangements"
 
     id                  = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id             = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)  # ← add
     product_id          = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=True)
     name                = Column(String(255), nullable=True)
     description         = Column(Text, nullable=True)
@@ -19,16 +20,17 @@ class Arrangement(Base):
     vase_id             = Column(UUID(as_uuid=True), ForeignKey("vases.id"), nullable=True)
     wrapping_id         = Column(UUID(as_uuid=True), ForeignKey("wrappings.id"), nullable=True)
     accessory_id        = Column(UUID(as_uuid=True), ForeignKey("accessories.id"), nullable=True)
+    last_restock_date   = Column(DateTime(timezone=True), nullable=True)  # ← add (from ERD)
     created_at          = Column(DateTime(timezone=True), default=now_utc)
     updated_at          = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
     # Relationships
+    user        = relationship("User", back_populates="arrangements")  # ← add
     orders      = relationship("Order", back_populates="arrangement")
     flower      = relationship("Flower", back_populates="arrangements", foreign_keys=[flower_id])
     vase        = relationship("Vase", back_populates="arrangements", foreign_keys=[vase_id])
     wrapping    = relationship("Wrapping", back_populates="arrangements", foreign_keys=[wrapping_id])
     accessory   = relationship("Accessory", back_populates="arrangements", foreign_keys=[accessory_id])
-
 
 class Flower(Base):
     __tablename__ = "flowers"
@@ -53,22 +55,20 @@ class Vase(Base):
     __tablename__ = "vases"
 
     id           = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    product_id   = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    name         = Column(String(255), nullable=True)        # ← add
+    description  = Column(Text, nullable=True)               # ← add
+    image_url    = Column(String(500), nullable=True)        # ← add
+    is_available = Column(Boolean, default=True)             # ← add
     style        = Column(String(100), nullable=True)
     material     = Column(String(100), nullable=True)
     color        = Column(String(100), nullable=True)
     size         = Column(String(100), nullable=True)
     quantity     = Column(Integer, default=1)
-    unit_price   = Column(Numeric(10, 2), nullable=False)
-    original_price = Column(Numeric(10, 2), nullable=True)  # Original price before discount
-    rating       = Column(Numeric(2, 1), nullable=True)   # Rating (e.g., 4.8)
-    reviews      = Column(Integer, default=0)              # Number of reviews
-    ribbon       = Column(String(50), nullable=True)          # Ribbon text (e.g., "Best Seller", "Premium")
-    category     = Column(String(50), nullable=True)        # Category (e.g., "Gold", "Green", "White")
+    unit_price   = Column(Numeric(10, 2), nullable=True)
+    category     = Column(String(80), nullable=True)
     created_at   = Column(DateTime(timezone=True), default=now_utc)
 
     # Relationships
-    product      = relationship("Product", back_populates="vase")
     arrangements = relationship("Arrangement", back_populates="vase", foreign_keys="Arrangement.vase_id")
 
 
