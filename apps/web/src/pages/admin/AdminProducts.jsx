@@ -39,6 +39,31 @@ const PRODUCT_IMAGE_MAP = {
   "3pcs Pink Tulips":              Tulips_3pc_Pink,
 }
 
+const vaseImg = (filename) =>
+  new URL(`../../assets/products/vases/${filename}`, import.meta.url).href
+
+const VASE_IMAGE_MAP = {
+  "Black Gold Large Vase":    vaseImg("BlackGoldLargeVase580.webp"),
+  "Black Gold Regular Vase":  vaseImg("BlackGoldRegularVase280.webp"),
+  "Green Fountain Vase":      vaseImg("GreenFountainVase.webp"),
+  "Green Grainy Curvy Vase":  vaseImg("GreenGrainyCurvyVase.webp"),
+  "Green Grainy Line Vase":   vaseImg("GreenGrainyLineVase.webp"),
+  "Green Grainy Vase":        vaseImg("GreenGrainyVase.webp"),
+  "Green Leaf Vase":          vaseImg("GreenLeafVase.webp"),
+  "Green Rectangle Vase":     vaseImg("GreenRectangleVase.webp"),
+  "Green Tulip Vase":         vaseImg("GreenTulipVase480.webp"),
+  "Marble Hexagon Vase":      vaseImg("MarbleHexagonVase380.webp"),
+  "Marble Line Vase":         vaseImg("MarbleLineVase.webp"),
+  "Mint Green Simple Vase":   vaseImg("MintGreenSimpleVase.webp"),
+  "Pink Abstract Vase":       vaseImg("PinkAbstractVase380.webp"),
+  "White Abstract Vase":      vaseImg("WhiteAbstractVase300.webp"),
+  "White Circular Vase S":    vaseImg("WhiteCircularVase80.webp"),
+  "White Circular Vase L":    vaseImg("WhiteCircularVase1000.webp"),
+  "White Circular Vase XL":   vaseImg("WhiteCircularVase1350.webp"),
+  "White Hexagon Vase":       vaseImg("WhiteHexagonVase80.webp"),
+  "White Tulip Vase":         vaseImg("WhiteTulipVase480.webp"),
+}
+
 function getProductImage(product) {
   if (product.image_url) return product.image_url
   return PRODUCT_IMAGE_MAP[product.name] || null

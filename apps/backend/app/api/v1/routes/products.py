@@ -149,25 +149,6 @@ def get_low_stock(
     return [serialize_product(p) for p in products]
 
 
-# ── Wildcard route — MUST be last ─────────────────────────────────────────────
-@router.get("/{product_id}", response_model=dict)
-def get_product(product_id: str, db: Session = Depends(get_db)):
-    """Get single product details."""
-    product = db.query(Product).filter(Product.id == product_id).first()
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    return {
-        "id": str(product.id),
-        "name": product.name,
-        "description": product.description,
-        "price": float(product.price) if product.price else 0,
-        "category": product.category.value if hasattr(product.category, "value") else product.category,
-        "image_url": product.image_url,
-        "is_available": product.is_available,
-        "status": product.status.value if hasattr(product.status, "value") else product.status,
-    }
-
-
 # ── Admin CRUD ────────────────────────────────────────────────────────────────
 @router.post("/admin", response_model=dict, status_code=201)
 def create_product(
@@ -303,3 +284,22 @@ def delete_product(
     db.commit()
 
     return {"status": "success", "message": "Product deactivated successfully."}
+
+
+# ── Public wildcard route — MUST be last ─────────────────────────────────────
+@router.get("/{product_id}", response_model=dict)
+def get_product(product_id: str, db: Session = Depends(get_db)):
+    """Get single product details."""
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    return {
+        "id": str(product.id),
+        "name": product.name,
+        "description": product.description,
+        "price": float(product.price) if product.price else 0,
+        "category": product.category.value if hasattr(product.category, "value") else product.category,
+        "image_url": product.image_url,
+        "is_available": product.is_available,
+        "status": product.status.value if hasattr(product.status, "value") else product.status,
+    }
