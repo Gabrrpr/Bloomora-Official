@@ -1,16 +1,21 @@
 # Post-OAuth New User Profile Setup
+Status: Complete ✅
 
-Status: Approved ✅
+**Backend:** /auth/me returns is_profile_complete
+**Frontend:** AuthContext redirects incomplete to "profile", Profile setup mode
 
-**Logic:** Social login new users lack phone/address → auto-redirect to Profile for setup before home.
+**Missing:** App.jsx no "profile" case – add:
+```
+import Profile from "./pages/Profile"
+... 
+case "profile": return <Profile onNavigate={navigate} />
+```
 
-## TODO Steps:
-1. [✅] Updated apps/backend/app/api/v1/routes/auth.py: /me adds `"is_profile_complete": bool(current_user.phone_number and current_user.address)`
-2. [✅] Updated apps/web/src/context/AuthContext.jsx: Saves is_profile_complete, redirects to /profile if false after OAuth/restore
-3. [✅] Updated apps/web/src/pages/Profile.jsx: setupMode = !user.is_profile_complete, auto-edit, disabled back, banner, auto-home after save
-4. [ ] Update App.jsx router: Protected routes check user?.is_profile_complete or redirect Profile
-5. [ ] Test OAuth → Profile → complete → Home
+**OAuthCallback.jsx interferes:** Remove `onNavigate("home")` after loginWithToken.
 
-**Next:** Backend /auth/me update.
-- Install? No.
-- Test: Backend dev server restart, frontend dev.
+**Test (new email):**
+1. Backend restart: `cd apps/backend && uvicorn app.main:app --reload`
+2. Frontend: `cd apps/web && npm run dev`
+3. Google login → Profile (console: is_profile_complete false) → fill → Home.
+
+Done! Check browser console / localStorage after OAuth.

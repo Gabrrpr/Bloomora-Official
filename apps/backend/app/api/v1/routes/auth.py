@@ -5,18 +5,24 @@ from datetime import datetime, timedelta, timezone
 from jose import jwt
 import bcrypt
 import uuid
+import httpx
 
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.user import User, RoleEnum
 from app.services.email_service import generate_otp, send_otp_email
+from app.core.dependencies import get_current_user
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from authlib.integrations.starlette_client import OAuth
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-# ── OAuth Setup ───────────────────────────────────────────────────────────
+GOOGLE_REDIRECT_URI  = "http://localhost:8000/api/v1/auth/google/callback"
+FACEBOOK_REDIRECT_URI = "http://localhost:8000/api/v1/auth/facebook/callback"
+FRONTEND_URL = "http://localhost:5173"
+
+# ── OAuth Setup ───────────────────────────────────────────────────────────────
 oauth = OAuth()
 oauth.register(
     name='google',
@@ -36,13 +42,11 @@ oauth.register(
 )
 
 
-# ── Schemas ───────────────────────────────────────────────────────────────
-
-# Add this schema at the top with the others
+# ── Schemas ───────────────────────────────────────────────────────────────────
 class LoginRequest(BaseModel):
     email: str
     password: str
-    
+
 class SendOTPRequest(BaseModel):
     email: EmailStr
 
@@ -70,7 +74,7 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────
+# ── Helpers ───────────────────────────────────────────────────────────────────
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
 
@@ -91,9 +95,37 @@ def generate_username(email: str, db: Session) -> str:
         counter += 1
     return username
 
+def find_or_create_oauth_user(email: str, first_name: str, last_name: str, db: Session) -> User:
+    user = db.query(User).filter(User.email == email).first()
+    if not user:
+        user = User(
+            id=uuid.uuid4(),
+            username=generate_username(email, db),
+            email=email,
+            first_name=first_name,
+            last_name=last_name,
+            password_hash="",
+            is_verified=True,
+            is_active=True,
+            role=RoleEnum.customer,
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    else:
+        # Ensure OAuth users are always active and verified
+        user.is_active = True
+        user.is_verified = True
+        if not user.first_name:
+            user.first_name = first_name
+        if not user.last_name:
+            user.last_name = last_name
+        db.commit()
+        db.refresh(user)
+    return user
 
-# ── Routes ────────────────────────────────────────────────────────────────
 
+# ── OTP Routes ────────────────────────────────────────────────────────────────
 @router.post("/send-otp")
 def send_otp(payload: SendOTPRequest, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
@@ -150,6 +182,7 @@ def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(get_db)):
     return {"status": "success", "message": "OTP verified."}
 
 
+# ── Register ──────────────────────────────────────────────────────────────────
 @router.post("/register", status_code=201)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
@@ -182,6 +215,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     return {"status": "success", "message": "Account created successfully.", "user_id": str(user.id)}
 
 
+# ── Forgot Password ───────────────────────────────────────────────────────────
 @router.post("/forgot-password/send-otp")
 def forgot_password_send_otp(payload: SendOTPRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
@@ -193,7 +227,6 @@ def forgot_password_send_otp(payload: SendOTPRequest, db: Session = Depends(get_
 
     otp = generate_otp()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
-
     user.otp_code = otp
     user.otp_expires_at = expires_at
     db.commit()
@@ -226,6 +259,7 @@ def forgot_password_reset(payload: ResetPasswordRequest, db: Session = Depends(g
     return {"status": "success", "message": "Password reset successfully."}
 
 
+# ── Login ─────────────────────────────────────────────────────────────────────
 @router.post("/login", response_model=TokenResponse)
 async def login(request: Request, db: Session = Depends(get_db)):
     import json
@@ -237,14 +271,12 @@ async def login(request: Request, db: Session = Depends(get_db)):
         if "application/json" in content_type:
             data = json.loads(body_bytes.decode())
         else:
-            # form-encoded (OAuth2 password flow from Swagger UI)
             from urllib.parse import parse_qs
             parsed = parse_qs(body_bytes.decode())
             data = {k: v[0] if v else "" for k, v in parsed.items()}
     except Exception:
         raise HTTPException(status_code=422, detail="Invalid request body.")
 
-    # Support both JSON keys (email/password) and OAuth2 form keys (username/password)
     email = data.get("email") or data.get("username")
     password = data.get("password")
 
@@ -265,112 +297,108 @@ async def login(request: Request, db: Session = Depends(get_db)):
     return TokenResponse(access_token=token)
 
 
-# ── Google OAuth ──────────────────────────────────────────────────────────
-
+# ── Google OAuth ──────────────────────────────────────────────────────────────
 @router.get("/google")
 async def google_login(request: Request):
-    return await oauth.google.authorize_redirect(
-        request, 
-        "http://localhost:8000/api/v1/auth/google/callback"
-    )
+    return await oauth.google.authorize_redirect(request, GOOGLE_REDIRECT_URI)
+
 
 @router.get("/google/callback")
 async def google_callback(request: Request, db: Session = Depends(get_db)):
+    # Check for error from Google
+    error = request.query_params.get("error")
+    if error:
+        return RedirectResponse(url=f"{FRONTEND_URL}/?error=google_auth_failed")
+
+    code = request.query_params.get("code")
+    if not code:
+        return RedirectResponse(url=f"{FRONTEND_URL}/?error=no_code")
+
     try:
-        token = await oauth.google.authorize_access_token(request)
-        user_info = token.get("userinfo")
-    except Exception:
-        code = request.query_params.get("code")
-        token = await oauth.google.fetch_token(
-            "https://oauth2.googleapis.com/token",
-            code=code,
-            redirect_uri="http://localhost:8000/api/v1/auth/google/callback",
-        )
-        resp = await oauth.google.get(
-            "https://www.googleapis.com/oauth2/v2/userinfo",
-            token=token
-        )
-        user_info = resp.json()
+        # Exchange code for token directly via httpx — avoids session state issues
+        async with httpx.AsyncClient() as client:
+            token_res = await client.post(
+                "https://oauth2.googleapis.com/token",
+                data={
+                    "code": code,
+                    "client_id": settings.GOOGLE_CLIENT_ID,
+                    "client_secret": settings.GOOGLE_CLIENT_SECRET,
+                    "redirect_uri": GOOGLE_REDIRECT_URI,
+                    "grant_type": "authorization_code",
+                }
+            )
+            token_data = token_res.json()
 
-    if not user_info:
-        raise HTTPException(status_code=400, detail="Failed to fetch Google user info.")
+            if "error" in token_data:
+                print("Token exchange error:", token_data)
+                return RedirectResponse(url=f"{FRONTEND_URL}/?error=token_exchange_failed")
 
-    email = user_info.get("email")
-    first_name = user_info.get("given_name", "")
-    last_name = user_info.get("family_name", "User")
+            access_token = token_data.get("access_token")
 
-    if not email:
-        raise HTTPException(status_code=400, detail="Google account has no email.")
+            # Fetch user profile
+            profile_res = await client.get(
+                "https://www.googleapis.com/oauth2/v2/userinfo",
+                headers={"Authorization": f"Bearer {access_token}"}
+            )
+            user_info = profile_res.json()
 
-    user = db.query(User).filter(User.email == email).first()
+        email = user_info.get("email")
+        if not email:
+            return RedirectResponse(url=f"{FRONTEND_URL}/?error=no_email")
 
-    if not user:
-        user = User(
-            id=uuid.uuid4(),
-            username=generate_username(email, db),
-            email=email,
-            first_name=first_name,
-            last_name=last_name,
-            password_hash="",
-            is_verified=True,
-            is_active=True,
-            role=RoleEnum.customer,
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+        first_name = user_info.get("given_name", "")
+        last_name = user_info.get("family_name", "User")
 
-    access_token = create_access_token(str(user.id))
-    role = user.role.value if hasattr(user.role, 'value') else user.role
-    frontend_url = f"http://localhost:5173/?token={access_token}&role={role}"
-    return RedirectResponse(url=frontend_url)
+        user = find_or_create_oauth_user(email, first_name, last_name, db)
+        jwt_token = create_access_token(str(user.id))
+        role = user.role.value if hasattr(user.role, 'value') else user.role
+
+        return RedirectResponse(url=f"{FRONTEND_URL}/?token={jwt_token}&role={role}")
+
+    except Exception as e:
+        print("Google OAuth error:", e)
+        return RedirectResponse(url=f"{FRONTEND_URL}/?error=google_auth_failed")
 
 
-# ── Facebook OAuth ────────────────────────────────────────────────────────
-
+# ── Facebook OAuth ────────────────────────────────────────────────────────────
 @router.get("/facebook")
 async def facebook_login(request: Request):
-    redirect_uri = settings.OAUTH_REDIRECT_URI + "/facebook"
-    return await oauth.facebook.authorize_redirect(request, redirect_uri)
+    return await oauth.facebook.authorize_redirect(request, FACEBOOK_REDIRECT_URI)
+
 
 @router.get("/facebook/callback")
 async def facebook_callback(request: Request, db: Session = Depends(get_db)):
-    token = await oauth.facebook.authorize_access_token(request)
-    resp = await oauth.facebook.get("me?fields=id,name,email", token=token)
-    user_info = resp.json()
+    error = request.query_params.get("error")
+    if error:
+        return RedirectResponse(url=f"{FRONTEND_URL}/?error=facebook_auth_failed")
 
-    email = user_info.get("email")
-    name_parts = user_info.get("name", "").split()
-    first_name = name_parts[0] if name_parts else ""
-    last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else "User"
+    try:
+        token = await oauth.facebook.authorize_access_token(request)
+        resp = await oauth.facebook.get("me?fields=id,name,email", token=token)
+        user_info = resp.json()
 
-    if not email:
-        raise HTTPException(status_code=400, detail="Facebook email permission not granted.")
+        email = user_info.get("email")
+        if not email:
+            raise HTTPException(status_code=400, detail="Facebook email permission not granted.")
 
-    user = db.query(User).filter(User.email == email).first()
+        name_parts = user_info.get("name", "").split()
+        first_name = name_parts[0] if name_parts else ""
+        last_name = " ".join(name_parts[1:]) if len(name_parts) > 1 else "User"
 
-    if not user:
-        user = User(
-            id=uuid.uuid4(),
-            username=generate_username(email, db),
-            email=email,
-            first_name=first_name,
-            last_name=last_name,
-            password_hash="",
-            is_verified=True,
-            is_active=True,
-            role=RoleEnum.customer,
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+        user = find_or_create_oauth_user(email, first_name, last_name, db)
+        jwt_token = create_access_token(str(user.id))
+        role = user.role.value if hasattr(user.role, 'value') else user.role
 
-    access_token = create_access_token(str(user.id))
-    role = user.role.value if hasattr(user.role, 'value') else user.role
-    return {"status": "success", "access_token": access_token, "role": role}
+        return RedirectResponse(url=f"{FRONTEND_URL}/?token={jwt_token}&role={role}")
 
-from app.core.dependencies import get_current_user
+    except HTTPException:
+        raise
+    except Exception as e:
+        print("Facebook OAuth error:", e)
+        return RedirectResponse(url=f"{FRONTEND_URL}/?error=facebook_auth_failed")
 
+
+# ── Me ────────────────────────────────────────────────────────────────────────
 @router.get("/me")
 def get_me(current_user: User = Depends(get_current_user)):
     return {
