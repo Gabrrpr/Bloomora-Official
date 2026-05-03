@@ -27,6 +27,7 @@ export function AuthProvider({ children }) {
         email: profile.email,
         phoneNumber: profile.phone_number,
         address: profile.address,
+        is_profile_complete: profile.is_profile_complete,
       }
       localStorage.setItem("access_token", token)
       localStorage.setItem("user", JSON.stringify(userData))
@@ -66,6 +67,7 @@ export function AuthProvider({ children }) {
         email: profile.email,
         phoneNumber: profile.phone_number,
         address: profile.address,
+        is_profile_complete: profile.is_profile_complete,
       }
       localStorage.setItem("user", JSON.stringify(userData))
       setUser(userData)
@@ -105,6 +107,9 @@ export function AuthProvider({ children }) {
       console.log("[AuthContext] Storing OAuth token, calling setUserFromToken...")
       setUserFromToken(urlToken).then(result => {
         console.log("[AuthContext] setUserFromToken result:", result)
+        if (result && !result.is_profile_complete) {
+          window.location.replace('/profile')
+        }
       })
       window.history.replaceState({}, document.title, window.location.pathname)
     } else {
@@ -115,6 +120,9 @@ export function AuthProvider({ children }) {
         console.log("[AuthContext] Restoring session from stored token...")
         setUserFromToken(existingToken).then(result => {
           console.log("[AuthContext] setUserFromToken result:", result)
+          if (result && !result.is_profile_complete) {
+            window.location.replace('/profile')
+          }
         })
       }
     }

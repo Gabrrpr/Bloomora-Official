@@ -1,21 +1,16 @@
-# Implementation TODO
+# Post-OAuth New User Profile Setup
 
-## Task: Payment-First Ordering System
+Status: Approved ✅
 
-### Backend Changes
+**Logic:** Social login new users lack phone/address → auto-redirect to Profile for setup before home.
 
-- [x] 1. Remove COD (`cash_on_delivery`) from PaymentMethodEnum in `apps/backend/app/models/order.py`
-- [x] 2. Add payment processing to `create_orders` endpoint in `apps/backend/app/api/v1/routes/orders.py`
-- [x] 3. Add new `POST /orders/{order_id}/pay` endpoint for payment confirmation in `apps/backend/app/api/v1/routes/orders.py`
+## TODO Steps:
+1. [✅] Updated apps/backend/app/api/v1/routes/auth.py: /me adds `"is_profile_complete": bool(current_user.phone_number and current_user.address)`
+2. [✅] Updated apps/web/src/context/AuthContext.jsx: Saves is_profile_complete, redirects to /profile if false after OAuth/restore
+3. [✅] Updated apps/web/src/pages/Profile.jsx: setupMode = !user.is_profile_complete, auto-edit, disabled back, banner, auto-home after save
+4. [ ] Update App.jsx router: Protected routes check user?.is_profile_complete or redirect Profile
+5. [ ] Test OAuth → Profile → complete → Home
 
-### Frontend Changes
-
-- [x] 4. Add payment confirmation step in `apps/web/src/pages/Checkout.jsx` - require payment confirmation before order creation
-
-### Additional Improvements Made
-
-- [x] 5. Added "Save to address book" checkbox feature in Checkout.jsx for recipient addresses
-
-### Follow-up Steps
-- [ ] Test the checkout flow end-to-end
-- [ ] Verify orders only created after payment is confirmed
+**Next:** Backend /auth/me update.
+- Install? No.
+- Test: Backend dev server restart, frontend dev.

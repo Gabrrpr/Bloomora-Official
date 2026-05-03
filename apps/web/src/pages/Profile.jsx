@@ -29,7 +29,8 @@ const EMPTY_ADDRESS = {
 export default function Profile({ onNavigate }) {
   const { user } = useAuth()
 
-  const [editing, setEditing] = useState(false)
+  const setupMode = user && !user.is_profile_complete
+  const [editing, setEditing] = useState(setupMode)
   const [saved, setSaved] = useState(false)
   const [avatarSrc, setAvatarSrc] = useState(null) // null = initials fallback
   const fileInputRef = useRef(null)
@@ -178,6 +179,9 @@ const handleSaveAddress = async (e) => {
       setEditing(false)
       setSaved(true)
       setTimeout(() => setSaved(false), 3000)
+      if (setupMode) {
+        setTimeout(() => onNavigate("home"), 1500)
+      }
     } catch (err) {
       console.error("Failed to save profile:", err)
       alert("Failed to save profile. Please try again.")
@@ -196,15 +200,24 @@ const handleSaveAddress = async (e) => {
 
         {/* Back */}
         <button
-          onClick={() => onNavigate("home")}
-          className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6 transition"
+          onClick={setupMode ? undefined : () => onNavigate("home")}
+          disabled={setupMode}
+          className={`flex items-center gap-2 text-sm mb-6 transition ${setupMode ? 'text-gray-300 cursor-not-allowed' : 'text-gray-500 hover:text-gray-700'}`}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
           </svg>
-          Back
+          {setupMode ? 'Complete setup first' : 'Back'}
         </button>
 
+        {setupMode && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl mb-5 text-sm font-semibold text-blue-800 bg-blue-50 border border-blue-200">
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+            </svg>
+            Complete your profile to start shopping
+          </div>
+        )}
         {/* Success toast */}
         {saved && (
           <div
