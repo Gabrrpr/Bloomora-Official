@@ -1,21 +1,14 @@
-# Post-OAuth New User Profile Setup
-Status: Complete ✅
+# OAuth New User Username/Password Setup
 
-**Backend:** /auth/me returns is_profile_complete
-**Frontend:** AuthContext redirects incomplete to "profile", Profile setup mode
+## Steps
 
-**Missing:** App.jsx no "profile" case – add:
-```
-import Profile from "./pages/Profile"
-... 
-case "profile": return <Profile onNavigate={navigate} />
-```
+### 1. Create TODO.md [✅]
 
-**OAuthCallback.jsx interferes:** Remove `onNavigate("home")` after loginWithToken.
+### 2. Backend: Edit users.py /users/me PATCH
+- Add `username: Optional[str]`, `password: Optional[str]` to UserUpdateRequest
+- In update_me: 
+  - if username: check unique, set
+  - if password: hash_password(set)
 
-**Test (new email):**
-1. Backend restart: `cd apps/backend && uvicorn app.main:app --reload`
-2. Frontend: `cd apps/web && npm run dev`
-3. Google login → Profile (console: is_profile_complete false) → fill → Home.
-
-Done! Check browser console / localStorage after OAuth.
+### 3. Backend: Edit auth.py /me response
+- ` "is_profile_complete": bool(current_user.phone_number and current_user

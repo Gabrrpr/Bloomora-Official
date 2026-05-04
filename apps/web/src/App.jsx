@@ -31,6 +31,7 @@ import WorldClock from "./pages/WorldClock";
 import VasesPage from "./pages/VasesPage";
 import AddonsPage from "./pages/AddonsPage";
 import WriteReviewPage from "./pages/WriteReviewPage";
+import Profile from "./pages/Profile";
 
 const AUTH_PAGES = ["login", "register", "forgot-password", "terms"];
 
@@ -49,10 +50,8 @@ function AppContent() {
   };
 
   const renderContent = () => {
-    // 1. Handle Admin Layout
     if (page === "admin") return <AdminDashboard onNavigate={navigate} />;
 
-    // 2. Handle Auth Layout (No Navbar/Chat)
     if (AUTH_PAGES.includes(page)) {
       if (page === "login") return <Login onNavigate={navigate} />;
       if (page === "register") return <Register onNavigate={navigate} />;
@@ -60,7 +59,6 @@ function AppContent() {
       if (page === "terms") return <TermsAndConditions onNavigate={navigate} onBack={() => navigate(prevPage)} />;
     }
 
-    // 3. Main Site Layout
     return (
       <>
         <Navbar cartCount={cartCount} setCartCount={setCartCount} onNavigate={navigate} />
@@ -80,7 +78,7 @@ function AppContent() {
             case "occasions":            return <AllOccasions onNavigate={navigate} />;
             case "make-it-personal":     return <MakeItPersonal onNavigate={navigate} />;
             case "mix-and-match":        return <MixAndMatch onNavigate={navigate} />;
-            case "describe-arrangement":  return <DescribeArrangement onNavigate={navigate} />;
+            case "describe-arrangement": return <DescribeArrangement onNavigate={navigate} />;
             case "faq":                  return <FAQ onNavigate={navigate} />;
             case "return-policy":        return <ReturnPolicy onNavigate={navigate} />;
             case "ai-gallery":           return <AIGalleryPage onNavigate={navigate} />;
@@ -88,6 +86,7 @@ function AppContent() {
             case "vases":                return <VasesPage onNavigate={navigate} />;
             case "addons":               return <AddonsPage onNavigate={navigate} />;
             case "write-review":         return <WriteReviewPage onNavigate={navigate} />;
+            case "profile":              return <Profile onNavigate={navigate} />;
             default:                     return <Home onNavigate={navigate} />;
           }
         })()}
@@ -108,6 +107,7 @@ function AppContent() {
     </>
   );
 }
+
 export default function App() {
   return (
     <AuthProvider>
@@ -115,3 +115,4 @@ export default function App() {
     </AuthProvider>
   );
 }
+

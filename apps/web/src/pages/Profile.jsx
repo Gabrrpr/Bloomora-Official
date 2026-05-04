@@ -53,7 +53,7 @@ export default function Profile({ onNavigate }) {
   const [showAddressModal, setShowAddressModal] = useState(false)
   const [editingAddress, setEditingAddress] = useState(null)
   const [addressForm, setAddressForm] = useState({ ...EMPTY_ADDRESS })
-const [savingAddress, setSavingAddress] = useState(false)
+  const [savingAddress, setSavingAddress] = useState(false)
   const [addressError, setAddressError] = useState("")
 
   useEffect(() => {
@@ -94,12 +94,11 @@ const [savingAddress, setSavingAddress] = useState(false)
     setShowAddressModal(true)
   }
 
-const handleSaveAddress = async (e) => {
+  const handleSaveAddress = async (e) => {
     e.preventDefault()
     setAddressError("")
     setSavingAddress(true)
     try {
-      console.log("Saving address with data:", addressForm)
       if (editingAddress) {
         await api.updateAddress(editingAddress.id, addressForm)
       } else {
@@ -173,7 +172,8 @@ const handleSaveAddress = async (e) => {
         middle_name: form.middleName,
         last_name: form.lastName,
         phone_number: form.phone,
-        address: form.address,
+        // Since 'address' isn't in your form state, we leave it out 
+        // or map it from the address book if needed.
       })
       setSavedForm({ ...form })
       setEditing(false)
@@ -218,7 +218,7 @@ const handleSaveAddress = async (e) => {
             Complete your profile to start shopping
           </div>
         )}
-        {/* Success toast */}
+
         {saved && (
           <div
             className="flex items-center gap-3 px-4 py-3 rounded-xl mb-5 text-sm font-medium text-white shadow"
@@ -233,12 +233,9 @@ const handleSaveAddress = async (e) => {
 
         {/* ── Avatar card ── */}
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-5">
-          {/* Cover */}
           <div className="h-24" style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }} />
-
           <div className="px-6 pb-6">
             <div className="flex items-end justify-between -mt-12 mb-4">
-              {/* Avatar with upload */}
               <div className="relative group">
                 <div
                   onClick={handlePhotoClick}
@@ -254,8 +251,6 @@ const handleSaveAddress = async (e) => {
                     initials
                   )}
                 </div>
-
-                {/* Camera overlay — only when editing */}
                 {editing && (
                   <div
                     onClick={handlePhotoClick}
@@ -267,7 +262,6 @@ const handleSaveAddress = async (e) => {
                     </svg>
                   </div>
                 )}
-
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -277,7 +271,6 @@ const handleSaveAddress = async (e) => {
                 />
               </div>
 
-              {/* Edit / Save / Cancel buttons */}
               <div className="flex gap-2">
                 {editing ? (
                   <>
@@ -312,12 +305,6 @@ const handleSaveAddress = async (e) => {
                 {[form.firstName, form.middleName, form.lastName].filter(Boolean).join(" ") || "Your Name"}
               </h2>
               <p className="text-sm text-gray-400">{form.email || user?.email}</p>
-              {editing && (
-                <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                  Click your photo to change it
-                </p>
-              )}
             </div>
           </div>
         </div>
@@ -353,24 +340,6 @@ const handleSaveAddress = async (e) => {
               </div>
             ))}
           </div>
-
-          {editing && (
-            <div className="flex gap-3 mt-6 pt-5 border-t border-gray-100">
-              <button
-                onClick={handleCancel}
-                className="flex-1 py-2.5 text-sm font-semibold border border-gray-200 rounded-lg hover:bg-gray-50 transition text-gray-600"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                className="flex-1 py-2.5 text-sm font-semibold text-white rounded-lg transition hover:brightness-105"
-                style={{ backgroundColor: G }}
-              >
-                Save Changes
-              </button>
-            </div>
-          )}
         </div>
 
         {/* ── Address Book ── */}
@@ -395,7 +364,6 @@ const handleSaveAddress = async (e) => {
             <div className="py-8 text-center border border-dashed border-gray-200 rounded-lg">
               <div className="text-3xl mb-2">📍</div>
               <p className="text-sm text-gray-500">No saved addresses yet</p>
-              <p className="text-xs text-gray-400 mt-1">Add your first delivery address</p>
             </div>
           ) : (
             <div className="space-y-3">
@@ -416,35 +384,23 @@ const handleSaveAddress = async (e) => {
                       </div>
                       <p className="text-sm text-gray-700 font-medium">{addr.recipient_name} — {addr.phone}</p>
                       <p className="text-xs text-gray-500 mt-0.5 truncate">
-                        {addr.street}{addr.barangay ? `, ${addr.barangay}` : ""}, {addr.city}, {addr.province}{addr.zip_code ? ` ${addr.zip_code}` : ""}
+                        {addr.street}{addr.barangay ? `, ${addr.barangay}` : ""}, {addr.city}, {addr.province}
                       </p>
                     </div>
                     <div className="flex items-center gap-1 ml-3 flex-shrink-0">
                       {!addr.is_default && (
-                        <button
-                          onClick={() => handleSetDefault(addr.id)}
-                          className="p-1.5 text-gray-400 hover:text-green-600 transition"
-                          title="Set as default"
-                        >
+                        <button onClick={() => handleSetDefault(addr.id)} className="p-1.5 text-gray-400 hover:text-green-600 transition">
                           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
                           </svg>
                         </button>
                       )}
-                      <button
-                        onClick={() => openEditAddress(addr)}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 transition"
-                        title="Edit"
-                      >
+                      <button onClick={() => openEditAddress(addr)} className="p-1.5 text-gray-400 hover:text-blue-600 transition">
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                         </svg>
                       </button>
-                      <button
-                        onClick={() => handleDeleteAddress(addr.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-500 transition"
-                        title="Delete"
-                      >
+                      <button onClick={() => handleDeleteAddress(addr.id)} className="p-1.5 text-gray-400 hover:text-red-500 transition">
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
@@ -477,7 +433,7 @@ const handleSaveAddress = async (e) => {
         {/* ── Danger Zone ── */}
         <div className="bg-white border border-red-100 rounded-xl p-6">
           <h3 className="text-sm font-semibold text-red-500 mb-1">Danger Zone</h3>
-          <p className="text-xs text-gray-400 mb-4">Permanently delete your account and all associated data. This action cannot be undone.</p>
+          <p className="text-xs text-gray-400 mb-4">Permanently delete your account. This cannot be undone.</p>
           <button className="px-5 py-2 text-sm font-semibold text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition">
             Delete Account
           </button>
@@ -492,10 +448,7 @@ const handleSaveAddress = async (e) => {
               <h3 className="text-base font-semibold text-gray-800">
                 {editingAddress ? "Edit Address" : "Add New Address"}
               </h3>
-              <button
-                onClick={() => setShowAddressModal(false)}
-                className="text-gray-400 hover:text-gray-600 transition"
-              >
+              <button onClick={() => setShowAddressModal(false)} className="text-gray-400 hover:text-gray-600 transition">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
@@ -524,7 +477,7 @@ const handleSaveAddress = async (e) => {
                   value={addressForm.recipient_name}
                   onChange={e => setAddressForm({ ...addressForm, recipient_name: e.target.value })}
                   placeholder="Full name of recipient"
-                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg"
                 />
               </div>
 
@@ -536,7 +489,7 @@ const handleSaveAddress = async (e) => {
                   value={addressForm.phone}
                   onChange={e => setAddressForm({ ...addressForm, phone: e.target.value })}
                   placeholder="+63 9XX XXX XXXX"
-                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg"
                 />
               </div>
 
@@ -548,7 +501,7 @@ const handleSaveAddress = async (e) => {
                   value={addressForm.street}
                   onChange={e => setAddressForm({ ...addressForm, street: e.target.value })}
                   placeholder="House number, street name, building"
-                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 resize-none"
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg resize-none"
                 />
               </div>
 
@@ -559,8 +512,7 @@ const handleSaveAddress = async (e) => {
                     type="text"
                     value={addressForm.barangay}
                     onChange={e => setAddressForm({ ...addressForm, barangay: e.target.value })}
-                    placeholder="Barangay"
-                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg"
                   />
                 </div>
                 <div>
@@ -569,8 +521,7 @@ const handleSaveAddress = async (e) => {
                     type="text"
                     value={addressForm.zip_code}
                     onChange={e => setAddressForm({ ...addressForm, zip_code: e.target.value })}
-                    placeholder="ZIP"
-                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg"
                   />
                 </div>
               </div>
@@ -583,8 +534,7 @@ const handleSaveAddress = async (e) => {
                     required
                     value={addressForm.city}
                     onChange={e => setAddressForm({ ...addressForm, city: e.target.value })}
-                    placeholder="City"
-                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg"
                   />
                 </div>
                 <div>
@@ -594,8 +544,7 @@ const handleSaveAddress = async (e) => {
                     required
                     value={addressForm.province}
                     onChange={e => setAddressForm({ ...addressForm, province: e.target.value })}
-                    placeholder="Province"
-                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg"
                   />
                 </div>
               </div>
@@ -611,11 +560,7 @@ const handleSaveAddress = async (e) => {
               </label>
 
               <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowAddressModal(false)}
-                  className="flex-1 py-2.5 text-sm font-semibold border border-gray-200 rounded-lg hover:bg-gray-50 transition text-gray-600"
-                >
+                <button type="button" onClick={() => setShowAddressModal(false)} className="flex-1 py-2.5 text-sm font-semibold border border-gray-200 rounded-lg text-gray-600">
                   Cancel
                 </button>
                 <button

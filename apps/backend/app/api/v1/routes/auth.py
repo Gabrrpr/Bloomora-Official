@@ -410,5 +410,5 @@ def get_me(current_user: User = Depends(get_current_user)):
         "username": current_user.username,
         "phone_number": current_user.phone_number,
         "address": current_user.address,
-        "is_profile_complete": bool(current_user.phone_number and current_user.address),
+
     }

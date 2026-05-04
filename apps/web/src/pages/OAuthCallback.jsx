@@ -8,8 +8,8 @@ export default function OAuthCallback({ onNavigate }) {
     const params = new URLSearchParams(window.location.search)
     const token = params.get("token")
     if (token) {
-      loginWithToken(token)
-      onNavigate("home")
+loginWithToken(token)
+      // Let AuthContext handle redirect
     } else {
       onNavigate("login")
     }

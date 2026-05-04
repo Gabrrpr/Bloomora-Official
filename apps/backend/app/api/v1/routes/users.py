@@ -10,6 +10,7 @@ from app.models import User, RoleEnum, BranchEnum
 from app.api.v1.routes.auth import hash_password, generate_username
 from pydantic import BaseModel, EmailStr
 
+
 router = APIRouter(tags=["Users"])
 
 
@@ -17,7 +18,6 @@ router = APIRouter(tags=["Users"])
 def require_admin_or_staff(current_user: User):
     if current_user.role not in [RoleEnum.admin, RoleEnum.staff]:
         raise HTTPException(status_code=403, detail="Admin or staff access required.")
-
 
 def serialize_user(u: User) -> dict:
     return {
@@ -38,12 +38,10 @@ def serialize_user(u: User) -> dict:
         "updated_at": u.updated_at.isoformat() if u.updated_at else None,
     }
 
-
 # ── Schemas ──────────────────────────────────────────────────────────────────
 class UserListResponse(BaseModel):
     total: int
     users: List[dict]
-
 
 class StaffCreateRequest(BaseModel):
     first_name: str
@@ -57,7 +55,6 @@ class StaffCreateRequest(BaseModel):
     password: str
     force_password_change: bool = True
 
-
 class UserUpdateRequest(BaseModel):
     first_name: Optional[str] = None
     middle_name: Optional[str] = None
@@ -69,9 +66,7 @@ class UserUpdateRequest(BaseModel):
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None
     must_change_password: Optional[bool] = None
-
-
-# ── Routes ───────────────────────────────────────────────────────────────────
+    
 @router.get("/", response_model=UserListResponse)
 def list_users(
     role: Optional[str] = Query(None, description="Filter by role: customer, staff, admin, delivery"),
