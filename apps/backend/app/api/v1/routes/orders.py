@@ -26,7 +26,7 @@ def serialize_order(o: Order) -> dict:
         "id": str(o.id),
         "order_number": f"ORD-{o.id.hex[:8].upper()}",
         "user_id": str(o.user_id),
-        "customer_name": f"{o.user.first_name or ''} {o.user.last_name or ''}".strip() or o.user.email,
+"customer_name": f"{getattr(o.user, 'first_name', '') or ''} {getattr(o.user, 'last_name', '') or ''}".strip() or getattr(o.user, 'email', 'Unknown'),
         "customer_email": o.user.email,
         "customer_phone": o.user.phone_number,
         "branch": o.user.branch.value if o.user.branch and hasattr(o.user.branch, "value") else (o.user.branch or "—"),

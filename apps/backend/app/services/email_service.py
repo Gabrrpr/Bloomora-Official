@@ -120,3 +120,102 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
     except Exception as e:
         print(f"[EMAIL ERROR] {e}")
         return False, str(e)
+
+
+def send_staff_confirm_email(to_email: str, first_name: str, verify_url: str):
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "Bloomora Staff Account Confirmation"
+        msg["From"] = settings.MAIL_FROM
+        msg["To"] = to_email
+
+        greeting = f"Hi {first_name},"
+        html = f"""
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Bloomora Staff Confirmation</title>
+        </head>
+        <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6;">
+            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                    <td align="center" style="padding: 40px 20px;">
+                        <table role="presentation" width="100%" max-width="560" cellspacing="0" cellpadding="0" border="0" style="max-width: 560px; width: 100%; background: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.08);">
+                            
+                            <tr>
+                                <td style="background: linear-gradient(135deg, #15803d 0%, #16a34a 50%, #86efac 100%); padding: 48px 40px 40px; text-align: center;">
+                                    <div style="width: 64px; height: 64px; background: rgba(255,255,255,0.2); border-radius: 50%; margin: 0 auto 16px; display: inline-flex; align-items: center; justify-content: center; font-size: 32px;">
+                                        👤
+                                    </div>
+                                    <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">Bloomora Staff</h1>
+                                    <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0; font-size: 14px;">Account Activation</p>
+                                </td>
+                            </tr>
+                            
+                            <tr>
+                                <td style="padding: 40px;">
+                                    <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 16px;">{greeting}</p>
+                                    <p style="color: #6b7280; font-size: 15px; line-height: 1.6; margin: 0 0 32px;">
+                                        Your staff account has been created by an administrator. 
+                                        <strong>Click the button below to activate your account.</strong>
+                                    </p>
+                                    
+                                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                        <tr>
+                                            <td style="text-align: center;">
+                                                <a href="{verify_url}" style="background: linear-gradient(135deg, #15803d, #16a34a); color: white; padding: 16px 40px; font-size: 18px; font-weight: 600; text-decoration: none; border-radius: 12px; display: inline-block; box-shadow: 0 4px 16px rgba(21,128,61,0.3);">
+                                                    Confirm My Account
+                                                </a>
+                                            </td>
+                                        </tr>
+                                    </table>
+                                    
+                                    <p style="color: #dc2626; font-size: 14px; line-height: 1.5; margin: 32px 0 0; font-weight: 500; text-align: center;">
+                                        <strong>⚠️ Security Notice</strong><br>
+                                        If you didn&#39;t request to be staff of Bloomora, please ignore and delete this email immediately.
+                                    </p>
+                                </td>
+                            </tr>
+                            
+                            <tr>
+                                <td style="padding: 0 40px;">
+                                    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                        <tr>
+                                            <td style="border-top: 1px solid #e5e7eb; padding-top: 24px;"></td>
+                                        </tr>
+                                    </table>
+                                </td>
+                            </tr>
+                            
+                            <tr>
+                                <td style="padding: 0 40px 40px; text-align: center;">
+                                    <p style="color: #15803d; font-size: 14px; font-weight: 600; margin: 0 0 8px;">Bloomora</p>
+                                    <p style="color: #9ca3af; font-size: 12px; line-height: 1.5; margin: 0 0 16px;">
+                                        Bringing nature&#39;s beauty to your doorstep.
+                                    </p>
+                                    <p style="color: #d1d5db; font-size: 11px; margin: 16px 0 0;">
+                                        © Bloomora. All rights reserved.
+                                    </p>
+                                </td>
+                            </tr>
+                            
+                        </table>
+                    </td>
+                </tr>
+            </table>
+        </body>
+        </html>
+        """
+        msg.attach(MIMEText(html, "html"))
+
+        with smtplib.SMTP(settings.MAIL_SERVER, settings.MAIL_PORT) as server:
+            server.starttls()
+            server.login(settings.MAIL_USERNAME, settings.MAIL_PASSWORD)
+            server.sendmail(settings.MAIL_FROM, to_email, msg.as_string())
+
+        return True, None
+    except Exception as e:
+        print(f"[STAFF EMAIL ERROR] {e}")
+        return False, str(e)

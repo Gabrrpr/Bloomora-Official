@@ -2,17 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from typing import List, Optional
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import uuid
 
 from app.core.dependencies import get_db, get_current_user
 from app.models import User, RoleEnum, BranchEnum
-from app.api.v1.routes.auth import hash_password, generate_username
+# Added the missing auth imports back:
+from app.api.v1.routes.auth import hash_password, generate_username 
 from pydantic import BaseModel, EmailStr
-
+from app.services.email_service import send_otp_email, send_staff_confirm_email
 
 router = APIRouter(tags=["Users"])
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 def require_admin_or_staff(current_user: User):
@@ -20,22 +20,26 @@ def require_admin_or_staff(current_user: User):
         raise HTTPException(status_code=403, detail="Admin or staff access required.")
 
 def serialize_user(u: User) -> dict:
+    is_staff_verified = getattr(u, 'is_staff_verified', True)
+    staff_status = "active" if u.is_active and u.is_verified else "inactive" if not u.is_active else "pending" if not is_staff_verified and u.role in [RoleEnum.admin, RoleEnum.staff, RoleEnum.delivery] else "pending"
     return {
         "id": str(u.id),
-        "first_name": u.first_name,
-        "middle_name": u.middle_name,
-        "last_name": u.last_name,
-        "username": u.username,
-        "email": u.email,
-        "phone_number": u.phone_number,
-        "address": u.address,
+        "first_name": getattr(u, 'first_name', ''),
+        "middle_name": getattr(u, 'middle_name', ''),
+        "last_name": getattr(u, 'last_name', ''),
+        "username": getattr(u, 'username', ''),
+        "email": getattr(u, 'email', ''),
+        "phone_number": getattr(u, 'phone_number', ''),
+        "address": getattr(u, 'address', ''),
         "role": u.role.value if hasattr(u.role, "value") else u.role,
-        "branch": u.branch.value if u.branch and hasattr(u.branch, "value") else u.branch,
-        "is_active": u.is_active,
-        "is_verified": u.is_verified,
-        "must_change_password": u.must_change_password,
-        "created_at": u.created_at.isoformat() if u.created_at else None,
-        "updated_at": u.updated_at.isoformat() if u.updated_at else None,
+        "branch": getattr(u.branch, 'value', u.branch) if u.branch else None,
+        "is_active": getattr(u, 'is_active', False),
+        "is_verified": getattr(u, 'is_verified', False),
+        "is_staff_verified": is_staff_verified,
+        "staff_status": staff_status,
+        "must_change_password": getattr(u, 'must_change_password', False),
+        "created_at": getattr(u, 'created_at', None) and u.created_at.isoformat() or None,
+        "updated_at": getattr(u, 'updated_at', None) and u.updated_at.isoformat() or None,
     }
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -162,6 +166,10 @@ def create_staff(
     if db.query(User).filter(User.username == username).first():
         raise HTTPException(status_code=400, detail="Username already taken.")
 
+    # Staff confirmation setup
+    token = str(uuid.uuid4())
+    expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+
     new_user = User(
         id=uuid.uuid4(),
         first_name=payload.first_name,
@@ -176,12 +184,58 @@ def create_staff(
         is_active=True,
         is_verified=True,
         must_change_password=payload.force_password_change,
+        is_staff_verified=False,
+        staff_verification_token=token,
+        staff_token_expires_at=expires_at,
     )
+
+    # Send confirmation email
+    verify_url = f"http://localhost:8000/api/v1/users/staff/verify?token={token}"
+    sent, error = send_staff_confirm_email(payload.email, payload.first_name, verify_url)
+    if not sent:
+        raise HTTPException(status_code=500, detail=f"Failed to send confirmation email: {error}")
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
-    return {"status": "success", "user_id": str(new_user.id), "message": "Staff account created successfully."}
+    return {"status": "success", "user_id": str(new_user.id), "message": "Staff account created successfully. Confirmation email sent."}
+
+@router.get("/staff/verify")
+def staff_verify(token: str = Query(..., description="Staff verification token"), db: Session = Depends(get_db)):
+    """Verify staff account via email token."""
+    user = db.query(User).filter(
+        User.staff_verification_token == token,
+        User.staff_token_expires_at > datetime.now(timezone.utc)
+    ).first()
+    
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid or expired verification token.")
+    
+    user.is_staff_verified = True
+    user.staff_verification_token = None
+    user.staff_token_expires_at = None
+    user.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    
+    return {"status": "success", "message": "Staff account verified successfully. You can now login."}
+
+
+@router.get("/{user_id}", response_model=dict)
+def get_user(
+    user_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get user by ID (public profile info)."""
+    try:
+        uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid user ID format")
+    
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    return serialize_user(user)
 
 
 @router.patch("/me", response_model=dict)

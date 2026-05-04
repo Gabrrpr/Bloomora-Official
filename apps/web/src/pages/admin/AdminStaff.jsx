@@ -245,6 +245,8 @@ export default function AdminStaff() {
   const [error, setError] = useState(null)
   const [viewingStaff, setViewingStaff] = useState(null)
   const [editingStaff, setEditingStaff] = useState(null)
+  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false)
+  const [staffToDeactivate, setStaffToDeactivate] = useState(null)
 
   const fetchStaff = useCallback(async () => {
     setLoading(true)
@@ -284,10 +286,16 @@ export default function AdminStaff() {
 
   const handleViewStaff = (s) => setViewingStaff(s)
   const handleEditStaff = (s) => setEditingStaff(s)
-  const handleDeleteStaff = async (id) => {
-    if (!window.confirm("Deactivate this staff account?")) return
+  const handleDeactivateStaff = (s) => {
+    setStaffToDeactivate(s)
+    setShowDeactivateConfirm(true)
+  }
+
+  const confirmDeactivate = async () => {
+    setShowDeactivateConfirm(false)
+    if (!staffToDeactivate) return
     try {
-      await api.updateUser(id, { is_active: false })
+      await api.updateUser(staffToDeactivate.id, { is_active: false })
       fetchStaff()
     } catch (err) {
       alert(err.message || "Failed to deactivate staff")
@@ -452,7 +460,7 @@ export default function AdminStaff() {
                           <button onClick={() => handleViewStaff(s)}
                             className="px-3 py-1.5 text-xs font-semibold rounded-md border transition-all hover:shadow-sm active:scale-95"
                             style={{ backgroundColor: "#f0fdf4", borderColor: "#bbf7d0", color: DG }}>View</button>
-                          <button onClick={() => handleDeleteStaff(s.id)}
+                          <button onClick={() => handleDeactivateConfirm(s)}
                             className="w-7 h-7 flex items-center justify-center rounded-md transition-all hover:bg-red-600 active:scale-95"
                             style={{ backgroundColor: "#1e293b" }}>
                             <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -519,6 +527,35 @@ export default function AdminStaff() {
           onClose={() => setEditingStaff(null)}
           onSaved={fetchStaff}
         />
+      )}
+
+      {/* Deactivate Confirm Popup */}
+      {showDeactivateConfirm && staffToDeactivate && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => e.target === e.currentTarget && setShowDeactivateConfirm(false)}>
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
+                  <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-gray-900">Deactivate Staff Account?</h3>
+                  <p className="text-sm text-gray-600">This will prevent {staffToDeactivate.first_name} {staffToDeactivate.last_name} ({staffToDeactivate.role}) from logging in until reactivated.</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 justify-end pt-4 border-t border-gray-100">
+              <button onClick={() => setShowDeactivateConfirm(false)} className="px-5 py-2 text-sm font-semibold text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
+                Cancel
+              </button>
+              <button onClick={confirmDeactivate} className="px-5 py-2 text-sm font-bold text-white rounded-xl transition-all hover:opacity-90 bg-red-600 shadow-sm hover:shadow-md active:scale-[0.98]">
+                Deactivate
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

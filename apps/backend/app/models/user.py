@@ -11,11 +11,9 @@ class RoleEnum(str, enum.Enum):
     customer = "customer"
     delivery = "delivery"
 
-
 class BranchEnum(str, enum.Enum):
     manila = "manila"
     pampanga = "pampanga"
-
 
 class User(Base):
     __tablename__ = "users"
@@ -41,7 +39,12 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
     otp_code = Column(String(4), nullable=True)
-    otp_expires_at = Column(DateTime(timezone=True), nullable=True)
+
+    
+    # These three lines must align perfectly with the properties above
+    is_staff_verified = Column(Boolean, default=False, nullable=False)
+    staff_verification_token = Column(String(255), nullable=True)
+    staff_token_expires_at = Column(DateTime(timezone=True), nullable=True)
 
     # Relationships
     orders = relationship("Order", back_populates="user", foreign_keys="Order.user_id")

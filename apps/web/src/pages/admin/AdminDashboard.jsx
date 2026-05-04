@@ -17,26 +17,28 @@ import AdminAdvertisements from "./AdminAdvertisements"
 import { api } from "../../services/api.js"
 import { GreenCard, WhiteCard, ComingSoon } from "./_adminShared"
 
-
 const DG = "#0C573E"
 const G  = "#2E8B34"
 
 const GREEN_FILTER = "brightness(0) saturate(100%) invert(38%) sepia(72%) saturate(500%) hue-rotate(90deg) brightness(90%)"
 
 const NAV = [
-  { label: "Dashboard",     d: "M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" },
-  { label: "Orders",        d: "M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" },
-  { label: "Products",      d: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" },
-  { label: "Inventory",     d: "M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" },
+  { label: "Dashboard",     d: "M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zm10 0a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z", staff: true },
+  { label: "Orders",        d: "M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z", staff: true },
+  { label: "Products",      d: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4", staff: true },
+  { label: "Inventory",     d: "M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4", staff: true },
   { label: "Staffs",        d: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" },
   { label: "Customers",     d: "M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" },
-  { label: "Messages",      d: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z", badge: true },
+  { label: "Messages",      d: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z", badge: true, staff: true },
   { label: "Activity Logs", d: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" },
-  { label: "Transactions",  d: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" },
-  { label: "Delivery",      d: "M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8" },
+  { label: "Transactions",  d: "M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z", staff: true },
+  { label: "Delivery",      d: "M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8", staff: true },
   { label: "Hero Section",  d: "M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" },
   { label: "Advertisements", d: "M3 7h18M3 7a2 2 0 00-2 2v8a2 2 0 002 2h18a2 2 0 002-2V9a2 2 0 00-2-2M3 7V5a2 2 0 012-2h14a2 2 0 012 2v2M8 13h4m-4 3h8" },
   { label: "Preview Site",   d: "M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z", preview: true },
+
+  // Modification section
+  { label: "Modification", header: true },
 ]
 
 function NavIcon({ d }) {
@@ -316,11 +318,6 @@ function DashboardPanel({ user }) {
   const Y_LABELS = ["₱15k", "₱10k", "₱5k", "₱0"]
 
   useEffect(() => {
-
-    // Fetch low stock - disabled due to DB table missing
-
-
-
     // Fetch orders
     api.getMyOrders('today').then(data => {
       setOrdersToday(data.length || 0)
@@ -336,7 +333,6 @@ function DashboardPanel({ user }) {
   }, [])
 
   return (
-
     <div className="space-y-5">
       <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -344,7 +340,6 @@ function DashboardPanel({ user }) {
         <WhiteCard label="Orders Today"    value={0} sub="+0 vs yesterday" accentColor="#3b82f6" />
         <WhiteCard label="Pending Orders"  value={0} sub="−0 vs yesterday" subUp={false} accentColor="#f59e0b" />
         <WhiteCard label="Low Stock Alerts" value={lowStockCount || 0} sub="Needs restock today" subGray accentColor="#ef4444" />
-
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4">
@@ -432,27 +427,26 @@ function DashboardPanel({ user }) {
             <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Product</span>
             <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Stock</span>
           </div>
-{lowStock.length === 0 ? (
-  <p className="px-5 py-8 text-center text-sm text-gray-400">No low stock items</p>
-) : (
-  lowStock.slice(0, 5).map((item) => (
-    <div key={item.id} className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
-      <div className="w-8 h-8 rounded-lg flex-shrink-0 bg-orange-50 border border-orange-200 flex items-center justify-center">
-        <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-2.048-.833-2.818 0L3.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-        </svg>
-      </div>
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
-        <p className="text-xs text-gray-500">Stock: {item.stock}/{item.reorder_point}</p>
-      </div>
-      <span className="text-xs font-semibold text-red-600 px-2 py-0.5 rounded-full bg-red-50">
-        {item.stock === 0 ? 'Out' : `${item.stock}`}
-      </span>
-    </div>
-  ))
-)}
-
+          {lowStock.length === 0 ? (
+            <p className="px-5 py-8 text-center text-sm text-gray-400">No low stock items</p>
+          ) : (
+            lowStock.slice(0, 5).map((item) => (
+              <div key={item.id} className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
+                <div className="w-8 h-8 rounded-lg flex-shrink-0 bg-orange-50 border border-orange-200 flex items-center justify-center">
+                  <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-2.048-.833-2.818 0L3.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+                  <p className="text-xs text-gray-500">Stock: {item.stock}/{item.reorder_point}</p>
+                </div>
+                <span className="text-xs font-semibold text-red-600 px-2 py-0.5 rounded-full bg-red-50">
+                  {item.stock === 0 ? 'Out' : `${item.stock}`}
+                </span>
+              </div>
+            ))
+          )}
         </div>
       </div>
     </div>
@@ -517,7 +511,8 @@ function PreviewSitePanel({ onBack }) {
 }
 
 // ── Sidebar ───────────────────────────────────────────────────────────────────
-function SidebarContent({ active, setActive, collapsed, onLogout }) {
+
+function SidebarContent({ active, setActive, collapsed, onLogout, user }) {
   return (
     <>
       <div className={`flex items-center gap-3 py-4 ${collapsed ? "px-3 justify-center" : "px-4"}`}
@@ -536,15 +531,26 @@ function SidebarContent({ active, setActive, collapsed, onLogout }) {
       <nav className="flex-1 py-2 px-2 overflow-y-auto space-y-0.5">
         {NAV.map(item => {
           const on = active === item.label
+          const isStaff = user?.role === "staff"
+          const allowed = !isStaff || item.staff
           return (
-            <button key={item.label} onClick={() => setActive(item.label)}
+            <button key={item.label} onClick={allowed ? () => setActive(item.label) : undefined}
               title={collapsed ? item.label : undefined}
-              className={`w-full flex items-center gap-2.5 py-2 rounded-lg text-sm transition-all duration-150 relative ${collapsed ? "justify-center px-2" : "px-3"}`}
-              style={{ color: on ? G : "#6b7280", fontWeight: on ? 600 : 400, backgroundColor: on ? "#ecf9f1" : "transparent", borderLeft: on && !collapsed ? `3px solid ${G}` : "3px solid transparent" }}
-              onMouseEnter={e => { if (!on) { e.currentTarget.style.backgroundColor = "#f8faf9"; e.currentTarget.style.color = "#374151" } }}
-              onMouseLeave={e => { if (!on) { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#6b7280" } }}>
-              <span style={{ color: on ? G : "#9ca3af" }}><NavIcon d={item.d} /></span>
-              {!collapsed && <span className="truncate">{item.label}</span>}
+              className={`w-full flex items-center gap-2.5 py-2 rounded-lg text-sm transition-all duration-150 relative ${collapsed ? "justify-center px-2" : "px-3"} ${!allowed ? "opacity-50 cursor-not-allowed" : ""}`}
+              style={{ 
+                color: on ? G : allowed ? "#6b7280" : "#9ca3af", 
+                fontWeight: on ? 600 : 400, 
+                backgroundColor: on ? "#ecf9f1" : "transparent", 
+                borderLeft: on && !collapsed ? `3px solid ${G}` : "3px solid transparent" 
+              }}
+              onMouseEnter={e => { if (!on && allowed) { e.currentTarget.style.backgroundColor = "#f8faf9"; e.currentTarget.style.color = "#374151" } }}
+              onMouseLeave={e => { if (!on && allowed) { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = "#6b7280" } }}>
+              {item.header ? null : (
+                <span style={{ color: on ? G : allowed ? "#9ca3af" : "#cbd5e1" }}><NavIcon d={item.d} /></span>
+              )}
+              {!collapsed && (
+                item.header ? <span className="px-3 py-1 text-xs font-semibold text-gray-500 uppercase tracking-wider">{item.label}</span> : <span className="truncate">{item.label}</span>
+              )}
               {item.badge && !collapsed && <span className="ml-auto w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />}
               {item.badge && collapsed && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500" />}
             </button>
@@ -625,7 +631,7 @@ export default function AdminDashboard({ onNavigate }) {
       case "Activity Logs":return <AdminActivityLogs />
       case "Transactions": return <AdminTransactions />
       case "Delivery":     return <AdminDelivery />
-case "Settings":     return <AdminSettings />
+      case "Settings":     return <AdminSettings />
       case "Hero Section": return <AdminHero />
       case "Advertisements": return <AdminAdvertisements />
       case "Preview Site":  return <PreviewSitePanel onBack={() => goTo("Dashboard")} />
@@ -644,13 +650,17 @@ case "Settings":     return <AdminSettings />
       {/* Mobile sidebar */}
       <aside className={`fixed inset-y-0 left-0 z-50 w-60 bg-white flex flex-col transition-transform duration-300 lg:hidden ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
         style={{ boxShadow: "4px 0 24px rgba(0,0,0,0.10)" }}>
-        <SidebarContent active={active} setActive={(l) => { goTo(l); setMobileOpen(false) }} collapsed={false} onLogout={handleLogout} />
+
+        <SidebarContent active={active} setActive={(l) => { goTo(l); setMobileOpen(false) }} collapsed={false} onLogout={handleLogout} user={user} />
+
       </aside>
 
       {/* Desktop sidebar */}
       <aside className={`hidden lg:flex flex-col bg-white flex-shrink-0 min-h-screen transition-all duration-300`}
         style={{ width: collapsed ? "60px" : "220px", borderRight: "1px solid #e8edf2", boxShadow: "1px 0 6px rgba(0,0,0,0.03)" }}>
-        <SidebarContent active={active} setActive={goTo} collapsed={collapsed} onLogout={handleLogout} />
+
+        <SidebarContent active={active} setActive={goTo} collapsed={collapsed} onLogout={handleLogout} user={user} />
+
       </aside>
 
       <div className="flex-1 flex flex-col min-h-screen min-w-0">

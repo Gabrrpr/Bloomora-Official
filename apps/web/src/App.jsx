@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Navbar from "./components/Navbar";
 import Home from "./pages/Home";
@@ -42,6 +42,12 @@ function AppContent() {
   const [prevPage, setPrevPage] = useState("login");
   const [selectedOrderId, setSelectedOrderId] = useState(null);
 
+  useEffect(() => {
+    if (user && (user.role === "admin" || user.role === "staff")) {
+      setPage("admin");
+    }
+  }, [user]);
+
   const navigate = (to, orderId = null) => {
     if (orderId) setSelectedOrderId(orderId);
     setPrevPage(page);
@@ -64,30 +70,30 @@ function AppContent() {
         <Navbar cartCount={cartCount} setCartCount={setCartCount} onNavigate={navigate} />
         {(() => {
           switch (page) {
-            case "home":                 return <Home onNavigate={navigate} />;
-            case "shop":                 return <Shop onNavigate={navigate} />;
-            case "cart":                 return <Cart onNavigate={navigate} cartCount={cartCount} setCartCount={setCartCount} />;
-            case "checkout":             return <Checkout onNavigate={navigate} />;
-            case "confirmation":         return <Confirmation onNavigate={navigate} />;
-            case "account":              return <AccountPage onNavigate={navigate} />;
-            case "orders":               return <Orders onNavigate={navigate} />;
-            case "wishlist":             return <Wishlist onNavigate={navigate} />;
-            case "settings":             return <Settings onNavigate={navigate} />;
-            case "about":                return <AboutUs onNavigate={navigate} />;
-            case "contact":              return <ContactUs onNavigate={navigate} />;
-            case "occasions":            return <AllOccasions onNavigate={navigate} />;
-            case "make-it-personal":     return <MakeItPersonal onNavigate={navigate} />;
-            case "mix-and-match":        return <MixAndMatch onNavigate={navigate} />;
+            case "home": return <Home onNavigate={navigate} />;
+            case "shop": return <Shop onNavigate={navigate} />;
+            case "cart": return <Cart onNavigate={navigate} cartCount={cartCount} setCartCount={setCartCount} />;
+            case "checkout": return <Checkout onNavigate={navigate} />;
+            case "confirmation": return <Confirmation onNavigate={navigate} />;
+            case "account": return <AccountPage onNavigate={navigate} />;
+            case "orders": return <Orders onNavigate={navigate} />;
+            case "wishlist": return <Wishlist onNavigate={navigate} />;
+            case "settings": return <Settings onNavigate={navigate} />;
+            case "about": return <AboutUs onNavigate={navigate} />;
+            case "contact": return <ContactUs onNavigate={navigate} />;
+            case "occasions": return <AllOccasions onNavigate={navigate} />;
+            case "make-it-personal": return <MakeItPersonal onNavigate={navigate} />;
+            case "mix-and-match": return <MixAndMatch onNavigate={navigate} />;
             case "describe-arrangement": return <DescribeArrangement onNavigate={navigate} />;
-            case "faq":                  return <FAQ onNavigate={navigate} />;
-            case "return-policy":        return <ReturnPolicy onNavigate={navigate} />;
-            case "ai-gallery":           return <AIGalleryPage onNavigate={navigate} />;
-            case "world-clock":          return <WorldClock onNavigate={navigate} />;
-            case "vases":                return <VasesPage onNavigate={navigate} />;
-            case "addons":               return <AddonsPage onNavigate={navigate} />;
-            case "write-review":         return <WriteReviewPage onNavigate={navigate} />;
-            case "profile":              return <Profile onNavigate={navigate} />;
-            default:                     return <Home onNavigate={navigate} />;
+            case "faq": return <FAQ onNavigate={navigate} />;
+            case "return-policy": return <ReturnPolicy onNavigate={navigate} />;
+            case "ai-gallery": return <AIGalleryPage onNavigate={navigate} />;
+            case "world-clock": return <WorldClock onNavigate={navigate} />;
+            case "vases": return <VasesPage onNavigate={navigate} />;
+            case "addons": return <AddonsPage onNavigate={navigate} />;
+            case "write-review": return <WriteReviewPage onNavigate={navigate} />;
+            case "profile": return <Profile onNavigate={navigate} />;
+            default: return <Home onNavigate={navigate} />;
           }
         })()}
         <ChatWidget />
