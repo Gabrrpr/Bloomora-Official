@@ -7,38 +7,13 @@ import bpiImg          from "../assets/BPI.png"
 import metrobankImg    from "../assets/Metrobank.png"
 import lalamoveImg     from "../assets/Lalamove.png"
 
-/* ─── Data ─────────────────────────────────────────────────────── */
+/* ─── Data ───────────────────────────────────────────────────── */
 const QUICK_LINKS = [
   { label: "Home",       page: "home" },
   { label: "Shop",       page: "shop" },
   { label: "Occasions",  page: "occasions" },
   { label: "About Us",   page: "about" },
   { label: "Contact Us", page: "contact" },
-]
-const FLOWERS = [
-  { label: "Best Sellers",       page: "shop" },
-  { label: "Classic Collection", page: "shop" },
-  { label: "Gift Sets",          page: "shop" },
-]
-const BOTANICALS = [
-  { label: "Vases & Containers",     page: "shop" },
-  { label: "Pots & Planters",        page: "shop" },
-  { label: "Floral Supplies",        page: "shop" },
-  { label: "Wrapping & Accessories", page: "shop" },
-]
-const OCCASIONS = [
-  { label: "Birthdays",     page: "occasions" },
-  { label: "Anniversaries", page: "occasions" },
-  { label: "Weddings",      page: "occasions" },
-  { label: "Graduations",   page: "occasions" },
-  { label: "Sympathy",      page: "occasions" },
-  { label: "Just Because",  page: "occasions" },
-  { label: "Openings",      page: "occasions" },
-]
-const MAKE_IT_PERSONAL = [
-  { label: "Describe Arrangement", page: "make-it-personal" },
-  { label: "Mix & Match",          page: "make-it-personal" },
-  { label: "See Examples",         page: "make-it-personal" },
 ]
 const CUSTOMER_CARE = [
   { label: "FAQs",           page: "faq" },
@@ -60,101 +35,31 @@ const PAYMENT_METHODS = [
   { name: "Metrobank",     img: metrobankImg },
 ]
 
-/* ─── Theme ─────────────────────────────────────────────────────── */
+/* ─── Theme ──────────────────────────────────────────────────── */
 const C = {
   accent:      "#7daa91",
   accentLight: "#b8d4c2",
   text:        "rgba(255,255,255,0.95)",
-  textMid:     "rgba(255,255,255,0.82)",
-  textDim:     "rgba(255,255,255,0.50)",
-  border:      "rgba(255,255,255,0.09)",
+  textMid:     "rgba(255,255,255,0.75)",
+  textDim:     "rgba(255,255,255,0.45)",
+  divider:     "rgba(255,255,255,0.08)",
   cardBg:      "rgba(255,255,255,0.04)",
 }
 
-/* ─── CSS ────────────────────────────────────────────────────────── */
+/* ─── CSS ────────────────────────────────────────────────────── */
 const FOOTER_CSS = `
-  .ft-outer { max-width: 1400px; margin: 0 auto; padding: 36px 32px 0; }
-
-  /* ── Brand row: 3 sections spanning full width ── */
-  .ft-brand-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 40px;
-    padding-bottom: 24px;
-    margin-bottom: 28px;
-  }
-  .ft-brand-text       { flex: 0 0 280px; }
-  .ft-brand-social-wrap{ flex: 0 0 auto; }
-
-  /* ── Nav row: 6 equal columns, always one row ── */
-  .ft-nav-row {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 20px;
-    align-items: start;
-    padding-bottom: 8px;
-  }
-  /* Quick Links gets extra left breathing room */
-  .ft-nav-row > *:first-child { padding-left: 0; }
-
-  /* ── Strip ── */
-  .ft-strip {
-    display: flex; align-items: stretch;
-    border: 1px solid rgba(255,255,255,0.09);
-    border-radius: 10px; overflow: hidden;
-    margin-top: 28px;
-    margin-bottom: 24px;
-  }
-  .ft-strip-panel { flex: 1; padding: 15px 18px; border-right: 1px solid rgba(255,255,255,0.09); }
-  .ft-strip-panel:last-child { border-right: none; }
-  .ft-strip-panel--payment   { flex: 1.3; }
-  .ft-strip-panel--logistics { flex: 0 0 auto; min-width: 115px; }
-
-  /* ── Copyright ── */
-  .ft-copyright {
-    display: flex; align-items: center; justify-content: space-between;
-    flex-wrap: wrap; gap: 10px;
-    max-width: 1400px; margin: 0 auto; padding: 11px 32px;
-  }
-
-  /* ── Tablet ≤1024px: nav wraps to 3+3 ── */
-  @media (max-width: 1024px) {
-    .ft-brand-row { flex-wrap: wrap; justify-content: flex-start; gap: 24px; }
-    .ft-brand-text { flex: 0 0 100%; }
-    .ft-nav-row { grid-template-columns: repeat(3, 1fr); gap: 24px; }
-    .ft-strip { flex-wrap: wrap; }
-    .ft-strip-panel { flex: 1 1 48%; min-width: 180px; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.09); }
-    .ft-strip-panel:nth-child(odd) { border-right: 1px solid rgba(255,255,255,0.09); }
-    .ft-strip-panel--logistics { flex: 1 1 48%; min-width: 180px; }
-    .ft-strip-panel:last-child,
-    .ft-strip-panel:nth-last-child(2):nth-child(odd) { border-bottom: none; }
-  }
-
-  /* ── Small tablet ≤640px ── */
-  @media (max-width: 640px) {
-    .ft-outer { padding: 28px 20px 0; }
-    .ft-nav-row { grid-template-columns: repeat(2, 1fr); gap: 20px; }
-    .ft-strip { flex-direction: column; }
-    .ft-strip-panel,
-    .ft-strip-panel:nth-child(odd) { flex: none; width: 100%; border-right: none; border-bottom: 1px solid rgba(255,255,255,0.09); }
-    .ft-strip-panel:last-child { border-bottom: none; }
-    .ft-strip-panel--logistics { min-width: unset; }
-    .ft-copyright { padding: 11px 20px; }
-  }
-
-  /* ── Interactions ── */
   .ft-navlink {
     background: none; border: none; cursor: pointer; padding: 0;
-    font-size: 12.5px; text-align: left; display: block;
+    font-size: 13px; text-align: left; display: block;
     transition: color 0.15s, padding-left 0.15s;
+    font-family: var(--font-ui);
   }
   .ft-navlink:hover { color: white !important; padding-left: 5px; }
 
   .ft-social {
-    width: 32px; height: 32px;
+    width: 34px; height: 34px;
     display: flex; align-items: center; justify-content: center;
-    border-radius: 7px; text-decoration: none;
+    border-radius: 8px; text-decoration: none;
     transition: background 0.18s, border-color 0.18s, color 0.18s;
   }
   .ft-social:hover {
@@ -163,54 +68,46 @@ const FOOTER_CSS = `
     color: white !important;
   }
 
-  .ft-logo-img { border-radius: 5px; opacity: 0.88; transition: opacity 0.15s, transform 0.15s; }
-  .ft-logo-img:hover { opacity: 1 !important; transform: scale(1.08); }
+  .ft-logo-img {
+    border-radius: 4px; opacity: 0.82;
+    transition: opacity 0.15s, transform 0.15s;
+  }
+  .ft-logo-img:hover { opacity: 1 !important; transform: scale(1.06); }
 
   .ft-top-btn {
-    width: 30px; height: 30px;
+    width: 32px; height: 32px;
     display: flex; align-items: center; justify-content: center;
-    border-radius: 7px; cursor: pointer;
+    border-radius: 8px; cursor: pointer;
     transition: background 0.18s, border-color 0.18s, color 0.18s;
   }
   .ft-top-btn:hover {
-    background: rgba(125,170,145,0.18) !important;
+    background: rgba(125,170,145,0.20) !important;
     border-color: #7daa91 !important;
     color: white !important;
   }
 `
 
-/* ─── Micro-components ───────────────────────────────────────────── */
-const PinIcon   = () => <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" style={{ color: C.accentLight, flexShrink: 0, marginTop: "2px" }}><path fillRule="evenodd" clipRule="evenodd" d="M11.54 22.351a.76.76 0 00.723 0C14.339 21.187 21 16.492 21 10.5a9 9 0 10-18 0c0 5.992 6.661 10.687 8.54 11.851zM12 13.5a3 3 0 100-6 3 3 0 000 6z"/></svg>
-const ClockIcon = () => <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: C.accentLight, flexShrink: 0 }}><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-const PhoneIcon = () => <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: C.accentLight, flexShrink: 0 }}><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.63A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+/* ─── Small helpers ──────────────────────────────────────────── */
+const PinIcon   = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" style={{ color: C.accentLight, flexShrink: 0, marginTop: "2px" }}><path fillRule="evenodd" clipRule="evenodd" d="M11.54 22.351a.76.76 0 00.723 0C14.339 21.187 21 16.492 21 10.5a9 9 0 10-18 0c0 5.992 6.661 10.687 8.54 11.851zM12 13.5a3 3 0 100-6 3 3 0 000 6z"/></svg>
+const ClockIcon = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: C.accentLight, flexShrink: 0, marginTop: "1px" }}><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+const PhoneIcon = () => <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: C.accentLight, flexShrink: 0, marginTop: "1px" }}><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 9.81a19.79 19.79 0 01-3.07-8.63A2 2 0 012 1h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L6.09 8.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
 
-const SectionLabel = ({ children }) => (
-  <p style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: C.accentLight, marginBottom: "8px" }}>{children}</p>
+const ColLabel = ({ children }) => (
+  <p style={{ fontSize: "9.5px", fontWeight: 700, letterSpacing: "0.13em", textTransform: "uppercase", color: C.accentLight, marginBottom: "14px", marginTop: 0 }}>
+    {children}
+  </p>
 )
+
 const InfoRow = ({ icon, children }) => (
-  <div style={{ display: "flex", alignItems: "flex-start", gap: "6px", marginBottom: "4px" }}>
-    <span style={{ marginTop: "1px" }}>{icon}</span>
-    <p style={{ fontSize: "11.5px", color: C.textMid, margin: 0, lineHeight: "1.4" }}>{children}</p>
-  </div>
-)
-const NavCol = ({ title, links, go }) => (
-  <div>
-    <p style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: C.accentLight, marginBottom: "14px" }}>{title}</p>
-    <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "9px" }}>
-      {links.map(link => (
-        <li key={link.label}>
-          <button className="ft-navlink" onClick={() => go(link.page)} style={{ color: C.textMid }}>
-            {link.label}
-          </button>
-        </li>
-      ))}
-    </ul>
+  <div style={{ display: "flex", alignItems: "flex-start", gap: "7px", marginBottom: "6px" }}>
+    <span style={{ marginTop: "2px" }}>{icon}</span>
+    <p style={{ fontSize: "12.5px", color: C.textMid, margin: 0, lineHeight: "1.5", fontFamily: "var(--font-ui)" }}>{children}</p>
   </div>
 )
 
-/* ─── Footer ─────────────────────────────────────────────────────── */
+/* ─── Footer ─────────────────────────────────────────────────── */
 export default function Footer({ onNavigate }) {
-  const go = (page) => onNavigate?.(page)
+  const go          = (page) => onNavigate?.(page)
   const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" })
 
   useEffect(() => {
@@ -225,92 +122,205 @@ export default function Footer({ onNavigate }) {
   return (
     <footer style={{ backgroundColor: "#0C5240", color: "white" }}>
 
-      {/* Top accent */}
+      {/* Top accent line */}
       <div style={{ height: "3px", background: "linear-gradient(90deg, transparent, #3d8a65 20%, #a8c5b2 50%, #3d8a65 80%, transparent)" }} />
 
-      <div className="ft-outer">
+      <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "48px 40px 0" }}>
 
-        {/* ── Brand row: description + socials side by side, above nav ── */}
-        <div className="ft-brand-row">
-          <div className="ft-brand-text">
-            <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-              <img src="/src/assets/EstingsLogo.svg" alt="" style={{ width: "44px", height: "44px", objectFit: "contain" }} onError={e => e.target.style.display = "none"} />
-              <img src="/src/assets/Estings.svg" alt="Esting's" style={{ height: "36px", objectFit: "contain", filter: "brightness(0) invert(1)" }} onError={e => e.target.style.display = "none"} />
+        {/* ══ ROW 1: Logo + tagline on left · Socials on right ══ */}
+        <div style={{
+          display: "flex",
+          alignItems: "flex-start",
+          justifyContent: "space-between",
+          gap: "32px",
+          flexWrap: "wrap",
+          paddingBottom: "36px",
+          borderBottom: `1px solid ${C.divider}`,
+          marginBottom: "40px",
+        }}>
+          {/* Logo + tagline */}
+          <div>
+            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "14px" }}>
+              <img
+                src="/src/assets/EstingsLogo.svg"
+                alt=""
+                style={{ width: "46px", height: "46px", objectFit: "contain" }}
+                onError={e => e.target.style.display = "none"}
+              />
+              <img
+                src="/src/assets/Estings.svg"
+                alt="Esting's"
+                style={{ height: "38px", objectFit: "contain", filter: "brightness(0) invert(1)" }}
+                onError={e => e.target.style.display = "none"}
+              />
             </div>
+            <p style={{ fontSize: "13px", color: C.textMid, margin: 0, lineHeight: "1.6", maxWidth: "280px", fontFamily: "var(--font-ui)" }}>
+              Fresh flowers, handcrafted with care.<br />
+              Serving Manila &amp; Pampanga since 1959.
+            </p>
           </div>
 
-          <div className="ft-brand-social-wrap">
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", flexWrap: "wrap" }}>
-              <p style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: C.accentLight, margin: 0, whiteSpace: "nowrap" }}>
-                Follow Us On
-              </p>
-              <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                {SOCIAL_LINKS.map(s => (
-                  <a key={s.name} href={s.href} title={s.name} target="_blank" rel="noopener noreferrer"
-                    className="ft-social"
-                    style={{ background: C.cardBg, border: `1px solid ${C.border}`, color: C.textMid }}
-                  >{s.icon}</a>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Nav: always 6 columns in one row ── */}
-        <div className="ft-nav-row">
-          <NavCol title="Quick Links"       links={QUICK_LINKS}      go={go} />
-          <NavCol title="Flowers"            links={FLOWERS}          go={go} />
-          <NavCol title="Botanicals & Gifts" links={BOTANICALS}       go={go} />
-          <NavCol title="Occasions"          links={OCCASIONS}        go={go} />
-          <NavCol title="Make it Personal"   links={MAKE_IT_PERSONAL} go={go} />
-          <NavCol title="Customer Care"      links={CUSTOMER_CARE}    go={go} />
-        </div>
-
-        {/* ── Strip ── */}
-        <div className="ft-strip">
-          <div className="ft-strip-panel">
-            <SectionLabel>Manila Branch</SectionLabel>
-            <InfoRow icon={<PinIcon />}>Laon-Laan Cor. Dos Castillas St., Sampaloc</InfoRow>
-            <InfoRow icon={<ClockIcon />}>Mon – Sat &nbsp;·&nbsp; 9:00 AM – 9:00 PM</InfoRow>
-            <InfoRow icon={<PhoneIcon />}>+63 918 902 2401</InfoRow>
-          </div>
-          <div className="ft-strip-panel">
-            <SectionLabel>Pampanga Branch</SectionLabel>
-            <InfoRow icon={<PinIcon />}>McArthur Hi-way, Dolores, San Fernando</InfoRow>
-            <InfoRow icon={<ClockIcon />}>Mon – Sat &nbsp;·&nbsp; 7:30 AM – 5:00 PM</InfoRow>
-            <InfoRow icon={<PhoneIcon />}>+63 045 961 5378</InfoRow>
-          </div>
-          <div className="ft-strip-panel ft-strip-panel--payment">
-            <SectionLabel>We Accept</SectionLabel>
-            <div style={{ display: "flex", alignItems: "center", gap: "7px", flexWrap: "wrap" }}>
-              {PAYMENT_METHODS.map(({ name, img }) => (
-                <img key={name} src={img} alt={name} title={name} className="ft-logo-img"
-                  style={{ height: "22px", width: "auto", maxWidth: "58px", objectFit: "contain" }} />
+          {/* Social icons */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "10px" }}>
+            <p style={{ fontSize: "9.5px", fontWeight: 700, letterSpacing: "0.13em", textTransform: "uppercase", color: C.accentLight, margin: 0 }}>
+              Follow Us On
+            </p>
+            <div style={{ display: "flex", gap: "7px" }}>
+              {SOCIAL_LINKS.map(s => (
+                <a
+                  key={s.name}
+                  href={s.href}
+                  title={s.name}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="ft-social"
+                  style={{ background: C.cardBg, border: `1px solid ${C.divider}`, color: C.textMid }}
+                >
+                  {s.icon}
+                </a>
               ))}
             </div>
           </div>
-          <div className="ft-strip-panel ft-strip-panel--logistics">
-            <SectionLabel>Shipped Via</SectionLabel>
-            <img src={lalamoveImg} alt="Lalamove" className="ft-logo-img"
-              style={{ height: "24px", width: "auto", maxWidth: "90px", objectFit: "contain", display: "block" }} />
+        </div>
+
+        {/* ══ ROW 2: Nav links + Branch info + Payments ══ */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "160px 140px 1fr 1fr auto",
+          gap: "40px",
+          alignItems: "start",
+          paddingBottom: "44px",
+        }}
+          className="ft-main-row"
+        >
+
+          {/* Quick Links */}
+          <div>
+            <ColLabel>Quick Links</ColLabel>
+            <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "10px" }}>
+              {QUICK_LINKS.map(link => (
+                <li key={link.label}>
+                  <button className="ft-navlink" onClick={() => go(link.page)} style={{ color: C.textMid }}>
+                    {link.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Customer Care */}
+          <div>
+            <ColLabel>Customer Care</ColLabel>
+            <ul style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: "10px" }}>
+              {CUSTOMER_CARE.map(link => (
+                <li key={link.label}>
+                  <button className="ft-navlink" onClick={() => go(link.page)} style={{ color: C.textMid }}>
+                    {link.label}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {/* Manila Branch */}
+          <div>
+            <ColLabel>Manila Branch</ColLabel>
+            <InfoRow icon={<PinIcon />}>Laon-Laan Cor. Dos Castillas St., Sampaloc</InfoRow>
+            <InfoRow icon={<ClockIcon />}>Mon – Sat · 9:00 AM – 9:00 PM</InfoRow>
+            <InfoRow icon={<PhoneIcon />}>+63 918 902 2401</InfoRow>
+          </div>
+
+          {/* Pampanga Branch */}
+          <div>
+            <ColLabel>Pampanga Branch</ColLabel>
+            <InfoRow icon={<PinIcon />}>McArthur Hi-way, Dolores, San Fernando</InfoRow>
+            <InfoRow icon={<ClockIcon />}>Mon – Sat · 7:30 AM – 5:00 PM</InfoRow>
+            <InfoRow icon={<PhoneIcon />}>+63 045 961 5378</InfoRow>
+          </div>
+
+          {/* We Accept + Shipped Via — stacked vertically */}
+          <div style={{ display: "flex", flexDirection: "column", gap: "22px" }}>
+            <div>
+              <ColLabel>We Accept</ColLabel>
+              <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap", maxWidth: "160px" }}>
+                {PAYMENT_METHODS.map(({ name, img }) => (
+                  <img
+                    key={name}
+                    src={img}
+                    alt={name}
+                    title={name}
+                    className="ft-logo-img"
+                    style={{ height: "22px", width: "auto", maxWidth: "54px", objectFit: "contain" }}
+                  />
+                ))}
+              </div>
+            </div>
+            <div>
+              <ColLabel>Shipped Via</ColLabel>
+              <img
+                src={lalamoveImg}
+                alt="Lalamove"
+                className="ft-logo-img"
+                style={{ height: "24px", width: "auto", maxWidth: "90px", objectFit: "contain", display: "block" }}
+              />
+            </div>
           </div>
         </div>
+
+        {/* Responsive overrides via injected style */}
+        <style>{`
+          @media (max-width: 1024px) {
+            .ft-main-row {
+              grid-template-columns: repeat(3, 1fr) !important;
+            }
+          }
+          @media (max-width: 640px) {
+            .ft-main-row {
+              grid-template-columns: repeat(2, 1fr) !important;
+              gap: 28px !important;
+            }
+          }
+          @media (max-width: 400px) {
+            .ft-main-row {
+              grid-template-columns: 1fr !important;
+            }
+          }
+        `}</style>
       </div>
 
-      {/* ── Copyright ── */}
-      <div style={{ borderTop: `1px solid ${C.border}`, background: "rgba(0,0,0,0.15)" }}>
-        <div className="ft-copyright">
-          <p style={{ fontSize: "11.5px", color: C.textDim, margin: 0 }}>
+      {/* ══ Copyright bar ══ */}
+      <div style={{ borderTop: `1px solid ${C.divider}`, background: "rgba(0,0,0,0.18)" }}>
+        <div style={{
+          maxWidth: "1280px",
+          margin: "0 auto",
+          padding: "14px 40px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: "12px",
+        }}>
+          <p style={{ fontSize: "12px", color: C.textDim, margin: 0, fontFamily: "var(--font-ui)" }}>
             © {new Date().getFullYear()} Esting's Flower International Inc. All rights reserved.
           </p>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <button onClick={() => go("terms")}
-              style={{ fontSize: "11.5px", color: C.textDim, background: "none", border: "none", cursor: "pointer", padding: 0, transition: "color 0.15s" }}
+
+          <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
+            <button
+              onClick={() => go("terms")}
+              style={{ fontSize: "12px", color: C.textDim, background: "none", border: "none", cursor: "pointer", padding: 0, transition: "color 0.15s", fontFamily: "var(--font-ui)" }}
               onMouseEnter={e => e.currentTarget.style.color = C.text}
               onMouseLeave={e => e.currentTarget.style.color = C.textDim}
-            >Terms of Service</button>
-            <button onClick={scrollToTop} title="Back to top" className="ft-top-btn"
-              style={{ background: C.cardBg, border: `1px solid ${C.border}`, color: C.textMid }}>
+            >
+              Terms of Service
+            </button>
+
+            {/* Back to top */}
+            <button
+              onClick={scrollToTop}
+              title="Back to top"
+              className="ft-top-btn"
+              style={{ background: C.cardBg, border: `1px solid ${C.divider}`, color: C.textMid }}
+            >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M18 15l-6-6-6 6"/>
               </svg>

@@ -3,458 +3,690 @@ import { useAuth } from "../context/AuthContext"
 import { sendOtp, verifyOtp } from "../services/auth"
 import { regions, getProvinces } from "../utils/philippines"
 import FlowerPanel from "../components/FlowerPanel"
+import estingsLogo from "../assets/estings.svg"
+import bgImg from "../assets/BG_LoginRegister.png"
 
-const STORAGE_KEY = "register_form_draft"
+// ── Validation helpers ──────────────────────────────────────────────────────
 
-export default function Register({ onNavigate }) {
-  const { register } = useAuth()
-  const [step, setStep] = useState("form")
-  const [otp, setOtp] = useState("")
-  const [form, setForm] = useState(() => {
-    const saved = sessionStorage.getItem(STORAGE_KEY)
-    return saved ? JSON.parse(saved) : {
-      firstName: "",
-      lastName: "",
-      email: "",
-      phone: "",
-      username: "",
-      password: "",
-      confirmPassword: "",
-      address: {
-        regionId: "",
-        provinceId: "",
-        city: "",
-        street: "",
-        zip_code: "",
-      }
-    }
-  })
-  const [showPassword, setShowPassword] = useState(false)
-  const [agreeTerms, setAgreeTerms] = useState(false)
-  const [error, setError] = useState("")
-  const [loading, setLoading] = useState(false)
+/** Strict email: local@domain.tld — TLD must be 2+ alpha chars, no consecutive dots, etc. */
+function isValidEmail(v) {
+  return /^[^\s@]+@[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(v.trim())
+}
 
-  // Validation states
-  const [phoneValid, setPhoneValid] = useState(true)
-  const [passwordStrength, setPasswordStrength] = useState('empty')
-  const [addressComplete, setAddressComplete] = useState(false)
-  const [formValid, setFormValid] = useState(false)
+/** PH phone: must be exactly +63 followed by 10 digits, second digit 9 (mobile prefix) */
+function isValidPHPhone(v) {
+  return /^\+639\d{9}$/.test(v)
+}
 
+/** Name: letters, spaces, hyphens, apostrophes only — no digits or symbols */
+function isValidName(v) {
+  return /^[a-zA-ZÀ-ÖØ-öø-ÿ\s'\-]+$/.test(v.trim()) && v.trim().length >= 2
+}
+
+/** ZIP: exactly 4 digits (PH standard) */
+function isValidZip(v) {
+  return /^\d{4}$/.test(v)
+}
+
+/** City / Municipality: letters, spaces, hyphens, periods — min 2 chars */
+function isValidCity(v) {
+  return /^[a-zA-ZÀ-ÖØ-öø-ÿ\s'.\-]+$/.test(v.trim()) && v.trim().length >= 2
+}
+
+/** Street address: at least 10 chars and contains at least one digit (house/unit number) */
+function isValidStreet(v) {
+  return v.trim().length >= 10 && /\d/.test(v)
+}
+
+/** Username: alphanumeric, underscores, dots — 3–30 chars */
+function isValidUsername(v) {
+  if (!v) return true // optional
+  return /^[a-zA-Z0-9_.]{3,30}$/.test(v)
+}
+
+// ── Typewriter ──────────────────────────────────────────────────────────────
+function TypewriterText({ text, typingSpeed = 100, deletingSpeed = 65, pauseAfterTyping = 2500, pauseAfterDeleting = 600 }) {
+  const [state, setState] = useState({ displayed: "", phase: "typing" })
+  useEffect(() => { setState({ displayed: "", phase: "typing" }) }, [text])
   useEffect(() => {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(form))
-  }, [form])
-
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      sessionStorage.removeItem(STORAGE_KEY)
+    const { displayed, phase } = state
+    let delay
+    if (phase === "typing") {
+      delay = displayed.length < text.length
+        ? setTimeout(() => setState({ displayed: text.slice(0, displayed.length + 1), phase: "typing" }), typingSpeed)
+        : setTimeout(() => setState({ displayed, phase: "deleting" }), pauseAfterTyping)
+    } else {
+      delay = displayed.length > 0
+        ? setTimeout(() => setState({ displayed: displayed.slice(0, -1), phase: "deleting" }), deletingSpeed)
+        : setTimeout(() => setState({ displayed: "", phase: "typing" }), pauseAfterDeleting)
     }
-    window.addEventListener("beforeunload", handleBeforeUnload)
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
-  }, [])
+    return () => clearTimeout(delay)
+  }, [state, text, typingSpeed, deletingSpeed, pauseAfterTyping, pauseAfterDeleting])
+  return <span>{state.displayed}<span className="inline-block w-[2px] h-[1em] bg-current align-middle ml-[2px] translate-y-[-1px] animate-pulse" /></span>
+}
 
-  // Phone validation & formatting
-  const handlePhoneChange = useCallback((e) => {
-    let val = e.target.value.replace(/[^\d+]/g, '')
-    if (val.startsWith('0')) val = '+63' + val.slice(1)
-    if (!val.startsWith('+63')) val = '+63' + val.slice(0, 10)
-    val = val.slice(0, 13) // +63xxxxxxxxx
-    const isValid = /^\+63\d{10}$/.test(val)
-    setPhoneValid(isValid)
-    setForm({ ...form, phone: val })
-  }, [form])
-
-  // Password strength
-  useEffect(() => {
-    const pass = form.password
-    let score = 0
-    if (pass.length >= 8) score++
-    if (/[A-Z]/.test(pass)) score++
-    if (/[0-9]/.test(pass)) score++
-    if (/[^A-Za-z0-9]/.test(pass)) score++
-    const strength = score === 0 ? 'empty' : score < 2 ? 'weak' : score < 3 ? 'fair' : score < 4 ? 'good' : 'strong'
-    setPasswordStrength(strength)
-  }, [form.password])
-
-  // Address validation
-  useEffect(() => {
-    const addr = form.address
-    const complete = addr.regionId && addr.provinceId && addr.city.trim() && addr.street.trim() && addr.zip_code.trim()
-    setAddressComplete(complete)
-  }, [form.address])
-
-  // Overall form valid
-  useEffect(() => {
-
-    const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)
-    setFormValid(
-      !!form.firstName.trim() &&
-      !!form.lastName.trim() &&
-      emailValid &&
-      phoneValid &&
-      passwordStrength === 'strong' &&
-      form.password === form.confirmPassword &&
-      agreeTerms &&
-      addressComplete
-    )
-
-  }, [form, phoneValid, passwordStrength, agreeTerms, addressComplete])
-
-  const validateForm = () => {
-    if (form.password !== form.confirmPassword) {
-      setError("Passwords do not match.")
-      return false
-    }
-    if (!phoneValid) {
-      setError("Phone must be valid Philippine number (+63xxxxxxxxx).")
-      return false
-    }
-    if (passwordStrength !== 'strong') {
-      setError("Password must be strong (8+ chars, upper, number, special).")
-      return false
-    }
-    if (!addressComplete) {
-      setError("Please complete all address fields.")
-      return false
-    }
-    if (!agreeTerms) {
-      setError("Please agree to the Terms & Conditions.")
-      return false
-    }
-    return true
-  }
-
-  const handleSendOtp = async (e) => {
-    e.preventDefault()
-    setError("")
-    if (!validateForm()) return
-
-    setLoading(true)
-    try {
-      await sendOtp(form.email)
-      setStep("otp")
-      setError("")
-    } catch (err) {
-      setError(err.message || "Failed to send OTP. Please try again.")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleVerifyAndRegister = async (e) => {
-    e.preventDefault()
-    setError("")
-    if (!otp || otp.length < 4) {
-      setError("Please enter the OTP sent to your email.")
-      return
-    }
-
-    setLoading(true)
-    try {
-      await verifyOtp(form.email, otp)
-// Convert address object to string format
-      const addressStr = form.address.street 
-        ? `${form.address.street}, ${form.address.city}, ${form.address.provinceId || ''} ${form.address.zip_code || ''}`.trim()
-        : undefined
-      
-      const result = await register({
-        first_name: form.firstName,
-        last_name: form.lastName,
-        email: form.email,
-        phone_number: form.phone,
-        username: form.username || undefined,
-        password: form.password,
-        address: addressStr
-      })
-      if (result.success || result.status === "success") {
-        sessionStorage.setItem("registerEmail", form.email)
-        sessionStorage.setItem("registerPassword", form.password)
-        onNavigate("login")
-      } else {
-        setError(result.message || "Registration failed. Please try again.")
-      }
-    } catch (err) {
-      setError(err.message || "Invalid OTP or registration failed.")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const strengthColors = {
-    empty: 'gray',
-    weak: 'red',
-    fair: 'orange',
-    good: 'yellow',
-    strong: 'green'
-  }
-
-  const strengthWidth = {
-    empty: 0,
-    weak: 25,
-    fair: 50,
-    good: 75,
-    strong: 100
-  }
-
-  const updateAddressField = (field, value) => {
-    const newAddress = { ...form.address, [field]: value }
-    setForm({ ...form, address: newAddress })
-  }
-
+// ── Mobile banner ───────────────────────────────────────────────────────────
+function MobileFlowerBanner() {
   return (
-    <div className="min-h-screen flex">
-      <FlowerPanel />
-
-      <div className="w-full lg:w-1/2 flex items-center justify-center bg-white px-8 py-12">
-        <div className="w-full max-w-md">
-          <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-green-50 mb-4">
-              <svg className="w-7 h-7 text-green-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z" />
-              </svg>
-            </div>
-            <h1 className="text-2xl font-bold text-gray-800">
-              {step === "otp" ? "Verify your email" : "Create an account"}
-            </h1>
-            <p className="text-gray-500 text-sm mt-1">
-              {step === "otp"
-                ? `Enter the OTP sent to ${form.email}`
-                : "Join us and start ordering beautiful flowers today."}
-            </p>
-          </div>
-
-          {error && (
-            <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm text-center">{error}</div>
-          )}
-
-          {step === "form" ? (
-            <form onSubmit={handleSendOtp} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">First Name</label>
-                  <input type="text" value={form.firstName} onChange={e => setForm({ ...form, firstName: e.target.value })} placeholder="Juan" required
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Last Name</label>
-                  <input type="text" value={form.lastName} onChange={e => setForm({ ...form, lastName: e.target.value })} placeholder="Dela Cruz" required
-                    className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
-                  </span>
-                  <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} placeholder="juan@example.com" required
-                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h.93a2 2 0 01.948.684l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 01.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /></svg>
-                  </span>
-                  <input type="tel" value={form.phone} onChange={handlePhoneChange} placeholder="+63 917 123 4567"
-                    className={`w-full pl-10 pr-4 py-3 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition ${phoneValid ? '' : 'border-red-300 bg-red-50'}`} />
-                  {!phoneValid && form.phone && (
-                    <p className="text-xs text-red-600 mt-1">Invalid Philippine phone number</p>
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Username</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                  </span>
-                  <input type="text" value={form.username} onChange={e => setForm({ ...form, username: e.target.value })} placeholder="juandelacruz"
-                    className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
-                </div>
-                <p className="text-xs text-gray-400 mt-1">Leave blank to auto-generate from email.</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
-                <div className="relative">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                  </span>
-                  <input type={showPassword ? "text" : "password"} value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} placeholder="••••••••" required
-                    className={`w-full pl-10 pr-10 py-3 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition ${passwordStrength === 'strong' ? 'border-green-300 ring-green-500' : passwordStrength === 'empty' ? '' : 'border-yellow-300'}`} />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                  </button>
-                </div>
-                {/* Password strength bar */}
-                <div className="mt-2">
-                  <div className="flex h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div 
-                      className="h-full transition-all duration-300 rounded-full"
-                      style={{
-                        width: `${strengthWidth[passwordStrength]}%`,
-                        backgroundColor: strengthColors[passwordStrength]
-                      }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-xs mt-1">
-                    <span>Weak</span>
-                    <span>Fair</span>
-                    <span>Good</span>
-                    <span>Strong</span>
-                  </div>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  8+ chars, 1 upper, 1 number, 1 special
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Password</label>
-                <input type={showPassword ? "text" : "password"} value={form.confirmPassword} onChange={e => setForm({ ...form, confirmPassword: e.target.value })} placeholder="••••••••" required
-                  className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition" />
-              </div>
-
-              {/* Address Section */}
-              <div className="border-y border-gray-100 py-4">
-                <h3 className="text-sm font-semibold text-gray-800 mb-3">Delivery Address</h3>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Region</label>
-                    <select value={form.address.regionId} onChange={e => updateAddressField('regionId', e.target.value)} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
-                      <option value="">Select Region</option>
-                      {regions.map(r => (
-                        <option key={r.id} value={r.id}>{r.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Province</label>
-                    <select value={form.address.provinceId} onChange={e => updateAddressField('provinceId', e.target.value)} disabled={!form.address.regionId} className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm">
-                      <option value="">Select Province</option>
-                      {getProvinces(form.address.regionId).map(p => (
-                        <option key={p.id} value={p.id}>{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">City / Municipality</label>
-                    <input type="text" value={form.address.city} onChange={e => updateAddressField('city', e.target.value)} placeholder="City" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">ZIP Code</label>
-                    <input type="text" value={form.address.zip_code} onChange={e => updateAddressField('zip_code', e.target.value)} placeholder="ZIP" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Street Address</label>
-                  <textarea rows="2" value={form.address.street} onChange={e => updateAddressField('street', e.target.value)} placeholder="House/Bldg No, Street, Subdivision/Village" className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm resize-vertical" />
-                </div>
-                {!addressComplete && (
-                  <p className="text-xs text-red-600 mt-1">Please complete all address fields</p>
-                )}
-              </div>
-
-              <label className="flex items-start gap-2 cursor-pointer">
-                <input type="checkbox" checked={agreeTerms} onChange={e => setAgreeTerms(e.target.checked)} className="w-4 h-4 rounded accent-green-600 mt-0.5" />
-                <span className="text-sm text-gray-600">
-                  I agree to the{" "}
-                  <button type="button" onClick={() => onNavigate("terms")} className="text-green-700 hover:underline font-medium">Terms & Conditions</button>
-                </span>
-              </label>
-
-              <button type="submit" disabled={loading || !formValid}
-                className="w-full py-3 bg-green-700 hover:bg-green-800 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition">
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
-                    Sending OTP...
-                  </span>
-                ) : "Create Account"}
-              </button>
-            </form>
-          ) : (
-            <form onSubmit={handleVerifyAndRegister} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3 text-center">OTP Code</label>
-                <div className="flex justify-center gap-3">
-                  {[0, 1, 2, 3].map((i) => (
-                    <input
-                      key={i}
-                      id={`otp-${i}`}
-                      type="text"
-                      inputMode="numeric"
-                      maxLength={1}
-                      value={otp[i] || ""}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/\D/g, "")
-                        if (!val) return
-                        const newOtp = otp.split("")
-                        newOtp[i] = val[val.length - 1]
-                        const joined = newOtp.join("")
-                        setOtp(joined)
-                        if (i < 3 && val) {
-                          document.getElementById(`otp-${i + 1}`)?.focus()
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Backspace" && !otp[i] && i > 0) {
-                          const newOtp = otp.split("")
-                          newOtp[i - 1] = ""
-                          setOtp(newOtp.join(""))
-                          document.getElementById(`otp-${i - 1}`)?.focus()
-                        }
-                      }}
-                      onPaste={(e) => {
-                        e.preventDefault()
-                        const paste = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4)
-                        setOtp(paste)
-                        const focusIndex = Math.min(paste.length, 3)
-                        setTimeout(() => document.getElementById(`otp-${focusIndex}`)?.focus(), 0)
-                      }}
-                      className="w-14 h-14 text-center text-2xl font-bold border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
-                    />
-                  ))}
-                </div>
-                <p className="text-xs text-gray-400 mt-3 text-center">Check your email inbox for the verification code.</p>
-              </div>
-
-              <button type="submit" disabled={loading}
-                className="w-full py-3 bg-green-700 hover:bg-green-800 text-white font-semibold rounded-xl transition disabled:opacity-60">
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
-                    Verifying...
-                  </span>
-                ) : "Verify & Create Account"}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setStep("form"); setOtp(""); setError("") }}
-                className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition"
-              >
-                ← Back to registration
-              </button>
-            </form>
-          )}
-
-          <p className="text-center text-sm text-gray-500 mt-6">
-            Already have an account?{" "}
-            <button onClick={() => onNavigate("login")} className="text-green-700 font-semibold hover:underline">Log in</button>
-          </p>
+    <div className="lg:hidden relative h-48 sm:h-56 flex items-center justify-center overflow-hidden flex-shrink-0"
+      style={{ background: "linear-gradient(135deg,#f9c6d0 0%,#e8a0b4 50%,#c97fa0 100%)" }}>
+      <img src={bgImg} alt="" className="absolute inset-0 w-full h-full object-cover object-center" />
+      <div className="absolute inset-0 bg-black/35" />
+      <div className="relative z-10 text-center px-8">
+        <div className="inline-flex flex-col items-center gap-2">
+          <img src={estingsLogo} alt="Esting's" className="h-20 sm:h-24 brightness-0 invert drop-shadow-lg" />
+          <p className="text-white font-bold text-xs sm:text-sm tracking-[0.22em] uppercase drop-shadow">Flower International Inc.</p>
         </div>
       </div>
     </div>
   )
 }
 
+// ── Flower petal loader ─────────────────────────────────────────────────────
+function FlowerLoader({ message = "Please wait..." }) {
+  const petals = [
+    { angle: 0,   color: "#f48fb1" },
+    { angle: 60,  color: "#ec407a" },
+    { angle: 120, color: "#e91e63" },
+    { angle: 180, color: "#f06292" },
+    { angle: 240, color: "#c2185b" },
+    { angle: 300, color: "#f48fb1" },
+  ]
+  return (
+    <>
+      <style>{`
+        @keyframes petalBloom {
+          0%, 100% { opacity: 0.2; }
+          50%       { opacity: 1;   }
+        }
+      `}</style>
+      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm">
+        <svg width="120" height="120" viewBox="0 0 100 100">
+          {petals.map(({ angle, color }, i) => (
+            <g key={i} transform={`rotate(${angle} 50 50)`}>
+              <ellipse cx="50" cy="27" rx="9.5" ry="21" fill={color}
+                style={{ animation: `petalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`, animationFillMode: "both" }} />
+            </g>
+          ))}
+          <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+          <circle cx="50" cy="50" r="7"  fill="#f9c6d0" />
+          <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+        </svg>
+        <p className="mt-4 text-sm font-medium text-gray-500 tracking-wide">{message}</p>
+      </div>
+    </>
+  )
+}
+
+// ── Eye icons ───────────────────────────────────────────────────────────────
+function EyeOpen() {
+  return <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+}
+function EyeSlash() {
+  return <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+}
+
+// ── Inline field error ──────────────────────────────────────────────────────
+function FieldError({ msg }) {
+  if (!msg) return null
+  return <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><span>⚠</span>{msg}</p>
+}
+
+// ── Input class constants ───────────────────────────────────────────────────
+const iBase  = "w-full py-3 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent transition bg-white"
+const iOk    = "border-gray-200 focus:ring-green-500"
+const iErr   = "border-red-400 focus:ring-red-400"
+const iPlain = (err) => `px-4 ${iBase} ${err ? iErr : iOk}`
+const iIcon  = (err) => `pl-10 pr-4 ${iBase} ${err ? iErr : iOk}`
+const iIconR = (err) => `pl-10 pr-10 ${iBase} ${err ? iErr : iOk}`
+const iSel   = "w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition bg-white appearance-auto"
+
+const STORAGE_KEY = "register_form_draft"
+const PHASES = [
+  { title: "Nice to meet you!",    sub: "Let's start with your name."               },
+  { title: "Stay in touch",        sub: "How can we reach you?"                     },
+  { title: "Secure your account",  sub: "Pick a strong password."                   },
+  { title: "Where do we deliver?", sub: "Fill in your delivery address to continue." },
+]
+
+export default function Register({ onNavigate }) {
+  const { register } = useAuth()
+  const [step, setStep]           = useState("form")
+  const [formPhase, setFormPhase] = useState(1)
+  const [otp, setOtp]             = useState("")
+
+  const [form, setForm] = useState(() => {
+    const saved = sessionStorage.getItem(STORAGE_KEY)
+    return saved ? JSON.parse(saved) : {
+      firstName: "", lastName: "", email: "", phone: "", username: "",
+      password: "", confirmPassword: "",
+      address: { regionId: "", provinceId: "", city: "", street: "", zip_code: "" }
+    }
+  })
+
+  // ── Per-field touched & error state ──────────────────────────────────────
+  const [touched, setTouched]   = useState({})
+  const [fieldErr, setFieldErr] = useState({})
+
+  const touch  = (field) => setTouched(t => ({ ...t, [field]: true }))
+  const setErr = (field, msg) => setFieldErr(e => ({ ...e, [field]: msg }))
+  const clearErr = (field) => setFieldErr(e => ({ ...e, [field]: "" }))
+
+  // Validate a single field and update fieldErr
+  const validateField = useCallback((field, value, formSnapshot) => {
+    switch (field) {
+      case "firstName":
+        if (!value.trim()) return setErr("firstName", "First name is required.")
+        if (!isValidName(value)) return setErr("firstName", "Name can only contain letters, spaces, hyphens, or apostrophes.")
+        return clearErr("firstName")
+
+      case "lastName":
+        if (!value.trim()) return setErr("lastName", "Last name is required.")
+        if (!isValidName(value)) return setErr("lastName", "Name can only contain letters, spaces, hyphens, or apostrophes.")
+        return clearErr("lastName")
+
+      case "email":
+        if (!value.trim()) return setErr("email", "Email is required.")
+        if (!isValidEmail(value)) return setErr("email", "Enter a valid email (e.g. juan@gmail.com).")
+        return clearErr("email")
+
+      case "phone":
+        if (!value) return setErr("phone", "Phone number is required.")
+        if (!isValidPHPhone(value)) return setErr("phone", "Enter a valid PH mobile number (+639XXXXXXXXX).")
+        return clearErr("phone")
+
+      case "username":
+        if (value && !isValidUsername(value)) return setErr("username", "3–30 characters: letters, numbers, _ or . only.")
+        return clearErr("username")
+
+      case "password":
+        if (!value) return setErr("password", "Password is required.")
+        if (value.length < 8) return setErr("password", "Must be at least 8 characters.")
+        return clearErr("password")
+
+      case "confirmPassword": {
+        const pw = formSnapshot?.password ?? form.password
+        if (!value) return setErr("confirmPassword", "Please confirm your password.")
+        if (value !== pw) return setErr("confirmPassword", "Passwords do not match.")
+        return clearErr("confirmPassword")
+      }
+
+      case "zip_code":
+        if (!value) return setErr("zip_code", "ZIP code is required.")
+        if (!isValidZip(value)) return setErr("zip_code", "ZIP must be exactly 4 digits.")
+        return clearErr("zip_code")
+
+      case "city":
+        if (!value.trim()) return setErr("city", "City is required.")
+        if (!isValidCity(value)) return setErr("city", "City can only contain letters, spaces, hyphens, or periods.")
+        return clearErr("city")
+
+      case "street":
+        if (!value.trim()) return setErr("street", "Street address is required.")
+        if (!isValidStreet(value)) return setErr("street", "Enter full address with house/unit number (min. 10 characters).")
+        return clearErr("street")
+
+      default: break
+    }
+  }, [form.password])
+
+  const [showPassword, setShowPassword]   = useState(false)
+  const [agreeTerms, setAgreeTerms]       = useState(false)
+  const [error, setError]                 = useState("")
+  const [loading, setLoading]             = useState(false)
+  const [loadingMsg, setLoadingMsg]       = useState("Please wait...")
+  const [passwordStrength, setPasswordStrength] = useState("empty")
+
+  useEffect(() => { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(form)) }, [form])
+  useEffect(() => {
+    const clean = () => sessionStorage.removeItem(STORAGE_KEY)
+    window.addEventListener("beforeunload", clean)
+    return () => window.removeEventListener("beforeunload", clean)
+  }, [])
+
+  // ── Phone handler ─────────────────────────────────────────────────────────
+  const handlePhoneChange = useCallback((e) => {
+    let val = e.target.value.replace(/[^\d+]/g, "")
+    // Auto-convert 09xx → +639xx
+    if (val.startsWith("0")) val = "+63" + val.slice(1)
+    // Ensure +63 prefix
+    if (!val.startsWith("+63")) val = "+63" + val.replace(/^\+?63?/, "")
+    val = val.slice(0, 13) // +63 + 10 digits = 13 chars max
+    setForm(f => ({ ...f, phone: val }))
+    if (touched.phone) validateField("phone", val, null)
+  }, [touched.phone, validateField])
+
+  // ── Password strength ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const p = form.password; let s = 0
+    if (p.length >= 8) s++; if (/[A-Z]/.test(p)) s++; if (/[0-9]/.test(p)) s++; if (/[^A-Za-z0-9]/.test(p)) s++
+    setPasswordStrength(s === 0 ? "empty" : s < 2 ? "weak" : s < 3 ? "fair" : s < 4 ? "good" : "strong")
+  }, [form.password])
+
+  // ── Address helper ────────────────────────────────────────────────────────
+  const updateAddr = (field, value) => {
+    setForm(f => ({ ...f, address: { ...f.address, [field]: value } }))
+    if (touched[field]) validateField(field, value, null)
+  }
+
+  // ── ZIP: block non-numeric keystrokes ─────────────────────────────────────
+  const handleZipChange = (e) => {
+    const val = e.target.value.replace(/\D/g, "").slice(0, 4)
+    updateAddr("zip_code", val)
+  }
+
+  // ── Phase-level can-proceed ────────────────────────────────────────────────
+  const canProceed = {
+    1: isValidName(form.firstName) && isValidName(form.lastName),
+    2: isValidEmail(form.email) && isValidPHPhone(form.phone),
+    3: passwordStrength === "strong" && form.password === form.confirmPassword && isValidUsername(form.username),
+    4: isValidZip(form.address.zip_code) && isValidCity(form.address.city) &&
+       isValidStreet(form.address.street) && form.address.regionId && form.address.provinceId && agreeTerms,
+  }
+
+  // ── Phase validation with error messages ──────────────────────────────────
+  const validatePhase = (phase) => {
+    setError("")
+    if (phase === 1) {
+      touch("firstName"); touch("lastName")
+      validateField("firstName", form.firstName, null)
+      validateField("lastName", form.lastName, null)
+      if (!canProceed[1]) { setError("Please enter a valid first and last name."); return false }
+    }
+    if (phase === 2) {
+      touch("email"); touch("phone")
+      validateField("email", form.email, null)
+      validateField("phone", form.phone, null)
+      if (!isValidEmail(form.email)) { setError("Please enter a valid email address (e.g. juan@gmail.com)."); return false }
+      if (!isValidPHPhone(form.phone)) { setError("Please enter a valid PH mobile number (+639XXXXXXXXX)."); return false }
+    }
+    if (phase === 3) {
+      touch("username"); touch("password"); touch("confirmPassword")
+      validateField("username", form.username, null)
+      validateField("password", form.password, null)
+      validateField("confirmPassword", form.confirmPassword, null)
+      if (form.username && !isValidUsername(form.username)) { setError("Username must be 3–30 characters (letters, numbers, _ or .)."); return false }
+      if (passwordStrength !== "strong") { setError("Password must be strong (8+ chars, uppercase, number, special)."); return false }
+      if (form.password !== form.confirmPassword) { setError("Passwords do not match."); return false }
+    }
+    if (phase === 4) {
+      touch("city"); touch("street"); touch("zip_code")
+      validateField("city", form.address.city, null)
+      validateField("street", form.address.street, null)
+      validateField("zip_code", form.address.zip_code, null)
+      if (!form.address.regionId || !form.address.provinceId) { setError("Please select your region and province."); return false }
+      if (!isValidCity(form.address.city)) { setError("Please enter a valid city name."); return false }
+      if (!isValidZip(form.address.zip_code)) { setError("ZIP code must be exactly 4 digits."); return false }
+      if (!isValidStreet(form.address.street)) { setError("Please enter your full street address including a house/unit number (min. 10 characters)."); return false }
+      if (!agreeTerms) { setError("Please agree to the Terms & Conditions."); return false }
+    }
+    return true
+  }
+
+  const handleNext = () => { if (validatePhase(formPhase)) setFormPhase(p => p + 1) }
+
+  const handleSendOtp = async () => {
+    setError("")
+    if (!validatePhase(4)) return
+    setLoadingMsg("Sending verification code...")
+    setLoading(true)
+    try { await sendOtp(form.email); setStep("otp") }
+    catch (err) { setError(err.message || "Failed to send OTP. Please try again.") }
+    finally { setLoading(false) }
+  }
+
+  const handleVerifyAndRegister = async (e) => {
+    e.preventDefault(); setError("")
+    if (!otp || otp.length < 4) return setError("Please enter the complete 4-digit OTP.")
+    setLoadingMsg("Creating your account...")
+    setLoading(true)
+    try {
+      await verifyOtp(form.email, otp)
+      const addressStr = form.address.street
+        ? `${form.address.street}, ${form.address.city}, ${form.address.provinceId || ""} ${form.address.zip_code || ""}`.trim()
+        : undefined
+      const result = await register({
+        first_name: form.firstName, last_name: form.lastName, email: form.email,
+        phone_number: form.phone, username: form.username || undefined,
+        password: form.password, address: addressStr
+      })
+      if (result.success || result.status === "success") {
+        sessionStorage.setItem("registerEmail", form.email)
+        sessionStorage.setItem("registerPassword", form.password)
+        onNavigate("login")
+      } else { setError(result.message || "Registration failed. Please try again.") }
+    } catch (err) { setError(err.message || "Invalid OTP or registration failed.") }
+    finally { setLoading(false) }
+  }
+
+  const strengthColors = { empty: "gray", weak: "#ef4444", fair: "#f97316", good: "#eab308", strong: "#22c55e" }
+  const strengthWidth  = { empty: 0, weak: 25, fair: 50, good: 75, strong: 100 }
+  const strengthLabel  = { empty: "", weak: "Weak", fair: "Fair", good: "Good", strong: "Strong" }
+
+  const currentTitle = step === "otp" ? "Verify your email" : PHASES[formPhase - 1].title
+  const currentSub   = step === "otp" ? `Enter the OTP sent to ${form.email}` : PHASES[formPhase - 1].sub
+
+  return (
+    <div className="min-h-screen flex">
+      {loading && <FlowerLoader message={loadingMsg} />}
+
+      <div className="hidden lg:block lg:w-1/2 flex-shrink-0 sticky top-0 h-screen">
+        <FlowerPanel />
+      </div>
+
+      <div className="w-full lg:w-1/2 flex flex-col bg-gray-50 overflow-y-auto">
+        <MobileFlowerBanner />
+
+        <div className="flex-1 flex items-center justify-center px-6 py-12">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-md border border-gray-100 px-8 py-10">
+
+            {/* Header */}
+            <div className="text-center mb-6">
+              <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-green-50 mb-4">
+                <svg className="w-7 h-7 text-green-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d={step === "otp"
+                      ? "M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                      : "M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"} />
+                </svg>
+              </div>
+              <h1 className="text-2xl font-bold text-gray-800 min-h-[2rem]"><TypewriterText text={currentTitle} /></h1>
+              <p className="text-gray-500 text-sm mt-1">{currentSub}</p>
+            </div>
+
+            {/* Progress bar */}
+            {step === "form" && (
+              <div className="mb-6">
+                <div className="flex gap-1.5">
+                  {[1,2,3,4].map(i => (
+                    <div key={i} className={`flex-1 h-1 rounded-full transition-colors duration-500 ${
+                      i < formPhase ? "bg-green-600" : i === formPhase ? "bg-green-400" : "bg-gray-200"
+                    }`} />
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 mt-1.5 text-right">Step {formPhase} of 4</p>
+              </div>
+            )}
+
+            {error && (
+              <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm text-center">{error}</div>
+            )}
+
+            {/* ══ FORM PHASES ════════════════════════════════════════════ */}
+            {step === "form" && (
+              <div className="space-y-4">
+
+                {/* ── Phase 1: Name ─────────────────────────────────────── */}
+                {formPhase === 1 && <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">First Name</label>
+                      <input type="text" value={form.firstName} autoFocus
+                        onChange={e => { setForm(f => ({ ...f, firstName: e.target.value })); if (touched.firstName) validateField("firstName", e.target.value, null) }}
+                        onBlur={() => { touch("firstName"); validateField("firstName", form.firstName, null) }}
+                        placeholder="Juan"
+                        className={iPlain(touched.firstName && fieldErr.firstName)} />
+                      <FieldError msg={touched.firstName && fieldErr.firstName} />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Last Name</label>
+                      <input type="text" value={form.lastName}
+                        onChange={e => { setForm(f => ({ ...f, lastName: e.target.value })); if (touched.lastName) validateField("lastName", e.target.value, null) }}
+                        onBlur={() => { touch("lastName"); validateField("lastName", form.lastName, null) }}
+                        placeholder="Dela Cruz"
+                        className={iPlain(touched.lastName && fieldErr.lastName)} />
+                      <FieldError msg={touched.lastName && fieldErr.lastName} />
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-400">Letters, spaces, hyphens, and apostrophes only.</p>
+                  <button onClick={handleNext} disabled={!canProceed[1]}
+                    className="w-full py-3 bg-green-700 hover:bg-green-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition">
+                    Next →
+                  </button>
+                </>}
+
+                {/* ── Phase 2: Contact ──────────────────────────────────── */}
+                {formPhase === 2 && <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                      </span>
+                      <input type="email" value={form.email} autoFocus
+                        onChange={e => { setForm(f => ({ ...f, email: e.target.value })); if (touched.email) validateField("email", e.target.value, null) }}
+                        onBlur={() => { touch("email"); validateField("email", form.email, null) }}
+                        placeholder="juan@gmail.com"
+                        className={iIcon(touched.email && fieldErr.email)} />
+                    </div>
+                    <FieldError msg={touched.email && fieldErr.email} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h.93a2 2 0 01.948.684l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 01.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /></svg>
+                      </span>
+                      <input type="tel" value={form.phone}
+                        onChange={handlePhoneChange}
+                        onBlur={() => { touch("phone"); validateField("phone", form.phone, null) }}
+                        placeholder="+63 917 123 4567"
+                        className={iIcon(touched.phone && fieldErr.phone)} />
+                    </div>
+                    <FieldError msg={touched.phone && fieldErr.phone} />
+                    <p className="text-xs text-gray-400 mt-1">Tip: typing 09xx auto-converts to +639xx.</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <button onClick={() => { setFormPhase(1); setError("") }} className="flex-1 py-3 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition">← Back</button>
+                    <button onClick={handleNext} disabled={!canProceed[2]} className="flex-1 py-3 bg-green-700 hover:bg-green-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition">Next →</button>
+                  </div>
+                </>}
+
+                {/* ── Phase 3: Account ──────────────────────────────────── */}
+                {formPhase === 3 && <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Username <span className="text-gray-400 font-normal">(optional)</span></label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                      </span>
+                      <input type="text" value={form.username} autoFocus
+                        onChange={e => { setForm(f => ({ ...f, username: e.target.value })); if (touched.username) validateField("username", e.target.value, null) }}
+                        onBlur={() => { touch("username"); validateField("username", form.username, null) }}
+                        placeholder="juandelacruz"
+                        className={iIcon(touched.username && fieldErr.username)} />
+                    </div>
+                    <FieldError msg={touched.username && fieldErr.username} />
+                    <p className="text-xs text-gray-400 mt-1">3–30 chars. Letters, numbers, underscores, or dots. Auto-generated if blank.</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                      </span>
+                      <input type={showPassword ? "text" : "password"} value={form.password}
+                        onChange={e => {
+                          setForm(f => ({ ...f, password: e.target.value }))
+                          if (touched.password) validateField("password", e.target.value, null)
+                          // Re-validate confirm when password changes
+                          if (touched.confirmPassword) validateField("confirmPassword", form.confirmPassword, { password: e.target.value })
+                        }}
+                        onBlur={() => { touch("password"); validateField("password", form.password, null) }}
+                        placeholder="••••••••"
+                        className={iIconR(touched.password && fieldErr.password)} />
+                      <button type="button" onClick={() => setShowPassword(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        {showPassword ? <EyeOpen /> : <EyeSlash />}
+                      </button>
+                    </div>
+                    {/* Strength bar */}
+                    <div className="mt-2">
+                      <div className="flex h-2 bg-gray-200 rounded-full overflow-hidden">
+                        <div className="h-full transition-all duration-300 rounded-full"
+                          style={{ width: `${strengthWidth[passwordStrength]}%`, backgroundColor: strengthColors[passwordStrength] }} />
+                      </div>
+                      <div className="flex justify-between items-center mt-1">
+                        <span className="text-xs font-medium" style={{ color: strengthColors[passwordStrength] || "#9ca3af" }}>
+                          {strengthLabel[passwordStrength]}
+                        </span>
+                        <span className="text-xs text-gray-400">8+ chars, 1 upper, 1 number, 1 special</span>
+                      </div>
+                    </div>
+                    <FieldError msg={touched.password && fieldErr.password} />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Password</label>
+                    <div className="relative">
+                      <input type={showPassword ? "text" : "password"} value={form.confirmPassword}
+                        onChange={e => {
+                          setForm(f => ({ ...f, confirmPassword: e.target.value }))
+                          if (touched.confirmPassword) validateField("confirmPassword", e.target.value, null)
+                        }}
+                        onBlur={() => { touch("confirmPassword"); validateField("confirmPassword", form.confirmPassword, null) }}
+                        placeholder="••••••••"
+                        className={`w-full px-4 pr-10 py-3 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent transition bg-white ${(touched.confirmPassword && fieldErr.confirmPassword) ? iErr : iOk}`} />
+                      <button type="button" onClick={() => setShowPassword(s => !s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                        {showPassword ? <EyeOpen /> : <EyeSlash />}
+                      </button>
+                    </div>
+                    <FieldError msg={touched.confirmPassword && fieldErr.confirmPassword} />
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button onClick={() => { setFormPhase(2); setError("") }} className="flex-1 py-3 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition">← Back</button>
+                    <button onClick={handleNext} disabled={!canProceed[3]} className="flex-1 py-3 bg-green-700 hover:bg-green-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition">Next →</button>
+                  </div>
+                </>}
+
+                {/* ── Phase 4: Address ──────────────────────────────────── */}
+                {formPhase === 4 && <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Region</label>
+                      <select value={form.address.regionId}
+                        onChange={e => { updateAddr("regionId", e.target.value); updateAddr("provinceId", "") }}
+                        className={iSel}>
+                        <option value="">Select Region</option>
+                        {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Province</label>
+                      <select value={form.address.provinceId}
+                        onChange={e => updateAddr("provinceId", e.target.value)}
+                        disabled={!form.address.regionId}
+                        className={`${iSel} disabled:opacity-50`}>
+                        <option value="">Select Province</option>
+                        {getProvinces(form.address.regionId).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">City / Municipality</label>
+                      <input type="text" value={form.address.city}
+                        onChange={e => updateAddr("city", e.target.value)}
+                        onBlur={() => { touch("city"); validateField("city", form.address.city, null) }}
+                        placeholder="City"
+                        className={`${iSel} ${touched.city && fieldErr.city ? "border-red-400 focus:ring-red-400" : ""}`} />
+                      <FieldError msg={touched.city && fieldErr.city} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">ZIP Code</label>
+                      {/* Numbers only — enforced by replace + inputMode */}
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={form.address.zip_code}
+                        onChange={handleZipChange}
+                        onBlur={() => { touch("zip_code"); validateField("zip_code", form.address.zip_code, null) }}
+                        placeholder="4 digits"
+                        maxLength={4}
+                        className={`${iSel} ${touched.zip_code && fieldErr.zip_code ? "border-red-400 focus:ring-red-400" : ""}`} />
+                      <FieldError msg={touched.zip_code && fieldErr.zip_code} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Street Address</label>
+                    <textarea rows="2" value={form.address.street}
+                      onChange={e => updateAddr("street", e.target.value)}
+                      onBlur={() => { touch("street"); validateField("street", form.address.street, null) }}
+                      placeholder="House/Bldg No, Street, Subdivision/Village (e.g. 123 Rizal St, Barangay)"
+                      style={{ maxHeight: "6rem" }}
+                      className={`w-full px-3 py-2 border rounded-xl text-sm resize-y focus:outline-none focus:ring-2 focus:border-transparent transition bg-white ${touched.street && fieldErr.street ? "border-red-400 focus:ring-red-400" : "border-gray-200 focus:ring-green-500"}`} />
+                    <FieldError msg={touched.street && fieldErr.street} />
+                    <p className="text-xs text-gray-400 mt-1">Must include a house/unit number and be at least 10 characters.</p>
+                  </div>
+
+                  <label className="flex items-start gap-2 cursor-pointer">
+                    <input type="checkbox" checked={agreeTerms} onChange={e => setAgreeTerms(e.target.checked)} className="w-4 h-4 rounded accent-green-600 mt-0.5" />
+                    <span className="text-sm text-gray-600">I agree to the{" "}
+                      <button type="button" onClick={() => onNavigate("terms")} className="text-green-700 hover:underline font-medium">Terms & Conditions</button>
+                    </span>
+                  </label>
+
+                  <div className="flex gap-3">
+                    <button onClick={() => { setFormPhase(3); setError("") }} className="flex-1 py-3 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition">← Back</button>
+                    <button onClick={handleSendOtp} disabled={!canProceed[4]}
+                      className="flex-1 py-3 bg-green-700 hover:bg-green-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition">
+                      Create Account
+                    </button>
+                  </div>
+                </>}
+              </div>
+            )}
+
+            {/* ══ OTP STEP ═══════════════════════════════════════════════ */}
+            {step === "otp" && (
+              <form onSubmit={handleVerifyAndRegister} className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3 text-center">OTP Code</label>
+                  <div className="flex justify-center gap-3">
+                    {[0,1,2,3].map(i => (
+                      <input key={i} id={`otp-${i}`} type="text" inputMode="numeric" maxLength={1} value={otp[i] || ""}
+                        onChange={e => {
+                          const val = e.target.value.replace(/\D/g, ""); if (!val) return
+                          const arr = otp.split(""); arr[i] = val[val.length - 1]; setOtp(arr.join(""))
+                          if (i < 3) document.getElementById(`otp-${i + 1}`)?.focus()
+                        }}
+                        onKeyDown={e => {
+                          if (e.key === "Backspace" && !otp[i] && i > 0) {
+                            const arr = otp.split(""); arr[i - 1] = ""; setOtp(arr.join(""))
+                            document.getElementById(`otp-${i - 1}`)?.focus()
+                          }
+                        }}
+                        onPaste={e => {
+                          e.preventDefault()
+                          const paste = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4)
+                          setOtp(paste)
+                          setTimeout(() => document.getElementById(`otp-${Math.min(paste.length, 3)}`)?.focus(), 0)
+                        }}
+                        className="w-14 h-14 text-center text-2xl font-bold border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition bg-white" />
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-400 mt-3 text-center">Check your email inbox for the verification code.</p>
+                </div>
+                <button type="submit" disabled={loading || otp.length < 4}
+                  className="w-full py-3 bg-green-700 hover:bg-green-800 text-white font-semibold rounded-xl transition disabled:opacity-60">
+                  Verify & Create Account
+                </button>
+                <button type="button" onClick={() => { setStep("form"); setOtp(""); setError("") }}
+                  className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition">← Back to registration</button>
+              </form>
+            )}
+
+            <p className="text-center text-sm text-gray-500 mt-6">
+              Already have an account?{" "}
+              <button onClick={() => onNavigate("login")} className="text-green-700 font-semibold hover:underline">Log in</button>
+            </p>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}

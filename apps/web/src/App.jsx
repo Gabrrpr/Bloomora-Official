@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import Navbar from "./components/Navbar";
 import Home from "./pages/Home";
@@ -43,10 +43,26 @@ function AppContent() {
   const [prevPage, setPrevPage] = useState("login");
   const [selectedOrderId, setSelectedOrderId] = useState(null);
 
+  // Keep a ref that always holds the current page value.
+  // This lets the user-change effect read the latest page without
+  // being added to its dependency array (which would re-run it on
+  // every navigation and break the delay logic).
+  const pageRef = useRef(page);
+  useEffect(() => { pageRef.current = page; }, [page]);
+
   useEffect(() => {
-    if (isPreview) return; // Don't redirect to admin when previewing storefront
+    if (isPreview) return;
     if (user && (user.role === "admin" || user.role === "staff")) {
-      setPage("admin");
+      if (pageRef.current === "login") {
+        // Login's curtain-split animation takes 850 ms.
+        // Wait 950 ms before swapping to the dashboard so the
+        // animation fully completes before Login unmounts.
+        const t = setTimeout(() => setPage("admin"), 950);
+        return () => clearTimeout(t);
+      } else {
+        // Already logged in on a different page (e.g. page refresh) — redirect immediately.
+        setPage("admin");
+      }
     }
   }, [user]);
 
@@ -58,7 +74,6 @@ function AppContent() {
   };
 
   const renderContent = () => {
-    // Preview mode: force customer storefront regardless of role
     if (isPreview) {
       return (
         <>
@@ -72,10 +87,10 @@ function AppContent() {
     if (page === "admin") return <AdminDashboard onNavigate={navigate} />;
 
     if (AUTH_PAGES.includes(page)) {
-      if (page === "login")          return <Login onNavigate={navigate} />;
-      if (page === "register")       return <Register onNavigate={navigate} />;
+      if (page === "login")           return <Login onNavigate={navigate} />;
+      if (page === "register")        return <Register onNavigate={navigate} />;
       if (page === "forgot-password") return <ForgotPassword onNavigate={navigate} />;
-      if (page === "terms")          return <TermsAndConditions onNavigate={navigate} onBack={() => navigate(prevPage)} />;
+      if (page === "terms")           return <TermsAndConditions onNavigate={navigate} onBack={() => navigate(prevPage)} />;
     }
 
     return (
@@ -89,11 +104,11 @@ function AppContent() {
             case "checkout":             return <Checkout onNavigate={navigate} />;
             case "confirmation":         return <Confirmation onNavigate={navigate} />;
             case "account":              return <AccountPage onNavigate={navigate} />;
-            case "orders":               return <Orders onNavigate={navigate} />;
+            case "orders":               return <Orders onNavigate={navigate} selectedOrderId={selectedOrderId} />;
             case "wishlist":             return <Wishlist onNavigate={navigate} />;
             case "settings":             return <Settings onNavigate={navigate} />;
             case "about":                return <AboutUs onNavigate={navigate} />;
-            case "contact":              return <ContactUs onNavigate={navigate} />;
+            case "contact":             return <ContactUs onNavigate={navigate} />;
             case "occasions":            return <AllOccasions onNavigate={navigate} />;
             case "make-it-personal":     return <MakeItPersonal onNavigate={navigate} />;
             case "mix-and-match":        return <MixAndMatch onNavigate={navigate} />;
