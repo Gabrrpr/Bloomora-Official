@@ -7,7 +7,6 @@ import uuid
 
 from app.core.dependencies import get_db, get_current_user
 from app.models import User, RoleEnum, BranchEnum
-# Added the missing auth imports back:
 from app.api.v1.routes.auth import hash_password, generate_username 
 from pydantic import BaseModel, EmailStr
 from app.services.email_service import send_otp_email, send_staff_confirm_email
@@ -21,7 +20,15 @@ def require_admin_or_staff(current_user: User):
 
 def serialize_user(u: User) -> dict:
     is_staff_verified = getattr(u, 'is_staff_verified', True)
-    staff_status = "active" if u.is_active and u.is_verified else "inactive" if not u.is_active else "pending" if not is_staff_verified and u.role in [RoleEnum.admin, RoleEnum.staff, RoleEnum.delivery] else "pending"
+    
+    # Cleaned up staff status logic for better readability
+    if not getattr(u, 'is_active', False):
+        staff_status = "inactive"
+    elif getattr(u, 'is_verified', False) and is_staff_verified:
+        staff_status = "active"
+    else:
+        staff_status = "pending"
+
     return {
         "id": str(u.id),
         "first_name": getattr(u, 'first_name', ''),
@@ -38,8 +45,9 @@ def serialize_user(u: User) -> dict:
         "is_staff_verified": is_staff_verified,
         "staff_status": staff_status,
         "must_change_password": getattr(u, 'must_change_password', False),
-        "created_at": getattr(u, 'created_at', None) and u.created_at.isoformat() or None,
-        "updated_at": getattr(u, 'updated_at', None) and u.updated_at.isoformat() or None,
+        # Using cleaner Python ternary operators
+        "created_at": u.created_at.isoformat() if getattr(u, 'created_at', None) else None,
+        "updated_at": u.updated_at.isoformat() if getattr(u, 'updated_at', None) else None,
     }
 
 # ── Schemas ──────────────────────────────────────────────────────────────────
@@ -223,15 +231,20 @@ def staff_verify(token: str = Query(..., description="Staff verification token")
 @router.get("/{user_id}", response_model=dict)
 def get_user(
     user_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user) # Security fix: Requires auth
 ):
-    """Get user by ID (public profile info)."""
+    """Get user by ID. Requires auth. Users can only view themselves unless Admin/Staff."""
     try:
-        uuid.UUID(user_id)
+        user_uuid = uuid.UUID(user_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid user ID format")
     
-    user = db.query(User).filter(User.id == user_id).first()
+    # Security check: Make sure standard users can't pull other people's PII
+    if str(current_user.id) != user_id and current_user.role not in [RoleEnum.admin, RoleEnum.staff]:
+        raise HTTPException(status_code=403, detail="You do not have permission to view this profile.")
+
+    user = db.query(User).filter(User.id == user_uuid).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     

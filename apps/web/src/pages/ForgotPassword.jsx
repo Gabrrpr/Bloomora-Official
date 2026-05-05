@@ -45,7 +45,7 @@ const STEP_TITLES = ["Forgot Password", "Enter your code", "Set new password", "
 export default function ForgotPassword({ onNavigate }) {
   const [step, setStep] = useState(0)
   const [email, setEmail] = useState("")
-  const [otp, setOtp] = useState(["", "", "", ""])
+const [otp, setOtp] = useState(["", "", "", "", "", ""])
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
@@ -62,7 +62,7 @@ export default function ForgotPassword({ onNavigate }) {
   const handleOtpChange = (i, val) => {
     if (!/^\d?$/.test(val)) return
     const next = [...otp]; next[i] = val; setOtp(next)
-    if (val && i < 3) document.getElementById(`fp-otp-${i + 1}`)?.focus()
+if (val && i < 5) document.getElementById(`fp-otp-${i + 1}`)?.focus()
   }
 
   const handleSendOtp = async () => {
@@ -74,7 +74,7 @@ export default function ForgotPassword({ onNavigate }) {
   }
 
   const handleVerifyOtp = () => {
-    if (otp.join("").length !== 4) return setError("Please enter the 4-digit OTP.")
+if (otp.join("").length !== 6) return setError("Please enter the 6-digit OTP.")
     setStep(2); setError("")
   }
 
@@ -143,7 +143,7 @@ export default function ForgotPassword({ onNavigate }) {
             {step === 1 && (
               <>
                 <div className="flex justify-center gap-3 mb-6">
-                  {otp.map((digit, i) => (
+ {otp.map((digit, i) => (
                     <input key={i} id={`fp-otp-${i}`} type="text" maxLength={1} value={digit}
                       onChange={e => handleOtpChange(i, e.target.value)}
                       onKeyDown={e => { if (e.key === "Backspace" && !digit && i > 0) document.getElementById(`fp-otp-${i - 1}`)?.focus() }}

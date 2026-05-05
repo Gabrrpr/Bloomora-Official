@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from app.core.config import settings
 
 def generate_otp() -> str:
-    return ''.join(random.choices(string.digits, k=4))
+    return ''.join(random.choices(string.digits, k=6))
 
 def send_otp_email(to_email: str, otp: str, first_name: str = None):
     try:

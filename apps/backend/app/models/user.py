@@ -38,7 +38,8 @@ class User(Base):
     must_change_password = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
-    otp_code = Column(String(4), nullable=True)
+    otp_code = Column(String(6), nullable=True)
+    otp_expires_at = Column(DateTime(timezone=True), nullable=True)
 
     
     # These three lines must align perfectly with the properties above

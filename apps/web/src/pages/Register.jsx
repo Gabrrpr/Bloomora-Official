@@ -337,7 +337,7 @@ export default function Register({ onNavigate }) {
 
   const handleVerifyAndRegister = async (e) => {
     e.preventDefault(); setError("")
-    if (!otp || otp.length < 4) return setError("Please enter the complete 4-digit OTP.")
+    if (!otp || otp.length < 6) return setError("Please enter the complete 6-digit OTP.")
     setLoadingMsg("Creating your account...")
     setLoading(true)
     try {
@@ -646,12 +646,12 @@ export default function Register({ onNavigate }) {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3 text-center">OTP Code</label>
                   <div className="flex justify-center gap-3">
-                    {[0,1,2,3].map(i => (
+                    {[0,1,2,3,4,5].map(i => (
                       <input key={i} id={`otp-${i}`} type="text" inputMode="numeric" maxLength={1} value={otp[i] || ""}
                         onChange={e => {
                           const val = e.target.value.replace(/\D/g, ""); if (!val) return
                           const arr = otp.split(""); arr[i] = val[val.length - 1]; setOtp(arr.join(""))
-                          if (i < 3) document.getElementById(`otp-${i + 1}`)?.focus()
+                          if (i < 5) document.getElementById(`otp-${i + 1}`)?.focus()
                         }}
                         onKeyDown={e => {
                           if (e.key === "Backspace" && !otp[i] && i > 0) {
@@ -661,16 +661,16 @@ export default function Register({ onNavigate }) {
                         }}
                         onPaste={e => {
                           e.preventDefault()
-                          const paste = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 4)
+                          const paste = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6)
                           setOtp(paste)
-                          setTimeout(() => document.getElementById(`otp-${Math.min(paste.length, 3)}`)?.focus(), 0)
+                          setTimeout(() => document.getElementById(`otp-${Math.min(paste.length - 1, 5)}`)?.focus(), 0)
                         }}
                         className="w-14 h-14 text-center text-2xl font-bold border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition bg-white" />
                     ))}
                   </div>
                   <p className="text-xs text-gray-400 mt-3 text-center">Check your email inbox for the verification code.</p>
                 </div>
-                <button type="submit" disabled={loading || otp.length < 4}
+                <button type="submit" disabled={loading || otp.length < 6}
                   className="w-full py-3 bg-green-700 hover:bg-green-800 text-white font-semibold rounded-xl transition disabled:opacity-60">
                   Verify & Create Account
                 </button>
