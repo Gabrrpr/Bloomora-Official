@@ -3,6 +3,9 @@ import { loginUser, googleLogin as googleLoginApi, facebookLogin as facebookLogi
 
 const AuthContext = createContext(null)
 
+// Module-level so it's read once before any redirects fire
+const isPreview = new URLSearchParams(window.location.search).get("preview") === "true"
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => {
     const saved = localStorage.getItem("user")
@@ -98,7 +101,7 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const urlToken = params.get("token")
-    const urlRole = params.get("role")
+    const urlRole  = params.get("role")
     console.log("[AuthContext] OAuth redirect check — token in URL:", !!urlToken, "role:", urlRole)
 
     if (urlToken) {
@@ -107,21 +110,31 @@ export function AuthProvider({ children }) {
       console.log("[AuthContext] Storing OAuth token, calling setUserFromToken...")
       setUserFromToken(urlToken).then(result => {
         console.log("[AuthContext] setUserFromToken result:", result)
-        if (result && !result.is_profile_complete) {
-          window.location.replace('/profile')
+        // Never redirect if in preview mode — it would wipe ?preview=true
+        if (!isPreview && result && !result.is_profile_complete) {
+          window.location.replace("/profile")
         }
       })
-      window.history.replaceState({}, document.title, window.location.pathname)
+
+      // Strip only token + role — preserve ?preview=true and other params
+      const remaining = new URLSearchParams(window.location.search)
+      remaining.delete("token")
+      remaining.delete("role")
+      const newUrl = remaining.toString()
+        ? `${window.location.pathname}?${remaining.toString()}`
+        : window.location.pathname
+      window.history.replaceState({}, document.title, newUrl)
     } else {
       const existingToken = localStorage.getItem("access_token")
-      const existingUser = localStorage.getItem("user")
+      const existingUser  = localStorage.getItem("user")
       console.log("[AuthContext] No URL token. existingToken:", !!existingToken, "existingUser:", !!existingUser)
       if (existingToken && !existingUser) {
         console.log("[AuthContext] Restoring session from stored token...")
         setUserFromToken(existingToken).then(result => {
           console.log("[AuthContext] setUserFromToken result:", result)
-          if (result && !result.is_profile_complete) {
-            window.location.replace('/profile')
+          // Never redirect if in preview mode — it would wipe ?preview=true
+          if (!isPreview && result && !result.is_profile_complete) {
+            window.location.replace("/profile")
           }
         })
       }
@@ -134,6 +147,7 @@ export function AuthProvider({ children }) {
     </AuthContext.Provider>
   )
 }
+
 export function useAuth() {
   return useContext(AuthContext)
 }
