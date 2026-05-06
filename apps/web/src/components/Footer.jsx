@@ -127,45 +127,72 @@ export default function Footer({ onNavigate }) {
 
       <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "48px 40px 0" }}>
 
-        {/* ══ ROW 1: Logo + tagline on left · Socials on right ══ */}
+        {/* ══ ROW 1: Logo | divider | tagline | spacer | Follow Us + socials ══
+            All items are vertically centered on one single row.               */}
         <div style={{
           display: "flex",
-          alignItems: "flex-start",
-          justifyContent: "space-between",
-          gap: "32px",
+          alignItems: "center",
+          gap: "20px",
           flexWrap: "wrap",
           paddingBottom: "36px",
           borderBottom: `1px solid ${C.divider}`,
           marginBottom: "40px",
         }}>
-          {/* Logo + tagline */}
-          <div>
-            <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "14px" }}>
-              <img
-                src="/src/assets/EstingsLogo.svg"
-                alt=""
-                style={{ width: "46px", height: "46px", objectFit: "contain" }}
-                onError={e => e.target.style.display = "none"}
-              />
-              <img
-                src="/src/assets/Estings.svg"
-                alt="Esting's"
-                style={{ height: "38px", objectFit: "contain", filter: "brightness(0) invert(1)" }}
-                onError={e => e.target.style.display = "none"}
-              />
-            </div>
-            <p style={{ fontSize: "13px", color: C.textMid, margin: 0, lineHeight: "1.6", maxWidth: "280px", fontFamily: "var(--font-ui)" }}>
-              Fresh flowers, handcrafted with care.<br />
-              Serving Manila &amp; Pampanga since 1959.
-            </p>
+
+          {/* Logo group: icon + wordmark */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0 }}>
+            <img
+              src="/src/assets/EstingsLogo.svg"
+              alt=""
+              style={{ width: "40px", height: "40px", objectFit: "contain" }}
+              onError={e => e.target.style.display = "none"}
+            />
+            <img
+              src="/src/assets/Estings.svg"
+              alt="Esting's"
+              style={{ height: "34px", objectFit: "contain", filter: "brightness(0) invert(1)" }}
+              onError={e => e.target.style.display = "none"}
+            />
           </div>
 
-          {/* Social icons */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "10px" }}>
-            <p style={{ fontSize: "9.5px", fontWeight: 700, letterSpacing: "0.13em", textTransform: "uppercase", color: C.accentLight, margin: 0 }}>
+          {/* Thin vertical divider */}
+          <div style={{
+            width: "1px",
+            height: "36px",
+            background: "rgba(255,255,255,0.20)",
+            flexShrink: 0,
+          }} />
+
+          {/* Tagline */}
+          <p style={{
+            fontSize: "12.5px",
+            color: C.textMid,
+            margin: 0,
+            lineHeight: "1.6",
+            fontFamily: "var(--font-ui)",
+            flexShrink: 0,
+          }}>
+            Fresh flowers, handcrafted with care.<br />
+            Serving Manila &amp; Pampanga since 1959.
+          </p>
+
+          {/* Spacer pushes the social block to the far right */}
+          <div style={{ flex: 1 }} />
+
+          {/* Follow Us + socials — all inline */}
+          <div style={{ display: "flex", alignItems: "center", gap: "10px", flexShrink: 0, flexWrap: "wrap" }}>
+            <p style={{
+              fontSize: "9.5px",
+              fontWeight: 700,
+              letterSpacing: "0.13em",
+              textTransform: "uppercase",
+              color: C.accentLight,
+              margin: 0,
+              whiteSpace: "nowrap",
+            }}>
               Follow Us On
             </p>
-            <div style={{ display: "flex", gap: "7px" }}>
+            <div style={{ display: "flex", gap: "6px" }}>
               {SOCIAL_LINKS.map(s => (
                 <a
                   key={s.name}
@@ -184,13 +211,14 @@ export default function Footer({ onNavigate }) {
         </div>
 
         {/* ══ ROW 2: Nav links + Branch info + Payments ══ */}
-        <div style={{
-          display: "grid",
-          gridTemplateColumns: "160px 140px 1fr 1fr auto",
-          gap: "40px",
-          alignItems: "start",
-          paddingBottom: "44px",
-        }}
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: "160px 140px 1fr 1fr auto",
+            gap: "40px",
+            alignItems: "start",
+            paddingBottom: "44px",
+          }}
           className="ft-main-row"
         >
 
@@ -238,7 +266,7 @@ export default function Footer({ onNavigate }) {
             <InfoRow icon={<PhoneIcon />}>+63 045 961 5378</InfoRow>
           </div>
 
-          {/* We Accept + Shipped Via — stacked vertically */}
+          {/* We Accept + Shipped Via */}
           <div style={{ display: "flex", flexDirection: "column", gap: "22px" }}>
             <div>
               <ColLabel>We Accept</ColLabel>
@@ -267,23 +295,16 @@ export default function Footer({ onNavigate }) {
           </div>
         </div>
 
-        {/* Responsive overrides via injected style */}
+        {/* Responsive overrides */}
         <style>{`
           @media (max-width: 1024px) {
-            .ft-main-row {
-              grid-template-columns: repeat(3, 1fr) !important;
-            }
+            .ft-main-row { grid-template-columns: repeat(3, 1fr) !important; }
           }
           @media (max-width: 640px) {
-            .ft-main-row {
-              grid-template-columns: repeat(2, 1fr) !important;
-              gap: 28px !important;
-            }
+            .ft-main-row { grid-template-columns: repeat(2, 1fr) !important; gap: 28px !important; }
           }
           @media (max-width: 400px) {
-            .ft-main-row {
-              grid-template-columns: 1fr !important;
-            }
+            .ft-main-row { grid-template-columns: 1fr !important; }
           }
         `}</style>
       </div>
@@ -314,7 +335,6 @@ export default function Footer({ onNavigate }) {
               Terms of Service
             </button>
 
-            {/* Back to top */}
             <button
               onClick={scrollToTop}
               title="Back to top"

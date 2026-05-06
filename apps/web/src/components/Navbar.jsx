@@ -6,6 +6,7 @@ import estingsText from "../assets/Estings.svg";
 
 const SITE_GREEN = "#2E8B34";
 const NAVY_GREEN = "#35530A";
+const DARK_GREEN = "#0C573E";
 
 const PROMOTIONS = [
   { text: "Get", highlight: "3% off your first order", cta: "SHOP NOW", page: "shop" },
@@ -34,7 +35,7 @@ const NAV_LINKS = [
   },
   { label: "About Us", page: "about" },
   { label: "Contact Us", page: "contact" },
-  { label: "Help Center", page: null, dropdown: [{ label: "FAQs", page: "faq" }, { label: "Track My Order", page: "orders" }, { label: "Return Policy", page: "return-policy" }, { label: "World Clock",   page: "world-clock" }] },
+  { label: "Help Center", page: null, dropdown: [{ label: "FAQs", page: "faq" }, { label: "Track My Order", page: "orders" }, { label: "Return Policy", page: "return-policy" }, { label: "World Clock", page: "world-clock" }] },
 ];
 
 const SOCIAL_LINKS = [
@@ -44,134 +45,251 @@ const SOCIAL_LINKS = [
   { name: "Gmail",     href: "#", icon: (<svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 512 512"><path d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z" /></svg>) },
 ];
 
-// ── Make it Personal — side popout panel ─────────────────────────────────────
+const BRANCHES = {
+  Manila: {
+    address: "Laon-Laan Cor. Dos Castillas St., Sampaloc, Manila",
+    hours: "Mon – Sat, 9:00 AM – 9:00 PM",
+    phone: "+63 918 902 2401",
+  },
+  Pampanga: {
+    address: "McArthur Hi-way, Dolores, San Fernando, Pampanga",
+    hours: "Mon – Sat, 7:30 AM – 5:00 PM",
+    phone: "+63 045 961 5378",
+  },
+}
+
+// ── Branch Selected Modal — redesigned with strong visual hierarchy ────────────
+function BranchModal({ branch, onClose }) {
+  const info = BRANCHES[branch]
+
+  useEffect(() => {
+    const handleKey = (e) => { if (e.key === "Escape") onClose() }
+    document.addEventListener("keydown", handleKey)
+    return () => document.removeEventListener("keydown", handleKey)
+  }, [onClose])
+
+  return (
+    <>
+      <style>{`
+        @keyframes branchModalIn {
+          from { opacity: 0; transform: scale(0.93) translateY(-16px); }
+          to   { opacity: 1; transform: scale(1)    translateY(0); }
+        }
+      `}</style>
+
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 z-[200] flex items-center justify-center px-4"
+        style={{ backgroundColor: "rgba(0,0,0,0.50)", backdropFilter: "blur(5px)" }}
+        onClick={onClose}
+      >
+        <div
+          className="relative w-full overflow-hidden rounded-2xl"
+          style={{
+            maxWidth: "360px",
+            animation: "branchModalIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both",
+            boxShadow: "0 32px 80px rgba(0,0,0,0.28)",
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* ── HEADER ── */}
+          <div
+            className="relative overflow-hidden"
+            style={{
+              background: `linear-gradient(150deg, ${DARK_GREEN} 0%, #1a6b3f 50%, ${SITE_GREEN} 100%)`,
+              padding: "36px 28px 32px",
+            }}
+          >
+            {/* Decorative circles */}
+            <div style={{ position: "absolute", top: "-40px", right: "-40px", width: "160px", height: "160px", borderRadius: "50%", background: "rgba(255,255,255,0.06)" }} />
+            <div style={{ position: "absolute", bottom: "-30px", left: "-30px", width: "120px", height: "120px", borderRadius: "50%", background: "rgba(255,255,255,0.05)" }} />
+            <div style={{ position: "absolute", top: "20px", right: "90px", width: "60px", height: "60px", borderRadius: "50%", background: "rgba(255,255,255,0.04)" }} />
+
+            {/* Close */}
+            <button
+              onClick={onClose}
+              className="absolute top-4 right-4 flex items-center justify-center rounded-full transition-all"
+              style={{ width: "28px", height: "28px", background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.7)" }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.22)"; e.currentTarget.style.color = "white" }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.12)"; e.currentTarget.style.color = "rgba(255,255,255,0.7)" }}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Checkmark badge */}
+            <div className="relative z-10 mb-4" style={{ width: "fit-content" }}>
+              <div
+                className="flex items-center justify-center rounded-full"
+                style={{ width: "52px", height: "52px", background: "rgba(255,255,255,0.15)", border: "2px solid rgba(255,255,255,0.25)" }}
+              >
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            </div>
+
+            {/* Text hierarchy */}
+            <div className="relative z-10">
+              {/* Small label */}
+              <p style={{
+                fontSize: "10px",
+                fontWeight: 700,
+                letterSpacing: "0.16em",
+                textTransform: "uppercase",
+                color: "rgba(255,255,255,0.55)",
+                marginBottom: "6px",
+              }}>
+                Now shopping from
+              </p>
+              {/* Giant branch city name */}
+              <h2 style={{
+                fontSize: "42px",
+                fontWeight: 900,
+                color: "white",
+                lineHeight: 1.0,
+                letterSpacing: "-0.02em",
+                margin: 0,
+              }}>
+                {branch}
+              </h2>
+              {/* "Branch" subtitle */}
+              <p style={{
+                fontSize: "18px",
+                fontWeight: 500,
+                color: "rgba(255,255,255,0.65)",
+                margin: "2px 0 0",
+                letterSpacing: "0.04em",
+              }}>
+                Branch
+              </p>
+            </div>
+          </div>
+
+          {/* ── BODY ── */}
+          <div className="bg-white" style={{ padding: "24px 28px" }}>
+
+            {/* Info rows */}
+            <div style={{ display: "flex", flexDirection: "column", gap: "16px", marginBottom: "24px" }}>
+
+              {/* Address */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                <div className="flex items-center justify-center flex-shrink-0 rounded-lg"
+                  style={{ width: "34px", height: "34px", backgroundColor: "#f0fdf4", marginTop: "1px" }}>
+                  <svg className="w-4 h-4" style={{ color: SITE_GREEN }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9ca3af", margin: "0 0 2px" }}>Address</p>
+                  <p style={{ fontSize: "13px", color: "#374151", lineHeight: "1.5", margin: 0 }}>{info.address}</p>
+                </div>
+              </div>
+
+              {/* Hours */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                <div className="flex items-center justify-center flex-shrink-0 rounded-lg"
+                  style={{ width: "34px", height: "34px", backgroundColor: "#f0fdf4", marginTop: "1px" }}>
+                  <svg className="w-4 h-4" style={{ color: SITE_GREEN }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9ca3af", margin: "0 0 2px" }}>Store Hours</p>
+                  <p style={{ fontSize: "13px", color: "#374151", margin: 0 }}>{info.hours}</p>
+                </div>
+              </div>
+
+              {/* Phone */}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "12px" }}>
+                <div className="flex items-center justify-center flex-shrink-0 rounded-lg"
+                  style={{ width: "34px", height: "34px", backgroundColor: "#f0fdf4", marginTop: "1px" }}>
+                  <svg className="w-4 h-4" style={{ color: SITE_GREEN }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                </div>
+                <div>
+                  <p style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "#9ca3af", margin: "0 0 2px" }}>Phone</p>
+                  <p style={{ fontSize: "13px", color: "#374151", margin: 0 }}>{info.phone}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* CTA */}
+            <button
+              onClick={onClose}
+              className="w-full font-bold text-white rounded-xl transition-all"
+              style={{
+                padding: "14px",
+                fontSize: "15px",
+                background: `linear-gradient(135deg, ${SITE_GREEN}, ${DARK_GREEN})`,
+                border: "none",
+                cursor: "pointer",
+                letterSpacing: "0.01em",
+              }}
+              onMouseEnter={e => e.currentTarget.style.opacity = "0.92"}
+              onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+            >
+              Got it, start shopping
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+// ── Make it Personal — side popout ───────────────────────────────────────────
 const MIP_OPTIONS = [
   {
     page: "describe-arrangement",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
-      </svg>
-    ),
-    label: "Describe Arrangement",
-    desc: "Tell us what you have in mind and we'll bring it to life.",
-    accent: "#7c3aed",
-    accentBg: "#f5f3ff",
+    icon: (<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" /><path strokeLinecap="round" strokeLinejoin="round" d="M18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" /></svg>),
+    label: "Describe Arrangement", desc: "Tell us what you have in mind and we'll bring it to life.", accent: "#7c3aed", accentBg: "#f5f3ff",
   },
   {
     page: "mix-and-match",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-      </svg>
-    ),
-    label: "Mix & Match",
-    desc: "Pick your flowers and build your own bouquet your way.",
-    accent: SITE_GREEN,
-    accentBg: "#f0fdf4",
+    icon: (<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>),
+    label: "Mix & Match", desc: "Pick your flowers and build your own bouquet your way.", accent: SITE_GREEN, accentBg: "#f0fdf4",
   },
   {
     page: "ai-gallery",
-    icon: (
-      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-      </svg>
-    ),
-    label: "See Examples",
-    desc: "Browse arrangements made by our team for inspiration.",
-    accent: "#d97706",
-    accentBg: "#fffbeb",
+    icon: (<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" /></svg>),
+    label: "See Examples", desc: "Browse arrangements made by our team for inspiration.", accent: "#d97706", accentBg: "#fffbeb",
   },
 ];
 
 function MakeItPersonalPopout({ onNavigate, onClose }) {
   return (
     <>
-      <style>{`
-        @keyframes mipSlideIn {
-          from { opacity: 0; transform: translateX(-12px) scale(0.97); }
-          to   { opacity: 1; transform: translateX(0)   scale(1);    }
-        }
-      `}</style>
-      {/* Connector bridge so mouse can travel from button → panel without gap */}
-      <div className="absolute" style={{ top: 0, right: "-12px", width: "16px", height: "100%", zIndex: 49 }} />
-
-      <div
-        className="absolute z-50"
-        style={{
-          top: "-8px",
-          left: "calc(100% + 12px)",
-          animation: "mipSlideIn 0.22s cubic-bezier(0.34,1.56,0.64,1) both",
-          filter: "drop-shadow(0 16px 40px rgba(0,0,0,0.13))",
-        }}
-      >
-        {/* Pointing arrow on the left side */}
-        <div
-          className="absolute"
-          style={{
-            left: "-7px",
-            top: "28px",
-            width: 0,
-            height: 0,
-            borderTop:    "7px solid transparent",
-            borderBottom: "7px solid transparent",
-            borderRight:  "7px solid white",
-            filter: "drop-shadow(-2px 0 2px rgba(0,0,0,0.06))",
-          }}
-        />
-
-        <div
-          className="bg-white overflow-hidden"
-          style={{
-            borderRadius: "16px",
-            border: "1px solid #e9f5ea",
-            width: "260px",
-          }}
-        >
-          {/* Header */}
-          <div className="px-4 pt-4 pb-3" style={{ borderBottom: "1px solid #f0fdf4" }}>
+      <style>{`@keyframes mipSlideIn { from { opacity:0; transform:translateX(-12px) scale(0.97); } to { opacity:1; transform:translateX(0) scale(1); } }`}</style>
+      <div className="absolute" style={{ top:0, right:"-12px", width:"16px", height:"100%", zIndex:49 }} />
+      <div className="absolute z-50" style={{ top:"-8px", left:"calc(100% + 12px)", animation:"mipSlideIn 0.22s cubic-bezier(0.34,1.56,0.64,1) both", filter:"drop-shadow(0 16px 40px rgba(0,0,0,0.13))" }}>
+        <div className="absolute" style={{ left:"-7px", top:"28px", width:0, height:0, borderTop:"7px solid transparent", borderBottom:"7px solid transparent", borderRight:"7px solid white", filter:"drop-shadow(-2px 0 2px rgba(0,0,0,0.06))" }} />
+        <div className="bg-white overflow-hidden" style={{ borderRadius:"16px", border:"1px solid #e9f5ea", width:"260px" }}>
+          <div className="px-4 pt-4 pb-3" style={{ borderBottom:"1px solid #f0fdf4" }}>
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md flex items-center justify-center"
-                style={{ background: "linear-gradient(135deg,#2E8B34,#0C573E)" }}>
-                <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                </svg>
+              <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background:"linear-gradient(135deg,#2E8B34,#0C573E)" }}>
+                <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" /></svg>
               </div>
               <p className="text-xs font-bold text-gray-700 uppercase tracking-widest">Make it Personal</p>
             </div>
-            <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">
-              Choose how you'd like to create your perfect arrangement.
-            </p>
+            <p className="text-xs text-gray-400 mt-1.5 leading-relaxed">Choose how you'd like to create your perfect arrangement.</p>
           </div>
-
-          {/* Options */}
           <div className="py-2">
             {MIP_OPTIONS.map((opt, i) => (
-              <button
-                key={opt.page}
-                onClick={() => { onNavigate(opt.page); onClose(); }}
+              <button key={opt.page} onClick={() => { onNavigate(opt.page); onClose(); }}
                 className="w-full flex items-start gap-3 px-4 py-3 text-left transition-all group"
                 style={{ borderBottom: i < MIP_OPTIONS.length - 1 ? "1px solid #f9fafb" : "none" }}
                 onMouseEnter={e => { e.currentTarget.style.backgroundColor = opt.accentBg }}
-                onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent" }}
-              >
-                {/* Icon pill */}
-                <div
-                  className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 transition-all group-hover:scale-110"
-                  style={{ backgroundColor: opt.accentBg, color: opt.accent, border: `1.5px solid ${opt.accent}22` }}
-                >
-                  {opt.icon}
-                </div>
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent" }}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 transition-all group-hover:scale-110" style={{ backgroundColor:opt.accentBg, color:opt.accent, border:`1.5px solid ${opt.accent}22` }}>{opt.icon}</div>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-gray-800 leading-snug">{opt.label}</p>
                   <p className="text-xs text-gray-400 mt-0.5 leading-relaxed">{opt.desc}</p>
                 </div>
-                {/* Arrow */}
-                <svg className="w-3.5 h-3.5 text-gray-300 flex-shrink-0 mt-1.5 transition-all group-hover:translate-x-0.5"
-                  style={{ color: opt.accent }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-                </svg>
+                <svg className="w-3.5 h-3.5 flex-shrink-0 mt-1.5 transition-all group-hover:translate-x-0.5" style={{ color:opt.accent }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" /></svg>
               </button>
             ))}
           </div>
@@ -181,94 +299,51 @@ function MakeItPersonalPopout({ onNavigate, onClose }) {
   );
 }
 
-// ── Promo Carousel ─────────────────────────────────────────────────────────────
+// ── Promo Carousel ────────────────────────────────────────────────────────────
 function PromoCarousel({ onNavigate }) {
-  const [current, setCurrent]     = useState(0);
+  const [current, setCurrent] = useState(0);
   const [animating, setAnimating] = useState(false);
   const [direction, setDirection] = useState("next");
   const intervalRef = useRef(null);
   const total = PROMOTIONS.length;
-
   const go = (dir) => {
     if (animating) return;
-    setDirection(dir);
-    setAnimating(true);
-    setTimeout(() => {
-      setCurrent(c => dir === "next" ? (c + 1) % total : (c - 1 + total) % total);
-      setAnimating(false);
-    }, 260);
+    setDirection(dir); setAnimating(true);
+    setTimeout(() => { setCurrent(c => dir === "next" ? (c+1)%total : (c-1+total)%total); setAnimating(false); }, 260);
   };
-
-  useEffect(() => {
-    intervalRef.current = setInterval(() => go("next"), 4000);
-    return () => clearInterval(intervalRef.current);
-  }, [animating]);
-
+  useEffect(() => { intervalRef.current = setInterval(() => go("next"), 4000); return () => clearInterval(intervalRef.current); }, [animating]);
   const promo = PROMOTIONS[current];
-
   const arrowBtn = (dir) => (
-    <button
-      onClick={() => { clearInterval(intervalRef.current); go(dir); }}
-      style={{
-        width: "26px", height: "26px",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        borderRadius: "50%", border: "none", background: "transparent",
-        color: "rgba(255,255,255,0.85)", cursor: "pointer",
-        flexShrink: 0, transition: "background 0.15s",
-      }}
-      onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.18)"}
-      onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-    >
-      <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
-          d={dir === "prev" ? "M15 19l-7-7 7-7" : "M9 5l7 7-7 7"} />
-      </svg>
+    <button onClick={() => { clearInterval(intervalRef.current); go(dir); }}
+      style={{ width:"26px", height:"26px", display:"flex", alignItems:"center", justifyContent:"center", borderRadius:"50%", border:"none", background:"transparent", color:"rgba(255,255,255,0.85)", cursor:"pointer", flexShrink:0, transition:"background 0.15s" }}
+      onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,0.18)"}
+      onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+      <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={dir==="prev"?"M15 19l-7-7 7-7":"M9 5l7 7-7 7"} /></svg>
     </button>
   );
-
   return (
-    <div style={{ backgroundColor: "#0C573E", minHeight: "52px", display: "flex", alignItems: "center", padding: "0 16px" }}>
-      <div className="hidden sm:flex items-center gap-1.5" style={{ visibility: "hidden", flexShrink: 0 }}>
-        {SOCIAL_LINKS.map(s => <div key={s.name} style={{ width: "28px", height: "28px" }} />)}
-      </div>
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "10px" }}>
+    <div style={{ backgroundColor:DARK_GREEN, minHeight:"52px", display:"flex", alignItems:"center", padding:"0 16px" }}>
+      <div className="hidden sm:flex items-center gap-1.5" style={{ visibility:"hidden", flexShrink:0 }}>{SOCIAL_LINKS.map(s=><div key={s.name} style={{width:"28px",height:"28px"}}/>)}</div>
+      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:"10px" }}>
         {arrowBtn("prev")}
-        <div style={{ overflow: "hidden" }}>
-          <span
-            className="text-xs sm:text-sm font-medium text-white"
-            style={{
-              display: "inline-block", whiteSpace: "nowrap",
-              transition: animating ? "opacity 0.26s ease, transform 0.26s ease" : "none",
-              opacity:   animating ? 0 : 1,
-              transform: animating ? (direction === "next" ? "translateX(-14px)" : "translateX(14px)") : "translateX(0)",
-            }}
-          >
+        <div style={{ overflow:"hidden" }}>
+          <span className="text-xs sm:text-sm font-medium text-white" style={{ display:"inline-block", whiteSpace:"nowrap", transition:animating?"opacity 0.26s ease, transform 0.26s ease":"none", opacity:animating?0:1, transform:animating?(direction==="next"?"translateX(-14px)":"translateX(14px)"):"translateX(0)" }}>
             {promo.text}&nbsp;<strong>{promo.highlight}</strong>{" — "}
-            <button
-              onClick={() => onNavigate?.(promo.page)}
-              style={{ fontWeight: 700, textDecoration: "underline", textUnderlineOffset: "2px", background: "none", border: "none", color: "white", cursor: "pointer", letterSpacing: "0.05em", padding: 0 }}
-              onMouseEnter={e => e.currentTarget.style.opacity = "0.75"}
-              onMouseLeave={e => e.currentTarget.style.opacity = "1"}
-            >{promo.cta}</button>
+            <button onClick={() => onNavigate?.(promo.page)} style={{ fontWeight:700, textDecoration:"underline", textUnderlineOffset:"2px", background:"none", border:"none", color:"white", cursor:"pointer", letterSpacing:"0.05em", padding:0 }} onMouseEnter={e=>e.currentTarget.style.opacity="0.75"} onMouseLeave={e=>e.currentTarget.style.opacity="1"}>{promo.cta}</button>
           </span>
         </div>
         {arrowBtn("next")}
       </div>
-      <div className="hidden sm:flex items-center gap-1.5" style={{ flexShrink: 0 }}>
-        {SOCIAL_LINKS.map(s => (
-          <a key={s.name} href={s.href} title={s.name} target="_blank" rel="noopener noreferrer"
-            className="w-7 h-7 rounded-full flex items-center justify-center text-white transition-all hover:scale-110"
-            style={{ backgroundColor: "rgba(255,255,255,0.15)" }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.3)"}
-            onMouseLeave={e => e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.15)"}
-          >{s.icon}</a>
+      <div className="hidden sm:flex items-center gap-1.5" style={{ flexShrink:0 }}>
+        {SOCIAL_LINKS.map(s=>(
+          <a key={s.name} href={s.href} title={s.name} target="_blank" rel="noopener noreferrer" className="w-7 h-7 rounded-full flex items-center justify-center text-white transition-all hover:scale-110" style={{ backgroundColor:"rgba(255,255,255,0.15)" }} onMouseEnter={e=>e.currentTarget.style.backgroundColor="rgba(255,255,255,0.3)"} onMouseLeave={e=>e.currentTarget.style.backgroundColor="rgba(255,255,255,0.15)"}>{s.icon}</a>
         ))}
       </div>
     </div>
   );
 }
 
-// ── Search Overlay ─────────────────────────────────────────────────────────────
+// ── Search Overlay ────────────────────────────────────────────────────────────
 function SearchOverlay({ onClose, onNavigate }) {
   const [query, setQuery] = useState("");
   const inputRef = useRef(null);
@@ -280,32 +355,17 @@ function SearchOverlay({ onClose, onNavigate }) {
   }, []);
   const handleSubmit = (e) => { e.preventDefault(); if (query.trim()) { onNavigate?.("shop"); onClose(); } };
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-24 px-4"
-      style={{ backgroundColor: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }} onClick={onClose}>
+    <div className="fixed inset-0 z-[100] flex items-start justify-center pt-24 px-4" style={{ backgroundColor:"rgba(0,0,0,0.6)", backdropFilter:"blur(4px)" }} onClick={onClose}>
       <style>{`@keyframes searchSlideDown { from { opacity:0; transform:translateY(-24px) scale(0.97); } to { opacity:1; transform:translateY(0) scale(1); } }`}</style>
-      <div className="w-full max-w-2xl" onClick={e => e.stopPropagation()}
-        style={{ animation: "searchSlideDown 0.25s cubic-bezier(0.34,1.56,0.64,1) both" }}>
+      <div className="w-full max-w-2xl" onClick={e=>e.stopPropagation()} style={{ animation:"searchSlideDown 0.25s cubic-bezier(0.34,1.56,0.64,1) both" }}>
         <form onSubmit={handleSubmit}>
-          <div className="flex items-stretch bg-white rounded-2xl overflow-hidden shadow-2xl" style={{ border: `2px solid ${SITE_GREEN}` }}>
-            <div className="flex items-center px-4 flex-shrink-0">
-              <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
-              </svg>
-            </div>
-            <input ref={inputRef} type="text" value={query} onChange={e => setQuery(e.target.value)}
-              placeholder="Search for flowers, bouquets, occasions..."
-              className="flex-1 py-4 text-base outline-none text-gray-800 placeholder-gray-400 bg-transparent" />
-            {query && (
-              <button type="button" onClick={() => setQuery("")} className="px-3 text-gray-400 hover:text-gray-600 self-center">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            )}
-            <button type="submit" className="px-6 text-sm font-bold text-white transition-all hover:opacity-90 self-stretch flex items-center"
-              style={{ backgroundColor: SITE_GREEN, borderRadius: "0 14px 14px 0" }}>Search</button>
+          <div className="flex items-stretch bg-white rounded-2xl overflow-hidden shadow-2xl" style={{ border:`2px solid ${SITE_GREEN}` }}>
+            <div className="flex items-center px-4 flex-shrink-0"><svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" /></svg></div>
+            <input ref={inputRef} type="text" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search for flowers, bouquets, occasions..." className="flex-1 py-4 text-base outline-none text-gray-800 placeholder-gray-400 bg-transparent" />
+            {query && <button type="button" onClick={()=>setQuery("")} className="px-3 text-gray-400 hover:text-gray-600 self-center"><svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg></button>}
+            <button type="submit" className="px-6 text-sm font-bold text-white transition-all hover:opacity-90 self-stretch flex items-center" style={{ backgroundColor:SITE_GREEN, borderRadius:"0 14px 14px 0" }}>Search</button>
           </div>
-          <p className="text-center text-white/60 text-xs mt-3">
-            Press <kbd className="px-1.5 py-0.5 rounded bg-white/20 text-white text-xs">Esc</kbd> to close
-          </p>
+          <p className="text-center text-white/60 text-xs mt-3">Press <kbd className="px-1.5 py-0.5 rounded bg-white/20 text-white text-xs">Esc</kbd> to close</p>
         </form>
       </div>
     </div>
@@ -315,18 +375,13 @@ function SearchOverlay({ onClose, onNavigate }) {
 function DropdownMenu({ items, categories, onNavigate, onClose }) {
   if (categories) {
     return (
-      <div className="absolute top-full left-0 mt-2 bg-white z-50 overflow-hidden"
-        style={{ border: "1px solid #e5e7eb", borderRadius: "12px", boxShadow: "0 12px 32px rgba(0,0,0,0.10)", animation: "dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards", minWidth: "340px" }}>
+      <div className="absolute top-full left-0 mt-2 bg-white z-50 overflow-hidden" style={{ border:"1px solid #e5e7eb", borderRadius:"12px", boxShadow:"0 12px 32px rgba(0,0,0,0.10)", animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards", minWidth:"340px" }}>
         <div className="flex divide-x divide-gray-100">
           {categories.map(cat => (
             <div key={cat.heading} className="flex-1 py-3">
-              <p className="px-4 pb-2 text-xs font-bold uppercase tracking-widest" style={{ color: SITE_GREEN }}>{cat.heading}</p>
+              <p className="px-4 pb-2 text-xs font-bold uppercase tracking-widest" style={{ color:SITE_GREEN }}>{cat.heading}</p>
               {cat.items.map(item => (
-                <button key={item.label} onClick={() => { if (item.page && onNavigate) onNavigate(item.page); onClose?.(); }}
-                  className="w-full text-left px-4 py-2 text-sm text-gray-600 transition-all duration-150"
-                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = SITE_GREEN; e.currentTarget.style.color = "white"; }}
-                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = ""; e.currentTarget.style.color = ""; }}
-                >{item.label}</button>
+                <button key={item.label} onClick={() => { if (item.page && onNavigate) onNavigate(item.page); onClose?.(); }} className="w-full text-left px-4 py-2 text-sm text-gray-600 transition-all duration-150" onMouseEnter={e=>{ e.currentTarget.style.backgroundColor=SITE_GREEN; e.currentTarget.style.color="white"; }} onMouseLeave={e=>{ e.currentTarget.style.backgroundColor=""; e.currentTarget.style.color=""; }}>{item.label}</button>
               ))}
             </div>
           ))}
@@ -335,14 +390,9 @@ function DropdownMenu({ items, categories, onNavigate, onClose }) {
     );
   }
   return (
-    <div className="absolute top-full left-0 mt-2 bg-white z-50 min-w-[190px] overflow-hidden"
-      style={{ border: "1px solid #e5e7eb", borderRadius: "12px", boxShadow: "0 12px 32px rgba(0,0,0,0.10)", animation: "dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards" }}>
-      {items.map((item) => (
-        <button key={item.label} onClick={() => { if (item.page && onNavigate) onNavigate(item.page); onClose?.(); }}
-          className="w-full text-left px-4 py-2.5 text-sm text-gray-600 first:rounded-t-xl last:rounded-b-xl transition-all duration-150"
-          onMouseEnter={e => { e.currentTarget.style.backgroundColor = SITE_GREEN; e.currentTarget.style.color = "white"; }}
-          onMouseLeave={e => { e.currentTarget.style.backgroundColor = ""; e.currentTarget.style.color = ""; }}
-        >{item.label}</button>
+    <div className="absolute top-full left-0 mt-2 bg-white z-50 min-w-[190px] overflow-hidden" style={{ border:"1px solid #e5e7eb", borderRadius:"12px", boxShadow:"0 12px 32px rgba(0,0,0,0.10)", animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards" }}>
+      {items.map(item => (
+        <button key={item.label} onClick={() => { if (item.page && onNavigate) onNavigate(item.page); onClose?.(); }} className="w-full text-left px-4 py-2.5 text-sm text-gray-600 first:rounded-t-xl last:rounded-b-xl transition-all duration-150" onMouseEnter={e=>{ e.currentTarget.style.backgroundColor=SITE_GREEN; e.currentTarget.style.color="white"; }} onMouseLeave={e=>{ e.currentTarget.style.backgroundColor=""; e.currentTarget.style.color=""; }}>{item.label}</button>
       ))}
     </div>
   );
@@ -350,55 +400,32 @@ function DropdownMenu({ items, categories, onNavigate, onClose }) {
 
 function CartDropdown({ cartCount, onNavigate }) {
   const cartItems = getCart()
-  const subtotal = cartItems.reduce((sum, item) => sum + (item.price || 0) * (item.qty || 1), 0)
-
+  const subtotal = cartItems.reduce((sum, item) => sum + (item.price||0)*(item.qty||1), 0)
   return (
-    <div className="absolute top-full right-0 mt-2 bg-white z-50 w-72 overflow-hidden"
-      style={{ border: "1px solid #e5e7eb", borderRadius: "14px", boxShadow: "0 12px 32px rgba(0,0,0,0.12)", animation: "dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards" }}>
-      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-        <span className="text-sm font-semibold text-gray-800">Your Cart</span>
-        <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor: cartCount > 0 ? "#e11d48" : "#9ca3af" }}>{cartCount}</span>
-      </div>
+    <div className="absolute top-full right-0 mt-2 bg-white z-50 w-72 overflow-hidden" style={{ border:"1px solid #e5e7eb", borderRadius:"14px", boxShadow:"0 12px 32px rgba(0,0,0,0.12)", animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards" }}>
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100"><span className="text-sm font-semibold text-gray-800">Your Cart</span><span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor:cartCount>0?"#e11d48":"#9ca3af" }}>{cartCount}</span></div>
       {cartCount === 0 ? (
         <div className="px-4 py-8 text-center">
-          <div className="w-11 h-11 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
-            <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007Z" />
-            </svg>
-          </div>
+          <div className="w-11 h-11 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3"><svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007Z" /></svg></div>
           <p className="text-sm font-medium text-gray-600 mb-1">Your cart is empty</p>
           <p className="text-xs text-gray-400">Browse our collection and add something you love.</p>
         </div>
       ) : (
         <div className="max-h-48 overflow-y-auto">
-          {cartItems.slice(0, 4).map((item, idx) => (
+          {cartItems.slice(0,4).map((item,idx) => (
             <div key={`${item.id}-${item.group}-${idx}`} className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-0">
-              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-pink-50 to-rose-100 flex items-center justify-center flex-shrink-0 overflow-hidden border border-gray-100">
-                {item.img ? (
-                  <img src={item.img} alt={item.name} className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-[10px] text-gray-400 text-center leading-tight px-1">{item.name?.slice(0, 8) || "Item"}</span>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-gray-800 truncate">{item.name}</p>
-                <p className="text-[11px] text-gray-400">Qty: {item.qty || 1}</p>
-              </div>
-              <span className="text-xs font-semibold text-gray-700">₱{((item.price || 0) * (item.qty || 1)).toLocaleString()}</span>
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-pink-50 to-rose-100 flex items-center justify-center flex-shrink-0 overflow-hidden border border-gray-100">{item.img?<img src={item.img} alt={item.name} className="w-full h-full object-cover"/>:<span className="text-[10px] text-gray-400 text-center leading-tight px-1">{item.name?.slice(0,8)||"Item"}</span>}</div>
+              <div className="flex-1 min-w-0"><p className="text-xs font-medium text-gray-800 truncate">{item.name}</p><p className="text-[11px] text-gray-400">Qty: {item.qty||1}</p></div>
+              <span className="text-xs font-semibold text-gray-700">₱{((item.price||0)*(item.qty||1)).toLocaleString()}</span>
             </div>
           ))}
-          {cartItems.length > 4 && (
-            <p className="px-4 py-2 text-[11px] text-gray-400 text-center">+{cartItems.length - 4} more item(s)</p>
-          )}
+          {cartItems.length>4&&<p className="px-4 py-2 text-[11px] text-gray-400 text-center">+{cartItems.length-4} more item(s)</p>}
         </div>
       )}
       <div className="px-4 py-3 border-t border-gray-100 bg-gray-50 rounded-b-xl">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Subtotal</span>
-          <span className="text-sm font-bold text-gray-800">₱{subtotal.toLocaleString()}.00</span>
-        </div>
+        <div className="flex items-center justify-between mb-2"><span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Subtotal</span><span className="text-sm font-bold text-gray-800">₱{subtotal.toLocaleString()}.00</span></div>
         <p className="text-xs text-gray-400 mb-3">Shipping and taxes calculated at checkout.</p>
-        <button onClick={() => onNavigate?.("cart")} className="w-full py-2 text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90" style={{ backgroundColor: SITE_GREEN }}>View Cart</button>
+        <button onClick={()=>onNavigate?.("cart")} className="w-full py-2 text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90" style={{ backgroundColor:SITE_GREEN }}>View Cart</button>
       </div>
     </div>
   );
@@ -407,37 +434,29 @@ function CartDropdown({ cartCount, onNavigate }) {
 function UserHoverDropdown({ user, onNavigate, onLogout }) {
   if (!user) {
     return (
-      <div className="absolute top-full right-0 mt-2 bg-white z-50 overflow-hidden"
-        style={{ border: "1px solid #e5e7eb", borderRadius: "14px", boxShadow: "0 12px 32px rgba(0,0,0,0.12)", animation: "dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards", minWidth: "200px" }}>
-        <div className="px-4 py-3 border-b border-gray-100">
-          <p className="text-sm font-semibold text-gray-800">Welcome!</p>
-          <p className="text-xs text-gray-400 mt-0.5">Sign in to manage your orders</p>
-        </div>
+      <div className="absolute top-full right-0 mt-2 bg-white z-50 overflow-hidden" style={{ border:"1px solid #e5e7eb", borderRadius:"14px", boxShadow:"0 12px 32px rgba(0,0,0,0.12)", animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards", minWidth:"200px" }}>
+        <div className="px-4 py-3 border-b border-gray-100"><p className="text-sm font-semibold text-gray-800">Welcome!</p><p className="text-xs text-gray-400 mt-0.5">Sign in to manage your orders</p></div>
         <div className="p-3 space-y-2">
-          <button onClick={() => onNavigate("login")} className="w-full py-2 text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90" style={{ backgroundColor: SITE_GREEN }}>Login</button>
-          <button onClick={() => onNavigate("register")} className="w-full py-2 text-sm font-semibold rounded-lg border transition-all hover:bg-gray-50" style={{ borderColor: SITE_GREEN, color: SITE_GREEN }}>Create Account</button>
+          <button onClick={()=>onNavigate("login")} className="w-full py-2 text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90" style={{ backgroundColor:SITE_GREEN }}>Login</button>
+          <button onClick={()=>onNavigate("register")} className="w-full py-2 text-sm font-semibold rounded-lg border transition-all hover:bg-gray-50" style={{ borderColor:SITE_GREEN, color:SITE_GREEN }}>Create Account</button>
         </div>
       </div>
     );
   }
   return (
-    <div className="absolute top-full right-0 mt-2 bg-white z-50 overflow-hidden"
-      style={{ border: "1px solid #e5e7eb", borderRadius: "14px", boxShadow: "0 12px 32px rgba(0,0,0,0.12)", animation: "dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards", minWidth: "200px" }}>
-      <div className="px-4 py-3 border-b border-gray-100" style={{ background: "linear-gradient(to right,#f0fdf4,white)" }}>
+    <div className="absolute top-full right-0 mt-2 bg-white z-50 overflow-hidden" style={{ border:"1px solid #e5e7eb", borderRadius:"14px", boxShadow:"0 12px 32px rgba(0,0,0,0.12)", animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards", minWidth:"200px" }}>
+      <div className="px-4 py-3 border-b border-gray-100" style={{ background:"linear-gradient(to right,#f0fdf4,white)" }}>
         <p className="text-xs text-gray-400">Signed in as</p>
         <p className="text-sm font-bold text-gray-800 truncate">{user.firstName} {user.lastName}</p>
       </div>
       <div className="py-1">
-        {[{ label: "My Account", page: "account" }, { label: "My Orders", page: "orders" }, { label: "Wishlist", page: "wishlist" }].map(({ label, page }) => (
-          <button key={label} onClick={() => onNavigate(page)}
-            className="w-full text-left px-4 py-2.5 text-sm text-gray-600 hover:bg-green-50 hover:text-green-800 transition-all">{label}</button>
+        {[{label:"My Account",page:"account"},{label:"My Orders",page:"orders"},{label:"Wishlist",page:"wishlist"}].map(({label,page})=>(
+          <button key={label} onClick={()=>onNavigate(page)} className="w-full text-left px-4 py-2.5 text-sm text-gray-600 hover:bg-green-50 hover:text-green-800 transition-all">{label}</button>
         ))}
       </div>
       <div className="border-t border-gray-100">
         <button onClick={onLogout} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-all rounded-b-xl">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
-          </svg>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" /></svg>
           Logout
         </button>
       </div>
@@ -447,15 +466,11 @@ function UserHoverDropdown({ user, onNavigate, onLogout }) {
 
 function LocationDropdown({ selected, onChange, onClose }) {
   return (
-    <div className="absolute top-full left-0 mt-1.5 bg-white z-50 w-32 overflow-hidden"
-      style={{ border: "1px solid #e5e7eb", borderRadius: "10px", boxShadow: "0 8px 24px rgba(0,0,0,0.10)", animation: "dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards" }}>
-      {["Manila", "Pampanga"].map((loc) => (
-        <button key={loc} onClick={() => { onChange(loc); onClose(); }}
-          className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left transition-all first:rounded-t-xl last:rounded-b-xl"
-          onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#f0fdf4"; e.currentTarget.style.color = SITE_GREEN; }}
-          onMouseLeave={e => { e.currentTarget.style.backgroundColor = ""; e.currentTarget.style.color = ""; }}>
-          {selected === loc && <svg className="w-3.5 h-3.5 flex-shrink-0" style={{ color: SITE_GREEN }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" /></svg>}
-          <span className={selected === loc ? "font-semibold" : ""} style={{ color: selected === loc ? SITE_GREEN : "#374151", marginLeft: selected === loc ? 0 : "19px" }}>{loc}</span>
+    <div className="absolute top-full left-0 mt-1.5 bg-white z-50 w-36 overflow-hidden" style={{ border:"1px solid #e5e7eb", borderRadius:"10px", boxShadow:"0 8px 24px rgba(0,0,0,0.10)", animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards" }}>
+      {["Manila","Pampanga"].map(loc=>(
+        <button key={loc} onClick={()=>{onChange(loc);onClose();}} className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left transition-all first:rounded-t-xl last:rounded-b-xl" onMouseEnter={e=>{e.currentTarget.style.backgroundColor="#f0fdf4";e.currentTarget.style.color=SITE_GREEN;}} onMouseLeave={e=>{e.currentTarget.style.backgroundColor="";e.currentTarget.style.color="";}}>
+          {selected===loc&&<svg className="w-3.5 h-3.5 flex-shrink-0" style={{color:SITE_GREEN}} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
+          <span className={selected===loc?"font-semibold":""} style={{color:selected===loc?SITE_GREEN:"#374151",marginLeft:selected===loc?0:"19px"}}>{loc}</span>
         </button>
       ))}
     </div>
@@ -468,10 +483,7 @@ function useCartCount() {
     const update = () => setCount(getCartCount())
     window.addEventListener("bloomora:cart-updated", update)
     window.addEventListener("storage", update)
-    return () => {
-      window.removeEventListener("bloomora:cart-updated", update)
-      window.removeEventListener("storage", update)
-    }
+    return () => { window.removeEventListener("bloomora:cart-updated", update); window.removeEventListener("storage", update) }
   }, [])
   return count
 }
@@ -483,12 +495,13 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
   const [active, setActive]                     = useState("Home");
   const [locationOpen, setLocationOpen]         = useState(false);
   const [selectedLocation, setSelectedLocation] = useState("Manila");
+  const [branchModal, setBranchModal]           = useState(null);
   const [openMenu, setOpenMenu]                 = useState(null);
   const [mobileOpen, setMobileOpen]             = useState(false);
   const [cartOpen, setCartOpen]                 = useState(false);
   const [userOpen, setUserOpen]                 = useState(false);
   const [searchOpen, setSearchOpen]             = useState(false);
-  const [mipOpen, setMipOpen]                   = useState(false); // Make it Personal popout
+  const [mipOpen, setMipOpen]                   = useState(false);
 
   const navRef = useRef(null), cartRef = useRef(null), userRef = useRef(null), locationRef = useRef(null), mipRef = useRef(null);
   const menuCloseTimer = useRef(null), cartCloseTimer = useRef(null), userCloseTimer = useRef(null), mipCloseTimer = useRef(null);
@@ -502,6 +515,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
   const openMipDelayed   = ()  => { clearTimeout(mipCloseTimer.current); setMipOpen(true); };
   const closeMipDelayed  = ()  => { mipCloseTimer.current = setTimeout(() => setMipOpen(false), 220); };
 
+  const handleBranchSelect = (loc) => { setSelectedLocation(loc); setLocationOpen(false); setBranchModal(loc); };
   const handleLogout       = () => { logout(); setUserOpen(false); onNavigate?.("login"); };
   const handleNavClick     = (link) => { setActive(link.label); if (link.page) onNavigate?.(link.page); setMobileOpen(false); };
   const handleAccountClick = () => { setUserOpen(false); onNavigate?.(user ? "account" : "login"); };
@@ -521,191 +535,129 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
   return (
     <>
       <style>{`@keyframes dropIn { from { opacity:0; transform:translateY(-8px) scale(0.97); } to { opacity:1; transform:translateY(0) scale(1); } }`}</style>
+      {branchModal && <BranchModal branch={branchModal} onClose={() => setBranchModal(null)} />}
       {searchOpen && <SearchOverlay onClose={() => setSearchOpen(false)} onNavigate={onNavigate} />}
 
       <div className="w-full sticky top-0 z-50" ref={navRef}>
         <PromoCarousel onNavigate={onNavigate} />
 
-        <nav className="bg-white border-b px-4 sm:px-6 lg:px-8 py-3" style={{ borderColor: "#DAEDD5" }}>
+        <nav className="bg-white border-b px-4 sm:px-6 lg:px-8 py-3" style={{ borderColor:"#DAEDD5" }}>
           <div className="flex items-center justify-between gap-4">
-            {/* Logo */}
             <div className="flex items-center gap-2 flex-shrink-0 cursor-pointer" onClick={() => onNavigate?.("home")}>
               <img src={estingsLogo} alt="Esting's Logo" className="w-9 h-9 sm:w-10 sm:h-10 object-contain" />
               <img src={estingsText} alt="Esting's" className="h-6 sm:h-7 object-contain hidden sm:block" />
             </div>
 
-            {/* Desktop nav */}
             <div className="hidden lg:flex items-center gap-6 xl:gap-8">
-              {/* Location picker */}
               <div className="flex items-center gap-1.5" ref={locationRef}>
-                <span className="text-xs uppercase tracking-wide font-medium" style={{ color: SITE_GREEN }}>Deliver to</span>
+                <span className="text-xs uppercase tracking-wide font-medium" style={{ color:SITE_GREEN }}>Store Branch</span>
                 <div className="relative">
-                  <button onClick={() => setLocationOpen(p => !p)}
+                  <button onClick={() => setLocationOpen(p=>!p)}
                     className="flex items-center gap-1.5 border rounded-lg px-3 py-1.5 text-sm text-gray-700 hover:border-green-400 transition-all"
-                    style={{ borderColor: locationOpen ? SITE_GREEN : "#e5e7eb" }}>
-                    <svg className="w-3 h-3" style={{ color: SITE_GREEN }} fill="currentColor" viewBox="0 0 24 24">
-                      <path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742ZM12 13.5a3 3 0 100-6 3 3 0 000 6Z" clipRule="evenodd" />
-                    </svg>
+                    style={{ borderColor:locationOpen?SITE_GREEN:"#e5e7eb" }}>
+                    <svg className="w-3 h-3" style={{color:SITE_GREEN}} fill="currentColor" viewBox="0 0 24 24"><path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742ZM12 13.5a3 3 0 100-6 3 3 0 000 6Z" clipRule="evenodd"/></svg>
                     {selectedLocation}
-                    <svg className="w-3 h-3 text-gray-400 transition-transform" style={{ transform: locationOpen ? "rotate(180deg)" : "rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                    </svg>
+                    <svg className="w-3 h-3 text-gray-400 transition-transform" style={{transform:locationOpen?"rotate(180deg)":"rotate(0)"}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
                   </button>
-                  {locationOpen && <LocationDropdown selected={selectedLocation} onChange={setSelectedLocation} onClose={() => setLocationOpen(false)} />}
+                  {locationOpen && <LocationDropdown selected={selectedLocation} onChange={handleBranchSelect} onClose={() => setLocationOpen(false)} />}
                 </div>
               </div>
 
-              {/* Nav links */}
               <div className="flex items-center gap-5 xl:gap-7">
                 {NAV_LINKS.map(link => (
-                  <div key={link.label} className="relative"
-                    onMouseEnter={() => (link.dropdown || link.categories) && openMenuDelayed(link.label)}
-                    onMouseLeave={() => (link.dropdown || link.categories) && closeMenuDelayed()}>
+                  <div key={link.label} className="relative" onMouseEnter={() => (link.dropdown||link.categories)&&openMenuDelayed(link.label)} onMouseLeave={() => (link.dropdown||link.categories)&&closeMenuDelayed()}>
                     <button onClick={() => handleNavClick(link)}
                       className="flex items-center gap-0.5 text-sm font-medium pb-1 whitespace-nowrap transition-colors"
-                      style={{ color: active === link.label ? SITE_GREEN : "#4b5563", borderBottom: active === link.label ? `2px solid ${SITE_GREEN}` : "2px solid transparent" }}
-                      onMouseEnter={e => { if (active !== link.label) e.currentTarget.style.color = NAVY_GREEN; }}
-                      onMouseLeave={e => { if (active !== link.label) e.currentTarget.style.color = "#4b5563"; }}>
+                      style={{ color:active===link.label?SITE_GREEN:"#4b5563", borderBottom:active===link.label?`2px solid ${SITE_GREEN}`:"2px solid transparent" }}
+                      onMouseEnter={e=>{ if(active!==link.label) e.currentTarget.style.color=NAVY_GREEN; }}
+                      onMouseLeave={e=>{ if(active!==link.label) e.currentTarget.style.color="#4b5563"; }}>
                       {link.label}
-                      {(link.dropdown || link.categories) && (
-                        <svg className="w-3 h-3 text-gray-400 ml-0.5 transition-transform" style={{ transform: openMenu === link.label ? "rotate(180deg)" : "rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                        </svg>
-                      )}
+                      {(link.dropdown||link.categories)&&<svg className="w-3 h-3 text-gray-400 ml-0.5 transition-transform" style={{transform:openMenu===link.label?"rotate(180deg)":"rotate(0)"}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>}
                     </button>
-                    {(link.dropdown || link.categories) && openMenu === link.label && (
-                      <div onMouseEnter={() => openMenuDelayed(link.label)} onMouseLeave={() => closeMenuDelayed()}>
-                        <DropdownMenu items={link.dropdown} categories={link.categories} onNavigate={onNavigate} onClose={() => setOpenMenu(null)} />
+                    {(link.dropdown||link.categories)&&openMenu===link.label&&(
+                      <div onMouseEnter={()=>openMenuDelayed(link.label)} onMouseLeave={()=>closeMenuDelayed()}>
+                        <DropdownMenu items={link.dropdown} categories={link.categories} onNavigate={onNavigate} onClose={()=>setOpenMenu(null)} />
                       </div>
                     )}
                   </div>
                 ))}
-
-                {/* ── Make it Personal — side-popout button ── */}
-                <div
-                  className="relative"
-                  ref={mipRef}
-                  onMouseEnter={openMipDelayed}
-                  onMouseLeave={closeMipDelayed}
-                >
-                  <button
-                    onClick={() => onNavigate?.("make-it-personal")}
+                <div className="relative" ref={mipRef} onMouseEnter={openMipDelayed} onMouseLeave={closeMipDelayed}>
+                  <button onClick={() => onNavigate?.("make-it-personal")}
                     className="whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full text-white flex items-center gap-1 transition-all hover:shadow-md hover:scale-105"
-                    style={{ background: "linear-gradient(135deg,#2E8B34,#0C573E)" }}
-                  >
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z" />
-                    </svg>
+                    style={{ background:"linear-gradient(135deg,#2E8B34,#0C573E)" }}>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
                     Make it Personal
-                    {/* Small chevron hinting at the popout */}
-                    <svg className="w-2.5 h-2.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7" />
-                    </svg>
+                    <svg className="w-2.5 h-2.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
                   </button>
-
-                  {/* Side popout — appears to the right */}
-                  {mipOpen && (
-                    <MakeItPersonalPopout
-                      onNavigate={onNavigate}
-                      onClose={() => setMipOpen(false)}
-                    />
-                  )}
+                  {mipOpen && <MakeItPersonalPopout onNavigate={onNavigate} onClose={() => setMipOpen(false)} />}
                 </div>
               </div>
             </div>
 
-            {/* Right icons */}
             <div className="flex items-center gap-1 sm:gap-2">
               <button onClick={() => setSearchOpen(true)} className="hidden lg:flex w-9 h-9 items-center justify-center rounded-full hover:bg-gray-50 transition-colors text-gray-600">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" /></svg>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/></svg>
               </button>
               <div className="relative" ref={cartRef}>
-                <button onMouseEnter={openCartDelayed} onMouseLeave={closeCartDelayed} onClick={() => onNavigate?.("cart")}
-                  className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full hover:bg-gray-50 transition-colors relative text-gray-600">
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0Zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0Z" /></svg>
-                  <span className="absolute -top-1 -right-1 flex items-center justify-center text-white font-bold rounded-full" style={{ backgroundColor: cartCount > 0 ? "#e11d48" : "#9ca3af", fontSize: "9px", width: "16px", height: "16px" }}>{cartCount}</span>
+                <button onMouseEnter={openCartDelayed} onMouseLeave={closeCartDelayed} onClick={() => onNavigate?.("cart")} className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full hover:bg-gray-50 transition-colors relative text-gray-600">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0Zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0Z"/></svg>
+                  <span className="absolute -top-1 -right-1 flex items-center justify-center text-white font-bold rounded-full" style={{ backgroundColor:cartCount>0?"#e11d48":"#9ca3af", fontSize:"9px", width:"16px", height:"16px" }}>{cartCount}</span>
                 </button>
                 {cartOpen && <div onMouseEnter={openCartDelayed} onMouseLeave={closeCartDelayed}><CartDropdown cartCount={cartCount} onNavigate={onNavigate} /></div>}
               </div>
               <div className="relative" ref={userRef}>
-                <button onMouseEnter={openUserDelayed} onMouseLeave={closeUserDelayed} onClick={handleAccountClick}
-                  className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full hover:bg-gray-50 transition-colors text-gray-600">
+                <button onMouseEnter={openUserDelayed} onMouseLeave={closeUserDelayed} onClick={handleAccountClick} className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full hover:bg-gray-50 transition-colors text-gray-600">
                   {user
-                    ? <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: "linear-gradient(135deg,#2E8B34,#0C573E)" }}>{user.firstName?.[0]?.toUpperCase() || "U"}</div>
-                    : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0ZM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632Z" /></svg>
-                  }
+                    ? <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background:"linear-gradient(135deg,#2E8B34,#0C573E)" }}>{user.firstName?.[0]?.toUpperCase()||"U"}</div>
+                    : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0ZM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/></svg>}
                 </button>
-                {userOpen && <div onMouseEnter={openUserDelayed} onMouseLeave={closeUserDelayed}><UserHoverDropdown user={user} onNavigate={(p) => { onNavigate?.(p); setUserOpen(false); }} onLogout={handleLogout} /></div>}
+                {userOpen && <div onMouseEnter={openUserDelayed} onMouseLeave={closeUserDelayed}><UserHoverDropdown user={user} onNavigate={(p)=>{ onNavigate?.(p); setUserOpen(false); }} onLogout={handleLogout} /></div>}
               </div>
-              <button className="lg:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-50 transition-colors text-gray-600 ml-1" onClick={() => setMobileOpen(p => !p)}>
+              <button className="lg:hidden w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-50 transition-colors text-gray-600 ml-1" onClick={()=>setMobileOpen(p=>!p)}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
-                  {mobileOpen ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /> : <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />}
+                  {mobileOpen?<path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>:<path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>}
                 </svg>
               </button>
             </div>
           </div>
 
-          {/* Mobile menu */}
           {mobileOpen && (
-            <div className="lg:hidden mt-3 pt-3 border-t" style={{ borderColor: "#DAEDD5" }}>
+            <div className="lg:hidden mt-3 pt-3 border-t" style={{ borderColor:"#DAEDD5" }}>
               <div className="flex items-center gap-2 px-2 mb-3 flex-wrap">
-                <span className="text-xs uppercase tracking-wide font-medium" style={{ color: SITE_GREEN }}>Deliver to</span>
-                {["Manila", "Pampanga"].map(loc => (
-                  <button key={loc} onClick={() => setSelectedLocation(loc)} className="text-sm px-2 py-0.5 rounded border transition-colors"
-                    style={{ borderColor: selectedLocation === loc ? SITE_GREEN : "#e5e7eb", color: selectedLocation === loc ? SITE_GREEN : "#6b7280", fontWeight: selectedLocation === loc ? 600 : 400 }}>{loc}</button>
+                <span className="text-xs uppercase tracking-wide font-medium" style={{ color:SITE_GREEN }}>Store Branch</span>
+                {["Manila","Pampanga"].map(loc=>(
+                  <button key={loc} onClick={()=>{ handleBranchSelect(loc); setMobileOpen(false); }} className="text-sm px-2 py-0.5 rounded border transition-colors" style={{ borderColor:selectedLocation===loc?SITE_GREEN:"#e5e7eb", color:selectedLocation===loc?SITE_GREEN:"#6b7280", fontWeight:selectedLocation===loc?600:400 }}>{loc}</button>
                 ))}
               </div>
-              {NAV_LINKS.map(link => (
+              {NAV_LINKS.map(link=>(
                 <div key={link.label}>
-                  <button onClick={() => handleNavClick(link)} className="w-full text-left px-2 py-2.5 text-sm font-medium border-b transition-colors"
-                    style={{ color: active === link.label ? SITE_GREEN : "#4b5563", borderColor: "#f3f4f6" }}>{link.label}</button>
-                  {link.dropdown && (
-                    <div className="pl-4 bg-gray-50">
-                      {link.dropdown.map(sub => (
-                        <button key={sub.label} onClick={() => { onNavigate?.(sub.page); setMobileOpen(false); }}
-                          className="block w-full text-left px-2 py-2 text-xs text-gray-500 border-b hover:text-emerald-700 transition-colors" style={{ borderColor: "#f3f4f6" }}>{sub.label}</button>
-                      ))}
-                    </div>
-                  )}
+                  <button onClick={()=>handleNavClick(link)} className="w-full text-left px-2 py-2.5 text-sm font-medium border-b transition-colors" style={{ color:active===link.label?SITE_GREEN:"#4b5563", borderColor:"#f3f4f6" }}>{link.label}</button>
+                  {link.dropdown&&<div className="pl-4 bg-gray-50">{link.dropdown.map(sub=><button key={sub.label} onClick={()=>{ onNavigate?.(sub.page); setMobileOpen(false); }} className="block w-full text-left px-2 py-2 text-xs text-gray-500 border-b hover:text-emerald-700 transition-colors" style={{ borderColor:"#f3f4f6" }}>{sub.label}</button>)}</div>}
                 </div>
               ))}
-
-              {/* Make it Personal in mobile — flat list */}
-              <div className="px-2 py-3 border-t" style={{ borderColor: "#f3f4f6" }}>
-                <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: SITE_GREEN }}>Make it Personal</p>
-                <div className="space-y-1">
-                  {MIP_OPTIONS.map(opt => (
-                    <button
-                      key={opt.page}
-                      onClick={() => { onNavigate?.(opt.page); setMobileOpen(false); }}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700 font-medium transition-all hover:bg-green-50"
-                    >
-                      <span style={{ color: opt.accent }}>{opt.icon}</span>
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
+              <div className="px-2 py-3 border-t" style={{ borderColor:"#f3f4f6" }}>
+                <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color:SITE_GREEN }}>Make it Personal</p>
+                <div className="space-y-1">{MIP_OPTIONS.map(opt=><button key={opt.page} onClick={()=>{ onNavigate?.(opt.page); setMobileOpen(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700 font-medium transition-all hover:bg-green-50"><span style={{color:opt.accent}}>{opt.icon}</span>{opt.label}</button>)}</div>
               </div>
-
-              <div className="px-2 py-3 border-t" style={{ borderColor: "#f3f4f6" }}>
-                {user ? (
+              <div className="px-2 py-3 border-t" style={{ borderColor:"#f3f4f6" }}>
+                {user?(
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 mb-3">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background: "linear-gradient(135deg,#2E8B34,#0C573E)" }}>{user.firstName?.[0]?.toUpperCase()}</div>
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{background:"linear-gradient(135deg,#2E8B34,#0C573E)"}}>{user.firstName?.[0]?.toUpperCase()}</div>
                       <div><p className="text-sm font-semibold text-gray-800">{user.firstName} {user.lastName}</p><p className="text-xs text-gray-400">{user.email}</p></div>
                     </div>
-                    {[{ l: "My Account", p: "account" }, { l: "My Orders", p: "orders" }, { l: "Wishlist", p: "wishlist" }, { l: "Settings", p: "settings" }].map(({ l, p }) => (
-                      <button key={p} onClick={() => { onNavigate?.(p); setMobileOpen(false); }} className="w-full text-left text-sm text-gray-600 px-2 py-1.5 rounded hover:bg-green-50 hover:text-green-800 transition-colors">{l}</button>
+                    {[{l:"My Account",p:"account"},{l:"My Orders",p:"orders"},{l:"Wishlist",p:"wishlist"},{l:"Settings",p:"settings"}].map(({l,p})=>(
+                      <button key={p} onClick={()=>{ onNavigate?.(p); setMobileOpen(false); }} className="w-full text-left text-sm text-gray-600 px-2 py-1.5 rounded hover:bg-green-50 hover:text-green-800 transition-colors">{l}</button>
                     ))}
                     <button onClick={handleLogout} className="flex items-center gap-2 text-sm text-red-500 font-medium px-2 py-1.5 rounded hover:bg-red-50 transition-colors w-full mt-1">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" /></svg>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
                       Logout
                     </button>
                   </div>
-                ) : (
+                ):(
                   <div className="flex gap-2">
-                    <button onClick={() => { onNavigate?.("login"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold text-white rounded-lg" style={{ backgroundColor: SITE_GREEN }}>Login</button>
-                    <button onClick={() => { onNavigate?.("register"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold rounded-lg border" style={{ borderColor: SITE_GREEN, color: SITE_GREEN }}>Sign Up</button>
+                    <button onClick={()=>{ onNavigate?.("login"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold text-white rounded-lg" style={{backgroundColor:SITE_GREEN}}>Login</button>
+                    <button onClick={()=>{ onNavigate?.("register"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold rounded-lg border" style={{borderColor:SITE_GREEN,color:SITE_GREEN}}>Sign Up</button>
                   </div>
                 )}
               </div>

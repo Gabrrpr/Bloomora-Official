@@ -16,37 +16,37 @@ const OCCASIONS = [
   {
     label: "Birthday",
     img: birthdayImg,
-    desc: "Birthdays only come once a year — make sure they feel it. From bright sunflowers to lush mixed arrangements, we help you send a little extra joy on their special day.",
+    desc: "Make their day unforgettable with bright, cheerful arrangements that bring the celebration to life.",
   },
   {
     label: "Anniversary",
     img: anniversaryImg,
-    desc: "Whether it's your first year or your fiftieth, flowers have a way of saying what words sometimes can't. Celebrate the love you've built with something truly beautiful.",
+    desc: "Say it with flowers. Whether it's your first year together or your fiftieth, we'll help you mark the moment.",
   },
   {
     label: "Graduation",
     img: graduationImg,
-    desc: "All those late nights finally paid off. Help them mark this milestone with flowers that are as bright and promising as the future ahead of them.",
+    desc: "All those late nights finally paid off. Celebrate their milestone with something as bright as their future.",
   },
   {
     label: "Sympathy",
     img: sympathyImg,
-    desc: "In moments of loss, a thoughtful arrangement can offer quiet comfort. Let us help you show up for someone who needs to know they're not alone.",
+    desc: "When words fall short, flowers offer quiet comfort. Let us help you show up for someone who needs it.",
   },
   {
     label: "Openings",
     img: openingsImg,
-    desc: "A new chapter deserves a grand welcome. Send something that sets the tone — fresh, vibrant arrangements that say congratulations and good luck all at once.",
+    desc: "Welcome a new chapter with vibrant arrangements that set the perfect tone for what's ahead.",
   },
   {
     label: "Just Because",
     img: justBecauseImg,
-    desc: "You don't need a reason to make someone smile. Sometimes the most meaningful gesture is the one that comes out of nowhere — just because you were thinking of them.",
+    desc: "You don't need a reason to make someone smile. Sometimes the best gift is the one no one saw coming.",
   },
   {
     label: "Wedding",
     img: weddingImg,
-    desc: "Every detail matters on your wedding day. From ceremony centerpieces to bridal bouquets, we work with you to bring your floral vision to life.",
+    desc: "From bouquets to centerpieces, we bring your floral vision to life on your most important day.",
   },
 ]
 
@@ -70,34 +70,49 @@ export default function AllOccasions({ onNavigate }) {
 
       {/* Occasions grid */}
       <div className="max-w-6xl mx-auto px-6 sm:px-10 py-16">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {OCCASIONS.map((occ) => (
-            <button
+            <div
               key={occ.label}
-              onClick={() => onNavigate?.("shop")}
-              className="group flex flex-col text-left rounded-2xl border overflow-hidden transition-all duration-200 hover:shadow-xl hover:-translate-y-1"
-              style={{ borderColor: "#e9f5ea", backgroundColor: "white" }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = G; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = "#e9f5ea"; }}
+              className="group flex flex-col items-center text-center rounded-2xl border bg-white transition-all duration-200 hover:shadow-xl hover:-translate-y-1 overflow-hidden pb-6"
+              style={{ borderColor: "#e5f0e6" }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor = G }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor = "#e5f0e6" }}
             >
-              {/* Photo */}
-              <div className="w-full overflow-hidden" style={{ height: "200px" }}>
-                <img
-                  src={occ.img}
-                  alt={occ.label}
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                />
+              {/* Circular image — bigger, thin green border matching site */}
+              <div className="mt-7 mb-4 flex-shrink-0">
+                <div
+                  className="overflow-hidden rounded-full transition-all duration-300 group-hover:scale-105"
+                  style={{
+                    width: "190px",
+                    height: "190px",
+                    border: `2px solid ${G}`,
+                    boxShadow: "0 4px 16px rgba(46,139,52,0.13)",
+                  }}
+                >
+                  <img
+                    src={occ.img}
+                    alt={occ.label}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
               </div>
 
               {/* Text */}
-              <div className="flex flex-col gap-1.5 p-5">
+              <div className="flex flex-col items-center gap-2 px-6">
                 <p className="text-base font-bold text-gray-900">{occ.label}</p>
                 <p className="text-sm text-gray-500 leading-relaxed">{occ.desc}</p>
-                <p className="text-xs font-semibold mt-2 transition-colors" style={{ color: G }}>
-                  Shop {occ.label} Arrangements →
-                </p>
               </div>
-            </button>
+
+              {/* Shop Now button */}
+              <button
+                onClick={() => onNavigate?.("shop")}
+                className="mt-5 px-7 py-2 rounded-full text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 active:scale-95"
+                style={{ backgroundColor: G }}
+              >
+                Shop Now
+              </button>
+            </div>
           ))}
         </div>
       </div>

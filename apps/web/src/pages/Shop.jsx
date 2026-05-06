@@ -61,11 +61,12 @@ const SORT_OPTIONS = [
 
 const discount = (orig, price) => Math.round((1 - price / orig) * 100)
 
-function Stars({ rating }) {
+function Stars({ rating, size = "sm" }) {
+  const dim = size === "md" ? "w-4 h-4" : "w-3 h-3"
   return (
     <div className="flex items-center gap-0.5">
       {[1,2,3,4,5].map(i => (
-        <svg key={i} className="w-3 h-3" fill={i <= Math.floor(rating) ? "#f59e0b" : "#e5e7eb"} viewBox="0 0 20 20">
+        <svg key={i} className={dim} fill={i <= Math.floor(rating) ? "#f59e0b" : "#e5e7eb"} viewBox="0 0 20 20">
           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
         </svg>
       ))}
@@ -73,16 +74,14 @@ function Stars({ rating }) {
   )
 }
 
-// ── Wishlist heart button (reusable) ──────────────────────────────────────────
-function WishlistBtn({ id, wishlist, toggleWishlist, size = "sm" }) {
+function WishlistBtn({ id, wishlist, toggleWishlist }) {
   const wishlisted = wishlist.includes(id)
-  const dim = size === "sm" ? "w-7 h-7" : "w-8 h-8"
   return (
     <button
       onClick={e => { e.stopPropagation(); toggleWishlist(id) }}
-      className={`${dim} flex items-center justify-center rounded-md transition-all`}
+      className="w-9 h-9 flex items-center justify-center rounded-lg transition-all"
       style={{
-        backgroundColor: wishlisted ? "#fef2f2" : "#f9fafb",
+        backgroundColor: wishlisted ? "#fef2f2" : "#f3f4f6",
         border: wishlisted ? "1px solid #fecaca" : "1px solid #e5e7eb",
       }}>
       <svg className="w-4 h-4 transition-all"
@@ -96,73 +95,120 @@ function WishlistBtn({ id, wishlist, toggleWishlist, size = "sm" }) {
   )
 }
 
-// ── List card ─────────────────────────────────────────────────────────────────
+// ── List card — full-width e-commerce horizontal card ────────────────────────
+// Fixed card height so the image always fills tall, right panel has no gray bg
 function ListCard({ product, wishlist, toggleWishlist, onPreview }) {
   return (
     <div
-      className="bg-white flex group hover:shadow-md transition-shadow duration-200"
-      style={{ border: "1px solid #e5e7eb", borderRadius: "10px", overflow: "hidden", cursor: "pointer" }}
+      className="bg-white flex group hover:shadow-lg transition-all duration-200"
+      style={{
+        border: "1px solid #e8edf0",
+        borderRadius: "14px",
+        overflow: "hidden",
+        cursor: "pointer",
+        height: "240px",          // fixed height — image fills it completely
+      }}
       onClick={() => onPreview(product)}
     >
-      {/* Image */}
-      <div className="relative flex-shrink-0" style={{ width: "180px", backgroundColor: "#f9fafb" }}>
-        <img src={product.image} alt={product.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-          style={{ display: "block", aspectRatio: "1/1" }} />
+      {/* ── LEFT: Image — fills the full card height ── */}
+      <div className="relative flex-shrink-0" style={{ width: "240px", height: "100%", backgroundColor: "#f8fafb" }}>
+        <img
+          src={product.image}
+          alt={product.name}
+          className="group-hover:scale-105 transition-transform duration-500"
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+        />
         {product.ribbon && (
-          <div className="absolute top-3 left-0 z-10">
-            <div className="text-[10px] font-bold text-white shadow-sm"
-              style={{ backgroundColor: RIBBON_COLORS[product.ribbon], clipPath: "polygon(0 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 0 100%)", padding: "3px 16px 3px 9px" }}>
+          <div className="absolute top-4 left-0 z-10">
+            <div className="text-[10px] font-bold text-white shadow"
+              style={{ backgroundColor: RIBBON_COLORS[product.ribbon], clipPath: "polygon(0 0, calc(100% - 7px) 0, 100% 50%, calc(100% - 7px) 100%, 0 100%)", padding: "4px 18px 4px 10px" }}>
               {product.ribbon}
             </div>
           </div>
         )}
-        <div className="absolute top-2 right-2 text-white text-[10px] font-bold px-1.5 py-0.5 rounded"
+        <div className="absolute top-3 right-3 text-white text-[11px] font-bold px-2 py-0.5 rounded-full shadow"
           style={{ backgroundColor: DG }}>
           -{discount(product.original, product.price)}%
         </div>
       </div>
 
-      {/* Details */}
-      <div className="flex-1 flex flex-col justify-center min-w-0" style={{ padding: "16px 20px", gap: "6px" }}>
-        <p className="text-[10px] font-semibold uppercase tracking-widest" style={{ color: G, margin: 0 }}>{product.category}</p>
-        <p className="text-base font-bold text-gray-900 leading-snug" style={{ margin: 0 }}>{product.name}</p>
-        <div className="flex items-center gap-1.5">
-          <Stars rating={product.rating} />
-          <span className="text-xs text-gray-500">{product.rating}</span>
-          <span className="text-xs text-gray-400">({product.reviews})</span>
+      {/* ── MIDDLE: Category, name, stars, in-stock ── */}
+      <div
+        className="flex-1 flex flex-col justify-center"
+        style={{ padding: "28px 36px", minWidth: 0 }}
+      >
+        <span
+          className="inline-block text-[10px] font-bold uppercase tracking-widest mb-3 px-3 py-1 rounded-full"
+          style={{ backgroundColor: "#f0fdf4", color: G, width: "fit-content" }}
+        >
+          {product.category}
+        </span>
+
+        <h3 className="text-xl font-bold text-gray-900 mb-3 leading-snug">{product.name}</h3>
+
+        <div className="flex items-center gap-2 mb-4">
+          <Stars rating={product.rating} size="md" />
+          <span className="text-sm font-semibold text-gray-700">{product.rating}</span>
+          <span className="text-sm text-gray-400">({product.reviews.toLocaleString()} reviews)</span>
         </div>
 
-        {/* Price + wishlist */}
-        <div className="flex items-center justify-between" style={{ marginTop: "2px" }}>
-          <div className="flex items-baseline gap-2">
-            <span className="text-lg font-bold" style={{ color: G }}>₱{product.price.toLocaleString()}</span>
-            <span className="text-sm text-gray-400 line-through">₱{product.original.toLocaleString()}</span>
+        <div className="flex items-center gap-2">
+          <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: G }} />
+          <span className="text-xs text-gray-500">In Stock · Ready to deliver</span>
+        </div>
+      </div>
+
+      {/* ── RIGHT: Price + wishlist + CTA — pure white, generous padding ── */}
+      <div
+        className="flex flex-col justify-between flex-shrink-0"
+        style={{
+          width: "220px",
+          padding: "28px 28px",
+          borderLeft: "1px solid #f0f2f5",
+          // NO gray background — keeping it white matches the rest of the card
+        }}
+      >
+        {/* Wishlist — top right */}
+        <div className="flex justify-end">
+          <WishlistBtn id={product.id} wishlist={wishlist} toggleWishlist={toggleWishlist} />
+        </div>
+
+        {/* Price block — middle */}
+        <div>
+          <div className="text-3xl font-extrabold mb-1" style={{ color: G, lineHeight: 1 }}>
+            ₱{product.price.toLocaleString()}
           </div>
-          <WishlistBtn id={product.id} wishlist={wishlist} toggleWishlist={toggleWishlist} size="sm" />
+          <div className="text-sm text-gray-400 line-through mb-2">
+            ₱{product.original.toLocaleString()}
+          </div>
+          <div
+            className="inline-block text-xs font-bold px-2.5 py-1 rounded-lg"
+            style={{ backgroundColor: "#fef9c3", color: "#854d0e" }}
+          >
+            Save ₱{(product.original - product.price).toLocaleString()}
+          </div>
         </div>
 
-        {/* View Details — inline width, not full stretch */}
-        <div style={{ marginTop: "6px" }}>
-          <button
-            onClick={e => { e.stopPropagation(); onPreview(product) }}
-            className="inline-flex items-center gap-2 px-5 py-2 text-sm font-semibold text-white rounded-lg transition-all"
-            style={{ backgroundColor: G }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = DG}
-            onMouseLeave={e => e.currentTarget.style.backgroundColor = G}>
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-            </svg>
-            View Details
-          </button>
-        </div>
+        {/* View Details — bottom */}
+        <button
+          onClick={e => { e.stopPropagation(); onPreview(product) }}
+          className="w-full flex items-center justify-center gap-2 py-3 text-sm font-bold text-white rounded-xl transition-all"
+          style={{ backgroundColor: G }}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = DG}
+          onMouseLeave={e => e.currentTarget.style.backgroundColor = G}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+          </svg>
+          View Details
+        </button>
       </div>
     </div>
   )
 }
 
-// ── Grid card ─────────────────────────────────────────────────────────────────
+// ── Grid card (unchanged) ─────────────────────────────────────────────────────
 function GridCard({ product, wishlist, toggleWishlist, onPreview }) {
   return (
     <div
@@ -170,7 +216,6 @@ function GridCard({ product, wishlist, toggleWishlist, onPreview }) {
       style={{ border: "1px solid #e5e7eb", borderRadius: "8px", overflow: "hidden", cursor: "pointer" }}
       onClick={() => onPreview(product)}
     >
-      {/* Image — zoom on hover only, no overlay */}
       <div className="relative overflow-hidden bg-gray-50" style={{ aspectRatio: "1/1" }}>
         <img src={product.image} alt={product.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
@@ -187,26 +232,19 @@ function GridCard({ product, wishlist, toggleWishlist, onPreview }) {
           -{discount(product.original, product.price)}%
         </div>
       </div>
-
-      {/* Card body */}
       <div className="p-3">
-        {/* Price row + wishlist — always visible */}
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-baseline gap-2">
             <span className="text-base font-bold" style={{ color: G }}>₱{product.price.toLocaleString()}</span>
             <span className="text-xs text-gray-400 line-through">₱{product.original.toLocaleString()}</span>
           </div>
-          <WishlistBtn id={product.id} wishlist={wishlist} toggleWishlist={toggleWishlist} size="sm" />
+          <WishlistBtn id={product.id} wishlist={wishlist} toggleWishlist={toggleWishlist} />
         </div>
-
         <p className="text-sm font-medium text-gray-800 leading-snug mb-1.5 line-clamp-2">{product.name}</p>
-
         <div className="flex items-center gap-1 mb-3">
           <Stars rating={product.rating} />
           <span className="text-xs text-gray-400">{product.rating} ({product.reviews})</span>
         </div>
-
-        {/* View Details — full green, opens modal */}
         <button
           onClick={e => { e.stopPropagation(); onPreview(product) }}
           className="w-full text-sm font-semibold py-2 text-white transition-all flex items-center justify-center gap-2"
@@ -214,10 +252,8 @@ function GridCard({ product, wishlist, toggleWishlist, onPreview }) {
           onMouseEnter={e => e.currentTarget.style.backgroundColor = DG}
           onMouseLeave={e => e.currentTarget.style.backgroundColor = G}>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
           </svg>
           View Details
         </button>
@@ -263,7 +299,7 @@ export default function Shop({ onNavigate }) {
     })
 
   const gridStyle = {
-    list:  { display: "flex", flexDirection: "column", gap: "12px" },
+    list:  { display: "flex", flexDirection: "column", gap: "14px" },
     grid2: { display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: "16px" },
     grid3: { display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: "16px" },
     grid4: { display: "grid", gridTemplateColumns: "repeat(4, minmax(0, 1fr))", gap: "16px" },
