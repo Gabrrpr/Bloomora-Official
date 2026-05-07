@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     SUPABASE_URL: str
     SUPABASE_KEY: str
+    SUPABASE_SERVICE_KEY: str = ""
 
     # JWT
     SECRET_KEY: str

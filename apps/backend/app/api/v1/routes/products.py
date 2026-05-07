@@ -1,21 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, Form
+from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_
 from typing import List, Optional
 from decimal import Decimal
 import uuid
 
+from supabase import create_client, Client
+from app.core.config import settings
 from app.core.dependencies import get_db, get_current_user
 from app.models import User, RoleEnum, Product, Inventory, ProductCategoryEnum, ProductStatusEnum
 
 router = APIRouter()
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def require_admin_or_staff(current_user: User):
     if current_user.role not in [RoleEnum.admin, RoleEnum.staff]:
         raise HTTPException(status_code=403, detail="Admin or staff access required.")
-
 
 def serialize_product(p: Product) -> dict:
     inv = p.inventory
@@ -35,7 +35,6 @@ def serialize_product(p: Product) -> dict:
         "reorder_point": inv.reorder_point if inv else 10,
     }
 
-
 # ── Public endpoints ──────────────────────────────────────────────────────────
 @router.get("/", response_model=List[dict])
 def get_products(db: Session = Depends(get_db)):
@@ -49,7 +48,6 @@ def get_products(db: Session = Depends(get_db)):
         "image_url": p.image_url,
         "is_available": p.is_available,
     } for p in products]
-
 
 @router.get("/customization/all", response_model=List[dict])
 def get_customization_products(db: Session = Depends(get_db)):
@@ -102,11 +100,8 @@ def get_customization_products(db: Session = Depends(get_db)):
                 "size": p.accessory.size,
                 "quantity": p.accessory.quantity,
             }
-
         result.append(item)
-
     return result
-
 
 # ── Admin endpoints ───────────────────────────────────────────────────────────
 @router.get("/admin/all", response_model=List[dict])
@@ -123,7 +118,6 @@ def get_admin_products(
         .all()
     )
     return [serialize_product(p) for p in products]
-
 
 @router.get("/low-stock", response_model=List[dict])
 def get_low_stock(
@@ -148,6 +142,40 @@ def get_low_stock(
     )
     return [serialize_product(p) for p in products]
 
+# ── Admin Image Upload ────────────────────────────────────────────────────────
+@router.post("/admin/upload-image", response_model=dict)
+async def upload_product_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload product image to Supabase Storage and return public URL."""
+    require_admin_or_staff(current_user)
+    
+    if not settings.SUPABASE_SERVICE_KEY:
+        raise HTTPException(status_code=500, detail="Supabase Service Key is not configured.")
+
+    try:
+        supabase_admin: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
+        
+        # Generate unique filename to prevent overwrites
+        ext = file.filename.split(".")[-1]
+        filename = f"products/{uuid.uuid4()}.{ext}"
+        
+        file_bytes = await file.read()
+        
+        # Upload using service role key
+        supabase_admin.storage.from_(settings.SUPABASE_BUCKET).upload(
+            path=filename,
+            file=file_bytes,
+            file_options={"content-type": file.content_type}
+        )
+        
+        # Get public URL
+        public_url = supabase_admin.storage.from_(settings.SUPABASE_BUCKET).get_public_url(filename)
+        
+        return {"status": "success", "url": public_url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
 
 # ── Admin CRUD ────────────────────────────────────────────────────────────────
 @router.post("/admin", response_model=dict, status_code=201)
@@ -204,7 +232,6 @@ def create_product(
     db.commit()
 
     return {"status": "success", "product": serialize_product(new_product)}
-
 
 @router.put("/admin/{product_id}", response_model=dict)
 def update_product(
@@ -265,7 +292,6 @@ def update_product(
 
     return {"status": "success", "product": serialize_product(product)}
 
-
 @router.delete("/admin/{product_id}", response_model=dict)
 def delete_product(
     product_id: str,
@@ -284,7 +310,6 @@ def delete_product(
     db.commit()
 
     return {"status": "success", "message": "Product deactivated successfully."}
-
 
 # ── Public wildcard route — MUST be last ─────────────────────────────────────
 @router.get("/{product_id}", response_model=dict)

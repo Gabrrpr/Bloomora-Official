@@ -75,25 +75,90 @@ const AVAILABILITIES = ["Available", "Limited", "Out of Stock"]
 const STATUSES = ["Active", "Inactive"]
 
 // ── Product Pagination (matches Staff/Customers design) ───────────────────────
-function ProductPagination({ showing = "0 entries" }) {
+function ProductPagination({
+  showing = "0 entries",
+  page = 1,
+  totalPages = 1,
+  onPageChange = () => {},
+}) {
   const btnBase = "px-3 py-1.5 text-xs font-semibold border rounded-md transition-all"
   const activeStyle = { borderColor: "#dde3ec", color: "#374151", cursor: "pointer" }
+  const disabledStyle = { borderColor: "#e5e7eb", color: "#9ca3af", cursor: "not-allowed", backgroundColor: "#f9fafb" }
+
+  const canPrev = page > 1
+  const canNext = page < totalPages
 
   return (
     <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: "1px solid #f1f5f9" }}>
       <p className="text-xs text-gray-400">{showing}</p>
       <div className="flex items-center gap-1">
-        {["← Prev", "1", "2", "3", "Next →"].map(lbl => (
-          <button
-            key={lbl}
-            className={btnBase}
-            style={activeStyle}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#f0fdf4"; e.currentTarget.style.borderColor = G; e.currentTarget.style.color = G }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = ""; e.currentTarget.style.borderColor = "#dde3ec"; e.currentTarget.style.color = "#374151" }}
-          >
-            {lbl}
-          </button>
-        ))}
+        <button
+          className={btnBase}
+          style={canPrev ? activeStyle : disabledStyle}
+          disabled={!canPrev}
+          onClick={() => onPageChange(page - 1)}
+          onMouseEnter={e => {
+            if (!canPrev) return
+            e.currentTarget.style.backgroundColor = "#f0fdf4"
+            e.currentTarget.style.borderColor = G
+            e.currentTarget.style.color = G
+          }}
+          onMouseLeave={e => {
+            if (!canPrev) return
+            e.currentTarget.style.backgroundColor = ""
+            e.currentTarget.style.borderColor = "#dde3ec"
+            e.currentTarget.style.color = "#374151"
+          }}
+        >
+          ← Prev
+        </button>
+
+        {/* Simple windowed page numbers: current +/- 1 */}
+        {([page - 1, page, page + 1])
+          .filter(p => p >= 1 && p <= totalPages)
+          .map(p => (
+            <button
+              key={p}
+              className={btnBase}
+              style={p === page ? { ...activeStyle, borderColor: G, color: G } : activeStyle}
+              onClick={() => onPageChange(p)}
+              onMouseEnter={e => {
+                if (p === page) return
+                e.currentTarget.style.backgroundColor = "#f0fdf4"
+                e.currentTarget.style.borderColor = G
+                e.currentTarget.style.color = G
+              }}
+              onMouseLeave={e => {
+                if (p === page) return
+                e.currentTarget.style.backgroundColor = ""
+                e.currentTarget.style.borderColor = "#dde3ec"
+                e.currentTarget.style.color = "#374151"
+              }}
+            >
+              {p}
+            </button>
+          ))}
+
+        <button
+          className={btnBase}
+          style={canNext ? activeStyle : disabledStyle}
+          disabled={!canNext}
+          onClick={() => onPageChange(page + 1)}
+          onMouseEnter={e => {
+            if (!canNext) return
+            e.currentTarget.style.backgroundColor = "#f0fdf4"
+            e.currentTarget.style.borderColor = G
+            e.currentTarget.style.color = G
+          }}
+          onMouseLeave={e => {
+            if (!canNext) return
+            e.currentTarget.style.backgroundColor = ""
+            e.currentTarget.style.borderColor = "#dde3ec"
+            e.currentTarget.style.color = "#374151"
+          }}
+        >
+          Next →
+        </button>
       </div>
     </div>
   )
@@ -105,6 +170,7 @@ function AddProductModal({ onClose, onSave }) {
     availability: "Available", status: "Active", description: "", image_url: "",
   })
   const [errors, setErrors] = useState({})
+  const [isUploading, setIsUploading] = useState(false)
 
   const set = (key) => (val) => setForm(f => ({ ...f, [key]: val }))
 
@@ -115,6 +181,34 @@ function AddProductModal({ onClose, onSave }) {
     if (!form.price || isNaN(form.price) || +form.price <= 0) err.price = "Enter a valid price"
     if (form.originalPrice && (+form.originalPrice < +form.price)) err.originalPrice = "Original price must be ≥ selling price"
     return err
+  }
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    setIsUploading(true)
+    const fd = new FormData()
+    fd.append("file", file)
+
+    try {
+      const res = await api.post("/products/admin/upload-image", fd, {
+        headers: {
+          "Content-Type": undefined
+        }
+      })
+      // Support nested axios response or custom fetch wrapper
+      const url = res.data?.url || res.url
+      if (url) {
+        set("image_url")(url)
+      } else {
+        throw new Error("No URL returned from server")
+      }
+    } catch (err) {
+      alert("Upload failed: " + (err.response?.data?.detail || err.message || "Unknown error"))
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   const handleSave = async () => {
@@ -163,17 +257,30 @@ function AddProductModal({ onClose, onSave }) {
         {/* Body */}
         <div className="overflow-y-auto p-6 space-y-4" style={{ maxHeight: "calc(90vh - 130px)" }}>
 
-          {/* Image URL */}
+          {/* Product Image Upload */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Image URL <span className="text-gray-400 font-normal">(optional)</span></label>
-            <input value={form.image_url} onChange={e => set("image_url")(e.target.value)}
-              placeholder="https://..."
-              className="w-full px-3 py-2.5 text-sm border rounded-md bg-white outline-none transition-all"
-              style={{ borderColor: "#dde3ec" }}
-              onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.10)` }}
-              onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }} />
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Product Image <span className="text-gray-400 font-normal">(optional)</span></label>
+            <div className="flex items-center gap-4">
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={handleImageUpload} 
+                disabled={isUploading}
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 transition-all cursor-pointer disabled:opacity-50"
+              />
+              {isUploading && <span className="text-xs text-green-600 font-medium whitespace-nowrap animate-pulse">Uploading to Supabase...</span>}
+            </div>
             {form.image_url && (
-              <img src={form.image_url} alt="Preview" className="mt-2 h-20 w-20 object-cover rounded-lg border border-gray-200" />
+              <div className="mt-3 relative inline-block">
+                <img src={form.image_url} alt="Preview" className="h-24 w-24 object-cover rounded-lg border border-gray-200 shadow-sm" />
+                <button 
+                  type="button" 
+                  onClick={() => set("image_url")("")} 
+                  className="absolute -top-2 -right-2 bg-red-100 text-red-600 rounded-full p-1 hover:bg-red-200 transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
             )}
           </div>
 
@@ -289,7 +396,8 @@ function AddProductModal({ onClose, onSave }) {
             Cancel
           </button>
           <button onClick={handleSave}
-            className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95"
+            disabled={isUploading}
+            className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: `linear-gradient(135deg, ${DG}, ${G})`, boxShadow: "0 2px 8px rgba(12,87,62,0.25)" }}>
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
@@ -315,6 +423,7 @@ function EditProductModal({ product, onClose, onSave }) {
     image_url: getProductImage(product) || "",
   })
   const [errors, setErrors] = useState({})
+  const [isUploading, setIsUploading] = useState(false)
 
   const set = (key) => (val) => setForm(f => ({ ...f, [key]: val }))
 
@@ -325,6 +434,31 @@ function EditProductModal({ product, onClose, onSave }) {
     if (!form.price || isNaN(form.price) || +form.price <= 0) err.price = "Enter a valid price"
     if (form.originalPrice && (+form.originalPrice < +form.price)) err.originalPrice = "Original price must be ≥ selling price"
     return err
+  }
+
+  const handleImageUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+
+    setIsUploading(true)
+    const fd = new FormData()
+    fd.append("file", file)
+
+    try {
+      const res = await api.post("/products/admin/upload-image", fd, {
+        headers: { "Content-Type": "multipart/form-data" }
+      })
+      const url = res.data?.url || res.url
+      if (url) {
+        set("image_url")(url)
+      } else {
+        throw new Error("No URL returned from server")
+      }
+    } catch (err) {
+      alert("Upload failed: " + (err.response?.data?.detail || err.message || "Unknown error"))
+    } finally {
+      setIsUploading(false)
+    }
   }
 
   const handleSave = async () => {
@@ -370,19 +504,34 @@ function EditProductModal({ product, onClose, onSave }) {
         </div>
         {/* Body */}
         <div className="overflow-y-auto p-6 space-y-4" style={{ maxHeight: "calc(90vh - 130px)" }}>
-          {/* Image URL */}
+          
+          {/* Product Image Upload */}
           <div>
-            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Image URL <span className="text-gray-400 font-normal">(optional)</span></label>
-            <input value={form.image_url} onChange={e => set("image_url")(e.target.value)}
-              placeholder="https://..."
-              className="w-full px-3 py-2.5 text-sm border rounded-md bg-white outline-none transition-all"
-              style={{ borderColor: "#dde3ec" }}
-              onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.10)` }}
-              onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }} />
+            <label className="block text-xs font-semibold text-gray-600 mb-1.5">Product Image <span className="text-gray-400 font-normal">(optional)</span></label>
+            <div className="flex items-center gap-4">
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={handleImageUpload} 
+                disabled={isUploading}
+                className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-green-50 file:text-green-700 hover:file:bg-green-100 transition-all cursor-pointer disabled:opacity-50"
+              />
+              {isUploading && <span className="text-xs text-green-600 font-medium whitespace-nowrap animate-pulse">Uploading to Supabase...</span>}
+            </div>
             {form.image_url && (
-              <img src={form.image_url} alt="Preview" className="mt-2 h-20 w-20 object-cover rounded-lg border border-gray-200" />
+              <div className="mt-3 relative inline-block">
+                <img src={form.image_url} alt="Preview" className="h-24 w-24 object-cover rounded-lg border border-gray-200 shadow-sm" />
+                <button 
+                  type="button" 
+                  onClick={() => set("image_url")("")} 
+                  className="absolute -top-2 -right-2 bg-red-100 text-red-600 rounded-full p-1 hover:bg-red-200 transition-colors"
+                >
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
             )}
           </div>
+
           {/* Product Name */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Product Name <span className="text-red-400">*</span></label>
@@ -490,7 +639,8 @@ function EditProductModal({ product, onClose, onSave }) {
             Cancel
           </button>
           <button onClick={handleSave}
-            className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95"
+            disabled={isUploading}
+            className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background: `linear-gradient(135deg, ${DG}, ${G})`, boxShadow: "0 2px 8px rgba(12,87,62,0.25)" }}>
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
@@ -575,10 +725,14 @@ function ViewProductModal({ product, onClose }) {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function AdminProducts() {
+  const PAGE_SIZE = 35
+
   const [search, setSearch]         = useState("")
   const [category, setCategory]     = useState("")
   const [status, setStatus]         = useState("")
   const [priceSort, setPriceSort]   = useState("")
+  const [page, setPage]             = useState(1)
+
   const [showModal, setShowModal]   = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
   const [viewingProduct, setViewingProduct] = useState(null)
@@ -586,6 +740,7 @@ export default function AdminProducts() {
   const [totalCount, setTotalCount] = useState(0)
   const [lowCount, setLowCount]     = useState(0)
   const [loading, setLoading]       = useState(true)
+
 
 const fetchProducts = useCallback(async () => {
   setLoading(true)
@@ -652,6 +807,20 @@ const fetchProducts = useCallback(async () => {
     if (priceSort === "desc") return +b.price - +a.price
     return 0
   })
+
+  // Pagination (client-side, 35 per page)
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const pageSafe = Math.min(page, totalPages)
+  const startIdx = (pageSafe - 1) * PAGE_SIZE
+  const endIdx = startIdx + PAGE_SIZE
+  const paginated = filtered.slice(startIdx, endIdx)
+
+  // Reset to first page whenever filters change
+  useEffect(() => {
+    setPage(1)
+  }, [search, category, status, priceSort])
+
+
 
   return (
     <div className="space-y-5">
@@ -793,7 +962,7 @@ const fetchProducts = useCallback(async () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
-              {filtered.length > 0 ? filtered.map(p => {
+              {filtered.length > 0 ? paginated.map(p => {
                 const availability = !p.is_available ? "Out of stock" : p.stock <= (p.reorder_point || 10) ? "Low stock" : "In stock"
                 return (
                   <tr key={p.id} className="hover:bg-gray-50 transition-colors">
@@ -827,7 +996,13 @@ const fetchProducts = useCallback(async () => {
             </tbody>
           </table>
         </div>
-        <ProductPagination showing={`Showing ${filtered.length} of ${products.length} entries`} />
+        <ProductPagination
+          showing={`Showing ${paginated.length} of ${filtered.length} entries`}
+          page={pageSafe}
+          totalPages={totalPages}
+          onPageChange={(p) => setPage(p)}
+        />
+
       </TableWrap>
     </div>
   )
