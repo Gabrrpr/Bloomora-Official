@@ -192,11 +192,8 @@ function AddProductModal({ onClose, onSave }) {
     fd.append("file", file)
 
     try {
-      const res = await api.post("/products/admin/upload-image", fd, {
-        headers: {
-          "Content-Type": undefined
-        }
-      })
+      // ✅ Correct
+      const res = await api.post("/products/admin/upload-image", fd);
       // Support nested axios response or custom fetch wrapper
       const url = res.data?.url || res.url
       if (url) {

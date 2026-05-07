@@ -1,16 +1,31 @@
 const API_BASE = 'http://localhost:8000/api/v1';
 
 export const api = {
-async request(endpoint, options = {}) {
+  // ── Core Request Engine ───────────────────────────────────────────────────
+  async request(endpoint, options = {}) {
     const token = localStorage.getItem('access_token');
     const url = `${API_BASE}${endpoint}`;
+    
+    // Setup base headers
+    const headers = {
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...options.headers,
+    };
+
+    // 🛡️ BULLETPROOF HEADER LOGIC:
+    if (options.body instanceof FormData) {
+      // If sending a file, we MUST let the browser generate the Content-Type with the boundary.
+      // This deletes any manual 'multipart/form-data' headers to prevent the 400 error.
+      delete headers['Content-Type'];
+      delete headers['content-type']; 
+    } else if (options.body && !headers['Content-Type'] && !headers['content-type']) {
+      // If it's a normal request, default to JSON
+      headers['Content-Type'] = 'application/json';
+    }
+
     const config = {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
-        ...options.headers,
-      },
       ...options,
+      headers,
     };
 
     const response = await fetch(url, config);
@@ -27,10 +42,13 @@ async request(endpoint, options = {}) {
     return response.json();
   },
 
-  async post(endpoint, data) {
+  async post(endpoint, data, customOptions = {}) {
+    // Smart Body: Don't stringify if it's a file upload (FormData)
+    const isFormData = data instanceof FormData;
     return this.request(endpoint, {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: isFormData ? data : JSON.stringify(data),
+      ...customOptions
     });
   },
 
@@ -38,10 +56,22 @@ async request(endpoint, options = {}) {
     return this.request(endpoint);
   },
 
-  async patch(endpoint, data) {
+  async put(endpoint, data, customOptions = {}) {
+    // Added PUT method for your updateProduct route
+    const isFormData = data instanceof FormData;
+    return this.request(endpoint, {
+      method: 'PUT',
+      body: isFormData ? data : JSON.stringify(data),
+      ...customOptions
+    });
+  },
+
+  async patch(endpoint, data, customOptions = {}) {
+    const isFormData = data instanceof FormData;
     return this.request(endpoint, {
       method: 'PATCH',
-      body: JSON.stringify(data),
+      body: isFormData ? data : JSON.stringify(data),
+      ...customOptions
     });
   },
 
@@ -59,21 +89,9 @@ async request(endpoint, options = {}) {
   },
 
   async uploadChatImage(file) {
-    const token = localStorage.getItem('access_token');
-    const url = `${API_BASE}/chats/upload`;
     const formData = new FormData();
     formData.append('file', file);
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-      body: formData,
-    });
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`);
-    }
-    return response.json();
+    return this.post('/chats/upload', formData); 
   },
 
   async getChatHistory(user_id) {
@@ -117,48 +135,19 @@ async request(endpoint, options = {}) {
     return this.get('/products/admin/all');
   },
 
-
-
-
-
-
   async createProduct(formData) {
-    const token = localStorage.getItem('access_token');
-    const url = `${API_BASE}/products/admin`;
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-      body: formData,
-    });
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`);
-    }
-    return response.json();
+    return this.post('/products/admin', formData);
   },
 
   async updateProduct(productId, formData) {
-    const token = localStorage.getItem('access_token');
-    const url = `${API_BASE}/products/admin/${productId}`;
-    const response = await fetch(url, {
-      method: 'PUT',
-      headers: {
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-      body: formData,
-    });
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`);
-    }
-    return response.json();
+    return this.put(`/products/admin/${productId}`, formData); 
   },
 
   async deleteProduct(productId) {
     return this.delete(`/products/admin/${productId}`);
   },
 
-// ── Orders ────────────────────────────────────────────────────────────────
+  // ── Orders ────────────────────────────────────────────────────────────────
   async createOrder({ items, delivery_address, delivery_notes, scheduled_at, payment_method }) {
     return this.post('/orders/', { items, delivery_address, delivery_notes, scheduled_at, payment_method });
   },
@@ -167,13 +156,11 @@ async request(endpoint, options = {}) {
     return this.post(`/orders/${orderId}/pay`, {});
   },
 
-
   async getMyOrders(status) {
     const params = new URLSearchParams();
     if (status && status !== 'All' && status !== 'today') params.append('status', status.toLowerCase().replace(/ /g, '_'));
     return this.get(`/orders/my?${params.toString()}`);
   },
-
 
   async getAdminOrders({ status, search, branch, limit = 100, offset = 0 } = {}) {
     const params = new URLSearchParams();
@@ -185,7 +172,7 @@ async request(endpoint, options = {}) {
     return this.get(`/orders/?${params.toString()}`);
   },
 
-// ── Products (Public) ───────────────────────────────────────────────────
+  // ── Products (Public) ───────────────────────────────────────────────────
   async getProducts() {
     return this.get('/products/');
   },
@@ -194,7 +181,7 @@ async request(endpoint, options = {}) {
     return this.get('/products/customization/all');
   },
 
-// ── Vases ────────────────────────────────────────────────────────────────
+  // ── Vases ────────────────────────────────────────────────────────────────
   async getVases(category = null, minPrice = null, maxPrice = null) {
     const params = new URLSearchParams();
     if (category && category !== 'All') params.append('category', category);
@@ -261,6 +248,4 @@ async request(endpoint, options = {}) {
       body: JSON.stringify({ enabled }),
     });
   },
-
 };
-
