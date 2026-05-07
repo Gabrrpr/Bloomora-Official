@@ -154,11 +154,22 @@ async def upload_product_image(
     if not settings.SUPABASE_SERVICE_KEY:
         raise HTTPException(status_code=500, detail="Supabase Service Key is not configured.")
 
+    # 🛡️ STRICT FILE TYPE CHECK
+    try:
+        ext = file.filename.split(".")[-1].lower()
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid filename.")
+        
+    allowed_extensions = {"jpg", "jpeg", "png", "webp", "gif"}
+    if ext not in allowed_extensions:
+        raise HTTPException(status_code=400, detail=f"Only {', '.join(allowed_extensions)} images are allowed.")
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Invalid file type. Must be an image.")
+
     try:
         supabase_admin: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
         
         # Generate unique filename to prevent overwrites
-        ext = file.filename.split(".")[-1]
         filename = f"products/{uuid.uuid4()}.{ext}"
         
         file_bytes = await file.read()
@@ -276,7 +287,9 @@ def update_product(
     if is_available is not None:
         product.is_available = is_available
     if image_url is not None:
-        product.image_url = image_url
+        # Treat empty string as “no image”
+        product.image_url = image_url or None
+
 
     db.commit()
     db.refresh(product)

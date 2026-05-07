@@ -37,8 +37,6 @@ const NAV = [
   { label: "Advertisements", d: "M3 7h18M3 7a2 2 0 00-2 2v8a2 2 0 002 2h18a2 2 0 002-2V9a2 2 0 00-2-2M3 7V5a2 2 0 012-2h14a2 2 0 012 2v2M8 13h4m-4 3h8" },
   { label: "Preview Site",   d: "M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z", preview: true },
 
-  // Modification section
-  { label: "Modification", header: true },
 ]
 
 function NavIcon({ d }) {

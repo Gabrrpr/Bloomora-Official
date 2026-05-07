@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     SUPABASE_URL: str
     SUPABASE_KEY: str
     SUPABASE_SERVICE_KEY: str = ""
+    SUPABASE_BUCKET: str = "Products"
 
     # JWT
     SECRET_KEY: str
@@ -15,9 +16,6 @@ class Settings(BaseSettings):
 
     # Pollinations
     POLLINATIONS_API_URL: str = "https://image.pollinations.ai/prompt"
-
-    # Supabase Storage
-    SUPABASE_BUCKET: str = "arrangements"
 
     # Lalamove
     LALAMOVE_API_KEY: str = ""

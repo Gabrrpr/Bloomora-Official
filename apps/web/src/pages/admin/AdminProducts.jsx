@@ -1,6 +1,74 @@
 import { useState, useEffect, useCallback } from "react"
 import { api } from "../../services/api.js"
-import { DG, G, StatusBadge, FilterBar, Pagination, TH, TD, ActionBtns, EmptyRow, TableWrap, ExportBtn } from "./_adminShared"
+import { DG, G, StatusBadge, TH, TD, ActionBtns, EmptyRow, TableWrap, ExportBtn } from "./_adminShared"
+
+// ── Products export (CSV report) ─────────────────────────────────────────────
+function ExportProductsBtn({ data = [] }) {
+  const handleExport = () => {
+    const headers = [
+      "id",
+      "name",
+      "category",
+      "status",
+      "availability",
+      "price",
+      "original_price",
+      "stock",
+      "reorder_point",
+    ]
+
+    const rows = data.length
+      ? data.map(p => {
+          const availability = !p.is_available
+            ? "Out of stock"
+            : (p.stock ?? 0) <= (p.reorder_point ?? 10)
+              ? "Low stock"
+              : "In stock"
+
+          return [
+            p.id ?? "",
+            p.name ?? "",
+            p.category ?? "",
+            p.status ?? "",
+            availability,
+            p.price ?? 0,
+            p.original_price ?? "",
+            p.stock ?? 0,
+            p.reorder_point ?? 10,
+          ].map(v => {
+            const s = String(v ?? "")
+            // CSV escaping
+            if (s.includes(",") || s.includes("\n") || s.includes('"')) return `"${s.replace(/"/g, '""')}"`
+            return s
+          }).join(",")
+        })
+      : [headers.map(() => "—").join(",")]
+
+    const csv = [headers.join(","), ...rows].join("\n")
+    const blob = new Blob([csv], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `products_report_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <button
+      onClick={handleExport}
+      className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md hover:bg-gray-50 transition-all text-gray-600 active:scale-95"
+      style={{ borderColor: "#dde3ec" }}
+      title="Export filtered products as CSV report"
+    >
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+      </svg>
+      Export Report
+    </button>
+  )
+}
+
 
 // ── Product images (same as Shop.jsx) ───────────────────────────────────────
 import SpringFlowers_PurpleWrapper from "../../assets/products/SpringFlowers_PurpleWrapper.png"
@@ -172,6 +240,13 @@ function AddProductModal({ onClose, onSave }) {
   const [errors, setErrors] = useState({})
   const [isUploading, setIsUploading] = useState(false)
 
+  // image preview (lightbox)
+  const [showImageLightbox, setShowImageLightbox] = useState(false)
+  const [lightboxSrc, setLightboxSrc] = useState(null)
+  // image removal
+  const [removeImage, setRemoveImage] = useState(false)
+
+
   const set = (key) => (val) => setForm(f => ({ ...f, [key]: val }))
 
   const validate = () => {
@@ -269,16 +344,61 @@ function AddProductModal({ onClose, onSave }) {
             </div>
             {form.image_url && (
               <div className="mt-3 relative inline-block">
-                <img src={form.image_url} alt="Preview" className="h-24 w-24 object-cover rounded-lg border border-gray-200 shadow-sm" />
+                <button
+                  type="button"
+                  aria-label="Enlarge product image"
+                  onClick={() => {
+                    setLightboxSrc(form.image_url)
+                    setShowImageLightbox(true)
+                  }}
+                  className="block"
+                >
+                  <img
+                    src={form.image_url}
+                    alt="Preview"
+                    className="h-24 w-24 object-cover rounded-lg border border-gray-200 shadow-sm"
+                  />
+                </button>
+
                 <button 
-                  type="button" 
-                  onClick={() => set("image_url")("")} 
+                  type="button"
+                  onClick={() => {
+                    setRemoveImage(true)
+                    set("image_url")("")
+                  }}
                   className="absolute -top-2 -right-2 bg-red-100 text-red-600 rounded-full p-1 hover:bg-red-200 transition-colors"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
             )}
+
+            {showImageLightbox && lightboxSrc && (
+              <div
+                className="fixed inset-0 z-[60] flex items-center justify-center px-4"
+                style={{ backgroundColor: "rgba(15,23,42,0.65)", backdropFilter: "blur(3px)" }}
+                onClick={() => setShowImageLightbox(false)}
+              >
+                <div className="relative rounded-xl overflow-hidden" style={{ maxWidth: "860px", width: "100%" }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowImageLightbox(false)}
+                    className="absolute -top-3 -right-3 z-10 bg-white border border-gray-200 rounded-full p-2 hover:bg-gray-50"
+                    aria-label="Close image preview"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                  <img
+                    src={lightboxSrc}
+                    alt="Enlarged preview"
+                    className="w-full max-h-[78vh] object-contain bg-white"
+                  />
+                </div>
+              </div>
+            )}
+
           </div>
 
           {/* Product Name */}
@@ -421,6 +541,10 @@ function EditProductModal({ product, onClose, onSave }) {
   })
   const [errors, setErrors] = useState({})
   const [isUploading, setIsUploading] = useState(false)
+  const [removeImage, setRemoveImage] = useState(false)
+  const [showImageLightbox, setShowImageLightbox] = useState(false)
+  const [lightboxSrc, setLightboxSrc] = useState(null)
+
 
   const set = (key) => (val) => setForm(f => ({ ...f, [key]: val }))
 
@@ -469,7 +593,14 @@ function EditProductModal({ product, onClose, onSave }) {
       fd.append("status", form.status.toLowerCase())
       fd.append("is_available", form.availability !== "Out of Stock")
       if (form.description) fd.append("description", form.description)
-      if (form.image_url) fd.append("image_url", form.image_url)
+
+      // Ensure image removal persists
+      if (removeImage) {
+        fd.append("image_url", "")
+      } else if (form.image_url) {
+        fd.append("image_url", form.image_url)
+      }
+
       const stock = form.availability === "Out of Stock" ? 0 : form.availability === "Limited" ? 5 : 50
       fd.append("stock", String(stock))
       const res = await api.updateProduct(product.id, fd)
@@ -479,6 +610,7 @@ function EditProductModal({ product, onClose, onSave }) {
       alert(e.message || "Failed to update product")
     }
   }
+
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
@@ -517,16 +649,61 @@ function EditProductModal({ product, onClose, onSave }) {
             </div>
             {form.image_url && (
               <div className="mt-3 relative inline-block">
-                <img src={form.image_url} alt="Preview" className="h-24 w-24 object-cover rounded-lg border border-gray-200 shadow-sm" />
-                <button 
-                  type="button" 
-                  onClick={() => set("image_url")("")} 
+                <button
+                  type="button"
+                  aria-label="Enlarge product image"
+                  onClick={() => {
+                    setLightboxSrc(form.image_url)
+                    setShowImageLightbox(true)
+                  }}
+                  className="block"
+                >
+                  <img
+                    src={form.image_url}
+                    alt="Preview"
+                    className="h-24 w-24 object-cover rounded-lg border border-gray-200 shadow-sm"
+                  />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRemoveImage(true)
+                    set("image_url")("")
+                  }}
                   className="absolute -top-2 -right-2 bg-red-100 text-red-600 rounded-full p-1 hover:bg-red-200 transition-colors"
                 >
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
             )}
+
+            {showImageLightbox && lightboxSrc && (
+              <div
+                className="fixed inset-0 z-[60] flex items-center justify-center px-4"
+                style={{ backgroundColor: "rgba(15,23,42,0.65)", backdropFilter: "blur(3px)" }}
+                onClick={() => setShowImageLightbox(false)}
+              >
+                <div className="relative rounded-xl overflow-hidden" style={{ maxWidth: "860px", width: "100%" }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowImageLightbox(false)}
+                    className="absolute -top-3 -right-3 z-10 bg-white border border-gray-200 rounded-full p-2 hover:bg-gray-50"
+                    aria-label="Close image preview"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                  <img
+                    src={lightboxSrc}
+                    alt="Enlarged preview"
+                    className="w-full max-h-[78vh] object-contain bg-white"
+                  />
+                </div>
+              </div>
+            )}
+
           </div>
 
           {/* Product Name */}
@@ -941,7 +1118,7 @@ const fetchProducts = useCallback(async () => {
 
             <button className="px-4 py-2 text-sm font-semibold text-white rounded-md transition-all hover:opacity-90 active:scale-95"
               style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>Filter</button>
-            <ExportBtn />
+            <ExportProductsBtn data={filtered} />
           </div>
         </div>
 
