@@ -233,11 +233,42 @@ export default function AdminOrders() {
                     </span>
                   </TD>
                   <TD>
-                    <button className="px-3 py-1.5 text-xs font-semibold rounded-md border transition-all hover:shadow-sm active:scale-95"
-                      style={{ backgroundColor: "#f0fdf4", borderColor: "#bbf7d0", color: DG }}>
-                      View
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button className="px-3 py-1.5 text-xs font-semibold rounded-md border transition-all hover:shadow-sm active:scale-95"
+                        style={{ backgroundColor: "#f0fdf4", borderColor: "#bbf7d0", color: DG }} onClick={() => fetchOrders()}>
+                        View
+                      </button>
+
+                      <select
+                        value={formatStatus(o.status)}
+                        onChange={async (e) => {
+                          const next = e.target.value;
+                          const nextKey = next.toLowerCase().replace(/ /g, '_');
+                          const canNext = (formatStatus(o.status) === 'Pending' && nextKey === 'preparing') ||
+                            (formatStatus(o.status) === 'Confirmed' && nextKey === 'preparing') ||
+                            (formatStatus(o.status) === 'Preparing' && nextKey === 'out_for_delivery') ||
+                            (formatStatus(o.status) === 'Out For Delivery' && nextKey === 'Delivered') ||
+                            (nextKey === 'cancelled' && formatStatus(o.status) !== 'Delivered');
+
+                          if (!canNext) return;
+
+                          try {
+                            await api.updateAdminOrderStatus(o.id, nextKey);
+                            await fetchOrders();
+                          } catch (err) {
+                            setError(err.message || 'Failed to update order');
+                          }
+                        }}
+                        className="text-xs font-semibold border rounded-md px-2 py-1"
+                        style={{ borderColor: '#e2e8f0', color: '#0f172a' }}>
+                        <option value={formatStatus(o.status)}>{formatStatus(o.status)}</option>
+                        {['Pending', 'Preparing', 'Out For Delivery', 'Delivered', 'Cancelled', 'Confirmed'].map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
                   </TD>
+
                 </tr>
               )) : (
                 <EmptyRow cols={7} message="No orders match your filters." />

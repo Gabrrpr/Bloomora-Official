@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import ProductPreviewModal from "../components/ProductPreviewModal.jsx"
 import Footer from "../components/Footer.jsx"
+import FallbackImage from "../components/FallbackImage.jsx"
 import { api } from "../services/api.js"
 
 const G  = "#2E8B34"
@@ -173,8 +174,12 @@ function GridCard({ vase, wishlist, toggleWishlist, onPreview }) {
       onClick={() => onPreview(vase)}
     >
       <div className="relative overflow-hidden bg-gray-50" style={{ aspectRatio:"1/1" }}>
-        <img src={vase.image} alt={vase.name}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"/>
+        <FallbackImage
+          src={vase.image}
+          alt={vase.name}
+          fallbackSrc="/EstingsLogo.svg"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+        />
         {vase.ribbon && (
           <div className="absolute top-3 left-0 z-10">
             <div className="text-[10px] font-bold text-white px-3 py-1 shadow-sm"

@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from "react"
 import { api } from "../../services/api.js"
 import { DG, G, StatusBadge, TH, TD, ActionBtns, EmptyRow, TableWrap, ExportBtn } from "./_adminShared"
+import FallbackImage from "../../components/FallbackImage.jsx"
+
 
 // ── Products export (CSV report) ─────────────────────────────────────────────
 function ExportProductsBtn({ data = [] }) {
@@ -133,8 +135,10 @@ const VASE_IMAGE_MAP = {
 }
 
 function getProductImage(product) {
+  // If a product doesn't have an uploaded image yet, fall back to the static map.
+  // If that map also doesn't have it, we return the ImageNotFound placeholder.
   if (product.image_url) return product.image_url
-  return PRODUCT_IMAGE_MAP[product.name] || null
+  return PRODUCT_IMAGE_MAP[product.name] || new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href
 }
 
 // ── Add Product Modal ─────────────────────────────────────────────────────────
@@ -353,10 +357,11 @@ function AddProductModal({ onClose, onSave }) {
                   }}
                   className="block"
                 >
-                  <img
+<FallbackImage
                     src={form.image_url}
                     alt="Preview"
                     className="h-24 w-24 object-cover rounded-lg border border-gray-200 shadow-sm"
+                    fallbackSrc="/src/assets/default-img/ImageNotFound.webp"
                   />
                 </button>
 
@@ -390,10 +395,11 @@ function AddProductModal({ onClose, onSave }) {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
-                  <img
+<FallbackImage
                     src={lightboxSrc}
                     alt="Enlarged preview"
                     className="w-full max-h-[78vh] object-contain bg-white"
+                    fallbackSrc="/EstingsLogo.svg"
                   />
                 </div>
               </div>
@@ -845,15 +851,13 @@ function ViewProductModal({ product, onClose }) {
           </button>
         </div>
         <div className="p-6 space-y-4">
-          {getProductImage(product) ? (
-            <img src={getProductImage(product)} alt={product.name} className="w-full h-48 object-cover rounded-lg" style={{ border: "1px solid #e8edf2" }} />
-          ) : (
-            <div className="w-full h-48 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0" }}>
-              <svg className="w-12 h-12" style={{ color: DG }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01" />
-              </svg>
-            </div>
-          )}
+<FallbackImage
+            src={getProductImage(product)}
+            alt={product.name}
+            className="w-full h-48 object-cover rounded-lg"
+            style={{ border: "1px solid #e8edf2" }}
+            fallbackSrc="/EstingsLogo.svg"
+          />
           <div>
             <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Product Name</p>
             <p className="text-base font-bold text-gray-900 mt-0.5">{product.name}</p>
@@ -1141,15 +1145,13 @@ const fetchProducts = useCallback(async () => {
                 return (
                   <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                     <TD>
-                      {getProductImage(p) ? (
-                        <img src={getProductImage(p)} alt={p.name} className="w-10 h-10 rounded-lg object-cover" style={{ border: "1px solid #e8edf2" }} />
-                      ) : (
-                        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ backgroundColor: "#f0fdf4", border: "1px solid #bbf7d0" }}>
-                          <svg className="w-5 h-5" style={{ color: DG }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01" />
-                          </svg>
-                        </div>
-                      )}
+<FallbackImage
+                        src={getProductImage(p)}
+                        alt={p.name}
+                        className="w-10 h-10 rounded-lg object-cover"
+                        style={{ border: "1px solid #e8edf2" }}
+                        fallbackSrc="/EstingsLogo.svg"
+                      />
                     </TD>
                     <TD><span className="font-medium text-gray-800">{p.name}</span></TD>
                     <TD><span className="text-gray-600">{p.category}</span></TD>

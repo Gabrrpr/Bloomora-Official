@@ -156,6 +156,11 @@ export const api = {
     return this.post(`/orders/${orderId}/pay`, {});
   },
 
+  async updateAdminOrderStatus(orderId, status) {
+    return this.post(`/orders/${orderId}/action`, { status });
+  },
+
+
   async getMyOrders(status) {
     const params = new URLSearchParams();
     if (status && status !== 'All' && status !== 'today') params.append('status', status.toLowerCase().replace(/ /g, '_'));

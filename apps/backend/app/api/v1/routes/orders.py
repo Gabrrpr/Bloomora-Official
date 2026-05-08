@@ -269,6 +269,7 @@ def confirm_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+
     """Confirm payment for an order. Updates transaction status and order status."""
     try:
         order_uuid = uuid.UUID(order_id)
@@ -307,3 +308,47 @@ def confirm_payment(
         "payment_status": order.transaction.status.value,
         "order_status": order.status.value,
     }
+
+
+@router.post("/{order_id}/action", response_model=dict)
+def admin_order_action(
+    order_id: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Admin/Staff action to update an order status."""
+    require_admin_or_staff(current_user)
+
+    action_status = payload.get("status")
+    if not action_status:
+        raise HTTPException(status_code=400, detail="Missing 'status' in payload")
+
+    # Normalize to backend enum value (expects: pending|confirmed|preparing|out_for_delivery|delivered|cancelled)
+    status_key = str(action_status).lower().replace(" ", "_")
+
+    try:
+        new_status = OrderStatusEnum(status_key)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {action_status}")
+
+    try:
+        order_uuid = uuid.UUID(order_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid order ID")
+
+    order = db.query(Order).filter(Order.id == order_uuid).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    # Optional transition rules could be enforced here.
+    order.status = new_status
+    db.commit()
+    db.refresh(order)
+
+    return {
+        "status": "success",
+        "message": "Order status updated",
+        **serialize_order(order),
+    }
+

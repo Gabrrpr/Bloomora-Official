@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import ProductPreviewModal from "../components/ProductPreviewModal.jsx"
 import Footer from "../components/Footer.jsx"
+import FallbackImage from "../components/FallbackImage.jsx"
 import { api } from "../services/api.js" // 👈 Added API import
 
 import SpringFlowers_PurpleWrapper from "../assets/products/SpringFlowers_PurpleWrapper.png"
@@ -101,8 +102,14 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
       style={{ border:"1px solid #e8edf0", borderRadius:"12px", overflow:"hidden", cursor:"pointer", height:"210px" }}
       onClick={() => onPreview(product)}>
       <div className="relative flex-shrink-0" style={{ width:"210px", height:"100%", backgroundColor:"#f8fafb" }}>
-        <img src={product.image} alt={product.name} className="group-hover:scale-105 transition-transform duration-500"
-          style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }}/>
+        <FallbackImage
+          src={product.image}
+          alt={product.name}
+          fallbackSrc="/EstingsLogo.svg"
+          className="group-hover:scale-105 transition-transform duration-500"
+          style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }}
+        />
+
         {product.ribbon && (
           <div className="absolute top-3 left-0 z-10">
             <div className="text-[10px] font-bold text-white shadow"
@@ -166,11 +173,13 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
       onClick={() => onPreview(product)}
     >
       <div className="relative flex-shrink-0" style={{ width:"108px", minHeight:"108px", backgroundColor:"#f8fafb", position:"relative" }}>
-        <img
+        <FallbackImage
           src={product.image}
           alt={product.name}
+          fallbackSrc="/EstingsLogo.svg"
           style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", display:"block" }}
         />
+
         {product.ribbon && (
           <div className="absolute top-2 left-0 z-10">
             <div className="text-[9px] font-bold text-white"
@@ -258,7 +267,13 @@ function GridCard({ product, wishlist, toggleWishlist, onPreview }) {
       style={{ border:"1px solid #e5e7eb", borderRadius:"8px", overflow:"hidden", cursor:"pointer" }}
       onClick={() => onPreview(product)}>
       <div className="relative overflow-hidden bg-gray-50" style={{ aspectRatio:"1/1" }}>
-        <img src={product.image} alt={product.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"/>
+        <FallbackImage
+          src={product.image}
+          alt={product.name}
+          fallbackSrc="/EstingsLogo.svg"
+          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+        />
+
         {product.ribbon && (
           <div className="absolute top-3 left-0 z-10">
             <div className="text-[10px] font-bold text-white shadow-sm"
