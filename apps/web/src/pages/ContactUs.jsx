@@ -5,9 +5,11 @@ import Footer from "../components/Footer"
 const G = "#2E8B34"
 const DG = "#0C573E"
 
+// Search-query format reliably places a red pin on both branches.
+// The Pampanga URL now uses q= search so Google resolves the exact place and pins it.
 const MAP_URLS = {
-  manila: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3861.0!2d120.9946!3d14.6042!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3397b6f3e4c4a1c3%3A0x0!2s1605+Laon-Laan+St%2C+Sampaloc%2C+Manila!5e0!3m2!1sen!2sph!4v1",
-  pampanga: "https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3853.0!2d120.6900!3d15.0300!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3396ef5aa0e14b4d%3A0x0!2sMcArthur+Hwy%2C+Dolores%2C+San+Fernando%2C+Pampanga!5e0!3m2!1sen!2sph!4v1",
+  manila: "https://maps.google.com/maps?q=Esting%27s+Flower+Shop+Laon-Laan+Dos+Castillas+Sampaloc+Manila&t=&z=17&ie=UTF8&iwloc=&output=embed",
+  pampanga: "https://maps.google.com/maps?q=Esting%27s+Flower+Shop+MacArthur+Highway+Dolores+San+Fernando+Pampanga&t=&z=17&ie=UTF8&iwloc=&output=embed",
 }
 
 const CONTACT_INFO = {
@@ -66,11 +68,6 @@ export default function ContactUs({ onNavigate }) {
 
       {/* Main split layout */}
       <div className="max-w-6xl mx-auto px-6 sm:px-10 py-14">
-        {/*
-          Key fix: use items-stretch on the grid so both columns are the same height.
-          The map iframe is set to height: 100% inside a position:relative wrapper
-          that also has height: 100%, so it fills the right column completely.
-        */}
         <div className="grid lg:grid-cols-[400px_1fr] gap-8 items-stretch">
 
           {/* LEFT PANEL */}
@@ -133,12 +130,11 @@ export default function ContactUs({ onNavigate }) {
             </div>
           </div>
 
-          {/* RIGHT PANEL: map fills full height of the left column */}
+          {/* RIGHT PANEL */}
           <div className="flex flex-col">
             <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: G }}>
               {activeMap === "manila" ? "Manila" : "Pampanga"} Branch — Location
             </p>
-            {/* This wrapper fills all remaining height so the map = left height */}
             <div className="flex-1 rounded-2xl overflow-hidden shadow-lg" style={{ border: "1.5px solid #e0f0e8", minHeight: "400px" }}>
               <iframe
                 key={activeMap}
