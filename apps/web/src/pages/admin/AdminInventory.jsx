@@ -1,7 +1,28 @@
-import { useState } from "react"
-import { DG, G, GreenCard, WhiteCard, FilterBar, Pagination, TH, EmptyRow, TableWrap, ExportBtn } from "./_adminShared"
+import { useState, useEffect, useCallback } from "react"
+import { api } from "../../services/api.js"
+import { DG, G, GreenCard, WhiteCard, FilterBar, Pagination, TH, TD, EmptyRow, TableWrap, ExportBtn, ActionBtns } from "./_adminShared"
 
-// ── Reusable form primitives (same style as AdminStaff) ───────────────────────
+// ── Custom Inventory Status Badge ─────────────────────────────────────────────
+function InvStatusBadge({ status }) {
+  let bg = "bg-green-100";
+  let text = "text-green-700";
+  
+  if (status === "Low Stock") {
+    bg = "bg-orange-100";
+    text = "text-orange-700";
+  } else if (status === "Out of Stock") {
+    bg = "bg-red-100";
+    text = "text-red-700";
+  }
+
+  return (
+    <span className={`px-2.5 py-1 text-[10px] uppercase tracking-wider font-bold rounded-md ${bg} ${text}`}>
+      {status}
+    </span>
+  )
+}
+
+// ── Reusable form primitives ──────────────────────────────────────────────────
 function FInput({ placeholder, value, onChange, type = "text", hint }) {
   return (
     <div>
@@ -88,27 +109,13 @@ function AddItemForm({ onBack }) {
 
   return (
     <div className="space-y-5">
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <GreenCard label="Total Items" value={0} />
-        {["Total Inventory Value", "Low Stock Items", "Out of Stock Items"].map(l => (
-          <WhiteCard key={l} label={l} value={l.includes("Value") ? "₱0" : 0} />
-        ))}
-      </div>
-
-      {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-900">Add New Item</h2>
-        <button
-          onClick={onBack}
-          className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md hover:bg-gray-50 transition-all text-gray-600"
-          style={{ borderColor: "#dde3ec" }}
-        >
+        <h2 className="text-lg font-bold text-gray-900">Add New Inventory Item</h2>
+        <button onClick={onBack} className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md hover:bg-gray-50 transition-all text-gray-600" style={{ borderColor: "#dde3ec" }}>
           ← Back to table
         </button>
       </div>
 
-      {/* Form grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <StepCard n={1} title="Item Information">
           <div><FL>Item Name</FL><FInput placeholder="e.g. Red Roses – Premium" value={f.name} onChange={s("name")} /></div>
@@ -130,26 +137,11 @@ function AddItemForm({ onBack }) {
           <div><FL>Cost per Unit (₱)</FL><FInput type="number" placeholder="0.00" value={f.costPerUnit} onChange={s("costPerUnit")} /></div>
           <div><FL>Status</FL><FSel options={STATUSES} value={f.status} onChange={s("status")} placeholder="Select status" /></div>
         </StepCard>
-
-        <StepCard n={3} title="Supplier & Location">
-          <div><FL>Supplier Name</FL><FInput placeholder="e.g. Manila Flower Wholesale" value={f.supplier} onChange={s("supplier")} /></div>
-          <div><FL>Storage Location</FL><FInput placeholder="e.g. Shelf A3 – Cold Room" value={f.location} onChange={s("location")} /></div>
-        </StepCard>
-
-        <StepCard n={4} title="Notes">
-          <div><FL>Additional Notes</FL><FTextarea placeholder="Any special handling, notes, or reminders for this item..." value={f.notes} onChange={s("notes")} /></div>
-        </StepCard>
       </div>
 
-      {/* Submit */}
       <div className="flex justify-end">
-        <button
-          className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95"
-          style={{ background: `linear-gradient(135deg,${DG},${G})` }}
-        >
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
-          </svg>
+        <button className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95" style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
           Add Item
         </button>
       </div>
@@ -160,9 +152,12 @@ function AddItemForm({ onBack }) {
 // ── Functional Export Button ──────────────────────────────────────────────────
 function ExportInventoryBtn({ data = [] }) {
   const handleExport = () => {
-    const headers = ["Item Name", "SKU", "Category", "Unit", "Current Stock", "Cost per Unit (₱)", "Status", "Branch"]
+    const headers = ["Item Name", "Category", "Unit Type", "Current Stock", "Cost per Unit", "Status"]
     const rows = data.length
-      ? data.map(r => headers.map(h => r[h] ?? "").join(","))
+      ? data.map(r => {
+          const status = r.stock <= 0 ? "Out of Stock" : r.stock <= (r.reorder_point || 10) ? "Low Stock" : "Active";
+          return `"${r.name}","${r.category}","${r.unit_type || 'piece'}","${r.stock}","${r.cost_per_unit || '0.00'}","${status}"`
+        })
       : [headers.map(() => "—").join(",")]
     const csv = [headers.join(","), ...rows].join("\n")
     const blob = new Blob([csv], { type: "text/csv" })
@@ -175,45 +170,43 @@ function ExportInventoryBtn({ data = [] }) {
   }
 
   return (
-    <button
-      onClick={handleExport}
-      className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md hover:bg-gray-50 transition-all text-gray-600 active:scale-95"
-      style={{ borderColor: "#dde3ec" }}
-    >
-      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-      </svg>
+    <button onClick={handleExport} className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md hover:bg-gray-50 transition-all text-gray-600 active:scale-95" style={{ borderColor: "#dde3ec" }}>
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
       Export
     </button>
   )
 }
 
 // ── Functional Pagination ─────────────────────────────────────────────────────
-function InventoryPagination({ total = 0, page = 1, onPage }) {
-  const disabled = total === 0
+function InventoryPagination({ showing = "0 entries", page = 1, totalPages = 1, onPageChange }) {
   const btnBase = "px-3 py-1.5 text-xs font-semibold border rounded-md transition-all"
-  const disabledStyle = { borderColor: "#e5e7eb", color: "#d1d5db", cursor: "not-allowed", backgroundColor: "#fafafa" }
   const activeStyle = { borderColor: "#dde3ec", color: "#374151", cursor: "pointer" }
+  const disabledStyle = { borderColor: "#e5e7eb", color: "#9ca3af", cursor: "not-allowed", backgroundColor: "#f9fafb" }
+
+  const canPrev = page > 1
+  const canNext = page < totalPages
 
   return (
     <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: "1px solid #f1f5f9" }}>
-      <p className="text-xs text-gray-400">
-        {disabled ? "Showing 0 items" : `Showing ${total} item${total !== 1 ? "s" : ""}`}
-      </p>
+      <p className="text-xs text-gray-400">{showing}</p>
       <div className="flex items-center gap-1">
-        {["← Prev", "1", "2", "3", "Next →"].map(lbl => (
+        <button
+          className={btnBase} style={canPrev ? activeStyle : disabledStyle} disabled={!canPrev}
+          onClick={() => onPageChange(page - 1)}
+        >← Prev</button>
+        
+        {([page - 1, page, page + 1]).filter(p => p >= 1 && p <= totalPages).map(p => (
           <button
-            key={lbl}
-            disabled={disabled}
-            onClick={() => !disabled && onPage && onPage(lbl)}
-            className={btnBase}
-            style={disabled ? disabledStyle : activeStyle}
-            onMouseEnter={e => { if (!disabled) { e.currentTarget.style.backgroundColor = "#f0fdf4"; e.currentTarget.style.borderColor = G; e.currentTarget.style.color = G } }}
-            onMouseLeave={e => { if (!disabled) { e.currentTarget.style.backgroundColor = ""; e.currentTarget.style.borderColor = "#dde3ec"; e.currentTarget.style.color = "#374151" } }}
-          >
-            {lbl}
-          </button>
+            key={p} className={btnBase}
+            style={p === page ? { ...activeStyle, borderColor: G, color: G } : activeStyle}
+            onClick={() => onPageChange(p)}
+          >{p}</button>
         ))}
+
+        <button
+          className={btnBase} style={canNext ? activeStyle : disabledStyle} disabled={!canNext}
+          onClick={() => onPageChange(page + 1)}
+        >Next →</button>
       </div>
     </div>
   )
@@ -221,95 +214,99 @@ function InventoryPagination({ total = 0, page = 1, onPage }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function AdminInventory() {
+  const PAGE_SIZE = 15;
+
+  const [inventory, setInventory] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
   const [search, setSearch] = useState("")
   const [showForm, setShowForm] = useState(false)
   const [statusFilter, setStatusFilter] = useState("")
-  const [branchFilter, setBranchFilter] = useState("")
-  const [dateFilter, setDateFilter] = useState("")
+
+  const fetchInventory = useCallback(async () => {
+    setLoading(true)
+    try {
+      // Reusing products endpoint since it joins inventory data (stock & reorder_point)
+      const { data } = await api.get("/products/admin/all")
+      setInventory(data || [])
+    } catch (err) {
+      console.error("Failed to load inventory:", err)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchInventory()
+  }, [fetchInventory])
+
+  // Calculated Stats
+  const totalItems = inventory.length;
+  // Fallback to a placeholder percentage if cost_per_unit is null/empty for demo purposes
+  const totalValue = inventory.reduce((sum, item) => sum + ((item.cost_per_unit || (item.price * 0.4)) * item.stock), 0);
+  const lowStockCount = inventory.filter(item => item.stock > 0 && item.stock <= (item.reorder_point || 10)).length;
+  const outOfStockCount = inventory.filter(item => item.stock <= 0).length;
+
+  // Filtering
+  const filtered = inventory.filter(item => {
+    const matchSearch = !search || item.name.toLowerCase().includes(search.toLowerCase()) || item.id.includes(search)
+    let matchStatus = true;
+    if (statusFilter === "Active") matchStatus = item.stock > (item.reorder_point || 10);
+    if (statusFilter === "Low Stock") matchStatus = item.stock > 0 && item.stock <= (item.reorder_point || 10);
+    if (statusFilter === "Out of Stock") matchStatus = item.stock <= 0;
+    
+    return matchSearch && matchStatus;
+  })
+
+  // Pagination Logic
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const pageSafe = Math.min(page, totalPages)
+  const startIdx = (pageSafe - 1) * PAGE_SIZE
+  const paginated = filtered.slice(startIdx, startIdx + PAGE_SIZE)
+
+  useEffect(() => { setPage(1) }, [search, statusFilter])
 
   if (showForm) return <AddItemForm onBack={() => setShowForm(false)} />
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-bold text-gray-900">Inventory</h1>
+      <h1 className="text-xl font-bold text-gray-900">Inventory Management</h1>
 
+      {/* Stat Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <GreenCard
           label="Total Items"
-          value={0}
-          sub="↑ +0 this week"
+          value={totalItems}
           action="Add Item"
           onAction={() => setShowForm(true)}
         />
-        <WhiteCard label="Total Inventory Value" value="₱0" sub="↑ +₱0 this week" accentColor="#3b82f6" />
-        <WhiteCard label="Low Stock Items" value={0} accentColor="#f59e0b">
-          <button className="text-xs font-semibold mt-2 block" style={{ color: "#16a34a" }}>↑ Needs restock</button>
+        <WhiteCard label="Est. Inventory Value" value={`₱${totalValue.toLocaleString(undefined, {minimumFractionDigits: 2})}`} accentColor="#3b82f6" />
+        <WhiteCard label="Low Stock Items" value={lowStockCount} accentColor="#f59e0b">
+          <button className="text-xs font-semibold mt-2 block" style={{ color: "#16a34a" }} onClick={() => setStatusFilter("Low Stock")}>
+            Review Needs
+          </button>
         </WhiteCard>
-        <WhiteCard label="Out of Stock Items" value={0} accentColor="#ef4444">
-          <button className="text-xs font-semibold mt-2 text-red-500 block">↑ Action needed</button>
+        <WhiteCard label="Out of Stock Items" value={outOfStockCount} accentColor="#ef4444">
+          <button className="text-xs font-semibold mt-2 text-red-500 block" onClick={() => setStatusFilter("Out of Stock")}>
+            Action Required
+          </button>
         </WhiteCard>
       </div>
 
-      <TableWrap>
+      <TableWrap loading={loading}>
         <div className="p-4" style={{ borderBottom: "1px solid #f1f5f9", backgroundColor: "#fafbfc" }}>
-          {/* Custom filter row with populated dropdowns */}
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Status */}
+            {/* Status Filter */}
             <div className="relative">
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
+              <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
                 className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md bg-white text-gray-700 cursor-pointer outline-none transition-all"
                 style={{ borderColor: "#dde3ec" }}
                 onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
-                onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}
-              >
+                onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}>
                 <option value="">Status: All</option>
                 <option value="Active">Active</option>
                 <option value="Low Stock">Low Stock</option>
                 <option value="Out of Stock">Out of Stock</option>
-                <option value="Discontinued">Discontinued</option>
-              </select>
-              <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-              </svg>
-            </div>
-
-            {/* Branch */}
-            <div className="relative">
-              <select
-                value={branchFilter}
-                onChange={e => setBranchFilter(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md bg-white text-gray-700 cursor-pointer outline-none transition-all"
-                style={{ borderColor: "#dde3ec" }}
-                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
-                onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}
-              >
-                <option value="">All Branches</option>
-                <option value="Manila">Manila</option>
-                <option value="Pampanga">Pampanga</option>
-              </select>
-              <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-              </svg>
-            </div>
-
-            {/* Date Range */}
-            <div className="relative">
-              <select
-                value={dateFilter}
-                onChange={e => setDateFilter(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md bg-white text-gray-700 cursor-pointer outline-none transition-all"
-                style={{ borderColor: "#dde3ec" }}
-                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
-                onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}
-              >
-                <option value="">Date Range: All</option>
-                <option value="today">Today</option>
-                <option value="week">This Week</option>
-                <option value="month">This Month</option>
-                <option value="quarter">This Quarter</option>
-                <option value="year">This Year</option>
               </select>
               <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
@@ -321,18 +318,14 @@ export default function AdminInventory() {
               <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
               </svg>
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                placeholder="Item ID or name"
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search Item ID or name"
                 className="w-full pl-9 pr-4 py-2 text-sm border rounded-md bg-white outline-none transition-all"
                 style={{ borderColor: "#dde3ec" }}
                 onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
-                onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}
-              />
+                onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }} />
             </div>
 
-            <ExportInventoryBtn data={[]} />
+            <ExportInventoryBtn data={filtered} />
           </div>
         </div>
 
@@ -349,13 +342,45 @@ export default function AdminInventory() {
                 <TH>Action</TH>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
-              <EmptyRow cols={7} message="Click '+ Add Item' to add your first inventory item." />
+            <tbody className="divide-y divide-gray-50 text-sm">
+              {loading ? (
+                 <EmptyRow cols={7} message="Loading inventory data..." />
+              ) : paginated.length > 0 ? paginated.map(item => {
+                
+                // Logic for Inventory Status
+                const invStatus = item.stock <= 0 ? "Out of Stock" : item.stock <= (item.reorder_point || 10) ? "Low Stock" : "Active";
+                
+                return (
+                  <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                    <TD><span className="font-medium text-gray-800">{item.name}</span></TD>
+                    <TD><span className="text-gray-600 capitalize">{item.category}</span></TD>
+                    <TD><span className="text-gray-500">{item.unit_type || "piece"}</span></TD>
+                    <TD>
+                      <span className={`font-semibold ${item.stock <= 0 ? 'text-red-600' : item.stock <= (item.reorder_point || 10) ? 'text-orange-500' : 'text-gray-800'}`}>
+                        {item.stock}
+                      </span>
+                    </TD>
+                    <TD>₱{item.cost_per_unit || "0.00"}</TD>
+                    
+                    {/* 👇 The custom InvStatusBadge is safely injected here */}
+                    <TD><InvStatusBadge status={invStatus} /></TD>
+                    
+                    <TD><ActionBtns onEdit={() => setShowForm(true)} /></TD>
+                  </tr>
+                )
+              }) : (
+                <EmptyRow cols={7} message="No inventory items found matching your criteria." />
+              )}
             </tbody>
           </table>
         </div>
 
-        <InventoryPagination total={0} />
+        <InventoryPagination 
+          showing={`Showing ${paginated.length} of ${filtered.length} entries`}
+          page={pageSafe}
+          totalPages={totalPages}
+          onPageChange={setPage}
+        />
       </TableWrap>
     </div>
   )

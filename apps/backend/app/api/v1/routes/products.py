@@ -33,6 +33,8 @@ def serialize_product(p: Product) -> dict:
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
         "stock": inv.current_stock if inv else 0,
         "reorder_point": inv.reorder_point if inv else 10,
+        "unit_type": inv.unit_type if (inv and inv.unit_type) else "piece",
+        "cost_per_unit": float(inv.cost_per_unit) if (inv and inv.cost_per_unit is not None) else None,
     }
 
 # ── Public endpoints ──────────────────────────────────────────────────────────
@@ -109,15 +111,77 @@ def get_admin_products(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get all products including inactive for admin panel."""
+    """Get all products including inactive for admin panel.
+
+    Inventory fields (stock/reorder/unit_type/cost_per_unit) are sourced from Supabase
+    `inventory` table so the admin inventory view matches Supabase.
+    """
+
     require_admin_or_staff(current_user)
-    products = (
-        db.query(Product)
-        .options(joinedload(Product.inventory))
-        .order_by(Product.created_at.desc())
-        .all()
-    )
-    return [serialize_product(p) for p in products]
+
+    try:
+        if not settings.SUPABASE_SERVICE_KEY:
+            raise HTTPException(status_code=500, detail="Supabase Service Key is not configured.")
+
+        supabase_admin: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
+
+        # Fetch inventory from Supabase
+        # If Supabase fails (RLS, wrong key, etc.), we still return products with default stock.
+        inv_rows = []
+        try:
+            inv_resp = supabase_admin.table("inventory").select(
+                "product_id,current_stock,reorder_point,unit_type,cost_per_unit"
+            ).execute()
+            inv_rows = inv_resp.data if inv_resp and hasattr(inv_resp, "data") and inv_resp.data else []
+        except Exception:
+            inv_rows = []
+
+
+        # Index by product_id (Supabase returns UUID as string)
+        inv_by_product_id = {}
+        for r in inv_rows:
+            pid = str(r.get("product_id")) if r.get("product_id") else None
+            if not pid:
+                continue
+            inv_by_product_id[pid] = r
+
+        # Fetch products from backend DB (includes product name/category/image/etc.)
+        products = (
+            db.query(Product)
+            .order_by(Product.created_at.desc())
+            .all()
+        )
+
+        result: List[dict] = []
+        for p in products:
+            pid = str(p.id)
+            inv = inv_by_product_id.get(pid)
+
+            result.append({
+                "id": pid,
+                "name": p.name,
+                "description": p.description,
+                "price": float(p.price) if p.price else 0,
+                "original_price": float(p.price) * 1.2 if p.price else 0,
+                "category": p.category.value if hasattr(p.category, "value") else p.category,
+                "image_url": p.image_url,
+                "is_available": p.is_available,
+                "status": p.status.value if hasattr(p.status, "value") else p.status,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+                # Inventory from Supabase
+                "stock": int(inv.get("current_stock") or 0) if inv else 0,
+                "reorder_point": int(inv.get("reorder_point") or 10) if inv else 10,
+                "unit_type": inv.get("unit_type") if inv and inv.get("unit_type") else "piece",
+                "cost_per_unit": float(inv.get("cost_per_unit")) if inv and inv.get("cost_per_unit") is not None else None,
+            })
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to load admin inventory from Supabase: {str(e)}")
 
 @router.get("/low-stock", response_model=List[dict])
 def get_low_stock(
@@ -289,7 +353,6 @@ def update_product(
     if image_url is not None:
         # Treat empty string as “no image”
         product.image_url = image_url or None
-
 
     db.commit()
     db.refresh(product)
