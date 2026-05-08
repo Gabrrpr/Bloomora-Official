@@ -290,24 +290,31 @@ export default function AddonsPage({ onNavigate }) {
 
   // 2. 👇 Fetch the real addons from the database when the page loads
   useEffect(() => {
-    api.get("/products/") 
+    // Important: backend /products/ returns ALL public products (flowers, vases, add-ons, etc.).
+    // Add-ons page must ONLY show items that are actually add-ons.
+    api.get("/products/")
       .then(data => {
-        if (data && data.length > 0) {
-          const mapped = data.map(p => {
-             const fallback = ALL_ADDONS.find(f => f.name === p.name) || {}
-             return {
-                ...p,
-                image: p.image_url || fallback.image || ALL_ADDONS[0].image,
-                original: p.original_price || fallback.original || p.price * 1.2,
-                rating: fallback.rating || 5.0,
-                reviews: fallback.reviews || 0,
-                ribbon: fallback.ribbon || null,
-             }
-          })
-          setAddons(mapped)
-        } else {
-          setAddons(ALL_ADDONS)
-        }
+        const safe = Array.isArray(data) ? data : [];
+
+        // Determine which backend products are add-ons by matching their category against our add-on catalog.
+        const addonCategories = new Set(ALL_ADDONS.map(a => a.category).filter(Boolean));
+        const addonItems = safe.filter(p => addonCategories.has((p.category || "").toString()));
+
+        const source = addonItems.length > 0 ? addonItems : ALL_ADDONS;
+
+        const mapped = source.map(p => {
+          const fallback = ALL_ADDONS.find(f => f.name === p.name) || ALL_ADDONS.find(a => a.category === p.category) || {}
+          return {
+            ...p,
+            image: p.image_url || fallback.image || ALL_ADDONS[0].image,
+            original: p.original_price || fallback.original || (p.price ? p.price * 1.2 : 0),
+            rating: fallback.rating || 5.0,
+            reviews: fallback.reviews || 0,
+            ribbon: fallback.ribbon || null,
+          }
+        })
+
+        setAddons(mapped)
       })
       .catch(() => setAddons(ALL_ADDONS))
   }, [])

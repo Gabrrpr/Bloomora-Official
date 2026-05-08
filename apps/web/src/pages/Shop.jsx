@@ -435,7 +435,7 @@ export default function Shop({ onNavigate }) {
              const fallback = ALL_PRODUCTS.find(f => f.name === p.name) || {}
              return {
                 ...p,
-                image: p.image_url || fallback.image || ALL_PRODUCTS[0].image,
+                image: p.image_url || fallback.image || new URL("../assets/default-img/ImageNotFound.webp", import.meta.url).href,
                 original: p.original_price || fallback.original || p.price * 1.2,
                 rating: fallback.rating || 5.0,
                 reviews: fallback.reviews || 0,

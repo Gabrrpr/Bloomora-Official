@@ -4,10 +4,8 @@ from typing import List, Optional
 import uuid
 
 from app.core.dependencies import get_db, get_current_user
-from app.models import (
-    User, Arrangement,
-    ProductCategoryEnum,
-)
+from app.models import User, Arrangement
+# 👇 Removed ProductCategoryEnum from here
 from app.models.arrangement import Flower, Vase, Wrapping, Accessory
 from app.models.ai_usage_log import DAILY_AI_LIMIT
 from app.schemas.customization import (
@@ -112,12 +110,6 @@ async def check_and_generate(
 ):
     """
     Two-Way Customization endpoint.
-
-    Flow:
-    1. Check if user has remaining AI generations today (limit: 5/day)
-    2. Check inventory availability for all selected materials
-    3a. All available → generate image via Pollinations.ai → calculate price breakdown → log usage
-    3b. Some unavailable → return unavailable items + suggested alternatives
     """
 
     # ── Step 1: Check daily AI usage limit ───────────────────────────────
@@ -130,11 +122,12 @@ async def check_and_generate(
     # ── Step 2: Check each selected material ─────────────────────────────
     unavailable_items: List[UnavailableItem] = []
 
+    # 👇 UPDATED: We now use plain strings instead of ProductCategoryEnum
     material_checks = [
-        ("flower_id",    payload.flower_id,    ProductCategoryEnum.flower),
-        ("vase_id",      payload.vase_id,      ProductCategoryEnum.vase),
-        ("wrapping_id",  payload.wrapping_id,  ProductCategoryEnum.wrapping),
-        ("accessory_id", payload.accessory_id, ProductCategoryEnum.accessory),
+        ("flower_id",    payload.flower_id,    "flower"),
+        ("vase_id",      payload.vase_id,      "vase"),
+        ("wrapping_id",  payload.wrapping_id,  "wrapping"),
+        ("accessory_id", payload.accessory_id, "accessory"),
     ]
 
     for field_name, material_id, category in material_checks:
@@ -168,11 +161,11 @@ async def check_and_generate(
 
     # ── Step 3b: Look up material records using product IDs ───────────────
     flower    = db.query(Flower).filter(Flower.product_id == payload.flower_id).first() if payload.flower_id else None
-    vase      = db.query(Vase).filter(Vase.product_id == payload.vase_id).first() if payload.vase_id else None
+    vase       = db.query(Vase).filter(Vase.product_id == payload.vase_id).first() if payload.vase_id else None
     wrapping  = db.query(Wrapping).filter(Wrapping.product_id == payload.wrapping_id).first() if payload.wrapping_id else None
     accessory = db.query(Accessory).filter(Accessory.product_id == payload.accessory_id).first() if payload.accessory_id else None
 
-    # ── Step 3c: Save arrangement with correct material IDs ───────────────
+    # ── Step 3c: Save arrangement ───────────────────────────────────────
     arrangement = Arrangement(
         id=uuid.uuid4(),
         prompt_text=payload.prompt_text,

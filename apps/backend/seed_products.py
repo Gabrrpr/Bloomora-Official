@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from sqlalchemy.orm import Session
 from app.core.database import engine, SessionLocal
-from app.models.product import Product, Inventory, ProductCategoryEnum, ProductStatusEnum
+from app.models.product import Product, Inventory, ProductStatusEnum
 from app.models.arrangement import Vase
 
 
@@ -62,9 +62,9 @@ def seed_products():
     db = SessionLocal()
 
     try:
-        # Get existing product names to avoid duplicates
-        existing_vase_names = {p.name for p in db.query(Product).filter(Product.category == ProductCategoryEnum.vase).all()}
-        existing_addon_names = {p.name for p in db.query(Product).filter(Product.category == ProductCategoryEnum.accessory).all()}
+        # 👇 UPDATED: Using strings instead of ProductCategoryEnum
+        existing_vase_names = {p.name for p in db.query(Product).filter(Product.category == "vase").all()}
+        existing_addon_names = {p.name for p in db.query(Product).filter(Product.category == "accessory").all()}
 
         # Add vases that don't exist yet
         vases_to_add = [v for v in VASES if v["name"] not in existing_vase_names]
@@ -76,7 +76,7 @@ def seed_products():
                     name=vase_data["name"],
                     description=f"Beautiful {vase_data['category']} vase - {vase_data['name']}",
                     price=Decimal(str(vase_data["price"])),
-                    category=ProductCategoryEnum.vase,
+                    category="vase", # 👈 UPDATED
                     image_url=f"/assets/products/vases/{vase_data['image']}",
                     is_available=True,
                     status=ProductStatusEnum.active,
@@ -93,13 +93,13 @@ def seed_products():
                 )
                 db.add(inventory)
 
-                # Add Vase record in vases table with all the extra fields
+                # Add Vase record in vases table
                 vase = Vase(
                     id=uuid.uuid4(),
                     product_id=product.id,
-                    style=None,  # Can be set based on vase name
-                    material=vase_data.get("category"),  # Use category as material
-                    color=None,  # Can be set based on vase type
+                    style=None,
+                    material=vase_data.get("category"),
+                    color=None,
                     size=None,
                     quantity=1,
                     unit_price=Decimal(str(vase_data["price"])),
@@ -116,17 +116,16 @@ def seed_products():
         else:
             print("All vases already exist in database")
 
-            # Even if products exist, check if vase records exist and create them if needed
+            # Check if vase records exist and create them if needed
             existing_vase_ids = {v.product_id for v in db.query(Vase).all()}
             vases_needing_records = db.query(Product).filter(
-                Product.category == ProductCategoryEnum.vase,
+                Product.category == "vase", # 👈 UPDATED
                 Product.id.notin_(existing_vase_ids)
             ).all()
 
             if vases_needing_records:
                 print(f"Creating vase records for {len(vases_needing_records)} existing vase products...")
                 for product in vases_needing_records:
-                    # Find matching vase data from VASES list
                     matching_vase = next((v for v in VASES if v["name"] == product.name), None)
                     if matching_vase:
                         vase = Vase(
@@ -158,7 +157,7 @@ def seed_products():
                     name=addon_data["name"],
                     description=f"{addon_data['brand']} {addon_data['name']} - {addon_data['weight']}",
                     price=Decimal(str(addon_data["price"])),
-                    category=ProductCategoryEnum.accessory,
+                    category="accessory", # 👈 UPDATED
                     image_url=f"/assets/products/addons/{addon_data['image']}",
                     is_available=True,
                     status=ProductStatusEnum.active,
@@ -169,7 +168,7 @@ def seed_products():
                 # Add inventory
                 inventory = Inventory(
                     product_id=product.id,
-                    current_stock=100,  # Default stock for chocolates
+                    current_stock=100,
                     reorder_point=20,
                     unit_type="pieces",
                 )
@@ -190,7 +189,3 @@ def seed_products():
         raise
     finally:
         db.close()
-
-
-if __name__ == "__main__":
-    seed_products()

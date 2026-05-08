@@ -4,7 +4,7 @@ from typing import List, Optional
 from uuid import UUID
 from dataclasses import dataclass
 
-from app.models.product import Product, Inventory, ProductCategoryEnum, ProductStatusEnum
+from app.models.product import Product, Inventory, ProductStatusEnum
 from app.schemas.customization import AlternativeItem
 
 
@@ -72,7 +72,7 @@ def check_material_availability(db: Session, product_id) -> AvailabilityResult:
 
 def get_alternatives(
     db: Session,
-    category: ProductCategoryEnum,
+    category: str,  # 👈 Change 1: Updated type hint to string
     exclude_id=None,
     limit: int = 3,
 ) -> List[AlternativeItem]:
@@ -100,7 +100,8 @@ def get_alternatives(
         AlternativeItem(
             product_id=str(p.id),
             product_name=p.name,
-            category=p.category.value,
+            # 👇 Change 2: Removed .value (Strings don't have a .value property!)
+            category=p.category, 
             price=float(p.price),
             image_url=p.image_url,
             current_stock=i.current_stock,

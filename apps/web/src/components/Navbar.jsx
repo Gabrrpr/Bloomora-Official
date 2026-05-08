@@ -1,12 +1,17 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../context/AuthContext.jsx";
 import { getCartCount, getCart } from "../utils/cart.js";
+import { api } from "../services/api.js"; // 👈 Added API import to fetch dynamic categories!
 import estingsLogo from "../assets/EstingsLogo.svg";
 import estingsText from "../assets/Estings.svg";
 
 const SITE_GREEN = "#2E8B34";
 const NAVY_GREEN = "#35530A";
 const DARK_GREEN = "#0C573E";
+
+// These are your default categories. The Navbar will ignore these when building dynamic links
+// because they are already inside your hardcoded Dropdown menus.
+const STANDARD_CATEGORIES = ["flower", "vase", "wrapping", "accessory", "arrangement", "add-on"];
 
 const PROMOTIONS = [
   { text: "Get", highlight: "3% off your first order", cta: "SHOP NOW", page: "shop" },
@@ -50,7 +55,7 @@ const BRANCHES = {
   Pampanga: { address: "McArthur Hi-way, Dolores, San Fernando, Pampanga",   hours: "Mon – Sat, 7:30 AM – 5:00 PM", phone: "+63 045 961 5378" },
 };
 
-// ── Branch Modal — 2-row header, no checkmark ─────────────────────────────────
+// ── Branch Modal ─────────────────────────────────
 function BranchModal({ branch, onClose }) {
   const info = BRANCHES[branch];
   useEffect(() => {
@@ -69,7 +74,6 @@ function BranchModal({ branch, onClose }) {
           style={{ maxWidth:"360px", animation:"bmIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both", boxShadow:"0 32px 80px rgba(0,0,0,0.28)" }}
           onClick={e => e.stopPropagation()}>
 
-          {/* Header */}
           <div className="relative overflow-hidden"
             style={{ background:`linear-gradient(150deg, ${DARK_GREEN} 0%, #1a6b3f 50%, ${SITE_GREEN} 100%)`, padding:"32px 28px 28px" }}>
             <div style={{ position:"absolute", top:"-40px", right:"-40px", width:"160px", height:"160px", borderRadius:"50%", background:"rgba(255,255,255,0.06)" }}/>
@@ -80,14 +84,12 @@ function BranchModal({ branch, onClose }) {
               onMouseLeave={e => { e.currentTarget.style.background="rgba(255,255,255,0.12)"; e.currentTarget.style.color="rgba(255,255,255,0.7)"; }}>
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
             </button>
-            {/* Two rows only */}
             <div className="relative z-10">
               <p style={{ fontSize:"13px", fontWeight:500, color:"rgba(255,255,255,0.65)", margin:"0 0 4px" }}>You've selected</p>
               <h2 style={{ fontSize:"26px", fontWeight:800, color:"white", lineHeight:1.1, letterSpacing:"-0.01em", margin:0 }}>{branch} Branch</h2>
             </div>
           </div>
 
-          {/* Body */}
           <div className="bg-white" style={{ padding:"24px 28px" }}>
             <div style={{ display:"flex", flexDirection:"column", gap:"16px", marginBottom:"24px" }}>
               {[
@@ -361,6 +363,8 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
   const { user, logout } = useAuth();
   const liveCartCount = useCartCount();
   const cartCount = propCartCount ?? liveCartCount;
+  
+  const [customCategories, setCustomCategories] = useState([]);
   const [active, setActive]                     = useState("Home");
   const [locationOpen, setLocationOpen]         = useState(false);
   const [selectedLocation, setSelectedLocation] = useState("Manila");
@@ -386,7 +390,52 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
 
   const handleBranchSelect = loc => { setSelectedLocation(loc); setLocationOpen(false); setBranchModal(loc); };
   const handleLogout       = ()  => { logout(); setUserOpen(false); onNavigate?.("login"); };
-  const handleNavClick     = link => { setActive(link.label); if (link.page) onNavigate?.(link.page); setMobileOpen(false); };
+  
+  // 👇 UPDATED: Automatically fetch categories from DB and filter out defaults
+  useEffect(() => {
+    api.get("/products/")
+      .then(data => {
+        if (data && data.length > 0) {
+          const allCats = data.map(p => p.category?.toLowerCase().trim()).filter(Boolean);
+          const uniqueCats = Array.from(new Set(allCats));
+          // Only keep categories that aren't part of our standard dropdowns
+          const custom = uniqueCats.filter(c => !STANDARD_CATEGORIES.includes(c));
+          setCustomCategories(custom);
+        }
+      })
+      .catch(err => console.error("Failed to load nav categories", err));
+  }, []);
+
+  // 👇 UPDATED: Generate Top Nav links from those custom categories
+  const generatedLinks = customCategories.map(cat => ({
+    label: cat.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+    page: "shop",
+    isCustomCategory: true,
+    highlight: true, // This adds the special red text and sparkles
+  }));
+
+  // Insert them immediately after "Shop"
+  const shopIndex = NAV_LINKS.findIndex(l => l.label === "Shop");
+  const FINAL_NAV_LINKS = [
+    ...NAV_LINKS.slice(0, shopIndex + 1),
+    ...generatedLinks,
+    ...NAV_LINKS.slice(shopIndex + 1)
+  ];
+
+  // 👇 UPDATED: Save custom category to memory so the Shop page knows to filter by it
+  const handleNavClick = link => { 
+    setActive(link.label); 
+    
+    if (link.isCustomCategory) {
+      localStorage.setItem("bloomora_active_category", link.label.toLowerCase());
+    } else {
+      localStorage.removeItem("bloomora_active_category");
+    }
+
+    if (link.page) onNavigate?.(link.page); 
+    setMobileOpen(false); 
+  };
+
   const handleAccountClick = ()  => { setUserOpen(false); onNavigate?.(user ? "account" : "login"); };
 
   useEffect(() => {
@@ -435,15 +484,20 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
               </div>
 
               <div className="flex items-center gap-5 xl:gap-7">
-                {NAV_LINKS.map(link => (
+                {/* 👇 UPDATED: Loops through our new dynamic FINAL_NAV_LINKS array */}
+                {FINAL_NAV_LINKS.map(link => (
                   <div key={link.label} className="relative"
                     onMouseEnter={() => (link.dropdown||link.categories) && openMenuD(link.label)}
                     onMouseLeave={() => (link.dropdown||link.categories) && closeMenuD()}>
                     <button onClick={() => handleNavClick(link)}
                       className="flex items-center gap-0.5 text-sm font-medium pb-1 whitespace-nowrap transition-colors"
-                      style={{ color:active===link.label?SITE_GREEN:"#4b5563", borderBottom:active===link.label?`2px solid ${SITE_GREEN}`:"2px solid transparent" }}
+                      style={{ 
+                        color: active===link.label ? SITE_GREEN : (link.highlight ? "#e11d48" : "#4b5563"), 
+                        borderBottom: active===link.label ? `2px solid ${SITE_GREEN}` : "2px solid transparent" 
+                      }}
                       onMouseEnter={e => { if (active!==link.label) e.currentTarget.style.color=NAVY_GREEN; }}
-                      onMouseLeave={e => { if (active!==link.label) e.currentTarget.style.color="#4b5563"; }}>
+                      onMouseLeave={e => { if (active!==link.label) e.currentTarget.style.color=(link.highlight ? "#e11d48" : "#4b5563"); }}>
+                      {link.highlight && <span className="text-[11px] mr-1">✨</span>}
                       {link.label}
                       {(link.dropdown||link.categories) && <svg className="w-3 h-3 text-gray-400 ml-0.5 transition-transform" style={{ transform:openMenu===link.label?"rotate(180deg)":"rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>}
                     </button>
@@ -508,13 +562,19 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                     style={{ borderColor:selectedLocation===loc?SITE_GREEN:"#e5e7eb", color:selectedLocation===loc?SITE_GREEN:"#6b7280", fontWeight:selectedLocation===loc?600:400 }}>{loc}</button>
                 ))}
               </div>
-              {NAV_LINKS.map(link => (
+              
+              {/* 👇 UPDATED: Applies custom highlighting logic to mobile menu as well */}
+              {FINAL_NAV_LINKS.map(link => (
                 <div key={link.label}>
-                  <button onClick={() => handleNavClick(link)} className="w-full text-left px-2 py-2.5 text-sm font-medium border-b transition-colors"
-                    style={{ color:active===link.label?SITE_GREEN:"#4b5563", borderColor:"#f3f4f6" }}>{link.label}</button>
+                  <button onClick={() => handleNavClick(link)} className="w-full flex items-center text-left px-2 py-2.5 text-sm font-medium border-b transition-colors"
+                    style={{ color:active===link.label?SITE_GREEN:(link.highlight ? "#e11d48" : "#4b5563"), borderColor:"#f3f4f6" }}>
+                    {link.highlight && <span className="text-[11px] mr-1.5">✨</span>}
+                    {link.label}
+                  </button>
                   {link.dropdown && <div className="pl-4 bg-gray-50">{link.dropdown.map(sub => <button key={sub.label} onClick={() => { onNavigate?.(sub.page); setMobileOpen(false); }} className="block w-full text-left px-2 py-2 text-xs text-gray-500 border-b hover:text-emerald-700 transition-colors" style={{ borderColor:"#f3f4f6" }}>{sub.label}</button>)}</div>}
                 </div>
               ))}
+
               <div className="px-2 py-3 border-t" style={{ borderColor:"#f3f4f6" }}>
                 <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color:SITE_GREEN }}>Make it Personal</p>
                 <div className="space-y-1">{MIP_OPTIONS.map(opt => <button key={opt.page} onClick={() => { onNavigate?.(opt.page); setMobileOpen(false); }} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-gray-700 font-medium transition-all hover:bg-green-50"><span style={{ color:opt.accent }}>{opt.icon}</span>{opt.label}</button>)}</div>

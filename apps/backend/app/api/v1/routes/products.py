@@ -8,7 +8,8 @@ import uuid
 from supabase import create_client, Client
 from app.core.config import settings
 from app.core.dependencies import get_db, get_current_user
-from app.models import User, RoleEnum, Product, Inventory, ProductCategoryEnum, ProductStatusEnum
+# 👇 Notice we removed ProductCategoryEnum from this import list!
+from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum
 
 router = APIRouter()
 
@@ -49,6 +50,11 @@ def get_products(db: Session = Depends(get_db)):
         "category": p.category.value if hasattr(p.category, "value") else p.category,
         "image_url": p.image_url,
         "is_available": p.is_available,
+
+        # Seasonal fields (used by navbar)
+        "season_key": p.season_key,
+        "limited_start_at": p.limited_start_at.isoformat() if p.limited_start_at else None,
+        "limited_end_at": p.limited_end_at.isoformat() if p.limited_end_at else None,
     } for p in products]
 
 @router.get("/customization/all", response_model=List[dict])
@@ -106,6 +112,7 @@ def get_customization_products(db: Session = Depends(get_db)):
     return result
 
 # ── Admin endpoints ───────────────────────────────────────────────────────────
+
 @router.get("/admin/all", response_model=List[dict])
 def get_admin_products(
     db: Session = Depends(get_db),
@@ -263,16 +270,17 @@ def create_product(
     is_available: bool = Form(True),
     image_url: Optional[str] = Form(None),
     stock: int = Form(0),
+
+    # Seasonal button fields (optional)
+    season_key: Optional[str] = Form(None),
+    limited_start_at: Optional[str] = Form(None),
+    limited_end_at: Optional[str] = Form(None),
+
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Create a new product. Admin/Staff only."""
     require_admin_or_staff(current_user)
-
-    try:
-        cat_enum = ProductCategoryEnum(category.lower())
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid category: {category}")
 
     try:
         status_enum = ProductStatusEnum(status.lower())
@@ -289,10 +297,15 @@ def create_product(
         name=name,
         description=description,
         price=price_val,
-        category=cat_enum,
+        category=category.lower().strip(),  # 👇 Directly use string instead of Enum
         status=status_enum,
         is_available=is_available,
         image_url=image_url,
+
+        # Seasonal button fields (optional)
+        season_key=season_key or None,
+        limited_start_at=(limited_start_at or None),
+        limited_end_at=(limited_end_at or None),
     )
     db.add(new_product)
     db.commit()
@@ -312,6 +325,7 @@ def create_product(
 def update_product(
     product_id: str,
     name: Optional[str] = Form(None),
+
     description: Optional[str] = Form(None),
     price: Optional[str] = Form(None),
     category: Optional[str] = Form(None),
@@ -319,7 +333,13 @@ def update_product(
     is_available: Optional[bool] = Form(None),
     image_url: Optional[str] = Form(None),
     stock: Optional[int] = Form(None),
-        db: Session = Depends(get_db),
+
+    # Seasonal button fields (optional)
+    season_key: Optional[str] = Form(None),
+    limited_start_at: Optional[str] = Form(None),
+    limited_end_at: Optional[str] = Form(None),
+
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Update an existing product. Admin/Staff only."""
@@ -339,10 +359,7 @@ def update_product(
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid price value.")
     if category is not None:
-        try:
-            product.category = ProductCategoryEnum(category.lower())
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid category: {category}")
+        product.category = category.lower().strip() # 👇 Directly use string instead of Enum
     if status is not None:
         try:
             product.status = ProductStatusEnum(status.lower())
@@ -353,6 +370,15 @@ def update_product(
     if image_url is not None:
         # Treat empty string as “no image”
         product.image_url = image_url or None
+
+    if season_key is not None:
+        product.season_key = season_key or None
+
+    if limited_start_at is not None:
+        product.limited_start_at = limited_start_at or None
+
+    if limited_end_at is not None:
+        product.limited_end_at = limited_end_at or None
 
     db.commit()
     db.refresh(product)

@@ -3,6 +3,7 @@ import { api } from "../../services/api.js"
 import { DG, G, StatusBadge, TH, TD, ActionBtns, EmptyRow, TableWrap, ExportBtn } from "./_adminShared"
 import FallbackImage from "../../components/FallbackImage.jsx"
 
+const PLACEHOLDER_IMAGE = new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href
 
 // ── Products export (CSV report) ─────────────────────────────────────────────
 function ExportProductsBtn({ data = [] }) {
@@ -71,8 +72,7 @@ function ExportProductsBtn({ data = [] }) {
   )
 }
 
-
-// ── Product images (same as Shop.jsx) ───────────────────────────────────────
+// ── Product images ───────────────────────────────────────
 import SpringFlowers_PurpleWrapper from "../../assets/products/SpringFlowers_PurpleWrapper.png"
 import SpringFlowers_PinkWrapper   from "../../assets/products/SpringFlowers_PinkWrapper.png"
 import SpringFlowers_GreenWrapper  from "../../assets/products/SpringFlowers_GreenWrapper.png"
@@ -135,18 +135,16 @@ const VASE_IMAGE_MAP = {
 }
 
 function getProductImage(product) {
-  // If a product doesn't have an uploaded image yet, fall back to the static map.
-  // If that map also doesn't have it, we return the ImageNotFound placeholder.
-  if (product.image_url) return product.image_url
-  return PRODUCT_IMAGE_MAP[product.name] || new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href
+  if (product.image_url === "none" || product.image_url === "") return PLACEHOLDER_IMAGE;
+  if (product.image_url) return product.image_url;
+  return PRODUCT_IMAGE_MAP[product.name] || VASE_IMAGE_MAP[product.name] || PLACEHOLDER_IMAGE;
 }
 
-// ── Add Product Modal ─────────────────────────────────────────────────────────
-const CATEGORIES = ["Flower", "Vase", "Wrapping", "Accessory", "Arrangement"]
+// ── Modals Setup ─────────────────────────────────────────────────────────
 const AVAILABILITIES = ["Available", "Limited", "Out of Stock"]
 const STATUSES = ["Active", "Inactive"]
 
-// ── Product Pagination (matches Staff/Customers design) ───────────────────────
+// ── Product Pagination ───────────────────────
 function ProductPagination({
   showing = "0 entries",
   page = 1,
@@ -185,7 +183,6 @@ function ProductPagination({
           ← Prev
         </button>
 
-        {/* Simple windowed page numbers: current +/- 1 */}
         {([page - 1, page, page + 1])
           .filter(p => p >= 1 && p <= totalPages)
           .map(p => (
@@ -236,27 +233,29 @@ function ProductPagination({
   )
 }
 
-function AddProductModal({ onClose, onSave }) {
+function AddProductModal({ onClose, onSave, categories }) {
   const [form, setForm] = useState({
     name: "", category: "", price: "", originalPrice: "",
     availability: "Available", status: "Active", description: "", image_url: "",
+
+    // Seasonal navigation (navbar button)
+    season_key: "",
+    limited_start_at: "",
+    limited_end_at: "",
   })
   const [errors, setErrors] = useState({})
   const [isUploading, setIsUploading] = useState(false)
 
-  // image preview (lightbox)
   const [showImageLightbox, setShowImageLightbox] = useState(false)
   const [lightboxSrc, setLightboxSrc] = useState(null)
-  // image removal
   const [removeImage, setRemoveImage] = useState(false)
-
 
   const set = (key) => (val) => setForm(f => ({ ...f, [key]: val }))
 
   const validate = () => {
     const err = {}
     if (!form.name.trim())          err.name = "Product name is required"
-    if (!form.category)             err.category = "Category is required"
+    if (!form.category.trim())      err.category = "Category is required"
     if (!form.price || isNaN(form.price) || +form.price <= 0) err.price = "Enter a valid price"
     if (form.originalPrice && (+form.originalPrice < +form.price)) err.originalPrice = "Original price must be ≥ selling price"
     return err
@@ -271,9 +270,7 @@ function AddProductModal({ onClose, onSave }) {
     fd.append("file", file)
 
     try {
-      // ✅ Correct
       const res = await api.post("/products/admin/upload-image", fd);
-      // Support nested axios response or custom fetch wrapper
       const url = res.data?.url || res.url
       if (url) {
         set("image_url")(url)
@@ -293,19 +290,44 @@ function AddProductModal({ onClose, onSave }) {
     try {
       const fd = new FormData()
       fd.append("name", form.name)
-      fd.append("category", form.category.toLowerCase())
+      fd.append("category", form.category.toLowerCase().trim())
       fd.append("price", form.price)
+      
+      // Only append original_price if it exists
+      if (form.originalPrice) {
+        fd.append("original_price", form.originalPrice)
+      }
+
+      // Seasonal navigation fields (optional)
+      if (form.season_key && form.season_key.trim()) {
+        fd.append("season_key", form.season_key.toLowerCase().trim())
+
+        // Send datetime only when season_key is set
+        if (form.limited_start_at) fd.append("limited_start_at", form.limited_start_at)
+        if (form.limited_end_at) fd.append("limited_end_at", form.limited_end_at)
+      } else {
+        // If clearing season, explicitly unset
+        fd.append("season_key", "")
+      }
+
       fd.append("status", form.status.toLowerCase())
-      fd.append("is_available", form.availability !== "Out of Stock")
+      fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false")
       if (form.description) fd.append("description", form.description)
       if (form.image_url) fd.append("image_url", form.image_url)
+      
       const stock = form.availability === "Out of Stock" ? 0 : form.availability === "Limited" ? 5 : 50
       fd.append("stock", String(stock))
+
       const res = await api.createProduct(fd)
       onSave(res.product)
       onClose()
     } catch (e) {
-      alert(e.message || "Failed to create product")
+      // Translate the error array into readable English!
+      let errorMsg = e.response?.data?.detail || e.message;
+      if (Array.isArray(errorMsg)) {
+        errorMsg = errorMsg.map(d => `${d.loc[d.loc.length - 1]}: ${d.msg}`).join("\n");
+      }
+      alert("Backend Rejected the Save:\n\n" + errorMsg);
     }
   }
 
@@ -316,7 +338,6 @@ function AddProductModal({ onClose, onSave }) {
       <div className="bg-white rounded-xl w-full overflow-hidden"
         style={{ maxWidth: "640px", maxHeight: "90vh", boxShadow: "0 24px 64px rgba(0,0,0,0.18)", border: "1px solid #e8edf2" }}>
 
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
           style={{ borderBottom: "1px solid #f1f5f9", background: "linear-gradient(135deg, #f0fdf4, #fafff8)" }}>
           <div>
@@ -330,10 +351,7 @@ function AddProductModal({ onClose, onSave }) {
           </button>
         </div>
 
-        {/* Body */}
         <div className="overflow-y-auto p-6 space-y-4" style={{ maxHeight: "calc(90vh - 130px)" }}>
-
-          {/* Product Image Upload */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Product Image <span className="text-gray-400 font-normal">(optional)</span></label>
             <div className="flex items-center gap-4">
@@ -357,11 +375,11 @@ function AddProductModal({ onClose, onSave }) {
                   }}
                   className="block"
                 >
-<FallbackImage
+                  <FallbackImage
                     src={form.image_url}
                     alt="Preview"
                     className="h-24 w-24 object-cover rounded-lg border border-gray-200 shadow-sm"
-                    fallbackSrc="/src/assets/default-img/ImageNotFound.webp"
+                    fallbackSrc={PLACEHOLDER_IMAGE}
                   />
                 </button>
 
@@ -395,19 +413,17 @@ function AddProductModal({ onClose, onSave }) {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
-<FallbackImage
+                  <FallbackImage
                     src={lightboxSrc}
                     alt="Enlarged preview"
                     className="w-full max-h-[78vh] object-contain bg-white"
-                    fallbackSrc="/EstingsLogo.svg"
+                    fallbackSrc={PLACEHOLDER_IMAGE}
                   />
                 </div>
               </div>
             )}
-
           </div>
 
-          {/* Product Name */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Product Name <span className="text-red-400">*</span></label>
             <input value={form.name} onChange={e => set("name")(e.target.value)}
@@ -419,25 +435,35 @@ function AddProductModal({ onClose, onSave }) {
             {errors.name && <p className="text-[11px] text-red-500 mt-1">{errors.name}</p>}
           </div>
 
-          {/* Category + Status row */}
           <div className="grid grid-cols-2 gap-3">
+            
+            {/* 👇 UPDATED CATEGORY BLOCK */}
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Category <span className="text-red-400">*</span></label>
+              <div className="flex items-end justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-gray-600">
+                  Category <span className="text-red-400">*</span>
+                </label>
+                <span className="text-[10px] text-green-600 font-medium">✨ Type to create new</span>
+              </div>
               <div className="relative">
-                <select value={form.category} onChange={e => set("category")(e.target.value)}
-                  className="w-full appearance-none px-3 py-2.5 text-sm border rounded-md bg-white cursor-pointer outline-none transition-all"
-                  style={{ borderColor: errors.category ? "#ef4444" : "#dde3ec", color: form.category ? "#0f172a" : "#9ca3af" }}
+                <input 
+                  list="category-options"
+                  value={form.category} 
+                  onChange={e => set("category")(e.target.value)}
+                  placeholder="Select or type new..."
+                  className="w-full px-3 py-2.5 text-sm border rounded-md bg-white outline-none transition-all capitalize"
+                  style={{ borderColor: errors.category ? "#ef4444" : "#dde3ec" }}
                   onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.10)` }}
-                  onBlur={e => { e.target.style.borderColor = errors.category ? "#ef4444" : "#dde3ec"; e.target.style.boxShadow = "none" }}>
-                  <option value="">Select category</option>
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                </svg>
+                  onBlur={e => { e.target.style.borderColor = errors.category ? "#ef4444" : "#dde3ec"; e.target.style.boxShadow = "none" }}
+                />
+                <datalist id="category-options">
+                  {categories.map(c => <option key={c} value={c} />)}
+                </datalist>
               </div>
               {errors.category && <p className="text-[11px] text-red-500 mt-1">{errors.category}</p>}
             </div>
+            {/* 👆 END UPDATED CATEGORY BLOCK */}
+
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Status</label>
               <div className="relative">
@@ -455,7 +481,6 @@ function AddProductModal({ onClose, onSave }) {
             </div>
           </div>
 
-          {/* Price + Original Price */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Selling Price (₱) <span className="text-red-400">*</span></label>
@@ -479,7 +504,6 @@ function AddProductModal({ onClose, onSave }) {
             </div>
           </div>
 
-          {/* Availability */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-2">Availability</label>
             <div className="flex gap-2">
@@ -497,7 +521,6 @@ function AddProductModal({ onClose, onSave }) {
             </div>
           </div>
 
-          {/* Description */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Description <span className="text-gray-400 font-normal">(optional)</span></label>
             <textarea value={form.description} onChange={e => set("description")(e.target.value)}
@@ -510,7 +533,6 @@ function AddProductModal({ onClose, onSave }) {
           </div>
         </div>
 
-        {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-6 py-4 flex-shrink-0"
           style={{ borderTop: "1px solid #f1f5f9", backgroundColor: "#fafbfc" }}>
           <button onClick={onClose}
@@ -533,8 +555,7 @@ function AddProductModal({ onClose, onSave }) {
   )
 }
 
-// ── Edit Product Modal ────────────────────────────────────────────────────────
-function EditProductModal({ product, onClose, onSave }) {
+function EditProductModal({ product, onClose, onSave, categories }) {
   const [form, setForm] = useState({
     name: product.name || "",
     category: product.category || "",
@@ -543,7 +564,12 @@ function EditProductModal({ product, onClose, onSave }) {
     availability: !product.is_available ? "Out of Stock" : product.stock <= (product.reorder_point || 10) ? "Limited" : "Available",
     status: product.status === "active" || product.status === "Active" ? "Active" : "Inactive",
     description: product.description || "",
-    image_url: getProductImage(product) || "",
+    image_url: product.image_url || "",
+
+    // Seasonal navigation fields
+    season_key: product.season_key || "",
+    limited_start_at: product.limited_start_at || "",
+    limited_end_at: product.limited_end_at || "",
   })
   const [errors, setErrors] = useState({})
   const [isUploading, setIsUploading] = useState(false)
@@ -551,13 +577,12 @@ function EditProductModal({ product, onClose, onSave }) {
   const [showImageLightbox, setShowImageLightbox] = useState(false)
   const [lightboxSrc, setLightboxSrc] = useState(null)
 
-
   const set = (key) => (val) => setForm(f => ({ ...f, [key]: val }))
 
   const validate = () => {
     const err = {}
     if (!form.name.trim())          err.name = "Product name is required"
-    if (!form.category)             err.category = "Category is required"
+    if (!form.category.trim())      err.category = "Category is required"
     if (!form.price || isNaN(form.price) || +form.price <= 0) err.price = "Enter a valid price"
     if (form.originalPrice && (+form.originalPrice < +form.price)) err.originalPrice = "Original price must be ≥ selling price"
     return err
@@ -578,6 +603,7 @@ function EditProductModal({ product, onClose, onSave }) {
       const url = res.data?.url || res.url
       if (url) {
         set("image_url")(url)
+        setRemoveImage(false)
       } else {
         throw new Error("No URL returned from server")
       }
@@ -594,29 +620,50 @@ function EditProductModal({ product, onClose, onSave }) {
     try {
       const fd = new FormData()
       fd.append("name", form.name)
-      fd.append("category", form.category.toLowerCase())
+      fd.append("category", form.category.toLowerCase().trim())
       fd.append("price", form.price)
+      
+      if (form.originalPrice) {
+        fd.append("original_price", form.originalPrice)
+      }
+      
       fd.append("status", form.status.toLowerCase())
-      fd.append("is_available", form.availability !== "Out of Stock")
+      fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false")
       if (form.description) fd.append("description", form.description)
 
-      // Ensure image removal persists
+      // Handle the image removal
       if (removeImage) {
-        fd.append("image_url", "")
-      } else if (form.image_url) {
+        fd.append("image_url", "none")
+      } else if (form.image_url && form.image_url !== "none") {
         fd.append("image_url", form.image_url)
       }
 
       const stock = form.availability === "Out of Stock" ? 0 : form.availability === "Limited" ? 5 : 50
       fd.append("stock", String(stock))
+
+      // Seasonal navigation fields
+      if (form.season_key && form.season_key.trim()) {
+        fd.append("season_key", form.season_key.toLowerCase().trim())
+        if (form.limited_start_at) fd.append("limited_start_at", form.limited_start_at)
+        if (form.limited_end_at) fd.append("limited_end_at", form.limited_end_at)
+      } else {
+        fd.append("season_key", "")
+      }
+
       const res = await api.updateProduct(product.id, fd)
       onSave(res.product)
       onClose()
     } catch (e) {
-      alert(e.message || "Failed to update product")
+      // Translate the error array into readable English!
+      let errorMsg = e.response?.data?.detail || e.message;
+      if (Array.isArray(errorMsg)) {
+        errorMsg = errorMsg.map(d => `${d.loc[d.loc.length - 1]}: ${d.msg}`).join("\n");
+      }
+      alert("Backend Rejected the Save:\n\n" + errorMsg);
     }
   }
 
+  const previewUrl = removeImage ? "" : (form.image_url || getProductImage(product));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
@@ -624,7 +671,6 @@ function EditProductModal({ product, onClose, onSave }) {
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="bg-white rounded-xl w-full overflow-hidden"
         style={{ maxWidth: "640px", maxHeight: "90vh", boxShadow: "0 24px 64px rgba(0,0,0,0.18)", border: "1px solid #e8edf2" }}>
-        {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
           style={{ borderBottom: "1px solid #f1f5f9", background: "linear-gradient(135deg, #f0fdf4, #fafff8)" }}>
           <div>
@@ -637,10 +683,8 @@ function EditProductModal({ product, onClose, onSave }) {
             </svg>
           </button>
         </div>
-        {/* Body */}
         <div className="overflow-y-auto p-6 space-y-4" style={{ maxHeight: "calc(90vh - 130px)" }}>
           
-          {/* Product Image Upload */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Product Image <span className="text-gray-400 font-normal">(optional)</span></label>
             <div className="flex items-center gap-4">
@@ -653,21 +697,23 @@ function EditProductModal({ product, onClose, onSave }) {
               />
               {isUploading && <span className="text-xs text-green-600 font-medium whitespace-nowrap animate-pulse">Uploading to Supabase...</span>}
             </div>
-            {form.image_url && (
+            
+            {previewUrl && previewUrl !== PLACEHOLDER_IMAGE && (
               <div className="mt-3 relative inline-block">
                 <button
                   type="button"
                   aria-label="Enlarge product image"
                   onClick={() => {
-                    setLightboxSrc(form.image_url)
+                    setLightboxSrc(previewUrl)
                     setShowImageLightbox(true)
                   }}
                   className="block"
                 >
-                  <img
-                    src={form.image_url}
+                  <FallbackImage
+                    src={previewUrl}
                     alt="Preview"
                     className="h-24 w-24 object-cover rounded-lg border border-gray-200 shadow-sm"
+                    fallbackSrc={PLACEHOLDER_IMAGE}
                   />
                 </button>
 
@@ -701,10 +747,11 @@ function EditProductModal({ product, onClose, onSave }) {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
-                  <img
+                  <FallbackImage
                     src={lightboxSrc}
                     alt="Enlarged preview"
                     className="w-full max-h-[78vh] object-contain bg-white"
+                    fallbackSrc={PLACEHOLDER_IMAGE}
                   />
                 </div>
               </div>
@@ -712,7 +759,6 @@ function EditProductModal({ product, onClose, onSave }) {
 
           </div>
 
-          {/* Product Name */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Product Name <span className="text-red-400">*</span></label>
             <input value={form.name} onChange={e => set("name")(e.target.value)}
@@ -723,25 +769,35 @@ function EditProductModal({ product, onClose, onSave }) {
               onBlur={e => { e.target.style.borderColor = errors.name ? "#ef4444" : "#dde3ec"; e.target.style.boxShadow = "none" }} />
             {errors.name && <p className="text-[11px] text-red-500 mt-1">{errors.name}</p>}
           </div>
-          {/* Category + Status row */}
           <div className="grid grid-cols-2 gap-3">
+            
+            {/* 👇 UPDATED CATEGORY BLOCK */}
             <div>
-              <label className="block text-xs font-semibold text-gray-600 mb-1.5">Category <span className="text-red-400">*</span></label>
+              <div className="flex items-end justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-gray-600">
+                  Category <span className="text-red-400">*</span>
+                </label>
+                <span className="text-[10px] text-green-600 font-medium">✨ Type to create new</span>
+              </div>
               <div className="relative">
-                <select value={form.category} onChange={e => set("category")(e.target.value)}
-                  className="w-full appearance-none px-3 py-2.5 text-sm border rounded-md bg-white cursor-pointer outline-none transition-all"
-                  style={{ borderColor: errors.category ? "#ef4444" : "#dde3ec", color: form.category ? "#0f172a" : "#9ca3af" }}
+                <input 
+                  list="category-options"
+                  value={form.category} 
+                  onChange={e => set("category")(e.target.value)}
+                  placeholder="Select or type new..."
+                  className="w-full px-3 py-2.5 text-sm border rounded-md bg-white outline-none transition-all capitalize"
+                  style={{ borderColor: errors.category ? "#ef4444" : "#dde3ec" }}
                   onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.10)` }}
-                  onBlur={e => { e.target.style.borderColor = errors.category ? "#ef4444" : "#dde3ec"; e.target.style.boxShadow = "none" }}>
-                  <option value="">Select category</option>
-                  {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-                <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                </svg>
+                  onBlur={e => { e.target.style.borderColor = errors.category ? "#ef4444" : "#dde3ec"; e.target.style.boxShadow = "none" }}
+                />
+                <datalist id="category-options">
+                  {categories.map(c => <option key={c} value={c} />)}
+                </datalist>
               </div>
               {errors.category && <p className="text-[11px] text-red-500 mt-1">{errors.category}</p>}
             </div>
+            {/* 👆 END UPDATED CATEGORY BLOCK */}
+
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Status</label>
               <div className="relative">
@@ -758,7 +814,6 @@ function EditProductModal({ product, onClose, onSave }) {
               </div>
             </div>
           </div>
-          {/* Price + Original Price */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-gray-600 mb-1.5">Selling Price (₱) <span className="text-red-400">*</span></label>
@@ -781,7 +836,6 @@ function EditProductModal({ product, onClose, onSave }) {
               {errors.originalPrice && <p className="text-[11px] text-red-500 mt-1">{errors.originalPrice}</p>}
             </div>
           </div>
-          {/* Availability */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-2">Availability</label>
             <div className="flex gap-2">
@@ -798,7 +852,6 @@ function EditProductModal({ product, onClose, onSave }) {
               ))}
             </div>
           </div>
-          {/* Description */}
           <div>
             <label className="block text-xs font-semibold text-gray-600 mb-1.5">Description <span className="text-gray-400 font-normal">(optional)</span></label>
             <textarea value={form.description} onChange={e => set("description")(e.target.value)}
@@ -810,7 +863,6 @@ function EditProductModal({ product, onClose, onSave }) {
               onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }} />
           </div>
         </div>
-        {/* Footer */}
         <div className="flex items-center justify-end gap-2 px-6 py-4 flex-shrink-0"
           style={{ borderTop: "1px solid #f1f5f9", backgroundColor: "#fafbfc" }}>
           <button onClick={onClose}
@@ -851,12 +903,12 @@ function ViewProductModal({ product, onClose }) {
           </button>
         </div>
         <div className="p-6 space-y-4">
-<FallbackImage
+          <FallbackImage
             src={getProductImage(product)}
             alt={product.name}
             className="w-full h-48 object-cover rounded-lg"
             style={{ border: "1px solid #e8edf2" }}
-            fallbackSrc="/EstingsLogo.svg"
+            fallbackSrc={PLACEHOLDER_IMAGE}
           />
           <div>
             <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Product Name</p>
@@ -865,11 +917,11 @@ function ViewProductModal({ product, onClose }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Category</p>
-              <p className="text-sm font-medium text-gray-800 mt-0.5">{product.category}</p>
+              <p className="text-sm font-medium text-gray-800 mt-0.5 capitalize">{product.category}</p>
             </div>
             <div>
               <p className="text-xs text-gray-400 font-semibold uppercase tracking-wider">Status</p>
-              <p className="text-sm font-medium text-gray-800 mt-0.5">{product.status}</p>
+              <p className="text-sm font-medium text-gray-800 mt-0.5 capitalize">{product.status}</p>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -918,7 +970,6 @@ export default function AdminProducts() {
   const [totalCount, setTotalCount] = useState(0)
   const [lowCount, setLowCount]     = useState(0)
   const [loading, setLoading]       = useState(true)
-
 
 const fetchProducts = useCallback(async () => {
   setLoading(true)
@@ -978,7 +1029,7 @@ const fetchProducts = useCallback(async () => {
   const filtered = products.filter(p => {
     const matchSearch   = !search   || p.name?.toLowerCase().includes(search.toLowerCase())
     const matchCategory = !category || p.category?.toLowerCase() === category.toLowerCase()
-    const matchStatus   = !status   || p.status === status
+    const matchStatus   = !status   || p.status === status.toLowerCase()
     return matchSearch && matchCategory && matchStatus
   }).sort((a, b) => {
     if (priceSort === "asc")  return +a.price - +b.price
@@ -998,19 +1049,24 @@ const fetchProducts = useCallback(async () => {
     setPage(1)
   }, [search, category, status, priceSort])
 
-
+  // 👇 Generate dynamic category list for modals AND filters
+  const baseCategories = ["Flower", "Vase", "Wrapping", "Accessory", "Arrangement", "Add-on"]
+  const allCategoriesRaw = [
+    ...baseCategories.map(c => c.toLowerCase()), 
+    ...products.map(p => p.category?.toLowerCase()).filter(Boolean)
+  ]
+  const dynamicCategories = Array.from(new Set(allCategoriesRaw))
+    .map(c => c.charAt(0).toUpperCase() + c.slice(1)) // Capitalize for the UI
 
   return (
     <div className="space-y-5">
-      {showModal && <AddProductModal onClose={() => setShowModal(false)} onSave={handleSave} />}
-      {editingProduct && <EditProductModal product={editingProduct} onClose={() => setEditingProduct(null)} onSave={handleEditSave} />}
+      {showModal && <AddProductModal onClose={() => setShowModal(false)} onSave={handleSave} categories={dynamicCategories} />}
+      {editingProduct && <EditProductModal product={editingProduct} onClose={() => setEditingProduct(null)} onSave={handleEditSave} categories={dynamicCategories} />}
       {viewingProduct && <ViewProductModal product={viewingProduct} onClose={() => setViewingProduct(null)} />}
 
       <h1 className="text-xl font-bold text-gray-900">Products</h1>
 
-      {/* Stat cards — equal height using flex + align-stretch */}
       <div className="flex flex-wrap gap-3 items-stretch">
-
         {/* Total Products — green */}
         <div className="rounded-xl p-5 relative overflow-hidden flex flex-col justify-between transition-all duration-200"
           style={{
@@ -1064,12 +1120,13 @@ const fetchProducts = useCallback(async () => {
             {/* Category */}
             <div className="relative">
               <select value={category} onChange={e => setCategory(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md bg-white text-gray-700 cursor-pointer outline-none transition-all"
+                className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md bg-white text-gray-700 cursor-pointer outline-none transition-all capitalize"
                 style={{ borderColor: "#dde3ec", minWidth: "130px" }}
                 onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
                 onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}>
                 <option value="">All Categories</option>
-                {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
+                {/* 👇 Using dynamic categories for the filter too! */}
+                {dynamicCategories.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
               <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
@@ -1145,16 +1202,16 @@ const fetchProducts = useCallback(async () => {
                 return (
                   <tr key={p.id} className="hover:bg-gray-50 transition-colors">
                     <TD>
-<FallbackImage
+                      <FallbackImage
                         src={getProductImage(p)}
                         alt={p.name}
                         className="w-10 h-10 rounded-lg object-cover"
                         style={{ border: "1px solid #e8edf2" }}
-                        fallbackSrc="/EstingsLogo.svg"
+                        fallbackSrc={PLACEHOLDER_IMAGE}
                       />
                     </TD>
                     <TD><span className="font-medium text-gray-800">{p.name}</span></TD>
-                    <TD><span className="text-gray-600">{p.category}</span></TD>
+                    <TD><span className="text-gray-600 capitalize">{p.category}</span></TD>
                     <TD>
                       <div>
                         <span className="font-semibold text-gray-800">₱{(+p.price).toLocaleString()}</span>
