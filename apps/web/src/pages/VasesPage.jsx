@@ -226,6 +226,8 @@ const VIEW_OPTIONS = [
 ]
 
 // ── Main page ─────────────────────────────────────────────────────────────────
+
+const dynamicCategories = ["All", ...new Set(ALL_VASES.map(v => v.category))]
 export default function VasesPage({ onNavigate }) {
   const [viewAs,   setViewAs]   = useState("grid3")
   const [sortBy,   setSortBy]   = useState("featured")
@@ -327,7 +329,7 @@ export default function VasesPage({ onNavigate }) {
             <div className="mb-7">
               <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-3">Collection</p>
               <div className="flex flex-col gap-0.5">
-                {CATEGORIES.map(cat => sideBtn(category===cat, ()=>setCategory(cat), cat))}
+                {dynamicCategories.map(cat => sideBtn(category===cat, ()=>setCategory(cat), cat))}
               </div>
             </div>
 

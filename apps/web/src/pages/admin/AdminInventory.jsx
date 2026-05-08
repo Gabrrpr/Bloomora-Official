@@ -226,8 +226,8 @@ export default function AdminInventory() {
   const fetchInventory = useCallback(async () => {
     setLoading(true)
     try {
-      // Reusing products endpoint since it joins inventory data (stock & reorder_point)
-      const { data } = await api.get("/products/admin/all")
+      const data = await api.get("/products/admin/all")
+      console.log("RAW INVENTORY DATA:", data) // 👈 ADD THIS LINE
       setInventory(data || [])
     } catch (err) {
       console.error("Failed to load inventory:", err)

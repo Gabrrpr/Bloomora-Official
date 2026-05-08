@@ -316,18 +316,24 @@ function DashboardPanel({ user }) {
   const Y_LABELS = ["₱15k", "₱10k", "₱5k", "₱0"]
 
   useEffect(() => {
-    // Fetch orders
-    api.getMyOrders('today').then(data => {
-      setOrdersToday(data.length || 0)
-    }).catch(() => setOrdersToday(0))
+    // 1. FETCH ACTUAL LOW STOCK INVENTORY
+    api.get("/products/low-stock")
+      .then(data => {
+        setLowStock(data || [])
+        setLowStockCount(data ? data.length : 0)
+      })
+      .catch(err => console.error("Failed to fetch low stock:", err))
 
-    api.getAdminOrders({ status: 'pending' }).then(data => {
-      setPendingOrders(data.length || 0)
-      setRecentOrders(data.slice(0,5) || [])
-    }).catch(() => {
-      setPendingOrders(0)
-      setRecentOrders([])
-    })
+    // 2. Placeholder Order fetches (Will naturally populate once Checkout is built)
+    if (api.getMyOrders) {
+      api.getMyOrders('today').then(data => setOrdersToday(data?.length || 0)).catch(() => setOrdersToday(0))
+    }
+    if (api.getAdminOrders) {
+      api.getAdminOrders({ status: 'pending' }).then(data => {
+        setPendingOrders(data?.length || 0)
+        setRecentOrders(data?.slice(0, 5) || [])
+      }).catch(() => { setPendingOrders(0); setRecentOrders([]) })
+    }
   }, [])
 
   return (
@@ -335,9 +341,11 @@ function DashboardPanel({ user }) {
       <h1 className="text-xl font-bold text-gray-900">Dashboard</h1>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <GreenCard label="Total Revenue Today" value="₱0" sub="↑ ₱0 vs yesterday" />
-        <WhiteCard label="Orders Today"    value={0} sub="+0 vs yesterday" accentColor="#3b82f6" />
-        <WhiteCard label="Pending Orders"  value={0} sub="−0 vs yesterday" subUp={false} accentColor="#f59e0b" />
-        <WhiteCard label="Low Stock Alerts" value={lowStockCount || 0} sub="Needs restock today" subGray accentColor="#ef4444" />
+        <WhiteCard label="Orders Today"    value={ordersToday} sub="+0 vs yesterday" accentColor="#3b82f6" />
+        <WhiteCard label="Pending Orders"  value={pendingOrders} sub="−0 vs yesterday" subUp={false} accentColor="#f59e0b" />
+        
+        {/* 👇 Real Low Stock Count is injected here */}
+        <WhiteCard label="Low Stock Alerts" value={lowStockCount} sub="Needs restock today" subGray accentColor="#ef4444" />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4">
@@ -425,11 +433,12 @@ function DashboardPanel({ user }) {
             <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Product</span>
             <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">Stock</span>
           </div>
+          {/* 👇 Real List Generation happening right here */}
           {lowStock.length === 0 ? (
             <p className="px-5 py-8 text-center text-sm text-gray-400">No low stock items</p>
           ) : (
             lowStock.slice(0, 5).map((item) => (
-              <div key={item.id} className="flex items-center gap-3 py-2.5 border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors">
+              <div key={item.id} className="flex items-center gap-3 py-2.5 border-b border-gray-50 px-5 last:border-0 hover:bg-gray-50 transition-colors">
                 <div className="w-8 h-8 rounded-lg flex-shrink-0 bg-orange-50 border border-orange-200 flex items-center justify-center">
                   <svg className="w-4 h-4 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-2.048-.833-2.818 0L3.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
@@ -437,10 +446,10 @@ function DashboardPanel({ user }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
-                  <p className="text-xs text-gray-500">Stock: {item.stock}/{item.reorder_point}</p>
+                  <p className="text-[10px] text-gray-500">Reorder at: {item.reorder_point}</p>
                 </div>
-                <span className="text-xs font-semibold text-red-600 px-2 py-0.5 rounded-full bg-red-50">
-                  {item.stock === 0 ? 'Out' : `${item.stock}`}
+                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${item.stock === 0 ? 'bg-red-50 text-red-600' : 'bg-orange-50 text-orange-600'}`}>
+                  {item.stock === 0 ? 'Out' : `${item.stock} left`}
                 </span>
               </div>
             ))

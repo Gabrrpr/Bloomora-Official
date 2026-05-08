@@ -319,7 +319,7 @@ def update_product(
     is_available: Optional[bool] = Form(None),
     image_url: Optional[str] = Form(None),
     stock: Optional[int] = Form(None),
-    db: Session = Depends(get_db),
+        db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Update an existing product. Admin/Staff only."""

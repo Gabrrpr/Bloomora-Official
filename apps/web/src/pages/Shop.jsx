@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import ProductPreviewModal from "../components/ProductPreviewModal.jsx"
 import Footer from "../components/Footer.jsx"
+import { api } from "../services/api.js" // 👈 Added API import
 
 import SpringFlowers_PurpleWrapper from "../assets/products/SpringFlowers_PurpleWrapper.png"
 import SpringFlowers_PinkWrapper   from "../assets/products/SpringFlowers_PinkWrapper.png"
@@ -46,7 +47,6 @@ const RIBBON_COLORS = {
   "Popular":"#f59e0b", "Premium":"#7c3aed", "Rare Find":"#ec4899",
 }
 
-const CATEGORIES   = ["All","Roses","Bouquets","Tulips","Arrangements"]
 const PRICE_RANGES = [[0,500],[500,1000],[1000,1500],[1500,2500]]
 const SORT_OPTIONS = [
   { value:"best-selling", label:"Best Selling" },
@@ -157,9 +157,6 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
   )
 }
 
-// ── Mobile list card ──────────────────────────────────────────────────────────
-// Image fills left column height naturally.
-// Bottom row: price on left, [View] + [♥] on right — no stretching.
 function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
   const wishlisted = wishlist.includes(product.id)
   return (
@@ -168,7 +165,6 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
       style={{ border:"1px solid #e8edf0", borderRadius:"12px", overflow:"hidden", cursor:"pointer", alignItems:"stretch" }}
       onClick={() => onPreview(product)}
     >
-      {/* ── Image column — stretches to card height ── */}
       <div className="relative flex-shrink-0" style={{ width:"108px", minHeight:"108px", backgroundColor:"#f8fafb", position:"relative" }}>
         <img
           src={product.image}
@@ -191,10 +187,7 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
         </div>
       </div>
 
-      {/* ── Content column ── */}
       <div style={{ flex:1, minWidth:0, padding:"11px 12px", display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
-
-        {/* Top: category · name · stars */}
         <div>
           <p style={{ fontSize:"9px", fontWeight:800, letterSpacing:"0.16em", textTransform:"uppercase", color:G, margin:"0 0 3px" }}>
             {product.category}
@@ -208,10 +201,7 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
           </div>
         </div>
 
-        {/* Bottom: price left · [View] + [♥] right */}
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"6px", marginTop:"8px" }}>
-
-          {/* Price */}
           <div style={{ display:"flex", alignItems:"baseline", gap:"4px" }}>
             <span style={{ fontSize:"15px", fontWeight:800, color:G, lineHeight:1 }}>
               ₱{product.price.toLocaleString()}
@@ -221,7 +211,6 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
             </span>
           </div>
 
-          {/* View + Heart — grouped, no stretch */}
           <div style={{ display:"flex", alignItems:"center", gap:"6px", flexShrink:0 }}>
             <button
               onClick={e => { e.stopPropagation(); onPreview(product) }}
@@ -258,7 +247,6 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
             </button>
           </div>
         </div>
-
       </div>
     </div>
   )
@@ -313,7 +301,8 @@ function GridCard({ product, wishlist, toggleWishlist, onPreview }) {
   )
 }
 
-function SidebarContent({ activeCategory, setActiveCategory, priceRange, setPriceRange, onClose }) {
+// ── 👇 CHANGED: SidebarContent now receives `categories` as a prop
+function SidebarContent({ categories, activeCategory, setActiveCategory, priceRange, setPriceRange, onClose }) {
   return (
     <div>
       {onClose && (
@@ -325,11 +314,12 @@ function SidebarContent({ activeCategory, setActiveCategory, priceRange, setPric
         </div>
       )}
       <div className="mb-6">
-        <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2.5">Category</p>
+        <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2.5">Brand</p>
         <div className="flex flex-col gap-0.5">
-          {CATEGORIES.map(cat => (
+          {/* 👇 Now maps over the dynamic categories */}
+          {categories.map(cat => (
             <button key={cat} onClick={() => { setActiveCategory(cat); onClose?.(); }}
-              className="text-left px-3 py-2 rounded-lg text-sm transition-all"
+              className="text-left px-3 py-2 rounded-lg text-sm transition-all capitalize"
               style={{ fontWeight:activeCategory===cat?600:400, color:activeCategory===cat?"white":"#4b5563", backgroundColor:activeCategory===cat?G:"transparent" }}
               onMouseEnter={e => { if (activeCategory!==cat) e.currentTarget.style.backgroundColor="#f3f4f6" }}
               onMouseLeave={e => { if (activeCategory!==cat) e.currentTarget.style.backgroundColor="transparent" }}>
@@ -350,11 +340,12 @@ function SidebarContent({ activeCategory, setActiveCategory, priceRange, setPric
               ₱{min.toLocaleString()} – ₱{max.toLocaleString()}
             </button>
           ))}
-          <button onClick={() => setPriceRange([0, 2500])}
+          {/* 👇 Uses 700 instead of 2500 specifically for the AddOns page */}
+          <button onClick={() => setPriceRange([0, 700])}
             className="text-left px-3 py-2 rounded-lg text-sm transition-all"
-            style={{ fontWeight:priceRange[0]===0&&priceRange[1]===2500?600:400, color:priceRange[0]===0&&priceRange[1]===2500?"white":"#4b5563", backgroundColor:priceRange[0]===0&&priceRange[1]===2500?G:"transparent" }}
-            onMouseEnter={e => { if (priceRange[0]!==0||priceRange[1]!==2500) e.currentTarget.style.backgroundColor="#f3f4f6" }}
-            onMouseLeave={e => { if (priceRange[0]!==0||priceRange[1]!==2500) e.currentTarget.style.backgroundColor="transparent" }}>
+            style={{ fontWeight:priceRange[0]===0&&priceRange[1]===700?600:400, color:priceRange[0]===0&&priceRange[1]===700?"white":"#4b5563", backgroundColor:priceRange[0]===0&&priceRange[1]===700?G:"transparent" }}
+            onMouseEnter={e => { if (priceRange[0]!==0||priceRange[1]!==700) e.currentTarget.style.backgroundColor="#f3f4f6" }}
+            onMouseLeave={e => { if (priceRange[0]!==0||priceRange[1]!==700) e.currentTarget.style.backgroundColor="transparent" }}>
             All Prices
           </button>
         </div>
@@ -370,7 +361,7 @@ function SidebarContent({ activeCategory, setActiveCategory, priceRange, setPric
   )
 }
 
-function MobileFilterDrawer({ open, onClose, activeCategory, setActiveCategory, priceRange, setPriceRange }) {
+function MobileFilterDrawer({ open, onClose, categories, activeCategory, setActiveCategory, priceRange, setPriceRange }) {
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden"
     else document.body.style.overflow = ""
@@ -388,7 +379,7 @@ function MobileFilterDrawer({ open, onClose, activeCategory, setActiveCategory, 
           onClick={e => e.stopPropagation()}>
           <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 rounded-full bg-gray-300"/></div>
           <div style={{ padding:"12px 24px 32px" }}>
-            <SidebarContent activeCategory={activeCategory} setActiveCategory={setActiveCategory}
+            <SidebarContent categories={dynamicCategories} activeCategory={category} setActiveCategory={setCategory}
               priceRange={priceRange} setPriceRange={setPriceRange} onClose={onClose}/>
           </div>
         </div>
@@ -408,15 +399,41 @@ export default function Shop({ onNavigate }) {
   const width    = useWidth()
   const isMobile = width < 768
 
-  const [viewAs, setViewAs]             = useState("grid3")
-  const [sortBy, setSortBy]             = useState("best-selling")
+  const [products, setProducts]           = useState([]) // 👈 State for dynamic backend data
+  const [viewAs, setViewAs]               = useState("grid3")
+  const [sortBy, setSortBy]               = useState("best-selling")
   const [activeCategory, setActiveCategory] = useState("All")
-  const [priceRange, setPriceRange]     = useState([0, 2500])
-  const [wishlist, setWishlist]         = useState([])
-  const [sortOpen, setSortOpen]         = useState(false)
-  const [filterOpen, setFilterOpen]     = useState(false)
+  const [priceRange, setPriceRange]       = useState([0, 2500])
+  const [wishlist, setWishlist]           = useState([])
+  const [sortOpen, setSortOpen]           = useState(false)
+  const [filterOpen, setFilterOpen]       = useState(false)
   const [previewProduct, setPreviewProduct] = useState(null)
   const sortRef = useRef(null)
+
+  // 👇 API Fetch Effect
+  useEffect(() => {
+    // Attempt to grab live products from backend, otherwise fallback to the hardcoded list
+    api.get("/products/")
+      .then(data => {
+        if (data && data.length > 0) {
+          const mapped = data.map(p => {
+             const fallback = ALL_PRODUCTS.find(f => f.name === p.name) || {}
+             return {
+                ...p,
+                image: p.image_url || fallback.image || ALL_PRODUCTS[0].image,
+                original: p.original_price || fallback.original || p.price * 1.2,
+                rating: fallback.rating || 5.0,
+                reviews: fallback.reviews || 0,
+                ribbon: fallback.ribbon || null,
+             }
+          })
+          setProducts(mapped)
+        } else {
+          setProducts(ALL_PRODUCTS)
+        }
+      })
+      .catch(() => setProducts(ALL_PRODUCTS))
+  }, [])
 
   useEffect(() => {
     if (isMobile && (viewAs === "grid3" || viewAs === "grid4")) setViewAs("grid2")
@@ -430,8 +447,11 @@ export default function Shop({ onNavigate }) {
 
   const toggleWishlist = id => setWishlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
 
-  const filtered = ALL_PRODUCTS
-    .filter(p => activeCategory === "All" || p.category === activeCategory)
+  // 👇 The Magic Dynamic Categories Array using a Set!
+  const dynamicCategories = ["All", ...new Set(products.map(p => p.category).filter(Boolean))]
+
+  const filtered = products
+    .filter(p => activeCategory === "All" || p.category.toLowerCase() === activeCategory.toLowerCase())
     .filter(p => p.price >= priceRange[0] && p.price <= priceRange[1])
     .sort((a, b) => {
       if (sortBy === "price-asc")  return a.price - b.price
@@ -456,6 +476,7 @@ export default function Shop({ onNavigate }) {
   return (
     <div className="min-h-screen bg-white">
       <MobileFilterDrawer open={filterOpen} onClose={() => setFilterOpen(false)}
+        categories={dynamicCategories} // 👈 Passed down
         activeCategory={activeCategory} setActiveCategory={setActiveCategory}
         priceRange={priceRange} setPriceRange={setPriceRange}/>
 
@@ -463,7 +484,8 @@ export default function Shop({ onNavigate }) {
         <div className="flex gap-6 lg:gap-8">
 
           <aside className="w-48 flex-shrink-0 hidden lg:block">
-            <SidebarContent activeCategory={activeCategory} setActiveCategory={setActiveCategory}
+            <SidebarContent categories={dynamicCategories} // 👈 Passed down
+              activeCategory={activeCategory} setActiveCategory={setActiveCategory}
               priceRange={priceRange} setPriceRange={setPriceRange}/>
           </aside>
 
@@ -491,7 +513,7 @@ export default function Shop({ onNavigate }) {
                     <button key={key} onClick={() => setViewAs(key)}
                       style={{
                         width:"32px", height:"32px",
-                        display:"flex", alignItems:"center", justifyContent:"center",
+                        display:"flex", alignItems:"center", justifyCenter:"center",
                         flexShrink:0,
                         backgroundColor:viewAs===key?G:"white",
                         color:viewAs===key?"white":"#6b7280",
@@ -558,7 +580,7 @@ export default function Shop({ onNavigate }) {
             {isMobile && activeFiltersCount > 0 && (
               <div className="flex flex-wrap gap-2 mb-4">
                 {activeCategory !== "All" && (
-                  <span className="flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full"
+                  <span className="flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full capitalize"
                     style={{ backgroundColor:"#f0fdf4", color:G, border:`1px solid ${G}33` }}>
                     {activeCategory}
                     <button onClick={() => setActiveCategory("All")} className="ml-0.5 text-green-600 hover:text-green-800">×</button>
