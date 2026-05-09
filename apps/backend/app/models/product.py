@@ -47,6 +47,8 @@ class Product(Base):
     wrapping = relationship("Wrapping", back_populates="product", uselist=False)
     accessory = relationship("Accessory", back_populates="product", uselist=False)
     discounts = relationship("Discount", back_populates="product")
+    campaigns = relationship("Campaign", secondary="product_campaigns", back_populates="products")
+
 
 class Inventory(Base):
     __tablename__ = "inventory"

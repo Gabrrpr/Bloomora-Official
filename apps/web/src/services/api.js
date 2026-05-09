@@ -186,6 +186,35 @@ export const api = {
     return this.get('/products/customization/all');
   },
 
+  // ── Campaigns (Admin + Public) ─────────────────────────────────────────
+  async getActiveCampaigns() {
+    return this.get('/campaigns/active');
+  },
+
+  async getCampaigns({ only_active = false } = {}) {
+    const params = new URLSearchParams();
+    params.append('only_active', String(!!only_active));
+    return this.get(`/campaigns/?${params.toString()}`);
+  },
+
+  async createCampaign(data) {
+    return this.post('/campaigns/', data);
+  },
+
+  async updateCampaign(campaignId, data) {
+    return this.put(`/campaigns/${campaignId}`, data);
+  },
+
+  async deleteCampaign(campaignId) {
+    return this.delete(`/campaigns/${campaignId}`);
+  },
+
+  async setCampaignProducts(campaignId, product_ids) {
+    // body: { product_ids: [...] }
+    return this.post(`/campaigns/${campaignId}/products`, { product_ids });
+  },
+
+
   // ── Vases ────────────────────────────────────────────────────────────────
   async getVases(category = null, minPrice = null, maxPrice = null) {
     const params = new URLSearchParams();

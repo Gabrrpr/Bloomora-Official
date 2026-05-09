@@ -683,12 +683,19 @@ function PreviewSitePanel({ onBack }) {
       <p className="text-base font-semibold text-gray-700 mb-1">Preview Site</p>
       <p className="text-sm text-gray-400 mb-6 max-w-xs">Open the customer-facing storefront in a new tab.</p>
       <div className="flex items-center gap-3">
-        <a href="http://localhost:5173" target="_blank" rel="noopener noreferrer"
+        <button
+          type="button"
+          onClick={() => {
+            const url = (import.meta.env.VITE_WEB_URL || "").trim() || "http://localhost:5173";
+            window.open(url, "_blank", "noopener,noreferrer");
+          }}
           className="px-5 py-2.5 text-sm font-semibold text-white rounded-lg hover:opacity-90 transition-all flex items-center gap-2"
-          style={{ background:`linear-gradient(135deg,${DG},${G})` }}>
+          style={{ background:`linear-gradient(135deg,${DG},${G})` }}
+        >
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
           Open Storefront
-        </a>
+        </button>
+
         <button onClick={onBack} className="px-5 py-2.5 text-sm font-semibold rounded-lg border hover:bg-gray-50 transition-all" style={{ borderColor:"#dde3ec", color:"#6b7280" }}>
           Back to Dashboard
         </button>
