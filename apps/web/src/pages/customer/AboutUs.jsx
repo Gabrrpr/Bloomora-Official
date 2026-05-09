@@ -1,9 +1,9 @@
 import { useState } from "react"
-import { useTheme } from "../context/ThemeContext"
-import pageBg5    from "../assets/PageBG5.png"
-import aboutImg1  from "../assets/AboutUsImg1.png"
-import aboutImg2  from "../assets/AboutUsImg2.png"
-import Footer     from "../components/Footer"
+import { useTheme } from "../../context/ThemeContext"
+import pageBg5    from "../../assets/PageBG5.webp"
+import aboutImg1  from "../../assets/AboutUsImg1.png"
+import aboutImg2  from "../../assets/AboutUsImg2.png"
+import Footer     from "../../components/Footer"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -73,7 +73,7 @@ export default function AboutUs({ onNavigate }) {
     <div className="min-h-screen" style={{ backgroundColor: pageBg }}>
 
       {/* Hero — image-based, always looks good */}
-      <div className="relative overflow-hidden" style={{ minHeight:"320px" }}>
+      <div className="relative overflow-hidden" style={{ minHeight:"280px" }}>
         <img src={pageBg5} alt="" className="absolute inset-0 w-full h-full object-cover"/>
         <div className="absolute inset-0" style={{ background:"linear-gradient(to right,rgba(12,87,62,0.88) 0%,rgba(12,87,62,0.65) 60%,rgba(12,87,62,0.3) 100%)" }}/>
         <div className="relative z-10 max-w-5xl mx-auto px-6 sm:px-10 py-20">

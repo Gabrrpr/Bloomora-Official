@@ -1,14 +1,14 @@
-import { useTheme } from "../context/ThemeContext"
-import pageBg5      from "../assets/PageBG5.png"
-import Footer       from "../components/Footer"
+import { useTheme } from "../../context/ThemeContext"
+import pageBg5      from "../../assets/PageBG5.webp"
+import Footer       from "../../components/Footer"
 
-import birthdayImg    from "../assets/Birthday.png"
-import anniversaryImg from "../assets/Anniversary.png"
-import weddingImg     from "../assets/Wedding.png"
-import graduationImg  from "../assets/Graduation.png"
-import sympathyImg    from "../assets/Sympathy.png"
-import justBecauseImg from "../assets/JustBecause.png"
-import openingsImg    from "../assets/Openings.png"
+import birthdayImg    from "../../assets/Birthday.png"
+import anniversaryImg from "../../assets/Anniversary.png"
+import weddingImg     from "../../assets/Wedding.png"
+import graduationImg  from "../../assets/Graduation.png"
+import sympathyImg    from "../../assets/Sympathy.png"
+import justBecauseImg from "../../assets/JustBecause.png"
+import openingsImg    from "../../assets/Openings.png"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -39,7 +39,7 @@ export default function AllOccasions({ onNavigate }) {
   return (
     <div className="min-h-screen" style={{ backgroundColor: pageBg }}>
 
-      {/* Hero — image-based, always readable */}
+      {/* Hero */}
       <div className="relative overflow-hidden" style={{ minHeight:"280px" }}>
         <img src={pageBg5} alt="" className="absolute inset-0 w-full h-full object-cover"/>
         <div className="absolute inset-0"
@@ -48,13 +48,13 @@ export default function AllOccasions({ onNavigate }) {
           <p className="text-xs font-bold tracking-widest uppercase mb-4" style={{ color:"#86efac" }}>Shop by Occasion</p>
           <h1 className="text-4xl sm:text-5xl font-bold text-white mb-3 leading-tight">All Occasions</h1>
           <p className="text-base max-w-xl" style={{ color:"rgba(255,255,255,0.78)" }}>
-            Whatever the moment calls for, we have the perfect arrangement. Browse by occasion and find flowers that say exactly what you feel.
+            Whatever the moment calls for, we have the right arrangement for it. Find flowers that say exactly what you feel.
           </p>
         </div>
       </div>
 
       {/* Occasions grid */}
-      <div className="max-w-6xl mx-auto px-6 sm:px-10 py-16">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-10 py-12 sm:py-16">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
           {OCCASIONS.map(occ => (
             <div
