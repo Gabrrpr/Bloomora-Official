@@ -15,6 +15,8 @@ import AdminActivityLogs   from "./AdminActivityLogs"
 import AdminSettings       from "./AdminSettings"
 import AdminHero           from "./AdminHero"
 import AdminAdvertisements from "./AdminAdvertisements"
+import AdminCampaigns    from "./AdminCampaigns"
+
 import { api } from "../../services/api.js"
 import { GreenCard, WhiteCard, ComingSoon } from "./_adminShared"
 
@@ -49,6 +51,8 @@ const NAV_APPEARANCE = [
   { label: "Hero Section",   d: "M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" },
   { label: "Advertisements", d: "M3 7h18M3 7a2 2 0 00-2 2v8a2 2 0 002 2h18a2 2 0 002-2V9a2 2 0 00-2-2M3 7V5a2 2 0 012-2h14a2 2 0 012 2v2M8 13h4m-4 3h8" },
   { label: "Preview Site",   d: "M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" },
+  { label: "Campaigns",     staff: true, d: "M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7" },
+
 ]
 
 const REVENUE_PERIODS = [
@@ -1039,10 +1043,12 @@ export default function AdminDashboard({ onNavigate }) {
       case "Settings":       return <AdminSettings />
       case "Hero Section":   return <AdminHero />
       case "Advertisements": return <AdminAdvertisements />
-      case "Preview Site":   return <PreviewSitePanel onBack={() => goTo("Dashboard")} />
+      case "Campaigns":      return <AdminCampaigns />
+      case "Preview Site":   return <PreviewSitePanel onBack={()=>goTo("Dashboard")} />
       default:               return <ComingSoon label={active} />
     }
   }
+
 
   return (
     <div className="min-h-screen flex" style={{ backgroundColor: t.pageBg }}>

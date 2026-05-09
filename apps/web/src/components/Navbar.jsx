@@ -663,7 +663,10 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
   const liveCartCount = useCartCount();
   const cartCount = propCartCount ?? liveCartCount;
 
+  // 🌟 NEW: State to hold active campaigns
+  const [activeCampaigns, setActiveCampaigns] = useState([]);
   const [customCategories, setCustomCategories] = useState([]);
+  
   const [active, setActive]                     = useState("Home");
   const [locationOpen, setLocationOpen]         = useState(false);
   const [selectedLocation, setSelectedLocation] = useState("Manila");
@@ -690,6 +693,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
   const handleBranchSelect = loc => { setSelectedLocation(loc); setLocationOpen(false); setBranchModal(loc); };
   const handleLogout       = ()  => { logout(); setUserOpen(false); onNavigate?.("login"); };
 
+  // Fetch standard custom categories
   useEffect(() => {
     api.get("/products/")
       .then(data => {
@@ -703,27 +707,59 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
       .catch(err => console.error("Failed to load nav categories", err));
   }, []);
 
+  // 🌟 NEW: Fetch Active Campaigns on load
+  useEffect(() => {
+    api.getActiveCampaigns()
+      .then(data => {
+        const list = data?.campaigns ? data.campaigns : data || [];
+        setActiveCampaigns(Array.isArray(list) ? list : []);
+      })
+      .catch(err => console.error("Failed to load active campaigns", err));
+  }, []);
+
+  // Format dynamic links
   const generatedLinks = customCategories.map(cat => ({
     label: cat.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
     page: "shop",
     isCustomCategory: true,
-    highlight: true,
   }));
 
+  // 🌟 NEW: Format Campaigns as Navigation Links (with highlight & hearts!)
+  const campaignLinks = activeCampaigns.map(c => ({
+    label: c.name,
+    page: "shop",
+    isCampaign: true,
+    campaignKey: c.campaign_key,
+    highlight: true, // This triggers the pink color and floating hearts!
+  }));
+
+  // Combine standard links with dynamic ones
   const shopIndex = NAV_LINKS.findIndex(l => l.label === "Shop");
   const FINAL_NAV_LINKS = [
     ...NAV_LINKS.slice(0, shopIndex + 1),
-    ...generatedLinks,
+    ...campaignLinks,  // <-- Campaigns injected right after "Shop"
+    ...generatedLinks, // <-- Standard custom categories injected next
     ...NAV_LINKS.slice(shopIndex + 1)
   ];
 
+  // 🌟 UPDATED: Handle routing and state management
   const handleNavClick = link => {
     setActive(link.label);
+    
+    // 1. Handle Categories
     if (link.isCustomCategory) {
       localStorage.setItem("bloomora_active_category", link.label.toLowerCase());
     } else {
       localStorage.removeItem("bloomora_active_category");
     }
+
+    // 2. Handle Campaigns
+    if (link.isCampaign) {
+      localStorage.setItem("bloomora_active_campaign", link.campaignKey);
+    } else {
+      localStorage.removeItem("bloomora_active_campaign");
+    }
+
     if (link.page) onNavigate?.(link.page);
     setMobileOpen(false);
   };
@@ -800,7 +836,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                       }}
                       onMouseEnter={e => { if (active!==link.label) e.currentTarget.style.color = link.highlight ? (isDark?"#ff4d6d":"#e11d48") : (isDark ? "#86efac" : NAVY_GREEN); }}
                       onMouseLeave={e => { if (active!==link.label) e.currentTarget.style.color = link.highlight ? (isDark?"#ff6b81":"#f43f5e") : (isDark ? "#d1d5db" : "#4b5563"); }}>
-                      {/* Floating hearts for highlight (e.g. Mother's Day) links */}
+                      {/* Floating hearts for highlight links! */}
                       {link.highlight && <FloatingHearts />}
                       {link.label}
                       {(link.dropdown||link.categories) && <svg className="w-3 h-3 text-gray-400 ml-0.5 transition-transform" style={{ transform:openMenu===link.label?"rotate(180deg)":"rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>}
@@ -812,6 +848,8 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                     )}
                   </div>
                 ))}
+                
+                {/* Make it Personal Button */}
                 <div className="relative" ref={mipRef} onMouseEnter={openMipD} onMouseLeave={closeMipD}>
                   <button onClick={() => onNavigate?.("make-it-personal")}
                     className="whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full text-white flex items-center gap-1 transition-all hover:shadow-md hover:scale-105"
@@ -825,9 +863,8 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
               </div>
             </div>
 
-            {/* ── Right icons ── */}
+            {/* Right side icons */}
             <div className="flex items-center gap-1 sm:gap-2">
-              {/* Search — all screen sizes */}
               <button onClick={() => setSearchOpen(true)}
                 className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors"
                 style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
@@ -836,10 +873,8 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                 <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/></svg>
               </button>
 
-              {/* Dark mode toggle — visible on all breakpoints */}
               <DarkModeToggle />
 
-              {/* Cart */}
               <div className="relative" ref={cartRef}>
                 <button onClick={() => onNavigate?.("cart")}
                   className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative"
@@ -852,7 +887,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                 {cartOpen && <div onMouseEnter={openCartD} onMouseLeave={closeCartD}><CartDropdown cartCount={cartCount} onNavigate={onNavigate} /></div>}
               </div>
 
-              {/* User */}
               <div className="relative" ref={userRef}>
                 <button onClick={handleAccountClick}
                   className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors"
@@ -866,7 +900,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                 {userOpen && <div onMouseEnter={openUserD} onMouseLeave={closeUserD}><UserHoverDropdown user={user} onNavigate={p => { onNavigate?.(p); setUserOpen(false); }} onLogout={handleLogout} /></div>}
               </div>
 
-              {/* Hamburger — mobile only */}
               <button className="lg:hidden w-8 h-8 flex items-center justify-center rounded-full transition-colors ml-1"
                 style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
                 onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"}
@@ -912,6 +945,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                         : (link.highlight ? (isDark ? "#ff6b81" : "#f43f5e") : (isDark ? "#d1d5db" : "#4b5563")),
                       borderColor: isDark ? "#2d3748" : "#f3f4f6",
                     }}>
+                    {link.highlight && <span className="mr-1">✨</span>}
                     {link.label}
                   </button>
                   {link.dropdown && (
@@ -930,7 +964,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                 </div>
               ))}
 
-              {/* Make it Personal */}
               <div className="px-2 py-3 border-t" style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6" }}>
                 <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>Make it Personal</p>
                 <div className="space-y-1">

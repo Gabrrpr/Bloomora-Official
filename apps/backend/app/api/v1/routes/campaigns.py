@@ -14,6 +14,7 @@ from app.schemas.campaigns import (
     CampaignUpdateRequest,
     CampaignOut,
     CampaignProductsResponse,
+    CampaignProductsRequest,
 )
 
 router = APIRouter(prefix="/campaigns", tags=["campaigns"])
@@ -113,26 +114,33 @@ def delete_campaign(
 @router.post("/{campaign_id}/products", response_model=CampaignProductsResponse)
 def set_campaign_products(
     campaign_id: UUID,
-    product_ids: List[UUID],
+    payload: CampaignProductsRequest, # 👈 Changed from List[UUID] to the Schema
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    # expects body like: {"product_ids":[...]}
     require_admin_or_staff(current_user)
 
     campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
     if not campaign:
         raise HTTPException(status_code=404, detail="Campaign not found")
 
-    products = db.query(Product).filter(Product.id.in_(product_ids)).all()
+    # 👈 Access product_ids through payload
+    products = db.query(Product).filter(Product.id.in_(payload.product_ids)).all()
     campaign.products = products
     db.commit()
     db.refresh(campaign)
 
-    return CampaignProductsResponse(
-        campaign=campaign,
-        product_ids=[p.id for p in campaign.products],
-    )
+    return {
+        "campaign": {
+            "id": campaign.id,
+            "name": campaign.name,
+            "campaign_key": campaign.campaign_key,
+            "start_at": campaign.start_at,
+            "end_at": campaign.end_at,
+            "is_active": campaign.is_active
+        },
+        "product_ids": [p.id for p in campaign.products]
+    }
 
 
 @router.get("/active", response_model=List[CampaignOut])

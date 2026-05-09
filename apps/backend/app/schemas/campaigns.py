@@ -18,6 +18,9 @@ class CampaignUpdateRequest(BaseModel):
     start_at: Optional[datetime] = None
     end_at: Optional[datetime] = None
     is_active: Optional[bool] = None
+    
+class CampaignProductsRequest(BaseModel):
+    product_ids: List[UUID]
 
 
 class CampaignOut(BaseModel):
