@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react"
+import { useTheme } from "../context/ThemeContext"
 
-const G = "#2E8B34"
-const DG = "#0C573E"
+const G    = "#2E8B34"
+const G_DARK = "#4ade80"   // bright green for dark mode accents
 
 const FEATURES = [
   {
@@ -44,6 +45,7 @@ const FEATURES = [
 ]
 
 export default function TrustBar() {
+  const { isDark } = useTheme()
   const ref = useRef(null)
   const [visible, setVisible] = useState(false)
 
@@ -56,22 +58,46 @@ export default function TrustBar() {
     return () => observer.disconnect()
   }, [])
 
+  const iconColor  = isDark ? G_DARK : G
+  const titleColor = isDark ? "#e5e7eb" : "#1f2937"
+  const subColor   = isDark ? "#9ca3af" : "#6b7280"
+  const bgColor    = isDark ? "#111827" : "white"
+  const borderColor = isDark ? "#2d3748" : "#e9f5ea"
+  const dividerColor = isDark ? "#2d3748" : "#e5e7eb"
+
   return (
-    <div ref={ref} className="w-full py-4 px-4 sm:px-8"
-      style={{ backgroundColor: "white", borderBottom: "1px solid #e9f5ea", borderTop: "1px solid #e9f5ea" }}>
+    <div
+      ref={ref}
+      className="w-full py-4 px-4 sm:px-8"
+      style={{
+        backgroundColor: bgColor,
+        borderBottom: `1px solid ${borderColor}`,
+        borderTop:    `1px solid ${borderColor}`,
+      }}
+    >
       <div className="max-w-6xl mx-auto">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-0 divide-x divide-gray-100">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-0">
           {FEATURES.map((f, i) => (
-            <div key={f.title} className="flex items-center gap-3 px-4 py-3 sm:py-2 justify-center sm:justify-start"
+            <div
+              key={f.title}
+              className="flex items-center gap-3 px-4 py-3 sm:py-2 justify-center sm:justify-start"
               style={{
                 opacity: visible ? 1 : 0,
                 transform: visible ? "translateY(0)" : "translateY(12px)",
                 transition: `opacity 0.5s ease ${i * 80}ms, transform 0.5s ease ${i * 80}ms`,
-              }}>
-              <div className="flex-shrink-0" style={{ color: G }}>{f.icon}</div>
+                borderRight: i < FEATURES.length - 1 ? `1px solid ${dividerColor}` : "none",
+              }}
+            >
+              <div className="flex-shrink-0" style={{ color: iconColor }}>
+                {f.icon}
+              </div>
               <div>
-                <p className="text-sm font-bold text-gray-800 leading-tight">{f.title}</p>
-                <p className="text-xs text-gray-400 leading-tight">{f.subtitle}</p>
+                <p className="text-sm font-bold leading-tight" style={{ color: titleColor }}>
+                  {f.title}
+                </p>
+                <p className="text-xs leading-tight" style={{ color: subColor }}>
+                  {f.subtitle}
+                </p>
               </div>
             </div>
           ))}

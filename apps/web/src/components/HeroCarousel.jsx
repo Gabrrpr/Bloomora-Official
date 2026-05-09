@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { useTheme } from "../context/ThemeContext"
 import { api } from "../services/api.js"
 
 import heroBg1 from "../assets/HeroBG1.png"
@@ -70,6 +71,7 @@ function resolveImage(slide) {
 }
 
 export default function HeroCarousel({ onNavigate }) {
+  const { isDark } = useTheme()
   const [heroes, setHeroes] = useState(DEFAULT_HEROES)
   const [current, setCurrent] = useState(0)
   const [prev, setPrev] = useState(null)
@@ -120,6 +122,11 @@ export default function HeroCarousel({ onNavigate }) {
   const hero     = heroes[current]
   const prevHero = prev !== null ? heroes[prev] : null
 
+  // Slightly deeper overlay in dark mode so text pops against the dimmed image
+  const overlayGradient = isDark
+    ? "linear-gradient(90deg, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.45) 55%, rgba(0,0,0,0.15) 100%)"
+    : "linear-gradient(90deg, rgba(0,0,0,0.60) 0%, rgba(0,0,0,0.30) 50%, rgba(0,0,0,0.05) 100%)"
+
   return (
     <div
       className="relative w-full overflow-hidden"
@@ -127,14 +134,16 @@ export default function HeroCarousel({ onNavigate }) {
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
+      {/* Background images */}
       {heroes.map((h, i) => (
         <div key={h.id} className="absolute inset-0 transition-opacity duration-700"
           style={{ backgroundImage: `url(${h.image})`, backgroundSize: "cover", backgroundPosition: "center", opacity: i === current ? 1 : 0, zIndex: 0 }} />
       ))}
 
-      <div className="absolute inset-0 z-10"
-        style={{ background: "linear-gradient(90deg, rgba(0,0,0,0.60) 0%, rgba(0,0,0,0.30) 50%, rgba(0,0,0,0.05) 100%)" }} />
+      {/* Overlay — deeper in dark mode */}
+      <div className="absolute inset-0 z-10" style={{ background: overlayGradient }} />
 
+      {/* Prev arrow */}
       <button onClick={() => goTo((current - 1 + heroes.length) % heroes.length, "prev")}
         className="absolute left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full flex items-center justify-center text-white border border-white/30 bg-black/20 hover:bg-black/40 backdrop-blur-sm transition-all duration-200 hover:scale-110"
         aria-label="Previous slide">
@@ -143,6 +152,7 @@ export default function HeroCarousel({ onNavigate }) {
         </svg>
       </button>
 
+      {/* Next arrow */}
       <button onClick={() => goTo((current + 1) % heroes.length, "next")}
         className="absolute right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full flex items-center justify-center text-white border border-white/30 bg-black/20 hover:bg-black/40 backdrop-blur-sm transition-all duration-200 hover:scale-110"
         aria-label="Next slide">
@@ -151,6 +161,7 @@ export default function HeroCarousel({ onNavigate }) {
         </svg>
       </button>
 
+      {/* Content */}
       <div className="relative z-20 h-full flex items-center">
         <div className="w-full max-w-7xl mx-auto px-16 sm:px-20 lg:px-24">
           <div className="max-w-xl">
@@ -174,20 +185,20 @@ export default function HeroCarousel({ onNavigate }) {
                 style={{ backgroundColor: hero.accent + "55", border: `1px solid ${hero.accent}99` }}>
                 {hero.tag}
               </span>
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-5" style={{ textShadow: "0 2px 20px rgba(0,0,0,0.4)" }}>
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-5" style={{ textShadow: "0 2px 20px rgba(0,0,0,0.5)" }}>
                 {hero.headline.split("\n").map((line, i) => <span key={i} className="block">{line}</span>)}
               </h1>
-              <p className="text-white/80 text-base sm:text-lg leading-relaxed mb-8 max-w-md">{hero.description}</p>
-              <div className="flex items-center gap-3 flex-wrap">
+              <p className="text-white/90 text-base sm:text-lg leading-relaxed mb-8 max-w-md">{hero.description}</p>
+              <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
                 <button
                   onClick={() => onNavigate && onNavigate("shop")}
-                  className="px-7 py-3.5 text-sm font-bold text-white rounded-full shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl"
+                  className="w-full sm:w-auto px-7 py-3.5 text-sm font-bold text-white rounded-full shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl text-center"
                   style={{ backgroundColor: hero.accent }}>
                   {hero.cta}
                 </button>
                 <button
                   onClick={() => onNavigate && hero.ctaSecondaryNav && onNavigate(hero.ctaSecondaryNav)}
-                  className="px-7 py-3.5 text-sm font-semibold text-white rounded-full border border-white/40 backdrop-blur-sm hover:bg-white/10 transition-all duration-200">
+                  className="w-full sm:w-auto px-7 py-3.5 text-sm font-semibold text-white rounded-full border border-white/40 backdrop-blur-sm hover:bg-white/10 transition-all duration-200 text-center">
                   {hero.ctaSecondary}
                 </button>
               </div>
@@ -196,6 +207,7 @@ export default function HeroCarousel({ onNavigate }) {
         </div>
       </div>
 
+      {/* Dot indicators */}
       <div className="absolute bottom-6 left-0 right-0 z-20 flex items-center justify-center gap-2.5">
         {heroes.map((_, i) => (
           <button key={i} onClick={() => goTo(i, i > current ? "next" : "prev")}
@@ -204,7 +216,7 @@ export default function HeroCarousel({ onNavigate }) {
             aria-label={`Go to slide ${i + 1}`}>
             {i === current && !paused && (
               <div className="absolute inset-y-0 left-0 rounded-full"
-                style={{ backgroundColor: "rgba(255,255,255,0.35)", width: `${progress}%`, transition: "width 0.1s linear" }} />
+                style={{ backgroundColor: "#4ade80", width: `${progress}%`, transition: "width 0.1s linear" }} />
             )}
           </button>
         ))}
