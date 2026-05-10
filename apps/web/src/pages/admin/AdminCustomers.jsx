@@ -1,97 +1,73 @@
 import { useState, useEffect, useCallback } from "react"
+import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
-import { DG, G, GreenCard, WhiteCard, TH, EmptyRow, TableWrap } from "./_adminShared"
+import { DG, G, StatusBadge, TH, EmptyRow, TableWrap, ExportBtn } from "./_adminShared"
 
-// ── Functional Export Button ──────────────────────────────────────────────────
-function ExportCustomersBtn({ data = [] }) {
-  const handleExport = () => {
-    const headers = ["Customer Name", "Email", "Phone", "Status", "Total Orders", "Last Order Date"]
-    const rows = data.length
-      ? data.map(r => headers.map(h => r[h] ?? "").join(","))
-      : [headers.map(() => "—").join(",")]
-    const csv = [headers.join(","), ...rows].join("\n")
-    const blob = new Blob([csv], { type: "text/csv" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `customers_export_${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
+const STATUS_OPTIONS = ["All", "Active", "Inactive", "Blocked", "Unverified"]
+const ORDERS_OPTIONS = ["All Orders", "No orders yet", "1–5 orders", "6–20 orders", "21–50 orders", "50+ orders"]
+const DATE_OPTIONS   = ["Last Order: Any", "Today", "This week", "This month", "Last 3 months", "Inactive 90+ days"]
 
+function SelectFilter({ value, onChange, options, minWidth = "130px", isDark }) {
+  const bg  = isDark ? "#1e293b" : "white"
+  const bdr = isDark ? "#374151" : "#dde3ec"
+  const tc  = isDark ? "#e2e8f0" : "#374151"
   return (
-    <button
-      onClick={handleExport}
-      className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md hover:bg-gray-50 transition-all text-gray-600 active:scale-95"
-      style={{ borderColor: "#dde3ec" }}
-    >
-      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+    <div className="relative">
+      <select
+        value={value} onChange={e => onChange(e.target.value)}
+        className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md cursor-pointer outline-none transition-all"
+        style={{ borderColor: bdr, minWidth, backgroundColor: bg, color: tc }}
+        onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = "0 0 0 2px rgba(74,222,128,0.18)" }}
+        onBlur={e => { e.target.style.borderColor = bdr; e.target.style.boxShadow = "none" }}>
+        {options.map(o => <option key={o} value={o}>{o}</option>)}
+      </select>
+      <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none"
+        style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
       </svg>
-      Export
-    </button>
-  )
-}
-
-// ── Functional Pagination ─────────────────────────────────────────────────────
-function CustomerPagination({ total = 0 }) {
-  const disabled = total === 0
-  const btnBase = "px-3 py-1.5 text-xs font-semibold border rounded-md transition-all"
-  const disabledStyle = { borderColor: "#e5e7eb", color: "#d1d5db", cursor: "not-allowed", backgroundColor: "#fafafa" }
-  const activeStyle = { borderColor: "#dde3ec", color: "#374151", cursor: "pointer" }
-
-  return (
-    <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: "1px solid #f1f5f9" }}>
-      <p className="text-xs text-gray-400">
-        {disabled ? "Showing 0 customers" : `Showing ${total} customer${total !== 1 ? "s" : ""}`}
-      </p>
-      <div className="flex items-center gap-1">
-        {["← Prev", "1", "2", "3", "Next →"].map(lbl => (
-          <button
-            key={lbl}
-            disabled={disabled}
-            className={btnBase}
-            style={disabled ? disabledStyle : activeStyle}
-            onMouseEnter={e => { if (!disabled) { e.currentTarget.style.backgroundColor = "#f0fdf4"; e.currentTarget.style.borderColor = G; e.currentTarget.style.color = G } }}
-            onMouseLeave={e => { if (!disabled) { e.currentTarget.style.backgroundColor = ""; e.currentTarget.style.borderColor = "#dde3ec"; e.currentTarget.style.color = "#374151" } }}
-          >
-            {lbl}
-          </button>
-        ))}
-      </div>
     </div>
   )
 }
 
-// ── Main Component ────────────────────────────────────────────────────────────
-function getCustomerName(c) {
-  const fullName = `${c.first_name || ""} ${c.last_name || ""}`.trim()
-  return fullName || c.username || c.email || "Unknown"
+function getName(c) {
+  return `${c.first_name || ""} ${c.last_name || ""}`.trim() || c.username || c.email || "Unknown"
 }
 
 export default function AdminCustomers() {
-  const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState("")
-  const [ordersFilter, setOrdersFilter] = useState("")
-  const [dateFilter, setDateFilter] = useState("")
-  const [customers, setCustomers] = useState([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+  const { isDark } = useTheme()
+
+  const [search, setSearch]             = useState("")
+  const [statusFilter, setStatusFilter] = useState("All")
+  const [ordersFilter, setOrdersFilter] = useState("All Orders")
+  const [dateFilter, setDateFilter]     = useState("Last Order: Any")
+  const [customers, setCustomers]       = useState([])
+  const [loading, setLoading]           = useState(false)
+  const [error, setError]               = useState(null)
+
+  // ── colour tokens (mirrors AdminOrders pattern) ──────────────────────────
+  const subTxt     = isDark ? "#94a3b8" : "#64748b"
+  const toolbarBg  = isDark ? "#111827" : "#fafbfc"
+  const toolbarBdr = isDark ? "#1e293b" : "#f1f5f9"
+  const inputBg    = isDark ? "#1e293b" : "white"
+  const inputBdr   = isDark ? "#374151" : "#dde3ec"
+  const inputTxt   = isDark ? "#e2e8f0" : "#374151"
+  const cardBg     = isDark ? "#1a2332" : "white"
+  const cardBdr    = isDark ? "#1e293b" : "#e8edf2"
+  const errBg      = isDark ? "rgba(239,68,68,0.10)" : "#fef2f2"
+  const errBdr     = isDark ? "rgba(239,68,68,0.30)" : "#fecaca"
+  const errTxt     = isDark ? "#f87171" : "#dc2626"
 
   const fetchCustomers = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+    setLoading(true); setError(null)
     try {
       const params = { role: "customer" }
       if (search.trim()) params.search = search.trim()
-      if (statusFilter) {
+      if (statusFilter !== "All") {
         const map = { Active: "active", Inactive: "inactive", Blocked: "inactive", Unverified: "unverified" }
         params.status = map[statusFilter] || statusFilter.toLowerCase()
       }
       const data = await api.getUsers(params)
       setCustomers(data.users || [])
-      setTotal(data.total || 0)
     } catch (err) {
       setError(err.message || "Failed to load customers")
     } finally {
@@ -99,196 +75,217 @@ export default function AdminCustomers() {
     }
   }, [search, statusFilter])
 
-  useEffect(() => {
-    fetchCustomers()
-  }, [fetchCustomers])
+  useEffect(() => { fetchCustomers() }, [fetchCustomers])
 
-  const activeCount = customers.filter(c => c.is_active).length
+  const total       = customers.length
+  const activeCount = customers.filter(c => c.is_active && c.is_verified).length
+  const inactive    = customers.filter(c => !c.is_active).length
+  const unverified  = customers.filter(c => !c.is_verified).length
 
-  const statusBadge = (customer) => {
-    if (!customer.is_verified) return { label: "Unverified", bg: "#fef9c3", color: "#92400e" }
-    if (!customer.is_active) return { label: "Inactive", bg: "#fee2e2", color: "#dc2626" }
-    return { label: "Active", bg: "#dcfce7", color: "#15803d" }
+  const customerStatus = (c) => {
+    if (!c.is_verified) return "Unverified"
+    if (!c.is_active)   return "Inactive"
+    return "Active"
   }
+
+  const filtered = customers.filter(c => {
+    const matchStatus = statusFilter === "All" || customerStatus(c) === statusFilter
+    const matchSearch = !search ||
+      getName(c).toLowerCase().includes(search.toLowerCase()) ||
+      (c.email || "").toLowerCase().includes(search.toLowerCase())
+    return matchStatus && matchSearch
+  })
+
+  const STAT_CARDS = [
+    { label: "Total Customers",    sub: "All registered",     value: total,       green: true  },
+    { label: "Active Customers",   sub: "Verified & active",  value: activeCount, blue: true   },
+    { label: "Inactive Customers", sub: "Needs re-engagement",value: inactive                  },
+    { label: "Unverified",         sub: "Pending email verify",value: unverified,  amber: true  },
+  ]
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-bold text-gray-900">Customers</h1>
 
-      <div className="flex flex-wrap gap-3">
-        <div style={{ flex: "1 0 220px", maxWidth: "300px" }}>
-          <GreenCard label="Total customers" value={total} sub="↑ +0 this week" />
-        </div>
-        <div style={{ flex: "1 0 200px", maxWidth: "280px" }}>
-          <WhiteCard label="Active Customers" value={activeCount} sub="↑ 0% vs last week" accentColor="#22c55e" />
+      {/* Heading */}
+      <div>
+        <p className="text-sm font-medium" style={{ color: subTxt }}>Total registered customers</p>
+        <div className="flex items-baseline gap-3 mt-0.5">
+          <span className="text-4xl font-bold" style={{ color: isDark ? "#4ade80" : DG }}>{total}</span>
+          <span className="text-sm font-semibold text-green-500">↑ 0% vs last week</span>
         </div>
       </div>
 
-      <TableWrap>
-        <div className="p-4" style={{ borderBottom: "1px solid #f1f5f9", backgroundColor: "#fafbfc" }}>
+      {/* Stat cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {STAT_CARDS.map(c => {
+          const isSelected = statusFilter === c.label
+          return (
+            <button key={c.label}
+              onClick={() => setStatusFilter(statusFilter === c.label ? "All" : c.label)}
+              className="rounded-xl p-4 sm:p-5 text-left transition-all duration-200"
+              style={{
+                background: c.green
+                  ? "linear-gradient(135deg,#0a4a34 0%,#1a7040 60%,#2E8B34 100%)"
+                  : isDark ? "#1a2332" : "white",
+                border: c.green ? "none"
+                  : isSelected
+                    ? `2px solid ${isDark ? "#4ade80" : DG}`
+                    : `1px solid ${isDark ? "#2d3748" : "#e8edf2"}`,
+                boxShadow: c.green
+                  ? "0 4px 16px rgba(12,87,62,0.25)"
+                  : isSelected ? "0 0 0 3px rgba(74,222,128,0.15)" : isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)",
+                transform: isSelected && !c.green ? "translateY(-1px)" : "",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)" }}
+              onMouseLeave={e => { if (!isSelected || c.green) e.currentTarget.style.transform = "" }}>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-1"
+                style={{ color: c.green ? "rgba(255,255,255,0.65)" : c.amber ? "#fbbf24" : isDark ? "#64748b" : "#94a3b8" }}>
+                {c.label}
+              </p>
+              <p className="text-xs mb-2"
+                style={{ color: c.green ? "rgba(255,255,255,0.5)" : isDark ? "#64748b" : "#94a3b8" }}>
+                {c.sub}
+              </p>
+              <p className="text-3xl font-bold"
+                style={{ color: c.green ? "white" : c.amber ? (isDark ? "#fbbf24" : "#d97706") : c.blue ? (isDark ? "#60a5fa" : "#3b82f6") : isDark ? "#4ade80" : DG }}>
+                {c.value}
+              </p>
+              {isSelected && !c.green && (
+                <p className="text-[10px] font-semibold mt-1" style={{ color: isDark ? "#4ade80" : DG }}>
+                  ● Filtering by this status
+                </p>
+              )}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Active filters */}
+      {(statusFilter !== "All" || search) && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-medium" style={{ color: subTxt }}>Active filters:</span>
+          {statusFilter !== "All" && (
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
+              style={{ backgroundColor: isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4", color: isDark ? "#4ade80" : DG, border: `1px solid ${isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0"}` }}>
+              Status: {statusFilter}
+              <button onClick={() => setStatusFilter("All")} style={{ color: isDark ? "#4ade80" : "#16a34a" }}>×</button>
+            </span>
+          )}
+          <button onClick={() => { setStatusFilter("All"); setSearch("") }}
+            className="text-xs font-semibold ml-1" style={{ color: "#f87171" }}>
+            Clear all
+          </button>
+        </div>
+      )}
+
+      {error && (
+        <div className="px-4 py-3 text-sm rounded-md border" style={{ color: errTxt, backgroundColor: errBg, borderColor: errBdr }}>
+          {error}
+        </div>
+      )}
+
+      {/* Table */}
+      <div className="rounded-xl overflow-hidden"
+        style={{ border: `1px solid ${cardBdr}`, backgroundColor: cardBg, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
+
+        {/* Toolbar */}
+        <div className="p-3 sm:p-4" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
           <div className="flex items-center gap-2 flex-wrap">
+            <SelectFilter value={statusFilter} onChange={setStatusFilter} options={STATUS_OPTIONS} minWidth="130px" isDark={isDark} />
+            <SelectFilter value={ordersFilter} onChange={setOrdersFilter} options={ORDERS_OPTIONS} minWidth="140px" isDark={isDark} />
+            <SelectFilter value={dateFilter}   onChange={setDateFilter}   options={DATE_OPTIONS}   minWidth="150px" isDark={isDark} />
 
-            {/* Status */}
-            <div className="relative">
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md bg-white text-gray-700 cursor-pointer outline-none transition-all"
-                style={{ borderColor: "#dde3ec" }}
-                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
-                onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}
-              >
-                <option value="">Status: All</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-                <option value="Blocked">Blocked</option>
-                <option value="Unverified">Unverified</option>
-              </select>
-              <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-              </svg>
-            </div>
-
-            {/* Total Orders */}
-            <div className="relative">
-              <select
-                value={ordersFilter}
-                onChange={e => setOrdersFilter(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md bg-white text-gray-700 cursor-pointer outline-none transition-all"
-                style={{ borderColor: "#dde3ec" }}
-                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
-                onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}
-              >
-                <option value="">Total Orders: All</option>
-                <option value="0">No orders yet</option>
-                <option value="1-5">1–5 orders</option>
-                <option value="6-20">6–20 orders</option>
-                <option value="21-50">21–50 orders</option>
-                <option value="50+">50+ orders</option>
-              </select>
-              <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-              </svg>
-            </div>
-
-            {/* Last Order Date */}
-            <div className="relative">
-              <select
-                value={dateFilter}
-                onChange={e => setDateFilter(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md bg-white text-gray-700 cursor-pointer outline-none transition-all"
-                style={{ borderColor: "#dde3ec" }}
-                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
-                onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}
-              >
-                <option value="">Last Order: Any time</option>
-                <option value="today">Today</option>
-                <option value="week">This week</option>
-                <option value="month">This month</option>
-                <option value="3months">Last 3 months</option>
-                <option value="inactive90">Inactive 90+ days</option>
-              </select>
-              <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-              </svg>
-            </div>
-
-            {/* Search */}
             <div className="relative flex-1" style={{ minWidth: "180px" }}>
-              <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
               </svg>
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') fetchCustomers() }}
-                placeholder="Find customer"
-                className="w-full pl-9 pr-4 py-2 text-sm border rounded-md bg-white outline-none transition-all"
-                style={{ borderColor: "#dde3ec" }}
-                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
-                onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}
-              />
+              <input value={search} onChange={e => setSearch(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && fetchCustomers()}
+                placeholder="Name or email"
+                className="w-full pl-9 pr-4 py-2 text-sm border rounded-md outline-none transition-all"
+                style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}
+                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = "0 0 0 2px rgba(74,222,128,0.18)" }}
+                onBlur={e => { e.target.style.borderColor = inputBdr; e.target.style.boxShadow = "none" }} />
             </div>
 
-            {/* Refresh */}
-            <button
-              onClick={fetchCustomers}
-              disabled={loading}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium border rounded-md hover:bg-gray-50 transition-all text-gray-600 active:scale-95 disabled:opacity-50"
-              style={{ borderColor: "#dde3ec" }}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
+            <button onClick={fetchCustomers} disabled={loading}
+              className="px-4 py-2 text-sm font-semibold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
+              style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
               Refresh
             </button>
-
-            <ExportCustomersBtn data={customers} />
+            <ExportBtn />
           </div>
         </div>
 
-        {error && (
-          <div className="px-5 py-3 text-sm text-red-600 bg-red-50 border-b border-red-100">
-            {error}
-          </div>
-        )}
-
+        {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full" style={{ minWidth: "760px" }}>
-            <thead style={{ borderBottom: "1px solid #f1f5f9", backgroundColor: "#fafbfc" }}>
+          <table className="w-full" style={{ minWidth: "700px" }}>
+            <thead style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
               <tr>
-                <TH>Customer Name</TH>
-                <TH>Email</TH>
-                <TH>Phone</TH>
-                <TH>Status</TH>
-                <TH>Total Orders</TH>
-                <TH>Joined</TH>
-                <TH>Action</TH>
+                {["Customer Name", "Email", "Phone", "Status", "Total Orders", "Joined", "Action"].map(h => (
+                  <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider"
+                    style={{ color: isDark ? "#64748b" : "#94a3b8" }}>
+                    {h}
+                  </th>
+                ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody style={{ borderTop: `1px solid ${toolbarBdr}` }}>
               {loading ? (
-                <tr><td colSpan={7} className="px-5 py-10 text-center text-sm text-gray-400">Loading customers...</td></tr>
-              ) : customers.length === 0 ? (
-                <EmptyRow cols={7} message={search || statusFilter ? "No customers match your filters." : "No customers found."} />
-              ) : (
-                customers.map(c => {
-                  const sb = statusBadge(c)
-                  return (
-                    <tr key={c.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3.5 text-sm">
-                        <span className="font-medium text-gray-800">{getCustomerName(c)}</span>
-                      </td>
-                      <td className="px-5 py-3.5 text-sm text-gray-600">{c.email}</td>
-                      <td className="px-5 py-3.5 text-sm text-gray-600">{c.phone_number || "—"}</td>
-                      <td className="px-5 py-3.5 text-sm">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold"
-                          style={{ backgroundColor: sb.bg, color: sb.color }}>
-                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sb.color }} />
-                          {sb.label}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-sm text-gray-600">—</td>
-                      <td className="px-5 py-3.5 text-sm text-gray-500">
-                        {c.created_at ? new Date(c.created_at).toLocaleDateString() : "—"}
-                      </td>
-                      <td className="px-5 py-3.5 text-sm">
-                        <button className="px-3 py-1.5 text-xs font-semibold rounded-md border transition-all hover:shadow-sm active:scale-95"
-                          style={{ backgroundColor: "#f0fdf4", borderColor: "#bbf7d0", color: DG }}>
-                          View
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })
+                <tr><td colSpan={7} className="px-5 py-10 text-center text-sm" style={{ color: subTxt }}>Loading customers...</td></tr>
+              ) : filtered.length > 0 ? filtered.map((c, idx) => (
+                <tr key={c.id}
+                  style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#f8fafc"}`, backgroundColor: isDark ? (idx % 2 === 0 ? "#1a2332" : "#111827") : "white" }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.04)" : "#f8fffe"}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = isDark ? (idx % 2 === 0 ? "#1a2332" : "#111827") : "white"}>
+                  <td className="px-4 py-3">
+                    <span className="font-semibold text-sm" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{getName(c)}</span>
+                  </td>
+                  <td className="px-4 py-3 text-sm" style={{ color: subTxt }}>{c.email}</td>
+                  <td className="px-4 py-3 text-sm" style={{ color: subTxt }}>{c.phone_number || "—"}</td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={customerStatus(c)} />
+                  </td>
+                  <td className="px-4 py-3 text-sm" style={{ color: subTxt }}>—</td>
+                  <td className="px-4 py-3 text-sm" style={{ color: subTxt }}>
+                    {c.created_at ? new Date(c.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      className="px-3 py-1.5 text-xs font-semibold rounded-md border transition-all hover:shadow-sm active:scale-95"
+                      style={{ backgroundColor: isDark ? "rgba(74,222,128,0.10)" : "#f0fdf4", borderColor: isDark ? "rgba(74,222,128,0.30)" : "#bbf7d0", color: isDark ? "#4ade80" : DG }}>
+                      View
+                    </button>
+                  </td>
+                </tr>
+              )) : (
+                <tr><td colSpan={7} className="px-5 py-12 text-center text-sm" style={{ color: subTxt }}>
+                  {search || statusFilter !== "All" ? "No customers match your filters." : "No customers found."}
+                </td></tr>
               )}
             </tbody>
           </table>
         </div>
 
-        <CustomerPagination total={total} />
-      </TableWrap>
+        {/* Pagination */}
+        <div className="flex items-center justify-between px-4 sm:px-5 py-3 flex-wrap gap-2"
+          style={{ borderTop: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
+          <span className="text-sm" style={{ color: subTxt }}>Showing {filtered.length} of {total} customers</span>
+          <div className="flex items-center gap-1">
+            {["←", "1", "2", "3", "→"].map((p, i) => (
+              <button key={i} className="px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all"
+                style={{
+                  background: p === "1" ? `linear-gradient(135deg,${DG},${G})` : isDark ? "#1e293b" : "white",
+                  color: p === "1" ? "white" : isDark ? "#94a3b8" : "#6b7280",
+                  border: p === "1" ? "none" : `1px solid ${isDark ? "#374151" : "#e2e8f0"}`,
+                }}>
+                {p}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
-
