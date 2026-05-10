@@ -1,119 +1,162 @@
 import { useState, useEffect, useCallback } from "react"
+import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
-import { DG, G, GreenCard, WhiteCard, Pagination, TH, EmptyRow, TableWrap } from "./_adminShared"
+import { DG, G } from "./_adminShared"
 
-// ── Reusable form primitives ──────────────────────────────────────────────────
-function FInput({ placeholder, value, onChange, type = "text", hint }) {
+// ── Dark token hook ───────────────────────────────────────────────────────────
+function useDark() {
+  const { isDark } = useTheme()
+  return {
+    isDark,
+    // Backgrounds — each level clearly distinct
+    pageBg:   isDark ? "transparent" : "transparent",
+    cardBg:   isDark ? "#1a2332"  : "white",
+    cardBdr:  isDark ? "#2d3748"  : "#e8edf2",
+    cardShdw: isDark ? "none"     : "0 1px 3px rgba(0,0,0,0.04)",
+    hdrBg:    isDark ? "#111827"  : "#fafbfc",
+    hdrBdr:   isDark ? "#1e293b"  : "#f1f5f9",
+    rowEven:  isDark ? "#1a2332"  : "white",
+    rowOdd:   isDark ? "#111827"  : "white",
+    rowHov:   isDark ? "rgba(74,222,128,0.05)" : "#f8fffe",
+    // Inputs
+    inputBg:  isDark ? "#1e293b"  : "white",
+    inputBdr: isDark ? "#475569"  : "#dde3ec",   // brighter border so clearly visible
+    inputTxt: isDark ? "#f1f5f9"  : "#111827",
+    // Text
+    headC:    isDark ? "#ffffff"  : "#111827",    // pure white headings
+    cellC:    isDark ? "#f1f5f9"  : "#1e293b",    // very bright primary cell text
+    subC:     isDark ? "#cbd5e1"  : "#6b7280",    // much brighter secondary text
+    labelC:   isDark ? "#94a3b8"  : "#4b5563",
+    muted:    isDark ? "#64748b"  : "#9ca3af",
+    // Accents
+    accentG:  isDark ? "#4ade80"  : G,
+    accentDG: isDark ? "#22c55e"  : DG,
+    priceG:   isDark ? "#4ade80"  : DG,
+    // Modal
+    modalBg:  isDark ? "#1a2332"  : "white",
+    modalBdr: isDark ? "#2d3748"  : "#e8edf2",
+    modalHdr: isDark ? "#111827"  : "linear-gradient(135deg,#f0fdf4,#fafff8)",
+    modalFtr: isDark ? "#0f172a"  : "#fafbfc",
+    overlay:  "rgba(5,10,20,0.75)",
+    // Step card
+    stepBg:   isDark ? "#0f172a"  : "white",
+    stepBdr:  isDark ? "#2d3748"  : "#e8edf2",
+  }
+}
+
+// ── Form primitives ───────────────────────────────────────────────────────────
+function FInput({ placeholder, value, onChange, type = "text", hint, d }) {
   return (
     <div>
-      <input
-        type={type}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full px-3 py-2.5 text-sm border rounded-md bg-white outline-none transition-all"
-        style={{ borderColor: "#dde3ec" }}
-        onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.10)` }}
-        onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}
-      />
-      {hint && <p className="text-[10px] text-gray-400 mt-0.5">{hint}</p>}
+      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+        className="w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all"
+        style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }}
+        onFocus={e => { e.target.style.borderColor="#4ade80"; e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.2)" }}
+        onBlur={e => { e.target.style.borderColor=d.inputBdr; e.target.style.boxShadow="none" }}/>
+      {hint && <p className="text-[10px] mt-0.5" style={{ color:d.muted }}>{hint}</p>}
     </div>
   )
 }
 
-function FSel({ options, value, onChange, placeholder }) {
+function FSel({ options, value, onChange, placeholder, d }) {
   return (
     <div className="relative">
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="w-full appearance-none px-3 py-2.5 text-sm border rounded-md bg-white cursor-pointer outline-none transition-all"
-        style={{ borderColor: "#dde3ec", color: value ? "#0f172a" : "#9ca3af" }}
-        onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.10)` }}
-        onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}
-      >
+      <select value={value} onChange={e => onChange(e.target.value)}
+        className="w-full appearance-none px-3 py-2.5 text-sm border rounded-md cursor-pointer outline-none transition-all"
+        style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:value?d.inputTxt:d.muted }}
+        onFocus={e => { e.target.style.borderColor="#4ade80"; e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.2)" }}
+        onBlur={e => { e.target.style.borderColor=d.inputBdr; e.target.style.boxShadow="none" }}>
         <option value="">{placeholder}</option>
         {options.map(o => <option key={o} value={o}>{o}</option>)}
       </select>
-      <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+      <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color:d.muted }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
       </svg>
     </div>
   )
 }
 
-function StepCard({ n, title, children }) {
+function FL({ children, d }) {
+  return <label className="block text-xs font-bold mb-1" style={{ color:d.labelC }}>{children}</label>
+}
+
+function StepCard({ n, title, children, d }) {
   return (
-    <div className="bg-white rounded-xl p-5" style={{ border: "1px solid #e8edf2", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
+    <div className="rounded-xl p-5"
+      style={{ backgroundColor:d.stepBg, border:`1px solid ${d.stepBdr}`, boxShadow:d.cardShdw }}>
       <div className="flex items-center justify-between mb-4">
-        <p className="text-sm font-semibold text-gray-800">{title}</p>
+        <p className="text-sm font-bold" style={{ color:d.headC }}>{title}</p>
         <span className="w-6 h-6 rounded-md flex items-center justify-center text-xs font-bold text-white"
-          style={{ background: `linear-gradient(135deg,${DG},${G})` }}>{n}</span>
+          style={{ background:`linear-gradient(135deg,${DG},${G})` }}>{n}</span>
       </div>
       <div className="space-y-3">{children}</div>
     </div>
   )
 }
 
-function FL({ children }) {
-  return <label className="block text-xs font-semibold text-gray-600 mb-1">{children}</label>
+// ── Role color badges ─────────────────────────────────────────────────────────
+function RoleBadge({ role, isDark }) {
+  const map = {
+    admin:    { bg:isDark?"rgba(167,139,250,0.15)":"#f3e8ff", color:isDark?"#c4b5fd":"#7c3aed" },
+    staff:    { bg:isDark?"rgba(56,189,248,0.12)":"#e0f2fe",  color:isDark?"#7dd3fc":"#0891b2" },
+    delivery: { bg:isDark?"rgba(251,191,36,0.12)":"#fef3c7",  color:isDark?"#fcd34d":"#b45309" },
+  }
+  const s = map[role?.toLowerCase()] || map.staff
+  return (
+    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold capitalize"
+      style={{ backgroundColor:s.bg, color:s.color }}>{role}</span>
+  )
 }
 
-// ── Functional Export Button ──────────────────────────────────────────────────
-function ExportStaffBtn({ data = [] }) {
-  const handleExport = () => {
-    const headers = ["User ID", "Username", "First Name", "Last Name", "Email", "Phone", "Role", "Branch", "Status", "Last Login"]
-    const rows = data.length
-      ? data.map(r => headers.map(h => r[h] ?? "").join(","))
-      : [headers.map(() => "—").join(",")]
-    const csv = [headers.join(","), ...rows].join("\n")
-    const blob = new Blob([csv], { type: "text/csv" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `staff_export_${new Date().toISOString().slice(0, 10)}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
+function StatusBadge({ isActive, isVerified, isDark }) {
+  const s = !isActive
+    ? { label:"Inactive", bg:isDark?"rgba(248,113,113,0.12)":"#fef2f2", color:isDark?"#f87171":"#dc2626" }
+    : !isVerified
+      ? { label:"Pending",  bg:isDark?"rgba(251,191,36,0.12)":"#fef9c3",  color:isDark?"#fcd34d":"#92400e" }
+      : { label:"Active",   bg:isDark?"rgba(74,222,128,0.12)":"#dcfce7",  color:isDark?"#4ade80":"#15803d" }
   return (
-    <button
-      onClick={handleExport}
-      className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md hover:bg-gray-50 transition-all text-gray-600 active:scale-95"
-      style={{ borderColor: "#dde3ec" }}
-    >
-      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-      </svg>
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold"
+      style={{ backgroundColor:s.bg, color:s.color }}>
+      <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor:s.color }}/>
+      {s.label}
+    </span>
+  )
+}
+
+// ── Export button ─────────────────────────────────────────────────────────────
+function ExportStaffBtn({ data=[], d }) {
+  const handleExport = () => {
+    const headers = ["User ID","Username","First Name","Last Name","Email","Phone","Role","Branch","Status"]
+    const rows = data.length ? data.map(r => [r.id,r.username,r.first_name,r.last_name,r.email,r.phone_number||"",r.role,r.branch||"",r.is_active?"Active":"Inactive"].join(",")) : [headers.map(()=>"—").join(",")]
+    const csv=[headers.join(","),...rows].join("\n"), blob=new Blob([csv],{type:"text/csv"}), url=URL.createObjectURL(blob), a=document.createElement("a")
+    a.href=url; a.download=`staff_export_${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url)
+  }
+  return (
+    <button onClick={handleExport}
+      className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all active:scale-95"
+      style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}>
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
       Export
     </button>
   )
 }
 
-// ── Functional Pagination ─────────────────────────────────────────────────────
-function StaffPagination({ total = 0 }) {
-  const disabled = total === 0
-  const btnBase = "px-3 py-1.5 text-xs font-semibold border rounded-md transition-all"
-  const disabledStyle = { borderColor: "#e5e7eb", color: "#d1d5db", cursor: "not-allowed", backgroundColor: "#fafafa" }
-  const activeStyle = { borderColor: "#dde3ec", color: "#374151", cursor: "pointer" }
-
+// ── Pagination ────────────────────────────────────────────────────────────────
+function StaffPagination({ total=0, d }) {
+  const dis = total===0
+  const base = "px-3 py-1.5 text-xs font-semibold border rounded-md transition-all"
+  const ok   = { borderColor:d.inputBdr, color:d.cellC, cursor:"pointer", backgroundColor:d.inputBg }
+  const off  = { borderColor:d.hdrBdr,  color:d.muted, cursor:"not-allowed", backgroundColor:d.hdrBg }
   return (
-    <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: "1px solid #f1f5f9" }}>
-      <p className="text-xs text-gray-400">
-        {disabled ? "Showing 0 staff accounts" : `Showing ${total} staff account${total !== 1 ? "s" : ""}`}
+    <div className="flex items-center justify-between px-5 py-3" style={{ borderTop:`1px solid ${d.hdrBdr}` }}>
+      <p className="text-xs" style={{ color:d.muted }}>
+        {dis ? "Showing 0 staff accounts" : `Showing ${total} staff account${total!==1?"s":""}`}
       </p>
       <div className="flex items-center gap-1">
-        {["← Prev", "1", "2", "3", "Next →"].map(lbl => (
-          <button
-            key={lbl}
-            disabled={disabled}
-            className={btnBase}
-            style={disabled ? disabledStyle : activeStyle}
-            onMouseEnter={e => { if (!disabled) { e.currentTarget.style.backgroundColor = "#f0fdf4"; e.currentTarget.style.borderColor = G; e.currentTarget.style.color = G } }}
-            onMouseLeave={e => { if (!disabled) { e.currentTarget.style.backgroundColor = ""; e.currentTarget.style.borderColor = "#dde3ec"; e.currentTarget.style.color = "#374151" } }}
-          >
-            {lbl}
-          </button>
+        {["← Prev","1","2","3","Next →"].map(lbl => (
+          <button key={lbl} disabled={dis} className={base} style={dis?off:ok}
+            onMouseEnter={e=>{if(!dis){e.currentTarget.style.borderColor="#4ade80";e.currentTarget.style.color="#4ade80"}}}
+            onMouseLeave={e=>{if(!dis){e.currentTarget.style.borderColor=d.inputBdr;e.currentTarget.style.color=d.cellC}}}>{lbl}</button>
         ))}
       </div>
     </div>
@@ -122,111 +165,321 @@ function StaffPagination({ total = 0 }) {
 
 // ── Add Staff Form ────────────────────────────────────────────────────────────
 function AddStaffForm({ onBack, onCreated }) {
-  const [f, setF] = useState({ fn: "", mn: "", ln: "", un: "", role: "", branch: "", email: "", phone: "", pwd: "", force: true })
+  const d = useDark()
+  const [f, setF] = useState({ fn:"", mn:"", ln:"", un:"", role:"", branch:"", email:"", phone:"", pwd:"", force:true })
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState(null)
-  const s = k => v => setF(p => ({ ...p, [k]: v }))
+  const s = k => v => setF(p=>({...p,[k]:v}))
   const gen = () => {
-    const c = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$"
-    s("pwd")(Array.from({ length: 12 }, () => c[Math.floor(Math.random() * c.length)]).join(""))
+    const c="ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$"
+    s("pwd")(Array.from({length:12},()=>c[Math.floor(Math.random()*c.length)]).join(""))
   }
-
   const handleSubmit = async () => {
     setFormError(null)
-    if (!f.fn || !f.ln || !f.email || !f.role || !f.pwd) {
-      setFormError("Please fill in all required fields.")
-      return
-    }
+    if (!f.fn||!f.ln||!f.email||!f.role||!f.pwd){setFormError("Please fill in all required fields.");return}
     setSubmitting(true)
     try {
-      await api.createStaff({
-        first_name: f.fn,
-        middle_name: f.mn || undefined,
-        last_name: f.ln,
-        username: f.un || undefined,
-        role: f.role.toLowerCase(),
-        branch: f.branch || undefined,
-        email: f.email,
-        phone_number: f.phone || undefined,
-        password: f.pwd,
-        force_password_change: f.force,
-      })
-      onCreated()
-      onBack()
-    } catch (err) {
-      setFormError(err.message || "Failed to create staff account.")
-    } finally {
-      setSubmitting(false)
-    }
+      await api.createStaff({ first_name:f.fn, middle_name:f.mn||undefined, last_name:f.ln, username:f.un||undefined, role:f.role.toLowerCase(), branch:f.branch||undefined, email:f.email, phone_number:f.phone||undefined, password:f.pwd, force_password_change:f.force })
+      onCreated(); onBack()
+    } catch(err){setFormError(err.message||"Failed to create staff account.")} finally{setSubmitting(false)}
   }
+
+  // Stat cards (inline dark-mode versions)
+  const mkCard = (label, val, accent) => (
+    <div key={label} className="rounded-xl p-4 relative overflow-hidden"
+      style={{ backgroundColor:d.cardBg, border:`1px solid ${d.cardBdr}`, boxShadow:d.cardShdw }}>
+      <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl" style={{ backgroundColor:accent }}/>
+      <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color:d.muted }}>{label}</p>
+      <p className="text-2xl font-bold" style={{ color:d.headC }}>{val}</p>
+    </div>
+  )
 
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <GreenCard label="Total Staffs" value={0} />
-        {["Admins", "Staffs", "Delivery Staffs"].map(l => <WhiteCard key={l} label={l} value={0} />)}
+        {/* Green card */}
+        <div className="rounded-xl p-4 flex flex-col justify-between relative overflow-hidden"
+          style={{ background:"linear-gradient(135deg,#0a4a34 0%,#1a7040 60%,#2E8B34 100%)", boxShadow:"0 4px 16px rgba(12,87,62,0.25)" }}>
+          <p className="text-xs font-bold uppercase tracking-wider" style={{ color:"rgba(255,255,255,0.65)" }}>Total Staffs</p>
+          <p className="text-2xl font-bold text-white">0</p>
+        </div>
+        {mkCard("Admins", 0, "#a78bfa")}
+        {mkCard("Staffs", 0, "#38bdf8")}
+        {mkCard("Delivery Staffs", 0, "#fbbf24")}
       </div>
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-900">Add New Staff</h2>
-        <button onClick={onBack} className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md hover:bg-gray-50 transition-all text-gray-600" style={{ borderColor: "#dde3ec" }}>← Back to table</button>
+
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h2 className="text-lg font-bold" style={{ color:d.headC }}>Add New Staff</h2>
+        <button onClick={onBack}
+          className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all"
+          style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}>
+          ← Back to table
+        </button>
       </div>
 
       {formError && (
-        <div className="px-4 py-3 text-sm text-red-600 bg-red-50 rounded-md border border-red-100">
+        <div className="px-4 py-3 text-sm rounded-md border"
+          style={{ color:"#f87171", backgroundColor:d.isDark?"rgba(248,113,113,0.1)":"#fef2f2", borderColor:d.isDark?"rgba(248,113,113,0.3)":"#fecaca" }}>
           {formError}
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <StepCard n={1} title="Personal Information">
-          <div><FL>First name</FL><FInput placeholder="Enter first name" value={f.fn} onChange={s("fn")} /></div>
+        <StepCard n={1} title="Personal Information" d={d}>
+          <div><FL d={d}>First name <span style={{ color:"#f87171" }}>*</span></FL><FInput placeholder="Enter first name" value={f.fn} onChange={s("fn")} d={d}/></div>
           <div className="grid grid-cols-2 gap-3">
-            <div><FL>Middle name</FL><FInput placeholder="Middle name" value={f.mn} onChange={s("mn")} /></div>
-            <div><FL>Last name</FL><FInput placeholder="Last name" value={f.ln} onChange={s("ln")} /></div>
+            <div><FL d={d}>Middle name</FL><FInput placeholder="Middle name" value={f.mn} onChange={s("mn")} d={d}/></div>
+            <div><FL d={d}>Last name <span style={{ color:"#f87171" }}>*</span></FL><FInput placeholder="Last name" value={f.ln} onChange={s("ln")} d={d}/></div>
           </div>
         </StepCard>
-        <StepCard n={2} title="Account Information">
-          <div><FL>Username</FL><FInput placeholder="e.g. j.delacruz" value={f.un} onChange={s("un")} hint="First and middle initial, dot, last name. Example: j.delacruz" /></div>
+
+        <StepCard n={2} title="Account Information" d={d}>
+          <div>
+            <FL d={d}>Username</FL>
+            <FInput placeholder="e.g. j.delacruz" value={f.un} onChange={s("un")} hint="Format: first initial.last name (e.g. j.delacruz)" d={d}/>
+          </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><FL>Role</FL><FSel options={["Admin", "Staff", "Delivery"]} value={f.role} onChange={s("role")} placeholder="Select role" /></div>
-            <div><FL>Branch</FL><FSel options={["Manila", "Pampanga"]} value={f.branch} onChange={s("branch")} placeholder="Select branch" /></div>
+            <div><FL d={d}>Role <span style={{ color:"#f87171" }}>*</span></FL><FSel options={["Admin","Staff","Delivery"]} value={f.role} onChange={s("role")} placeholder="Select role" d={d}/></div>
+            <div><FL d={d}>Branch</FL><FSel options={["Manila","Pampanga"]} value={f.branch} onChange={s("branch")} placeholder="Select branch" d={d}/></div>
           </div>
         </StepCard>
-        <StepCard n={3} title="Contact Details">
-          <div><FL>Email address</FL><FInput type="email" placeholder="ex: jdelacruz@gmail.com" value={f.email} onChange={s("email")} /></div>
-          <div><FL>Phone number</FL>
+
+        <StepCard n={3} title="Contact Details" d={d}>
+          <div><FL d={d}>Email address <span style={{ color:"#f87171" }}>*</span></FL><FInput type="email" placeholder="e.g. j.delacruz@gmail.com" value={f.email} onChange={s("email")} d={d}/></div>
+          <div>
+            <FL d={d}>Phone number</FL>
             <div className="flex gap-2">
-              <select className="appearance-none px-2 py-2.5 text-sm border rounded-md bg-white outline-none" style={{ borderColor: "#dde3ec", width: "70px" }}><option>+63</option></select>
-              <FInput placeholder="Phone number" value={f.phone} onChange={s("phone")} />
+              <select className="appearance-none px-2 py-2.5 text-sm border rounded-md outline-none"
+                style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt, width:"70px" }}>
+                <option>+63</option>
+              </select>
+              <FInput placeholder="Phone number" value={f.phone} onChange={s("phone")} d={d}/>
             </div>
           </div>
         </StepCard>
-        <StepCard n={4} title="Security">
-          <div><FL>Password</FL>
+
+        <StepCard n={4} title="Security" d={d}>
+          <div>
+            <FL d={d}>Password <span style={{ color:"#f87171" }}>*</span></FL>
             <div className="flex gap-2">
-              <input type="text" value={f.pwd} onChange={e => s("pwd")(e.target.value)} placeholder="Temporary Password"
-                className="flex-1 px-3 py-2.5 text-sm border rounded-md bg-white outline-none transition-all"
-                style={{ borderColor: "#dde3ec", fontFamily: f.pwd ? "monospace" : "inherit" }}
-                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.10)` }}
-                onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }} />
-              <button onClick={gen} className="px-3 py-2 text-xs font-semibold border rounded-md hover:bg-gray-50 transition-all text-gray-700 flex-shrink-0" style={{ borderColor: "#dde3ec" }}>Generate</button>
+              <input type="text" value={f.pwd} onChange={e => s("pwd")(e.target.value)} placeholder="Temporary password"
+                className="flex-1 px-3 py-2.5 text-sm border rounded-md outline-none transition-all"
+                style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt, fontFamily:f.pwd?"monospace":"inherit" }}
+                onFocus={e=>{e.target.style.borderColor="#4ade80";e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.2)"}}
+                onBlur={e=>{e.target.style.borderColor=d.inputBdr;e.target.style.boxShadow="none"}}/>
+              <button onClick={gen}
+                className="px-3 py-2 text-xs font-bold border rounded-md transition-all flex-shrink-0"
+                style={{ borderColor:d.inputBdr, color:d.isDark?"#4ade80":G, backgroundColor:d.inputBg }}>
+                Generate
+              </button>
             </div>
           </div>
           <label className="flex items-center gap-3 cursor-pointer">
-            <button onClick={() => s("force")(!f.force)} className="relative w-9 h-5 rounded-full transition-colors duration-200 flex-shrink-0" style={{ backgroundColor: f.force ? G : "#d1d5db" }}>
-              <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200" style={{ left: f.force ? "19px" : "2px" }} />
+            <button onClick={() => s("force")(!f.force)}
+              className="relative w-9 h-5 rounded-full transition-colors duration-200 flex-shrink-0"
+              style={{ backgroundColor:f.force?(d.isDark?"#4ade80":G):(d.isDark?"#334155":"#d1d5db") }}>
+              <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200"
+                style={{ left:f.force?"19px":"2px" }}/>
             </button>
-            <span className="text-xs text-gray-600">Force password change on first login</span>
+            <span className="text-xs" style={{ color:d.subC }}>Force password change on first login</span>
           </label>
         </StepCard>
       </div>
+
       <div className="flex justify-end">
         <button onClick={handleSubmit} disabled={submitting}
           className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-60"
-          style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
-          {submitting ? "Creating..." : "Create Staff"}
+          style={{ background:`linear-gradient(135deg,${DG},${G})` }}>
+          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
+          {submitting?"Creating...":"Create Staff"}
         </button>
+      </div>
+    </div>
+  )
+}
+
+// ── View Staff Modal ──────────────────────────────────────────────────────────
+function ViewStaffModal({ staff, onClose }) {
+  const d = useDark()
+  const rows = [
+    { label:"Full Name", value:`${staff.first_name} ${staff.middle_name||""} ${staff.last_name}`.replace(/\s+/g," ").trim() },
+    { label:"Username",  value:staff.username },
+    { label:"Email",     value:staff.email },
+    { label:"Phone",     value:staff.phone_number||"—" },
+    { label:"Role",      value:staff.role },
+    { label:"Branch",    value:staff.branch||"—" },
+    { label:"Status",    value:staff.is_active?(staff.is_verified?"Active":"Pending"):"Inactive" },
+    { label:"User ID",   value:staff.id, mono:true },
+  ]
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ backgroundColor:d.overlay, backdropFilter:"blur(4px)" }}
+      onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div className="rounded-xl w-full overflow-hidden"
+        style={{ maxWidth:"480px", boxShadow:"0 24px 64px rgba(0,0,0,0.55)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
+        <div className="flex items-center justify-between px-6 py-4"
+          style={{ borderBottom:`1px solid ${d.hdrBdr}`, background:d.modalHdr }}>
+          <p className="text-base font-bold" style={{ color:d.headC }}>Staff Details</p>
+          <button onClick={onClose} className="p-2 rounded-lg transition-all" style={{ color:d.muted }}
+            onMouseEnter={e=>e.currentTarget.style.backgroundColor=d.hdrBg}
+            onMouseLeave={e=>e.currentTarget.style.backgroundColor="transparent"}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div className="p-6 space-y-3">
+          {rows.map(row => (
+            <div key={row.label} className="flex justify-between gap-4 text-sm">
+              <span className="font-semibold flex-shrink-0" style={{ color:d.labelC }}>{row.label}</span>
+              <span className="text-right" style={{ color:d.cellC, fontFamily:row.mono?"monospace":"inherit", fontSize:row.mono?"11px":"14px" }}>
+                {row.value}
+              </span>
+            </div>
+          ))}
+        </div>
+        <div className="flex items-center justify-end gap-2 px-6 py-4"
+          style={{ borderTop:`1px solid ${d.hdrBdr}`, backgroundColor:d.modalFtr }}>
+          <button onClick={onClose}
+            className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
+            style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}
+            onMouseEnter={e=>e.currentTarget.style.backgroundColor=d.hdrBg}
+            onMouseLeave={e=>e.currentTarget.style.backgroundColor=d.inputBg}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Edit Staff Modal ──────────────────────────────────────────────────────────
+function EditStaffModal({ staff, onClose, onSaved }) {
+  const d = useDark()
+  const [form, setForm] = useState({
+    first_name:   staff.first_name||"",
+    middle_name:  staff.middle_name||"",
+    last_name:    staff.last_name||"",
+    email:        staff.email||"",
+    phone_number: staff.phone_number||"",
+    role:         staff.role||"",
+    branch:       staff.branch||"",
+    is_active:    staff.is_active??true,
+  })
+  const [saving, setSaving] = useState(false)
+  const [err, setErr]       = useState(null)
+  const set = key => val => setForm(f=>({...f,[key]:val}))
+
+  const handleSave = async () => {
+    setErr(null); setSaving(true)
+    try {
+      await api.updateUser(staff.id, { first_name:form.first_name, middle_name:form.middle_name||undefined, last_name:form.last_name, email:form.email, phone_number:form.phone_number||undefined, role:form.role, branch:form.branch||undefined, is_active:form.is_active })
+      onSaved(); onClose()
+    } catch(e){setErr(e.message||"Failed to update staff")} finally{setSaving(false)}
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ backgroundColor:d.overlay, backdropFilter:"blur(4px)" }}
+      onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div className="rounded-xl w-full overflow-hidden"
+        style={{ maxWidth:"520px", maxHeight:"90vh", boxShadow:"0 24px 64px rgba(0,0,0,0.55)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
+        <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
+          style={{ borderBottom:`1px solid ${d.hdrBdr}`, background:d.modalHdr }}>
+          <div>
+            <p className="text-base font-bold" style={{ color:d.headC }}>Edit Staff</p>
+            <p className="text-xs mt-0.5" style={{ color:d.muted }}>Update {staff.first_name}'s account details</p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg transition-all" style={{ color:d.muted }}
+            onMouseEnter={e=>e.currentTarget.style.backgroundColor=d.hdrBg}
+            onMouseLeave={e=>e.currentTarget.style.backgroundColor="transparent"}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div className="overflow-y-auto p-6 space-y-4" style={{ maxHeight:"calc(90vh - 130px)" }}>
+          {err && (
+            <div className="px-4 py-3 text-sm rounded-md border"
+              style={{ color:"#f87171", backgroundColor:d.isDark?"rgba(248,113,113,0.1)":"#fef2f2", borderColor:d.isDark?"rgba(248,113,113,0.3)":"#fecaca" }}>
+              {err}
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3">
+            <div><FL d={d}>First name</FL><FInput placeholder="First name" value={form.first_name} onChange={set("first_name")} d={d}/></div>
+            <div><FL d={d}>Last name</FL><FInput placeholder="Last name" value={form.last_name} onChange={set("last_name")} d={d}/></div>
+          </div>
+          <div><FL d={d}>Middle name</FL><FInput placeholder="Middle name" value={form.middle_name} onChange={set("middle_name")} d={d}/></div>
+          <div><FL d={d}>Email</FL><FInput type="email" placeholder="Email" value={form.email} onChange={set("email")} d={d}/></div>
+          <div><FL d={d}>Phone</FL><FInput placeholder="Phone number" value={form.phone_number} onChange={set("phone_number")} d={d}/></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><FL d={d}>Role</FL><FSel options={["Admin","Staff","Delivery"]} value={form.role} onChange={set("role")} placeholder="Select role" d={d}/></div>
+            <div><FL d={d}>Branch</FL><FSel options={["Manila","Pampanga"]} value={form.branch} onChange={set("branch")} placeholder="Select branch" d={d}/></div>
+          </div>
+          <label className="flex items-center gap-3 cursor-pointer select-none">
+            <button onClick={() => set("is_active")(!form.is_active)}
+              className="relative w-9 h-5 rounded-full transition-colors duration-200 flex-shrink-0"
+              style={{ backgroundColor:form.is_active?(d.isDark?"#4ade80":G):(d.isDark?"#334155":"#d1d5db") }}>
+              <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200"
+                style={{ left:form.is_active?"19px":"2px" }}/>
+            </button>
+            <span className="text-sm font-medium" style={{ color:d.subC }}>Account active</span>
+          </label>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-6 py-4 flex-shrink-0"
+          style={{ borderTop:`1px solid ${d.hdrBdr}`, backgroundColor:d.modalFtr }}>
+          <button onClick={onClose}
+            className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
+            style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}
+            onMouseEnter={e=>e.currentTarget.style.backgroundColor=d.hdrBg}
+            onMouseLeave={e=>e.currentTarget.style.backgroundColor=d.inputBg}>
+            Cancel
+          </button>
+          <button onClick={handleSave} disabled={saving}
+            className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-60"
+            style={{ background:`linear-gradient(135deg,${DG},${G})`, boxShadow:"0 2px 8px rgba(12,87,62,0.3)" }}>
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+            {saving?"Saving...":"Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Deactivate Confirm ────────────────────────────────────────────────────────
+function DeactivateModal({ staff, onClose, onConfirm }) {
+  const d = useDark()
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
+      style={{ backgroundColor:d.overlay, backdropFilter:"blur(4px)" }}
+      onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+      <div className="rounded-2xl p-6 w-full max-w-md"
+        style={{ backgroundColor:d.modalBg, border:`1px solid ${d.modalBdr}`, boxShadow:"0 24px 64px rgba(0,0,0,0.55)" }}>
+        <div className="flex items-start gap-4 mb-5">
+          <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
+            style={{ backgroundColor:d.isDark?"rgba(248,113,113,0.12)":"#fef2f2", border:`1px solid ${d.isDark?"rgba(248,113,113,0.25)":"#fecaca"}` }}>
+            <svg className="w-6 h-6" style={{ color:"#f87171" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-base font-bold mb-1" style={{ color:d.headC }}>Deactivate Staff Account?</h3>
+            <p className="text-sm" style={{ color:d.subC }}>
+              This will prevent <strong style={{ color:d.cellC }}>{staff.first_name} {staff.last_name}</strong> ({staff.role}) from logging in until reactivated.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-3 justify-end pt-4" style={{ borderTop:`1px solid ${d.hdrBdr}` }}>
+          <button onClick={onClose}
+            className="px-5 py-2 text-sm font-semibold border rounded-xl transition-all"
+            style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}>
+            Cancel
+          </button>
+          <button onClick={onConfirm}
+            className="px-5 py-2 text-sm font-bold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98]"
+            style={{ backgroundColor:"#dc2626", boxShadow:"0 2px 8px rgba(220,38,38,0.3)" }}>
+            Deactivate
+          </button>
+        </div>
       </div>
     </div>
   )
@@ -234,418 +487,234 @@ function AddStaffForm({ onBack, onCreated }) {
 
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function AdminStaff() {
-  const [search, setSearch] = useState("")
-  const [showForm, setShowForm] = useState(false)
-  const [statusFilter, setStatusFilter] = useState("")
-  const [branchFilter, setBranchFilter] = useState("")
-  const [roleFilter, setRoleFilter] = useState("")
-  const [staff, setStaff] = useState([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
-  const [viewingStaff, setViewingStaff] = useState(null)
-  const [editingStaff, setEditingStaff] = useState(null)
-  const [showDeactivateConfirm, setShowDeactivateConfirm] = useState(false)
-  const [staffToDeactivate, setStaffToDeactivate] = useState(null)
+  const d = useDark()
+  const { isDark } = d
+  const [search, setSearch]           = useState("")
+  const [showForm, setShowForm]       = useState(false)
+  const [statusFilter, setStatus]     = useState("")
+  const [branchFilter, setBranch]     = useState("")
+  const [roleFilter, setRole]         = useState("")
+  const [staff, setStaff]             = useState([])
+  const [total, setTotal]             = useState(0)
+  const [loading, setLoading]         = useState(false)
+  const [error, setError]             = useState(null)
+  const [viewingStaff, setViewing]    = useState(null)
+  const [editingStaff, setEditing]    = useState(null)
+  const [deactivating, setDeactivating] = useState(null)
 
   const fetchStaff = useCallback(async () => {
-    setLoading(true)
-    setError(null)
+    setLoading(true); setError(null)
     try {
-      const params = { role: "staff" }
+      const params = { role:"staff" }
       if (search.trim()) params.search = search.trim()
       if (branchFilter) params.branch = branchFilter.toLowerCase()
-      if (roleFilter) params.role = roleFilter.toLowerCase()
+      if (roleFilter)   params.role   = roleFilter.toLowerCase()
       if (statusFilter) {
-        const map = { Active: "active", Inactive: "inactive", Suspended: "inactive", "Pending Activation": "unverified" }
-        params.status = map[statusFilter] || statusFilter.toLowerCase()
+        const m = { Active:"active", Inactive:"inactive", Suspended:"inactive", "Pending Activation":"unverified" }
+        params.status = m[statusFilter]||statusFilter.toLowerCase()
       }
       const data = await api.getUsers(params)
-      setStaff(data.users || [])
-      setTotal(data.total || 0)
-    } catch (err) {
-      setError(err.message || "Failed to load staff")
-    } finally {
-      setLoading(false)
-    }
-  }, [search, branchFilter, roleFilter, statusFilter])
+      setStaff(data.users||[]); setTotal(data.total||0)
+    } catch(err){setError(err.message||"Failed to load staff")} finally{setLoading(false)}
+  }, [search,branchFilter,roleFilter,statusFilter])
 
-  useEffect(() => {
-    fetchStaff()
-  }, [fetchStaff])
+  useEffect(() => { fetchStaff() }, [fetchStaff])
 
-  const adminCount = staff.filter(s => s.role === "admin").length
-  const staffCount = staff.filter(s => s.role === "staff").length
-  const deliveryCount = staff.filter(s => s.role === "delivery").length
-
-  const statusBadge = (s) => {
-    if (!s.is_active) return { label: "Inactive", bg: "#fee2e2", color: "#dc2626" }
-    if (!s.is_verified) return { label: "Pending", bg: "#fef9c3", color: "#92400e" }
-    return { label: "Active", bg: "#dcfce7", color: "#15803d" }
-  }
-
-  const handleViewStaff = (s) => setViewingStaff(s)
-  const handleEditStaff = (s) => setEditingStaff(s)
-  const handleDeactivateStaff = (s) => {
-    setStaffToDeactivate(s)
-    setShowDeactivateConfirm(true)
-  }
+  const adminCount    = staff.filter(s => s.role==="admin").length
+  const staffCount    = staff.filter(s => s.role==="staff").length
+  const deliveryCount = staff.filter(s => s.role==="delivery").length
 
   const confirmDeactivate = async () => {
-    setShowDeactivateConfirm(false)
-    if (!staffToDeactivate) return
-    try {
-      await api.updateUser(staffToDeactivate.id, { is_active: false })
-      fetchStaff()
-    } catch (err) {
-      alert(err.message || "Failed to deactivate staff")
-    }
+    if (!deactivating) return
+    try { await api.updateUser(deactivating.id,{is_active:false}); fetchStaff() }
+    catch(err){alert(err.message||"Failed to deactivate staff")}
+    finally { setDeactivating(null) }
   }
 
-  if (showForm) return <AddStaffForm onBack={() => setShowForm(false)} onCreated={fetchStaff} />
+  if (showForm) return <AddStaffForm onBack={() => setShowForm(false)} onCreated={fetchStaff}/>
+
+  // Select style shorthand
+  const sel = { borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-bold text-gray-900">Staffs</h1>
+      {viewingStaff  && <ViewStaffModal staff={viewingStaff} onClose={()=>setViewing(null)}/>}
+      {editingStaff  && <EditStaffModal staff={editingStaff} onClose={()=>setEditing(null)} onSaved={fetchStaff}/>}
+      {deactivating  && <DeactivateModal staff={deactivating} onClose={()=>setDeactivating(null)} onConfirm={confirmDeactivate}/>}
 
+      <h1 className="text-xl font-bold" style={{ color:d.headC }}>Staffs</h1>
+
+      {/* ── Stat cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <GreenCard label="Total Staffs" value={total} sub="↑ +0 this week" action="Add Staff" onAction={() => setShowForm(true)} />
-        <WhiteCard label="Admins" value={adminCount} sub="+0 this Week" accentColor="#7c3aed" />
-        <WhiteCard label="Staffs" value={staffCount} sub="+0 this Week" accentColor="#0891b2" />
-        <WhiteCard label="Delivery Staffs" value={deliveryCount} sub="+0 this Week" accentColor="#f59e0b" />
+        {/* Green */}
+        <div className="rounded-xl p-4 sm:p-5 relative overflow-hidden flex flex-col justify-between transition-all duration-200"
+          style={{ background:"linear-gradient(135deg,#0a4a34 0%,#1a7040 60%,#2E8B34 100%)", boxShadow:"0 4px 16px rgba(12,87,62,0.25)" }}>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider" style={{ color:"rgba(255,255,255,0.65)" }}>Total Staffs</p>
+            <p className="text-3xl font-bold text-white mt-2">{total}</p>
+            <p className="text-xs mt-1" style={{ color:"rgba(255,255,255,0.5)" }}>↑ +0 this week</p>
+          </div>
+          <button onClick={() => setShowForm(true)}
+            className="mt-3 self-start text-xs font-bold px-3 py-1.5 rounded-md transition-all hover:scale-105"
+            style={{ backgroundColor:"rgba(255,255,255,0.15)", color:"white", border:"1px solid rgba(255,255,255,0.2)" }}>
+            + Add Staff
+          </button>
+        </div>
+        {/* White cards */}
+        {[
+          { label:"Admins",         val:adminCount,    accent:"#a78bfa" },
+          { label:"Staffs",         val:staffCount,    accent:"#38bdf8" },
+          { label:"Delivery Staffs",val:deliveryCount, accent:"#fbbf24" },
+        ].map(({ label, val, accent }) => (
+          <div key={label} className="rounded-xl p-4 sm:p-5 relative overflow-hidden flex flex-col justify-between transition-all duration-200"
+            style={{ backgroundColor:d.cardBg, border:`1px solid ${d.cardBdr}`, boxShadow:d.cardShdw }}
+            onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"}
+            onMouseLeave={e=>e.currentTarget.style.transform=""}>
+            <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl" style={{ backgroundColor:accent }}/>
+            <div>
+              <p className="text-xs font-bold uppercase tracking-wider" style={{ color:d.muted }}>{label}</p>
+              <p className="text-3xl font-bold mt-2" style={{ color:d.headC }}>{val}</p>
+              <p className="text-xs mt-1 font-medium" style={{ color:d.muted }}>+0 this week</p>
+            </div>
+          </div>
+        ))}
       </div>
 
-      <TableWrap>
-        <div className="p-4" style={{ borderBottom: "1px solid #f1f5f9", backgroundColor: "#fafbfc" }}>
+      {/* ── Table card ── */}
+      <div className="rounded-xl overflow-hidden"
+        style={{ border:`1px solid ${d.cardBdr}`, backgroundColor:d.cardBg, boxShadow:d.cardShdw }}>
+
+        {/* Toolbar */}
+        <div className="p-3 sm:p-4" style={{ borderBottom:`1px solid ${d.hdrBdr}`, backgroundColor:d.hdrBg }}>
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Status */}
-            <div className="relative">
-              <select
-                value={statusFilter}
-                onChange={e => setStatusFilter(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md bg-white text-gray-700 cursor-pointer outline-none transition-all"
-                style={{ borderColor: "#dde3ec" }}
-                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
-                onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}
-              >
-                <option value="">Status: All</option>
-                <option value="Active">Active</option>
-                <option value="Inactive">Inactive</option>
-                <option value="Suspended">Suspended</option>
-                <option value="Pending Activation">Pending Activation</option>
-              </select>
-              <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-              </svg>
-            </div>
-
-            {/* Branch */}
-            <div className="relative">
-              <select
-                value={branchFilter}
-                onChange={e => setBranchFilter(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md bg-white text-gray-700 cursor-pointer outline-none transition-all"
-                style={{ borderColor: "#dde3ec" }}
-                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
-                onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}
-              >
-                <option value="">All Branches</option>
-                <option value="Manila">Manila</option>
-                <option value="Pampanga">Pampanga</option>
-              </select>
-              <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-              </svg>
-            </div>
-
-            {/* Role */}
-            <div className="relative">
-              <select
-                value={roleFilter}
-                onChange={e => setRoleFilter(e.target.value)}
-                className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md bg-white text-gray-700 cursor-pointer outline-none transition-all"
-                style={{ borderColor: "#dde3ec" }}
-                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
-                onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}
-              >
-                <option value="">All Roles</option>
-                <option value="Admin">Admin</option>
-                <option value="Staff">Staff</option>
-                <option value="Delivery">Delivery</option>
-              </select>
-              <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-              </svg>
-            </div>
-
+            {/* Dropdowns */}
+            {[
+              { val:statusFilter, set:setStatus, opts:["All Status","Active","Inactive","Suspended","Pending Activation"], min:"140px" },
+              { val:branchFilter, set:setBranch, opts:["All Branches","Manila","Pampanga"], min:"130px" },
+              { val:roleFilter,   set:setRole,   opts:["All Roles","Admin","Staff","Delivery"], min:"120px" },
+            ].map(({ val, set: setVal, opts, min }, i) => (
+              <div key={i} className="relative">
+                <select value={val}
+                  onChange={e => setVal(e.target.value===opts[0]?"":e.target.value)}
+                  className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md cursor-pointer outline-none transition-all"
+                  style={{ ...sel, minWidth:min }}
+                  onFocus={e=>{e.target.style.borderColor="#4ade80";e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)"}}
+                  onBlur={e=>{e.target.style.borderColor=d.inputBdr;e.target.style.boxShadow="none"}}>
+                  {opts.map(o=><option key={o} value={o===opts[0]?"":o}>{o}</option>)}
+                </select>
+                <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color:d.muted }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
+                </svg>
+              </div>
+            ))}
             {/* Search */}
-            <div className="relative flex-1" style={{ minWidth: "180px" }}>
-              <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
+            <div className="relative flex-1" style={{ minWidth:"180px" }}>
+              <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color:d.muted }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
               </svg>
-              <input
-                value={search}
-                onChange={e => setSearch(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') fetchStaff() }}
+              <input value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")fetchStaff()}}
                 placeholder="User ID or username"
-                className="w-full pl-9 pr-4 py-2 text-sm border rounded-md bg-white outline-none transition-all"
-                style={{ borderColor: "#dde3ec" }}
-                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
-                onBlur={e => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}
-              />
+                className="w-full pl-9 pr-4 py-2 text-sm border rounded-md outline-none transition-all"
+                style={sel}
+                onFocus={e=>{e.target.style.borderColor="#4ade80";e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)"}}
+                onBlur={e=>{e.target.style.borderColor=d.inputBdr;e.target.style.boxShadow="none"}}/>
             </div>
-
-            <button
-              onClick={fetchStaff}
-              disabled={loading}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-medium border rounded-md hover:bg-gray-50 transition-all text-gray-600 active:scale-95 disabled:opacity-50"
-              style={{ borderColor: "#dde3ec" }}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
+            {/* Refresh */}
+            <button onClick={fetchStaff} disabled={loading}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all active:scale-95 disabled:opacity-50"
+              style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
               Refresh
             </button>
-
-            <ExportStaffBtn data={staff} />
+            <ExportStaffBtn data={staff} d={d}/>
           </div>
         </div>
 
+        {/* Error */}
         {error && (
-          <div className="px-5 py-3 text-sm text-red-600 bg-red-50 border-b border-red-100">
+          <div className="px-5 py-3 text-sm border-b"
+            style={{ color:"#f87171", backgroundColor:isDark?"rgba(248,113,113,0.08)":"#fef2f2", borderColor:isDark?"rgba(248,113,113,0.2)":"#fecaca" }}>
             {error}
           </div>
         )}
 
+        {/* Table */}
         <div className="overflow-x-auto">
-          <table className="w-full" style={{ minWidth: "700px" }}>
-            <thead style={{ borderBottom: "1px solid #f1f5f9", backgroundColor: "#fafbfc" }}>
-              <tr><TH>User ID</TH><TH>Username</TH><TH>Name</TH><TH>Branch</TH><TH>Role</TH><TH>Status</TH><TH>Action</TH></tr>
+          <table className="w-full" style={{ minWidth:"700px" }}>
+            <thead style={{ borderBottom:`1px solid ${d.hdrBdr}`, backgroundColor:d.hdrBg }}>
+              <tr>
+                {["User ID","Username","Name","Branch","Role","Status","Action"].map(h => (
+                  <th key={h} className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider"
+                    style={{ color:d.muted }}>{h}</th>
+                ))}
+              </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody>
               {loading ? (
-                <tr><td colSpan={7} className="px-5 py-10 text-center text-sm text-gray-400">Loading staff...</td></tr>
-              ) : staff.length === 0 ? (
-                <EmptyRow cols={7} message={search || statusFilter || branchFilter || roleFilter ? "No staff match your filters." : "Click '+ Add Staff' to create your first staff account."} />
-              ) : (
-                staff.map(s => {
-                  const sb = statusBadge(s)
-                  return (
-                    <tr key={s.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-5 py-3.5 text-sm text-gray-500 font-mono">{s.id.slice(0, 8)}</td>
-                      <td className="px-5 py-3.5 text-sm text-gray-700 font-medium">{s.username}</td>
-                      <td className="px-5 py-3.5 text-sm text-gray-700">{s.first_name} {s.last_name}</td>
-                      <td className="px-5 py-3.5 text-sm text-gray-600">{s.branch || "—"}</td>
-                      <td className="px-5 py-3.5 text-sm">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold capitalize"
-                          style={{
-                            backgroundColor: s.role === "admin" ? "#f3e8ff" : s.role === "delivery" ? "#fef3c7" : "#e0f2fe",
-                            color: s.role === "admin" ? "#7c3aed" : s.role === "delivery" ? "#b45309" : "#0891b2",
-                          }}>
-                          {s.role}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-sm">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold"
-                          style={{ backgroundColor: sb.bg, color: sb.color }}>
-                          <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: sb.color }} />
-                          {sb.label}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 text-sm">
-                        <div className="flex items-center gap-1.5">
-                          <button onClick={() => handleEditStaff(s)}
-                            className="px-3 py-1.5 text-xs font-semibold text-white rounded-md transition-all hover:opacity-85 active:scale-95"
-                            style={{ backgroundColor: DG }}>Edit</button>
-                          <button onClick={() => handleViewStaff(s)}
-                            className="px-3 py-1.5 text-xs font-semibold rounded-md border transition-all hover:shadow-sm active:scale-95"
-                            style={{ backgroundColor: "#f0fdf4", borderColor: "#bbf7d0", color: DG }}>View</button>
-                          <button onClick={() => handleDeactivateConfirm(s)}
-                            className="w-7 h-7 flex items-center justify-center rounded-md transition-all hover:bg-red-600 active:scale-95"
-                            style={{ backgroundColor: "#1e293b" }}>
-                            <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                            </svg>
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
+                <tr><td colSpan={7} className="px-5 py-12 text-center text-sm" style={{ color:d.muted }}>Loading staff...</td></tr>
+              ) : staff.length===0 ? (
+                <tr><td colSpan={7} className="px-5 py-12 text-center text-sm" style={{ color:d.muted }}>
+                  {search||statusFilter||branchFilter||roleFilter
+                    ? "No staff match your filters."
+                    : "Click '+ Add Staff' to create your first staff account."}
+                </td></tr>
+              ) : staff.map((s, idx) => (
+                <tr key={s.id}
+                  style={{ borderBottom:`1px solid ${d.hdrBdr}`, backgroundColor:idx%2===0?d.rowEven:d.rowOdd }}
+                  onMouseEnter={e=>e.currentTarget.style.backgroundColor=d.rowHov}
+                  onMouseLeave={e=>e.currentTarget.style.backgroundColor=idx%2===0?d.rowEven:d.rowOdd}>
+                  <td className="px-5 py-3.5">
+                    <span className="font-mono text-xs" style={{ color:d.muted }}>{s.id.slice(0,8)}</span>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <span className="font-semibold text-sm" style={{ color:d.cellC }}>{s.username}</span>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <span className="text-sm" style={{ color:d.cellC }}>{s.first_name} {s.last_name}</span>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <span className="text-sm" style={{ color:d.subC }}>{s.branch||"—"}</span>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <RoleBadge role={s.role} isDark={isDark}/>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <StatusBadge isActive={s.is_active} isVerified={s.is_verified} isDark={isDark}/>
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <div className="flex items-center gap-1.5">
+                      {/* Edit */}
+                      <button onClick={() => setEditing(s)}
+                        className="px-3 py-1.5 text-xs font-bold text-white rounded-md transition-all hover:opacity-85 active:scale-95"
+                        style={{ backgroundColor:DG }}>
+                        Edit
+                      </button>
+                      {/* View */}
+                      <button onClick={() => setViewing(s)}
+                        className="px-3 py-1.5 text-xs font-bold rounded-md border transition-all hover:shadow-sm active:scale-95"
+                        style={{ backgroundColor:isDark?"rgba(74,222,128,0.1)":"#f0fdf4", borderColor:isDark?"rgba(74,222,128,0.3)":"#bbf7d0", color:isDark?"#4ade80":DG }}>
+                        View
+                      </button>
+                      {/* Deactivate */}
+                      <button onClick={() => setDeactivating(s)}
+                        className="w-7 h-7 flex items-center justify-center rounded-md transition-all active:scale-95"
+                        style={{ backgroundColor:isDark?"rgba(248,113,113,0.12)":"#fef2f2", border:`1px solid ${isDark?"rgba(248,113,113,0.25)":"#fecaca"}` }}
+                        onMouseEnter={e=>e.currentTarget.style.backgroundColor=isDark?"rgba(248,113,113,0.25)":"#fee2e2"}
+                        onMouseLeave={e=>e.currentTarget.style.backgroundColor=isDark?"rgba(248,113,113,0.12)":"#fef2f2"}>
+                        <svg className="w-3.5 h-3.5" style={{ color:"#f87171" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
 
-        <StaffPagination total={total} />
-      </TableWrap>
-
-      {/* View Staff Modal */}
-      {viewingStaff && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
-          style={{ backgroundColor: "rgba(15,23,42,0.5)", backdropFilter: "blur(3px)" }}
-          onClick={e => { if (e.target === e.currentTarget) setViewingStaff(null) }}>
-          <div className="bg-white rounded-xl w-full overflow-hidden"
-            style={{ maxWidth: "480px", boxShadow: "0 24px 64px rgba(0,0,0,0.18)", border: "1px solid #e8edf2" }}>
-            <div className="flex items-center justify-between px-6 py-4"
-              style={{ borderBottom: "1px solid #f1f5f9", background: "linear-gradient(135deg, #f0fdf4, #fafff8)" }}>
-              <p className="text-base font-bold text-gray-900">Staff Details</p>
-              <button onClick={() => setViewingStaff(null)} className="p-2 rounded-lg hover:bg-gray-100 transition-all text-gray-400">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <div className="p-6 space-y-3">
-              {[
-                { label: "Full Name", value: `${viewingStaff.first_name} ${viewingStaff.middle_name || ""} ${viewingStaff.last_name}` },
-                { label: "Username", value: viewingStaff.username },
-                { label: "Email", value: viewingStaff.email },
-                { label: "Phone", value: viewingStaff.phone_number || "—" },
-                { label: "Role", value: viewingStaff.role },
-                { label: "Branch", value: viewingStaff.branch || "—" },
-                { label: "Status", value: viewingStaff.is_active ? (viewingStaff.is_verified ? "Active" : "Pending") : "Inactive" },
-                { label: "User ID", value: viewingStaff.id },
-              ].map(field => (
-                <div key={field.label} className="flex justify-between text-sm">
-                  <span className="text-gray-500">{field.label}</span>
-                  <span className="font-medium text-gray-800">{field.value}</span>
-                </div>
-              ))}
-            </div>
-            <div className="flex items-center justify-end gap-2 px-6 py-4" style={{ borderTop: "1px solid #f1f5f9", backgroundColor: "#fafbfc" }}>
-              <button onClick={() => setViewingStaff(null)}
-                className="px-4 py-2 text-sm font-semibold border rounded-md hover:bg-gray-50 transition-all text-gray-600"
-                style={{ borderColor: "#dde3ec" }}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Staff Modal */}
-      {editingStaff && (
-        <EditStaffModal
-          staff={editingStaff}
-          onClose={() => setEditingStaff(null)}
-          onSaved={fetchStaff}
-        />
-      )}
-
-      {/* Deactivate Confirm Popup */}
-      {showDeactivateConfirm && staffToDeactivate && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={e => e.target === e.currentTarget && setShowDeactivateConfirm(false)}>
-          <div className="bg-white rounded-2xl p-6 max-w-md w-full max-h-[90vh] overflow-y-auto shadow-2xl border border-gray-100">
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
-                  <svg className="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                  </svg>
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">Deactivate Staff Account?</h3>
-                  <p className="text-sm text-gray-600">This will prevent {staffToDeactivate.first_name} {staffToDeactivate.last_name} ({staffToDeactivate.role}) from logging in until reactivated.</p>
-                </div>
-              </div>
-            </div>
-            <div className="flex gap-3 justify-end pt-4 border-t border-gray-100">
-              <button onClick={() => setShowDeactivateConfirm(false)} className="px-5 py-2 text-sm font-semibold text-gray-700 border border-gray-200 rounded-xl hover:bg-gray-50 transition-all">
-                Cancel
-              </button>
-              <button onClick={confirmDeactivate} className="px-5 py-2 text-sm font-bold text-white rounded-xl transition-all hover:opacity-90 bg-red-600 shadow-sm hover:shadow-md active:scale-[0.98]">
-                Deactivate
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Edit Staff Modal ─────────────────────────────────────────────────────────
-function EditStaffModal({ staff, onClose, onSaved }) {
-  const [form, setForm] = useState({
-    first_name: staff.first_name || "",
-    middle_name: staff.middle_name || "",
-    last_name: staff.last_name || "",
-    email: staff.email || "",
-    phone_number: staff.phone_number || "",
-    role: staff.role || "",
-    branch: staff.branch || "",
-    is_active: staff.is_active ?? true,
-  })
-  const [saving, setSaving] = useState(false)
-  const [err, setErr] = useState(null)
-
-  const set = (key) => (val) => setForm(f => ({ ...f, [key]: val }))
-
-  const handleSave = async () => {
-    setErr(null)
-    setSaving(true)
-    try {
-      await api.updateUser(staff.id, {
-        first_name: form.first_name,
-        middle_name: form.middle_name || undefined,
-        last_name: form.last_name,
-        email: form.email,
-        phone_number: form.phone_number || undefined,
-        role: form.role,
-        branch: form.branch || undefined,
-        is_active: form.is_active,
-      })
-      onSaved()
-      onClose()
-    } catch (e) {
-      setErr(e.message || "Failed to update staff")
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      style={{ backgroundColor: "rgba(15,23,42,0.5)", backdropFilter: "blur(3px)" }}
-      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="bg-white rounded-xl w-full overflow-hidden"
-        style={{ maxWidth: "520px", maxHeight: "90vh", boxShadow: "0 24px 64px rgba(0,0,0,0.18)", border: "1px solid #e8edf2" }}>
-        <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
-          style={{ borderBottom: "1px solid #f1f5f9", background: "linear-gradient(135deg, #f0fdf4, #fafff8)" }}>
-          <p className="text-base font-bold text-gray-900">Edit Staff</p>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-gray-100 transition-all text-gray-400">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-          </button>
-        </div>
-        <div className="overflow-y-auto p-6 space-y-4" style={{ maxHeight: "calc(90vh - 130px)" }}>
-          {err && <div className="px-4 py-3 text-sm text-red-600 bg-red-50 rounded-md border border-red-100">{err}</div>}
-          <div className="grid grid-cols-2 gap-3">
-            <div><FL>First name</FL><FInput placeholder="First name" value={form.first_name} onChange={set("first_name")} /></div>
-            <div><FL>Last name</FL><FInput placeholder="Last name" value={form.last_name} onChange={set("last_name")} /></div>
-          </div>
-          <div><FL>Middle name</FL><FInput placeholder="Middle name" value={form.middle_name} onChange={set("middle_name")} /></div>
-          <div><FL>Email</FL><FInput type="email" placeholder="Email" value={form.email} onChange={set("email")} /></div>
-          <div><FL>Phone</FL><FInput placeholder="Phone number" value={form.phone_number} onChange={set("phone_number")} /></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><FL>Role</FL><FSel options={["Admin", "Staff", "Delivery"]} value={form.role} onChange={set("role")} placeholder="Select role" /></div>
-            <div><FL>Branch</FL><FSel options={["Manila", "Pampanga"]} value={form.branch} onChange={set("branch")} placeholder="Select branch" /></div>
-          </div>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input type="checkbox" checked={form.is_active} onChange={e => set("is_active")(e.target.checked)}
-              className="w-4 h-4 accent-green-600 rounded" />
-            <span className="text-sm text-gray-700">Account active</span>
-          </label>
-        </div>
-        <div className="flex items-center justify-end gap-2 px-6 py-4 flex-shrink-0"
-          style={{ borderTop: "1px solid #f1f5f9", backgroundColor: "#fafbfc" }}>
-          <button onClick={onClose}
-            className="px-4 py-2 text-sm font-semibold border rounded-md hover:bg-gray-50 transition-all text-gray-600"
-            style={{ borderColor: "#dde3ec" }}>Cancel</button>
-          <button onClick={handleSave} disabled={saving}
-            className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-60"
-            style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
-            {saving ? "Saving..." : "Save Changes"}
-          </button>
-        </div>
+        <StaffPagination total={total} d={d}/>
       </div>
     </div>
   )
 }
-
