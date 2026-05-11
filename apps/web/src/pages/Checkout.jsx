@@ -135,9 +135,123 @@ export default function Checkout({ onNavigate }) {
     }
   }
 
-  const deliveryDetails = getDeliveryDetails()
+const deliveryDetails = getDeliveryDetails()
 
-const handlePlaceOrder = async () => {
+  // ── Store-branch vs address-province confirmation ────────────────────────
+  // Navigation/branch selection lives elsewhere in the app; for now we infer the
+  // selected store branch from localStorage (set by the store-branch selector).
+  const selectedStoreBranch = localStorage.getItem("bloomora_selected_branch") // "Manila" | "Pampanga"
+
+  const provinceToBranch = (province) => {
+    const p = (province || "").toLowerCase()
+    if (!p) return null
+    // Very simple mapping based on common PH provinces in your flows.
+    // If you have a more accurate province list, extend this mapping.
+    if (p.includes("pampanga") || p.includes("angeles") || p.includes("mabalacat")) return "Pampanga"
+    if (p.includes("manila") || p.includes("quezon")) return "Manila"
+    return null
+  }
+
+const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddress?.province : manualForm.province)
+  const needsBranchConfirm = selectedStoreBranch && addressBranch && selectedStoreBranch !== addressBranch
+
+  const [branchConfirmOpen, setBranchConfirmOpen] = useState(false)
+
+  const proceedAfterBranchConfirm = async () => {
+    // Close modal first to avoid double submits
+    setBranchConfirmOpen(false)
+
+    if (cartItems.length === 0) {
+      setError("Your cart is empty.")
+      return
+    }
+    if (!deliveryDetails.address || !deliveryDetails.phone) {
+      setError("Please provide a complete delivery address and phone number before placing an order.")
+      return
+    }
+
+    setPlacing(true)
+    setError("")
+    try {
+      // Save recipient address to address book if checkbox is checked
+      if (
+        saveAddressToBook &&
+        recipientType === "someone_else" &&
+        manualForm.recipient_name &&
+        manualForm.phone &&
+        manualForm.street
+      ) {
+        try {
+          await api.createAddress({
+            label: `To: ${manualForm.recipient_name}`,
+            recipient_name: manualForm.recipient_name,
+            phone: manualForm.phone,
+            street: manualForm.street,
+            barangay: manualForm.barangay || "",
+            city: manualForm.city,
+            province: manualForm.province,
+            zip_code: manualForm.zip || "",
+            is_default: false,
+          })
+          const res = await api.getAddresses()
+          setAddresses(res.addresses || [])
+        } catch (addrErr) {
+          console.error("Failed to save address to book:", addrErr)
+        }
+      }
+
+      const res = await api.createOrder({
+        items: cartItems.map(i => ({
+          id: i.id,
+          group: i.group,
+          name: i.name,
+          desc: i.desc,
+          price: i.price,
+          qty: i.qty,
+          img: i.img,
+        })),
+        delivery_address: deliveryDetails.address,
+        delivery_notes: `Delivery time: ${deliveryTime} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone})`,
+        scheduled_at: tomorrow.toISOString(),
+        payment_method: paymentMethod,
+      })
+
+      const orderIds = res.order_ids || []
+      for (const orderId of orderIds) {
+        try {
+          await api.confirmPayment(orderId)
+        } catch (payErr) {
+          console.error(`Failed to confirm payment for order ${orderId}:`, payErr)
+        }
+      }
+
+      const orderData = {
+        orderIds: orderIds,
+        items: cartItems,
+        subtotal,
+        shipping,
+        total,
+        deliveryTime,
+        deliveryAddress: deliveryDetails.address,
+        scheduledDate: fmt(tomorrow),
+        placedAt: new Date().toISOString(),
+      }
+      localStorage.setItem("bloomora_last_order", JSON.stringify(orderData))
+
+      clearCart()
+      onNavigate("confirmation")
+    } catch (e) {
+      setError(e.message || "Failed to place order. Please try again.")
+    } finally {
+      setPlacing(false)
+    }
+  }
+
+  const handlePlaceOrder = async () => {
+    if (needsBranchConfirm) {
+      setBranchConfirmOpen(true)
+      return
+    }
     if (cartItems.length === 0) {
       setError("Your cart is empty.")
       return
@@ -224,6 +338,38 @@ const handlePlaceOrder = async () => {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#F7F8FA" }}>
+      {branchConfirmOpen && needsBranchConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setBranchConfirmOpen(false)
+          }}
+        >
+          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">Confirm your order branch</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              You selected <b>{selectedStoreBranch}</b> branch, but the delivery address appears to be in <b>{addressBranch}</b>.
+              Are you sure you want to proceed?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setBranchConfirmOpen(false)}
+                className="flex-1 py-2.5 text-sm font-semibold border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600"
+              >
+                Go back
+              </button>
+              <button
+                onClick={proceedAfterBranchConfirm}
+                className="flex-1 py-2.5 text-sm font-semibold text-white rounded-lg"
+                style={{ backgroundColor: G }}
+              >
+                Yes, proceed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         <h1 className="text-xl font-semibold text-gray-800 mb-6">Checkout</h1>

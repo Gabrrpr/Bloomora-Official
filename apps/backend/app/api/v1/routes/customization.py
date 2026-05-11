@@ -5,7 +5,7 @@ import uuid
 
 from app.core.dependencies import get_db, get_current_user
 from app.models import User, Arrangement
-# 👇 Removed ProductCategoryEnum from here
+from app.models.product import Product
 from app.models.arrangement import Flower, Vase, Wrapping, Accessory
 from app.models.ai_usage_log import DAILY_AI_LIMIT
 from app.schemas.customization import (
@@ -16,6 +16,7 @@ from app.schemas.customization import (
     PriceBreakdown,
 )
 from app.services.pollinations_service import PollinationsService
+from app.services.gemini_service import validate_and_optimize_prompt  # 👈 NEW: Import Gemini service
 from app.services.inventory_service import check_material_availability, get_alternatives
 from app.services.ai_usage_service import (
     has_reached_daily_limit,
@@ -109,7 +110,7 @@ async def check_and_generate(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Two-Way Customization endpoint.
+    Two-Way Customization endpoint with Gemini Intelligent Validation.
     """
 
     # ── Step 1: Check daily AI usage limit ───────────────────────────────
@@ -119,10 +120,9 @@ async def check_and_generate(
             detail=f"You have reached your daily limit of {DAILY_AI_LIMIT} AI generations. Please try again tomorrow."
         )
 
-    # ── Step 2: Check each selected material ─────────────────────────────
+    # ── Step 2: Check each explicitly selected material ──────────────────
     unavailable_items: List[UnavailableItem] = []
 
-    # 👇 UPDATED: We now use plain strings instead of ProductCategoryEnum
     material_checks = [
         ("flower_id",    payload.flower_id,    "flower"),
         ("vase_id",      payload.vase_id,      "vase"),
@@ -148,7 +148,7 @@ async def check_and_generate(
                 )
             )
 
-    # ── Step 3a: Some unavailable → return notification + alternatives ────
+    # ── Step 3: If explicit materials are unavailable, return early ───────
     if unavailable_items:
         remaining = get_remaining_generations(db, current_user.id)
         return CustomizationResponse(
@@ -159,13 +159,36 @@ async def check_and_generate(
             remaining_generations=remaining,
         )
 
-    # ── Step 3b: Look up material records using product IDs ───────────────
+    # ── Step 4: Gemini Intelligent Prompt Validation ──────────────────────
+    # Fetch all active product names for Gemini's context
+    db_products = db.query(Product.name).filter(Product.is_available == True).all()
+    inventory_names = [p[0] for p in db_products]
+    
+    # Fallback just in case DB is empty
+    if not inventory_names:
+        inventory_names = ["Red Roses", "White Tulips", "Sunflowers", "Pink Carnations"]
+
+    # Ask Gemini to validate the prompt
+    ai_verdict = validate_and_optimize_prompt(payload.prompt_text, inventory_names)
+
+    # If Gemini says the requested flowers aren't in stock, reject politely
+    if not ai_verdict.get("is_possible"):
+        remaining = get_remaining_generations(db, current_user.id)
+        return CustomizationResponse(
+            success=False,
+            message=ai_verdict.get("feedback") or "We cannot fulfill this exact arrangement with our current stock.",
+            generated_image_url=None,
+            unavailable_items=[],
+            remaining_generations=remaining,
+        )
+
+    # ── Step 5: Look up material records using product IDs ────────────────
     flower    = db.query(Flower).filter(Flower.product_id == payload.flower_id).first() if payload.flower_id else None
-    vase       = db.query(Vase).filter(Vase.product_id == payload.vase_id).first() if payload.vase_id else None
+    vase      = db.query(Vase).filter(Vase.product_id == payload.vase_id).first() if payload.vase_id else None
     wrapping  = db.query(Wrapping).filter(Wrapping.product_id == payload.wrapping_id).first() if payload.wrapping_id else None
     accessory = db.query(Accessory).filter(Accessory.product_id == payload.accessory_id).first() if payload.accessory_id else None
 
-    # ── Step 3c: Save arrangement ───────────────────────────────────────
+    # ── Step 6: Save arrangement ──────────────────────────────────────────
     arrangement = Arrangement(
         id=uuid.uuid4(),
         prompt_text=payload.prompt_text,
@@ -178,10 +201,13 @@ async def check_and_generate(
     db.commit()
     db.refresh(arrangement)
 
-    # ── Step 3d: Generate image via Pollinations ──────────────────────────
+    # ── Step 7: Generate image via Pollinations (Using Optimized Prompt) ──
+    optimized_prompt = ai_verdict.get("optimized_prompt") or payload.prompt_text
+    
     generated_url = await pollinations.generate_arrangement_image(
         db=db,
         arrangement_id=str(arrangement.id),
+        optimized_prompt=optimized_prompt # 👈 Send Gemini's enhanced prompt
     )
 
     if not generated_url:
@@ -190,7 +216,7 @@ async def check_and_generate(
             detail="Image generation failed. Please try again."
         )
 
-    # ── Step 3e: Calculate price breakdown ────────────────────────────────
+    # ── Step 8: Calculate price breakdown ─────────────────────────────────
     price_breakdown = calculate_price_breakdown(flower, vase, wrapping, accessory)
 
     # Update arrangement with estimated price
@@ -198,7 +224,7 @@ async def check_and_generate(
     arrangement.generated_image_url = generated_url
     db.commit()
 
-    # ── Step 4: Log the AI usage ──────────────────────────────────────────
+    # ── Step 9: Log the AI usage ──────────────────────────────────────────
     log_ai_usage(
         db=db,
         user_id=current_user.id,

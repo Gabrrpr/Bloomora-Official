@@ -55,6 +55,7 @@ class Order(Base):
     has_reviewed = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+    branch_name = Column(String(50), nullable=False, default="Manila")
 
     # Relationships
     user = relationship("User", back_populates="orders", foreign_keys=[user_id])

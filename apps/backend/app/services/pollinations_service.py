@@ -1,5 +1,6 @@
 import httpx
 import io
+import base64
 from PIL import Image, ImageDraw, ImageFont
 from supabase import create_client, Client
 from urllib.parse import quote
@@ -8,118 +9,77 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.arrangement import Arrangement
 
-
 class PollinationsService:
     def __init__(self):
-        self.base_url = "https://image.pollinations.ai/prompt/"
-        self.model = "flux"
+        # 2026 Unified API Endpoint
+        self.base_url = "https://gen.pollinations.ai/image/"
+        self.model = "flux" # Or your preferred model like 'turbo'
 
-    async def generate_arrangement_image(self, db: Session, arrangement_id: str):
-        """
-        Fetches the arrangement data from your DB and generates the Flux image.
-        """
-        # 1. Fetch the arrangement using your Arrangement model
+    async def generate_arrangement_image(self, db: Session, arrangement_id: str, optimized_prompt: str):
         arrangement = db.query(Arrangement).filter(Arrangement.id == arrangement_id).first()
         if not arrangement:
             return None
 
-        # 2. Build the prompt based on your model's relationships
-        # We access arrangement.flower, arrangement.wrapping, etc.
-        prompt_parts = []
+        encoded_prompt = quote(optimized_prompt)
+        clean_key = settings.POLLINATIONS_API_KEY.strip()
+        pollinations_url = f"{self.base_url}{encoded_prompt}?width=1024&height=1024&model={self.model}&nologo=true&seed=42&key={clean_key}"
 
-        if arrangement.flower:
-            prompt_parts.append(f"{arrangement.flower.quantity} {arrangement.flower.color} {arrangement.flower.style} flowers")
-
-        if arrangement.wrapping:
-            prompt_parts.append(f"wrapped in {arrangement.wrapping.color} {arrangement.wrapping.style} paper")
-
-        if arrangement.vase:
-            prompt_parts.append(f"placed in a {arrangement.vase.material} {arrangement.vase.style} vase")
-
-        # Fallback to the natural language prompt if no specific materials are linked
-        base_prompt = arrangement.prompt_text if arrangement.prompt_text else "A beautiful floral arrangement"
-
-        materials_desc = ", ".join(prompt_parts) if prompt_parts else ""
-        
-        # Build florist-executable, consistent prompt
-        full_prompt = (
-            f"Professional studio product photograph of a realistic floral bouquet arrangement, "
-            f"top-down angled view at 45 degrees, centered in frame. "
-            f"{base_prompt}. "
-            f"{materials_desc}. "
-            f"The arrangement is built by a professional florist using real, fresh flowers and materials "
-            f"currently in stock at a flower shop. Each flower has natural coloration — no neon, glitter, "
-            f"or fantasy hues. Stems are freshly cut at natural lengths, leaves are healthy and green. "
-            f"The bouquet is wrapped and arranged in a style that a florist can actually recreate by hand. "
-            f"Pure white seamless background. Soft diffused natural lighting from upper left. "
-            f"Sharp focus on the entire bouquet, gentle shadow beneath. Photorealistic, high detail, "
-            f"8k product photography. "
-            f"NO illustrations, NO digital art, NO watercolor, NO anime, NO fantasy elements, "
-            f"NO glowing or unnatural colors, NO impossible flower combinations, "
-            f"NO text, NO watermark, NO logo, NO frame."
-        )
-
-        # 3. Call Pollinations.ai to get image URL
-        encoded_prompt = quote(full_prompt)
-        pollinations_url = f"{self.base_url}{encoded_prompt}?width=1024&height=1024&model={self.model}&nologo=true"
-
+        # ==========================================
+        # 1. POLLINATIONS TRY BLOCK
+        # ==========================================
         try:
-            # Download image
             async with httpx.AsyncClient() as client:
-                resp = await client.get(pollinations_url, timeout=30.0)
+                resp = await client.get(pollinations_url, timeout=60.0)
                 resp.raise_for_status()
                 image_bytes = resp.content
+        except Exception as e:
+            print(f"❌ POLLINATIONS ERROR: {e}")
+            return None
 
-            # Load with Pillow and apply watermark
-            img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
-            draw = ImageDraw.Draw(img)
+        # ==========================================
+        # 2. IMAGE WATERMARKING
+        # ==========================================
+        img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
+        draw = ImageDraw.Draw(img)
+        watermark_text = "Bloomora.ai ©"
+        font_size = max(60, img.width // 20)
+        try:
+            font = ImageFont.truetype("arial.ttf", font_size)
+        except:
+            font = ImageFont.load_default()
 
-            # Watermark text and positioning (bottom-right, scalable)
-            watermark_text = "Bloomora.ai ©"
-            font_size = max(60, img.width // 20)  # Larger for visibility
-            try:
-                font = ImageFont.truetype("arial.ttf", font_size)
-            except:
-                font = ImageFont.load_default()
+        bbox = draw.textbbox((0, 0), watermark_text, font=font)
+        margin = 20
+        x = img.width - (bbox[2] - bbox[0]) - margin
+        y = img.height - (bbox[3] - bbox[1]) - margin
 
-            bbox = draw.textbbox((0, 0), watermark_text, font=font)
-            text_width = bbox[2] - bbox[0]
-            text_height = bbox[3] - bbox[1]
-            margin = 20
-            x = img.width - text_width - margin
-            y = img.height - text_height - margin
+        for dx, dy in [(-1,-1), (1,-1), (-1,1), (1,1)]:
+            draw.text((x+dx, y+dy), watermark_text, fill="black", font=font)
+        draw.text((x, y), watermark_text, fill=(255, 255, 255, 128), font=font)
 
-            # Semi-transparent white text with black outline
-            draw.text((x-1, y-1), watermark_text, fill="black", font=font)
-            draw.text((x+1, y-1), watermark_text, fill="black", font=font)
-            draw.text((x-1, y+1), watermark_text, fill="black", font=font)
-            draw.text((x+1, y+1), watermark_text, fill="black", font=font)
-            draw.text((x, y), watermark_text, fill=(255, 255, 255, 128), font=font)
+        img = img.convert("RGB")
+        output = io.BytesIO()
+        img.save(output, format="PNG", optimize=True)
+        watermarked_bytes = output.getvalue()
 
-            # Convert back and get bytes
-            img = img.convert("RGB")
-            output = io.BytesIO()
-            img.save(output, format="PNG", optimize=True)
-            watermarked_bytes = output.getvalue()
-
-            # Init Supabase client and upload
-            supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+        # ==========================================
+        # 3. SUPABASE TRY BLOCK
+        # ==========================================
+        try:
+            supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
             file_path = f"{settings.SUPABASE_BUCKET}/{arrangement_id}.png"
-            upload_resp = supabase.storage.from_(settings.SUPABASE_BUCKET).upload(
-                file_path, watermarked_bytes, options={"contentType": "image/png"}
+            
+            supabase.storage.from_(settings.SUPABASE_BUCKET).upload(
+                path=file_path,
+                file=watermarked_bytes,
+                file_options={"content-type": "image/png", "x-upsert": "true"}
             )
-
-            # Get public URL (assume upload success or check)
             public_url = supabase.storage.from_(settings.SUPABASE_BUCKET).get_public_url(file_path)
-            watermarked_url = public_url
-            print(f"Uploaded watermarked image to: {watermarked_url}")
+            
+            arrangement.generated_image_url = public_url
+            db.commit()
+            return public_url
 
         except Exception as e:
-            print(f"Watermark/upload failed: {e}")
-            watermarked_url = pollinations_url  # Fallback to original
-
-        # 4. Update model and commit
-        arrangement.generated_image_url = watermarked_url
-        db.commit()
-
-        return watermarked_url
+            print(f"❌ SUPABASE ERROR: {e}")
+            return None

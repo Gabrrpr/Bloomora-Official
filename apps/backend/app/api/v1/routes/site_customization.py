@@ -105,7 +105,7 @@ def _get_or_seed_toggle(db: Session):
     if not row:
         row = SiteCustomization(
             key="customization_enabled",
-            value=json.dumps({"enabled": true}),
+            value=json.dumps({"enabled": True}),
         )
         db.add(row)
         db.commit()
@@ -119,7 +119,7 @@ def get_customization_toggle(db: Session = Depends(get_db)):
     row = _get_or_seed_toggle(db)
     try:
         data = json.loads(row.value)
-        return CustomizationToggleResponse(enabled=data.get("enabled", true))
+        return CustomizationToggleResponse(enabled=data.get("enabled", True))
     except json.JSONDecodeError:
         return CustomizationToggleResponse(enabled=true)
 

@@ -15,7 +15,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
 
     # Pollinations
-    POLLINATIONS_API_URL: str = "https://image.pollinations.ai/prompt"
+    POLLINATIONS_API_KEY: str
+    
+    # Gemini
+    GEMINI_API_KEY: str
 
     # Lalamove
     LALAMOVE_API_KEY: str = ""
