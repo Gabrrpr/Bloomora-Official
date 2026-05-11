@@ -19,7 +19,7 @@ Bloomora is a full-stack monorepo capstone project that provides Esting's Flower
 - Rider delivery management via a dedicated mobile interface
 
 ---
-
+## for the streak
 ## Team
 
 | Name | Role |
