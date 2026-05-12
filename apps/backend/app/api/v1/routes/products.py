@@ -60,9 +60,17 @@ def get_products(db: Session = Depends(get_db)):
 @router.get("/customization/all", response_model=List[dict])
 def get_customization_products(db: Session = Depends(get_db)):
     """Get all available products with customization attributes for Mix & Match."""
+    # Ensure we load relationships to avoid N+1 queries
     products = (
         db.query(Product)
         .filter(Product.is_available == True)
+        .options(
+            joinedload(Product.inventory),
+            joinedload(Product.flower),
+            joinedload(Product.wrapping),
+            joinedload(Product.accessory)
+            # Add joinedload(Product.vase) here if you have a Vase relationship
+        )
         .order_by(Product.category, Product.name)
         .all()
     )
@@ -73,42 +81,54 @@ def get_customization_products(db: Session = Depends(get_db)):
         stock = inv.current_stock if inv else 0
         reorder = inv.reorder_point if inv else 10
         stock_status = "out_of_stock" if stock <= 0 else "low_stock" if stock <= reorder else "in_stock"
+        
+        # Clean the category string to match frontend expectations exactly
+        raw_category = p.category.value if hasattr(p.category, "value") else str(p.category)
+        clean_category = raw_category.strip().lower()
 
         item = {
             "id": str(p.id),
             "name": p.name,
             "price": float(p.price) if p.price else 0,
-            "category": p.category.value if hasattr(p.category, "value") else p.category,
+            "category": clean_category, # Use the cleaned category!
             "image_url": p.image_url,
             "is_available": p.is_available,
             "stock": stock,
             "stock_status": stock_status,
         }
 
+        # Safely extract attributes if the relationship exists
         if p.flower:
             item["attrs"] = {
                 "color": p.flower.color,
                 "style": p.flower.style,
-                "size": p.flower.size,
+                "size": getattr(p.flower, 'size', None),
                 "quantity": p.flower.quantity,
             }
         elif p.wrapping:
             item["attrs"] = {
                 "style": p.wrapping.style,
                 "color": p.wrapping.color,
-                "material": p.wrapping.material,
+                "material": getattr(p.wrapping, 'material', None),
                 "size": p.wrapping.size,
                 "quantity": p.wrapping.quantity,
             }
         elif p.accessory:
             item["attrs"] = {
                 "name": p.accessory.name,
-                "style": p.accessory.style,
-                "color": p.accessory.color,
-                "size": p.accessory.size,
-                "quantity": p.accessory.quantity,
+                "style": getattr(p.accessory, 'style', None),
+                "color": getattr(p.accessory, 'color', None),
+                "size": getattr(p.accessory, 'size', None),
+                "quantity": getattr(p.accessory, 'quantity', 1),
             }
+            
+        # We don't necessarily need a specific 'elif p.vase:' block unless 
+        # your Vase model has specific attributes (like 'material' or 'height') 
+        # that you want the frontend to use in the prompt generation. 
+        # The base 'item' dictionary is enough to display the card!
+
         result.append(item)
+        
     return result
 
 # ── Admin endpoints ───────────────────────────────────────────────────────────

@@ -17,15 +17,15 @@ def validate_and_optimize_prompt(user_prompt: str, inventory_list: list[str]) ->
     
     Task:
     1. Check if the user's request is possible using ONLY the inventory above.
-    2. If impossible (e.g. requesting Blue Roses when we only have Red), set is_possible to false and explain why in 'feedback'.
-    3. If possible, set is_possible to true and create a highly detailed 'optimized_prompt' for an image generator. 
-    Focus on photorealism, professional studio lighting, and specific placement.
+    2. If impossible, set is_possible to false and explain why.
+    3. If possible, set is_possible to true, create the 'optimized_prompt', AND list the exact names of the inventory items you included in the arrangement.
     
     Response must be JSON:
     {{
         "is_possible": boolean,
         "feedback": string | null,
-        "optimized_prompt": string | null
+        "optimized_prompt": string | null,
+        "used_items": ["string", "string"]  // 👈 NEW: List the exact inventory names used
     }}
     
     User Request: {user_prompt}

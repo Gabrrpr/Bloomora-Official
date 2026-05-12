@@ -16,7 +16,7 @@ from app.schemas.customization import (
     PriceBreakdown,
 )
 from app.services.pollinations_service import PollinationsService
-from app.services.gemini_service import validate_and_optimize_prompt  # 👈 NEW: Import Gemini service
+from app.services.gemini_service import validate_and_optimize_prompt
 from app.services.inventory_service import check_material_availability, get_alternatives
 from app.services.ai_usage_service import (
     has_reached_daily_limit,
@@ -35,7 +35,7 @@ def calculate_price_breakdown(
     accessory: Optional[Accessory],
 ) -> PriceBreakdown:
     """
-    Builds an itemized price breakdown from the selected materials.
+    Builds an itemized price breakdown from the explicitly selected materials.
     """
     items: List[PriceBreakdownItem] = []
 
@@ -93,7 +93,6 @@ def get_ai_usage(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Returns how many AI generations the current user has left today."""
     remaining = get_remaining_generations(db, current_user.id)
     return {
         "used": DAILY_AI_LIMIT - remaining,
@@ -109,10 +108,6 @@ async def check_and_generate(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Two-Way Customization endpoint with Gemini Intelligent Validation.
-    """
-
     # ── Step 1: Check daily AI usage limit ───────────────────────────────
     if has_reached_daily_limit(db, current_user.id):
         raise HTTPException(
@@ -160,18 +155,14 @@ async def check_and_generate(
         )
 
     # ── Step 4: Gemini Intelligent Prompt Validation ──────────────────────
-    # Fetch all active product names for Gemini's context
     db_products = db.query(Product.name).filter(Product.is_available == True).all()
     inventory_names = [p[0] for p in db_products]
     
-    # Fallback just in case DB is empty
     if not inventory_names:
         inventory_names = ["Red Roses", "White Tulips", "Sunflowers", "Pink Carnations"]
 
-    # Ask Gemini to validate the prompt
     ai_verdict = validate_and_optimize_prompt(payload.prompt_text, inventory_names)
 
-    # If Gemini says the requested flowers aren't in stock, reject politely
     if not ai_verdict.get("is_possible"):
         remaining = get_remaining_generations(db, current_user.id)
         return CustomizationResponse(
@@ -207,7 +198,7 @@ async def check_and_generate(
     generated_url = await pollinations.generate_arrangement_image(
         db=db,
         arrangement_id=str(arrangement.id),
-        optimized_prompt=optimized_prompt # 👈 Send Gemini's enhanced prompt
+        optimized_prompt=optimized_prompt 
     )
 
     if not generated_url:
@@ -216,10 +207,34 @@ async def check_and_generate(
             detail="Image generation failed. Please try again."
         )
 
-    # ── Step 8: Calculate price breakdown ─────────────────────────────────
+    # ── Step 8: Calculate price breakdown (Merged!) ───────────────────────
+    # 8a. Calculate the base items the user selected via dropdowns
     price_breakdown = calculate_price_breakdown(flower, vase, wrapping, accessory)
+    
+    # 8b. Add items that Gemini intelligently extracted from their text prompt
+    used_item_names = ai_verdict.get("used_items", [])
+    if used_item_names:
+        ai_selected_products = db.query(Product).filter(Product.name.in_(used_item_names)).all()
+        
+        # Get list of IDs already in the breakdown so we don't double charge!
+        existing_ids = [item.product_id for item in price_breakdown.items]
+        
+        for prod in ai_selected_products:
+            if str(prod.id) not in existing_ids:
+                # Assuming your Product model has a 'price' or 'unit_price' column
+                item_price = float(getattr(prod, 'price', getattr(prod, 'unit_price', 0.0)))
+                
+                price_breakdown.items.append(PriceBreakdownItem(
+                    material_type="Custom Request (AI)",
+                    product_id=str(prod.id),
+                    product_name=prod.name,
+                    unit_price=item_price,
+                    quantity=1,
+                    subtotal=item_price
+                ))
+                price_breakdown.total_price += item_price
 
-    # Update arrangement with estimated price
+    # Update arrangement with final estimated price
     arrangement.estimated_price = price_breakdown.total_price
     arrangement.generated_image_url = generated_url
     db.commit()
