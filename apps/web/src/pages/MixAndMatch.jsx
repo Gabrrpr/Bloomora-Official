@@ -25,8 +25,8 @@ function StockBadge({ status }) {
 }
 
 function ProductCard({ product, selected, onClick, disabled }) {
-  // 👈 Grab whichever image property actually exists!
-  const imageSrc = product.image_url || product.imageUrl || product.image;
+  // Add a log so we can see what React is receiving
+  console.log(`Product: ${product.name}, Image URL:`, product.image_url);
 
   return (
     <button
@@ -41,15 +41,12 @@ function ProductCard({ product, selected, onClick, disabled }) {
       }}
     >
       <div className="w-full aspect-square rounded-lg overflow-hidden bg-gray-50 relative">
-        {imageSrc ? (
+        {product.image_url ? (
           <img 
-            src={imageSrc} 
+            src={product.image_url} 
             alt={product.name} 
             className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105" 
-            onError={(e) => {
-              // If the URL is broken, hide the broken image icon
-              e.currentTarget.style.display = 'none';
-            }}
+            // 👈 I removed the onError so we can see if it's a broken link!
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center text-xs text-gray-300">No image</div>
