@@ -13,106 +13,106 @@ const DARK_GREEN = "#0C573E";
 const STANDARD_CATEGORIES = ["flower", "vase", "wrapping", "accessory", "arrangement", "add-on"];
 
 const PROMOTIONS = [
-  { text: "Get", highlight: "3% off your first order", cta: "SHOP NOW", page: "shop" },
-  { text: "Free delivery on orders over", highlight: "₱2,000", cta: "ORDER NOW", page: "shop" },
-  { text: "Custom bouquets made just for you!", highlight: "Make it Personal", cta: "TRY IT", page: "make-it-personal" },
-  { text: "Visit us in", highlight: "Manila & Pampanga", cta: "GET DIRECTIONS", page: "contact" },
+  { text: "Get", highlight: "3% off your first order", cta: "SHOP NOW", page: "shop" },
+  { text: "Free delivery on orders over", highlight: "₱2,000", cta: "ORDER NOW", page: "shop" },
+  { text: "Custom bouquets made just for you!", highlight: "Make it Personal", cta: "TRY IT", page: "make-it-personal" },
+  { text: "Visit us in", highlight: "Manila & Pampanga", cta: "GET DIRECTIONS", page: "contact" },
 ];
 
 const NAV_LINKS = [
-  { label: "Home", page: "home" },
-  {
-    label: "Shop", page: "shop", categorized: true,
-    categories: [
-      { heading: "Flowers", items: [{ label: "Best Sellers", page: "shop" }, { label: "Classic Collection", page: "shop" }, { label: "Gift Sets", page: "shop" }] },
-      { heading: "Non-Floral", items: [{ label: "Vases & Containers", page: "vases" }, { label: "Pots & Planters", page: "shop" }, { label: "Floral Supplies", page: "shop" }, { label: "Wrapping & Accessories", page: "shop" }, { label: "Add-ons", page: "addons" }] },
-    ],
-  },
-  {
-    label: "Occasions", page: "occasions",
-    dropdown: [
-      { label: "Birthdays", page: "occasions" }, { label: "Anniversaries", page: "occasions" },
-      { label: "Weddings", page: "occasions" }, { label: "Graduations", page: "occasions" },
-      { label: "Sympathy", page: "occasions" }, { label: "Just Because", page: "occasions" },
-      { label: "Openings", page: "occasions" },
-    ],
-  },
-  { label: "About Us", page: "about" },
-  { label: "Contact Us", page: "contact" },
-  { label: "Help Center", page: null, dropdown: [{ label: "FAQs", page: "faq" }, { label: "Track My Order", page: "orders" }, { label: "Return Policy", page: "return-policy" }, { label: "World Clock", page: "world-clock" }] },
+  { label: "Home", page: "home" },
+  {
+    label: "Shop", page: "shop", categorized: true,
+    categories: [
+      { heading: "Flowers", items: [{ label: "Best Sellers", page: "shop" }, { label: "Classic Collection", page: "shop" }, { label: "Gift Sets", page: "shop" }] },
+      { heading: "Non-Floral", items: [{ label: "Vases & Containers", page: "vases" }, { label: "Pots & Planters", page: "shop" }, { label: "Floral Supplies", page: "shop" }, { label: "Wrapping & Accessories", page: "shop" }, { label: "Add-ons", page: "addons" }] },
+    ],
+  },
+  {
+    label: "Occasions", page: "occasions",
+    dropdown: [
+      { label: "Birthdays", page: "occasions" }, { label: "Anniversaries", page: "occasions" },
+      { label: "Weddings", page: "occasions" }, { label: "Graduations", page: "occasions" },
+      { label: "Sympathy", page: "occasions" }, { label: "Just Because", page: "occasions" },
+      { label: "Openings", page: "occasions" },
+    ],
+  },
+  { label: "About Us", page: "about" },
+  { label: "Contact Us", page: "contact" },
+  { label: "Help Center", page: null, dropdown: [{ label: "FAQs", page: "faq" }, { label: "Track My Order", page: "orders" }, { label: "Return Policy", page: "return-policy" }, { label: "World Clock", page: "world-clock" }] },
 ];
 
 const SOCIAL_LINKS = [
-  { name: "Facebook",  href: "https://www.facebook.com/profile.php?id=100063877087893", icon: <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg> },
-  { name: "Instagram", href: "https://www.instagram.com/estingsflowershop/", icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg> },
-  { name: "WhatsApp",  href: "#", icon: <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 448 512"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg> },
-  { name: "Gmail",     href: "#", icon: <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 512 512"><path d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"/></svg> },
+  { name: "Facebook",  href: "https://www.facebook.com/profile.php?id=100063877087893", icon: <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg> },
+  { name: "Instagram", href: "https://www.instagram.com/estingsflowershop/", icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg> },
+  { name: "WhatsApp",  href: "#", icon: <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 448 512"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg> },
+  { name: "Gmail",     href: "#", icon: <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 512 512"><path d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"/></svg> },
 ];
 
 const BRANCHES = {
-  Manila:   { address: "Laon-Laan Cor. Dos Castillas St., Sampaloc, Manila", hours: "Mon – Sat, 9:00 AM – 9:00 PM",  phone: "+63 918 902 2401" },
-  Pampanga: { address: "McArthur Hi-way, Dolores, San Fernando, Pampanga",   hours: "Mon – Sat, 7:30 AM – 5:00 PM", phone: "+63 045 961 5378" },
+  Manila:   { address: "Laon-Laan Cor. Dos Castillas St., Sampaloc, Manila", hours: "Mon – Sat, 9:00 AM – 9:00 PM",  phone: "+63 918 902 2401" },
+  Pampanga: { address: "McArthur Hi-way, Dolores, San Fernando, Pampanga",   hours: "Mon – Sat, 7:30 AM – 5:00 PM", phone: "+63 045 961 5378" },
 };
 
 // ── Dark Mode Toggle Button ───────────────────────────────────────────────────
 function DarkModeToggle() {
-  const { isDark, toggleDark } = useTheme();
-  return (
-    <button
-      onClick={toggleDark}
-      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-      className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-all relative overflow-hidden"
-      style={{
-        background: isDark
-          ? "linear-gradient(135deg, #1e3a5f, #2d4a7a)"
-          : "linear-gradient(135deg, #fef3c7, #fde68a)",
-        border: isDark ? "1.5px solid #3b5fa0" : "1.5px solid #f59e0b",
-        boxShadow: isDark
-          ? "0 0 10px rgba(59,130,246,0.25)"
-          : "0 0 10px rgba(245,158,11,0.25)",
-        transition: "all 0.3s cubic-bezier(0.34,1.56,0.64,1)",
-      }}
-      onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.1)"; }}
-      onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
-    >
-      {/* Sun icon (light mode) */}
-      <span
-        style={{
-          position: "absolute",
-          inset: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          opacity: isDark ? 0 : 1,
-          transform: isDark ? "rotate(90deg) scale(0.5)" : "rotate(0deg) scale(1)",
-          transition: "all 0.3s cubic-bezier(0.34,1.56,0.64,1)",
-        }}
-      >
-        <svg width="16" height="16" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="4"/>
-          <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-        </svg>
-      </span>
+  const { isDark, toggleDark } = useTheme();
+  return (
+    <button
+      onClick={toggleDark}
+      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+      className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-all relative overflow-hidden"
+      style={{
+        background: isDark
+          ? "linear-gradient(135deg, #1e3a5f, #2d4a7a)"
+          : "linear-gradient(135deg, #fef3c7, #fde68a)",
+        border: isDark ? "1.5px solid #3b5fa0" : "1.5px solid #f59e0b",
+        boxShadow: isDark
+          ? "0 0 10px rgba(59,130,246,0.25)"
+          : "0 0 10px rgba(245,158,11,0.25)",
+        transition: "all 0.3s cubic-bezier(0.34,1.56,0.64,1)",
+      }}
+      onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.1)"; }}
+      onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
+    >
+      {/* Sun icon (light mode) */}
+      <span
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: isDark ? 0 : 1,
+          transform: isDark ? "rotate(90deg) scale(0.5)" : "rotate(0deg) scale(1)",
+          transition: "all 0.3s cubic-bezier(0.34,1.56,0.64,1)",
+        }}
+      >
+        <svg width="16" height="16" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24">
+          <circle cx="12" cy="12" r="4"/>
+          <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+        </svg>
+      </span>
 
-      {/* Moon icon (dark mode) */}
-      <span
-        style={{
-          position: "absolute",
-          inset: 0,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          opacity: isDark ? 1 : 0,
-          transform: isDark ? "rotate(0deg) scale(1)" : "rotate(-90deg) scale(0.5)",
-          transition: "all 0.3s cubic-bezier(0.34,1.56,0.64,1)",
-        }}
-      >
-        <svg width="14" height="14" fill="#93c5fd" viewBox="0 0 24 24">
-          <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
-        </svg>
-      </span>
-    </button>
-  );
+      {/* Moon icon (dark mode) */}
+      <span
+        style={{
+          position: "absolute",
+          inset: 0,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          opacity: isDark ? 1 : 0,
+          transform: isDark ? "rotate(0deg) scale(1)" : "rotate(-90deg) scale(0.5)",
+          transition: "all 0.3s cubic-bezier(0.34,1.56,0.64,1)",
+        }}
+      >
+        <svg width="14" height="14" fill="#93c5fd" viewBox="0 0 24 24">
+          <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+        </svg>
+      </span>
+    </button>
+  );
 }
 
 // ── Floating Hearts (Mother's Day button) ─────────────────────────────────────
@@ -126,884 +126,996 @@ const HEART_CSS = `
 `;
 
 const HEARTS_CONFIG = [
-  { anim:"hRise1 2.4s ease-out infinite", delay:"0s",    left:"-14px", size:10, color:"#f43f5e" },
-  { anim:"hRise2 2.9s ease-out infinite", delay:"0.55s", left:"8%",   size:8,  color:"#ec4899" },
-  { anim:"hRise3 2.2s ease-out infinite", delay:"1.1s",  left:"30%",  size:12, color:"#f43f5e" },
-  { anim:"hRise4 2.7s ease-out infinite", delay:"0.3s",  right:"12%", size:9,  color:"#fb7185" },
-  { anim:"hRise5 2.5s ease-out infinite", delay:"0.85s", right:"-12px",size:8, color:"#ec4899" },
+  { anim:"hRise1 2.4s ease-out infinite", delay:"0s",    left:"-14px", size:10, color:"#f43f5e" },
+  { anim:"hRise2 2.9s ease-out infinite", delay:"0.55s", left:"8%",   size:8,  color:"#ec4899" },
+  { anim:"hRise3 2.2s ease-out infinite", delay:"1.1s",  left:"30%",  size:12, color:"#f43f5e" },
+  { anim:"hRise4 2.7s ease-out infinite", delay:"0.3s",  right:"12%", size:9,  color:"#fb7185" },
+  { anim:"hRise5 2.5s ease-out infinite", delay:"0.85s", right:"-12px",size:8, color:"#ec4899" },
 ];
 
 function FloatingHearts() {
-  return (
-    <>
-      {HEARTS_CONFIG.map((h, i) => (
-        <span key={i} style={{
-          position:"absolute", bottom:"calc(100% - 2px)",
-          left:h.left, right:h.right,
-          animation:h.anim, animationDelay:h.delay,
-          pointerEvents:"none", zIndex:10, lineHeight:1,
-          display:"inline-block",
-        }}>
-          <svg width={h.size} height={h.size} viewBox="0 0 24 24" fill={h.color}>
-            <path d="M12 21.593c-5.63-5.539-11-10.297-11-14.402 0-3.791 3.068-5.191 5.281-5.191 1.312 0 4.151.501 5.719 4.457 1.59-3.968 4.464-4.447 5.726-4.447 2.54 0 5.274 1.621 5.274 5.181 0 4.069-5.136 8.625-11 14.402z"/>
-          </svg>
-        </span>
-      ))}
-    </>
-  );
+  return (
+    <>
+      {HEARTS_CONFIG.map((h, i) => (
+        <span key={i} style={{
+          position:"absolute", bottom:"calc(100% - 2px)",
+          left:h.left, right:h.right,
+          animation:h.anim, animationDelay:h.delay,
+          pointerEvents:"none", zIndex:10, lineHeight:1,
+          display:"inline-block",
+        }}>
+          <svg width={h.size} height={h.size} viewBox="0 0 24 24" fill={h.color}>
+            <path d="M12 21.593c-5.63-5.539-11-10.297-11-14.402 0-3.791 3.068-5.191 5.281-5.191 1.312 0 4.151.501 5.719 4.457 1.59-3.968 4.464-4.447 5.726-4.447 2.54 0 5.274 1.621 5.274 5.181 0 4.069-5.136 8.625-11 14.402z"/>
+          </svg>
+        </span>
+      ))}
+    </>
+  );
 }
 
 // ── Branch Modal ──────────────────────────────────────────────────────────────
 function BranchModal({ branch, onClose }) {
-  const info = BRANCHES[branch];
-  useEffect(() => {
-    const h = (e) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", h);
-    return () => document.removeEventListener("keydown", h);
-  }, [onClose]);
+  const info = BRANCHES[branch];
+  useEffect(() => {
+    const h = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [onClose]);
 
-  return (
-    <>
-      <style>{`@keyframes bmIn { from { opacity:0; transform:scale(0.93) translateY(-16px); } to { opacity:1; transform:scale(1) translateY(0); } }`}</style>
-      <div className="fixed inset-0 z-[200] flex items-center justify-center px-4"
-        style={{ backgroundColor: "rgba(0,0,0,0.50)", backdropFilter: "blur(5px)" }}
-        onClick={onClose}>
-        <div className="relative w-full overflow-hidden rounded-2xl"
-          style={{ maxWidth:"360px", animation:"bmIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both", boxShadow:"0 32px 80px rgba(0,0,0,0.28)" }}
-          onClick={e => e.stopPropagation()}>
-          <div className="relative overflow-hidden"
-            style={{ background:`linear-gradient(150deg, ${DARK_GREEN} 0%, #1a6b3f 50%, ${SITE_GREEN} 100%)`, padding:"32px 28px 28px" }}>
-            <div style={{ position:"absolute", top:"-40px", right:"-40px", width:"160px", height:"160px", borderRadius:"50%", background:"rgba(255,255,255,0.06)" }}/>
-            <div style={{ position:"absolute", bottom:"-30px", left:"-30px", width:"120px", height:"120px", borderRadius:"50%", background:"rgba(255,255,255,0.05)" }}/>
-            <button onClick={onClose} className="absolute top-4 right-4 flex items-center justify-center rounded-full transition-all"
-              style={{ width:"28px", height:"28px", background:"rgba(255,255,255,0.12)", color:"rgba(255,255,255,0.7)" }}
-              onMouseEnter={e => { e.currentTarget.style.background="rgba(255,255,255,0.22)"; e.currentTarget.style.color="white"; }}
-              onMouseLeave={e => { e.currentTarget.style.background="rgba(255,255,255,0.12)"; e.currentTarget.style.color="rgba(255,255,255,0.7)"; }}>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
-            <div className="relative z-10">
-              <p style={{ fontSize:"13px", fontWeight:500, color:"rgba(255,255,255,0.65)", margin:"0 0 4px" }}>You've selected</p>
-              <h2 style={{ fontSize:"26px", fontWeight:800, color:"white", lineHeight:1.1, letterSpacing:"-0.01em", margin:0 }}>{branch} Branch</h2>
-            </div>
-          </div>
-          <div className="bg-white" style={{ padding:"24px 28px" }}>
-            <div style={{ display:"flex", flexDirection:"column", gap:"16px", marginBottom:"24px" }}>
-              {[
-                { label:"Address", icon:<svg className="w-4 h-4" style={{color:SITE_GREEN}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>, value: info.address },
-                { label:"Store Hours", icon:<svg className="w-4 h-4" style={{color:SITE_GREEN}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>, value: info.hours },
-                { label:"Phone", icon:<svg className="w-4 h-4" style={{color:SITE_GREEN}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>, value: info.phone },
-              ].map(row => (
-                <div key={row.label} style={{ display:"flex", alignItems:"flex-start", gap:"12px" }}>
-                  <div className="flex items-center justify-center flex-shrink-0 rounded-lg" style={{ width:"34px", height:"34px", backgroundColor:"#f0fdf4", marginTop:"1px" }}>{row.icon}</div>
-                  <div>
-                    <p style={{ fontSize:"10px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:"#9ca3af", margin:"0 0 2px" }}>{row.label}</p>
-                    <p style={{ fontSize:"13px", color:"#374151", lineHeight:"1.5", margin:0 }}>{row.value}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <button onClick={onClose} className="w-full font-semibold text-white rounded-xl transition-all"
-              style={{ padding:"13px", fontSize:"14px", background:`linear-gradient(135deg, ${SITE_GREEN}, ${DARK_GREEN})`, border:"none", cursor:"pointer" }}
-              onMouseEnter={e => e.currentTarget.style.opacity="0.92"}
-              onMouseLeave={e => e.currentTarget.style.opacity="1"}>
-              Got it, start shopping
-            </button>
-          </div>
-        </div>
-      </div>
-    </>
-  );
+  return (
+    <>
+      <style>{`@keyframes bmIn { from { opacity:0; transform:scale(0.93) translateY(-16px); } to { opacity:1; transform:scale(1) translateY(0); } }`}</style>
+      <div className="fixed inset-0 z-[200] flex items-center justify-center px-4"
+        style={{ backgroundColor: "rgba(0,0,0,0.50)", backdropFilter: "blur(5px)" }}
+        onClick={onClose}>
+        <div className="relative w-full overflow-hidden rounded-2xl"
+          style={{ maxWidth:"360px", animation:"bmIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both", boxShadow:"0 32px 80px rgba(0,0,0,0.28)" }}
+          onClick={e => e.stopPropagation()}>
+          <div className="relative overflow-hidden"
+            style={{ background:`linear-gradient(150deg, ${DARK_GREEN} 0%, #1a6b3f 50%, ${SITE_GREEN} 100%)`, padding:"32px 28px 28px" }}>
+            <div style={{ position:"absolute", top:"-40px", right:"-40px", width:"160px", height:"160px", borderRadius:"50%", background:"rgba(255,255,255,0.06)" }}/>
+            <div style={{ position:"absolute", bottom:"-30px", left:"-30px", width:"120px", height:"120px", borderRadius:"50%", background:"rgba(255,255,255,0.05)" }}/>
+            <button onClick={onClose} className="absolute top-4 right-4 flex items-center justify-center rounded-full transition-all"
+              style={{ width:"28px", height:"28px", background:"rgba(255,255,255,0.12)", color:"rgba(255,255,255,0.7)" }}
+              onMouseEnter={e => { e.currentTarget.style.background="rgba(255,255,255,0.22)"; e.currentTarget.style.color="white"; }}
+              onMouseLeave={e => { e.currentTarget.style.background="rgba(255,255,255,0.12)"; e.currentTarget.style.color="rgba(255,255,255,0.7)"; }}>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+            <div className="relative z-10">
+              <p style={{ fontSize:"13px", fontWeight:500, color:"rgba(255,255,255,0.65)", margin:"0 0 4px" }}>You've selected</p>
+              <h2 style={{ fontSize:"26px", fontWeight:800, color:"white", lineHeight:1.1, letterSpacing:"-0.01em", margin:0 }}>{branch} Branch</h2>
+            </div>
+          </div>
+          <div className="bg-white" style={{ padding:"24px 28px" }}>
+            <div style={{ display:"flex", flexDirection:"column", gap:"16px", marginBottom:"24px" }}>
+              {[
+                { label:"Address", icon:<svg className="w-4 h-4" style={{color:SITE_GREEN}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>, value: info.address },
+                { label:"Store Hours", icon:<svg className="w-4 h-4" style={{color:SITE_GREEN}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>, value: info.hours },
+                { label:"Phone", icon:<svg className="w-4 h-4" style={{color:SITE_GREEN}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>, value: info.phone },
+              ].map(row => (
+                <div key={row.label} style={{ display:"flex", alignItems:"flex-start", gap:"12px" }}>
+                  <div className="flex items-center justify-center flex-shrink-0 rounded-lg" style={{ width:"34px", height:"34px", backgroundColor:"#f0fdf4", marginTop:"1px" }}>{row.icon}</div>
+                  <div>
+                    <p style={{ fontSize:"10px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:"#9ca3af", margin:"0 0 2px" }}>{row.label}</p>
+                    <p style={{ fontSize:"13px", color:"#374151", lineHeight:"1.5", margin:0 }}>{row.value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button onClick={onClose} className="w-full font-semibold text-white rounded-xl transition-all"
+              style={{ padding:"13px", fontSize:"14px", background:`linear-gradient(135deg, ${SITE_GREEN}, ${DARK_GREEN})`, border:"none", cursor:"pointer" }}
+              onMouseEnter={e => e.currentTarget.style.opacity="0.92"}
+              onMouseLeave={e => e.currentTarget.style.opacity="1"}>
+              Got it, start shopping
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
 }
 
 // ── Make it Personal popout ───────────────────────────────────────────────────
 const MIP_OPTIONS = [
-  { page:"describe-arrangement", icon:<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z"/><path strokeLinecap="round" strokeLinejoin="round" d="M18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z"/></svg>, label:"Describe Arrangement", desc:"Tell us what you have in mind and we'll bring it to life.", accent:"#7c3aed", accentBg:"#f5f3ff" },
-  { page:"mix-and-match", icon:<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/></svg>, label:"Mix & Match", desc:"Pick your flowers and build your own bouquet your way.", accent:SITE_GREEN, accentBg:"#f0fdf4" },
-  { page:"ai-gallery", icon:<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/></svg>, label:"See Examples", desc:"Browse arrangements made by our team for inspiration.", accent:"#d97706", accentBg:"#fffbeb" },
+  { page:"describe-arrangement", icon:<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z"/><path strokeLinecap="round" strokeLinejoin="round" d="M18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z"/></svg>, label:"Describe Arrangement", desc:"Tell us what you have in mind and we'll bring it to life.", accent:"#7c3aed", accentBg:"#f5f3ff" },
+  { page:"mix-and-match", icon:<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/></svg>, label:"Mix & Match", desc:"Pick your flowers and build your own bouquet your way.", accent:SITE_GREEN, accentBg:"#f0fdf4" },
+  { page:"ai-gallery", icon:<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/></svg>, label:"See Examples", desc:"Browse arrangements made by our team for inspiration.", accent:"#d97706", accentBg:"#fffbeb" },
 ];
 
 function MakeItPersonalPopout({ onNavigate, onClose }) {
-  const { isDark } = useTheme();
-  const bg     = isDark ? "#1a2332" : "white";
-  const bdr    = isDark ? "#2d3748" : "#e9f5ea";
-  const divBdr = isDark ? "#2d3748" : "#f0fdf4";
+  const { isDark } = useTheme();
+  const bg     = isDark ? "#1a2332" : "white";
+  const bdr    = isDark ? "#2d3748" : "#e9f5ea";
+  const divBdr = isDark ? "#2d3748" : "#f0fdf4";
 
-  // In dark mode use low-opacity accent tints so text stays visible
-  const hoverBg = (accent) =>
-    isDark ? `${accent}22` : MIP_OPTIONS.find(o => o.accent === accent)?.accentBg || "#f9fafb";
+  // In dark mode use low-opacity accent tints so text stays visible
+  const hoverBg = (accent) =>
+    isDark ? `${accent}22` : MIP_OPTIONS.find(o => o.accent === accent)?.accentBg || "#f9fafb";
 
-  return (
-    <>
-      <style>{`@keyframes mipSlideIn { from { opacity:0; transform:translateX(-12px) scale(0.97); } to { opacity:1; transform:translateX(0) scale(1); } }`}</style>
-      <div className="absolute" style={{ top:0, right:"-12px", width:"16px", height:"100%", zIndex:49 }}/>
-      <div className="absolute z-50" style={{ top:"-8px", left:"calc(100% + 12px)", animation:"mipSlideIn 0.22s cubic-bezier(0.34,1.56,0.64,1) both", filter:"drop-shadow(0 16px 40px rgba(0,0,0,0.13))" }}>
-        <div className="absolute" style={{ left:"-7px", top:"28px", width:0, height:0, borderTop:"7px solid transparent", borderBottom:"7px solid transparent", borderRight:`7px solid ${bg}`, filter:"drop-shadow(-2px 0 2px rgba(0,0,0,0.06))" }}/>
-        <div className="overflow-hidden" style={{ borderRadius:"16px", border:`1px solid ${bdr}`, width:"260px", backgroundColor:bg }}>
-          <div className="px-4 pt-4 pb-3" style={{ borderBottom:`1px solid ${divBdr}` }}>
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background:"linear-gradient(135deg,#2E8B34,#0C573E)" }}>
-                <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
-              </div>
-              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: isDark ? "#d1d5db" : "#374151" }}>Make it Personal</p>
-            </div>
-            <p className="text-xs mt-1.5 leading-relaxed" style={{ color: isDark ? "#9ca3af" : "#9ca3af" }}>Choose how you'd like to create your perfect arrangement.</p>
-          </div>
-          <div className="py-2">
-            {MIP_OPTIONS.map((opt, i) => (
-              <button key={opt.page} onClick={() => { onNavigate(opt.page); onClose(); }}
-                className="w-full flex items-start gap-3 px-4 py-3 text-left transition-all group"
-                style={{ borderBottom: i < MIP_OPTIONS.length - 1 ? `1px solid ${divBdr}` : "none", backgroundColor:"transparent" }}
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = hoverBg(opt.accent)}
-                onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 transition-all group-hover:scale-110"
-                  style={{ backgroundColor: isDark ? `${opt.accent}22` : opt.accentBg, color:opt.accent, border:`1.5px solid ${opt.accent}33` }}>{opt.icon}</div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold leading-snug" style={{ color: isDark ? "#e5e7eb" : "#111827" }}>{opt.label}</p>
-                  <p className="text-xs mt-0.5 leading-relaxed" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>{opt.desc}</p>
-                </div>
-                <svg className="w-3.5 h-3.5 flex-shrink-0 mt-1.5 transition-all group-hover:translate-x-0.5" style={{ color:opt.accent }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    </>
-  );
+  return (
+    <>
+      <style>{`@keyframes mipSlideIn { from { opacity:0; transform:translateX(-12px) scale(0.97); } to { opacity:1; transform:translateX(0) scale(1); } }`}</style>
+      <div className="absolute" style={{ top:0, right:"-12px", width:"16px", height:"100%", zIndex:49 }}/>
+      <div className="absolute z-50" style={{ top:"-8px", left:"calc(100% + 12px)", animation:"mipSlideIn 0.22s cubic-bezier(0.34,1.56,0.64,1) both", filter:"drop-shadow(0 16px 40px rgba(0,0,0,0.13))" }}>
+        <div className="absolute" style={{ left:"-7px", top:"28px", width:0, height:0, borderTop:"7px solid transparent", borderBottom:"7px solid transparent", borderRight:`7px solid ${bg}`, filter:"drop-shadow(-2px 0 2px rgba(0,0,0,0.06))" }}/>
+        <div className="overflow-hidden" style={{ borderRadius:"16px", border:`1px solid ${bdr}`, width:"260px", backgroundColor:bg }}>
+          <div className="px-4 pt-4 pb-3" style={{ borderBottom:`1px solid ${divBdr}` }}>
+            <div className="flex items-center gap-2">
+              <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background:"linear-gradient(135deg,#2E8B34,#0C573E)" }}>
+                <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+              </div>
+              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: isDark ? "#d1d5db" : "#374151" }}>Make it Personal</p>
+            </div>
+            <p className="text-xs mt-1.5 leading-relaxed" style={{ color: isDark ? "#9ca3af" : "#9ca3af" }}>Choose how you'd like to create your perfect arrangement.</p>
+          </div>
+          <div className="py-2">
+            {MIP_OPTIONS.map((opt, i) => (
+              <button key={opt.page} onClick={() => { onNavigate(opt.page); onClose(); }}
+                className="w-full flex items-start gap-3 px-4 py-3 text-left transition-all group"
+                style={{ borderBottom: i < MIP_OPTIONS.length - 1 ? `1px solid ${divBdr}` : "none", backgroundColor:"transparent" }}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = hoverBg(opt.accent)}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 transition-all group-hover:scale-110"
+                  style={{ backgroundColor: isDark ? `${opt.accent}22` : opt.accentBg, color:opt.accent, border:`1.5px solid ${opt.accent}33` }}>{opt.icon}</div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold leading-snug" style={{ color: isDark ? "#e5e7eb" : "#111827" }}>{opt.label}</p>
+                  <p className="text-xs mt-0.5 leading-relaxed" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>{opt.desc}</p>
+                </div>
+                <svg className="w-3.5 h-3.5 flex-shrink-0 mt-1.5 transition-all group-hover:translate-x-0.5" style={{ color:opt.accent }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
+  );
 }
 
 // ── Promo Carousel ────────────────────────────────────────────────────────────
 function PromoCarousel({ onNavigate }) {
-  const [current, setCurrent] = useState(0);
-  const [animating, setAnimating] = useState(false);
-  const [direction, setDirection] = useState("next");
-  const intervalRef = useRef(null);
-  const total = PROMOTIONS.length;
-  const go = (dir) => {
-    if (animating) return;
-    setDirection(dir); setAnimating(true);
-    setTimeout(() => { setCurrent(c => dir==="next"?(c+1)%total:(c-1+total)%total); setAnimating(false); }, 260);
-  };
-  useEffect(() => { intervalRef.current = setInterval(() => go("next"), 4000); return () => clearInterval(intervalRef.current); }, [animating]);
-  const promo = PROMOTIONS[current];
-  const arrowBtn = (dir) => (
-    <button onClick={() => { clearInterval(intervalRef.current); go(dir); }}
-      style={{ width:"26px", height:"26px", display:"flex", alignItems:"center", justifyContent:"center", borderRadius:"50%", border:"none", background:"transparent", color:"rgba(255,255,255,0.85)", cursor:"pointer", flexShrink:0, transition:"background 0.15s" }}
-      onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,0.18)"} onMouseLeave={e => e.currentTarget.style.background="transparent"}>
-      <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={dir==="prev"?"M15 19l-7-7 7-7":"M9 5l7 7-7 7"}/></svg>
-    </button>
-  );
-  return (
-    <div style={{ backgroundColor:DARK_GREEN, minHeight:"52px", display:"flex", alignItems:"center", padding:"4px 10px" }}>
-      {/* Invisible spacer to balance social icons on desktop */}
-      <div className="hidden sm:flex items-center gap-1.5" style={{ visibility:"hidden", flexShrink:0 }}>{SOCIAL_LINKS.map(s=><div key={s.name} style={{ width:"28px", height:"28px" }}/>)}</div>
+  const [current, setCurrent] = useState(0);
+  const [animating, setAnimating] = useState(false);
+  const [direction, setDirection] = useState("next");
+  const intervalRef = useRef(null);
+  const total = PROMOTIONS.length;
+  const go = (dir) => {
+    if (animating) return;
+    setDirection(dir); setAnimating(true);
+    setTimeout(() => { setCurrent(c => dir==="next"?(c+1)%total:(c-1+total)%total); setAnimating(false); }, 260);
+  };
+  useEffect(() => { intervalRef.current = setInterval(() => go("next"), 4000); return () => clearInterval(intervalRef.current); }, [animating]);
+  const promo = PROMOTIONS[current];
+  const arrowBtn = (dir) => (
+    <button onClick={() => { clearInterval(intervalRef.current); go(dir); }}
+      style={{ width:"26px", height:"26px", display:"flex", alignItems:"center", justifyItems:"center", borderRadius:"50%", border:"none", background:"transparent", color:"rgba(255,255,255,0.85)", cursor:"pointer", flexShrink:0, transition:"background 0.15s" }}
+      onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,0.18)"} onMouseLeave={e => e.currentTarget.style.background="transparent"}>
+      <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={dir==="prev"?"M15 19l-7-7 7-7":"M9 5l7 7-7 7"}/></svg>
+    </button>
+  );
+  return (
+    <div style={{ backgroundColor:DARK_GREEN, minHeight:"52px", display:"flex", alignItems:"center", padding:"4px 10px" }}>
+      {/* Invisible spacer to balance social icons on desktop */}
+      <div className="hidden sm:flex items-center gap-1.5" style={{ visibility:"hidden", flexShrink:0 }}>{SOCIAL_LINKS.map(s=><div key={s.name} style={{ width:"28px", height:"28px" }}/>)}</div>
 
-      {/* Center: arrows + text */}
-      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:"6px", minWidth:0 }}>
-        {arrowBtn("prev")}
-        <div style={{ overflow:"hidden", minWidth:0, flex:1, maxWidth:"560px", textAlign:"center" }}>
-          <span className="text-xs sm:text-sm font-medium text-white" style={{
-            display:"block",
-            transition:animating?"opacity 0.26s ease, transform 0.26s ease":"none",
-            opacity:animating?0:1,
-            transform:animating?(direction==="next"?"translateX(-14px)":"translateX(14px)"):"translateX(0)",
-            lineHeight:1.5,
-            wordBreak:"break-word",
-          }}>
-            {promo.text}&nbsp;<strong>{promo.highlight}</strong>{" — "}
-            <button onClick={() => onNavigate?.(promo.page)} style={{ fontWeight:700, textDecoration:"underline", textUnderlineOffset:"2px", background:"none", border:"none", color:"white", cursor:"pointer", letterSpacing:"0.05em", padding:0, display:"inline" }}
-              onMouseEnter={e => e.currentTarget.style.opacity="0.75"} onMouseLeave={e => e.currentTarget.style.opacity="1"}>{promo.cta}</button>
-          </span>
-        </div>
-        {arrowBtn("next")}
-      </div>
+      {/* Center: arrows + text */}
+      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:"6px", minWidth:0 }}>
+        {arrowBtn("prev")}
+        <div style={{ overflow:"hidden", minWidth:0, flex:1, maxWidth:"560px", textAlign:"center" }}>
+          <span className="text-xs sm:text-sm font-medium text-white" style={{
+            display:"block",
+            transition:animating?"opacity 0.26s ease, transform 0.26s ease":"none",
+            opacity:animating?0:1,
+            transform:animating?(direction==="next"?"translateX(-14px)":"translateX(14px)"):"translateX(0)",
+            lineHeight:1.5,
+            wordBreak:"break-word",
+          }}>
+            {promo.text}&nbsp;<strong>{promo.highlight}</strong>{" — "}
+            <button onClick={() => onNavigate?.(promo.page)} style={{ fontWeight:700, textDecoration:"underline", textUnderlineOffset:"2px", background:"none", border:"none", color:"white", cursor:"pointer", letterSpacing:"0.05em", padding:0, display:"inline" }}
+              onMouseEnter={e => e.currentTarget.style.opacity="0.75"} onMouseLeave={e => e.currentTarget.style.opacity="1"}>{promo.cta}</button>
+          </span>
+        </div>
+        {arrowBtn("next")}
+      </div>
 
-      {/* Social links — desktop only */}
-      <div className="hidden sm:flex items-center gap-1.5" style={{ flexShrink:0 }}>
-        {SOCIAL_LINKS.map(s => (
-          <a key={s.name} href={s.href} title={s.name} target="_blank" rel="noopener noreferrer"
-            className="w-7 h-7 rounded-full flex items-center justify-center text-white transition-all hover:scale-110"
-            style={{ backgroundColor:"rgba(255,255,255,0.15)" }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor="rgba(255,255,255,0.3)"}
-            onMouseLeave={e => e.currentTarget.style.backgroundColor="rgba(255,255,255,0.15)"}>{s.icon}</a>
-        ))}
-      </div>
-    </div>
-  );
+      {/* Social links — desktop only */}
+      <div className="hidden sm:flex items-center gap-1.5" style={{ flexShrink:0 }}>
+        {SOCIAL_LINKS.map(s => (
+          <a key={s.name} href={s.href} title={s.name} target="_blank" rel="noopener noreferrer"
+            className="w-7 h-7 rounded-full flex items-center justify-center text-white transition-all hover:scale-110"
+            style={{ backgroundColor:"rgba(255,255,255,0.15)" }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor="rgba(255,255,255,0.3)"}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor="rgba(255,255,255,0.15)"}>{s.icon}</a>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 // ── Search suggestions ────────────────────────────────────────────────────────
 const SEARCH_SUGGESTIONS = [
-  "Red Roses", "Birthday Flowers", "Anniversary Bouquet",
-  "Sunflowers", "Mixed Tulips", "Same-day Delivery",
+  "Red Roses", "Birthday Flowers", "Anniversary Bouquet",
+  "Sunflowers", "Mixed Tulips", "Same-day Delivery",
 ];
 
 // ── Search Overlay ────────────────────────────────────────────────────────────
 function SearchOverlay({ onClose, onNavigate }) {
-  const { isDark } = useTheme();
-  const [query, setQuery] = useState("");
-  const inputRef = useRef(null);
+  const { isDark } = useTheme();
+  const [query, setQuery] = useState("");
+  const inputRef = useRef(null);
 
-  useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 50);
-    const h = (e) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", h);
-    return () => document.removeEventListener("keydown", h);
-  }, []);
+  useEffect(() => {
+    setTimeout(() => inputRef.current?.focus(), 50);
+    const h = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, []);
 
-  const doSearch = (term) => {
-    if (term.trim()) { onNavigate?.("shop"); onClose(); }
-  };
+  const doSearch = (term) => {
+    if (term.trim()) { onNavigate?.("shop"); onClose(); }
+  };
 
-  // One single surface color — only the OUTER div gets it; children are transparent
-  const surfaceBg = isDark ? "#1a2332" : "white";
-  const textC     = isDark ? "#e5e7eb" : "#111827";
-  const iconC     = isDark ? "#9ca3af" : "#9ca3af";
-  const suggBg    = isDark ? "#111827" : "#f3f4f6";
-  const suggBdr   = isDark ? "#2d3748" : "#e5e7eb";
-  const suggText  = isDark ? "#d1d5db" : "#374151";
+  // One single surface color — only the OUTER div gets it; children are transparent
+  const surfaceBg = isDark ? "#1a2332" : "white";
+  const textC     = isDark ? "#e5e7eb" : "#111827";
+  const iconC     = isDark ? "#9ca3af" : "#9ca3af";
+  const suggBg    = isDark ? "#111827" : "#f3f4f6";
+  const suggBdr   = isDark ? "#2d3748" : "#e5e7eb";
+  const suggText  = isDark ? "#d1d5db" : "#374151";
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center px-3 sm:px-4"
-      style={{ backgroundColor:"rgba(0,0,0,0.72)", backdropFilter:"blur(6px)", paddingTop:"clamp(52px,10vh,110px)" }}
-      onClick={onClose}>
-      <style>{`
-        @keyframes ssDown { from{opacity:0;transform:translateY(-16px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }
+  return (
+    <div className="fixed inset-0 z-[100] flex items-start justify-center px-3 sm:px-4"
+      style={{ backgroundColor:"rgba(0,0,0,0.72)", backdropFilter:"blur(6px)", paddingTop:"clamp(52px,10vh,110px)" }}
+      onClick={onClose}>
+      <style>{`
+        @keyframes ssDown { from{opacity:0;transform:translateY(-16px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }
 
-        /* ── Search input: higher specificity than dark mode CSS so border/bg never bleed through ── */
-        .search-input {
-          min-width: 0;
-          flex: 1;
-          outline: none;
-          background: transparent !important;
-          background-color: transparent !important;
-          border: none !important;
-          box-shadow: none !important;
-          -webkit-appearance: none !important;
-          appearance: none !important;
-        }
-        /* [attr+class] selector has specificity (0,2,0) — beats dark mode's [attr]+element (0,1,1) */
-        [data-theme="dark"] .search-input,
-        [data-theme="light"] .search-input,
-        [data-theme] .search-input {
-          background: transparent !important;
-          background-color: transparent !important;
-          border: none !important;
-          box-shadow: none !important;
-        }
-        .search-input::placeholder { color: ${isDark ? "#6b7280" : "#9ca3af"}; }
+        /* ── Search input: higher specificity than dark mode CSS so border/bg never bleed through ── */
+        .search-input {
+          min-width: 0;
+          flex: 1;
+          outline: none;
+          background: transparent !important;
+          background-color: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+          -webkit-appearance: none !important;
+          appearance: none !important;
+        }
+        /* [attr+class] selector has specificity (0,2,0) — beats dark mode's [attr]+element (0,1,1) */
+        [data-theme="dark"] .search-input,
+        [data-theme="light"] .search-input,
+        [data-theme] .search-input {
+          background: transparent !important;
+          background-color: transparent !important;
+          border: none !important;
+          box-shadow: none !important;
+        }
+        .search-input::placeholder { color: ${isDark ? "#6b7280" : "#9ca3af"}; }
 
-        /* Landscape: pull dialog closer to top */
-        @media (max-height: 500px) and (orientation: landscape) {
-          .search-dialog { padding-top: 6px !important; }
-        }
-      `}</style>
+        /* Landscape: pull dialog closer to top */
+        @media (max-height: 500px) and (orientation: landscape) {
+          .search-dialog { padding-top: 6px !important; }
+        }
+      `}</style>
 
-      <div className="search-dialog w-full max-w-2xl" onClick={e => e.stopPropagation()}
-        style={{ animation:"ssDown 0.22s cubic-bezier(0.34,1.56,0.64,1) both" }}>
+      <div className="search-dialog w-full max-w-2xl" onClick={e => e.stopPropagation()}
+        style={{ animation:"ssDown 0.22s cubic-bezier(0.34,1.56,0.64,1) both" }}>
 
-        {/* ── Input row ─────────────────────────────────────────────────────
-            Only the OUTER div carries the background color.
-            Every child uses transparent so there's only one shade.        */}
-        <form onSubmit={e => { e.preventDefault(); doSearch(query); }}>
-          <div className="flex items-center rounded-2xl overflow-hidden shadow-2xl"
-            style={{ backgroundColor: surfaceBg, border:`2px solid ${SITE_GREEN}`, height:"52px" }}>
+        {/* ── Input row ─────────────────────────────────────────────────────
+            Only the OUTER div carries the background color.
+            Every child uses transparent so there's only one shade.        */}
+        <form onSubmit={e => { e.preventDefault(); doSearch(query); }}>
+          <div className="flex items-center rounded-2xl overflow-hidden shadow-2xl"
+            style={{ backgroundColor: surfaceBg, border:`2px solid ${SITE_GREEN}`, height:"52px" }}>
 
-            {/* Search icon — transparent, inherits bg from parent */}
-            <div className="flex items-center pl-3 pr-2 flex-shrink-0" style={{ backgroundColor:"transparent" }}>
-              <svg className="w-5 h-5" style={{ color:iconC }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
-              </svg>
-            </div>
+            {/* Search icon — transparent, inherits bg from parent */}
+            <div className="flex items-center pl-3 pr-2 flex-shrink-0" style={{ backgroundColor:"transparent" }}>
+              <svg className="w-5 h-5" style={{ color:iconC }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
+              </svg>
+            </div>
 
-            {/* Input — transparent bg, min-width 0 prevents overflow */}
-            <input
-              ref={inputRef}
-              type="text"
-              value={query}
-              onChange={e => setQuery(e.target.value)}
-              placeholder="Search flowers, bouquets..."
-              className="search-input py-3 text-sm sm:text-base"
-              style={{ color: textC, caretColor: SITE_GREEN, WebkitAppearance:"none" }}
-            />
+            {/* Input — transparent bg, min-width 0 prevents overflow */}
+            <input
+              ref={inputRef}
+              type="text"
+              value={query}
+              onChange={e => setQuery(e.target.value)}
+              placeholder="Search flowers, bouquets..."
+              className="search-input py-3 text-sm sm:text-base"
+              style={{ color: textC, caretColor: SITE_GREEN, WebkitAppearance:"none" }}
+            />
 
-            {/* Clear — transparent */}
-            {query && (
-              <button type="button" onClick={() => setQuery("")}
-                className="px-2 flex-shrink-0 transition-opacity hover:opacity-70"
-                style={{ color: iconC, backgroundColor:"transparent", border:"none" }}>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-              </button>
-            )}
+            {/* Clear — transparent */}
+            {query && (
+              <button type="button" onClick={() => setQuery("")}
+                className="px-2 flex-shrink-0 transition-opacity hover:opacity-70"
+                style={{ color: iconC, backgroundColor:"transparent", border:"none" }}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                </svg>
+              </button>
+            )}
 
-            {/* Search button — icon on xs, text on sm+ */}
-            <button type="submit"
-              className="flex items-center justify-center gap-1.5 text-white font-bold self-stretch transition-all hover:opacity-90 flex-shrink-0"
-              style={{
-                backgroundColor: SITE_GREEN,
-                borderRadius:"0 16px 16px 0",
-                padding:"0 12px",
-                minWidth:"44px",
-              }}>
-              {/* Icon always visible */}
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
-              </svg>
-              {/* Text only on sm+ */}
-              <span className="hidden sm:inline text-sm">Search</span>
-            </button>
-          </div>
-        </form>
+            {/* Search button — icon on xs, text on sm+ */}
+            <button type="submit"
+              className="flex items-center justify-center gap-1.5 text-white font-bold self-stretch transition-all hover:opacity-90 flex-shrink-0"
+              style={{
+                backgroundColor: SITE_GREEN,
+                borderRadius:"0 16px 16px 0",
+                padding:"0 12px",
+                minWidth:"44px",
+              }}>
+              {/* Icon always visible */}
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
+              </svg>
+              {/* Text only on sm+ */}
+              <span className="hidden sm:inline text-sm">Search</span>
+            </button>
+          </div>
+        </form>
 
-        {/* Search suggestions */}
-        <div className="mt-3 flex flex-wrap gap-2 justify-center">
-          {SEARCH_SUGGESTIONS.map(s => (
-            <button key={s} onClick={() => doSearch(s)}
-              className="text-xs font-medium px-3 py-1.5 rounded-full transition-all hover:scale-105"
-              style={{ backgroundColor:suggBg, border:`1px solid ${suggBdr}`, color:suggText }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor=SITE_GREEN; e.currentTarget.style.color=isDark?"#4ade80":SITE_GREEN; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor=suggBdr; e.currentTarget.style.color=suggText; }}>
-              {s}
-            </button>
-          ))}
-        </div>
+        {/* Search suggestions */}
+        <div className="mt-3 flex flex-wrap gap-2 justify-center">
+          {SEARCH_SUGGESTIONS.map(s => (
+            <button key={s} onClick={() => doSearch(s)}
+              className="text-xs font-medium px-3 py-1.5 rounded-full transition-all hover:scale-105"
+              style={{ backgroundColor:suggBg, border:`1px solid ${suggBdr}`, color:suggText }}
+              onMouseEnter={e => { e.currentTarget.style.borderColor=SITE_GREEN; e.currentTarget.style.color=isDark?"#4ade80":SITE_GREEN; }}
+              onMouseLeave={e => { e.currentTarget.style.borderColor=suggBdr; e.currentTarget.style.color=suggText; }}>
+              {s}
+            </button>
+          ))}
+        </div>
 
-        <p className="text-center text-white/50 text-xs mt-3">
-          Press <kbd className="px-1.5 py-0.5 rounded text-xs" style={{ backgroundColor:"rgba(255,255,255,0.15)", color:"rgba(255,255,255,0.8)" }}>Esc</kbd> to close
-        </p>
-      </div>
-    </div>
-  );
+        <p className="text-center text-white/50 text-xs mt-3">
+          Press <kbd className="px-1.5 py-0.5 rounded text-xs" style={{ backgroundColor:"rgba(255,255,255,0.15)", color:"rgba(255,255,255,0.8)" }}>Esc</kbd> to close
+        </p>
+      </div>
+    </div>
+  );
 }
 
 function DropdownMenu({ items, categories, onNavigate, onClose }) {
-  const { isDark } = useTheme();
-  const dropStyle = {
-    backgroundColor: isDark ? "#1a2332" : "white",
-    border: `1px solid ${isDark ? "#2d3748" : "#e5e7eb"}`,
-    borderRadius:"12px",
-    boxShadow: isDark ? "0 12px 32px rgba(0,0,0,0.5)" : "0 12px 32px rgba(0,0,0,0.10)",
-    animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards",
-  };
-  const itemHover = (e, on) => {
-    e.currentTarget.style.backgroundColor = on ? SITE_GREEN : "";
-    e.currentTarget.style.color = on ? "white" : (isDark ? "#d1d5db" : "#4b5563");
-  };
-  const headingGreen = isDark ? "#4ade80" : SITE_GREEN;
+  const { isDark } = useTheme();
+  const dropStyle = {
+    backgroundColor: isDark ? "#1a2332" : "white",
+    border: `1px solid ${isDark ? "#2d3748" : "#e5e7eb"}`,
+    borderRadius:"12px",
+    boxShadow: isDark ? "0 12px 32px rgba(0,0,0,0.5)" : "0 12px 32px rgba(0,0,0,0.10)",
+    animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards",
+  };
+  const itemHover = (e, on) => {
+    e.currentTarget.style.backgroundColor = on ? SITE_GREEN : "";
+    e.currentTarget.style.color = on ? "white" : (isDark ? "#d1d5db" : "#4b5563");
+  };
+  const headingGreen = isDark ? "#4ade80" : SITE_GREEN;
 
-  if (categories) {
-    return (
-      <div className="absolute top-full left-0 mt-2 z-50 overflow-hidden" style={{ ...dropStyle, minWidth:"340px" }}>
-        <div className="flex" style={{ borderTop:"none" }}>
-          {categories.map((cat, ci) => (
-            <div key={cat.heading} className="flex-1 py-3" style={{ borderRight: ci < categories.length-1 ? `1px solid ${isDark?"#2d3748":"#f3f4f6"}` : "none" }}>
-              <p className="px-4 pb-2 text-xs font-bold uppercase tracking-widest" style={{ color:headingGreen }}>{cat.heading}</p>
-              {cat.items.map(item => (
-                <button key={item.label} onClick={() => { if (item.page && onNavigate) onNavigate(item.page); onClose?.(); }}
-                  className="w-full text-left px-4 py-2 text-sm transition-all duration-150"
-                  style={{ color: isDark ? "#d1d5db" : "#4b5563" }}
-                  onMouseEnter={e => itemHover(e, true)}
-                  onMouseLeave={e => itemHover(e, false)}>{item.label}</button>
-              ))}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-  return (
-    <div className="absolute top-full left-0 mt-2 z-50 min-w-[190px] overflow-hidden" style={dropStyle}>
-      {items.map(item => (
-        <button key={item.label} onClick={() => { if (item.page && onNavigate) onNavigate(item.page); onClose?.(); }}
-          className="w-full text-left px-4 py-2.5 text-sm first:rounded-t-xl last:rounded-b-xl transition-all duration-150"
-          style={{ color: isDark ? "#d1d5db" : "#4b5563" }}
-          onMouseEnter={e => itemHover(e, true)}
-          onMouseLeave={e => itemHover(e, false)}>{item.label}</button>
-      ))}
-    </div>
-  );
+  if (categories) {
+    return (
+      <div className="absolute top-full left-0 mt-2 z-50 overflow-hidden" style={{ ...dropStyle, minWidth:"340px" }}>
+        <div className="flex" style={{ borderTop:"none" }}>
+          {categories.map((cat, ci) => (
+            <div key={cat.heading} className="flex-1 py-3" style={{ borderRight: ci < categories.length-1 ? `1px solid ${isDark?"#2d3748":"#f3f4f6"}` : "none" }}>
+              <p className="px-4 pb-2 text-xs font-bold uppercase tracking-widest" style={{ color:headingGreen }}>{cat.heading}</p>
+              {cat.items.map(item => (
+                <button key={item.label} onClick={() => { if (item.page && onNavigate) onNavigate(item.page); onClose?.(); }}
+                  className="w-full text-left px-4 py-2 text-sm transition-all duration-150"
+                  style={{ color: isDark ? "#d1d5db" : "#4b5563" }}
+                  onMouseEnter={e => itemHover(e, true)}
+                  onMouseLeave={e => itemHover(e, false)}>{item.label}</button>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="absolute top-full left-0 mt-2 z-50 min-w-[190px] overflow-hidden" style={dropStyle}>
+      {items.map(item => (
+        <button key={item.label} onClick={() => { if (item.page && onNavigate) onNavigate(item.page); onClose?.(); }}
+          className="w-full text-left px-4 py-2.5 text-sm first:rounded-t-xl last:rounded-b-xl transition-all duration-150"
+          style={{ color: isDark ? "#d1d5db" : "#4b5563" }}
+          onMouseEnter={e => itemHover(e, true)}
+          onMouseLeave={e => itemHover(e, false)}>{item.label}</button>
+      ))}
+    </div>
+  );
 }
 
 function CartDropdown({ cartCount, onNavigate }) {
-  const { isDark } = useTheme();
-  const cartItems = getCart();
-  const subtotal = cartItems.reduce((s, i) => s + (i.price||0)*(i.qty||1), 0);
-  const bg  = isDark ? "#1a2332" : "white";
-  const bdr = isDark ? "#2d3748" : "#e5e7eb";
-  const textPrimary   = isDark ? "#e5e7eb" : "#111827";
-  const textSecondary = isDark ? "#9ca3af" : "#6b7280";
-  const footerBg = isDark ? "#0f172a" : "#f9fafb";
-  return (
-    <div className="absolute top-full right-0 mt-2 z-50 w-72 overflow-hidden"
-      style={{ backgroundColor:bg, border:`1px solid ${bdr}`, borderRadius:"14px", boxShadow: isDark?"0 12px 32px rgba(0,0,0,0.4)":"0 12px 32px rgba(0,0,0,0.12)", animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards" }}>
-      <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom:`1px solid ${bdr}` }}>
-        <span className="text-sm font-semibold" style={{ color:textPrimary }}>Your Cart</span>
-        <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor:cartCount>0?"#e11d48":"#9ca3af" }}>{cartCount}</span>
-      </div>
-      {cartCount===0?(
-        <div className="px-4 py-8 text-center">
-          <div className="w-11 h-11 rounded-full flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: isDark?"#1e293b":"#f3f4f6" }}>
-            <svg className="w-5 h-5" style={{ color:textSecondary }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007Z"/></svg>
-          </div>
-          <p className="text-sm font-medium mb-1" style={{ color:textPrimary }}>Your cart is empty</p>
-          <p className="text-xs" style={{ color:textSecondary }}>Browse our collection and add something you love.</p>
-        </div>
-      ):(
-        <div className="max-h-48 overflow-y-auto">
-          {cartItems.slice(0,4).map((item,idx)=>(
-            <div key={`${item.id}-${idx}`} className="flex items-center gap-3 px-4 py-2.5" style={{ borderBottom:`1px solid ${isDark?"#374151":"#f9fafb"}` }}>
-              <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0" style={{ border:`1px solid ${bdr}` }}>{item.img?<img src={item.img} alt={item.name} className="w-full h-full object-cover"/>:<div className="w-full h-full" style={{ backgroundColor: isDark?"#374151":"#fdf2f8" }}/>}</div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium truncate" style={{ color:textPrimary }}>{item.name}</p>
-                <p className="text-[11px]" style={{ color:textSecondary }}>Qty: {item.qty||1}</p>
-              </div>
-              <span className="text-xs font-semibold" style={{ color:textPrimary }}>₱{((item.price||0)*(item.qty||1)).toLocaleString()}</span>
-            </div>
-          ))}
-          {cartItems.length>4&&<p className="px-4 py-2 text-[11px] text-center" style={{ color:textSecondary }}>+{cartItems.length-4} more item(s)</p>}
-        </div>
-      )}
-      <div className="px-4 py-3 rounded-b-xl" style={{ borderTop:`1px solid ${bdr}`, backgroundColor:footerBg }}>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-medium uppercase tracking-wide" style={{ color:textSecondary }}>Subtotal</span>
-          <span className="text-sm font-bold" style={{ color:textPrimary }}>₱{subtotal.toLocaleString()}.00</span>
-        </div>
-        <p className="text-xs mb-3" style={{ color:textSecondary }}>Shipping and taxes calculated at checkout.</p>
-        <button onClick={()=>onNavigate?.("cart")} className="w-full py-2 text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90" style={{ backgroundColor:SITE_GREEN }}>View Cart</button>
-      </div>
-    </div>
-  );
+  const { isDark } = useTheme();
+  const cartItems = getCart();
+  const subtotal = cartItems.reduce((s, i) => s + (i.price||0)*(i.qty||1), 0);
+  const bg  = isDark ? "#1a2332" : "white";
+  const bdr = isDark ? "#2d3748" : "#e5e7eb";
+  const textPrimary   = isDark ? "#e5e7eb" : "#111827";
+  const textSecondary = isDark ? "#9ca3af" : "#6b7280";
+  const footerBg = isDark ? "#0f172a" : "#f9fafb";
+  return (
+    <div className="absolute top-full right-0 mt-2 z-50 w-72 overflow-hidden"
+      style={{ backgroundColor:bg, border:`1px solid ${bdr}`, borderRadius:"14px", boxShadow: isDark?"0 12px 32px rgba(0,0,0,0.4)":"0 12px 32px rgba(0,0,0,0.12)", animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards" }}>
+      <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom:`1px solid ${bdr}` }}>
+        <span className="text-sm font-semibold" style={{ color:textPrimary }}>Your Cart</span>
+        <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor:cartCount>0?"#e11d48":"#9ca3af" }}>{cartCount}</span>
+      </div>
+      {cartCount===0?(
+        <div className="px-4 py-8 text-center">
+          <div className="w-11 h-11 rounded-full flex items-center justify-center mx-auto mb-3" style={{ backgroundColor: isDark?"#1e293b":"#f3f4f6" }}>
+            <svg className="w-5 h-5" style={{ color:textSecondary }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007Z"/></svg>
+          </div>
+          <p className="text-sm font-medium mb-1" style={{ color:textPrimary }}>Your cart is empty</p>
+          <p className="text-xs" style={{ color:textSecondary }}>Browse our collection and add something you love.</p>
+        </div>
+      ):(
+        <div className="max-h-48 overflow-y-auto">
+          {cartItems.slice(0,4).map((item,idx)=>(
+            <div key={`${item.id}-${idx}`} className="flex items-center gap-3 px-4 py-2.5" style={{ borderBottom:`1px solid ${isDark?"#374151":"#f9fafb"}` }}>
+              <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0" style={{ border:`1px solid ${bdr}` }}>{item.img?<img src={item.img} alt={item.name} className="w-full h-full object-cover"/>:<div className="w-full h-full" style={{ backgroundColor: isDark?"#374151":"#fdf2f8" }}/>}</div>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium truncate" style={{ color:textPrimary }}>{item.name}</p>
+                <p className="text-[11px]" style={{ color:textSecondary }}>Qty: {item.qty||1}</p>
+              </div>
+              <span className="text-xs font-semibold" style={{ color:textPrimary }}>₱{((item.price||0)*(item.qty||1)).toLocaleString()}</span>
+            </div>
+          ))}
+          {cartItems.length>4&&<p className="px-4 py-2 text-[11px] text-center" style={{ color:textSecondary }}>+{cartItems.length-4} more item(s)</p>}
+        </div>
+      )}
+      <div className="px-4 py-3 rounded-b-xl" style={{ borderTop:`1px solid ${bdr}`, backgroundColor:footerBg }}>
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-medium uppercase tracking-wide" style={{ color:textSecondary }}>Subtotal</span>
+          <span className="text-sm font-bold" style={{ color:textPrimary }}>₱{subtotal.toLocaleString()}.00</span>
+        </div>
+        <p className="text-xs mb-3" style={{ color:textSecondary }}>Shipping and taxes calculated at checkout.</p>
+        <button onClick={()=>onNavigate?.("cart")} className="w-full py-2 text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90" style={{ backgroundColor:SITE_GREEN }}>View Cart</button>
+      </div>
+    </div>
+  );
 }
 
 function UserHoverDropdown({ user, onNavigate, onLogout }) {
-  const { isDark } = useTheme();
-  const bg  = isDark ? "#1a2332" : "white";
-  const bdr = isDark ? "#2d3748" : "#e5e7eb";
-  const tp  = isDark ? "#e5e7eb" : "#111827";
-  const ts  = isDark ? "#9ca3af" : "#6b7280";
-  const baseStyle = { backgroundColor:bg, border:`1px solid ${bdr}`, borderRadius:"14px", boxShadow: isDark?"0 12px 32px rgba(0,0,0,0.5)":"0 12px 32px rgba(0,0,0,0.12)", animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards", minWidth:"200px" };
-  const linkHover = (e, on) => { e.currentTarget.style.backgroundColor = on ? (isDark?"rgba(74,222,128,0.12)":"#f0fdf4") : "transparent"; e.currentTarget.style.color = on ? (isDark?"#4ade80":SITE_GREEN) : (isDark?"#d1d5db":"#4b5563"); };
+  const { isDark } = useTheme();
+  const bg  = isDark ? "#1a2332" : "white";
+  const bdr = isDark ? "#2d3748" : "#e5e7eb";
+  const tp  = isDark ? "#e5e7eb" : "#111827";
+  const ts  = isDark ? "#9ca3af" : "#6b7280";
+  const baseStyle = { backgroundColor:bg, border:`1px solid ${bdr}`, borderRadius:"14px", boxShadow: isDark?"0 12px 32px rgba(0,0,0,0.5)":"0 12px 32px rgba(0,0,0,0.12)", animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards", minWidth:"200px" };
+  const linkHover = (e, on) => { e.currentTarget.style.backgroundColor = on ? (isDark?"rgba(74,222,128,0.12)":"#f0fdf4") : "transparent"; e.currentTarget.style.color = on ? (isDark?"#4ade80":SITE_GREEN) : (isDark?"#d1d5db":"#4b5563"); };
 
-  if (!user) return (
-    <div className="absolute top-full right-0 mt-2 z-50 overflow-hidden" style={baseStyle}>
-      <div className="px-4 py-3" style={{ borderBottom:`1px solid ${bdr}` }}>
-        <p className="text-sm font-semibold" style={{ color:tp }}>Welcome!</p>
-        <p className="text-xs mt-0.5" style={{ color:ts }}>Sign in to manage your orders</p>
-      </div>
-      <div className="p-3 space-y-2">
-        <button onClick={()=>onNavigate("login")} className="w-full py-2 text-sm font-semibold text-white rounded-lg hover:opacity-90 transition-all" style={{ backgroundColor:SITE_GREEN }}>Login</button>
-        <button onClick={()=>onNavigate("register")} className="w-full py-2 text-sm font-semibold rounded-lg border hover:opacity-80 transition-all" style={{ borderColor:SITE_GREEN, color:SITE_GREEN, backgroundColor:"transparent" }}>Create Account</button>
-      </div>
-    </div>
-  );
-  return (
-    <div className="absolute top-full right-0 mt-2 z-50 overflow-hidden" style={baseStyle}>
-      <div className="px-4 py-3" style={{ borderBottom:`1px solid ${bdr}`, background: isDark?"linear-gradient(to right,rgba(46,139,52,0.12),transparent)":"linear-gradient(to right,#f0fdf4,white)" }}>
-        <p className="text-xs" style={{ color:ts }}>Signed in as</p>
-        <p className="text-sm font-bold truncate" style={{ color:tp }}>{user.firstName} {user.lastName}</p>
-      </div>
-      <div className="py-1">
-        {[{label:"My Account",page:"account"},{label:"My Orders",page:"orders"},{label:"Wishlist",page:"wishlist"}].map(({label,page})=>(
-          <button key={label} onClick={()=>onNavigate(page)}
-            className="w-full text-left px-4 py-2.5 text-sm transition-all"
-            style={{ color: isDark?"#d1d5db":"#4b5563" }}
-            onMouseEnter={e=>linkHover(e,true)} onMouseLeave={e=>linkHover(e,false)}>{label}</button>
-        ))}
-      </div>
-      <div style={{ borderTop:`1px solid ${bdr}` }}>
-        <button onClick={onLogout} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-500 rounded-b-xl transition-all"
-          style={{ backgroundColor:"transparent" }}
-          onMouseEnter={e=>e.currentTarget.style.backgroundColor=isDark?"rgba(239,68,68,0.1)":"#fef2f2"}
-          onMouseLeave={e=>e.currentTarget.style.backgroundColor="transparent"}>
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
-          Logout
-        </button>
-      </div>
-    </div>
-  );
+  if (!user) return (
+    <div className="absolute top-full right-0 mt-2 z-50 overflow-hidden" style={baseStyle}>
+      <div className="px-4 py-3" style={{ borderBottom:`1px solid ${bdr}` }}>
+        <p className="text-sm font-semibold" style={{ color:tp }}>Welcome!</p>
+        <p className="text-xs mt-0.5" style={{ color:ts }}>Sign in to manage your orders</p>
+      </div>
+      <div className="p-3 space-y-2">
+        <button onClick={()=>onNavigate("login")} className="w-full py-2 text-sm font-semibold text-white rounded-lg hover:opacity-90 transition-all" style={{ backgroundColor:SITE_GREEN }}>Login</button>
+        <button onClick={()=>onNavigate("register")} className="w-full py-2 text-sm font-semibold rounded-lg border hover:opacity-80 transition-all" style={{ borderColor:SITE_GREEN, color:SITE_GREEN, backgroundColor:"transparent" }}>Create Account</button>
+      </div>
+    </div>
+  );
+  return (
+    <div className="absolute top-full right-0 mt-2 z-50 overflow-hidden" style={baseStyle}>
+      <div className="px-4 py-3" style={{ borderBottom:`1px solid ${bdr}`, background: isDark?"linear-gradient(to right,rgba(46,139,52,0.12),transparent)":"linear-gradient(to right,#f0fdf4,white)" }}>
+        <p className="text-xs" style={{ color:ts }}>Signed in as</p>
+        <p className="text-sm font-bold truncate" style={{ color:tp }}>{user.firstName} {user.lastName}</p>
+      </div>
+      <div className="py-1">
+        {[{label:"My Account",page:"account"},{label:"My Orders",page:"orders"},{label:"Wishlist",page:"wishlist"}].map(({label,page})=>(
+          <button key={label} onClick={()=>onNavigate(page)}
+            className="w-full text-left px-4 py-2.5 text-sm transition-all"
+            style={{ color: isDark?"#d1d5db":"#4b5563" }}
+            onMouseEnter={e=>linkHover(e,true)} onMouseLeave={e=>linkHover(e,false)}>{label}</button>
+        ))}
+      </div>
+      <div style={{ borderTop:`1px solid ${bdr}` }}>
+        <button onClick={onLogout} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-500 rounded-b-xl transition-all"
+          style={{ backgroundColor:"transparent" }}
+          onMouseEnter={e=>e.currentTarget.style.backgroundColor=isDark?"rgba(239,68,68,0.1)":"#fef2f2"}
+          onMouseLeave={e=>e.currentTarget.style.backgroundColor="transparent"}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
+          Logout
+        </button>
+      </div>
+    </div>
+  );
 }
 
 function LocationDropdown({ selected, onChange, onClose }) {
-  const { isDark } = useTheme();
-  const bg  = isDark ? "#1a2332" : "white";
-  const bdr = isDark ? "#2d3748" : "#e5e7eb";
-  const brightG = isDark ? "#4ade80" : SITE_GREEN;
-  return (
-    <div className="absolute top-full left-0 mt-1.5 z-50 w-36 overflow-hidden"
-      style={{ backgroundColor:bg, border:`1px solid ${bdr}`, borderRadius:"10px", boxShadow: isDark?"0 8px 24px rgba(0,0,0,0.5)":"0 8px 24px rgba(0,0,0,0.10)", animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards" }}>
-      {["Manila","Pampanga"].map(loc=>(
-        <button key={loc} onClick={()=>{ onChange(loc); onClose(); }}
-          className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left transition-all first:rounded-t-xl last:rounded-b-xl"
-          style={{ color: selected===loc ? brightG : (isDark?"#d1d5db":"#374151"), fontWeight: selected===loc?600:400 }}
-          onMouseEnter={e=>{ e.currentTarget.style.backgroundColor=isDark?"rgba(74,222,128,0.12)":"#f0fdf4"; e.currentTarget.style.color=brightG; }}
-          onMouseLeave={e=>{ e.currentTarget.style.backgroundColor=""; e.currentTarget.style.color=selected===loc?brightG:(isDark?"#d1d5db":"#374151"); }}>
-          {selected===loc&&<svg className="w-3.5 h-3.5 flex-shrink-0" style={{color:brightG}} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
-          <span style={{ marginLeft:selected===loc?0:"19px" }}>{loc}</span>
-        </button>
-      ))}
-    </div>
-  );
+  const { isDark } = useTheme();
+  const bg  = isDark ? "#1a2332" : "white";
+  const bdr = isDark ? "#2d3748" : "#e5e7eb";
+  const brightG = isDark ? "#4ade80" : SITE_GREEN;
+  return (
+    <div className="absolute top-full left-0 mt-1.5 z-50 w-36 overflow-hidden"
+      style={{ backgroundColor:bg, border:`1px solid ${bdr}`, borderRadius:"10px", boxShadow: isDark?"0 8px 24px rgba(0,0,0,0.5)":"0 8px 24px rgba(0,0,0,0.10)", animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards" }}>
+      {["Manila","Pampanga"].map(loc=>(
+        <button key={loc} onClick={()=>{ onChange(loc); onClose(); }}
+          className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left transition-all first:rounded-t-xl last:rounded-b-xl"
+          style={{ color: selected===loc ? brightG : (isDark?"#d1d5db":"#374151"), fontWeight: selected===loc?600:400 }}
+          onMouseEnter={e=>{ e.currentTarget.style.backgroundColor=isDark?"rgba(74,222,128,0.12)":"#f0fdf4"; e.currentTarget.style.color=brightG; }}
+          onMouseLeave={e=>{ e.currentTarget.style.backgroundColor=""; e.currentTarget.style.color=selected===loc?brightG:(isDark?"#d1d5db":"#374151"); }}>
+          {selected===loc&&<svg className="w-3.5 h-3.5 flex-shrink-0" style={{color:brightG}} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>}
+          <span style={{ marginLeft:selected===loc?0:"19px" }}>{loc}</span>
+        </button>
+      ))}
+    </div>
+  );
 }
 
 function useCartCount() {
-  const [count, setCount] = useState(getCartCount);
-  useEffect(() => {
-    const update = () => setCount(getCartCount());
-    window.addEventListener("bloomora:cart-updated", update);
-    window.addEventListener("storage", update);
-    return () => { window.removeEventListener("bloomora:cart-updated", update); window.removeEventListener("storage", update); };
-  }, []);
-  return count;
+  const [count, setCount] = useState(getCartCount);
+  useEffect(() => {
+    const update = () => setCount(getCartCount());
+    window.addEventListener("bloomora:cart-updated", update);
+    window.addEventListener("storage", update);
+    return () => { window.removeEventListener("bloomora:cart-updated", update); window.removeEventListener("storage", update); };
+  }, []);
+  return count;
 }
 
 export default function Navbar({ cartCount: propCartCount, onNavigate }) {
-  const { user, logout } = useAuth();
-  const { isDark } = useTheme();
-  const liveCartCount = useCartCount();
-  const cartCount = propCartCount ?? liveCartCount;
+  const { user, logout } = useAuth();
+  const { isDark } = useTheme();
+  const liveCartCount = useCartCount();
+  const cartCount = propCartCount ?? liveCartCount;
 
-  // 🌟 NEW: State to hold active campaigns
-  const [activeCampaigns, setActiveCampaigns] = useState([]);
-  const [customCategories, setCustomCategories] = useState([]);
-  
-  const [active, setActive]                     = useState("Home");
-  const [locationOpen, setLocationOpen]         = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState("Manila");
-  const [branchModal, setBranchModal]           = useState(null);
-  const [openMenu, setOpenMenu]                 = useState(null);
-  const [mobileOpen, setMobileOpen]             = useState(false);
-  const [cartOpen, setCartOpen]                 = useState(false);
-  const [userOpen, setUserOpen]                 = useState(false);
-  const [searchOpen, setSearchOpen]             = useState(false);
-  const [mipOpen, setMipOpen]                   = useState(false);
+  // 🌟 NEW: State to hold active campaigns
+  const [activeCampaigns, setActiveCampaigns] = useState([]);
+  const [customCategories, setCustomCategories] = useState([]);
+  
+  const [active, setActive]                     = useState("Home");
+  const [locationOpen, setLocationOpen]         = useState(false);
+  const [selectedLocation, setSelectedLocation] = useState("Manila");
+  const [branchModal, setBranchModal]           = useState(null);
+  const [openMenu, setOpenMenu]                 = useState(null);
+  const [mobileOpen, setMobileOpen]             = useState(false);
+  const [cartOpen, setCartOpen]                 = useState(false);
+  const [userOpen, setUserOpen]                 = useState(false);
+  const [searchOpen, setSearchOpen]             = useState(false);
+  const [mipOpen, setMipOpen]                   = useState(false);
 
-  const navRef=useRef(null), cartRef=useRef(null), userRef=useRef(null), locationRef=useRef(null), mipRef=useRef(null);
-  const menuTimer=useRef(null), cartTimer=useRef(null), userTimer=useRef(null), mipTimer=useRef(null);
+  // 🔔 Missing Notification Bell States added here to prevent crashes
+  const [notifOpen, setNotifOpen]               = useState(false);
+  const [notifications, setNotifications]       = useState([]);
+  const [unreadCount, setUnreadCount]           = useState(0);
+  const [loadingNotifs, setLoadingNotifs]       = useState(false);
 
-  const openMenuD  = l => { clearTimeout(menuTimer.current); setOpenMenu(l); };
-  const closeMenuD = ()  => { menuTimer.current = setTimeout(() => setOpenMenu(null), 200); };
-  const openCartD  = ()  => { clearTimeout(cartTimer.current); setCartOpen(true); };
-  const closeCartD = ()  => { cartTimer.current = setTimeout(() => setCartOpen(false), 200); };
-  const openUserD  = ()  => { clearTimeout(userTimer.current); setUserOpen(true); };
-  const closeUserD = ()  => { userTimer.current = setTimeout(() => setUserOpen(false), 200); };
-  const openMipD   = ()  => { clearTimeout(mipTimer.current); setMipOpen(true); };
-  const closeMipD  = ()  => { mipTimer.current = setTimeout(() => setMipOpen(false), 220); };
+  const navRef=useRef(null), cartRef=useRef(null), userRef=useRef(null), locationRef=useRef(null), mipRef=useRef(null);
+  const menuTimer=useRef(null), cartTimer=useRef(null), userTimer=useRef(null), mipTimer=useRef(null);
 
-  const handleBranchSelect = loc => { setSelectedLocation(loc); setLocationOpen(false); setBranchModal(loc); };
-  const handleLogout       = ()  => { logout(); setUserOpen(false); onNavigate?.("login"); };
+  const openMenuD  = l => { clearTimeout(menuTimer.current); setOpenMenu(l); };
+  const closeMenuD = ()  => { menuTimer.current = setTimeout(() => setOpenMenu(null), 200); };
+  const openCartD  = ()  => { clearTimeout(cartTimer.current); setCartOpen(true); };
+  const closeCartD = ()  => { cartTimer.current = setTimeout(() => setCartOpen(false), 200); };
+  const openUserD  = ()  => { clearTimeout(userTimer.current); setUserOpen(true); };
+  const closeUserD = ()  => { userTimer.current = setTimeout(() => setUserOpen(false), 200); };
+  const openMipD   = ()  => { clearTimeout(mipTimer.current); setMipOpen(true); };
+  const closeMipD  = ()  => { mipTimer.current = setTimeout(() => setMipOpen(false), 220); };
 
-  // Fetch standard custom categories
-  useEffect(() => {
-    api.get("/products/")
-      .then(data => {
-        if (data && data.length > 0) {
-          const allCats = data.map(p => p.category?.toLowerCase().trim()).filter(Boolean);
-          const uniqueCats = Array.from(new Set(allCats));
-          const custom = uniqueCats.filter(c => !STANDARD_CATEGORIES.includes(c));
-          setCustomCategories(custom);
-        }
-      })
-      .catch(err => console.error("Failed to load nav categories", err));
-  }, []);
+  const handleBranchSelect = loc => { setSelectedLocation(loc); setLocationOpen(false); setBranchModal(loc); };
+  const handleLogout       = ()  => { logout(); setUserOpen(false); onNavigate?.("login"); };
 
-  // 🌟 NEW: Fetch Active Campaigns on load
-  useEffect(() => {
-    api.getActiveCampaigns()
-      .then(data => {
-        const list = data?.campaigns ? data.campaigns : data || [];
-        setActiveCampaigns(Array.isArray(list) ? list : []);
-      })
-      .catch(err => console.error("Failed to load active campaigns", err));
-  }, []);
+  // 🔔 Notification placeholder functions to prevent crashes
+  const handleMarkAllRead = () => {
+    // We will wire this up later!
+    setUnreadCount(0);
+  };
+  
+  const handleNotifClick = (n) => {
+    // We will wire this up later!
+  };
 
-  // Format dynamic links
-  const generatedLinks = customCategories.map(cat => ({
-    label: cat.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-    page: "shop",
-    isCustomCategory: true,
-  }));
+  // Fetch standard custom categories
+  useEffect(() => {
+    api.get("/products/")
+      .then(data => {
+        if (data && data.length > 0) {
+          const allCats = data.map(p => p.category?.toLowerCase().trim()).filter(Boolean);
+          const uniqueCats = Array.from(new Set(allCats));
+          const custom = uniqueCats.filter(c => !STANDARD_CATEGORIES.includes(c));
+          setCustomCategories(custom);
+        }
+      })
+      .catch(err => console.error("Failed to load nav categories", err));
+  }, []);
 
-  // 🌟 NEW: Format Campaigns as Navigation Links (with highlight & hearts!)
-  const campaignLinks = activeCampaigns.map(c => ({
-    label: c.name,
-    page: "shop",
-    isCampaign: true,
-    campaignKey: c.campaign_key,
-    highlight: true, // This triggers the pink color and floating hearts!
-  }));
+  // 🌟 NEW: Fetch Active Campaigns on load
+  useEffect(() => {
+    api.getActiveCampaigns()
+      .then(data => {
+        const list = data?.campaigns ? data.campaigns : data || [];
+        setActiveCampaigns(Array.isArray(list) ? list : []);
+      })
+      .catch(err => console.error("Failed to load active campaigns", err));
+  }, []);
 
-  // Combine standard links with dynamic ones
-  const shopIndex = NAV_LINKS.findIndex(l => l.label === "Shop");
-  const FINAL_NAV_LINKS = [
-    ...NAV_LINKS.slice(0, shopIndex + 1),
-    ...campaignLinks,  // <-- Campaigns injected right after "Shop"
-    ...generatedLinks, // <-- Standard custom categories injected next
-    ...NAV_LINKS.slice(shopIndex + 1)
-  ];
+  // Format dynamic links
+  const generatedLinks = customCategories.map(cat => ({
+    label: cat.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
+    page: "shop",
+    isCustomCategory: true,
+  }));
 
-  // 🌟 UPDATED: Handle routing and state management
-  const handleNavClick = link => {
-    setActive(link.label);
-    
-    // 1. Handle Categories
-    if (link.isCustomCategory) {
-      localStorage.setItem("bloomora_active_category", link.label.toLowerCase());
-    } else {
-      localStorage.removeItem("bloomora_active_category");
-    }
+  // 🌟 NEW: Format Campaigns as Navigation Links (with highlight & hearts!)
+  const campaignLinks = activeCampaigns.map(c => ({
+    label: c.name,
+    page: "shop",
+    isCampaign: true,
+    campaignKey: c.campaign_key,
+    highlight: true, // This triggers the pink color and floating hearts!
+  }));
 
-    // 2. Handle Campaigns
-    if (link.isCampaign) {
-      localStorage.setItem("bloomora_active_campaign", link.campaignKey);
-    } else {
-      localStorage.removeItem("bloomora_active_campaign");
-    }
+  // Combine standard links with dynamic ones
+  const shopIndex = NAV_LINKS.findIndex(l => l.label === "Shop");
+  const FINAL_NAV_LINKS = [
+    ...NAV_LINKS.slice(0, shopIndex + 1),
+    ...campaignLinks,  // <-- Campaigns injected right after "Shop"
+    ...generatedLinks, // <-- Standard custom categories injected next
+    ...NAV_LINKS.slice(shopIndex + 1)
+  ];
 
-    if (link.page) onNavigate?.(link.page);
-    setMobileOpen(false);
-  };
+  // 🌟 UPDATED: Handle routing and state management
+  const handleNavClick = link => {
+    setActive(link.label);
+    
+    // 1. Handle Categories
+    if (link.isCustomCategory) {
+      localStorage.setItem("bloomora_active_category", link.label.toLowerCase());
+    } else {
+      localStorage.removeItem("bloomora_active_category");
+    }
 
-  const handleAccountClick = () => { setUserOpen(false); onNavigate?.(user ? "account" : "login"); };
+    // 2. Handle Campaigns
+    if (link.isCampaign) {
+      localStorage.setItem("bloomora_active_campaign", link.campaignKey);
+    } else {
+      localStorage.removeItem("bloomora_active_campaign");
+    }
 
-  useEffect(() => {
-    const h = e => {
-      if (navRef.current && !navRef.current.contains(e.target)) setOpenMenu(null);
-      if (cartRef.current && !cartRef.current.contains(e.target)) setCartOpen(false);
-      if (userRef.current && !userRef.current.contains(e.target)) setUserOpen(false);
-      if (locationRef.current && !locationRef.current.contains(e.target)) setLocationOpen(false);
-      if (mipRef.current && !mipRef.current.contains(e.target)) setMipOpen(false);
-    };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
-  }, []);
+    if (link.page) onNavigate?.(link.page);
+    setMobileOpen(false);
+  };
 
-  return (
-    <>
-      <style>{`
-        @keyframes dropIn { from { opacity:0; transform:translateY(-8px) scale(0.97); } to { opacity:1; transform:translateY(0) scale(1); } }
-        ${HEART_CSS}
-      `}</style>
-      {branchModal && <BranchModal branch={branchModal} onClose={() => setBranchModal(null)} />}
-      {searchOpen && <SearchOverlay onClose={() => setSearchOpen(false)} onNavigate={onNavigate} />}
+  const handleAccountClick = () => { setUserOpen(false); onNavigate?.(user ? "account" : "login"); };
 
-      <div className="w-full sticky top-0 z-50" ref={navRef}>
-        <PromoCarousel onNavigate={onNavigate} />
-        <nav className="border-b px-4 sm:px-6 lg:px-8 py-3" style={{
-          backgroundColor: isDark ? "#111827" : "white",
-          borderColor: isDark ? "#2d3748" : "#DAEDD5",
-        }}>
-          <div className="flex items-center justify-between gap-4">
+  useEffect(() => {
+    const h = e => {
+      if (navRef.current && !navRef.current.contains(e.target)) setOpenMenu(null);
+      if (cartRef.current && !cartRef.current.contains(e.target)) setCartOpen(false);
+      if (userRef.current && !userRef.current.contains(e.target)) setUserOpen(false);
+      if (locationRef.current && !locationRef.current.contains(e.target)) setLocationOpen(false);
+      if (mipRef.current && !mipRef.current.contains(e.target)) setMipOpen(false);
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  }, []);
 
-            {/* Logo */}
-            <div className="flex items-center gap-2 flex-shrink-0 cursor-pointer" onClick={() => onNavigate?.("home")}>
-              <img src={estingsLogo} alt="Esting's Logo" className="w-9 h-9 sm:w-10 sm:h-10 object-contain"
-                style={{ filter: isDark ? "brightness(1.15)" : "none" }}/>
-              <img src={estingsText} alt="Esting's" className="h-6 sm:h-7 object-contain hidden sm:block"
-                style={{ filter: isDark ? "brightness(0) invert(1)" : "none" }}/>
-            </div>
+  return (
+    <>
+      <style>{`
+        @keyframes dropIn { from { opacity:0; transform:translateY(-8px) scale(0.97); } to { opacity:1; transform:translateY(0) scale(1); } }
+        ${HEART_CSS}
+      `}</style>
+      {branchModal && <BranchModal branch={branchModal} onClose={() => setBranchModal(null)} />}
+      {searchOpen && <SearchOverlay onClose={() => setSearchOpen(false)} onNavigate={onNavigate} />}
 
-            {/* Desktop nav */}
-            <div className="hidden lg:flex items-center gap-6 xl:gap-8">
-              <div className="flex items-center gap-1.5" ref={locationRef}>
-                <span className="text-xs uppercase tracking-wide font-medium" style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>Store Branch</span>
-                <div className="relative">
-                  <button onClick={() => setLocationOpen(p => !p)}
-                    className="flex items-center gap-1.5 border rounded-lg px-3 py-1.5 text-sm hover:border-green-400 transition-all"
-                    style={{
-                      borderColor: locationOpen ? (isDark?"#4ade80":SITE_GREEN) : (isDark ? "#2d3748" : "#e5e7eb"),
-                      color: isDark ? "#d1d5db" : "#374151",
-                      backgroundColor: isDark ? "#1a2332" : "transparent",
-                    }}>
-                    <svg className="w-3 h-3" style={{color:SITE_GREEN}} fill="currentColor" viewBox="0 0 24 24"><path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742ZM12 13.5a3 3 0 100-6 3 3 0 000 6Z" clipRule="evenodd"/></svg>
-                    {selectedLocation}
-                    <svg className="w-3 h-3 text-gray-400 transition-transform" style={{ transform:locationOpen?"rotate(180deg)":"rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
-                  </button>
-                  {locationOpen && <LocationDropdown selected={selectedLocation} onChange={handleBranchSelect} onClose={() => setLocationOpen(false)} />}
-                </div>
-              </div>
+      <div className="w-full sticky top-0 z-50" ref={navRef}>
+        <PromoCarousel onNavigate={onNavigate} />
+        <nav className="border-b px-4 sm:px-6 lg:px-8 py-3" style={{
+          backgroundColor: isDark ? "#111827" : "white",
+          borderColor: isDark ? "#2d3748" : "#DAEDD5",
+        }}>
+          <div className="flex items-center justify-between gap-4">
 
-              <div className="flex items-center gap-5 xl:gap-7">
-                {FINAL_NAV_LINKS.map(link => (
-                  <div key={link.label} className="relative"
-                    onMouseEnter={() => (link.dropdown||link.categories) && openMenuD(link.label)}
-                    onMouseLeave={() => (link.dropdown||link.categories) && closeMenuD()}>
-                    <button onClick={() => handleNavClick(link)}
-                      className="flex items-center gap-0.5 text-sm font-medium pb-1 whitespace-nowrap transition-colors relative"
-                      style={{
-                        color: active===link.label ? (isDark?"#4ade80":SITE_GREEN) : (link.highlight ? (isDark?"#ff6b81":"#f43f5e") : (isDark ? "#d1d5db" : "#4b5563")),
-                        borderBottom: active===link.label ? `2px solid ${isDark?"#4ade80":SITE_GREEN}` : "2px solid transparent",
-                      }}
-                      onMouseEnter={e => { if (active!==link.label) e.currentTarget.style.color = link.highlight ? (isDark?"#ff4d6d":"#e11d48") : (isDark ? "#86efac" : NAVY_GREEN); }}
-                      onMouseLeave={e => { if (active!==link.label) e.currentTarget.style.color = link.highlight ? (isDark?"#ff6b81":"#f43f5e") : (isDark ? "#d1d5db" : "#4b5563"); }}>
-                      {/* Floating hearts for highlight links! */}
-                      {link.highlight && <FloatingHearts />}
-                      {link.label}
-                      {(link.dropdown||link.categories) && <svg className="w-3 h-3 text-gray-400 ml-0.5 transition-transform" style={{ transform:openMenu===link.label?"rotate(180deg)":"rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>}
-                    </button>
-                    {(link.dropdown||link.categories) && openMenu===link.label && (
-                      <div onMouseEnter={() => openMenuD(link.label)} onMouseLeave={closeMenuD}>
-                        <DropdownMenu items={link.dropdown} categories={link.categories} onNavigate={onNavigate} onClose={() => setOpenMenu(null)} />
-                      </div>
-                    )}
-                  </div>
-                ))}
-                
-                {/* Make it Personal Button */}
-                <div className="relative" ref={mipRef} onMouseEnter={openMipD} onMouseLeave={closeMipD}>
-                  <button onClick={() => onNavigate?.("make-it-personal")}
-                    className="whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full text-white flex items-center gap-1 transition-all hover:shadow-md hover:scale-105"
-                    style={{ background:"linear-gradient(135deg,#2E8B34,#0C573E)" }}>
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
-                    Make it Personal
-                    <svg className="w-2.5 h-2.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
-                  </button>
-                  {mipOpen && <MakeItPersonalPopout onNavigate={onNavigate} onClose={() => setMipOpen(false)} />}
-                </div>
-              </div>
-            </div>
+            {/* Logo */}
+            <div className="flex items-center gap-2 flex-shrink-0 cursor-pointer" onClick={() => onNavigate?.("home")}>
+              <img src={estingsLogo} alt="Esting's Logo" className="w-9 h-9 sm:w-10 sm:h-10 object-contain"
+                style={{ filter: isDark ? "brightness(1.15)" : "none" }}/>
+              <img src={estingsText} alt="Esting's" className="h-6 sm:h-7 object-contain hidden sm:block"
+                style={{ filter: isDark ? "brightness(0) invert(1)" : "none" }}/>
+            </div>
 
-            {/* Right side icons */}
-            <div className="flex items-center gap-1 sm:gap-2">
-              <button onClick={() => setSearchOpen(true)}
-                className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors"
-                style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"}
-                onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
-                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/></svg>
-              </button>
+            {/* Desktop nav */}
+            <div className="hidden lg:flex items-center gap-6 xl:gap-8">
+              <div className="flex items-center gap-1.5" ref={locationRef}>
+                <span className="text-xs uppercase tracking-wide font-medium" style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>Store Branch</span>
+                <div className="relative">
+                  <button onClick={() => setLocationOpen(p => !p)}
+                    className="flex items-center gap-1.5 border rounded-lg px-3 py-1.5 text-sm hover:border-green-400 transition-all"
+                    style={{
+                      borderColor: locationOpen ? (isDark?"#4ade80":SITE_GREEN) : (isDark ? "#2d3748" : "#e5e7eb"),
+                      color: isDark ? "#d1d5db" : "#374151",
+                      backgroundColor: isDark ? "#1a2332" : "transparent",
+                    }}>
+                    <svg className="w-3 h-3" style={{color:SITE_GREEN}} fill="currentColor" viewBox="0 0 24 24"><path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742ZM12 13.5a3 3 0 100-6 3 3 0 000 6Z" clipRule="evenodd"/></svg>
+                    {selectedLocation}
+                    <svg className="w-3 h-3 text-gray-400 transition-transform" style={{ transform:locationOpen?"rotate(180deg)":"rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
+                  </button>
+                  {locationOpen && <LocationDropdown selected={selectedLocation} onChange={handleBranchSelect} onClose={() => setLocationOpen(false)} />}
+                </div>
+              </div>
 
-              <DarkModeToggle />
+              <div className="flex items-center gap-5 xl:gap-7">
+                {FINAL_NAV_LINKS.map(link => (
+                  <div key={link.label} className="relative"
+                    onMouseEnter={() => (link.dropdown||link.categories) && openMenuD(link.label)}
+                    onMouseLeave={() => (link.dropdown||link.categories) && closeMenuD()}>
+                    <button onClick={() => handleNavClick(link)}
+                      className="flex items-center gap-0.5 text-sm font-medium pb-1 whitespace-nowrap transition-colors relative"
+                      style={{
+                        color: active===link.label ? (isDark?"#4ade80":SITE_GREEN) : (link.highlight ? (isDark?"#ff6b81":"#f43f5e") : (isDark ? "#d1d5db" : "#4b5563")),
+                        borderBottom: active===link.label ? `2px solid ${isDark?"#4ade80":SITE_GREEN}` : "2px solid transparent",
+                      }}
+                      onMouseEnter={e => { if (active!==link.label) e.currentTarget.style.color = link.highlight ? (isDark?"#ff4d6d":"#e11d48") : (isDark ? "#86efac" : NAVY_GREEN); }}
+                      onMouseLeave={e => { if (active!==link.label) e.currentTarget.style.color = link.highlight ? (isDark?"#ff6b81":"#f43f5e") : (isDark ? "#d1d5db" : "#4b5563"); }}>
+                      {/* Floating hearts for highlight links! */}
+                      {link.highlight && <FloatingHearts />}
+                      {link.label}
+                      {(link.dropdown||link.categories) && <svg className="w-3 h-3 text-gray-400 ml-0.5 transition-transform" style={{ transform:openMenu===link.label?"rotate(180deg)":"rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>}
+                    </button>
+                    {(link.dropdown||link.categories) && openMenu===link.label && (
+                      <div onMouseEnter={() => openMenuD(link.label)} onMouseLeave={closeMenuD}>
+                        <DropdownMenu items={link.dropdown} categories={link.categories} onNavigate={onNavigate} onClose={() => setOpenMenu(null)} />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                
+                {/* Make it Personal Button */}
+                <div className="relative" ref={mipRef} onMouseEnter={openMipD} onMouseLeave={closeMipD}>
+                  <button onClick={() => onNavigate?.("make-it-personal")}
+                    className="whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full text-white flex items-center gap-1 transition-all hover:shadow-md hover:scale-105"
+                    style={{ background:"linear-gradient(135deg,#2E8B34,#0C573E)" }}>
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                    Make it Personal
+                    <svg className="w-2.5 h-2.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
+                  </button>
+                  {mipOpen && <MakeItPersonalPopout onNavigate={onNavigate} onClose={() => setMipOpen(false)} />}
+                </div>
+              </div>
+            </div>
 
-              <div className="relative" ref={cartRef}>
-                <button onClick={() => onNavigate?.("cart")}
-                  className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative"
-                  style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
-                  onMouseEnter={e => { openCartD(); e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"; }}
-                  onMouseLeave={e => { closeCartD(); e.currentTarget.style.backgroundColor = "transparent"; }}>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0Zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0Z"/></svg>
-                  <span className="absolute -top-1 -right-1 flex items-center justify-center text-white font-bold rounded-full" style={{ backgroundColor:cartCount>0?"#e11d48":"#9ca3af", fontSize:"9px", width:"16px", height:"16px" }}>{cartCount}</span>
-                </button>
-                {cartOpen && <div onMouseEnter={openCartD} onMouseLeave={closeCartD}><CartDropdown cartCount={cartCount} onNavigate={onNavigate} /></div>}
-              </div>
+            {/* Right side icons */}
+            <div className="flex items-center gap-1 sm:gap-2">
+              <button onClick={() => setSearchOpen(true)}
+                className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors"
+                style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/></svg>
+              </button>
 
-              <div className="relative" ref={userRef}>
-                <button onClick={handleAccountClick}
-                  className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors"
-                  style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
-                  onMouseEnter={e => { openUserD(); e.currentTarget.style.backgroundColor = isDark ? "#374151" : "#f9fafb"; }}
-                  onMouseLeave={e => { closeUserD(); e.currentTarget.style.backgroundColor = "transparent"; }}>
-                  {user
-                    ? <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background:"linear-gradient(135deg,#2E8B34,#0C573E)" }}>{user.firstName?.[0]?.toUpperCase()||"U"}</div>
-                    : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0ZM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632Z"/></svg>}
-                </button>
-                {userOpen && <div onMouseEnter={openUserD} onMouseLeave={closeUserD}><UserHoverDropdown user={user} onNavigate={p => { onNavigate?.(p); setUserOpen(false); }} onLogout={handleLogout} /></div>}
-              </div>
+              <DarkModeToggle />
 
-              <button className="lg:hidden w-8 h-8 flex items-center justify-center rounded-full transition-colors ml-1"
-                style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"}
-                onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
-                onClick={() => setMobileOpen(p => !p)}>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
-                  {mobileOpen ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/> : <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>}
-                </svg>
-              </button>
-            </div>
-          </div>
+              <div className="relative" ref={cartRef}>
+                <button onClick={() => onNavigate?.("cart")}
+                  className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative"
+                  style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
+                  onMouseEnter={e => { openCartD(); e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"; }}
+                  onMouseLeave={e => { closeCartD(); e.currentTarget.style.backgroundColor = "transparent"; }}>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0Zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0Z"/></svg>
+                  <span className="absolute -top-1 -right-1 flex items-center justify-center text-white font-bold rounded-full" style={{ backgroundColor:cartCount>0?"#e11d48":"#9ca3af", fontSize:"9px", width:"16px", height:"16px" }}>{cartCount}</span>
+                </button>
+                {cartOpen && <div onMouseEnter={openCartD} onMouseLeave={closeCartD}><CartDropdown cartCount={cartCount} onNavigate={onNavigate} /></div>}
+              </div>
 
-          {/* Mobile menu */}
-          {mobileOpen && (
-            <div className="lg:hidden mt-3 pt-3 border-t" style={{
-              borderColor: isDark ? "#2d3748" : "#DAEDD5",
-              backgroundColor: isDark ? "#111827" : "transparent",
-              maxHeight: "calc(100svh - 108px)",
-              overflowY: "auto",
-            }}>
-              {/* Store branch */}
-              <div className="flex items-center gap-2 px-2 mb-3 flex-wrap">
-                <span className="text-xs uppercase tracking-wide font-medium" style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>Store Branch</span>
-                {["Manila","Pampanga"].map(loc => (
-                  <button key={loc} onClick={() => { handleBranchSelect(loc); setMobileOpen(false); }}
-                    className="text-sm px-2 py-0.5 rounded border transition-colors"
-                    style={{
-                      borderColor: selectedLocation===loc ? (isDark?"#4ade80":SITE_GREEN) : (isDark ? "#2d3748" : "#e5e7eb"),
-                      color: selectedLocation===loc ? (isDark?"#4ade80":SITE_GREEN) : (isDark ? "#9ca3af" : "#6b7280"),
-                      fontWeight: selectedLocation===loc ? 600 : 400,
-                    }}>{loc}</button>
-                ))}
-              </div>
+              {/* Notification Bell */}
+              <div className="relative">
+                <button
+                onClick={() => setNotifOpen(p => !p)}
+                className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative"
+                style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; }}
+                aria-label="Notifications"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                  <path strokeLinecap="round" strokeLinejoin="round"
+                    d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                </svg>
+                {unreadCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex items-center justify-center text-white font-bold rounded-full"
+                    style={{ backgroundColor: "#e11d48", fontSize: "9px", minWidth: "16px", height: "16px", padding: "0 3px" }}>
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </span>
+                )}
+              </button>
 
-              {/* Nav links */}
-              {FINAL_NAV_LINKS.map(link => (
-                <div key={link.label}>
-                  <button onClick={() => handleNavClick(link)}
-                    className="w-full flex items-center text-left px-2 py-2.5 text-sm font-medium border-b transition-colors"
-                    style={{
-                      color: active===link.label
-                        ? (isDark ? "#4ade80" : SITE_GREEN)
-                        : (link.highlight ? (isDark ? "#ff6b81" : "#f43f5e") : (isDark ? "#d1d5db" : "#4b5563")),
-                      borderColor: isDark ? "#2d3748" : "#f3f4f6",
-                    }}>
-                    {link.highlight && <span className="mr-1">✨</span>}
-                    {link.label}
-                  </button>
-                  {link.dropdown && (
-                    <div style={{ paddingLeft:"16px", backgroundColor: isDark ? "#0f172a" : "#f9fafb" }}>
-                      {link.dropdown.map(sub => (
-                        <button key={sub.label} onClick={() => { onNavigate?.(sub.page); setMobileOpen(false); }}
-                          className="block w-full text-left px-2 py-2 text-xs border-b transition-colors"
-                          style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6", color: isDark ? "#9ca3af" : "#6b7280" }}
-                          onMouseEnter={e => e.currentTarget.style.color = isDark ? "#4ade80" : SITE_GREEN}
-                          onMouseLeave={e => e.currentTarget.style.color = isDark ? "#9ca3af" : "#6b7280"}>
-                          {sub.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+              {notifOpen && (
+                <div
+                  onMouseLeave={() => setNotifOpen(false)}
+                  className="absolute top-full right-0 mt-2 z-50 overflow-hidden"
+                  style={{
+                    width: "320px",
+                    backgroundColor: isDark ? "#1a2332" : "white",
+                    border: `1px solid ${isDark ? "#2d3748" : "#e5e7eb"}`,
+                    borderRadius: "14px",
+                    boxShadow: isDark ? "0 12px 32px rgba(0,0,0,0.5)" : "0 12px 32px rgba(0,0,0,0.12)",
+                    animation: "dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards",
+                  }}
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between px-4 py-3"
+                    style={{ borderBottom: `1px solid ${isDark ? "#2d3748" : "#f3f4f6"}` }}>
+                    <span className="text-sm font-semibold" style={{ color: isDark ? "#e5e7eb" : "#111827" }}>
+                      Notifications
+                    </span>
+                    {unreadCount > 0 && (
+                      <button onClick={handleMarkAllRead}
+                        className="text-xs font-medium transition-opacity hover:opacity-70"
+                        style={{ color: SITE_GREEN }}>
+                        Mark all read
+                      </button>
+                    )}
+                  </div>
 
-              <div className="px-2 py-3 border-t" style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6" }}>
-                <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>Make it Personal</p>
-                <div className="space-y-1">
-                  {MIP_OPTIONS.map(opt => (
-                    <button key={opt.page} onClick={() => { onNavigate?.(opt.page); setMobileOpen(false); }}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all"
-                      style={{ color: isDark ? "#d1d5db" : "#374151" }}
-                      onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4"}
-                      onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
-                      <span style={{ color:opt.accent }}>{opt.icon}</span>{opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
+                  {/* List */}
+                  <div style={{ maxHeight: "360px", overflowY: "auto" }}>
+                    {loadingNotifs ? (
+                      <div className="py-8 text-center text-xs" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>
+                        Loading...
+                      </div>
+                    ) : notifications.length === 0 ? (
+                      <div className="py-10 text-center">
+                        <svg className="w-8 h-8 mx-auto mb-2" style={{ color: isDark ? "#4b5563" : "#d1d5db" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5"
+                            d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                        </svg>
+                        <p className="text-sm" style={{ color: isDark ? "#6b7280" : "#9ca3af" }}>No notifications yet</p>
+                      </div>
+                    ) : (
+                      notifications.map(n => (
+                        <button key={n.id} onClick={() => handleNotifClick(n)}
+                          className="w-full flex items-start gap-3 px-4 py-3 text-left transition-colors"
+                          style={{
+                            borderBottom: `1px solid ${isDark ? "#1e2a3a" : "#f9fafb"}`,
+                            backgroundColor: n.is_read
+                              ? "transparent"
+                              : (isDark ? "rgba(46,139,52,0.08)" : "#f0fdf4"),
+                          }}
+                          onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1e2a3a" : "#f9fafb"}
+                          onMouseLeave={e => e.currentTarget.style.backgroundColor = n.is_read ? "transparent" : (isDark ? "rgba(46,139,52,0.08)" : "#f0fdf4")}
+                        >
+                          {/* Dot */}
+                          <div className="flex-shrink-0 mt-1.5">
+                            {n.is_read
+                              ? <div className="w-2 h-2 rounded-full" style={{ backgroundColor: isDark ? "#374151" : "#e5e7eb" }} />
+                              : <div className="w-2 h-2 rounded-full" style={{ backgroundColor: SITE_GREEN }} />
+                            }
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-xs font-semibold leading-snug" style={{ color: isDark ? "#e5e7eb" : "#111827" }}>
+                              {n.title}
+                            </p>
+                            <p className="text-xs mt-0.5 leading-relaxed" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>
+                              {n.message}
+                            </p>
+                            <p className="text-[10px] mt-1" style={{ color: isDark ? "#4b5563" : "#9ca3af" }}>
+                              {new Date(n.created_at).toLocaleString("en-PH", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                            </p>
+                          </div>
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+              </div>
 
-              {/* User section */}
-              <div className="px-2 py-3 border-t" style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6" }}>
-                {user ? (
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 mb-3">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background:"linear-gradient(135deg,#2E8B34,#0C573E)" }}>{user.firstName?.[0]?.toUpperCase()}</div>
-                      <div><p className="text-sm font-semibold" style={{ color: isDark ? "#f3f4f6" : "#111827" }}>{user.firstName} {user.lastName}</p><p className="text-xs" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>{user.email}</p></div>
-                    </div>
-                    {[{l:"My Account",p:"account"},{l:"My Orders",p:"orders"},{l:"Wishlist",p:"wishlist"},{l:"Settings",p:"settings"}].map(({l,p}) => <button key={p} onClick={() => { onNavigate?.(p); setMobileOpen(false); }} className="w-full text-left text-sm px-2 py-1.5 rounded transition-colors" style={{ color: isDark ? "#d1d5db" : "#4b5563" }} onMouseEnter={e=>{e.currentTarget.style.backgroundColor=isDark?"rgba(74,222,128,0.1)":"#f0fdf4";e.currentTarget.style.color=isDark?"#4ade80":SITE_GREEN}} onMouseLeave={e=>{e.currentTarget.style.backgroundColor="transparent";e.currentTarget.style.color=isDark?"#d1d5db":"#4b5563"}}>{l}</button>)}
-                    <button onClick={handleLogout} className="flex items-center gap-2 text-sm text-red-500 font-medium px-2 py-1.5 rounded hover:bg-red-50 transition-colors w-full mt-1">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
-                      Logout
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <button onClick={() => { onNavigate?.("login"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold text-white rounded-lg" style={{ backgroundColor:SITE_GREEN }}>Login</button>
-                    <button onClick={() => { onNavigate?.("register"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold rounded-lg border" style={{ borderColor:SITE_GREEN, color:SITE_GREEN }}>Sign Up</button>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-        </nav>
-      </div>
-    </>
-  );
+              {/* 👤 USER PROFILE ICON (Paste this right here!) */}
+              <div className="relative" ref={userRef} onMouseEnter={openUserD} onMouseLeave={closeUserD}>
+                <button onClick={handleAccountClick}
+                  className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative"
+                  style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
+                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"; }}
+                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; }}>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                  </svg>
+                </button>
+                {userOpen && <UserHoverDropdown user={user} onNavigate={onNavigate} onLogout={handleLogout} />}
+              </div>
+              {/* ------------------------------------------- */}
+
+            </div> {/* <-- ADDED: Correctly closes the "Right side icons" flex container */}
+          </div> {/* <-- ADDED: Correctly closes the main flex items-center justify-between container */}
+
+          {/* Mobile menu */}
+          {mobileOpen && (
+            <div className="lg:hidden mt-3 pt-3 border-t" style={{
+              borderColor: isDark ? "#2d3748" : "#DAEDD5",
+              backgroundColor: isDark ? "#111827" : "transparent",
+              maxHeight: "calc(100svh - 108px)",
+              overflowY: "auto",
+            }}>
+              {/* Store branch */}
+              <div className="flex items-center gap-2 px-2 mb-3 flex-wrap">
+                <span className="text-xs uppercase tracking-wide font-medium" style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>Store Branch</span>
+                {["Manila","Pampanga"].map(loc => (
+                  <button key={loc} onClick={() => { handleBranchSelect(loc); setMobileOpen(false); }}
+                    className="text-sm px-2 py-0.5 rounded border transition-colors"
+                    style={{
+                      borderColor: selectedLocation===loc ? (isDark?"#4ade80":SITE_GREEN) : (isDark ? "#2d3748" : "#e5e7eb"),
+                      color: selectedLocation===loc ? (isDark?"#4ade80":SITE_GREEN) : (isDark ? "#9ca3af" : "#6b7280"),
+                      fontWeight: selectedLocation===loc ? 600 : 400,
+                    }}>{loc}</button>
+                ))}
+              </div>
+
+              {/* Nav links */}
+              {FINAL_NAV_LINKS.map(link => (
+                <div key={link.label}>
+                  <button onClick={() => handleNavClick(link)}
+                    className="w-full flex items-center text-left px-2 py-2.5 text-sm font-medium border-b transition-colors"
+                    style={{
+                      color: active===link.label
+                        ? (isDark ? "#4ade80" : SITE_GREEN)
+                        : (link.highlight ? (isDark ? "#ff6b81" : "#f43f5e") : (isDark ? "#d1d5db" : "#4b5563")),
+                      borderColor: isDark ? "#2d3748" : "#f3f4f6",
+                    }}>
+                    {link.highlight && <span className="mr-1">✨</span>}
+                    {link.label}
+                  </button>
+                  {link.dropdown && (
+                    <div style={{ paddingLeft:"16px", backgroundColor: isDark ? "#0f172a" : "#f9fafb" }}>
+                      {link.dropdown.map(sub => (
+                        <button key={sub.label} onClick={() => { onNavigate?.(sub.page); setMobileOpen(false); }}
+                          className="block w-full text-left px-2 py-2 text-xs border-b transition-colors"
+                          style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6", color: isDark ? "#9ca3af" : "#6b7280" }}
+                          onMouseEnter={e => e.currentTarget.style.color = isDark ? "#4ade80" : SITE_GREEN}
+                          onMouseLeave={e => e.currentTarget.style.color = isDark ? "#9ca3af" : "#6b7280"}>
+                          {sub.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <div className="px-2 py-3 border-t" style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6" }}>
+                <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>Make it Personal</p>
+                <div className="space-y-1">
+                  {MIP_OPTIONS.map(opt => (
+                    <button key={opt.page} onClick={() => { onNavigate?.(opt.page); setMobileOpen(false); }}
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all"
+                      style={{ color: isDark ? "#d1d5db" : "#374151" }}
+                      onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4"}
+                      onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+                      <span style={{ color:opt.accent }}>{opt.icon}</span>{opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* User section */}
+              <div className="px-2 py-3 border-t" style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6" }}>
+                {user ? (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background:"linear-gradient(135deg,#2E8B34,#0C573E)" }}>{user.firstName?.[0]?.toUpperCase()}</div>
+                      <div><p className="text-sm font-semibold" style={{ color: isDark ? "#f3f4f6" : "#111827" }}>{user.firstName} {user.lastName}</p><p className="text-xs" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>{user.email}</p></div>
+                    </div>
+                    {[{l:"My Account",p:"account"},{l:"My Orders",p:"orders"},{l:"Wishlist",p:"wishlist"},{l:"Settings",p:"settings"}].map(({l,p}) => <button key={p} onClick={() => { onNavigate?.(p); setMobileOpen(false); }} className="w-full text-left text-sm px-2 py-1.5 rounded transition-colors" style={{ color: isDark ? "#d1d5db" : "#4b5563" }} onMouseEnter={e=>{e.currentTarget.style.backgroundColor=isDark?"rgba(74,222,128,0.1)":"#f0fdf4";e.currentTarget.style.color=isDark?"#4ade80":SITE_GREEN}} onMouseLeave={e=>{e.currentTarget.style.backgroundColor="transparent";e.currentTarget.style.color=isDark?"#d1d5db":"#4b5563"}}>{l}</button>)}
+                    <button onClick={handleLogout} className="flex items-center gap-2 text-sm text-red-500 font-medium px-2 py-1.5 rounded hover:bg-red-50 transition-colors w-full mt-1">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
+                      Logout
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <button onClick={() => { onNavigate?.("login"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold text-white rounded-lg" style={{ backgroundColor:SITE_GREEN }}>Login</button>
+                    <button onClick={() => { onNavigate?.("register"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold rounded-lg border" style={{ borderColor:SITE_GREEN, color:SITE_GREEN }}>Sign Up</button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </nav>
+      </div>
+    </>
+  );
 }

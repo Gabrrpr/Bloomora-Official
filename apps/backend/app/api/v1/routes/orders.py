@@ -3,6 +3,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, func, String
 from typing import List, Optional
 from decimal import Decimal
+from sqlalchemy import text
+from app.services.email_service import send_order_status_email
 import uuid
 import secrets
 
@@ -345,6 +347,144 @@ def admin_order_action(
     order.status = new_status
     db.commit()
     db.refresh(order)
+
+    return {
+        "status": "success",
+        "message": "Order status updated",
+        **serialize_order(order),
+    }
+
+def _notify_order(db: Session, order: Order, status: str):
+    """Create a notification row + send email if user has order_updates enabled."""
+
+    status_messages = {
+        "confirmed":        ("Order Confirmed 🌸",        "Your order {num} has been confirmed and is being processed."),
+        "preparing":        ("We're Preparing Your Order 🌿", "Your order {num} is now being prepared by our florists."),
+        "out_for_delivery": ("On Its Way! 🚚",             "Your order {num} is out for delivery. Expect it soon!"),
+        "delivered":        ("Order Delivered 🎉",         "Your order {num} has been delivered. Enjoy your blooms!"),
+        "cancelled":        ("Order Cancelled",            "Your order {num} has been cancelled. Contact us if this was a mistake."),
+    }
+
+    cfg = status_messages.get(status)
+    if not cfg:
+        return
+
+    order_number = f"ORD-{order.id.hex[:8].upper()}"
+    title   = cfg[0]
+    message = cfg[1].format(num=order_number)
+
+    # 1. Insert notification row
+    db.execute(
+        text("""
+            INSERT INTO notifications (user_id, type, title, message, order_id)
+            VALUES (:uid, 'order', :title, :message, :oid)
+        """),
+        {
+            "uid":     str(order.user_id),
+            "title":   title,
+            "message": message,
+            "oid":     str(order.id),
+        }
+    )
+    db.commit()
+
+    # 2. Check preferences before sending email
+    pref = db.execute(
+        text("SELECT order_updates FROM user_notification_preferences WHERE user_id = :uid"),
+        {"uid": str(order.user_id)}
+    ).fetchone()
+
+    # Default to True if no preference row yet
+    if pref is None or pref.order_updates:
+        send_order_status_email(
+            to_email=order.user.email,
+            first_name=order.user.first_name or "there",
+            order_number=order_number,
+            status=status,
+            message=message,
+        )
+
+
+# ── Confirm Payment for Order ───────────────────────────────────────────────────
+@router.post("/{order_id}/pay", response_model=dict)
+def confirm_payment(
+    order_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        order_uuid = uuid.UUID(order_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid order ID")
+
+    order = db.query(Order).filter(Order.id == order_uuid).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if order.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if not order.transaction:
+        raise HTTPException(status_code=400, detail="No transaction found for this order")
+
+    if order.transaction.status == PaymentStatusEnum.paid:
+        raise HTTPException(status_code=400, detail="Payment already confirmed for this order")
+
+    order.transaction.status = PaymentStatusEnum.paid
+    order.status = OrderStatusEnum.confirmed
+    db.commit()
+    db.refresh(order)
+    db.refresh(order.transaction)
+
+    # Fire notification + email
+    _notify_order(db, order, "confirmed")
+
+    return {
+        "status": "success",
+        "message": "Payment confirmed successfully",
+        "order_id": str(order.id),
+        "order_number": f"ORD-{order.id.hex[:8].upper()}",
+        "payment_status": order.transaction.status.value,
+        "order_status": order.status.value,
+    }
+
+
+# ── Admin/Staff: Update Order Status ───────────────────────────────────────────
+@router.post("/{order_id}/action", response_model=dict)
+def admin_order_action(
+    order_id: str,
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    require_admin_or_staff(current_user)
+
+    action_status = payload.get("status")
+    if not action_status:
+        raise HTTPException(status_code=400, detail="Missing 'status' in payload")
+
+    status_key = str(action_status).lower().replace(" ", "_")
+
+    try:
+        new_status = OrderStatusEnum(status_key)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid status: {action_status}")
+
+    try:
+        order_uuid = uuid.UUID(order_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid order ID")
+
+    order = db.query(Order).filter(Order.id == order_uuid).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    order.status = new_status
+    db.commit()
+    db.refresh(order)
+
+    # Fire notification + email
+    _notify_order(db, order, status_key)
 
     return {
         "status": "success",

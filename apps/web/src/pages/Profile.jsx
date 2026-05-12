@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../context/AuthContext";
 import { api } from "../services/api";
+import { useTheme } from "../context/ThemeContext.jsx";
 
 const G = "#2E8B34";
 const DG = "#0C573E";
@@ -40,6 +41,7 @@ export default function Profile({ onNavigate }) {
   const [usernameCheck, setUsernameCheck] = useState("");
   const [passwordMatch, setPasswordMatch] = useState(true);
   const fileInputRef = useRef(null);
+  const { isDark } = useTheme();
 
   const [form, setForm] = useState({
     username: user?.username || "",
@@ -445,6 +447,71 @@ export default function Profile({ onNavigate }) {
                       </button>
                     </div>
                   </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+                {/* Preferences */}
+        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5">
+          <h3 className="text-sm font-semibold text-gray-700 mb-1">Preferences</h3>
+          <p className="text-xs text-gray-400 mb-5">Manage your theme and notification settings</p>
+
+          {/* Theme */}
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Appearance</p>
+          <div className="flex gap-2 mb-6">
+            {[
+              {
+                value: false, label: "Light",
+                icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>,
+              },
+              {
+                value: true, label: "Dark",
+                icon: <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>,
+              },
+            ].map(({ value, label, icon }) => {
+              const active = isDark === value;
+              return (
+                <button key={label} onClick={() => !active && toggleDark()}
+                  className="flex items-center gap-2 px-4 py-2 text-sm rounded-lg border transition-all"
+                  style={{
+                    borderColor: active ? G : "#e5e7eb",
+                    color: active ? G : "#6b7280",
+                    fontWeight: active ? 600 : 400,
+                    backgroundColor: active ? "#f0fdf4" : "transparent",
+                  }}>
+                  {icon}{label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Notifications */}
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Notifications</p>
+          {loadingPrefs ? (
+            <div className="text-xs text-gray-400">Loading...</div>
+          ) : (
+            <div className="space-y-3">
+              {[
+                { key: "order_updates", label: "Order updates", desc: "Confirmed, preparing, out for delivery, delivered" },
+                { key: "promotions",    label: "Promotions",    desc: "Discounts, campaigns, and special offers" },
+                { key: "chat_messages", label: "Chat messages", desc: "Replies from our team in support chat" },
+              ].map(({ key, label, desc }) => (
+                <div key={key} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+                  <div>
+                    <p className="text-sm font-medium text-gray-700">{label}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">{desc}</p>
+                  </div>
+                  <button
+                    onClick={() => handleTogglePref(key)}
+                    className="relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-200"
+                    style={{ backgroundColor: prefs[key] ? G : "#d1d5db" }}
+                  >
+                    <span
+                      className="absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200"
+                      style={{ transform: prefs[key] ? "translateX(20px)" : "translateX(0)" }}
+                    />
+                  </button>
                 </div>
               ))}
             </div>
