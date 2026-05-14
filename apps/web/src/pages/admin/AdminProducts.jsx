@@ -34,7 +34,6 @@ function useAdminTokens() {
     rowHov:    isDark ? "rgba(74,222,128,0.04)" : "#f8fffe",
     divider:   isDark ? "#1e293b"  : "#f1f5f9",
     overlayBg: "rgba(15,23,42,0.72)",
-    // Modal specific
     modalBg:   isDark ? "#1a2332"  : "white",
     modalBdr:  isDark ? "#2d3748"  : "#e8edf2",
     modalHdr:  isDark ? "#111827"  : "linear-gradient(135deg,#f0fdf4,#fafff8)",
@@ -45,22 +44,22 @@ function useAdminTokens() {
 }
 
 // ── Image maps ────────────────────────────────────────────────────────────────
-import SpringFlowers_PurpleWrapper from "../../assets/products/SpringFlowers_PurpleWrapper.png"
-import SpringFlowers_PinkWrapper   from "../../assets/products/SpringFlowers_PinkWrapper.png"
-import SpringFlowers_GreenWrapper  from "../../assets/products/SpringFlowers_GreenWrapper.png"
-import RainbowEquadorRoses         from "../../assets/products/RainbowEquadorRoses.png"
-import MixTulips                   from "../../assets/products/MixTulips.png"
-import Dozen_YellowChinaRoses      from "../../assets/products/Dozen_YellowChinaRoses.png"
-import Dozen_RedEquadorRoses       from "../../assets/products/Dozen_RedEquadorRoses.png"
-import Dozen_RedChinaRoses         from "../../assets/products/Dozen_RedChinaRoses.png"
-import Dozen_PinkChinaRoses        from "../../assets/products/Dozen_PinkChinaRoses.png"
-import Dozen_OrangeChinaRoses      from "../../assets/products/Dozen_OrangeChinaRoses.png"
-import Roses_24pcs_Red             from "../../assets/products/24pcs_RedEquadorRoses.png"
-import Roses_10pcs_Blue            from "../../assets/products/10pcs_BlueChinaRoses.png"
-import Roses_6pcs_White            from "../../assets/products/6pcs_WhiteEquadorRoses.png"
-import Roses_6pcs_Purple           from "../../assets/products/6pcs_PurpleChinaRoses.png"
-import Sunflower_3pcs              from "../../assets/products/3pcs_Sunflower.png"
-import Tulips_3pc_Pink             from "../../assets/products/3pc_PinkTulips.png"
+import SpringFlowers_PurpleWrapper from "../../assets/products/bouquets/SpringFlowers_PurpleWrapper.png"
+import SpringFlowers_PinkWrapper   from "../../assets/products/bouquets/SpringFlowers_PinkWrapper.png"
+import SpringFlowers_GreenWrapper  from "../../assets/products/bouquets/SpringFlowers_GreenWrapper.png"
+import RainbowEquadorRoses         from "../../assets/products/bouquets/RainbowEquadorRoses.png"
+import MixTulips                   from "../../assets/products/bouquets/MixTulips.png"
+import Dozen_YellowChinaRoses      from "../../assets/products/bouquets/Dozen_YellowChinaRoses.png"
+import Dozen_RedEquadorRoses       from "../../assets/products/bouquets/Dozen_RedEquadorRoses.png"
+import Dozen_RedChinaRoses         from "../../assets/products/bouquets/Dozen_RedChinaRoses.png"
+import Dozen_PinkChinaRoses        from "../../assets/products/bouquets/Dozen_PinkChinaRoses.png"
+import Dozen_OrangeChinaRoses      from "../../assets/products/bouquets/Dozen_OrangeChinaRoses.png"
+import Roses_24pcs_Red             from "../../assets/products/bouquets/24pcs_RedEquadorRoses.png"
+import Roses_10pcs_Blue            from "../../assets/products/bouquets/10pcs_BlueChinaRoses.png"
+import Roses_6pcs_White            from "../../assets/products/bouquets/6pcs_WhiteEquadorRoses.png"
+import Roses_6pcs_Purple           from "../../assets/products/bouquets/6pcs_PurpleChinaRoses.png"
+import Sunflower_3pcs              from "../../assets/products/bouquets/3pcs_Sunflower.png"
+import Tulips_3pc_Pink             from "../../assets/products/bouquets/3pc_PinkTulips.png"
 
 const PRODUCT_IMAGE_MAP = {
   "Spring Flowers Purple Wrapper": SpringFlowers_PurpleWrapper,
@@ -110,7 +109,7 @@ function getProductImage(product) {
   return PRODUCT_IMAGE_MAP[product.name] || VASE_IMAGE_MAP[product.name] || PLACEHOLDER_IMAGE
 }
 
-// ── Shared modal input components (dark-mode aware) ───────────────────────────
+// ── Shared modal input components ─────────────────────────────────────────────
 function MInput({ value, onChange, placeholder, type="text", error, d }) {
   return (
     <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
@@ -200,7 +199,7 @@ function ProductPagination({ showing, page, totalPages, onPageChange, d }) {
 function AddProductModal({ onClose, onSave, categories }) {
   const d = useAdminTokens()
   const [form, setForm] = useState({ name:"", category:"", price:"", originalPrice:"", availability:"Available", status:"Active", description:"", image_url:"", season_key:"", limited_start_at:"", limited_end_at:"" })
-  const [errors, setErrors]       = useState({})
+  const [errors, setErrors]         = useState({})
   const [isUploading, setUploading] = useState(false)
   const [lightboxSrc, setLightboxSrc] = useState(null)
   const set = key => val => setForm(f => ({...f,[key]:val}))
@@ -210,7 +209,7 @@ function AddProductModal({ onClose, onSave, categories }) {
     if (!form.name.trim()) err.name = "Product name is required"
     if (!form.category.trim()) err.category = "Category is required"
     if (!form.price || isNaN(form.price) || +form.price <= 0) err.price = "Enter a valid price"
-    if (form.originalPrice && +form.originalPrice < +form.price) err.originalPrice = "Original price must be ≥ selling price"
+    if (form.originalPrice && +form.originalPrice < +form.price) err.originalPrice = "Original price must be greater than or equal to selling price"
     return err
   }
 
@@ -252,7 +251,6 @@ function AddProductModal({ onClose, onSave, categories }) {
       <div className="rounded-xl w-full overflow-hidden"
         style={{ maxWidth:"640px", maxHeight:"90vh", boxShadow:"0 24px 64px rgba(0,0,0,0.5)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
 
-        {/* Modal header */}
         <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
           style={{ borderBottom:`1px solid ${d.modalHdrBdr}`, background:d.modalHdr }}>
           <div>
@@ -266,7 +264,6 @@ function AddProductModal({ onClose, onSave, categories }) {
         </div>
 
         <div className="overflow-y-auto p-6 space-y-4" style={{ maxHeight:"calc(90vh - 130px)" }}>
-          {/* Image upload */}
           <div>
             <MLabel d={d}>Product Image <span style={{ color:d.subC, fontWeight:400 }}>(optional)</span></MLabel>
             <input type="file" accept="image/*" onChange={handleUpload} disabled={isUploading}
@@ -287,7 +284,6 @@ function AddProductModal({ onClose, onSave, categories }) {
             )}
           </div>
 
-          {/* Name */}
           <div>
             <MLabel d={d}>Product Name <span style={{ color:"#f87171" }}>*</span></MLabel>
             <MInput value={form.name} onChange={set("name")} placeholder="e.g. Dozen Red Ecuador Roses" error={errors.name} d={d}/>
@@ -298,7 +294,7 @@ function AddProductModal({ onClose, onSave, categories }) {
             <div>
               <div className="flex items-end justify-between mb-1.5">
                 <MLabel d={d}>Category <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <span className="text-[10px] font-semibold" style={{ color:"#4ade80" }}>✨ Type to create new</span>
+                <span className="text-[10px] font-semibold" style={{ color:"#4ade80" }}>Type to create new</span>
               </div>
               <input list="cat-opts" value={form.category} onChange={e=>set("category")(e.target.value)} placeholder="Select or type new..."
                 className="w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all capitalize"
@@ -333,7 +329,7 @@ function AddProductModal({ onClose, onSave, categories }) {
               {AVAILABILITIES.map(a => (
                 <button key={a} onClick={()=>set("availability")(a)}
                   className="flex-1 py-2 text-xs font-bold rounded-md border transition-all"
-                  style={{ backgroundColor:form.availability===a?DG:(d.inputBg), color:form.availability===a?"white":d.subC, borderColor:form.availability===a?DG:d.inputBdr }}>
+                  style={{ backgroundColor:form.availability===a?DG:d.inputBg, color:form.availability===a?"white":d.subC, borderColor:form.availability===a?DG:d.inputBdr }}>
                   {a}
                 </button>
               ))}
@@ -361,8 +357,6 @@ function AddProductModal({ onClose, onSave, categories }) {
           </button>
         </div>
       </div>
-
-      {/* Lightbox */}
       {lightboxSrc && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center px-4"
           style={{ backgroundColor:"rgba(0,0,0,0.85)", backdropFilter:"blur(4px)" }}
@@ -404,7 +398,7 @@ function EditProductModal({ product, onClose, onSave, categories }) {
     if (!form.name.trim()) err.name="Product name is required"
     if (!form.category.trim()) err.category="Category is required"
     if (!form.price||isNaN(form.price)||+form.price<=0) err.price="Enter a valid price"
-    if (form.originalPrice&&+form.originalPrice<+form.price) err.originalPrice="Original price must be ≥ selling price"
+    if (form.originalPrice&&+form.originalPrice<+form.price) err.originalPrice="Original price must be greater than or equal to selling price"
     return err
   }
 
@@ -490,7 +484,7 @@ function EditProductModal({ product, onClose, onSave, categories }) {
             <div>
               <div className="flex items-end justify-between mb-1.5">
                 <MLabel d={d}>Category <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <span className="text-[10px] font-semibold" style={{ color:"#4ade80" }}>✨ Type to create new</span>
+                <span className="text-[10px] font-semibold" style={{ color:"#4ade80" }}>Type to create new</span>
               </div>
               <input list="cat-opts-edit" value={form.category} onChange={e=>set("category")(e.target.value)} placeholder="Select or type new..."
                 className="w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all capitalize"
@@ -567,12 +561,12 @@ function EditProductModal({ product, onClose, onSave, categories }) {
 function ViewProductModal({ product, onClose }) {
   const d = useAdminTokens()
   const rows = [
-    { label:"Product Name",  value:product.name },
-    { label:"Category",      value:product.category, capitalize:true },
-    { label:"Status",        value:product.status,   capitalize:true },
-    { label:"Price",         value:`₱${(+product.price).toLocaleString()}` },
-    { label:"Stock",         value:product.stock },
-    { label:"Description",   value:product.description || "—" },
+    { label:"Product Name", value:product.name },
+    { label:"Category",     value:product.category, capitalize:true },
+    { label:"Status",       value:product.status,   capitalize:true },
+    { label:"Price",        value:`₱${(+product.price).toLocaleString()}` },
+    { label:"Stock",        value:product.stock },
+    { label:"Description",  value:product.description || "—" },
   ]
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
@@ -617,18 +611,18 @@ export default function AdminProducts() {
   const { isDark } = d
   const PAGE_SIZE = 35
 
-  const [search, setSearch]         = useState("")
-  const [category, setCategory]     = useState("")
-  const [status, setStatus]         = useState("")
-  const [priceSort, setPriceSort]   = useState("")
-  const [page, setPage]             = useState(1)
-  const [showModal, setShowModal]   = useState(false)
+  const [search, setSearch]               = useState("")
+  const [category, setCategory]           = useState("")
+  const [status, setStatus]               = useState("")
+  const [priceSort, setPriceSort]         = useState("")
+  const [page, setPage]                   = useState(1)
+  const [showModal, setShowModal]         = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
   const [viewingProduct, setViewingProduct] = useState(null)
-  const [products, setProducts]     = useState([])
-  const [totalCount, setTotalCount] = useState(0)
-  const [lowCount, setLowCount]     = useState(0)
-  const [loading, setLoading]       = useState(true)
+  const [products, setProducts]           = useState([])
+  const [totalCount, setTotalCount]       = useState(0)
+  const [lowCount, setLowCount]           = useState(0)
+  const [loading, setLoading]             = useState(true)
 
   const fetchProducts = useCallback(async () => {
     setLoading(true)
@@ -646,9 +640,9 @@ export default function AdminProducts() {
   useEffect(() => { fetchProducts() }, [fetchProducts])
   useEffect(() => { setPage(1) }, [search,category,status,priceSort])
 
-  const handleSave = p => { setProducts(prev=>[p,...prev]); setTotalCount(c=>c+1) }
+  const handleSave     = p => { setProducts(prev=>[p,...prev]); setTotalCount(c=>c+1) }
   const handleEditSave = p => { setProducts(prev=>prev.map(x=>x.id===p.id?p:x)); setEditingProduct(null) }
-  const handleDelete = async (id) => {
+  const handleDelete   = async (id) => {
     if (!window.confirm("Delete this product?")) return
     try { await api.deleteProduct(id); setProducts(prev=>prev.filter(p=>p.id!==id)); setTotalCount(c=>Math.max(0,c-1)) }
     catch (e) { alert(e.message||"Failed to delete") }
@@ -661,19 +655,18 @@ export default function AdminProducts() {
     return ms&&mc&&mst
   }).sort((a,b) => { if(priceSort==="asc")return+a.price-+b.price; if(priceSort==="desc")return+b.price-+a.price; return 0 })
 
-  const totalPages=Math.max(1,Math.ceil(filtered.length/PAGE_SIZE))
-  const pageSafe=Math.min(page,totalPages)
-  const paginated=filtered.slice((pageSafe-1)*PAGE_SIZE, pageSafe*PAGE_SIZE)
+  const totalPages  = Math.max(1,Math.ceil(filtered.length/PAGE_SIZE))
+  const pageSafe    = Math.min(page,totalPages)
+  const paginated   = filtered.slice((pageSafe-1)*PAGE_SIZE, pageSafe*PAGE_SIZE)
 
-  const baseCategories=["Flower","Vase","Wrapping","Accessory","Arrangement","Add-on"]
-  const dynamicCategories=Array.from(new Set([...baseCategories.map(c=>c.toLowerCase()),...products.map(p=>p.category?.toLowerCase()).filter(Boolean)])).map(c=>c.charAt(0).toUpperCase()+c.slice(1))
+  const baseCategories     = ["Flower","Vase","Wrapping","Accessory","Arrangement","Add-on"]
+  const dynamicCategories  = Array.from(new Set([...baseCategories.map(c=>c.toLowerCase()),...products.map(p=>p.category?.toLowerCase()).filter(Boolean)])).map(c=>c.charAt(0).toUpperCase()+c.slice(1))
 
-  // Select style helper
   const selStyle = { borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }
 
   return (
     <div className="space-y-5">
-      {showModal && <AddProductModal onClose={()=>setShowModal(false)} onSave={handleSave} categories={dynamicCategories}/>}
+      {showModal      && <AddProductModal  onClose={()=>setShowModal(false)}      onSave={handleSave}     categories={dynamicCategories}/>}
       {editingProduct && <EditProductModal product={editingProduct} onClose={()=>setEditingProduct(null)} onSave={handleEditSave} categories={dynamicCategories}/>}
       {viewingProduct && <ViewProductModal product={viewingProduct} onClose={()=>setViewingProduct(null)}/>}
 
@@ -681,7 +674,6 @@ export default function AdminProducts() {
 
       {/* Stat cards */}
       <div className="flex flex-wrap gap-3 items-stretch">
-        {/* Green total card */}
         <div className="rounded-xl p-5 relative overflow-hidden flex flex-col justify-between transition-all duration-200"
           style={{ flex:"1 0 200px", maxWidth:"300px", background:"linear-gradient(135deg,#0a4a34 0%,#1a7040 60%,#2E8B34 100%)", boxShadow:"0 4px 16px rgba(12,87,62,0.28)" }}
           onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(12,87,62,0.36)"}}
@@ -690,7 +682,7 @@ export default function AdminProducts() {
           <div className="relative">
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color:"rgba(255,255,255,0.65)" }}>Total Products</p>
             <p className="text-3xl font-bold text-white mt-2">{totalCount}</p>
-            <p className="text-xs mt-1.5 font-medium" style={{ color:"rgba(255,255,255,0.55)" }}>↑ +0 this week</p>
+            <p className="text-xs mt-1.5 font-medium" style={{ color:"rgba(255,255,255,0.55)" }}>+0 this week</p>
           </div>
           <button onClick={()=>setShowModal(true)}
             className="relative flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-bold transition-all hover:scale-105 active:scale-95 mt-3 self-start"
@@ -700,15 +692,14 @@ export default function AdminProducts() {
           </button>
         </div>
 
-        {/* Low stock card */}
         <div className="rounded-xl p-5 relative overflow-hidden flex flex-col justify-between transition-all duration-200"
           style={{ flex:"1 0 180px", maxWidth:"260px", backgroundColor:d.cardBg, border:`1px solid ${d.cardBdr}`, boxShadow:d.cardShdw }}
           onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)"}} onMouseLeave={e=>{e.currentTarget.style.transform=""}}>
           <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl" style={{ backgroundColor:"#ef4444", opacity:0.7 }}/>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color:d.subC }}>Low stock products</p>
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color:d.subC }}>Low Stock Products</p>
             <p className="text-3xl font-bold mt-2" style={{ color:isDark?"#f87171":"#ef4444" }}>{lowCount}</p>
-            <p className="text-xs mt-1.5 font-semibold" style={{ color:"#f87171" }}>↑ +0 this week</p>
+            <p className="text-xs mt-1.5 font-semibold" style={{ color:"#f87171" }}>+0 this week</p>
           </div>
           <button className="text-xs font-semibold hover:underline mt-3 self-start" style={{ color:d.accentG }}>
             Review Inventory
@@ -716,15 +707,15 @@ export default function AdminProducts() {
         </div>
       </div>
 
-      {/* Table */}
+      {/* Table card */}
       <div className="rounded-xl overflow-hidden" style={{ border:`1px solid ${d.cardBdr}`, backgroundColor:d.cardBg, boxShadow:d.cardShdw }}>
         {/* Toolbar */}
         <div className="p-3 sm:p-4" style={{ borderBottom:`1px solid ${d.hdrBdr}`, backgroundColor:d.hdrBg }}>
           <div className="flex items-center gap-2 flex-wrap">
             {[
-              { val:category, set:setCategory, opts:["All Categories",...dynamicCategories], min:"130px" },
-              { val:status,   set:setStatus,   opts:["All Status","Active","Inactive"],       min:"120px" },
-              { val:priceSort,set:setPriceSort,opts:["Price: Default","Price: Low to High","Price: High to Low"], min:"160px",
+              { val:category,  set:setCategory,  opts:["All Categories",...dynamicCategories], min:"130px" },
+              { val:status,    set:setStatus,    opts:["All Status","Active","Inactive"],       min:"120px" },
+              { val:priceSort, set:setPriceSort, opts:["Price: Default","Price: Low to High","Price: High to Low"], min:"160px",
                 map:{ "Price: Default":"","Price: Low to High":"asc","Price: High to Low":"desc" },
                 unmap:{ "":"Price: Default","asc":"Price: Low to High","desc":"Price: High to Low" } },
             ].map((f,i) => (
@@ -742,12 +733,11 @@ export default function AdminProducts() {
                 </svg>
               </div>
             ))}
-            {/* Search */}
             <div className="relative flex-1" style={{ minWidth:"180px" }}>
               <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color:d.subC }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
               </svg>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search Product name"
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search product name"
                 className="w-full pl-9 pr-4 py-2 text-sm border rounded-md outline-none transition-all"
                 style={selStyle}
                 onFocus={e=>{e.target.style.borderColor="#4ade80";e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)"}}
@@ -765,8 +755,7 @@ export default function AdminProducts() {
             <thead style={{ borderBottom:`1px solid ${d.hdrBdr}`, backgroundColor:d.hdrBg }}>
               <tr>
                 {["Image","Product Name","Category","Price","Status","Availability","Action"].map(h => (
-                  <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider"
-                    style={{ color:d.subC }}>{h}</th>
+                  <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color:d.subC }}>{h}</th>
                 ))}
               </tr>
             </thead>
@@ -801,7 +790,7 @@ export default function AdminProducts() {
                 )
               }) : (
                 <tr><td colSpan={7} className="px-5 py-12 text-center text-sm" style={{ color:d.subC }}>
-                  No products yet. Click + Add Product to get started.
+                  No products yet. Click Add Product to get started.
                 </td></tr>
               )}
             </tbody>

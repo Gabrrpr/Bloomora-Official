@@ -1,25 +1,25 @@
 import { useState, useEffect, useRef } from "react"
-import ProductPreviewModal from "../components/ProductPreviewModal.jsx"
-import Footer from "../components/Footer.jsx"
-import FallbackImage from "../components/FallbackImage.jsx"
-import { api } from "../services/api.js" // 👈 Added API import
+import ProductPreviewModal from "../../components/ProductPreviewModal.jsx"
+import Footer from "../../components/Footer.jsx"
+import FallbackImage from "../../components/FallbackImage.jsx"
+import { api } from "../../services/api.js"
 
-import SpringFlowers_PurpleWrapper from "../assets/products/SpringFlowers_PurpleWrapper.png"
-import SpringFlowers_PinkWrapper   from "../assets/products/SpringFlowers_PinkWrapper.png"
-import SpringFlowers_GreenWrapper  from "../assets/products/SpringFlowers_GreenWrapper.png"
-import RainbowEquadorRoses         from "../assets/products/RainbowEquadorRoses.png"
-import MixTulips                   from "../assets/products/MixTulips.png"
-import Dozen_YellowChinaRoses      from "../assets/products/Dozen_YellowChinaRoses.png"
-import Dozen_RedEquadorRoses       from "../assets/products/Dozen_RedEquadorRoses.png"
-import Dozen_RedChinaRoses         from "../assets/products/Dozen_RedChinaRoses.png"
-import Dozen_PinkChinaRoses        from "../assets/products/Dozen_PinkChinaRoses.png"
-import Dozen_OrangeChinaRoses      from "../assets/products/Dozen_OrangeChinaRoses.png"
-import Roses_24pcs_Red             from "../assets/products/24pcs_RedEquadorRoses.png"
-import Roses_10pcs_Blue            from "../assets/products/10pcs_BlueChinaRoses.png"
-import Roses_6pcs_White            from "../assets/products/6pcs_WhiteEquadorRoses.png"
-import Roses_6pcs_Purple           from "../assets/products/6pcs_PurpleChinaRoses.png"
-import Sunflower_3pcs              from "../assets/products/3pcs_Sunflower.png"
-import Tulips_3pc_Pink             from "../assets/products/3pc_PinkTulips.png"
+import SpringFlowers_PurpleWrapper from "../../assets/products/bouquets/SpringFlowers_PurpleWrapper.png"
+import SpringFlowers_PinkWrapper   from "../../assets/products/bouquets/SpringFlowers_PinkWrapper.png"
+import SpringFlowers_GreenWrapper  from "../../assets/products/bouquets/SpringFlowers_GreenWrapper.png"
+import RainbowEquadorRoses         from "../../assets/products/bouquets/RainbowEquadorRoses.png"
+import MixTulips                   from "../../assets/products/bouquets/MixTulips.png"
+import Dozen_YellowChinaRoses      from "../../assets/products/bouquets/Dozen_YellowChinaRoses.png"
+import Dozen_RedEquadorRoses       from "../../assets/products/bouquets/Dozen_RedEquadorRoses.png"
+import Dozen_RedChinaRoses         from "../../assets/products/bouquets/Dozen_RedChinaRoses.png"
+import Dozen_PinkChinaRoses        from "../../assets/products/bouquets/Dozen_PinkChinaRoses.png"
+import Dozen_OrangeChinaRoses      from "../../assets/products/bouquets/Dozen_OrangeChinaRoses.png"
+import Roses_24pcs_Red             from "../../assets/products/bouquets/24pcs_RedEquadorRoses.png"
+import Roses_10pcs_Blue            from "../../assets/products/bouquets/10pcs_BlueChinaRoses.png"
+import Roses_6pcs_White            from "../../assets/products/bouquets/6pcs_WhiteEquadorRoses.png"
+import Roses_6pcs_Purple           from "../../assets/products/bouquets/6pcs_PurpleChinaRoses.png"
+import Sunflower_3pcs              from "../../assets/products/bouquets/3pcs_Sunflower.png"
+import Tulips_3pc_Pink             from "../../assets/products/bouquets/3pc_PinkTulips.png"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -109,7 +109,6 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
           className="group-hover:scale-105 transition-transform duration-500"
           style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }}
         />
-
         {product.ribbon && (
           <div className="absolute top-3 left-0 z-10">
             <div className="text-[10px] font-bold text-white shadow"
@@ -179,7 +178,6 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
           fallbackSrc="/EstingsLogo.svg"
           style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", display:"block" }}
         />
-
         {product.ribbon && (
           <div className="absolute top-2 left-0 z-10">
             <div className="text-[9px] font-bold text-white"
@@ -188,14 +186,10 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
             </div>
           </div>
         )}
-        <div
-          className="absolute bottom-2 right-2 text-white text-[9px] font-bold px-1.5 py-0.5 rounded"
-          style={{ backgroundColor:DG }}
-        >
+        <div className="absolute bottom-2 right-2 text-white text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor:DG }}>
           -{discount(product.original, product.price)}%
         </div>
       </div>
-
       <div style={{ flex:1, minWidth:0, padding:"11px 12px", display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
         <div>
           <p style={{ fontSize:"9px", fontWeight:800, letterSpacing:"0.16em", textTransform:"uppercase", color:G, margin:"0 0 3px" }}>
@@ -209,47 +203,24 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
             <span style={{ fontSize:"11px", color:"#9ca3af" }}>({product.reviews})</span>
           </div>
         </div>
-
         <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"6px", marginTop:"8px" }}>
           <div style={{ display:"flex", alignItems:"baseline", gap:"4px" }}>
-            <span style={{ fontSize:"15px", fontWeight:800, color:G, lineHeight:1 }}>
-              ₱{product.price.toLocaleString()}
-            </span>
-            <span style={{ fontSize:"11px", color:"#9ca3af", textDecoration:"line-through" }}>
-              ₱{product.original.toLocaleString()}
-            </span>
+            <span style={{ fontSize:"15px", fontWeight:800, color:G, lineHeight:1 }}>₱{product.price.toLocaleString()}</span>
+            <span style={{ fontSize:"11px", color:"#9ca3af", textDecoration:"line-through" }}>₱{product.original.toLocaleString()}</span>
           </div>
-
           <div style={{ display:"flex", alignItems:"center", gap:"6px", flexShrink:0 }}>
-            <button
-              onClick={e => { e.stopPropagation(); onPreview(product) }}
-              style={{
-                display:"inline-flex", alignItems:"center", gap:"4px",
-                backgroundColor:G, color:"white",
-                fontSize:"11px", fontWeight:700,
-                padding:"6px 11px", borderRadius:"8px",
-                border:"none", cursor:"pointer", lineHeight:1, flexShrink:0,
-              }}
+            <button onClick={e => { e.stopPropagation(); onPreview(product) }}
+              style={{ display:"inline-flex", alignItems:"center", gap:"4px", backgroundColor:G, color:"white", fontSize:"11px", fontWeight:700, padding:"6px 11px", borderRadius:"8px", border:"none", cursor:"pointer", lineHeight:1, flexShrink:0 }}
               onMouseEnter={e => e.currentTarget.style.backgroundColor=DG}
-              onMouseLeave={e => e.currentTarget.style.backgroundColor=G}
-            >
+              onMouseLeave={e => e.currentTarget.style.backgroundColor=G}>
               <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ flexShrink:0 }}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
               </svg>
               View
             </button>
-
-            <button
-              onClick={e => { e.stopPropagation(); toggleWishlist(product.id) }}
-              style={{
-                width:"30px", height:"30px", borderRadius:"8px", flexShrink:0,
-                display:"flex", alignItems:"center", justifyContent:"center",
-                backgroundColor: wishlisted ? "#fef2f2" : "#f3f4f6",
-                border: wishlisted ? "1px solid #fecaca" : "1px solid #e5e7eb",
-                cursor:"pointer",
-              }}
-            >
+            <button onClick={e => { e.stopPropagation(); toggleWishlist(product.id) }}
+              style={{ width:"30px", height:"30px", borderRadius:"8px", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", backgroundColor:wishlisted?"#fef2f2":"#f3f4f6", border:wishlisted?"1px solid #fecaca":"1px solid #e5e7eb", cursor:"pointer" }}>
               <svg width="13" height="13" fill={wishlisted?"#e11d48":"none"} stroke={wishlisted?"#e11d48":"#9ca3af"} strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
               </svg>
@@ -273,7 +244,6 @@ function GridCard({ product, wishlist, toggleWishlist, onPreview }) {
           fallbackSrc="/EstingsLogo.svg"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
-
         {product.ribbon && (
           <div className="absolute top-3 left-0 z-10">
             <div className="text-[10px] font-bold text-white shadow-sm"
@@ -282,8 +252,7 @@ function GridCard({ product, wishlist, toggleWishlist, onPreview }) {
             </div>
           </div>
         )}
-        <div className="absolute top-2 right-2 text-white text-[10px] font-bold px-1.5 py-0.5"
-          style={{ backgroundColor:DG, borderRadius:"4px" }}>
+        <div className="absolute top-2 right-2 text-white text-[10px] font-bold px-1.5 py-0.5" style={{ backgroundColor:DG, borderRadius:"4px" }}>
           -{discount(product.original, product.price)}%
         </div>
       </div>
@@ -316,7 +285,6 @@ function GridCard({ product, wishlist, toggleWishlist, onPreview }) {
   )
 }
 
-// ── 👇 CHANGED: SidebarContent now receives `categories` as a prop
 function SidebarContent({ categories, activeCategory, setActiveCategory, priceRange, setPriceRange, onClose }) {
   return (
     <div>
@@ -329,11 +297,10 @@ function SidebarContent({ categories, activeCategory, setActiveCategory, priceRa
         </div>
       )}
       <div className="mb-6">
-        <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2.5">Brand</p>
+        <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2.5">Category</p>
         <div className="flex flex-col gap-0.5">
-          {/* 👇 Now maps over the dynamic categories */}
           {categories.map(cat => (
-            <button key={cat} onClick={() => { setActiveCategory(cat); onClose?.(); }}
+            <button key={cat} onClick={() => { setActiveCategory(cat); onClose?.() }}
               className="text-left px-3 py-2 rounded-lg text-sm transition-all capitalize"
               style={{ fontWeight:activeCategory===cat?600:400, color:activeCategory===cat?"white":"#4b5563", backgroundColor:activeCategory===cat?G:"transparent" }}
               onMouseEnter={e => { if (activeCategory!==cat) e.currentTarget.style.backgroundColor="#f3f4f6" }}
@@ -355,12 +322,11 @@ function SidebarContent({ categories, activeCategory, setActiveCategory, priceRa
               ₱{min.toLocaleString()} – ₱{max.toLocaleString()}
             </button>
           ))}
-          {/* 👇 Uses 700 instead of 2500 specifically for the AddOns page */}
-          <button onClick={() => setPriceRange([0, 700])}
+          <button onClick={() => setPriceRange([0, 2500])}
             className="text-left px-3 py-2 rounded-lg text-sm transition-all"
-            style={{ fontWeight:priceRange[0]===0&&priceRange[1]===700?600:400, color:priceRange[0]===0&&priceRange[1]===700?"white":"#4b5563", backgroundColor:priceRange[0]===0&&priceRange[1]===700?G:"transparent" }}
-            onMouseEnter={e => { if (priceRange[0]!==0||priceRange[1]!==700) e.currentTarget.style.backgroundColor="#f3f4f6" }}
-            onMouseLeave={e => { if (priceRange[0]!==0||priceRange[1]!==700) e.currentTarget.style.backgroundColor="transparent" }}>
+            style={{ fontWeight:priceRange[0]===0&&priceRange[1]===2500?600:400, color:priceRange[0]===0&&priceRange[1]===2500?"white":"#4b5563", backgroundColor:priceRange[0]===0&&priceRange[1]===2500?G:"transparent" }}
+            onMouseEnter={e => { if (priceRange[0]!==0||priceRange[1]!==2500) e.currentTarget.style.backgroundColor="#f3f4f6" }}
+            onMouseLeave={e => { if (priceRange[0]!==0||priceRange[1]!==2500) e.currentTarget.style.backgroundColor="transparent" }}>
             All Prices
           </button>
         </div>
@@ -376,6 +342,7 @@ function SidebarContent({ categories, activeCategory, setActiveCategory, priceRa
   )
 }
 
+// ── Fixed: uses props (categories, activeCategory, setActiveCategory) instead of outer scope vars
 function MobileFilterDrawer({ open, onClose, categories, activeCategory, setActiveCategory, priceRange, setPriceRange }) {
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden"
@@ -394,8 +361,14 @@ function MobileFilterDrawer({ open, onClose, categories, activeCategory, setActi
           onClick={e => e.stopPropagation()}>
           <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 rounded-full bg-gray-300"/></div>
           <div style={{ padding:"12px 24px 32px" }}>
-            <SidebarContent categories={dynamicCategories} activeCategory={category} setActiveCategory={setCategory}
-              priceRange={priceRange} setPriceRange={setPriceRange} onClose={onClose}/>
+            <SidebarContent
+              categories={categories}
+              activeCategory={activeCategory}
+              setActiveCategory={setActiveCategory}
+              priceRange={priceRange}
+              setPriceRange={setPriceRange}
+              onClose={onClose}
+            />
           </div>
         </div>
       </div>
@@ -414,33 +387,31 @@ export default function Shop({ onNavigate }) {
   const width    = useWidth()
   const isMobile = width < 768
 
-  const [products, setProducts]           = useState([]) // 👈 State for dynamic backend data
-  const [viewAs, setViewAs]               = useState("grid3")
-  const [sortBy, setSortBy]               = useState("best-selling")
-  const [activeCategory, setActiveCategory] = useState("All")
-  const [priceRange, setPriceRange]       = useState([0, 2500])
-  const [wishlist, setWishlist]           = useState([])
-  const [sortOpen, setSortOpen]           = useState(false)
-  const [filterOpen, setFilterOpen]       = useState(false)
-  const [previewProduct, setPreviewProduct] = useState(null)
+  const [products, setProducts]               = useState([])
+  const [viewAs, setViewAs]                   = useState("grid3")
+  const [sortBy, setSortBy]                   = useState("best-selling")
+  const [activeCategory, setActiveCategory]   = useState("All")
+  const [priceRange, setPriceRange]           = useState([0, 2500])
+  const [wishlist, setWishlist]               = useState([])
+  const [sortOpen, setSortOpen]               = useState(false)
+  const [filterOpen, setFilterOpen]           = useState(false)
+  const [previewProduct, setPreviewProduct]   = useState(null)
   const sortRef = useRef(null)
 
-  // 👇 API Fetch Effect
   useEffect(() => {
-    // Attempt to grab live products from backend, otherwise fallback to the hardcoded list
     api.get("/products/")
       .then(data => {
         if (data && data.length > 0) {
           const mapped = data.map(p => {
-             const fallback = ALL_PRODUCTS.find(f => f.name === p.name) || {}
-             return {
-                ...p,
-                image: p.image_url || fallback.image || new URL("../assets/default-img/ImageNotFound.webp", import.meta.url).href,
-                original: p.original_price || fallback.original || p.price * 1.2,
-                rating: fallback.rating || 5.0,
-                reviews: fallback.reviews || 0,
-                ribbon: fallback.ribbon || null,
-             }
+            const fallback = ALL_PRODUCTS.find(f => f.name === p.name) || {}
+            return {
+              ...p,
+              image: p.image_url || fallback.image || new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href,
+              original: p.original_price || fallback.original || p.price * 1.2,
+              rating: fallback.rating || 5.0,
+              reviews: fallback.reviews || 0,
+              ribbon: fallback.ribbon || null,
+            }
           })
           setProducts(mapped)
         } else {
@@ -462,7 +433,6 @@ export default function Shop({ onNavigate }) {
 
   const toggleWishlist = id => setWishlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
 
-  // 👇 The Magic Dynamic Categories Array using a Set!
   const dynamicCategories = ["All", ...new Set(products.map(p => p.category).filter(Boolean))]
 
   const filtered = products
@@ -484,24 +454,33 @@ export default function Shop({ onNavigate }) {
     return {}
   }
 
-  const currentSortLabel = SORT_OPTIONS.find(o => o.value === sortBy)?.label || "Best Selling"
-  const activeFiltersCount = (activeCategory !== "All" ? 1 : 0) + (priceRange[0] !== 0 || priceRange[1] !== 2500 ? 1 : 0)
-  const visibleViews = VIEW_ALL.filter(v => !isMobile || v.mobileVisible)
+  const currentSortLabel    = SORT_OPTIONS.find(o => o.value === sortBy)?.label || "Best Selling"
+  const activeFiltersCount  = (activeCategory !== "All" ? 1 : 0) + (priceRange[0] !== 0 || priceRange[1] !== 2500 ? 1 : 0)
+  const visibleViews        = VIEW_ALL.filter(v => !isMobile || v.mobileVisible)
 
   return (
     <div className="min-h-screen bg-white">
-      <MobileFilterDrawer open={filterOpen} onClose={() => setFilterOpen(false)}
-        categories={dynamicCategories} // 👈 Passed down
-        activeCategory={activeCategory} setActiveCategory={setActiveCategory}
-        priceRange={priceRange} setPriceRange={setPriceRange}/>
+      <MobileFilterDrawer
+        open={filterOpen}
+        onClose={() => setFilterOpen(false)}
+        categories={dynamicCategories}
+        activeCategory={activeCategory}
+        setActiveCategory={setActiveCategory}
+        priceRange={priceRange}
+        setPriceRange={setPriceRange}
+      />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
         <div className="flex gap-6 lg:gap-8">
 
           <aside className="w-48 flex-shrink-0 hidden lg:block">
-            <SidebarContent categories={dynamicCategories} // 👈 Passed down
-              activeCategory={activeCategory} setActiveCategory={setActiveCategory}
-              priceRange={priceRange} setPriceRange={setPriceRange}/>
+            <SidebarContent
+              categories={dynamicCategories}
+              activeCategory={activeCategory}
+              setActiveCategory={setActiveCategory}
+              priceRange={priceRange}
+              setPriceRange={setPriceRange}
+            />
           </aside>
 
           <div className="flex-1 min-w-0">
@@ -526,16 +505,7 @@ export default function Shop({ onNavigate }) {
                 <div className="flex items-center border rounded-lg overflow-hidden" style={{ borderColor:"#e5e7eb" }}>
                   {visibleViews.map(({ key, icon }, idx) => (
                     <button key={key} onClick={() => setViewAs(key)}
-                      style={{
-                        width:"32px", height:"32px",
-                        display:"flex", alignItems:"center", justifyCenter:"center",
-                        flexShrink:0,
-                        backgroundColor:viewAs===key?G:"white",
-                        color:viewAs===key?"white":"#6b7280",
-                        borderRight:idx<visibleViews.length-1?"1px solid #e5e7eb":"none",
-                        cursor:"pointer", outline:"none", border:"none",
-                        transition:"background 0.15s",
-                      }}>
+                      style={{ width:"32px", height:"32px", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, backgroundColor:viewAs===key?G:"white", color:viewAs===key?"white":"#6b7280", borderRight:idx<visibleViews.length-1?"1px solid #e5e7eb":"none", cursor:"pointer", outline:"none", border:"none", transition:"background 0.15s" }}>
                       {icon}
                     </button>
                   ))}
@@ -558,11 +528,7 @@ export default function Shop({ onNavigate }) {
                 {sortOpen && (
                   isMobile ? (
                     <div className="fixed bg-white z-[100] shadow-2xl overflow-hidden"
-                      style={{
-                        top: sortRef.current ? sortRef.current.getBoundingClientRect().bottom + 4 : 80,
-                        right: 16, width: "200px",
-                        border: "1px solid #e5e7eb", borderRadius: "12px",
-                      }}>
+                      style={{ top: sortRef.current ? sortRef.current.getBoundingClientRect().bottom + 4 : 80, right: 16, width:"200px", border:"1px solid #e5e7eb", borderRadius:"12px" }}>
                       {SORT_OPTIONS.map(opt => (
                         <button key={opt.value} onClick={() => { setSortBy(opt.value); setSortOpen(false) }}
                           className="w-full text-left px-4 py-3 text-sm transition-all"

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import Navbar from "./components/Navbar";
-import Home from "./pages/Home";
+import Home from "./pages/customer/Home";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -18,7 +18,7 @@ import Settings from "./pages/Settings";
 import AboutUs from "./pages/customer/AboutUs";
 import ContactUs from "./pages/customer/ContactUs";
 import AllOccasions from "./pages/customer/AllOccasions";
-import Shop from "./pages/Shop";
+import Shop from "./pages/customer/Shop";
 import MakeItPersonal from "./pages/MakeItPersonal";
 import MixAndMatch from "./pages/MixAndMatch";
 import DescribeArrangement from "./pages/DescribeArrangement";
@@ -35,9 +35,6 @@ import WriteReviewPage from "./pages/WriteReviewPage";
 import Profile from "./pages/Profile";
 
 // ── Global dark-mode CSS ────────────────────────────────────────────────────
-// Applied via [data-theme="dark"] on <html>.  Uses high-specificity selectors
-// so they override inline white/gray backgrounds without needing to edit every
-// component.  Individual pages can refine on top of these base rules.
 const DARK_CSS = `
   /* ── Base ── */
   [data-theme="dark"] body {
@@ -94,7 +91,6 @@ const DARK_CSS = `
 const AUTH_PAGES = ["login", "register", "forgot-password", "terms"];
 const isPreview = new URLSearchParams(window.location.search).get("preview") === "true";
 
-// Inject dark mode CSS once into <head>
 function injectDarkCSS() {
   if (document.getElementById("bloomora-dark-css")) return;
   const tag = document.createElement("style");
