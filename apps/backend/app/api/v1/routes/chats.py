@@ -91,19 +91,20 @@ async def create_message(
         # Echo back to the customer
         try:
             await manager.send_to_user(str(message.user_id), payload)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"❌ HTTP-WS Customer Echo Error: {e}")
+
         # Notify all connected staff
         try:
             await manager.broadcast_to_staff(payload)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"❌ HTTP-WS Staff Broadcast Error: {e}")
     else:
         # Staff replied — notify only the customer
         try:
             await manager.send_to_user(str(message.user_id), payload)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"❌ HTTP-WS Customer Send Error: {e}")
 
     return serialize_chat(new_message)
 
@@ -212,11 +213,33 @@ async def websocket_endpoint(
     user_id: str,
     db: Session = Depends(get_db),
 ):
-    # Determine if this user is staff/admin
-    user = db.query(User).filter(User.id == user_id).first()
-    is_staff = user and user.role in [RoleEnum.admin, RoleEnum.staff]
+    print(f"\n--- 🔌 NEW WS CONNECTION ATTEMPT --- ID: {user_id}")
+    
+    # 1. Safely convert the string to a UUID object so PostgreSQL doesn't reject the query
+    try:
+        from uuid import UUID
+        valid_uuid = UUID(user_id)
+        user = db.query(User).filter(User.id == valid_uuid).first()
+    except Exception as e:
+        print(f"⚠️ Could not parse UUID or query DB: {e}")
+        user = None
 
+    # 2. Check the role
+    is_staff = False
+    if user:
+        role_val = user.role.value if hasattr(user.role, 'value') else str(user.role)
+        print(f"👤 User found in DB! Role recognized as: '{role_val}'")
+    
+        # Make the check case-insensitive just to be safe
+        if role_val.lower() in ['admin', 'staff', 'roleenum.admin', 'roleenum.staff']:
+            is_staff = True
+            print("✅ User granted STAFF broadcast privileges!")
+    else:
+        print("❌ User NOT found in database. Defaulting to customer privileges.")
+
+    # 3. Connect to the manager
     await manager.connect(websocket, user_id, is_staff=is_staff)
+
     try:
         while True:
             data = await websocket.receive_json()

@@ -137,11 +137,27 @@ export default function AdminChat() {
     setInput("")
     setShowQuickReplies(false)
     inputRef.current?.focus()
+    
+    // MOVE TO TOP LOGIC: Bump conversation to top when admin replies
+    setConversations(prev => {
+      const index = prev.findIndex(c => c.customer_id === activeId);
+      if (index === -1) return prev;
+      
+      const newConvos = [...prev];
+      const updatedConvo = { 
+        ...newConvos[index], 
+        last_message: text, 
+        last_message_from_staff: true, 
+        time: newMsg.time 
+      };
+      // Remove from old position and push to the very beginning
+      newConvos.splice(index, 1);
+      newConvos.unshift(updatedConvo);
+      return newConvos;
+    });
+
     try {
       await api.sendMessage(activeId, text)
-      setConversations(prev => prev.map(c =>
-        c.customer_id === activeId ? { ...c, last_message: text, last_message_from_staff: true, time: newMsg.time } : c
-      ))
     } catch (err) {
       console.error("Failed to send message:", err)
     }
@@ -151,42 +167,96 @@ export default function AdminChat() {
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
 
   // ── WebSocket connection ──────────────────────────────────────────────────
-  useEffect(() => {
-    if (!user || !['admin', 'staff'].includes(user.role)) return
-    if (wsRef.current) return
 
-    const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/${user.id}`)
-    wsRef.current = websocket
+  console.log("Current User Object:", user);
 
-    websocket.onopen = () => console.log('Admin WS connected')
+useEffect(() => {
+    // 1. Try to find the ID the normal way
+    let adminId = user?.id || user?.userId || user?._id; 
+    
+    // 2. THE SILVER BULLET: If the ID is missing, crack open the JWT token and grab it!
+    if (!adminId && user?.token) {
+      try {
+        // JWTs have 3 parts separated by dots. The middle part is the payload data.
+        const base64Url = user.token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        
+        const decodedToken = JSON.parse(jsonPayload);
+        adminId = decodedToken.sub; // FastAPI stores the user ID in the "sub" field
+        console.log("🔓 Successfully extracted Admin ID from token:", adminId);
+      } catch (e) {
+        console.error("Failed to extract ID from token:", e);
+      }
+    }
+
+    // 3. Updated Guard Clause
+    if (!adminId || !['admin', 'staff'].includes(user?.role)) {
+        console.warn("WebSocket Connection Blocked: Missing ID or incorrect role.", { user, adminId });
+        return;
+    }
+    
+    // Prevent duplicate connections
+    if (wsRef.current) return;
+
+    // 4. Connect using the guaranteed ID
+    console.log(`Attempting to connect Admin WS with ID: ${adminId}`);
+    const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/${adminId}`);
+    
+    wsRef.current = websocket;
+
+    websocket.onopen = () => console.log('✅ Admin WS connected to server!');
     websocket.onmessage = (event) => {
-      const data = JSON.parse(event.data)
-      console.log('Admin WS message:', data)
+      const data = JSON.parse(event.data);
+      console.log('📬 Admin WS message received:', data);
 
-      // If message is for active conversation, add it
-      const currentActiveId = activeIdRef.current
-      if (currentActiveId && data.user_id === currentActiveId) {
+      const incomingId = String(data.customer_id || data.user_id || data.sender_id);
+      const currentActiveId = activeIdRef.current ? String(activeIdRef.current) : null;
+
+      if (currentActiveId && incomingId === currentActiveId) {
         setMessages(prev => {
-          // Deduplicate
-          if (prev.find(m => m.id === data.id)) return prev
+          if (prev.find(m => String(m.id) === String(data.id))) return prev;
           return [...prev, {
             id: data.id,
             sender: 'customer',
-            text: data.message,
-            time: new Date(data.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          }]
-        })
+            text: data.message || data.text,
+            time: new Date(data.created_at || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          }];
+        });
       }
 
-      // Refresh conversation list
-      loadConversations()
-    }
-    websocket.onerror = (err) => console.error('Admin WS error:', err)
-    websocket.onclose = () => { wsRef.current = null }
+      setConversations(prev => {
+        const index = prev.findIndex(c => String(c.customer_id) === incomingId);
+        if (index !== -1) {
+          const newConvos = [...prev];
+          const updatedConvo = {
+            ...newConvos[index],
+            last_message: data.message || data.text,
+            last_message_from_staff: false,
+            time: new Date(data.created_at || Date.now()).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            unread_count: incomingId === currentActiveId ? 0 : (newConvos[index].unread_count || 0) + 1
+          };
+          newConvos.splice(index, 1);
+          newConvos.unshift(updatedConvo); 
+          return newConvos;
+        } else {
+          loadConversations();
+          return prev;
+        }
+      });
+    };
+    
+    websocket.onerror = (err) => console.error('❌ Admin WS error:', err);
+    websocket.onclose = () => { 
+        console.log("Admin WS Closed.");
+        wsRef.current = null; 
+    };
 
-    setWs(websocket)
-    return () => websocket.close()
-  }, [user, loadConversations])
+    setWs(websocket);
+    return () => websocket.close();
+  }, [user, loadConversations]);
 
   // ── Load conversations on mount ───────────────────────────────────────────
   useEffect(() => {
@@ -443,4 +513,3 @@ export default function AdminChat() {
     </div>
   )
 }
-
