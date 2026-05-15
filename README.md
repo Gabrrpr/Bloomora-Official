@@ -24,7 +24,7 @@ Bloomora is a full-stack monorepo capstone project that provides Esting's Flower
 
 | Name | Role |
 |---|---|
-| Batac, John Gabriel R. | shoplifter |
+| Batac, John Gabriel R. | Developer |
 | Ibarrientos, Forest Red R. | Developer |
 | De Leon, Julius Francis G. | Developer |
 | Mapoy, Pauline Erika M. | Developer |
