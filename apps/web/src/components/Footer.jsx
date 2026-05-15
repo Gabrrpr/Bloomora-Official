@@ -1,11 +1,11 @@
 import { useEffect } from "react"
-import paypalImg       from "../assets/PayPal.png"
-import westernUnionImg from "../assets/WesternUnion.png"
-import gcashImg        from "../assets/GCash.png"
-import bdoImg          from "../assets/BDO.png"
-import bpiImg          from "../assets/BPI.png"
-import metrobankImg    from "../assets/Metrobank.png"
-import lalamoveImg     from "../assets/Lalamove.png"
+import paypalImg       from "../assets/footer/PayPal.png"
+import westernUnionImg from "../assets/footer/WesternUnion.png"
+import gcashImg        from "../assets/footer/GCash.png"
+import bdoImg          from "../assets/footer/BDO.png"
+import bpiImg          from "../assets/footer/BPI.png"
+import metrobankImg    from "../assets/footer/Metrobank.png"
+import lalamoveImg     from "../assets/footer/Lalamove.png"
 
 const QUICK_LINKS = [
   { label: "Home",       page: "home" },
