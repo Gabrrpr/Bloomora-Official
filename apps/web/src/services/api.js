@@ -79,6 +79,11 @@ export const api = {
     return this.request(endpoint, { method: 'DELETE' });
   },
 
+  // ── Auth ──────────────────────────────────────────────────────────────────
+  async exchangeOAuthCode(code) {
+    return this.get(`/auth/oauth/exchange?code=${code}`);
+  },
+
   // ── Chat ──────────────────────────────────────────────────────────────────
   async createSession() {
     return this.post('/chats/sessions');

@@ -6,6 +6,7 @@ from jose import jwt
 import bcrypt
 import uuid
 import httpx
+import secrets
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -15,6 +16,9 @@ from app.core.dependencies import get_current_user
 from pydantic import BaseModel, EmailStr
 from typing import Optional
 from authlib.integrations.starlette_client import OAuth
+
+# Import the limiter from your main app instance
+from app.core.limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -74,6 +78,25 @@ class ResetPasswordRequest(BaseModel):
     new_password: str
 
 
+# ── Secure OAuth Token Exchange ───────────────────────────────────────────────
+# In-memory store (Consider Redis for production)
+_oauth_codes: dict[str, dict] = {}
+
+def store_oauth_token(jwt_token: str, role: str) -> str:
+    """Store token server-side, return a one-time code safe for URL."""
+    code = secrets.token_urlsafe(32)
+    _oauth_codes[code] = {"token": jwt_token, "role": role}
+    return code
+
+@router.get("/oauth/exchange")
+def exchange_oauth_code(code: str):
+    """Frontend calls this immediately after redirect to get the real token."""
+    data = _oauth_codes.pop(code, None)   # one-time use
+    if not data:
+        raise HTTPException(status_code=400, detail="Invalid or expired code.")
+    return {"access_token": data["token"], "role": data["role"], "token_type": "bearer"}
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -83,7 +106,8 @@ def verify_password(password: str, hashed: str) -> bool:
 
 def create_access_token(user_id: str) -> str:
     expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    payload = {"sub": user_id, "exp": expire}
+    # Added "type": "access" for strict token validation
+    payload = {"sub": user_id, "exp": expire, "type": "access"}
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 def generate_username(email: str, db: Session) -> str:
@@ -113,8 +137,10 @@ def find_or_create_oauth_user(email: str, first_name: str, last_name: str, db: S
         db.commit()
         db.refresh(user)
     else:
-        # Ensure OAuth users are always active and verified
-        user.is_active = True
+        # Don't override is_active — admin may have deactivated this account
+        if not user.is_active:
+            raise HTTPException(status_code=403, detail="Account is disabled.")
+            
         user.is_verified = True
         if not user.first_name:
             user.first_name = first_name
@@ -127,7 +153,8 @@ def find_or_create_oauth_user(email: str, first_name: str, last_name: str, db: S
 
 # ── OTP Routes ────────────────────────────────────────────────────────────────
 @router.post("/send-otp")
-def send_otp(payload: SendOTPRequest, db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+def send_otp(request: Request, payload: SendOTPRequest, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == payload.email).first()
 
     if existing and existing.is_verified:
@@ -217,7 +244,8 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 
 # ── Forgot Password ───────────────────────────────────────────────────────────
 @router.post("/forgot-password/send-otp")
-def forgot_password_send_otp(payload: SendOTPRequest, db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+def forgot_password_send_otp(request: Request, payload: SendOTPRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
 
     if not user:
@@ -261,32 +289,13 @@ def forgot_password_reset(payload: ResetPasswordRequest, db: Session = Depends(g
 
 # ── Login ─────────────────────────────────────────────────────────────────────
 @router.post("/login", response_model=TokenResponse)
-async def login(request: Request, db: Session = Depends(get_db)):
-    import json
-    content_type = request.headers.get("content-type", "")
-    body_bytes = await request.body()
-    data = {}
-
-    try:
-        if "application/json" in content_type:
-            data = json.loads(body_bytes.decode())
-        else:
-            from urllib.parse import parse_qs
-            parsed = parse_qs(body_bytes.decode())
-            data = {k: v[0] if v else "" for k, v in parsed.items()}
-    except Exception:
-        raise HTTPException(status_code=422, detail="Invalid request body.")
-
-    email = data.get("email") or data.get("username")
-    password = data.get("password")
-
-    if not email or not password:
-        raise HTTPException(status_code=422, detail="Email/username and password are required.")
-
+@limiter.limit("5/minute")
+def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(
-        (User.username == email) | (User.email == email)
+        (User.username == payload.email) | (User.email == payload.email)
     ).first()
-    if not user or not user.password_hash or not verify_password(password, user.password_hash):
+    
+    if not user or not user.password_hash or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid credentials.")
     if not user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user.")
@@ -305,7 +314,6 @@ async def google_login(request: Request):
 
 @router.get("/google/callback")
 async def google_callback(request: Request, db: Session = Depends(get_db)):
-    # Check for error from Google
     error = request.query_params.get("error")
     if error:
         return RedirectResponse(url=f"{FRONTEND_URL}/?error=google_auth_failed")
@@ -315,7 +323,6 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url=f"{FRONTEND_URL}/?error=no_code")
 
     try:
-        # Exchange code for token directly via httpx — avoids session state issues
         async with httpx.AsyncClient() as client:
             token_res = await client.post(
                 "https://oauth2.googleapis.com/token",
@@ -335,7 +342,6 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
 
             access_token = token_data.get("access_token")
 
-            # Fetch user profile
             profile_res = await client.get(
                 "https://www.googleapis.com/oauth2/v2/userinfo",
                 headers={"Authorization": f"Bearer {access_token}"}
@@ -353,7 +359,9 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         jwt_token = create_access_token(str(user.id))
         role = user.role.value if hasattr(user.role, 'value') else user.role
 
-        return RedirectResponse(url=f"{FRONTEND_URL}/?token={jwt_token}&role={role}")
+        # Store token securely and redirect with one-time code
+        exchange_code = store_oauth_token(jwt_token, role)
+        return RedirectResponse(url=f"{FRONTEND_URL}/oauth/callback?code={exchange_code}")
 
     except Exception as e:
         print("Google OAuth error:", e)
@@ -389,7 +397,9 @@ async def facebook_callback(request: Request, db: Session = Depends(get_db)):
         jwt_token = create_access_token(str(user.id))
         role = user.role.value if hasattr(user.role, 'value') else user.role
 
-        return RedirectResponse(url=f"{FRONTEND_URL}/?token={jwt_token}&role={role}")
+        # Store token securely and redirect with one-time code
+        exchange_code = store_oauth_token(jwt_token, role)
+        return RedirectResponse(url=f"{FRONTEND_URL}/oauth/callback?code={exchange_code}")
 
     except HTTPException:
         raise
