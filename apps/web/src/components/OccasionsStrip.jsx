@@ -16,8 +16,8 @@ const ALL_OCCASIONS = [
   { label: "Graduation",  img: graduationImg },
   { label: "Sympathy",    img: sympathyImg },
   { label: "Openings",    img: openingsImg },
-  { label: "Wedding",     img: weddingImg,     hidden: true },
-  { label: "Just Because",img: justBecauseImg, hidden: true },
+  { label: "Wedding",     img: weddingImg,      hidden: true },
+  { label: "Just Because",img: justBecauseImg,  hidden: true },
 ]
 
 const VISIBLE = ALL_OCCASIONS.filter(o => !o.hidden)
@@ -78,10 +78,10 @@ function OccasionCard({ label, img, onNavigate, delay, isDark, labelColor, accen
 
 export default function OccasionsStrip({ onNavigate }) {
   const { isDark } = useTheme()
-  const headingRef  = useRef(null)
+  const headingRef = useRef(null)
   useReveal(headingRef, 0)
 
-  const accentG   = isDark ? "#4ade80" : G   // bright green for labels/text
+  const accentG   = isDark ? "#4ade80" : G
   const sectionBg = isDark ? "#111827" : "white"
   const borderC   = isDark ? "#2d3748" : "#f3f4f6"
   const headingC  = isDark ? "#f3f4f6" : "#1f2937"
@@ -110,7 +110,16 @@ export default function OccasionsStrip({ onNavigate }) {
           <p className="text-sm mb-4" style={{ color: bodyC }}>
             Whatever it is, we've got flowers for it.
           </p>
-          <div className="mx-auto rounded-full" style={{ width:"48px", height:"3px", backgroundColor: accentG }} />
+          {/* Green bar — glows in dark mode, same as HomeFAQ and Testimonials */}
+          <div
+            className="mx-auto rounded-full"
+            style={{
+              width: "48px",
+              height: "3px",
+              backgroundColor: accentG,
+              boxShadow: isDark ? "0 0 10px rgba(74,222,128,0.5)" : "none",
+            }}
+          />
         </div>
 
         {/* Cards */}
@@ -144,6 +153,7 @@ export default function OccasionsStrip({ onNavigate }) {
             </svg>
           </button>
         </div>
+
       </div>
     </section>
   )
