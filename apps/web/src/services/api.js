@@ -3,32 +3,39 @@ const API_BASE = 'http://localhost:8000/api/v1';
 export const api = {
   // ── Core Request Engine ───────────────────────────────────────────────────
   async request(endpoint, options = {}) {
+    // 1. Instant check: Is the browser completely offline?
+    if (!navigator.onLine) {
+      throw new Error("No internet connection. Please check your network and try again.");
+    }
+
     const token = localStorage.getItem('access_token');
     const url = `${API_BASE}${endpoint}`;
-    
-    // Setup base headers
+
     const headers = {
       ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers,
     };
 
-    // 🛡️ BULLETPROOF HEADER LOGIC:
     if (options.body instanceof FormData) {
-      // If sending a file, we MUST let the browser generate the Content-Type with the boundary.
-      // This deletes any manual 'multipart/form-data' headers to prevent the 400 error.
       delete headers['Content-Type'];
       delete headers['content-type']; 
     } else if (options.body && !headers['Content-Type'] && !headers['content-type']) {
-      // If it's a normal request, default to JSON
       headers['Content-Type'] = 'application/json';
     }
 
-    const config = {
-      ...options,
-      headers,
-    };
+    const config = { ...options, headers };
 
-    const response = await fetch(url, config);
+    let response;
+    try {
+      // 2. Wrap the fetch in a try/catch to intercept "Failed to fetch" (Network drops)
+      response = await fetch(url, config);
+    } catch (error) {
+      // If fetch throws an error, it almost always means the network dropped 
+      // or the backend server is completely turned off/unreachable.
+      throw new Error("Unable to connect to the server. Please check your internet connection.");
+    }
+
+    // 3. Handle normal HTTP errors (400, 500, etc.)
     if (!response.ok) {
       let errorMsg = `API Error: ${response.status}`;
       try {
@@ -39,6 +46,7 @@ export const api = {
       }
       throw new Error(errorMsg);
     }
+
     return response.json();
   },
 

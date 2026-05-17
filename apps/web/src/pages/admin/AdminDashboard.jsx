@@ -300,14 +300,68 @@ function RevenueChart({ branch }) {
   const { isDark } = useTheme()
   const t = useTokens(isDark)
   const [periodKey, setPeriodKey] = useState("week")
-  const period = REVENUE_PERIODS.find(p => p.key === periodKey)
+  const [chartData, setChartData] = useState(null)
+  const [loading,   setLoading]   = useState(true)
+
+  // Fallback static data (shown while loading or on error)
+  const staticPeriod = REVENUE_PERIODS.find(p => p.key === periodKey)
+
+  useEffect(() => {
+    setLoading(true)
+    api.get(`/dashboard/revenue?period=${periodKey}&branch=${branch}`)
+      .then(rows => {
+        if (!rows || rows.length === 0) { setChartData(null); return }
+
+        const period = REVENUE_PERIODS.find(p => p.key === periodKey)
+        const manilaData    = Array(period.labels.length).fill(0)
+        const pampangaData  = Array(period.labels.length).fill(0)
+
+        rows.forEach(row => {
+          const date = new Date(row.period)
+          let idx = -1
+
+          if (periodKey === "week") {
+            // Map to Mon–Sun index (0=Mon … 6=Sun)
+            const day = date.getDay()
+            idx = day === 0 ? 6 : day - 1
+          } else if (periodKey === "month") {
+            idx = date.getMonth()
+          } else if (periodKey === "year") {
+            idx = period.labels.indexOf(String(date.getFullYear()))
+          }
+
+          if (idx === -1) return
+
+          // Normalize to percentage of max for bar height
+          if (row.branch === "Manila")   manilaData[idx]   += row.revenue
+          if (row.branch === "Pampanga") pampangaData[idx] += row.revenue
+        })
+
+        // Convert raw ₱ values to % of max for bar rendering
+        const allValues = [...manilaData, ...pampangaData]
+        const maxVal    = Math.max(...allValues, 1)
+
+        setChartData({
+          labels:   period.labels,
+          yAxis:    period.yAxis,
+          manila:   manilaData.map(v => Math.round((v / maxVal) * 90)),
+          pampanga: pampangaData.map(v => Math.round((v / maxVal) * 90)),
+          raw: { manila: manilaData, pampanga: pampangaData },
+        })
+      })
+      .catch(() => setChartData(null))
+      .finally(() => setLoading(false))
+  }, [periodKey, branch])
 
   const currentIdx = (() => {
     if (periodKey === "week")  { const d = new Date().getDay(); return d === 0 ? 6 : d - 1 }
     if (periodKey === "month") return new Date().getMonth()
-    if (periodKey === "year")  return period.labels.indexOf(String(new Date().getFullYear()))
+    if (periodKey === "year")  return staticPeriod.labels.indexOf(String(new Date().getFullYear()))
     return -1
   })()
+
+  // Use live data if available, fall back to static
+  const display = chartData || staticPeriod
 
   return (
     <div className="rounded-xl p-5" style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
@@ -315,6 +369,18 @@ function RevenueChart({ branch }) {
         <div className="flex items-center gap-2">
           <p className="text-sm font-semibold" style={{ color: t.textPrimary }}>Revenue</p>
           <BranchBadge branch={branch} />
+          {loading && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full animate-pulse"
+              style={{ backgroundColor: t.badgeBg, color: t.textMuted }}>
+              Loading…
+            </span>
+          )}
+          {!loading && chartData && (
+            <span className="text-[10px] px-2 py-0.5 rounded-full"
+              style={{ backgroundColor: isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4", color: isDark ? "#4ade80" : "#16a34a" }}>
+              Live
+            </span>
+          )}
         </div>
         {/* Period toggle */}
         <div className="flex items-center gap-0.5 p-0.5 rounded-lg"
@@ -339,7 +405,7 @@ function RevenueChart({ branch }) {
       <div className="flex gap-2" style={{ height: "184px" }}>
         {/* Y-axis */}
         <div className="flex flex-col justify-between flex-shrink-0 text-right" style={{ width: "40px", paddingBottom: "24px" }}>
-          {period.yAxis.map(l => (
+          {display.yAxis.map(l => (
             <span key={l} className="text-[10px] leading-none" style={{ color: t.textMuted }}>{l}</span>
           ))}
         </div>
@@ -351,32 +417,38 @@ function RevenueChart({ branch }) {
               <div key={i} className="absolute left-0 right-0 pointer-events-none"
                 style={{ top: `${(i / 4) * 100}%`, borderTop: `1px dashed ${t.chartDash}` }} />
             ))}
-            {period.labels.map((lbl, i) => {
+            {display.labels.map((lbl, i) => {
               const isCurrent = i === currentIdx
               if (branch === "all") {
                 return (
-                  <div key={lbl} className="flex-1 flex items-end gap-0.5" style={{ minWidth: 0 }}>
+                  <div key={lbl} className="flex-1 flex items-end gap-0.5" style={{ minWidth: 0 }}
+                    title={chartData ? `Manila: ₱${(chartData.raw?.manila[i] || 0).toLocaleString()} · Pampanga: ₱${(chartData.raw?.pampanga[i] || 0).toLocaleString()}` : ""}>
                     <div className="flex-1 rounded-t-sm transition-all duration-500"
-                      style={{ height: `${period.manila[i]}%`, background: isCurrent ? "linear-gradient(180deg,#3b82f6,#1d4ed8)" : isDark ? "#1d3a5f" : "#bfdbfe", minHeight: "3px" }} />
+                      style={{ height: `${display.manila[i]}%`, background: isCurrent ? "linear-gradient(180deg,#3b82f6,#1d4ed8)" : isDark ? "#1d3a5f" : "#bfdbfe", minHeight: "3px" }} />
                     <div className="flex-1 rounded-t-sm transition-all duration-500"
-                      style={{ height: `${period.pampanga[i]}%`, background: isCurrent ? "linear-gradient(180deg,#a78bfa,#6d28d9)" : isDark ? "#2e1a4a" : "#ddd6fe", minHeight: "3px" }} />
+                      style={{ height: `${display.pampanga[i]}%`, background: isCurrent ? "linear-gradient(180deg,#a78bfa,#6d28d9)" : isDark ? "#2e1a4a" : "#ddd6fe", minHeight: "3px" }} />
                   </div>
                 )
               }
-              const h  = branch === "manila" ? period.manila[i] : period.pampanga[i]
+              const h  = branch === "manila" ? display.manila[i] : display.pampanga[i]
+              const rawVal = chartData
+                ? (branch === "manila" ? chartData.raw?.manila[i] : chartData.raw?.pampanga[i]) || 0
+                : 0
               const bg = branch === "manila"
                 ? isCurrent ? "linear-gradient(180deg,#3b82f6,#1d4ed8)" : isDark ? "#1d3a5f" : "#bfdbfe"
                 : isCurrent ? "linear-gradient(180deg,#a78bfa,#6d28d9)" : isDark ? "#2e1a4a" : "#ddd6fe"
               return (
-                <div key={lbl} className="flex-1 flex items-end" style={{ minWidth: 0 }}>
-                  <div className="w-full rounded-t-sm transition-all duration-500" style={{ height: `${h}%`, background: bg, minHeight: "3px" }} />
+                <div key={lbl} className="flex-1 flex items-end" style={{ minWidth: 0 }}
+                  title={chartData ? `₱${rawVal.toLocaleString()}` : ""}>
+                  <div className="w-full rounded-t-sm transition-all duration-500"
+                    style={{ height: `${h}%`, background: bg, minHeight: "3px" }} />
                 </div>
               )
             })}
           </div>
           {/* X labels */}
           <div className="flex gap-1 pt-1.5" style={{ paddingLeft: "4px", paddingRight: "4px" }}>
-            {period.labels.map((lbl, i) => (
+            {display.labels.map((lbl, i) => (
               <div key={lbl} className="flex-1 flex justify-center" style={{ minWidth: 0 }}>
                 <span className="text-[9px] font-medium truncate"
                   style={{ color: i === currentIdx ? (isDark ? "#4ade80" : DG) : t.textMuted }}>
@@ -398,6 +470,11 @@ function RevenueChart({ branch }) {
             <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: "#a78bfa" }} />
             <span className="text-[11px] font-medium" style={{ color: t.textSecondary }}>Pampanga</span>
           </div>
+          {chartData && (
+            <span className="ml-auto text-[10px]" style={{ color: t.textMuted }}>
+              Hover bars for ₱ values
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -571,12 +648,21 @@ function DashboardPanel({ user }) {
   const [lowStockCount, setLowStockCount] = useState(0)
   const [ordersToday,   setOrdersToday]   = useState(0)
   const [pendingOrders, setPendingOrders] = useState(0)
+  const [revenueToday,  setRevenueToday]  = useState(0)
 
   useEffect(() => {
-    api.get("/products/low-stock").then(d => { setLowStock(d || []); setLowStockCount(d?.length || 0) }).catch(() => {})
-    if (api.getMyOrders) api.getMyOrders("today").then(d => setOrdersToday(d?.length || 0)).catch(() => {})
-    if (api.getAdminOrders) api.getAdminOrders({ status: "pending" }).then(d => setPendingOrders(d?.length || 0)).catch(() => {})
-  }, [])
+    api.get("/products/low-stock")
+      .then(d => { setLowStock(d || []); setLowStockCount(d?.length || 0) })
+      .catch(() => {})
+
+    api.get(`/dashboard/summary?branch=${branch}`)
+      .then(d => {
+        setRevenueToday(d?.revenue_today || 0)
+        setOrdersToday(d?.orders_today  || 0)
+        setPendingOrders(d?.pending_orders || 0)
+      })
+      .catch(() => {})
+  }, [branch])
 
   const branchLabel = BRANCHES.find(b => b.key === branch)?.label || "All Branches"
 
@@ -588,7 +674,11 @@ function DashboardPanel({ user }) {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <GreenCard label="Total Revenue Today" value="₱0" sub={`↑ ₱0 vs yesterday${branch !== "all" ? ` · ${branchLabel}` : ""}`} />
+        <GreenCard
+          label="Total Revenue Today"
+          value={`₱${revenueToday.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`}
+          sub={`Live · ${branchLabel}`}
+        />
         <WhiteCard label="Orders Today"     value={ordersToday}   sub={`+0 vs yesterday${branch !== "all" ? ` · ${branchLabel}` : ""}`}    accentColor="#3b82f6" />
         <WhiteCard label="Pending Orders"   value={pendingOrders} sub={`−0 vs yesterday${branch !== "all" ? ` · ${branchLabel}` : ""}`}    subUp={false} accentColor="#f59e0b" />
         <WhiteCard label="Low Stock Alerts" value={lowStockCount} sub={`Needs restock today${branch !== "all" ? ` · ${branchLabel}` : ""}`} subGray accentColor="#ef4444" />
