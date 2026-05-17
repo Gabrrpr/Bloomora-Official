@@ -20,7 +20,7 @@ def get_revenue(
 ):
     if period == "week":
         trunc = "day"
-        date_filter = Order.created_at >= func.now() - text("interval '7 days'")
+        date_filter = Order.created_at >= func.now() - text("interval '8 days'")
     elif period == "month":
         trunc = "month"
         date_filter = extract("year", Order.created_at) == datetime.now().year
@@ -29,7 +29,7 @@ def get_revenue(
         date_filter = None
     else:
         trunc = "day"
-        date_filter = Order.created_at >= func.now() - text("interval '7 days'")
+        date_filter = Order.created_at >= func.now() - text("interval '8 days'")
 
     # Use date_trunc as the period column — no raw created_at in SELECT
     period_col = func.date_trunc(trunc, Order.created_at).label("period")

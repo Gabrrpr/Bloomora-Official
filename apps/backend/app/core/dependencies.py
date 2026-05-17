@@ -4,9 +4,8 @@ from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import get_db, SessionLocal
 from app.models import User
-from app.core.database import SessionLocal
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -31,14 +30,7 @@ def get_current_user(
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise credentials_exception
-    if not getattr(user, 'is_active', False):
+    if not getattr(user, "is_active", False):
         raise HTTPException(status_code=400, detail="Inactive user.")
 
     return user
-
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()

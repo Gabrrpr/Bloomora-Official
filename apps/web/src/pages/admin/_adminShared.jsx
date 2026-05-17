@@ -36,6 +36,39 @@ export function StatusBadge({ status }) {
   )
 }
 
+import { useTheme } from "../../context/ThemeContext"; // Make sure this path is correct for your shared file!
+
+export function StatCard({ label, value, sub, trend, trendValue, alert }) {
+  const { isDark } = useTheme();
+  // Quick inline tokens for the shared card
+  const t = isDark 
+    ? { cardBg: "#1e293b", cardBorder: "#334155", textPrimary: "#f1f5f9", textSecondary: "#cbd5e1", textMuted: "#94a3b8" }
+    : { cardBg: "#ffffff", cardBorder: "#e8edf2", textPrimary: "#111827", textSecondary: "#6b7280", textMuted: "#9ca3af" };
+
+  return (
+    <div className="p-5 rounded-xl border shadow-sm transition-all relative" style={{ backgroundColor: t.cardBg, borderColor: alert ? '#fca5a5' : t.cardBorder }}>
+      <div className="flex justify-between items-start">
+        <div>
+          <p className="text-sm font-medium" style={{ color: t.textSecondary }}>{label}</p>
+          <h3 className="text-2xl font-bold mt-1" style={{ color: t.textPrimary }}>{value}</h3>
+        </div>
+        {trend && (
+          <span className={`text-xs font-bold px-2 py-1 rounded-md ${trend === 'up' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+            {trend === 'up' ? '↑' : '↓'} {trendValue}
+          </span>
+        )}
+        {alert && (
+          <span className="flex h-3 w-3 relative">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
+          </span>
+        )}
+      </div>
+      <p className="text-xs mt-3 font-medium" style={{ color: alert ? '#ef4444' : t.textMuted }}>{sub}</p>
+    </div>
+  );
+}
+
 // ── Green stat card ───────────────────────────────────────────────────────────
 export function GreenCard({ label, sublabel, value, prefix = "", sub, subColor, action, onAction }) {
   return (

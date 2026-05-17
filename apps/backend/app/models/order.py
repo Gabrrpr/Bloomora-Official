@@ -70,9 +70,9 @@ class Transaction(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False, unique=True)
-    payment_method = Column(Enum(PaymentMethodEnum), nullable=False)
+    payment_method = Column(String(50), nullable=False)
     total_amount = Column(Numeric(10, 2), nullable=False)
-    status = Column(Enum(PaymentStatusEnum), default=PaymentStatusEnum.pending)
+    status = Column(String(20), default="pending")
     reference_number = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)

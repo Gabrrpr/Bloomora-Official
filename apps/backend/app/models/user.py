@@ -5,15 +5,18 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from .base import Base, now_utc
 
+
 class RoleEnum(str, enum.Enum):
-    admin = "admin"
-    staff = "staff"
+    admin    = "admin"
+    staff    = "staff"
     customer = "customer"
     delivery = "delivery"
 
+
 class BranchEnum(str, enum.Enum):
-    manila = "manila"
+    manila   = "manila"
     pampanga = "pampanga"
+
 
 class User(Base):
     __tablename__ = "users"
@@ -40,9 +43,6 @@ class User(Base):
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
     otp_code = Column(String(6), nullable=True)
     otp_expires_at = Column(DateTime(timezone=True), nullable=True)
-
-    
-    # These three lines must align perfectly with the properties above
     is_staff_verified = Column(Boolean, default=False, nullable=False)
     staff_verification_token = Column(String(255), nullable=True)
     staff_token_expires_at = Column(DateTime(timezone=True), nullable=True)

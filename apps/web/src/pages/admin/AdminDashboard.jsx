@@ -18,7 +18,7 @@ import AdminAdvertisements from "./AdminAdvertisements"
 import AdminCampaigns    from "./AdminCampaigns"
 
 import { api } from "../../services/api.js"
-import { GreenCard, WhiteCard, ComingSoon } from "./_adminShared"
+import { GreenCard, StatCard, WhiteCard, ComingSoon } from "./_adminShared"
 
 const DG = "#0C573E"
 const G  = "#2E8B34"
@@ -297,107 +297,133 @@ function BranchBadge({ branch }) {
 
 // ─── Revenue Chart ────────────────────────────────────────────────────────────
 function RevenueChart({ branch }) {
-  const { isDark } = useTheme()
-  const t = useTokens(isDark)
-  const [periodKey, setPeriodKey] = useState("week")
-  const [chartData, setChartData] = useState(null)
-  const [loading,   setLoading]   = useState(true)
+  const { isDark } = useTheme();
+  const t = useTokens(isDark);
+  
+  const [periodKey, setPeriodKey] = useState("week");
+  const [chartData, setChartData] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Fallback static data (shown while loading or on error)
-  const staticPeriod = REVENUE_PERIODS.find(p => p.key === periodKey)
+  const staticPeriod = REVENUE_PERIODS.find(p => p.key === periodKey);
 
   useEffect(() => {
-    setLoading(true)
+    setLoading(true);
     api.get(`/dashboard/revenue?period=${periodKey}&branch=${branch}`)
       .then(rows => {
-        if (!rows || rows.length === 0) { setChartData(null); return }
+        console.log("🚀 LIVE REVENUE DATA RECEIVED:", rows);
 
-        const period = REVENUE_PERIODS.find(p => p.key === periodKey)
-        const manilaData    = Array(period.labels.length).fill(0)
-        const pampangaData  = Array(period.labels.length).fill(0)
+        if (!rows || rows.length === 0) { 
+          setChartData(null); 
+          return; 
+        }
+
+        const period = REVENUE_PERIODS.find(p => p.key === periodKey);
+        const manilaData = Array(period.labels.length).fill(0);
+        const pampangaData = Array(period.labels.length).fill(0);
 
         rows.forEach(row => {
-          const date = new Date(row.period)
-          let idx = -1
-
-          if (periodKey === "week") {
-            // Map to Mon–Sun index (0=Mon … 6=Sun)
-            const day = date.getDay()
-            idx = day === 0 ? 6 : day - 1
-          } else if (periodKey === "month") {
-            idx = date.getMonth()
-          } else if (periodKey === "year") {
-            idx = period.labels.indexOf(String(date.getFullYear()))
+          // FLEXIBLE DATE PARSING: Fallback to common backend keys if row.period is undefined
+          const rawDate = row.period || row.created_at || row.date || new Date().toISOString();
+          const date = new Date(rawDate);
+          
+          // Check if date parsing completely failed
+          if (isNaN(date.getTime())) {
+            console.warn("⚠️ Invalid date encountered during parsing:", rawDate);
+            return;
           }
 
-          if (idx === -1) return
+          let idx = -1;
 
-          // Normalize to percentage of max for bar height
-          if (row.branch === "Manila")   manilaData[idx]   += row.revenue
-          if (row.branch === "Pampanga") pampangaData[idx] += row.revenue
-        })
+          if (periodKey === "week") {
+            const day = date.getDay();
+            idx = day === 0 ? 6 : day - 1; // Map Sun=6, Mon=0
+          } else if (periodKey === "month") {
+            idx = date.getMonth();
+          } else if (periodKey === "year") {
+            idx = period.labels.indexOf(String(date.getFullYear()));
+            if (idx === -1) idx = period.labels.length - 1;
+          }
 
-        // Convert raw ₱ values to % of max for bar rendering
-        const allValues = [...manilaData, ...pampangaData]
-        const maxVal    = Math.max(...allValues, 1)
+          if (idx === -1 || idx >= period.labels.length) return;
+
+          const safeBranch = String(row.branch || row.branch_name || "manila").trim().toLowerCase();
+          const revenueNum = parseFloat(row.revenue) || parseFloat(row.total_amount) || 0;
+
+          if (safeBranch.includes("pampanga")) {
+            pampangaData[idx] += revenueNum;
+          } else {
+            manilaData[idx] += revenueNum;
+          }
+        });
+
+        const allValues = [...manilaData, ...pampangaData];
+        const maxVal = Math.max(...allValues, 1); 
 
         setChartData({
-          labels:   period.labels,
-          yAxis:    period.yAxis,
-          manila:   manilaData.map(v => Math.round((v / maxVal) * 90)),
-          pampanga: pampangaData.map(v => Math.round((v / maxVal) * 90)),
+          labels: period.labels,
+          yAxis: period.yAxis,
+          // If a value exists, give it a minimum height of 15% so it's clearly visible in the UI
+          manila: manilaData.map(v => v > 0 ? Math.max(15, Math.round((v / maxVal) * 90)) : 0),
+          pampanga: pampangaData.map(v => v > 0 ? Math.max(15, Math.round((v / maxVal) * 90)) : 0),
           raw: { manila: manilaData, pampanga: pampangaData },
-        })
+        });
       })
-      .catch(() => setChartData(null))
-      .finally(() => setLoading(false))
-  }, [periodKey, branch])
+      .catch(err => {
+        console.error("❌ REVENUE FETCH ERROR:", err);
+        setChartData(null);
+      })
+      .finally(() => setLoading(false));
+  }, [periodKey, branch]);
 
   const currentIdx = (() => {
-    if (periodKey === "week")  { const d = new Date().getDay(); return d === 0 ? 6 : d - 1 }
-    if (periodKey === "month") return new Date().getMonth()
-    if (periodKey === "year")  return staticPeriod.labels.indexOf(String(new Date().getFullYear()))
-    return -1
-  })()
+    const d = new Date();
+    if (periodKey === "week") { 
+      const day = d.getDay(); 
+      return day === 0 ? 6 : day - 1; 
+    }
+    if (periodKey === "month") return d.getMonth();
+    if (periodKey === "year") return staticPeriod.labels.indexOf(String(d.getFullYear()));
+    return -1;
+  })();
 
-  // Use live data if available, fall back to static
-  const display = chartData || staticPeriod
+  const display = chartData || staticPeriod;
+  const isLive = chartData !== null;
 
   return (
     <div className="rounded-xl p-5" style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
       <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
         <div className="flex items-center gap-2">
           <p className="text-sm font-semibold" style={{ color: t.textPrimary }}>Revenue</p>
-          <BranchBadge branch={branch} />
-          {loading && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full animate-pulse"
-              style={{ backgroundColor: t.badgeBg, color: t.textMuted }}>
-              Loading…
+          {loading ? (
+            <span className="text-[10px] px-2 py-0.5 rounded-full animate-pulse bg-gray-200 text-gray-500">
+              Loading...
             </span>
-          )}
-          {!loading && chartData && (
-            <span className="text-[10px] px-2 py-0.5 rounded-full"
-              style={{ backgroundColor: isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4", color: isDark ? "#4ade80" : "#16a34a" }}>
-              Live
+          ) : isLive ? (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700">
+              Live Data
+            </span>
+          ) : (
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
+              Static Data (No DB records)
             </span>
           )}
         </div>
+
         {/* Period toggle */}
-        <div className="flex items-center gap-0.5 p-0.5 rounded-lg"
-          style={{ backgroundColor: t.badgeBg, border: `1px solid ${t.cardBorder}` }}>
+        <div className="flex items-center gap-0.5 p-0.5 rounded-lg" style={{ backgroundColor: t.badgeBg, border: `1px solid ${t.cardBorder}` }}>
           {REVENUE_PERIODS.map(p => {
-            const on = p.key === periodKey
+            const on = p.key === periodKey;
             return (
               <button key={p.key} onClick={() => setPeriodKey(p.key)}
                 className="px-3 py-1 rounded-md text-xs font-semibold transition-all duration-200"
                 style={{
                   backgroundColor: on ? t.surfaceBg : "transparent",
-                  color: on ? (isDark ? "#4ade80" : DG) : t.textSecondary,
+                  color: on ? (isDark ? "#4ade80" : "#0C573E") : t.textSecondary,
                   boxShadow: on ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
                 }}>
                 {p.label}
               </button>
-            )
+            );
           })}
         </div>
       </div>
@@ -409,49 +435,51 @@ function RevenueChart({ branch }) {
             <span key={l} className="text-[10px] leading-none" style={{ color: t.textMuted }}>{l}</span>
           ))}
         </div>
+
         {/* Bars */}
         <div className="flex-1 flex flex-col">
-          <div className="flex-1 relative flex items-end gap-1"
-            style={{ borderLeft: `1px solid ${t.chartGrid}`, borderBottom: `1px solid ${t.chartGrid}`, paddingLeft: "4px", paddingRight: "4px" }}>
+          <div className="flex-1 relative flex items-end gap-1" style={{ borderLeft: `1px solid ${t.chartGrid}`, borderBottom: `1px solid ${t.chartGrid}`, paddingLeft: "4px", paddingRight: "4px" }}>
             {[1, 2, 3].map(i => (
-              <div key={i} className="absolute left-0 right-0 pointer-events-none"
-                style={{ top: `${(i / 4) * 100}%`, borderTop: `1px dashed ${t.chartDash}` }} />
+              <div key={i} className="absolute left-0 right-0 pointer-events-none" style={{ top: `${(i / 4) * 100}%`, borderTop: `1px dashed ${t.chartDash}` }} />
             ))}
+            
             {display.labels.map((lbl, i) => {
-              const isCurrent = i === currentIdx
+              const isCurrent = i === currentIdx;
+              
               if (branch === "all") {
                 return (
-                  <div key={lbl} className="flex-1 flex items-end gap-0.5" style={{ minWidth: 0 }}
-                    title={chartData ? `Manila: ₱${(chartData.raw?.manila[i] || 0).toLocaleString()} · Pampanga: ₱${(chartData.raw?.pampanga[i] || 0).toLocaleString()}` : ""}>
-                    <div className="flex-1 rounded-t-sm transition-all duration-500"
+                  <div key={lbl} className="flex-1 flex items-end gap-0.5 group" style={{ minWidth: 0 }}
+                    title={isLive ? `Manila: ₱${(chartData.raw?.manila[i] || 0).toLocaleString()} | Pampanga: ₱${(chartData.raw?.pampanga[i] || 0).toLocaleString()}` : ""}>
+                    <div className="flex-1 rounded-t-sm transition-all duration-500 hover:opacity-80"
                       style={{ height: `${display.manila[i]}%`, background: isCurrent ? "linear-gradient(180deg,#3b82f6,#1d4ed8)" : isDark ? "#1d3a5f" : "#bfdbfe", minHeight: "3px" }} />
-                    <div className="flex-1 rounded-t-sm transition-all duration-500"
+                    <div className="flex-1 rounded-t-sm transition-all duration-500 hover:opacity-80"
                       style={{ height: `${display.pampanga[i]}%`, background: isCurrent ? "linear-gradient(180deg,#a78bfa,#6d28d9)" : isDark ? "#2e1a4a" : "#ddd6fe", minHeight: "3px" }} />
                   </div>
-                )
+                );
               }
-              const h  = branch === "manila" ? display.manila[i] : display.pampanga[i]
-              const rawVal = chartData
-                ? (branch === "manila" ? chartData.raw?.manila[i] : chartData.raw?.pampanga[i]) || 0
-                : 0
-              const bg = branch === "manila"
+
+              const isManila = branch === "manila";
+              const h = isManila ? display.manila[i] : display.pampanga[i];
+              const rawVal = isLive ? (isManila ? chartData.raw?.manila[i] : chartData.raw?.pampanga[i]) || 0 : 0;
+              const bg = isManila
                 ? isCurrent ? "linear-gradient(180deg,#3b82f6,#1d4ed8)" : isDark ? "#1d3a5f" : "#bfdbfe"
-                : isCurrent ? "linear-gradient(180deg,#a78bfa,#6d28d9)" : isDark ? "#2e1a4a" : "#ddd6fe"
+                : isCurrent ? "linear-gradient(180deg,#a78bfa,#6d28d9)" : isDark ? "#2e1a4a" : "#ddd6fe";
+
               return (
-                <div key={lbl} className="flex-1 flex items-end" style={{ minWidth: 0 }}
-                  title={chartData ? `₱${rawVal.toLocaleString()}` : ""}>
-                  <div className="w-full rounded-t-sm transition-all duration-500"
+                <div key={lbl} className="flex-1 flex items-end group" style={{ minWidth: 0 }}
+                  title={isLive ? `₱${rawVal.toLocaleString()}` : ""}>
+                  <div className="w-full rounded-t-sm transition-all duration-500 hover:opacity-80"
                     style={{ height: `${h}%`, background: bg, minHeight: "3px" }} />
                 </div>
-              )
+              );
             })}
           </div>
+
           {/* X labels */}
           <div className="flex gap-1 pt-1.5" style={{ paddingLeft: "4px", paddingRight: "4px" }}>
             {display.labels.map((lbl, i) => (
               <div key={lbl} className="flex-1 flex justify-center" style={{ minWidth: 0 }}>
-                <span className="text-[9px] font-medium truncate"
-                  style={{ color: i === currentIdx ? (isDark ? "#4ade80" : DG) : t.textMuted }}>
+                <span className="text-[9px] font-medium truncate" style={{ color: i === currentIdx ? (isDark ? "#4ade80" : "#0C573E") : t.textMuted }}>
                   {periodKey === "month" ? lbl.slice(0, 1) : periodKey === "year" ? lbl.slice(2) : lbl}
                 </span>
               </div>
@@ -459,26 +487,8 @@ function RevenueChart({ branch }) {
           </div>
         </div>
       </div>
-
-      {branch === "all" && (
-        <div className="flex items-center gap-4 mt-3 pt-3" style={{ borderTop: `1px solid ${t.tableBorder}` }}>
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: "#3b82f6" }} />
-            <span className="text-[11px] font-medium" style={{ color: t.textSecondary }}>Manila</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: "#a78bfa" }} />
-            <span className="text-[11px] font-medium" style={{ color: t.textSecondary }}>Pampanga</span>
-          </div>
-          {chartData && (
-            <span className="ml-auto text-[10px]" style={{ color: t.textMuted }}>
-              Hover bars for ₱ values
-            </span>
-          )}
-        </div>
-      )}
     </div>
-  )
+  );
 }
 
 // ─── Recent Orders Card ───────────────────────────────────────────────────────
@@ -641,79 +651,110 @@ function DraggablePanelRow({ branch, lowStock }) {
 
 // ─── Dashboard Panel ──────────────────────────────────────────────────────────
 function DashboardPanel({ user }) {
-  const { isDark } = useTheme()
-  const t = useTokens(isDark)
-  const [branch,        setBranch]        = useState("all")
-  const [lowStock,      setLowStock]      = useState([])
-  const [lowStockCount, setLowStockCount] = useState(0)
-  const [ordersToday,   setOrdersToday]   = useState(0)
-  const [pendingOrders, setPendingOrders] = useState(0)
-  const [revenueToday,  setRevenueToday]  = useState(0)
+  const { isDark } = useTheme();
+  const t = useTokens(isDark);
+  
+  // 1. Declare branch state FIRST
+  const [branch, setBranch] = useState("all");
+  
+  // 2. Declare other states
+  const [lowStock, setLowStock] = useState([]);
+  const [lowStockCount, setLowStockCount] = useState(0);
+  const [ordersToday, setOrdersToday] = useState(0);
+  const [pendingOrders, setPendingOrders] = useState(0);
+  const [revenueToday, setRevenueToday] = useState(0);
 
+  // 3. Fetch Live Data
   useEffect(() => {
+    // Fetch Low Stock
     api.get("/products/low-stock")
-      .then(d => { setLowStock(d || []); setLowStockCount(d?.length || 0) })
-      .catch(() => {})
+      .then(d => { 
+        setLowStock(d || []); 
+        setLowStockCount(d?.length || 0); 
+      })
+      .catch(() => {});
 
+    // Fetch Summary (Revenue, Orders, Pending)
     api.get(`/dashboard/summary?branch=${branch}`)
       .then(d => {
-        setRevenueToday(d?.revenue_today || 0)
-        setOrdersToday(d?.orders_today  || 0)
-        setPendingOrders(d?.pending_orders || 0)
+        setRevenueToday(d?.revenue_today || 0);
+        setOrdersToday(d?.orders_today || 0);
+        setPendingOrders(d?.pending_orders || 0);
       })
-      .catch(() => {})
-  }, [branch])
+      .catch(err => console.error("Summary Fetch Error:", err));
+  }, [branch]);
 
-  const branchLabel = BRANCHES.find(b => b.key === branch)?.label || "All Branches"
+  const branchLabel = branch === "all" ? "All Branches" : branch.charAt(0).toUpperCase() + branch.slice(1);
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-xl font-bold" style={{ color: t.textPrimary }}>Dashboard</h1>
-        <BranchToggle value={branch} onChange={setBranch} />
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <GreenCard
-          label="Total Revenue Today"
-          value={`₱${revenueToday.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`}
-          sub={`Live · ${branchLabel}`}
-        />
-        <WhiteCard label="Orders Today"     value={ordersToday}   sub={`+0 vs yesterday${branch !== "all" ? ` · ${branchLabel}` : ""}`}    accentColor="#3b82f6" />
-        <WhiteCard label="Pending Orders"   value={pendingOrders} sub={`−0 vs yesterday${branch !== "all" ? ` · ${branchLabel}` : ""}`}    subUp={false} accentColor="#f59e0b" />
-        <WhiteCard label="Low Stock Alerts" value={lowStockCount} sub={`Needs restock today${branch !== "all" ? ` · ${branchLabel}` : ""}`} subGray accentColor="#ef4444" />
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-[1fr_320px] gap-4">
-        <RevenueChart branch={branch} />
-        {/* Trending Products */}
-        <div className="rounded-xl p-5" style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold" style={{ color: t.textPrimary }}>Trending Products</p>
-              <BranchBadge branch={branch} />
-            </div>
-            <button className="text-xs font-semibold px-2.5 py-1 rounded-md border transition-all"
-              style={{ borderColor: t.cardBorder, color: t.textSecondary }}>
-              View All
-            </button>
-          </div>
-          {[1, 2, 3].map(i => (
-            <div key={i} className="flex items-center gap-3 py-2.5 border-b last:border-0" style={{ borderColor: t.tableBorder }}>
-              <div className="w-10 h-10 rounded-lg flex-shrink-0" style={{ background: "linear-gradient(135deg,#f0fdf4,#dcfce7)", border: "1px solid #bbf7d0" }} />
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium" style={{ color: t.textSecondary }}>—</p>
-                <p className="text-xs" style={{ color: t.textMuted }}>0 units sold</p>
-              </div>
-              <p className="text-sm font-bold flex-shrink-0" style={{ color: isDark ? "#4ade80" : DG }}>₱0</p>
-            </div>
-          ))}
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: t.textPrimary }}>Dashboard Overview</h1>
+          <p className="text-sm mt-1" style={{ color: t.textSecondary }}>
+            Welcome back, {user?.firstName || "Admin"}. Here's what's happening today.
+          </p>
+        </div>
+        <div className="flex items-center gap-3">
+          <select
+            value={branch}
+            onChange={(e) => setBranch(e.target.value)}
+            className="text-sm rounded-lg px-3 py-2 outline-none cursor-pointer transition-all"
+            style={{ backgroundColor: t.surfaceBg, color: t.textPrimary, border: `1px solid ${t.cardBorder}` }}
+          >
+            <option value="all">All Branches</option>
+            <option value="manila">Manila Branch</option>
+            <option value="pampanga">Pampanga Branch</option>
+          </select>
+          <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all shadow-sm"
+            style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+            Export Report
+          </button>
         </div>
       </div>
 
-      <DraggablePanelRow branch={branch} lowStock={lowStock} />
+      {/* Top Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <GreenCard 
+          label="Total Revenue Today" 
+          value={`₱${revenueToday.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`} 
+          sub={`Live · ${branchLabel}`} 
+        />
+        <StatCard 
+          label="Orders Today" 
+          value={ordersToday} 
+          sub={`Live · ${branchLabel}`} 
+          trend="up" 
+          trendValue="12%" 
+        />
+        <StatCard 
+          label="Pending Orders" 
+          value={pendingOrders} 
+          sub="Requires attention" 
+          alert={pendingOrders > 0} 
+        />
+        <StatCard 
+          label="Low Stock Items" 
+          value={lowStockCount} 
+          sub="Below threshold" 
+          alert={lowStockCount > 0} 
+        />
+      </div>
+
+      {/* Main Content Area */}
+      <div className="space-y-6">
+        {/* Revenue Chart takes full width or adjusts to your layout */}
+        <RevenueChart branch={branch} />
+        
+        {/* Here are your missing Recent Orders and Low Stock cards! */}
+        <DraggablePanelRow branch={branch} lowStock={lowStock} />
+      </div>
     </div>
-  )
+  );
 }
 
 // ─── My Profile Panel ─────────────────────────────────────────────────────────
