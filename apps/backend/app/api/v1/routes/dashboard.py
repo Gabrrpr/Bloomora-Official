@@ -3,12 +3,17 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, text, extract
 from datetime import datetime
 
+
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.models.order import Order
+from app.models import RoleEnum
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
+
+
+
 
 
 @router.get("/revenue")
@@ -94,3 +99,46 @@ def get_summary(
         "pending_orders": q_pending.scalar() or 0,
         "orders_today": q_today_count.scalar() or 0,
     }
+
+
+@router.get("/recent-orders")
+def get_recent_orders(
+    branch: str = "all",
+    limit: int = 5,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return the most recent orders for dashboard cards."""
+    if getattr(current_user, "role", None) not in [RoleEnum.admin, RoleEnum.staff]:
+        # Keep consistent with other admin/staff endpoints: deny staff if not allowed.
+        # (Dashboard is intended for admin/staff only.)
+        return []
+
+    q = db.query(Order).order_by(Order.created_at.desc()).limit(limit)
+
+    if branch and branch != "all":
+        q = q.filter(Order.branch_name == branch)
+
+    orders = q.all()
+
+    def _customer_name(o: Order):
+        u = getattr(o, "user", None)
+        if not u:
+            return getattr(o, "customer_name", None) or "Unknown"
+        first = getattr(u, "first_name", None) or ""
+        last = getattr(u, "last_name", None) or ""
+        name = f"{first} {last}".strip()
+        return name or getattr(u, "email", None) or "Unknown"
+
+    return [
+        {
+            "id": str(o.id),
+            "order_number": f"ORD-{o.id.hex[:8].upper()}",
+            "customer_name": _customer_name(o),
+            "status": o.status.value if hasattr(o.status, "value") else o.status,
+            "total_amount": float(o.total_amount or 0),
+            "branch": o.branch_name,
+        }
+        for o in orders
+    ]
+

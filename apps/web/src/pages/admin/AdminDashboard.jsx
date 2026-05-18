@@ -296,6 +296,7 @@ function BranchBadge({ branch }) {
 }
 
 // ─── Revenue Chart ────────────────────────────────────────────────────────────
+// ─── Revenue Chart ────────────────────────────────────────────────────────────
 function RevenueChart({ branch }) {
   const { isDark } = useTheme();
   const t = useTokens(isDark);
@@ -306,81 +307,101 @@ function RevenueChart({ branch }) {
 
   const staticPeriod = REVENUE_PERIODS.find(p => p.key === periodKey);
 
+  // HELPER: Generate rolling 7 days labels (e.g., ends on "Mon" if today is Monday)
+  const getRollingWeekLabels = () => {
+    const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const labels = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      labels.push(days[d.getDay()]);
+    }
+    return labels;
+  };
+
   useEffect(() => {
     setLoading(true);
-    api.get(`/dashboard/revenue?period=${periodKey}&branch=${branch}`)
+
+    // 1. Capitalize the branch name so PostgreSQL finds it! (e.g. "manila" -> "Manila")
+    const apiBranch = branch === "all" ? "all" : branch.charAt(0).toUpperCase() + branch.slice(1);
+
+    api.get(`/dashboard/revenue?period=${periodKey}&branch=${apiBranch}`)
       .then(rows => {
-        console.log("🚀 LIVE REVENUE DATA RECEIVED:", rows);
-
-        if (!rows || rows.length === 0) { 
-          setChartData(null); 
-          return; 
-        }
-
         const period = REVENUE_PERIODS.find(p => p.key === periodKey);
-        const manilaData = Array(period.labels.length).fill(0);
-        const pampangaData = Array(period.labels.length).fill(0);
+        const actualLabels = periodKey === "week" ? getRollingWeekLabels() : period.labels;
 
-        rows.forEach(row => {
-          // FLEXIBLE DATE PARSING: Fallback to common backend keys if row.period is undefined
-          const rawDate = row.period || row.created_at || row.date || new Date().toISOString();
-          const date = new Date(rawDate);
-          
-          // Check if date parsing completely failed
-          if (isNaN(date.getTime())) {
-            console.warn("⚠️ Invalid date encountered during parsing:", rawDate);
-            return;
-          }
+        const manilaData = Array(actualLabels.length).fill(0);
+        const pampangaData = Array(actualLabels.length).fill(0);
 
-          let idx = -1;
+        // Normalize "Today" to exactly midnight
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-          if (periodKey === "week") {
-            const day = date.getDay();
-            idx = day === 0 ? 6 : day - 1; // Map Sun=6, Mon=0
-          } else if (periodKey === "month") {
-            idx = date.getMonth();
-          } else if (periodKey === "year") {
-            idx = period.labels.indexOf(String(date.getFullYear()));
-            if (idx === -1) idx = period.labels.length - 1;
-          }
+        // 2. We no longer abort if rows is empty! We process it normally so empty branches show a live flat chart.
+        if (rows && rows.length > 0) {
+          rows.forEach(row => {
+            const date = new Date(row.period);
+            if (isNaN(date.getTime())) return;
+            
+            let idx = -1;
 
-          if (idx === -1 || idx >= period.labels.length) return;
+            if (periodKey === "week") {
+              const rowDate = new Date(date);
+              rowDate.setHours(0, 0, 0, 0);
+              const diffTime = today - rowDate;
+              const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+              
+              if (diffDays >= 0 && diffDays <= 6) {
+                idx = 6 - diffDays; 
+              }
+            } else if (periodKey === "month") {
+              idx = date.getMonth();
+            } else if (periodKey === "year") {
+              idx = period.labels.indexOf(String(date.getFullYear()));
+              if (idx === -1) idx = period.labels.length - 1;
+            }
 
-          const safeBranch = String(row.branch || row.branch_name || "manila").trim().toLowerCase();
-          const revenueNum = parseFloat(row.revenue) || parseFloat(row.total_amount) || 0;
+            if (idx === -1 || idx >= actualLabels.length) return;
 
-          if (safeBranch.includes("pampanga")) {
-            pampangaData[idx] += revenueNum;
-          } else {
-            manilaData[idx] += revenueNum;
-          }
-        });
+            const safeBranch = String(row.branch || "").trim().toLowerCase();
+            const revenueNum = Number(row.revenue) || 0;
+
+            if (safeBranch === "pampanga") {
+              pampangaData[idx] += revenueNum;
+            } else {
+              manilaData[idx] += revenueNum;
+            }
+          });
+        }
 
         const allValues = [...manilaData, ...pampangaData];
         const maxVal = Math.max(...allValues, 1); 
 
+        const calculatedManila = manilaData.map(v => v > 0 ? Math.max(10, Math.round((v / maxVal) * 90)) : 0);
+        const calculatedPampanga = pampangaData.map(v => v > 0 ? Math.max(10, Math.round((v / maxVal) * 90)) : 0);
+
+        // Always set the real data, even if it's all 0s, to keep the "Live Data" badge active
         setChartData({
-          labels: period.labels,
+          labels: actualLabels,
           yAxis: period.yAxis,
-          // If a value exists, give it a minimum height of 15% so it's clearly visible in the UI
-          manila: manilaData.map(v => v > 0 ? Math.max(15, Math.round((v / maxVal) * 90)) : 0),
-          pampanga: pampangaData.map(v => v > 0 ? Math.max(15, Math.round((v / maxVal) * 90)) : 0),
+          manila: calculatedManila,
+          pampanga: calculatedPampanga,
           raw: { manila: manilaData, pampanga: pampangaData },
         });
       })
       .catch(err => {
         console.error("❌ REVENUE FETCH ERROR:", err);
-        setChartData(null);
+        // Only trigger the "Static Data" badge if the API completely crashes
+        setChartData(null); 
       })
       .finally(() => setLoading(false));
   }, [periodKey, branch]);
 
   const currentIdx = (() => {
+    // 🚀 In a Rolling 7 Days chart, "Today" is ALWAYS the very last column (index 6)!
+    if (periodKey === "week") return 6; 
+    
     const d = new Date();
-    if (periodKey === "week") { 
-      const day = d.getDay(); 
-      return day === 0 ? 6 : day - 1; 
-    }
     if (periodKey === "month") return d.getMonth();
     if (periodKey === "year") return staticPeriod.labels.indexOf(String(d.getFullYear()));
     return -1;
@@ -395,21 +416,14 @@ function RevenueChart({ branch }) {
         <div className="flex items-center gap-2">
           <p className="text-sm font-semibold" style={{ color: t.textPrimary }}>Revenue</p>
           {loading ? (
-            <span className="text-[10px] px-2 py-0.5 rounded-full animate-pulse bg-gray-200 text-gray-500">
-              Loading...
-            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full animate-pulse bg-gray-200 text-gray-500">Loading...</span>
           ) : isLive ? (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-              Live Data
-            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-100 text-green-700">Live Data</span>
           ) : (
-            <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">
-              Static Data (No DB records)
-            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">Static Data (No DB records)</span>
           )}
         </div>
 
-        {/* Period toggle */}
         <div className="flex items-center gap-0.5 p-0.5 rounded-lg" style={{ backgroundColor: t.badgeBg, border: `1px solid ${t.cardBorder}` }}>
           {REVENUE_PERIODS.map(p => {
             const on = p.key === periodKey;
@@ -429,16 +443,14 @@ function RevenueChart({ branch }) {
       </div>
 
       <div className="flex gap-2" style={{ height: "184px" }}>
-        {/* Y-axis */}
         <div className="flex flex-col justify-between flex-shrink-0 text-right" style={{ width: "40px", paddingBottom: "24px" }}>
           {display.yAxis.map(l => (
             <span key={l} className="text-[10px] leading-none" style={{ color: t.textMuted }}>{l}</span>
           ))}
         </div>
 
-        {/* Bars */}
         <div className="flex-1 flex flex-col">
-          <div className="flex-1 relative flex items-end gap-1" style={{ borderLeft: `1px solid ${t.chartGrid}`, borderBottom: `1px solid ${t.chartGrid}`, paddingLeft: "4px", paddingRight: "4px" }}>
+          <div className="flex-1 relative flex items-stretch gap-1" style={{ borderLeft: `1px solid ${t.chartGrid}`, borderBottom: `1px solid ${t.chartGrid}`, paddingLeft: "4px", paddingRight: "4px" }}>
             {[1, 2, 3].map(i => (
               <div key={i} className="absolute left-0 right-0 pointer-events-none" style={{ top: `${(i / 4) * 100}%`, borderTop: `1px dashed ${t.chartDash}` }} />
             ))}
@@ -448,7 +460,7 @@ function RevenueChart({ branch }) {
               
               if (branch === "all") {
                 return (
-                  <div key={lbl} className="flex-1 flex items-end gap-0.5 group" style={{ minWidth: 0 }}
+                  <div key={lbl} className="flex-1 flex items-end gap-0.5 group h-full" style={{ minWidth: 0 }}
                     title={isLive ? `Manila: ₱${(chartData.raw?.manila[i] || 0).toLocaleString()} | Pampanga: ₱${(chartData.raw?.pampanga[i] || 0).toLocaleString()}` : ""}>
                     <div className="flex-1 rounded-t-sm transition-all duration-500 hover:opacity-80"
                       style={{ height: `${display.manila[i]}%`, background: isCurrent ? "linear-gradient(180deg,#3b82f6,#1d4ed8)" : isDark ? "#1d3a5f" : "#bfdbfe", minHeight: "3px" }} />
@@ -466,7 +478,7 @@ function RevenueChart({ branch }) {
                 : isCurrent ? "linear-gradient(180deg,#a78bfa,#6d28d9)" : isDark ? "#2e1a4a" : "#ddd6fe";
 
               return (
-                <div key={lbl} className="flex-1 flex items-end group" style={{ minWidth: 0 }}
+                <div key={lbl} className="flex-1 flex items-end group h-full" style={{ minWidth: 0 }}
                   title={isLive ? `₱${rawVal.toLocaleString()}` : ""}>
                   <div className="w-full rounded-t-sm transition-all duration-500 hover:opacity-80"
                     style={{ height: `${h}%`, background: bg, minHeight: "3px" }} />
@@ -475,10 +487,9 @@ function RevenueChart({ branch }) {
             })}
           </div>
 
-          {/* X labels */}
           <div className="flex gap-1 pt-1.5" style={{ paddingLeft: "4px", paddingRight: "4px" }}>
             {display.labels.map((lbl, i) => (
-              <div key={lbl} className="flex-1 flex justify-center" style={{ minWidth: 0 }}>
+              <div key={`${lbl}-${i}`} className="flex-1 flex justify-center" style={{ minWidth: 0 }}>
                 <span className="text-[9px] font-medium truncate" style={{ color: i === currentIdx ? (isDark ? "#4ade80" : "#0C573E") : t.textMuted }}>
                   {periodKey === "month" ? lbl.slice(0, 1) : periodKey === "year" ? lbl.slice(2) : lbl}
                 </span>
@@ -489,10 +500,10 @@ function RevenueChart({ branch }) {
       </div>
     </div>
   );
-}
+} 
 
 // ─── Recent Orders Card ───────────────────────────────────────────────────────
-function RecentOrdersCard({ branch, t }) {
+function RecentOrdersCard({ branch, t, orders, loading }) {
   return (
     <div className="rounded-xl overflow-hidden h-full"
       style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
@@ -517,11 +528,41 @@ function RecentOrdersCard({ branch, t }) {
           </tr>
         </thead>
         <tbody>
-          <tr>
-            <td colSpan={4} className="px-5 py-10 text-center text-sm" style={{ color: t.textMuted }}>
-              No orders yet — connect backend
-            </td>
-          </tr>
+          {loading ? (
+            <tr>
+              <td colSpan={4} className="px-5 py-10 text-center text-sm" style={{ color: t.textMuted }}>
+                Loading recent orders...
+              </td>
+            </tr>
+          ) : !orders || orders.length === 0 ? (
+            <tr>
+              <td colSpan={4} className="px-5 py-10 text-center text-sm" style={{ color: t.textMuted }}>
+                No recent orders yet
+              </td>
+            </tr>
+          ) : (
+            orders.map((o, idx) => (
+              <tr
+                key={o.id || idx}
+                style={{ backgroundColor: idx % 2 === 0 ? t.cardBg : t.surfaceAlt }}
+              >
+                <td className="px-5 py-3" style={{ color: t.textSecondary }}>
+                  <span className="font-mono text-xs">{o.order_number || "—"}</span>
+                </td>
+                <td className="px-5 py-3" style={{ color: t.textPrimary }}>
+                  <span className="font-medium">{o.customer_name || "—"}</span>
+                </td>
+                <td className="px-5 py-3" style={{ color: t.textSecondary }}>
+                  <span className="text-xs font-semibold" style={{ color: t.textSecondary }}>
+                    {String(o.status || "").replace(/_/g, " ")}
+                  </span>
+                </td>
+                <td className="px-5 py-3" style={{ color: t.textPrimary }}>
+                  ₱{Number(o.total_amount || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </td>
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>
@@ -595,7 +636,7 @@ function LowStockCard({ branch, lowStock, t, isDark }) {
 }
 
 // ─── Draggable Panel Row ──────────────────────────────────────────────────────
-function DraggablePanelRow({ branch, lowStock }) {
+function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading }) {
   const { isDark } = useTheme()
   const t = useTokens(isDark)
   const containerRef = useRef(null)
@@ -626,7 +667,7 @@ function DraggablePanelRow({ branch, lowStock }) {
     <>
       {/* Mobile/tablet: stacked */}
       <div className="flex flex-col gap-4 xl:hidden">
-        <RecentOrdersCard branch={branch} t={t} />
+        <RecentOrdersCard branch={branch} t={t} orders={recentOrders} loading={recentLoading} />
         <LowStockCard branch={branch} lowStock={lowStock} t={t} isDark={isDark} />
       </div>
       {/* Desktop: draggable split */}
