@@ -93,6 +93,7 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("user")
     setUser(null)
     window.dispatchEvent(new CustomEvent("bloomora:cart-updated"))
+    window.dispatchEvent(new CustomEvent("bloomora:logout"))
   }
 
   const googleLogin = () => googleLoginApi()

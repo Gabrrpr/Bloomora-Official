@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
 
 const DG = "#0C573E"
@@ -54,46 +55,49 @@ const DEFAULT_SLIDES = [
   },
 ]
 
-function Field({ label, hint, children }) {
+function Field({ label, hint, children, isDark }) {
   return (
     <div>
-      <label className="block text-xs font-semibold text-gray-600 mb-1.5">{label}</label>
+      <label className="block text-sm font-semibold mb-1.5" style={{ color: isDark ? "#94a3b8" : "#374151" }}>
+        {label}
+      </label>
       {children}
-      {hint && <p className="text-[10px] text-gray-400 mt-1">{hint}</p>}
+      {hint && <p className="text-xs mt-1" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>{hint}</p>}
     </div>
   )
 }
 
-function Input({ value, onChange, placeholder, type = "text", rows }) {
-  const shared = "w-full px-3 py-2.5 text-sm border rounded-md bg-white outline-none transition-all"
-  const style = { borderColor: "#dde3ec" }
-  const handlers = {
-    onFocus: (e) => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.10)` },
-    onBlur: (e) => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" },
-  }
+function Input({ value, onChange, placeholder, type = "text", rows, isDark, inputBg, inputBdr, inputTxt }) {
+  const shared = "w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all"
   if (rows) {
     return (
-      <textarea value={value} onChange={(e) => onChange?.(e.target.value)} placeholder={placeholder} rows={rows}
-        className={shared} style={style} {...handlers} />
+      <textarea value={value} onChange={e => onChange?.(e.target.value)} placeholder={placeholder} rows={rows}
+        className={shared} style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}
+        onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
+        onBlur={e => { e.target.style.borderColor = inputBdr; e.target.style.boxShadow = "none" }} />
     )
   }
   return (
-    <input type={type} value={value} onChange={(e) => onChange?.(e.target.value)} placeholder={placeholder}
-      className={shared} style={style} {...handlers} />
+    <input type={type} value={value} onChange={e => onChange?.(e.target.value)} placeholder={placeholder}
+      className={shared} style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}
+      onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
+      onBlur={e => { e.target.style.borderColor = inputBdr; e.target.style.boxShadow = "none" }} />
   )
 }
 
-function Select({ value, onChange, options }) {
+function Select({ value, onChange, options, isDark, inputBg, inputBdr, inputTxt }) {
   return (
     <div className="relative">
-      <select value={value} onChange={(e) => onChange?.(e.target.value)}
-        className="w-full appearance-none px-3 py-2.5 text-sm border rounded-md bg-white cursor-pointer outline-none transition-all"
-        style={{ borderColor: "#dde3ec" }}
-        onFocus={(e) => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.10)` }}
-        onBlur={(e) => { e.target.style.borderColor = "#dde3ec"; e.target.style.boxShadow = "none" }}>
-        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      <select value={value} onChange={e => onChange?.(e.target.value)}
+        className="w-full appearance-none px-3 py-2.5 text-sm border rounded-md cursor-pointer outline-none transition-all"
+        style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}
+        onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
+        onBlur={e => { e.target.style.borderColor = inputBdr; e.target.style.boxShadow = "none" }}>
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
-      <svg className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <svg className="w-3.5 h-3.5 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none"
+        style={{ color: isDark ? "#64748b" : "#9ca3af" }}
+        fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
       </svg>
     </div>
@@ -115,27 +119,35 @@ function SaveBtn({ onClick, saved, label = "Save Changes" }) {
 }
 
 export default function AdminHero() {
+  const { isDark } = useTheme()
   const [slides, setSlides] = useState(DEFAULT_SLIDES)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-  const [error, setError] = useState("")
+  const [saving, setSaving]   = useState(false)
+  const [saved, setSaved]     = useState(false)
+  const [error, setError]     = useState("")
+
+  const inputBg  = isDark ? "#0f172a" : "white"
+  const inputBdr = isDark ? "#475569" : "#dde3ec"
+  const inputTxt = isDark ? "#f1f5f9" : "#111827"
+  const cardBg   = isDark ? "#1e293b" : "white"
+  const cardBdr  = isDark ? "#334155" : "#e8edf2"
+  const headerBg = isDark ? "#162032" : "#fafbfc"
+  const headerBdr = isDark ? "#2d3f55" : "#f1f5f9"
+  const subTxt   = isDark ? "#94a3b8" : "#64748b"
 
   useEffect(() => {
     api.getHeroSlides()
-      .then((data) => {
+      .then(data => {
         if (data?.slides && Array.isArray(data.slides)) {
           setSlides(data.slides.map((s, i) => ({ ...DEFAULT_SLIDES[i], ...s })))
         }
       })
-      .catch(() => {
-        // keep defaults
-      })
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
   const updateSlide = (index, field, value) => {
-    setSlides((prev) => prev.map((s, i) => (i === index ? { ...s, [field]: value } : s)))
+    setSlides(prev => prev.map((s, i) => i === index ? { ...s, [field]: value } : s))
   }
 
   const handleSave = async () => {
@@ -153,18 +165,17 @@ export default function AdminHero() {
   }
 
   const handleReset = () => {
-    if (confirm("Reset all slides to factory defaults?")) {
-      setSlides(DEFAULT_SLIDES)
-    }
+    if (confirm("Reset all slides to factory defaults?")) setSlides(DEFAULT_SLIDES)
   }
 
   if (loading) {
     return (
       <div className="space-y-5">
-        <h1 className="text-xl font-bold text-gray-900">Hero Section</h1>
-        <div className="bg-white rounded-xl p-10 text-center" style={{ border: "1px solid #e8edf2" }}>
-          <div className="w-8 h-8 border-2 border-gray-200 border-t-green-600 rounded-full animate-spin mx-auto mb-3" />
-          <p className="text-sm text-gray-500">Loading hero slides...</p>
+        <h1 className="text-xl font-bold" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>Hero Section</h1>
+        <div className="rounded-xl p-10 text-center" style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}` }}>
+          <div className="w-8 h-8 border-2 rounded-full animate-spin mx-auto mb-3"
+            style={{ borderColor: isDark ? "#334155" : "#e5e7eb", borderTopColor: isDark ? "#4ade80" : "#16a34a" }} />
+          <p className="text-sm" style={{ color: subTxt }}>Loading hero slides...</p>
         </div>
       </div>
     )
@@ -172,20 +183,25 @@ export default function AdminHero() {
 
   return (
     <div className="space-y-5">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-gray-900">Hero Section</h1>
+        <h1 className="text-xl font-bold" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>Hero Section</h1>
         <div className="flex items-center gap-2">
           <button onClick={handleReset}
-            className="px-3.5 py-2 text-sm font-semibold border rounded-md hover:bg-gray-50 transition-all text-gray-600"
-            style={{ borderColor: "#dde3ec" }}>
+            className="px-3.5 py-2 text-sm font-semibold border rounded-md transition-all"
+            style={{ borderColor: isDark ? "#374151" : "#dde3ec", color: isDark ? "#94a3b8" : "#6b7280", backgroundColor: isDark ? "#1e293b" : "white" }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#2d3f55" : "#f9fafb"}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "white"}>
             Reset to Defaults
           </button>
           <SaveBtn onClick={handleSave} saved={saved} label={saving ? "Saving..." : "Save Changes"} />
         </div>
       </div>
 
+      {/* Error */}
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-600 flex items-center gap-2">
+        <div className="rounded-xl px-4 py-3 text-sm flex items-center gap-2"
+          style={{ backgroundColor: isDark ? "rgba(239,68,68,0.1)" : "#fef2f2", border: `1px solid ${isDark ? "rgba(239,68,68,0.3)" : "#fecaca"}`, color: isDark ? "#f87171" : "#dc2626" }}>
           <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
@@ -193,49 +209,66 @@ export default function AdminHero() {
         </div>
       )}
 
+      {/* Slide cards */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         {slides.map((slide, idx) => (
-          <div key={slide.id} className="bg-white rounded-xl overflow-hidden" style={{ border: "1px solid #e8edf2", boxShadow: "0 1px 3px rgba(0,0,0,0.04)" }}>
-            <div className="flex items-center gap-3 px-5 py-4" style={{ borderBottom: "1px solid #f1f5f9", backgroundColor: "#fafbfc" }}>
-              <div className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+          <div key={slide.id} className="rounded-xl overflow-hidden"
+            style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
+
+            {/* Card header */}
+            <div className="flex items-center gap-3 px-5 py-4"
+              style={{ borderBottom: `1px solid ${headerBdr}`, backgroundColor: headerBg }}>
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
                 style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
                 {idx + 1}
               </div>
               <div>
-                <p className="text-sm font-bold text-gray-800">Slide {idx + 1}</p>
-                <p className="text-xs text-gray-400">{slide.tag}</p>
+                <p className="text-sm font-bold" style={{ color: isDark ? "#f1f5f9" : "#1e293b" }}>Slide {idx + 1}</p>
+                <p className="text-xs mt-0.5" style={{ color: subTxt }}>{slide.tag}</p>
               </div>
             </div>
+
+            {/* Fields */}
             <div className="p-5 space-y-4">
-              <Field label="Tag / Badge">
-                <Input value={slide.tag} onChange={(v) => updateSlide(idx, "tag", v)} placeholder="e.g. Fresh Flowers" />
+              <Field label="Tag / Badge" isDark={isDark}>
+                <Input value={slide.tag} onChange={v => updateSlide(idx, "tag", v)} placeholder="e.g. Fresh Flowers"
+                  isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
               </Field>
-              <Field label="Headline" hint="Use \\n for a line break">
-                <Input value={slide.headline} onChange={(v) => updateSlide(idx, "headline", v)} placeholder="e.g. Fresh Blooms" />
+
+              <Field label="Headline" hint='Use \n for a line break' isDark={isDark}>
+                <Input value={slide.headline} onChange={v => updateSlide(idx, "headline", v)} placeholder="e.g. Fresh Blooms"
+                  isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
               </Field>
-              <Field label="Description">
-                <Input value={slide.description} onChange={(v) => updateSlide(idx, "description", v)} rows={3} placeholder="Short description..." />
+
+              <Field label="Description" isDark={isDark}>
+                <Input value={slide.description} onChange={v => updateSlide(idx, "description", v)} rows={3} placeholder="Short description..."
+                  isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
               </Field>
+
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Primary CTA">
-                  <Input value={slide.cta} onChange={(v) => updateSlide(idx, "cta", v)} placeholder="e.g. Shop Flowers" />
+                <Field label="Primary CTA" isDark={isDark}>
+                  <Input value={slide.cta} onChange={v => updateSlide(idx, "cta", v)} placeholder="e.g. Shop Flowers"
+                    isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
                 </Field>
-                <Field label="Secondary CTA">
-                  <Input value={slide.ctaSecondary} onChange={(v) => updateSlide(idx, "ctaSecondary", v)} placeholder="e.g. View Occasions" />
+                <Field label="Secondary CTA" isDark={isDark}>
+                  <Input value={slide.ctaSecondary} onChange={v => updateSlide(idx, "ctaSecondary", v)} placeholder="e.g. View Occasions"
+                    isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
                 </Field>
               </div>
+
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Accent Color" hint="Hex color code">
+                <Field label="Accent Color" hint="Hex color code" isDark={isDark}>
                   <div className="flex items-center gap-2">
                     <input type="color" value={slide.accent}
-                      onChange={(e) => updateSlide(idx, "accent", e.target.value)}
-                      className="w-10 h-10 p-0 border-0 rounded cursor-pointer"
-                    />
-                    <Input value={slide.accent} onChange={(v) => updateSlide(idx, "accent", v)} placeholder="#2E8B34" />
+                      onChange={e => updateSlide(idx, "accent", e.target.value)}
+                      className="w-10 h-10 p-0 border-0 rounded cursor-pointer flex-shrink-0" />
+                    <Input value={slide.accent} onChange={v => updateSlide(idx, "accent", v)} placeholder="#2E8B34"
+                      isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
                   </div>
                 </Field>
-                <Field label="Background Image">
-                  <Select value={slide.image} onChange={(v) => updateSlide(idx, "image", v)} options={IMAGE_OPTIONS} />
+                <Field label="Background Image" isDark={isDark}>
+                  <Select value={slide.image} onChange={v => updateSlide(idx, "image", v)} options={IMAGE_OPTIONS}
+                    isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
                 </Field>
               </div>
             </div>
@@ -245,4 +278,3 @@ export default function AdminHero() {
     </div>
   )
 }
-

@@ -2,12 +2,10 @@ import { useState, useEffect } from "react"
 import { useTheme } from "../context/ThemeContext"
 import { api } from "../services/api.js"
 
-import heroBg1   from "../assets/hero/HeroBG1.png"
-import heroBg2   from "../assets/hero/HeroBG2.png"
-import heroBg3   from "../assets/hero/HeroBG3.png"
-import heroBg4   from "../assets/hero/HeroBG4.png"
-import sideHero1 from "../assets/hero/sideHero1.png"
-import sideHero2 from "../assets/hero/sideHero2.png"
+import heroBg1 from "../assets/hero/HeroBG1.png"
+import heroBg2 from "../assets/hero/HeroBG2.png"
+import heroBg3 from "../assets/hero/HeroBG3.png"
+import heroBg4 from "../assets/hero/HeroBG4.png"
 
 const IMAGE_MAP = {
   "HeroBG1.png": heroBg1,
@@ -74,12 +72,12 @@ function resolveImage(slide) {
 
 export default function HeroCarousel({ onNavigate }) {
   const { isDark } = useTheme()
-  const [heroes, setHeroes]     = useState(DEFAULT_HEROES)
-  const [current, setCurrent]   = useState(0)
-  const [prev, setPrev]         = useState(null)
+  const [heroes, setHeroes] = useState(DEFAULT_HEROES)
+  const [current, setCurrent] = useState(0)
+  const [prev, setPrev] = useState(null)
   const [animating, setAnimating] = useState(false)
   const [progress, setProgress] = useState(0)
-  const [paused, setPaused]     = useState(false)
+  const [paused, setPaused] = useState(false)
 
   useEffect(() => {
     api.getHeroSlides()
@@ -124,160 +122,104 @@ export default function HeroCarousel({ onNavigate }) {
   const hero     = heroes[current]
   const prevHero = prev !== null ? heroes[prev] : null
 
+  // Slightly deeper overlay in dark mode so text pops against the dimmed image
   const overlayGradient = isDark
     ? "linear-gradient(90deg, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.45) 55%, rgba(0,0,0,0.15) 100%)"
     : "linear-gradient(90deg, rgba(0,0,0,0.60) 0%, rgba(0,0,0,0.30) 50%, rgba(0,0,0,0.05) 100%)"
 
   return (
-    <div className="flex w-full items-stretch">
+    <div
+      className="relative w-full overflow-hidden"
+      style={{ height: "clamp(480px, 70vh, 720px)" }}
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      {/* Background images */}
+      {heroes.map((h, i) => (
+        <div key={h.id} className="absolute inset-0 transition-opacity duration-700"
+          style={{ backgroundImage: `url(${h.image})`, backgroundSize: "cover", backgroundPosition: "center", opacity: i === current ? 1 : 0, zIndex: 0 }} />
+      ))}
 
-      {/* ── LEFT: Carousel — full width on mobile/tablet, flex-1 on xl+ */}
-      <div
-        className="relative overflow-hidden flex-1"
-        style={{ minHeight: "clamp(280px, 52vw, 560px)" }}
-        onMouseEnter={() => setPaused(true)}
-        onMouseLeave={() => setPaused(false)}
-      >
-        {/* Background images */}
-        {heroes.map((h, i) => (
-          <div
-            key={h.id}
-            className="absolute inset-0 transition-opacity duration-700"
-            style={{
-              backgroundImage: `url(${h.image})`,
-              backgroundSize: "cover",
-              backgroundPosition: "center",
-              opacity: i === current ? 1 : 0,
-              zIndex: 0,
-            }}
-          />
-        ))}
+      {/* Overlay — deeper in dark mode */}
+      <div className="absolute inset-0 z-10" style={{ background: overlayGradient }} />
 
-        {/* Overlay */}
-        <div className="absolute inset-0 z-10" style={{ background: overlayGradient }} />
+      {/* Prev arrow */}
+      <button onClick={() => goTo((current - 1 + heroes.length) % heroes.length, "prev")}
+        className="absolute left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full flex items-center justify-center text-white border border-white/30 bg-black/20 hover:bg-black/40 backdrop-blur-sm transition-all duration-200 hover:scale-110"
+        aria-label="Previous slide">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+        </svg>
+      </button>
 
-        {/* Prev arrow */}
-        <button
-          onClick={() => goTo((current - 1 + heroes.length) % heroes.length, "prev")}
-          className="absolute left-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full flex items-center justify-center text-white border border-white/30 bg-black/20 hover:bg-black/40 backdrop-blur-sm transition-all duration-200 hover:scale-110"
-          aria-label="Previous slide"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-        </button>
+      {/* Next arrow */}
+      <button onClick={() => goTo((current + 1) % heroes.length, "next")}
+        className="absolute right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full flex items-center justify-center text-white border border-white/30 bg-black/20 hover:bg-black/40 backdrop-blur-sm transition-all duration-200 hover:scale-110"
+        aria-label="Next slide">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+        </svg>
+      </button>
 
-        {/* Next arrow */}
-        <button
-          onClick={() => goTo((current + 1) % heroes.length, "next")}
-          className="absolute right-4 top-1/2 -translate-y-1/2 z-30 w-10 h-10 rounded-full flex items-center justify-center text-white border border-white/30 bg-black/20 hover:bg-black/40 backdrop-blur-sm transition-all duration-200 hover:scale-110"
-          aria-label="Next slide"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-
-        {/* Content */}
-        <div className="relative z-20 h-full flex items-center">
-          <div className="hero-text-wrap w-full pl-16 sm:pl-20 lg:pl-24 pr-8">
-            <div className="max-w-xl">
-              {animating && prevHero && (
-                <div
-                  key={`prev-${prev}`}
-                  className="absolute"
-                  style={{ animation: "slideOutLeft 0.55s cubic-bezier(0.4,0,0.2,1) forwards" }}
-                >
-                  <span className="hero-tag inline-block text-xs font-bold tracking-[0.2em] uppercase px-3 py-1 rounded-full mb-4 text-white"
-                    style={{ backgroundColor: prevHero.accent + "55", border: `1px solid ${prevHero.accent}99` }}>
-                    {prevHero.tag}
-                  </span>
-                  <h1 className="hero-heading text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-4"
-                    style={{ textShadow: "0 2px 20px rgba(0,0,0,0.4)" }}>
-                    {prevHero.headline.split("\n").map((line, i) => <span key={i} className="block">{line}</span>)}
-                  </h1>
-                  <p className="hero-desc text-white/80 text-base sm:text-lg leading-relaxed mb-8">{prevHero.description}</p>
-                </div>
-              )}
-
-              <div key={`curr-${current}`}
-                style={{ animation: animating ? "slideInRight 0.6s cubic-bezier(0.4,0,0.2,1) forwards" : "none", opacity: animating ? 0 : 1 }}>
-                <span className="hero-tag inline-block text-xs font-bold tracking-[0.2em] uppercase px-3 py-1 rounded-full mb-5 text-white"
-                  style={{ backgroundColor: hero.accent + "55", border: `1px solid ${hero.accent}99` }}>
-                  {hero.tag}
+      {/* Content */}
+      <div className="relative z-20 h-full flex items-center">
+        <div className="w-full max-w-7xl mx-auto px-16 sm:px-20 lg:px-24">
+          <div className="max-w-xl">
+            {animating && prevHero && (
+              <div key={`prev-${prev}`} className="absolute"
+                style={{ animation: "slideOutLeft 0.55s cubic-bezier(0.4,0,0.2,1) forwards" }}>
+                <span className="inline-block text-xs font-bold tracking-[0.2em] uppercase px-3 py-1 rounded-full mb-4 text-white"
+                  style={{ backgroundColor: prevHero.accent + "55", border: `1px solid ${prevHero.accent}99` }}>
+                  {prevHero.tag}
                 </span>
-                <h1 className="hero-heading text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-5"
-                  style={{ textShadow: "0 2px 20px rgba(0,0,0,0.5)" }}>
-                  {hero.headline.split("\n").map((line, i) => <span key={i} className="block">{line}</span>)}
+                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-4" style={{ textShadow: "0 2px 20px rgba(0,0,0,0.4)" }}>
+                  {prevHero.headline.split("\n").map((line, i) => <span key={i} className="block">{line}</span>)}
                 </h1>
-                <p className="hero-desc text-white/90 text-base sm:text-lg leading-relaxed mb-8 max-w-md">{hero.description}</p>
-                <div className="hero-btns flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
-                  <button onClick={() => onNavigate && onNavigate("shop")}
-                    className="hero-btn w-full sm:w-auto px-7 py-3.5 text-sm font-bold text-white rounded-full shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl text-center"
-                    style={{ backgroundColor: hero.accent }}>
-                    {hero.cta}
-                  </button>
-                  <button onClick={() => onNavigate && hero.ctaSecondaryNav && onNavigate(hero.ctaSecondaryNav)}
-                    className="hero-btn w-full sm:w-auto px-7 py-3.5 text-sm font-semibold text-white rounded-full border border-white/40 backdrop-blur-sm hover:bg-white/10 transition-all duration-200 text-center">
-                    {hero.ctaSecondary}
-                  </button>
-                </div>
+                <p className="text-white/80 text-base sm:text-lg leading-relaxed mb-8">{prevHero.description}</p>
+              </div>
+            )}
+
+            <div key={`curr-${current}`}
+              style={{ animation: animating ? "slideInRight 0.6s cubic-bezier(0.4,0,0.2,1) forwards" : "none", opacity: animating ? 0 : 1 }}>
+              <span className="inline-block text-xs font-bold tracking-[0.2em] uppercase px-3 py-1 rounded-full mb-5 text-white"
+                style={{ backgroundColor: hero.accent + "55", border: `1px solid ${hero.accent}99` }}>
+                {hero.tag}
+              </span>
+              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-5" style={{ textShadow: "0 2px 20px rgba(0,0,0,0.5)" }}>
+                {hero.headline.split("\n").map((line, i) => <span key={i} className="block">{line}</span>)}
+              </h1>
+              <p className="text-white/90 text-base sm:text-lg leading-relaxed mb-8 max-w-md">{hero.description}</p>
+              <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
+                <button
+                  onClick={() => onNavigate && onNavigate("shop")}
+                  className="w-full sm:w-auto px-7 py-3.5 text-sm font-bold text-white rounded-full shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl text-center"
+                  style={{ backgroundColor: hero.accent }}>
+                  {hero.cta}
+                </button>
+                <button
+                  onClick={() => onNavigate && hero.ctaSecondaryNav && onNavigate(hero.ctaSecondaryNav)}
+                  className="w-full sm:w-auto px-7 py-3.5 text-sm font-semibold text-white rounded-full border border-white/40 backdrop-blur-sm hover:bg-white/10 transition-all duration-200 text-center">
+                  {hero.ctaSecondary}
+                </button>
               </div>
             </div>
           </div>
         </div>
-
-        {/* Dot indicators */}
-        <div className="absolute bottom-6 left-0 right-0 z-20 flex items-center justify-center gap-2.5">
-          {heroes.map((_, i) => (
-            <button
-              key={i}
-              onClick={() => goTo(i, i > current ? "next" : "prev")}
-              className="relative overflow-hidden rounded-full transition-all duration-300 flex-shrink-0"
-              style={{
-                width: i === current ? "28px" : "8px",
-                height: "8px",
-                backgroundColor: i === current ? "white" : "rgba(255,255,255,0.40)",
-              }}
-              aria-label={`Go to slide ${i + 1}`}
-            >
-              {i === current && !paused && (
-                <div
-                  className="absolute inset-y-0 left-0 rounded-full"
-                  style={{ backgroundColor: "#4ade80", width: `${progress}%`, transition: "width 0.1s linear" }}
-                />
-              )}
-            </button>
-          ))}
-        </div>
       </div>
 
-      {/* ── RIGHT: Two stacked side cards — hidden below xl ──────────── */}
-      <div className="hidden xl:flex xl:flex-col xl:flex-shrink-0" style={{ width: "35%", borderLeft: "6px solid white" }}>
-
-        {/* Top card — sideHero1 */}
-        <div style={{ aspectRatio: "594 / 320", overflow: "hidden" }}>
-          <img
-            src={sideHero1}
-            alt=""
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-            draggable={false}
-          />
-        </div>
-
-        {/* Partition */}
-        <div style={{ height: "6px", backgroundColor: "white", flexShrink: 0 }} />
-
-        {/* Bottom card — sideHero2 */}
-        <div style={{ aspectRatio: "594 / 320", overflow: "hidden" }}>
-          <img
-            src={sideHero2}
-            alt=""
-            style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-            draggable={false}
-          />
-        </div>
-
+      {/* Dot indicators */}
+      <div className="absolute bottom-6 left-0 right-0 z-20 flex items-center justify-center gap-2.5">
+        {heroes.map((_, i) => (
+          <button key={i} onClick={() => goTo(i, i > current ? "next" : "prev")}
+            className="relative overflow-hidden rounded-full transition-all duration-300 flex-shrink-0"
+            style={{ width: i === current ? "28px" : "8px", height: "8px", backgroundColor: i === current ? "white" : "rgba(255,255,255,0.40)" }}
+            aria-label={`Go to slide ${i + 1}`}>
+            {i === current && !paused && (
+              <div className="absolute inset-y-0 left-0 rounded-full"
+                style={{ backgroundColor: "#4ade80", width: `${progress}%`, transition: "width 0.1s linear" }} />
+            )}
+          </button>
+        ))}
       </div>
 
       <style>{`
@@ -288,22 +230,6 @@ export default function HeroCarousel({ onNavigate }) {
         @keyframes slideInRight {
           0%   { opacity: 0; transform: translateX(60px) scale(0.97); }
           100% { opacity: 1; transform: translateX(0) scale(1); }
-        }
-        /* Mobile portrait */
-        @media (max-width: 767px) {
-          .hero-text-wrap { padding-left: 3rem !important; padding-right: 1.5rem !important; }
-          .hero-heading   { font-size: clamp(1.8rem, 6vw, 2.5rem) !important; }
-          .hero-desc      { font-size: 0.875rem !important; margin-bottom: 1.25rem !important; }
-          .hero-btns      { flex-direction: column !important; }
-        }
-        /* Landscape mobile */
-        @media (max-height: 520px) and (orientation: landscape) {
-          .hero-text-wrap { padding-top: 0.5rem !important; }
-          .hero-tag       { margin-bottom: 0.5rem !important; }
-          .hero-heading   { font-size: clamp(1.4rem, 4vw, 2rem) !important; margin-bottom: 0.5rem !important; }
-          .hero-desc      { display: none !important; }
-          .hero-btns      { gap: 0.5rem !important; }
-          .hero-btn       { padding: 0.6rem 1.25rem !important; font-size: 0.8rem !important; }
         }
       `}</style>
     </div>

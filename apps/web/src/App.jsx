@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
-import { ThemeProvider } from "./context/ThemeContext";
+import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import Navbar from "./components/Navbar";
 import Home from "./pages/customer/Home";
 import Login from "./pages/Login";
@@ -38,47 +38,47 @@ import Profile from "./pages/Profile";
 const DARK_CSS = `
   /* ── Base ── */
   [data-theme="dark"] body {
-    background: #111827;
+    background: #0f172a;
     color: #e5e7eb;
   }
 
   /* ── Tailwind bg overrides ── */
-  [data-theme="dark"] .bg-white      { background-color: #111827 !important; }
-  [data-theme="dark"] .bg-gray-50    { background-color: #1a2332 !important; }
+  [data-theme="dark"] .bg-white      { background-color: #1e293b !important; }
+  [data-theme="dark"] .bg-gray-50    { background-color: #162032 !important; }
   [data-theme="dark"] .bg-gray-100   { background-color: #1e293b !important; }
-  [data-theme="dark"] .min-h-screen  { background-color: #111827 !important; }
+  [data-theme="dark"] .min-h-screen  { background-color: #0f172a !important; }
 
   /* ── Tailwind text overrides ── */
   [data-theme="dark"] .text-gray-900,
   [data-theme="dark"] .text-gray-800,
-  [data-theme="dark"] .text-gray-700 { color: #e5e7eb !important; }
+  [data-theme="dark"] .text-gray-700 { color: #f1f5f9 !important; }
 
   [data-theme="dark"] .text-gray-600,
-  [data-theme="dark"] .text-gray-500 { color: #9ca3af !important; }
+  [data-theme="dark"] .text-gray-500 { color: #cbd5e1 !important; }
 
-  [data-theme="dark"] .text-gray-400 { color: #6b7280 !important; }
+  [data-theme="dark"] .text-gray-400 { color: #94a3b8 !important; }
 
   /* ── Tailwind border overrides ── */
   [data-theme="dark"] .border,
   [data-theme="dark"] .border-b,
   [data-theme="dark"] .border-t,
   [data-theme="dark"] .border-gray-100,
-  [data-theme="dark"] .border-gray-200 { border-color: #2d3748 !important; }
+  [data-theme="dark"] .border-gray-200 { border-color: #334155 !important; }
 
-  [data-theme="dark"] .divide-gray-100 > * + * { border-color: #2d3748 !important; }
+  [data-theme="dark"] .divide-gray-100 > * + * { border-color: #334155 !important; }
 
   /* ── Inputs ── */
   [data-theme="dark"] input,
   [data-theme="dark"] textarea,
   [data-theme="dark"] select {
-    background-color: #1a2332 !important;
-    color: #e5e7eb !important;
-    border-color: #2d3748 !important;
+    background-color: #0f172a !important;
+    color: #f1f5f9 !important;
+    border-color: #475569 !important;
   }
   [data-theme="dark"] input::placeholder,
-  [data-theme="dark"] textarea::placeholder { color: #6b7280 !important; }
+  [data-theme="dark"] textarea::placeholder { color: #64748b !important; }
 
-  /* ── Smooth transitions (targeted — does NOT override transform/scale) ── */
+  /* ── Smooth transitions ── */
   [data-theme="dark"] button,
   [data-theme="dark"] a,
   [data-theme="dark"] nav,
@@ -102,6 +102,7 @@ injectDarkCSS();
 
 function AppContent() {
   const { user } = useAuth();
+  const { forceMode, clearForce } = useTheme();
   const [page, setPage] = useState("home");
   const [cartCount, setCartCount] = useState(0);
   const [prevPage, setPrevPage] = useState("login");
@@ -121,6 +122,17 @@ function AppContent() {
       }
     }
   }, [user]);
+
+  useEffect(() => {
+    if (AUTH_PAGES.includes(page)) {
+      // Auth pages always light
+      forceMode(false);
+    } else {
+      // Admin and customer pages both follow user preference
+      // Since logout resets preference to light, admin defaults to light after login
+      clearForce();
+    }
+  }, [page]);
 
   const navigate = (to, orderId = null) => {
     if (orderId) setSelectedOrderId(orderId);
