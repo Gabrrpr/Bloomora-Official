@@ -202,13 +202,18 @@ useEffect(() => {
     if (wsRef.current) return;
 
     // 4. Connect using the guaranteed ID
+    // 4. Connect using the guaranteed ID AND the Token!
     console.log(`Attempting to connect Admin WS with ID: ${adminId}`);
-    const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/${adminId}`);
+    
+    // Add the token to the URL so the Python backend lets you in!
+    const wsUrl = `ws://localhost:8000/api/v1/chats/ws/${adminId}?token=${user.token}`;
+    const websocket = new WebSocket(wsUrl);
     
     wsRef.current = websocket;
 
     websocket.onopen = () => console.log('✅ Admin WS connected to server!');
     websocket.onmessage = (event) => {
+      // ... (keep your existing onmessage logic here) ...
       const data = JSON.parse(event.data);
       console.log('📬 Admin WS message received:', data);
 
@@ -249,15 +254,20 @@ useEffect(() => {
     };
     
     websocket.onerror = (err) => console.error('❌ Admin WS error:', err);
-    websocket.onclose = () => { 
-        console.log("Admin WS Closed.");
+    websocket.onclose = (event) => { 
+        console.log(`🚪 Admin WS Closed. Code: ${event.code}, Reason: ${event.reason}`);
         wsRef.current = null; 
     };
 
     setWs(websocket);
-    return () => websocket.close();
+    
+    // THE SAFE CLEANUP: Only close if it's completely open, otherwise let the browser drop it naturally
+    return () => {
+        if (websocket.readyState === WebSocket.OPEN) {
+            websocket.close();
+        }
+    };
   }, [user, loadConversations]);
-
   // ── Load conversations on mount ───────────────────────────────────────────
   useEffect(() => {
     if (user && ['admin', 'staff'].includes(user.role)) {

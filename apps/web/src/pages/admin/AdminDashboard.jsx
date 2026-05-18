@@ -297,6 +297,7 @@ function BranchBadge({ branch }) {
 
 // ─── Revenue Chart ────────────────────────────────────────────────────────────
 // ─── Revenue Chart ────────────────────────────────────────────────────────────
+// ─── Revenue Chart ────────────────────────────────────────────────────────────
 function RevenueChart({ branch }) {
   const { isDark } = useTheme();
   const t = useTokens(isDark);
@@ -337,7 +338,7 @@ function RevenueChart({ branch }) {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // 2. We no longer abort if rows is empty! We process it normally so empty branches show a live flat chart.
+        // Process data normally so empty branches show a live flat chart
         if (rows && rows.length > 0) {
           rows.forEach(row => {
             const date = new Date(row.period);
@@ -375,15 +376,38 @@ function RevenueChart({ branch }) {
         }
 
         const allValues = [...manilaData, ...pampangaData];
-        const maxVal = Math.max(...allValues, 1); 
+        const maxDataValue = Math.max(...allValues, 0);
 
-        const calculatedManila = manilaData.map(v => v > 0 ? Math.max(10, Math.round((v / maxVal) * 90)) : 0);
-        const calculatedPampanga = pampangaData.map(v => v > 0 ? Math.max(10, Math.round((v / maxVal) * 90)) : 0);
+        // 🚀 DYNAMIC Y-AXIS GENERATOR
+        // Determine a clean "ceiling" for the chart so the lines divide evenly
+        let chartCeiling = 15000;
+        if (maxDataValue > 0) {
+          if (maxDataValue <= 1500) chartCeiling = 1500;
+          else if (maxDataValue <= 3000) chartCeiling = 3000;
+          else if (maxDataValue <= 6000) chartCeiling = 6000;
+          else chartCeiling = Math.ceil(maxDataValue / 3000) * 3000;
+        }
 
-        // Always set the real data, even if it's all 0s, to keep the "Live Data" badge active
+        const formatLabel = (num) => {
+          if (num >= 1000000) return `₱${(num / 1000000).toFixed(1).replace('.0', '')}M`;
+          if (num >= 1000) return `₱${(num / 1000).toFixed(1).replace('.0', '')}k`;
+          return `₱${num}`;
+        };
+
+        const dynamicYAxis = maxDataValue > 0 ? [
+          formatLabel(chartCeiling),
+          formatLabel((chartCeiling * 2) / 3),
+          formatLabel(chartCeiling / 3),
+          "₱0"
+        ] : period.yAxis;
+
+        // 🚀 SCALE BARS AGAINST THE CEILING (Not just the highest data point!)
+        const calculatedManila = manilaData.map(v => v > 0 ? Math.max(2, Math.round((v / chartCeiling) * 90)) : 0);
+        const calculatedPampanga = pampangaData.map(v => v > 0 ? Math.max(2, Math.round((v / chartCeiling) * 90)) : 0);
+
         setChartData({
           labels: actualLabels,
-          yAxis: period.yAxis,
+          yAxis: dynamicYAxis,
           manila: calculatedManila,
           pampanga: calculatedPampanga,
           raw: { manila: manilaData, pampanga: pampangaData },
@@ -391,16 +415,15 @@ function RevenueChart({ branch }) {
       })
       .catch(err => {
         console.error("❌ REVENUE FETCH ERROR:", err);
-        // Only trigger the "Static Data" badge if the API completely crashes
-        setChartData(null); 
+        setChartData(null);
       })
       .finally(() => setLoading(false));
   }, [periodKey, branch]);
 
   const currentIdx = (() => {
     // 🚀 In a Rolling 7 Days chart, "Today" is ALWAYS the very last column (index 6)!
-    if (periodKey === "week") return 6; 
-    
+    if (periodKey === "week") return 6;
+
     const d = new Date();
     if (periodKey === "month") return d.getMonth();
     if (periodKey === "year") return staticPeriod.labels.indexOf(String(d.getFullYear()));
@@ -444,23 +467,23 @@ function RevenueChart({ branch }) {
 
       <div className="flex gap-2" style={{ height: "184px" }}>
         <div className="flex flex-col justify-between flex-shrink-0 text-right" style={{ width: "40px", paddingBottom: "24px" }}>
-          {display.yAxis.map(l => (
-            <span key={l} className="text-[10px] leading-none" style={{ color: t.textMuted }}>{l}</span>
+          {display.yAxis.map((l, idx) => (
+            <span key={`y-${l}-${idx}`} className="text-[10px] leading-none" style={{ color: t.textMuted }}>{l}</span>
           ))}
         </div>
 
         <div className="flex-1 flex flex-col">
           <div className="flex-1 relative flex items-stretch gap-1" style={{ borderLeft: `1px solid ${t.chartGrid}`, borderBottom: `1px solid ${t.chartGrid}`, paddingLeft: "4px", paddingRight: "4px" }}>
             {[1, 2, 3].map(i => (
-              <div key={i} className="absolute left-0 right-0 pointer-events-none" style={{ top: `${(i / 4) * 100}%`, borderTop: `1px dashed ${t.chartDash}` }} />
+              <div key={`grid-${i}`} className="absolute left-0 right-0 pointer-events-none" style={{ top: `${(i / 4) * 100}%`, borderTop: `1px dashed ${t.chartDash}` }} />
             ))}
-            
+
             {display.labels.map((lbl, i) => {
               const isCurrent = i === currentIdx;
-              
+
               if (branch === "all") {
                 return (
-                  <div key={lbl} className="flex-1 flex items-end gap-0.5 group h-full" style={{ minWidth: 0 }}
+                  <div key={`bar-all-${lbl}-${i}`} className="flex-1 flex items-end gap-0.5 group h-full" style={{ minWidth: 0 }}
                     title={isLive ? `Manila: ₱${(chartData.raw?.manila[i] || 0).toLocaleString()} | Pampanga: ₱${(chartData.raw?.pampanga[i] || 0).toLocaleString()}` : ""}>
                     <div className="flex-1 rounded-t-sm transition-all duration-500 hover:opacity-80"
                       style={{ height: `${display.manila[i]}%`, background: isCurrent ? "linear-gradient(180deg,#3b82f6,#1d4ed8)" : isDark ? "#1d3a5f" : "#bfdbfe", minHeight: "3px" }} />
@@ -478,7 +501,7 @@ function RevenueChart({ branch }) {
                 : isCurrent ? "linear-gradient(180deg,#a78bfa,#6d28d9)" : isDark ? "#2e1a4a" : "#ddd6fe";
 
               return (
-                <div key={lbl} className="flex-1 flex items-end group h-full" style={{ minWidth: 0 }}
+                <div key={`bar-single-${lbl}-${i}`} className="flex-1 flex items-end group h-full" style={{ minWidth: 0 }}
                   title={isLive ? `₱${rawVal.toLocaleString()}` : ""}>
                   <div className="w-full rounded-t-sm transition-all duration-500 hover:opacity-80"
                     style={{ height: `${h}%`, background: bg, minHeight: "3px" }} />
@@ -489,7 +512,7 @@ function RevenueChart({ branch }) {
 
           <div className="flex gap-1 pt-1.5" style={{ paddingLeft: "4px", paddingRight: "4px" }}>
             {display.labels.map((lbl, i) => (
-              <div key={`${lbl}-${i}`} className="flex-1 flex justify-center" style={{ minWidth: 0 }}>
+              <div key={`label-${lbl}-${i}`} className="flex-1 flex justify-center" style={{ minWidth: 0 }}>
                 <span className="text-[9px] font-medium truncate" style={{ color: i === currentIdx ? (isDark ? "#4ade80" : "#0C573E") : t.textMuted }}>
                   {periodKey === "month" ? lbl.slice(0, 1) : periodKey === "year" ? lbl.slice(2) : lbl}
                 </span>
@@ -500,7 +523,7 @@ function RevenueChart({ branch }) {
       </div>
     </div>
   );
-} 
+}
 
 // ─── Recent Orders Card ───────────────────────────────────────────────────────
 function RecentOrdersCard({ branch, t, orders, loading }) {
