@@ -4,6 +4,7 @@ from sqlalchemy import or_, func
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 import uuid
+import secrets
 
 from app.core.dependencies import get_db, get_current_user
 from app.models import User, RoleEnum, BranchEnum
@@ -21,7 +22,6 @@ def require_admin_or_staff(current_user: User):
 def serialize_user(u: User) -> dict:
     is_staff_verified = getattr(u, 'is_staff_verified', True)
     
-    # Cleaned up staff status logic for better readability
     if not getattr(u, 'is_active', False):
         staff_status = "inactive"
     elif getattr(u, 'is_verified', False) and is_staff_verified:
@@ -45,7 +45,6 @@ def serialize_user(u: User) -> dict:
         "is_staff_verified": is_staff_verified,
         "staff_status": staff_status,
         "must_change_password": getattr(u, 'must_change_password', False),
-        # Using cleaner Python ternary operators
         "created_at": u.created_at.isoformat() if getattr(u, 'created_at', None) else None,
         "updated_at": u.updated_at.isoformat() if getattr(u, 'updated_at', None) else None,
     }
@@ -60,12 +59,15 @@ class StaffCreateRequest(BaseModel):
     middle_name: Optional[str] = None
     last_name: str
     username: Optional[str] = None
-    role: str  # admin, staff, delivery
+    role: str  
     branch: Optional[str] = None
     email: EmailStr
     phone_number: Optional[str] = None
+    # 🚀 REMOVED: password and force_password_change
+
+class StaffActivateRequest(BaseModel):
+    token: str
     password: str
-    force_password_change: bool = True
 
 class UserUpdateRequest(BaseModel):
     first_name: Optional[str] = None
@@ -79,33 +81,29 @@ class UserUpdateRequest(BaseModel):
     is_verified: Optional[bool] = None
     must_change_password: Optional[bool] = None
     
+
+# ── Routes ───────────────────────────────────────────────────────────────────
 @router.get("/", response_model=UserListResponse)
 def list_users(
-    role: Optional[str] = Query(None, description="Filter by role: customer, staff, admin, delivery"),
+    role: Optional[str] = Query(None, description="Filter by role"),
     branch: Optional[str] = Query(None, description="Filter by branch"),
-    status: Optional[str] = Query(None, description="Filter by status: active, inactive, unverified"),
-    search: Optional[str] = Query(None, description="Search by name, email, or username"),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    search: Optional[str] = Query(None, description="Search term"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """List users with filters. Admin/Staff only."""
     require_admin_or_staff(current_user)
-
     query = db.query(User)
 
     if role:
-        try:
-            query = query.filter(User.role == RoleEnum(role.lower()))
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
+        try: query = query.filter(User.role == RoleEnum(role.lower()))
+        except ValueError: raise HTTPException(status_code=400, detail=f"Invalid role: {role}")
 
     if branch:
-        try:
-            query = query.filter(User.branch == BranchEnum(branch.lower()))
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid branch: {branch}")
+        try: query = query.filter(User.branch == BranchEnum(branch.lower()))
+        except ValueError: raise HTTPException(status_code=400, detail=f"Invalid branch: {branch}")
 
     if status:
         status_lower = status.lower()
@@ -143,40 +141,33 @@ def create_staff(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Create a new staff/admin/delivery account. Admin/Staff only."""
+    """Create a new staff/admin/delivery account. Generates an invite link."""
     require_admin_or_staff(current_user)
 
-    # Validate role
-    try:
-        role_enum = RoleEnum(payload.role.lower())
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid role: {payload.role}")
+    try: role_enum = RoleEnum(payload.role.lower())
+    except ValueError: raise HTTPException(status_code=400, detail=f"Invalid role: {payload.role}")
 
     if role_enum == RoleEnum.customer:
         raise HTTPException(status_code=400, detail="Use customer registration for customer accounts.")
 
-    # Validate branch if provided
     branch_enum = None
     if payload.branch:
-        try:
-            branch_enum = BranchEnum(payload.branch.lower())
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid branch: {payload.branch}")
+        try: branch_enum = BranchEnum(payload.branch.lower())
+        except ValueError: raise HTTPException(status_code=400, detail=f"Invalid branch: {payload.branch}")
 
-    # Check email uniqueness
     if db.query(User).filter(User.email == payload.email).first():
         raise HTTPException(status_code=400, detail="Email already registered.")
 
-    # Check username uniqueness
-    username = payload.username
-    if not username:
-        username = generate_username(payload.email, db)
+    username = payload.username or generate_username(payload.email, db)
     if db.query(User).filter(User.username == username).first():
         raise HTTPException(status_code=400, detail="Username already taken.")
 
-    # Staff confirmation setup
-    token = str(uuid.uuid4())
+    # 🚀 Use a highly secure token instead of a UUID
+    token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    
+    # Generate a random dummy password hash since they haven't set one yet
+    dummy_hash = hash_password(secrets.token_urlsafe(16))
 
     new_user = User(
         id=uuid.uuid4(),
@@ -186,67 +177,109 @@ def create_staff(
         username=username,
         email=payload.email,
         phone_number=payload.phone_number,
-        password_hash=hash_password(payload.password),
+        password_hash=dummy_hash, # Temporary!
         role=role_enum,
         branch=branch_enum,
         is_active=True,
-        is_verified=True,
-        must_change_password=payload.force_password_change,
+        is_verified=False, # 🚀 Set to False so they are "Pending"
         is_staff_verified=False,
         staff_verification_token=token,
         staff_token_expires_at=expires_at,
     )
 
-    # Send confirmation email
-    verify_url = f"http://localhost:8000/api/v1/users/staff/verify?token={token}"
-    sent, error = send_staff_confirm_email(payload.email, payload.first_name, verify_url)
-    if not sent:
-        raise HTTPException(status_code=500, detail=f"Failed to send confirmation email: {error}")
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
 
-    return {"status": "success", "user_id": str(new_user.id), "message": "Staff account created successfully. Confirmation email sent."}
+    # 🚀 Send confirmation email pointing to the REACT FRONTEND
+    verify_url = f"http://localhost:5173/activate-staff?token={token}"
+    sent, error = send_staff_confirm_email(payload.email, payload.first_name, verify_url)
+    
+    if not sent:
+        raise HTTPException(status_code=500, detail=f"Failed to send confirmation email: {error}")
 
-@router.get("/staff/verify")
-def staff_verify(token: str = Query(..., description="Staff verification token"), db: Session = Depends(get_db)):
-    """Verify staff account via email token."""
+    return {"status": "success", "user_id": str(new_user.id), "message": "Staff invited successfully."}
+
+
+@router.post("/{user_id}/resend-invite", response_model=dict)
+def resend_staff_invite(
+    user_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Resend the invite email with a fresh token."""
+    require_admin_or_staff(current_user)
+
+    try: user_uuid = uuid.UUID(user_id)
+    except ValueError: raise HTTPException(status_code=400, detail="Invalid user ID format")
+
+    user = db.query(User).filter(User.id == user_uuid).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found.")
+    
+    if getattr(user, 'is_staff_verified', False):
+        raise HTTPException(status_code=400, detail="User is already verified and active.")
+
+    # Generate fresh token
+    new_token = secrets.token_urlsafe(32)
+    user.staff_verification_token = new_token
+    user.staff_token_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
+    db.commit()
+
+    # Send email
+    verify_url = f"http://localhost:5173/activate-staff?token={new_token}"
+    sent, error = send_staff_confirm_email(user.email, user.first_name, verify_url)
+    
+    if not sent:
+        raise HTTPException(status_code=500, detail=f"Failed to resend confirmation email: {error}")
+
+    return {"status": "success", "message": "Invitation email resent successfully."}
+
+
+@router.post("/staff/activate")
+def activate_staff_account(payload: StaffActivateRequest, db: Session = Depends(get_db)):
+    """The endpoint the React frontend hits when the staff sets their new password."""
+    
+    # 1. Find user by the unique token
     user = db.query(User).filter(
-        User.staff_verification_token == token,
+        User.staff_verification_token == payload.token,
         User.staff_token_expires_at > datetime.now(timezone.utc)
     ).first()
     
     if not user:
-        raise HTTPException(status_code=400, detail="Invalid or expired verification token.")
+        raise HTTPException(status_code=400, detail="Invalid or expired verification link. Please ask your administrator to resend the invite.")
     
+    # 2. Securely hash the password the user provided
+    user.password_hash = hash_password(payload.password)
+    
+    # 3. Mark them as officially active!
+    user.is_verified = True
     user.is_staff_verified = True
+    user.must_change_password = False
+    
+    # 4. Destroy the token so it can't be reused
     user.staff_verification_token = None
     user.staff_token_expires_at = None
     user.updated_at = datetime.now(timezone.utc)
-    db.commit()
     
-    return {"status": "success", "message": "Staff account verified successfully. You can now login."}
+    db.commit()
+    return {"status": "success", "message": "Account activated successfully. You can now log in."}
 
 
 @router.get("/{user_id}", response_model=dict)
 def get_user(
     user_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user) # Security fix: Requires auth
+    current_user: User = Depends(get_current_user)
 ):
-    """Get user by ID. Requires auth. Users can only view themselves unless Admin/Staff."""
-    try:
-        user_uuid = uuid.UUID(user_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid user ID format")
+    try: user_uuid = uuid.UUID(user_id)
+    except ValueError: raise HTTPException(status_code=400, detail="Invalid user ID format")
     
-    # Security check: Make sure standard users can't pull other people's PII
     if str(current_user.id) != user_id and current_user.role not in [RoleEnum.admin, RoleEnum.staff]:
         raise HTTPException(status_code=403, detail="You do not have permission to view this profile.")
 
     user = db.query(User).filter(User.id == user_uuid).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    if not user: raise HTTPException(status_code=404, detail="User not found")
     
     return serialize_user(user)
 
@@ -257,24 +290,16 @@ def update_me(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update the current user's own profile."""
     user = current_user
-
-    if payload.first_name is not None:
-        user.first_name = payload.first_name
-    if payload.middle_name is not None:
-        user.middle_name = payload.middle_name
-    if payload.last_name is not None:
-        user.last_name = payload.last_name
-    if payload.phone_number is not None:
-        user.phone_number = payload.phone_number
-    if payload.address is not None:
-        user.address = payload.address
+    if payload.first_name is not None: user.first_name = payload.first_name
+    if payload.middle_name is not None: user.middle_name = payload.middle_name
+    if payload.last_name is not None: user.last_name = payload.last_name
+    if payload.phone_number is not None: user.phone_number = payload.phone_number
+    if payload.address is not None: user.address = payload.address
 
     user.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(user)
-
     return {"status": "success", "message": "Profile updated successfully.", "user": serialize_user(user)}
 
 
@@ -285,46 +310,29 @@ def update_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update a user. Admin/Staff only."""
     require_admin_or_staff(current_user)
-
     user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found.")
+    if not user: raise HTTPException(status_code=404, detail="User not found.")
 
-    if payload.first_name is not None:
-        user.first_name = payload.first_name
-    if payload.middle_name is not None:
-        user.middle_name = payload.middle_name
-    if payload.last_name is not None:
-        user.last_name = payload.last_name
-    if payload.phone_number is not None:
-        user.phone_number = payload.phone_number
-    if payload.address is not None:
-        user.address = payload.address
-    if payload.is_active is not None:
-        user.is_active = payload.is_active
-    if payload.is_verified is not None:
-        user.is_verified = payload.is_verified
-    if payload.must_change_password is not None:
-        user.must_change_password = payload.must_change_password
+    if payload.first_name is not None: user.first_name = payload.first_name
+    if payload.middle_name is not None: user.middle_name = payload.middle_name
+    if payload.last_name is not None: user.last_name = payload.last_name
+    if payload.phone_number is not None: user.phone_number = payload.phone_number
+    if payload.address is not None: user.address = payload.address
+    if payload.is_active is not None: user.is_active = payload.is_active
+    if payload.is_verified is not None: user.is_verified = payload.is_verified
+    if payload.must_change_password is not None: user.must_change_password = payload.must_change_password
     if payload.role is not None:
-        try:
-            user.role = RoleEnum(payload.role.lower())
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid role: {payload.role}")
+        try: user.role = RoleEnum(payload.role.lower())
+        except ValueError: raise HTTPException(status_code=400, detail=f"Invalid role: {payload.role}")
     if payload.branch is not None:
-        if payload.branch == "":
-            user.branch = None
+        if payload.branch == "": user.branch = None
         else:
-            try:
-                user.branch = BranchEnum(payload.branch.lower())
-            except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid branch: {payload.branch}")
+            try: user.branch = BranchEnum(payload.branch.lower())
+            except ValueError: raise HTTPException(status_code=400, detail=f"Invalid branch: {payload.branch}")
 
     user.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(user)
 
     return {"status": "success", "message": "User updated successfully.", "user": serialize_user(user)}
-

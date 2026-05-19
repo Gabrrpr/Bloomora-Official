@@ -149,7 +149,7 @@ def send_staff_confirm_email(to_email: str, first_name: str, verify_url: str):
                                     <div style="width: 64px; height: 64px; background: rgba(255,255,255,0.2); border-radius: 50%; margin: 0 auto 16px; display: inline-flex; align-items: center; justify-content: center; font-size: 32px;">
                                         👤
                                     </div>
-                                    <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">Bloomora Staff</h1>
+                                    <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">Esting's Staff</h1>
                                     <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0; font-size: 14px;">Account Activation</p>
                                 </td>
                             </tr>

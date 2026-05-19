@@ -45,15 +45,40 @@ function useDark() {
 }
 
 // ── Form primitives ───────────────────────────────────────────────────────────
-function FInput({ placeholder, value, onChange, type = "text", hint, d }) {
+// ── Form primitives ───────────────────────────────────────────────────────────
+function FInput({ placeholder, value, onChange, type = "text", hint, error, d }) {
+  // 🚀 Logic to decide border color
+  const borderColor = error ? "#ef4444" : d.inputBdr;
+  
   return (
     <div>
-      <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+      <input 
+        type={type} 
+        value={value} 
+        onChange={e => onChange(e.target.value)} 
+        placeholder={placeholder}
         className="w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all"
-        style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }}
-        onFocus={e => { e.target.style.borderColor="#4ade80"; e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.2)" }}
-        onBlur={e => { e.target.style.borderColor=d.inputBdr; e.target.style.boxShadow="none" }}/>
-      {hint && <p className="text-[10px] mt-0.5" style={{ color:d.muted }}>{hint}</p>}
+        style={{ 
+          borderColor: borderColor, 
+          backgroundColor: d.inputBg, 
+          color: d.inputTxt 
+        }}
+        // 🚀 Focus/Blur: Green if okay, Red if there's an error
+        onFocus={e => { 
+          e.target.style.borderColor = error ? "#ef4444" : "#4ade80"; 
+          e.target.style.boxShadow = error ? "0 0 0 2px rgba(239,68,68,0.2)" : "0 0 0 2px rgba(74,222,128,0.2)";
+        }}
+        onBlur={e => { 
+          e.target.style.borderColor = borderColor; 
+          e.target.style.boxShadow = "none"; 
+        }}
+      />
+      {/* 🚀 Render Error Message or Hint */}
+      {error ? (
+        <p className="text-[10px] font-bold mt-1 text-red-500 animate-pulse">{error}</p>
+      ) : hint ? (
+        <p className="text-[10px] mt-0.5" style={{ color: d.muted }}>{hint}</p>
+      ) : null}
     </div>
   )
 }
@@ -108,12 +133,13 @@ function RoleBadge({ role, isDark }) {
   )
 }
 
-function StatusBadge({ isActive, isVerified, isDark }) {
+function StatusBadge({ isActive, isStaffVerified, isDark }) {
   const s = !isActive
     ? { label:"Inactive", bg:isDark?"rgba(248,113,113,0.12)":"#fef2f2", color:isDark?"#f87171":"#dc2626" }
-    : !isVerified
+    : !isStaffVerified
       ? { label:"Pending",  bg:isDark?"rgba(251,191,36,0.12)":"#fef9c3",  color:isDark?"#fcd34d":"#92400e" }
       : { label:"Active",   bg:isDark?"rgba(74,222,128,0.12)":"#dcfce7",  color:isDark?"#4ade80":"#15803d" }
+
   return (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold"
       style={{ backgroundColor:s.bg, color:s.color }}>
@@ -164,27 +190,72 @@ function StaffPagination({ total=0, d }) {
 }
 
 // ── Add Staff Form ────────────────────────────────────────────────────────────
+// ── Add Staff Form ────────────────────────────────────────────────────────────
+// ── Add Staff Form ────────────────────────────────────────────────────────────
 function AddStaffForm({ onBack, onCreated }) {
-  const d = useDark()
-  const [f, setF] = useState({ fn:"", mn:"", ln:"", un:"", role:"", branch:"", email:"", phone:"", pwd:"", force:true })
-  const [submitting, setSubmitting] = useState(false)
-  const [formError, setFormError] = useState(null)
-  const s = k => v => setF(p=>({...p,[k]:v}))
-  const gen = () => {
-    const c="ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$"
-    s("pwd")(Array.from({length:12},()=>c[Math.floor(Math.random()*c.length)]).join(""))
-  }
-  const handleSubmit = async () => {
-    setFormError(null)
-    if (!f.fn||!f.ln||!f.email||!f.role||!f.pwd){setFormError("Please fill in all required fields.");return}
-    setSubmitting(true)
-    try {
-      await api.createStaff({ first_name:f.fn, middle_name:f.mn||undefined, last_name:f.ln, username:f.un||undefined, role:f.role.toLowerCase(), branch:f.branch||undefined, email:f.email, phone_number:f.phone||undefined, password:f.pwd, force_password_change:f.force })
-      onCreated(); onBack()
-    } catch(err){setFormError(err.message||"Failed to create staff account.")} finally{setSubmitting(false)}
+  const d = useDark();
+  const [f, setF] = useState({ fn:"", mn:"", ln:"", un:"", role:"", branch:"", email:"", phone:"" });
+  const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+  const [formError, setFormError] = useState(null);
+  
+  const s = k => v => { 
+    setF(p => ({ ...p, [k]: v })); 
+    if (errors[k]) setErrors(prev => ({ ...prev, [k]: null })); 
+  };
+
+  const validateForm = () => {
+    const newErrors = {};
+    const email = f.email.trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const phoneRegex = /^[0-9]{11}$/; 
+
+    console.log("Validating Form State:", f); // 🚀 DEBUG: Watch what you typed!
+
+    if (!f.fn.trim()) newErrors.fn = "First name is required.";
+    if (!f.ln.trim()) newErrors.ln = "Last name is required.";
+    if (!f.role) newErrors.role = "Role is required.";
+    
+    if (!email) newErrors.email = "Email is required.";
+    else if (!emailRegex.test(email)) newErrors.email = "Invalid email format.";
+    
+    if (f.phone && !phoneRegex.test(f.phone)) newErrors.phone = "Must be 11 digits.";
+
+    console.log("Validation Errors Found:", newErrors); // 🚀 DEBUG: See what failed!
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   }
 
-  // Stat cards (inline dark-mode versions)
+  const handleSubmit = async () => {
+    setFormError(null);
+    if (!validateForm()) {
+      setFormError("Please fix the errors above.");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await api.createStaff({ 
+        first_name: f.fn, 
+        middle_name: f.mn || undefined, 
+        last_name: f.ln, 
+        username: f.un || undefined, 
+        role: f.role.toLowerCase(), 
+        branch: f.branch === "" ? undefined : f.branch, 
+        email: f.email, 
+        phone_number: f.phone || undefined 
+      });
+      onCreated(); 
+      onBack();
+    } catch(err) {
+      console.error("API Error Details:", err.response?.data || err.message);
+      setFormError(err.response?.data?.detail || err.message || "Failed to create staff account.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const mkCard = (label, val, accent) => (
     <div key={label} className="rounded-xl p-4 relative overflow-hidden"
       style={{ backgroundColor:d.cardBg, border:`1px solid ${d.cardBdr}`, boxShadow:d.cardShdw }}>
@@ -197,7 +268,6 @@ function AddStaffForm({ onBack, onCreated }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {/* Green card */}
         <div className="rounded-xl p-4 flex flex-col justify-between relative overflow-hidden"
           style={{ background:"linear-gradient(135deg,#0a4a34 0%,#1a7040 60%,#2E8B34 100%)", boxShadow:"0 4px 16px rgba(12,87,62,0.25)" }}>
           <p className="text-xs font-bold uppercase tracking-wider" style={{ color:"rgba(255,255,255,0.65)" }}>Total Staffs</p>
@@ -258,31 +328,17 @@ function AddStaffForm({ onBack, onCreated }) {
           </div>
         </StepCard>
 
-        <StepCard n={4} title="Security" d={d}>
-          <div>
-            <FL d={d}>Password <span style={{ color:"#f87171" }}>*</span></FL>
-            <div className="flex gap-2">
-              <input type="text" value={f.pwd} onChange={e => s("pwd")(e.target.value)} placeholder="Temporary password"
-                className="flex-1 px-3 py-2.5 text-sm border rounded-md outline-none transition-all"
-                style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt, fontFamily:f.pwd?"monospace":"inherit" }}
-                onFocus={e=>{e.target.style.borderColor="#4ade80";e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.2)"}}
-                onBlur={e=>{e.target.style.borderColor=d.inputBdr;e.target.style.boxShadow="none"}}/>
-              <button onClick={gen}
-                className="px-3 py-2 text-xs font-bold border rounded-md transition-all flex-shrink-0"
-                style={{ borderColor:d.inputBdr, color:d.isDark?"#4ade80":G, backgroundColor:d.inputBg }}>
-                Generate
-              </button>
-            </div>
+        {/* 🚀 Changed Step 4 from "Passwords" to "Account Activation" */}
+        <StepCard n={4} title="Account Activation" d={d}>
+          <div className="flex items-start gap-3 p-4 rounded-lg border mt-2" 
+            style={{ backgroundColor: d.isDark ? "rgba(56,189,248,0.1)" : "#f0f9ff", borderColor: d.isDark ? "rgba(56,189,248,0.2)" : "#bae6fd" }}>
+            <svg className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: d.isDark ? "#38bdf8" : "#0284c7" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+            </svg>
+            <p className="text-xs leading-relaxed" style={{ color: d.isDark ? "#bae6fd" : "#0369a1" }}>
+              An invitation link will be emailed to <strong className="font-bold">{f.email || "this address"}</strong>. The staff member will use this link to verify their account and securely set their own password.
+            </p>
           </div>
-          <label className="flex items-center gap-3 cursor-pointer">
-            <button onClick={() => s("force")(!f.force)}
-              className="relative w-9 h-5 rounded-full transition-colors duration-200 flex-shrink-0"
-              style={{ backgroundColor:f.force?(d.isDark?"#4ade80":G):(d.isDark?"#334155":"#d1d5db") }}>
-              <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-all duration-200"
-                style={{ left:f.force?"19px":"2px" }}/>
-            </button>
-            <span className="text-xs" style={{ color:d.subC }}>Force password change on first login</span>
-          </label>
         </StepCard>
       </div>
 
@@ -291,7 +347,7 @@ function AddStaffForm({ onBack, onCreated }) {
           className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-60"
           style={{ background:`linear-gradient(135deg,${DG},${G})` }}>
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
-          {submitting?"Creating...":"Create Staff"}
+          {submitting?"Sending Invite...":"Send Invite"}
         </button>
       </div>
     </div>
@@ -446,14 +502,21 @@ function EditStaffModal({ staff, onClose, onSaved }) {
 }
 
 // ── Deactivate Confirm ────────────────────────────────────────────────────────
+// ── Deactivate Confirm ────────────────────────────────────────────────────────
 function DeactivateModal({ staff, onClose, onConfirm }) {
   const d = useDark()
+  const [confirmText, setConfirmText] = useState("") // 🚀 NEW: Track what they type
+
+  // 🚀 NEW: The button will remain disabled until they type the EXACT username
+  const isConfirmed = confirmText === staff.username
+
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       style={{ backgroundColor:d.overlay, backdropFilter:"blur(4px)" }}
       onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
       <div className="rounded-2xl p-6 w-full max-w-md"
         style={{ backgroundColor:d.modalBg, border:`1px solid ${d.modalBdr}`, boxShadow:"0 24px 64px rgba(0,0,0,0.55)" }}>
+        
         <div className="flex items-start gap-4 mb-5">
           <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0"
             style={{ backgroundColor:d.isDark?"rgba(248,113,113,0.12)":"#fef2f2", border:`1px solid ${d.isDark?"rgba(248,113,113,0.25)":"#fecaca"}` }}>
@@ -463,20 +526,41 @@ function DeactivateModal({ staff, onClose, onConfirm }) {
           </div>
           <div>
             <h3 className="text-base font-bold mb-1" style={{ color:d.headC }}>Deactivate Staff Account?</h3>
-            <p className="text-sm" style={{ color:d.subC }}>
-              This will prevent <strong style={{ color:d.cellC }}>{staff.first_name} {staff.last_name}</strong> ({staff.role}) from logging in until reactivated.
+            <p className="text-sm leading-relaxed" style={{ color:d.subC }}>
+              This will prevent <strong style={{ color:d.cellC }}>{staff.first_name} {staff.last_name}</strong> from logging in. Their past data will remain intact in the database.
             </p>
           </div>
         </div>
+
+        {/* 🚀 NEW: The Security Confirmation Input */}
+        <div className="mb-6 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(0,0,0,0.2)" : "#f8fafc", border: `1px solid ${d.cardBdr}` }}>
+          <label className="block text-xs font-bold mb-2" style={{ color:d.labelC }}>
+            To verify, type <span className="font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: d.isDark ? "#334155" : "#e2e8f0", color: "#ef4444" }}>{staff.username}</span> below:
+          </label>
+          <input 
+            type="text" 
+            value={confirmText}
+            onChange={(e) => setConfirmText(e.target.value)}
+            placeholder={staff.username}
+            className="w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all font-mono"
+            style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }}
+            onFocus={e => { e.target.style.borderColor = "#f87171"; e.target.style.boxShadow = "0 0 0 2px rgba(248,113,113,0.2)" }}
+            onBlur={e => { e.target.style.borderColor = d.inputBdr; e.target.style.boxShadow = "none" }}
+          />
+        </div>
+
         <div className="flex gap-3 justify-end pt-4" style={{ borderTop:`1px solid ${d.hdrBdr}` }}>
           <button onClick={onClose}
-            className="px-5 py-2 text-sm font-semibold border rounded-xl transition-all"
+            className="px-5 py-2 text-sm font-semibold border rounded-xl transition-all hover:opacity-75"
             style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}>
             Cancel
           </button>
-          <button onClick={onConfirm}
-            className="px-5 py-2 text-sm font-bold text-white rounded-xl transition-all hover:opacity-90 active:scale-[0.98]"
-            style={{ backgroundColor:"#dc2626", boxShadow:"0 2px 8px rgba(220,38,38,0.3)" }}>
+          
+          <button 
+            onClick={onConfirm}
+            disabled={!isConfirmed} // 🚀 NEW: Button is grayed out until the input matches!
+            className="px-5 py-2 text-sm font-bold text-white rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.98]"
+            style={{ backgroundColor: "#dc2626", boxShadow: isConfirmed ? "0 2px 8px rgba(220,38,38,0.3)" : "none" }}>
             Deactivate
           </button>
         </div>

@@ -8,6 +8,7 @@ import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import TermsAndConditions from "./pages/customer/TermsAndConditions";
 import AdminDashboard from "./pages/admin/AdminDashboard";
+import ActivateStaff from "./pages/admin/ActivateStaff";
 import Cart from "./pages/customer/Cart";
 import Checkout from "./pages/Checkout";
 import Confirmation from "./pages/Confirmation";
@@ -88,7 +89,7 @@ const DARK_CSS = `
   }
 `;
 
-const AUTH_PAGES = ["login", "register", "forgot-password", "terms"];
+const AUTH_PAGES = ["login", "register", "forgot-password", "terms", "activate-staff"];
 const isPreview = new URLSearchParams(window.location.search).get("preview") === "true";
 
 function injectDarkCSS() {
@@ -103,7 +104,11 @@ injectDarkCSS();
 function AppContent() {
   const { user } = useAuth();
   const { forceMode, clearForce } = useTheme();
-  const [page, setPage] = useState("home");
+  const [page, setPage] = useState(() => {
+    const path = window.location.pathname.replace("/", "");
+    if (path.startsWith("activate-staff")) return "activate-staff";
+    return "home";
+  });
   const [cartCount, setCartCount] = useState(0);
   const [prevPage, setPrevPage] = useState("login");
   const [selectedOrderId, setSelectedOrderId] = useState(null);
@@ -205,6 +210,7 @@ function AppContent() {
       if (page === "register")        return <Register onNavigate={navigate} />;
       if (page === "forgot-password") return <ForgotPassword onNavigate={navigate} />;
       if (page === "terms")           return <TermsAndConditions onNavigate={navigate} onBack={() => navigate(prevPage)} />;
+      if (page === "activate-staff") return <ActivateStaff onNavigate={navigate} />;
     }
 
     return (
