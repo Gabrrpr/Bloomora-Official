@@ -54,6 +54,12 @@ Then open `.env` and fill in the values. Ask the team lead for the actual creden
 
 ### 4. Run the backend
 
+- make sure pala to download any dependencies error that you will encounter:
+
+ex.  ModuleNotFoundError: No module named 'itsdangerous'
+
+solution: pip install itsdangerous
+
 ```bash
 python -m uvicorn app.main:app --reload
 ```
