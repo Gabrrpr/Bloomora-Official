@@ -1,0 +1,91 @@
+const palette = {
+  green: '#2E8B34',
+  greenDark: '#236B28',
+  greenSoft: '#F0F8F1',
+  ink: '#1F2A24',
+  muted: '#6D776F',
+  red: '#B42318',
+  redSoft: '#FEE4E2',
+  line: '#E5E7EB',
+  softLine: '#F1F4F2',
+  offWhite: '#FAFBFA',
+  amber: '#F2B950',
+  white: '#FFFFFF',
+};
+
+export const theme = {
+  colors: {
+    ...palette,
+    background: palette.white,
+    surface: palette.white,
+    surfaceAlt: palette.offWhite,
+    primary: palette.green,
+    primaryDark: palette.greenDark,
+    secondary: palette.green,
+    accent: palette.amber,
+    text: palette.ink,
+    textMuted: palette.muted,
+    danger: palette.red,
+    dangerBorder: palette.redSoft,
+    border: palette.line,
+    subtleBorder: palette.softLine,
+    success: palette.green,
+    tabInactive: '#8E9890',
+  },
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 12,
+    lg: 16,
+    xl: 24,
+    xxl: 32,
+  },
+  radius: {
+    sm: 8,
+    md: 12,
+    lg: 18,
+    pill: 999,
+  },
+  icon: {
+    sm: 18,
+    md: 22,
+    lg: 28,
+  },
+  borderWidth: 1.2,
+  activeBorderWidth: 1.5,
+};
+
+export const Colors = {
+  light: {
+    text: theme.colors.text,
+    background: theme.colors.background,
+    tint: theme.colors.primary,
+    icon: theme.colors.textMuted,
+    tabIconDefault: theme.colors.tabInactive,
+    tabIconSelected: theme.colors.primary,
+  },
+  dark: {
+    text: theme.colors.text,
+    background: theme.colors.background,
+    tint: theme.colors.primary,
+    icon: theme.colors.textMuted,
+    tabIconDefault: theme.colors.tabInactive,
+    tabIconSelected: theme.colors.primary,
+  },
+};
+
+export const Fonts = {
+  sans: 'Inter_400Regular',
+  sansLight: 'Inter_300Light',
+  sansMedium: 'Inter_500Medium',
+  sansSemiBold: 'Inter_600SemiBold',
+  sansBold: 'Inter_700Bold',
+  sansExtraBold: 'Inter_800ExtraBold',
+  condensed: 'InterTight_400Regular',
+  condensedLight: 'InterTight_300Light',
+  condensedMedium: 'InterTight_500Medium',
+  condensedSemiBold: 'InterTight_600SemiBold',
+  serif: 'serif',
+  rounded: 'Inter_500Medium',
+  mono: 'monospace',
+};

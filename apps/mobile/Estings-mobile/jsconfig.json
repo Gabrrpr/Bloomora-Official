@@ -1,9 +1,0 @@
-{
-  "compilerOptions": {
-    "paths": {
-      "@/*": ["./*"]
-    },
-    "jsx": "react-jsx",
-    "ignoreDeprecations": "6.0"
-  }
-}
