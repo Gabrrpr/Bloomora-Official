@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import { useAuth } from "../../context/AuthContext"
+import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
 
 const DG = "#0C573E"
@@ -26,28 +27,36 @@ function InitialsAvatar({ name = "?", size = 38 }) {
   )
 }
 
-function ConvoItem({ convo, isActive, onClick }) {
+function ConvoItem({ convo, isActive, onClick, isDark }) {
+  const activeBg  = isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4"
+  const activeBdr = isDark ? "#4ade80" : G
+  const hoverBg   = isDark ? "#1e2d3d" : "#f9fafb"
+  const nameTxt   = isDark ? "#f1f5f9" : "#1f2937"
+  const subTxt    = isDark ? "#64748b"  : "#9ca3af"
+  const timeTxt   = isDark ? "#64748b"  : "#9ca3af"
+
   return (
     <button
       onClick={onClick}
       className="w-full flex items-center gap-3 px-4 py-3 text-left transition-all"
-      style={{ backgroundColor: isActive ? "#f0fdf4" : "transparent", borderLeft: isActive ? `3px solid ${G}` : "3px solid transparent" }}
-      onMouseEnter={e => { if (!isActive) e.currentTarget.style.backgroundColor = "#f9fafb" }}
+      style={{ backgroundColor: isActive ? activeBg : "transparent", borderLeft: isActive ? `3px solid ${activeBdr}` : "3px solid transparent" }}
+      onMouseEnter={e => { if (!isActive) e.currentTarget.style.backgroundColor = hoverBg }}
       onMouseLeave={e => { if (!isActive) e.currentTarget.style.backgroundColor = "transparent" }}
     >
       <div className="relative flex-shrink-0">
         <InitialsAvatar name={convo.user_name} size={40} />
         {convo.unread_count > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2 border-white" />
+          <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full bg-green-500 border-2"
+            style={{ borderColor: isDark ? "#111827" : "white" }} />
         )}
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-0.5">
-          <span className="text-sm font-semibold text-gray-800 truncate">{convo.user_name}</span>
-          <span className="text-[11px] text-gray-400 flex-shrink-0 ml-2">{convo.time || ""}</span>
+          <span className="text-sm font-semibold truncate" style={{ color: nameTxt }}>{convo.user_name}</span>
+          <span className="text-[11px] flex-shrink-0 ml-2" style={{ color: timeTxt }}>{convo.time || ""}</span>
         </div>
-        <p className="text-xs text-gray-400 truncate">
-          {convo.last_message_from_staff && <span style={{ color: G }}>You: </span>}
+        <p className="text-xs truncate" style={{ color: subTxt }}>
+          {convo.last_message_from_staff && <span style={{ color: isDark ? "#4ade80" : G }}>You: </span>}
           {convo.last_message || "No messages yet"}
         </p>
       </div>
@@ -65,6 +74,8 @@ function ConvoItem({ convo, isActive, onClick }) {
 
 export default function AdminChat() {
   const { user } = useAuth()
+  const { isDark } = useTheme()
+
   const [conversations, setConversations] = useState([])
   const [activeId, setActiveId] = useState(null)
   const [messages, setMessages] = useState([])
@@ -83,6 +94,25 @@ export default function AdminChat() {
 
   const activeConvo = conversations.find(c => c.customer_id === activeId)
   const filtered = conversations.filter(c => c.user_name?.toLowerCase().includes(searchQuery.toLowerCase()))
+
+  // ── Dark mode tokens ──────────────────────────────────────────────────────
+  const cardBg     = isDark ? "#1a2332"  : "white"
+  const cardBdr    = isDark ? "#1e293b"  : "#e8edf2"
+  const sidebarBdr = isDark ? "#1e293b"  : "#f1f5f9"
+  const headerBg   = isDark ? "#1e293b"  : "white"
+  const headerBdr  = isDark ? "#1e293b"  : "#f1f5f9"
+  const bodyTxt    = isDark ? "#f1f5f9"  : "#111827"
+  const subTxt     = isDark ? "#94a3b8"  : "#6b7280"
+  const mutedTxt   = isDark ? "#64748b"  : "#9ca3af"
+  const msgAreaBg  = isDark ? "#0f172a"  : "#f9fafb"
+  const bubbleBg   = isDark ? "#1e293b"  : "white"
+  const bubbleTxt  = isDark ? "#e2e8f0"  : "#1f2937"
+  const inputBg    = isDark ? "#0f172a"  : "#f9fafb"
+  const inputBdr   = isDark ? "#334155"  : "#e5e7eb"
+  const toolbarBg  = isDark ? "#1e293b"  : "white"
+  const toolbarBdr = isDark ? "#1e293b"  : "#f1f5f9"
+  const searchBg   = isDark ? "#111827"  : "#f9fafb"
+  const searchBdr  = isDark ? "#334155"  : "#e8edf2"
 
   // ── Load conversations ────────────────────────────────────────────────────
   const loadConversations = useCallback(async () => {
@@ -142,7 +172,6 @@ export default function AdminChat() {
     setConversations(prev => {
       const index = prev.findIndex(c => c.customer_id === activeId);
       if (index === -1) return prev;
-      
       const newConvos = [...prev];
       const updatedConvo = { 
         ...newConvos[index], 
@@ -150,7 +179,6 @@ export default function AdminChat() {
         last_message_from_staff: true, 
         time: newMsg.time 
       };
-      // Remove from old position and push to the very beginning
       newConvos.splice(index, 1);
       newConvos.unshift(updatedConvo);
       return newConvos;
@@ -167,25 +195,22 @@ export default function AdminChat() {
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
 
   // ── WebSocket connection ──────────────────────────────────────────────────
-
   console.log("Current User Object:", user);
 
-useEffect(() => {
+  useEffect(() => {
     // 1. Try to find the ID the normal way
     let adminId = user?.id || user?.userId || user?._id; 
     
     // 2. THE SILVER BULLET: If the ID is missing, crack open the JWT token and grab it!
     if (!adminId && user?.token) {
       try {
-        // JWTs have 3 parts separated by dots. The middle part is the payload data.
         const base64Url = user.token.split('.')[1];
         const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
         const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
             return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
         }).join(''));
-        
         const decodedToken = JSON.parse(jsonPayload);
-        adminId = decodedToken.sub; // FastAPI stores the user ID in the "sub" field
+        adminId = decodedToken.sub;
         console.log("🔓 Successfully extracted Admin ID from token:", adminId);
       } catch (e) {
         console.error("Failed to extract ID from token:", e);
@@ -201,19 +226,14 @@ useEffect(() => {
     // Prevent duplicate connections
     if (wsRef.current) return;
 
-    // 4. Connect using the guaranteed ID
     // 4. Connect using the guaranteed ID AND the Token!
     console.log(`Attempting to connect Admin WS with ID: ${adminId}`);
-    
-    // Add the token to the URL so the Python backend lets you in!
     const wsUrl = `ws://localhost:8000/api/v1/chats/ws/${adminId}?token=${user.token}`;
     const websocket = new WebSocket(wsUrl);
-    
     wsRef.current = websocket;
 
     websocket.onopen = () => console.log('✅ Admin WS connected to server!');
     websocket.onmessage = (event) => {
-      // ... (keep your existing onmessage logic here) ...
       const data = JSON.parse(event.data);
       console.log('📬 Admin WS message received:', data);
 
@@ -261,13 +281,13 @@ useEffect(() => {
 
     setWs(websocket);
     
-    // THE SAFE CLEANUP: Only close if it's completely open, otherwise let the browser drop it naturally
     return () => {
         if (websocket.readyState === WebSocket.OPEN) {
             websocket.close();
         }
     };
   }, [user, loadConversations]);
+
   // ── Load conversations on mount ───────────────────────────────────────────
   useEffect(() => {
     if (user && ['admin', 'staff'].includes(user.role)) {
@@ -291,24 +311,26 @@ useEffect(() => {
   }
 
   const TABS = [
-    { label: "All", count: conversations.length },
-    { label: "Unread", count: conversations.filter(c => c.unread_count > 0).length },
+    { label: "All",        count: conversations.length },
+    { label: "Unread",     count: conversations.filter(c => c.unread_count > 0).length },
     { label: "Unassigned", count: 0 },
-    { label: "Archived", count: 0 },
+    { label: "Archived",   count: 0 },
   ]
 
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold text-gray-900">Messages</h1>
+      <h1 className="text-xl font-bold" style={{ color: bodyTxt }}>Messages</h1>
+
       <div
-        className="flex rounded-xl overflow-hidden bg-white"
-        style={{ border: "1px solid #e8edf2", boxShadow: "0 1px 3px rgba(0,0,0,0.04)", height: "calc(100vh - 180px)", minHeight: "560px" }}
+        className="flex rounded-xl overflow-hidden"
+        style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)", height: "calc(100vh - 180px)", minHeight: "560px" }}
       >
-        {/* Sidebar */}
-        <div className="flex flex-col flex-shrink-0" style={{ width: "300px", borderRight: "1px solid #f1f5f9" }}>
-          <div className="px-3 pt-3 pb-2" style={{ borderBottom: "1px solid #f1f5f9" }}>
+        {/* ── Sidebar ── */}
+        <div className="flex flex-col flex-shrink-0" style={{ width: "300px", borderRight: `1px solid ${sidebarBdr}` }}>
+          <div className="px-3 pt-3 pb-2" style={{ borderBottom: `1px solid ${sidebarBdr}` }}>
             <div className="relative mb-2.5">
-              <svg className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <svg className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
+                style={{ color: mutedTxt }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
               </svg>
               <input
@@ -316,9 +338,9 @@ useEffect(() => {
                 onChange={e => setSearchQuery(e.target.value)}
                 placeholder="Search conversations..."
                 className="w-full pl-9 pr-4 py-2 text-xs rounded-lg outline-none transition-all"
-                style={{ border: "1px solid #e8edf2", backgroundColor: "#f9fafb" }}
-                onFocus={e => { e.target.style.borderColor = G; e.target.style.backgroundColor = "white" }}
-                onBlur={e => { e.target.style.borderColor = "#e8edf2"; e.target.style.backgroundColor = "#f9fafb" }}
+                style={{ border: `1px solid ${searchBdr}`, backgroundColor: searchBg, color: bodyTxt }}
+                onFocus={e => { e.target.style.borderColor = G; e.target.style.backgroundColor = isDark ? "#1e293b" : "white" }}
+                onBlur={e => { e.target.style.borderColor = searchBdr; e.target.style.backgroundColor = searchBg }}
               />
             </div>
             <div className="flex items-center gap-1 overflow-x-auto">
@@ -327,13 +349,13 @@ useEffect(() => {
                   key={tab.label}
                   onClick={() => setActiveTab(tab.label)}
                   className="flex-shrink-0 flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold transition-all"
-                  style={{ backgroundColor: activeTab === tab.label ? DG : "transparent", color: activeTab === tab.label ? "white" : "#6b7280" }}
+                  style={{ backgroundColor: activeTab === tab.label ? DG : "transparent", color: activeTab === tab.label ? "white" : subTxt }}
                 >
                   {tab.label}
                   {tab.count > 0 && (
                     <span
                       className="px-1 rounded-full text-[9px] font-bold"
-                      style={{ backgroundColor: activeTab === tab.label ? "rgba(255,255,255,0.25)" : "#e5e7eb", color: activeTab === tab.label ? "white" : "#6b7280" }}
+                      style={{ backgroundColor: activeTab === tab.label ? "rgba(255,255,255,0.25)" : (isDark ? "#334155" : "#e5e7eb"), color: activeTab === tab.label ? "white" : subTxt }}
                     >
                       {tab.count}
                     </span>
@@ -342,10 +364,12 @@ useEffect(() => {
               ))}
             </div>
           </div>
+
           <div className="flex-1 overflow-y-auto relative">
             {loadingConvos && conversations.length === 0 && (
               <div className="flex items-center justify-center py-12">
-                <div className="w-5 h-5 border-2 border-gray-300 border-t-green-600 rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 rounded-full animate-spin"
+                  style={{ borderColor: isDark ? "#334155" : "#d1d5db", borderTopColor: isDark ? "#4ade80" : "#16a34a" }} />
               </div>
             )}
             {filtered.length > 0 ? (
@@ -355,43 +379,50 @@ useEffect(() => {
                   convo={c}
                   isActive={activeId === c.customer_id}
                   onClick={() => setActiveId(c.customer_id)}
+                  isDark={isDark}
                 />
               ))
             ) : (
               <div className="flex flex-col items-center justify-center py-16 text-center px-6">
-                <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3" style={{ background: "linear-gradient(135deg, #f0fdf4, #dcfce7)" }}>
-                  <svg className="w-6 h-6" style={{ color: DG }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-3"
+                  style={{ background: isDark ? "rgba(34,197,94,0.1)" : "linear-gradient(135deg, #f0fdf4, #dcfce7)" }}>
+                  <svg className="w-6 h-6" style={{ color: isDark ? "#4ade80" : DG }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                   </svg>
                 </div>
-                <p className="text-sm font-medium text-gray-500">{searchQuery ? "No matches found" : "No conversations yet"}</p>
-                <p className="text-xs text-gray-400 mt-1">{searchQuery ? "Try a different search term" : "Customer messages will appear here"}</p>
+                <p className="text-sm font-medium" style={{ color: subTxt }}>{searchQuery ? "No matches found" : "No conversations yet"}</p>
+                <p className="text-xs mt-1" style={{ color: mutedTxt }}>{searchQuery ? "Try a different search term" : "Customer messages will appear here"}</p>
               </div>
             )}
           </div>
         </div>
 
-        {/* Main chat panel */}
+        {/* ── Main chat panel ── */}
         <div className="flex-1 flex flex-col min-w-0">
           {activeConvo ? (
             <>
               {/* Header */}
-              <div className="flex items-center justify-between px-5 py-3 flex-shrink-0" style={{ borderBottom: "1px solid #f1f5f9", backgroundColor: "white" }}>
+              <div className="flex items-center justify-between px-5 py-3 flex-shrink-0"
+                style={{ borderBottom: `1px solid ${headerBdr}`, backgroundColor: headerBg }}>
                 <div className="flex items-center gap-3">
                   <InitialsAvatar name={activeConvo.user_name} size={38} />
                   <div>
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-bold text-gray-900">{activeConvo.user_name}</p>
-                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold" style={{ backgroundColor: "#dcfce7", color: "#15803d" }}>
+                      <p className="text-sm font-bold" style={{ color: bodyTxt }}>{activeConvo.user_name}</p>
+                      <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
+                        style={{ backgroundColor: isDark ? "rgba(34,197,94,0.12)" : "#dcfce7", color: isDark ? "#4ade80" : "#15803d" }}>
                         <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
                         online
                       </span>
                     </div>
-                    <p className="text-[11px] text-gray-400">Customer #{activeConvo.customer_id}</p>
+                    <p className="text-[11px]" style={{ color: mutedTxt }}>Customer #{activeConvo.customer_id}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-1">
-                  <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-all text-gray-400">
+                  <button className="w-8 h-8 flex items-center justify-center rounded-lg transition-all"
+                    style={{ color: subTxt }}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#2d3f55" : "#f3f4f6"}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
                     </svg>
@@ -400,16 +431,17 @@ useEffect(() => {
               </div>
 
               {/* Messages */}
-              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4" style={{ backgroundColor: "#f9fafb" }}>
+              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4" style={{ backgroundColor: msgAreaBg }}>
                 {loadingMsgs && messages.length === 0 && (
                   <div className="flex items-center justify-center h-full">
-                    <div className="w-5 h-5 border-2 border-gray-300 border-t-green-600 rounded-full animate-spin" />
+                    <div className="w-5 h-5 border-2 rounded-full animate-spin"
+                      style={{ borderColor: isDark ? "#334155" : "#d1d5db", borderTopColor: isDark ? "#4ade80" : "#16a34a" }} />
                   </div>
                 )}
                 {messages.length === 0 && !loadingMsgs && (
                   <div className="flex flex-col items-center justify-center h-full text-center">
-                    <p className="text-sm text-gray-400">No messages in this conversation yet.</p>
-                    <p className="text-xs text-gray-400 mt-1">Start the conversation below.</p>
+                    <p className="text-sm" style={{ color: subTxt }}>No messages in this conversation yet.</p>
+                    <p className="text-xs mt-1" style={{ color: mutedTxt }}>Start the conversation below.</p>
                   </div>
                 )}
                 {messages.map((msg, i) => {
@@ -423,15 +455,15 @@ useEffect(() => {
                           className="px-4 py-2.5 text-sm leading-relaxed"
                           style={{
                             borderRadius: isStaff ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-                            backgroundColor: isStaff ? DG : "white",
-                            color: isStaff ? "white" : "#1f2937",
-                            boxShadow: isStaff ? "0 2px 8px rgba(12,87,62,0.18)" : "0 1px 3px rgba(0,0,0,0.08)",
+                            backgroundColor: isStaff ? DG : bubbleBg,
+                            color: isStaff ? "white" : bubbleTxt,
+                            boxShadow: isStaff ? "0 2px 8px rgba(12,87,62,0.18)" : isDark ? "0 1px 4px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.08)",
                           }}
                         >
                           {msg.text}
                         </div>
                         <div className={`flex items-center gap-1.5 mt-1 ${isStaff ? "justify-end" : "justify-start"}`}>
-                          <p className="text-[10px] text-gray-400">{msg.time}</p>
+                          <p className="text-[10px]" style={{ color: mutedTxt }}>{msg.time}</p>
                           {showSeen && <p className="text-[10px]" style={{ color: G }}>✓✓</p>}
                         </div>
                       </div>
@@ -442,14 +474,14 @@ useEffect(() => {
                   <div className="flex items-end gap-2.5 justify-start">
                     <InitialsAvatar name={activeConvo.user_name} size={30} />
                     <div
-                      className="px-4 py-3 bg-white rounded-2xl rounded-bl-sm flex items-center gap-1.5"
-                      style={{ boxShadow: "0 1px 3px rgba(0,0,0,0.08)" }}
+                      className="px-4 py-3 rounded-2xl rounded-bl-sm flex items-center gap-1.5"
+                      style={{ backgroundColor: bubbleBg, boxShadow: isDark ? "0 1px 4px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.08)" }}
                     >
                       {[0, 1, 2].map(i => (
                         <div
                           key={i}
-                          className="w-2 h-2 rounded-full bg-gray-400"
-                          style={{ animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }}
+                          className="w-2 h-2 rounded-full"
+                          style={{ backgroundColor: isDark ? "#64748b" : "#9ca3af", animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite` }}
                         />
                       ))}
                     </div>
@@ -460,13 +492,16 @@ useEffect(() => {
 
               {/* Quick replies */}
               {showQuickReplies && (
-                <div className="px-4 py-2.5 flex flex-wrap gap-1.5 border-t" style={{ backgroundColor: "white", borderColor: "#f1f5f9" }}>
+                <div className="px-4 py-2.5 flex flex-wrap gap-1.5 border-t"
+                  style={{ backgroundColor: toolbarBg, borderColor: toolbarBdr }}>
                   {QUICK_REPLIES.map(q => (
                     <button
                       key={q}
                       onClick={() => sendMessage(q)}
-                      className="px-3 py-1.5 text-xs font-medium rounded-full border transition-all hover:border-green-500 hover:text-green-700 hover:bg-green-50"
-                      style={{ borderColor: "#d1fae5", color: "#374151", backgroundColor: "#f9fafb" }}
+                      className="px-3 py-1.5 text-xs font-medium rounded-full border transition-all"
+                      style={{ borderColor: isDark ? "#334155" : "#d1fae5", color: isDark ? "#94a3b8" : "#374151", backgroundColor: isDark ? "#1e293b" : "#f9fafb" }}
+                      onMouseEnter={e => { e.currentTarget.style.borderColor = isDark ? "#4ade80" : "#22c55e"; e.currentTarget.style.color = isDark ? "#4ade80" : "#15803d"; e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4" }}
+                      onMouseLeave={e => { e.currentTarget.style.borderColor = isDark ? "#334155" : "#d1fae5"; e.currentTarget.style.color = isDark ? "#94a3b8" : "#374151"; e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "#f9fafb" }}
                     >
                       {q}
                     </button>
@@ -475,10 +510,14 @@ useEffect(() => {
               )}
 
               {/* Input bar */}
-              <div className="flex items-center gap-2 px-4 py-3 flex-shrink-0" style={{ borderTop: "1px solid #f1f5f9", backgroundColor: "white" }}>
+              <div className="flex items-center gap-2 px-4 py-3 flex-shrink-0"
+                style={{ borderTop: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
                 <button
                   onClick={() => setShowQuickReplies(p => !p)}
-                  className="w-9 h-9 flex items-center justify-center rounded-xl transition-all hover:bg-green-50 text-gray-400 hover:text-green-700 flex-shrink-0"
+                  className="w-9 h-9 flex items-center justify-center rounded-xl transition-all flex-shrink-0"
+                  style={{ color: showQuickReplies ? (isDark ? "#4ade80" : G) : subTxt }}
+                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4"; e.currentTarget.style.color = isDark ? "#4ade80" : G }}
+                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = showQuickReplies ? (isDark ? "#4ade80" : G) : subTxt }}
                   title="Quick replies"
                 >
                   <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -492,13 +531,16 @@ useEffect(() => {
                   onChange={e => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={`Reply to ${activeConvo.user_name}...`}
-                  className="flex-1 text-sm outline-none bg-gray-50 border border-gray-200 rounded-xl px-4 py-2.5 text-gray-700 placeholder-gray-400 focus:ring-2 focus:ring-green-500 focus:border-transparent transition"
+                  className="flex-1 text-sm outline-none rounded-xl px-4 py-2.5 transition-all"
+                  style={{ border: `1px solid ${inputBdr}`, backgroundColor: inputBg, color: bodyTxt }}
+                  onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = "0 0 0 2px rgba(46,139,52,0.12)" }}
+                  onBlur={e => { e.target.style.borderColor = inputBdr; e.target.style.boxShadow = "none" }}
                 />
                 <button
                   onClick={() => sendMessage(input)}
                   disabled={!input.trim()}
                   className="w-9 h-9 flex items-center justify-center rounded-xl text-white transition-all flex-shrink-0 disabled:opacity-50"
-                  style={{ backgroundColor: input.trim() ? DG : "#d1d5db" }}
+                  style={{ backgroundColor: input.trim() ? DG : (isDark ? "#334155" : "#d1d5db") }}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
@@ -508,13 +550,14 @@ useEffect(() => {
             </>
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style={{ background: "linear-gradient(135deg, #f0fdf4, #dcfce7)" }}>
-                <svg className="w-8 h-8" style={{ color: DG }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4"
+                style={{ background: isDark ? "rgba(34,197,94,0.1)" : "linear-gradient(135deg, #f0fdf4, #dcfce7)" }}>
+                <svg className="w-8 h-8" style={{ color: isDark ? "#4ade80" : DG }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
               </div>
-              <p className="text-sm font-medium text-gray-500">Select a conversation</p>
-              <p className="text-xs text-gray-400 mt-1">Choose a customer from the sidebar to start chatting</p>
+              <p className="text-sm font-medium" style={{ color: subTxt }}>Select a conversation</p>
+              <p className="text-xs mt-1" style={{ color: mutedTxt }}>Choose a customer from the sidebar to start chatting</p>
             </div>
           )}
         </div>

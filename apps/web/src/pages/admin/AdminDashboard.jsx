@@ -1035,7 +1035,7 @@ function NavBtn({ item, active, setActive, collapsed, user }) {
     <button
       onClick={allowed ? () => setActive(item.label) : undefined}
       title={collapsed ? item.label : undefined}
-      className={`w-full flex items-center gap-2.5 py-2 rounded-lg text-sm transition-all duration-150 relative ${collapsed ? "justify-center px-2" : "px-3"} ${!allowed ? "opacity-40 cursor-not-allowed" : ""}`}
+      className={`w-full flex items-center gap-2.5 py-2 rounded-lg text-sm transition-all duration-150 relative group ${collapsed ? "justify-center px-2" : "px-3"} ${!allowed ? "opacity-40 cursor-not-allowed" : ""}`}
       style={{
         color: on ? t.navTextActive : allowed ? t.navTextNormal : t.textMuted,
         fontWeight: on ? 600 : 400,
@@ -1050,6 +1050,13 @@ function NavBtn({ item, active, setActive, collapsed, user }) {
       {!collapsed && <span className="truncate">{item.label}</span>}
       {item.badge && !collapsed && <span className="ml-auto w-2 h-2 rounded-full bg-red-500 flex-shrink-0"/>}
       {item.badge &&  collapsed && <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-red-500"/>}
+
+      {collapsed && allowed && (
+  <span className="absolute left-full ml-2 px-2.5 py-1.5 text-xs font-semibold text-white rounded-md pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-150 whitespace-nowrap z-50"
+    style={{ backgroundColor: "#0f172a", boxShadow: "0 4px 12px rgba(0,0,0,0.4)" }}>
+    {item.label}
+  </span>
+)}
     </button>
   )
 }
@@ -1068,7 +1075,7 @@ function SidebarContent({ active, setActive, collapsed, onLogout, user }) {
           <div>
             <img src={estingsText} alt="Esting's" style={{ height: "28px", objectFit: "contain", filter: logoFilter }} />
             <p className="text-[7.5px] font-normal uppercase tracking-widest leading-tight mt-0.5"
-              style={{ color: isDark ? "#4ade80" : G, opacity: 0.75 }}>
+              style={{ color: isDark ? "rgba(255,255,255,0.85)" : G, opacity: 0.75 }}>
               Flower International Inc.
             </p>
           </div>

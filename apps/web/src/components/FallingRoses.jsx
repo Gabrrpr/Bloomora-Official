@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 /* ── Flower A: 8-petal bright pink (reference match) ── */
 const FLOWER_A = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
@@ -71,29 +71,28 @@ const BG = {
   LB: encode(LEAF_B),
 };
 
-/* ── Size ranges — now with much larger maximums ── */
 const SIZE = {
   FA: () => {
     const band = Math.random();
-    if (band < 0.33) return 18 + Math.random() * 12;   // small:  18–30px
-    if (band < 0.66) return 40 + Math.random() * 20;   // medium: 40–60px
-    return 70 + Math.random() * 25;                     // large:  70–95px
+    if (band < 0.33) return 18 + Math.random() * 12;
+    if (band < 0.66) return 40 + Math.random() * 20;
+    return 70 + Math.random() * 25;
   },
   FB: () => {
     const band = Math.random();
-    if (band < 0.4) return 50 + Math.random() * 20;    // medium: 50–70px
-    return 80 + Math.random() * 30;                     // large:  80–110px
+    if (band < 0.4) return 50 + Math.random() * 20;
+    return 80 + Math.random() * 30;
   },
-  FC: () => 10 + Math.random() * 18,                   // tiny:   10–28px
+  FC: () => 10 + Math.random() * 18,
   LA: () => {
     const band = Math.random();
-    if (band < 0.5) return 22 + Math.random() * 20;    // small:  22–42px
-    return 55 + Math.random() * 35;                     // large:  55–90px
+    if (band < 0.5) return 22 + Math.random() * 20;
+    return 55 + Math.random() * 35;
   },
   LB: () => {
     const band = Math.random();
-    if (band < 0.5) return 18 + Math.random() * 18;    // small:  18–36px
-    return 50 + Math.random() * 30;                     // large:  50–80px
+    if (band < 0.5) return 18 + Math.random() * 18;
+    return 50 + Math.random() * 30;
   },
 };
 
@@ -106,20 +105,18 @@ function pickType() {
   return "LB";
 }
 
-/* ── Larger items fall slower for realism ── */
 const ITEMS = Array.from({ length: 52 }, (_, i) => {
   const type = pickType();
   const size = SIZE[type]();
-  // Bigger = slower fall, gentler sway — feels physically correct
   const sizeFactor = size / 50;
   const duration   = (8 + Math.random() * 8) * Math.max(0.7, Math.min(1.4, sizeFactor));
-  const swayAmp    = (30 + Math.random() * 50) / Math.max(0.8, sizeFactor); // big items sway less
-  const swayDur    = (3 + Math.random() * 4)  * Math.max(0.8, sizeFactor);  // big items sway slower
-  const spinSpeed  = (60 + Math.random() * 120) / sizeFactor;               // big items spin slower
+  const swayAmp    = (30 + Math.random() * 50) / Math.max(0.8, sizeFactor);
+  const swayDur    = (3 + Math.random() * 4)  * Math.max(0.8, sizeFactor);
+  const spinSpeed  = (60 + Math.random() * 120) / sizeFactor;
 
   return {
     id: i, type, size,
-    left:     -5 + Math.random() * 110,   // -5% to 105% for edge coverage
+    left:     -5 + Math.random() * 110,
     duration,
     delay:    Math.random() * 10,
     swayAmp,
@@ -130,8 +127,20 @@ const ITEMS = Array.from({ length: 52 }, (_, i) => {
 
 const STYLE_ID = "bloomora-flowers-v4";
 
-export default function FallingFlowers() {
+export default function FallingRoses() {
   const injected = useRef(false);
+
+  // Read initial state from localStorage; default to enabled
+  const [enabled, setEnabled] = useState(() =>
+    localStorage.getItem("bloomora-falling-roses") !== "false"
+  );
+
+  // Listen for toggle events dispatched by AdminHero
+  useEffect(() => {
+    const handler = (e) => setEnabled(e.detail?.enabled ?? true);
+    window.addEventListener("bloomora:roses-toggle", handler);
+    return () => window.removeEventListener("bloomora:roses-toggle", handler);
+  }, []);
 
   useEffect(() => {
     if (injected.current || document.getElementById(STYLE_ID)) return;
@@ -140,15 +149,12 @@ export default function FallingFlowers() {
     const style = document.createElement("style");
     style.id = STYLE_ID;
     style.textContent = `
-      /* Vertical fall — smooth cubic ease, gentle fade in/out */
       @keyframes pf-fall {
         0%   { top: -110px; opacity: 0; }
         7%   { opacity: 1; }
         90%  { opacity: 0.95; }
         100% { top: 112vh;  opacity: 0; }
       }
-
-      /* Pendulum sway + slow spin — the natural petal motion */
       @keyframes pf-sway {
         0%   { transform: translateX(0)               rotate(0deg)                    scale(1);    }
         18%  { transform: translateX(var(--sa))        rotate(calc(var(--ss) * 0.18))  scale(0.97); }
@@ -163,9 +169,14 @@ export default function FallingFlowers() {
     return () => { document.getElementById(STYLE_ID)?.remove(); injected.current = false; };
   }, []);
 
+  // Return nothing when disabled — no DOM, no animation cost
+  if (!enabled) return null;
+
   return (
-    <div style={{ position:"fixed", inset:0, pointerEvents:"none", zIndex:1, overflow:"hidden" }}
-         aria-hidden="true">
+    <div
+      style={{ position:"fixed", inset:0, pointerEvents:"none", zIndex:1, overflow:"hidden" }}
+      aria-hidden="true"
+    >
       {ITEMS.map((f) => (
         <div
           key={f.id}
