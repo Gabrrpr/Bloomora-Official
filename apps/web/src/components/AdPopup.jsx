@@ -1,22 +1,23 @@
-import { useState, useEffect } from "react"
-import adImage from "../assets/advertisement1.png"
+import { useState } from "react"
 
-export default function AdPopup() {
-  const [visible, setVisible] = useState(false)
+// Accept the adId and onClose props passed down from App.jsx!
+export default function AdPopup({ adId = "1", onClose }) {
   const [hiding, setHiding]   = useState(false)
 
-  useEffect(() => {
-    // Show ad on every page load / refresh
-    const t = setTimeout(() => setVisible(true), 2500)
-    return () => clearTimeout(t)
-  }, [])
-
   const dismiss = () => {
+    // 1. Trigger the fade-out CSS animation
     setHiding(true)
-    setTimeout(() => setVisible(false), 350)
+    
+    // 2. Wait exactly 350ms for the animation to finish, then tell App.jsx to completely remove the popup
+    setTimeout(() => {
+      if (onClose) onClose();
+    }, 350)
   }
 
-  if (!visible) return null
+  // 🚀 Dynamically load the image based on the Admin's selection!
+  // Note: Ensure this path matches exactly where your ad images live. 
+  // Based on your admin file, they might be in an 'ads' folder like: `../assets/ads/advertisement${adId}.png`
+  const imageSrc = new URL(`../assets/ads/advertisement${adId}.png`, import.meta.url).href;
 
   return (
     <div
@@ -51,9 +52,12 @@ export default function AdPopup() {
         </button>
 
         <div className="rounded-2xl overflow-hidden shadow-2xl">
-          <img src={adImage} alt="Esting's Flowers Promotion"
-            className="w-full h-auto block"
-            style={{ maxHeight: "85vh", objectFit: "contain" }} />
+          <img 
+            src={imageSrc} 
+            alt="Esting's Flowers Promotion"
+            className="w-full h-auto block bg-white"
+            style={{ maxHeight: "85vh", objectFit: "contain" }} 
+          />
         </div>
 
         <p className="text-center text-white/60 text-xs mt-3">Click anywhere outside to close</p>

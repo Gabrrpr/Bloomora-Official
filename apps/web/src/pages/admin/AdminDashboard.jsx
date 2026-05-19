@@ -296,8 +296,6 @@ function BranchBadge({ branch }) {
 }
 
 // ─── Revenue Chart ────────────────────────────────────────────────────────────
-// ─── Revenue Chart ────────────────────────────────────────────────────────────
-// ─── Revenue Chart ────────────────────────────────────────────────────────────
 function RevenueChart({ branch }) {
   const { isDark } = useTheme();
   const t = useTokens(isDark);
@@ -308,7 +306,7 @@ function RevenueChart({ branch }) {
 
   const staticPeriod = REVENUE_PERIODS.find(p => p.key === periodKey);
 
-  // HELPER: Generate rolling 7 days labels (e.g., ends on "Mon" if today is Monday)
+  // HELPER 1: Generate rolling 7 days labels (ends on Today)
   const getRollingWeekLabels = () => {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const labels = [];
@@ -320,25 +318,35 @@ function RevenueChart({ branch }) {
     return labels;
   };
 
+  // 🚀 HELPER 2: Generate rolling 6 years labels (ends on Current Year)
+  const getRollingYearLabels = () => {
+    const currentYear = new Date().getFullYear();
+    // Generates an array of the last 6 years, e.g., ["2021", "2022", "2023", "2024", "2025", "2026"]
+    return Array.from({ length: 6 }, (_, i) => String(currentYear - 5 + i));
+  };
+
   useEffect(() => {
     setLoading(true);
 
-    // 1. Capitalize the branch name so PostgreSQL finds it! (e.g. "manila" -> "Manila")
     const apiBranch = branch === "all" ? "all" : branch.charAt(0).toUpperCase() + branch.slice(1);
 
     api.get(`/dashboard/revenue?period=${periodKey}&branch=${apiBranch}`)
       .then(rows => {
         const period = REVENUE_PERIODS.find(p => p.key === periodKey);
-        const actualLabels = periodKey === "week" ? getRollingWeekLabels() : period.labels;
+        
+        // 🚀 Swap in the dynamic labels for Week AND Year!
+        const actualLabels = periodKey === "week" 
+          ? getRollingWeekLabels() 
+          : periodKey === "year" 
+            ? getRollingYearLabels() 
+            : period.labels;
 
         const manilaData = Array(actualLabels.length).fill(0);
         const pampangaData = Array(actualLabels.length).fill(0);
 
-        // Normalize "Today" to exactly midnight
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // Process data normally so empty branches show a live flat chart
         if (rows && rows.length > 0) {
           rows.forEach(row => {
             const date = new Date(row.period);
@@ -358,8 +366,8 @@ function RevenueChart({ branch }) {
             } else if (periodKey === "month") {
               idx = date.getMonth();
             } else if (periodKey === "year") {
-              idx = period.labels.indexOf(String(date.getFullYear()));
-              if (idx === -1) idx = period.labels.length - 1;
+              // Map the database year to our dynamic rolling year array
+              idx = actualLabels.indexOf(String(date.getFullYear()));
             }
 
             if (idx === -1 || idx >= actualLabels.length) return;
@@ -376,11 +384,10 @@ function RevenueChart({ branch }) {
         }
 
         const allValues = [...manilaData, ...pampangaData];
-        const maxDataValue = Math.max(...allValues, 0);
+        const maxDataValue = Math.max(...allValues, 0); 
 
-        // 🚀 DYNAMIC Y-AXIS GENERATOR
-        // Determine a clean "ceiling" for the chart so the lines divide evenly
-        let chartCeiling = 15000;
+        // DYNAMIC Y-AXIS GENERATOR
+        let chartCeiling = 15000; 
         if (maxDataValue > 0) {
           if (maxDataValue <= 1500) chartCeiling = 1500;
           else if (maxDataValue <= 3000) chartCeiling = 3000;
@@ -401,13 +408,12 @@ function RevenueChart({ branch }) {
           "₱0"
         ] : period.yAxis;
 
-        // 🚀 SCALE BARS AGAINST THE CEILING (Not just the highest data point!)
         const calculatedManila = manilaData.map(v => v > 0 ? Math.max(2, Math.round((v / chartCeiling) * 90)) : 0);
         const calculatedPampanga = pampangaData.map(v => v > 0 ? Math.max(2, Math.round((v / chartCeiling) * 90)) : 0);
 
         setChartData({
           labels: actualLabels,
-          yAxis: dynamicYAxis,
+          yAxis: dynamicYAxis, 
           manila: calculatedManila,
           pampanga: calculatedPampanga,
           raw: { manila: manilaData, pampanga: pampangaData },
@@ -415,18 +421,17 @@ function RevenueChart({ branch }) {
       })
       .catch(err => {
         console.error("❌ REVENUE FETCH ERROR:", err);
-        setChartData(null);
+        setChartData(null); 
       })
       .finally(() => setLoading(false));
   }, [periodKey, branch]);
 
   const currentIdx = (() => {
-    // 🚀 In a Rolling 7 Days chart, "Today" is ALWAYS the very last column (index 6)!
-    if (periodKey === "week") return 6;
-
+    if (periodKey === "week") return 6; // Rolling week: Today is ALWAYS index 6 (far right)
+    if (periodKey === "year") return 5; // Rolling year: This Year is ALWAYS index 5 (far right)
+    
     const d = new Date();
     if (periodKey === "month") return d.getMonth();
-    if (periodKey === "year") return staticPeriod.labels.indexOf(String(d.getFullYear()));
     return -1;
   })();
 
@@ -477,10 +482,10 @@ function RevenueChart({ branch }) {
             {[1, 2, 3].map(i => (
               <div key={`grid-${i}`} className="absolute left-0 right-0 pointer-events-none" style={{ top: `${(i / 4) * 100}%`, borderTop: `1px dashed ${t.chartDash}` }} />
             ))}
-
+            
             {display.labels.map((lbl, i) => {
               const isCurrent = i === currentIdx;
-
+              
               if (branch === "all") {
                 return (
                   <div key={`bar-all-${lbl}-${i}`} className="flex-1 flex items-end gap-0.5 group h-full" style={{ minWidth: 0 }}
@@ -514,7 +519,7 @@ function RevenueChart({ branch }) {
             {display.labels.map((lbl, i) => (
               <div key={`label-${lbl}-${i}`} className="flex-1 flex justify-center" style={{ minWidth: 0 }}>
                 <span className="text-[9px] font-medium truncate" style={{ color: i === currentIdx ? (isDark ? "#4ade80" : "#0C573E") : t.textMuted }}>
-                  {periodKey === "month" ? lbl.slice(0, 1) : periodKey === "year" ? lbl.slice(2) : lbl}
+                  {periodKey === "year" ? lbl.slice(2) : lbl}
                 </span>
               </div>
             ))}

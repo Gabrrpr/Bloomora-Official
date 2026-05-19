@@ -94,7 +94,25 @@ export default function AdminAdvertisements() {
 
   const activeAd = useMemo(() => ADS.find(a => a.id === active), [active])
   const handleSetActive = useCallback((id) => { setActive(id); setSaved(false) }, [])
-  const handleSave = () => { setSaved(true); setTimeout(() => setSaved(false), 2500) }
+  const handleSave = () => { 
+    // 1. Save the active Ad ID to the browser so the customer side can read it!
+    localStorage.setItem("bloomora_active_ad_id", active);
+    // 2. Optional: If you have a backend route for this later, you would do:
+    // api.updateSettings({ active_ad_id: active });
+
+    // 3. Run your UI animation
+    setSaved(true); 
+    setTimeout(() => setSaved(false), 2500); 
+  }
+
+  // NOTE: You also need to make sure the admin page loads the saved ad when you open it!
+  // Add this new useEffect right under your existing state declarations (around line 100):
+  useEffect(() => {
+    const savedAdId = localStorage.getItem("bloomora_active_ad_id");
+    if (savedAdId) {
+      setActive(Number(savedAdId));
+    }
+  }, []);
 
   return (
     <div className="space-y-5">

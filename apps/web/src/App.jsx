@@ -108,8 +108,57 @@ function AppContent() {
   const [prevPage, setPrevPage] = useState("login");
   const [selectedOrderId, setSelectedOrderId] = useState(null);
 
+  // 🚀 NEW: State for Pop-up Orchestration
+  const [showCookieConsent, setShowCookieConsent] = useState(false);
+  const [showAdPopup, setShowAdPopup] = useState(false);
+  const [activeAdId, setActiveAdId] = useState("1");
+
   const pageRef = useRef(page);
   useEffect(() => { pageRef.current = page; }, [page]);
+
+  // 🚀 NEW: The Traffic Cop logic for Pop-ups
+  useEffect(() => {
+    // Only run this logic on customer storefront pages
+    if (isPreview || page === "admin" || AUTH_PAGES.includes(page)) return;
+
+    // 1. Find out which Ad the Admin wants to show
+    const adminAdId = localStorage.getItem("bloomora_active_ad_id") || "1";
+    setActiveAdId(adminAdId);
+
+    // 2. Check if cookies have been accepted
+    const hasAcceptedCookies = localStorage.getItem("bloomora_cookies_accepted");
+    
+    if (!hasAcceptedCookies) {
+      // Stop! Show cookies first. DO NOT show the ad yet.
+      setShowCookieConsent(true);
+    } else {
+      // Cookies are handled, safe to trigger the Ad!
+      triggerAd(adminAdId);
+    }
+  }, [page]); // Re-run if page changes, but sessionStorage keeps it to 1 pop-up per visit
+
+  const triggerAd = (adId) => {
+    // We use sessionStorage so the ad pops up once per browser session. 
+    // If we used localStorage, they would only ever see an ad ONCE in their entire life!
+    const hasSeenAd = sessionStorage.getItem(`bloomora_seen_ad_${adId}`);
+    
+    if (!hasSeenAd) {
+      // A smooth 2-second delay so the user isn't immediately bombarded
+      setTimeout(() => setShowAdPopup(true), 2000);
+    }
+  };
+
+  const handleAcceptCookies = () => {
+    localStorage.setItem("bloomora_cookies_accepted", "true");
+    setShowCookieConsent(false);
+    // Now that cookies are out of the way, trigger the Ad!
+    triggerAd(activeAdId);
+  };
+
+  const handleCloseAd = () => {
+    setShowAdPopup(false);
+    sessionStorage.setItem(`bloomora_seen_ad_${activeAdId}`, "true");
+  };
 
   useEffect(() => {
     if (isPreview) return;
@@ -125,11 +174,8 @@ function AppContent() {
 
   useEffect(() => {
     if (AUTH_PAGES.includes(page)) {
-      // Auth pages always light
       forceMode(false);
     } else {
-      // Admin and customer pages both follow user preference
-      // Since logout resets preference to light, admin defaults to light after login
       clearForce();
     }
   }, [page]);
@@ -200,10 +246,12 @@ function AppContent() {
   return (
     <>
       {renderContent()}
-      {!AUTH_PAGES.includes(page) && page !== "admin" && (
+
+      {/* 🚀 NEW: The Orchestrated Pop-ups */}
+      {!AUTH_PAGES.includes(page) && page !== "admin" && !isPreview && (
         <>
-          <CookieConsent />
-          <AdPopup />
+          {showCookieConsent && <CookieConsent onAccept={handleAcceptCookies} />}
+          {showAdPopup && <AdPopup adId={activeAdId} onClose={handleCloseAd} />}
         </>
       )}
     </>

@@ -1,29 +1,20 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 
 const DG = "#0C573E"
 
-// Changed to v2 key — clears old stored values so popup shows again
-const STORAGE_KEY = "bloomora_cookie_v2"
-
-export default function CookieConsent() {
-  const [visible, setVisible] = useState(false)
+// Accept the onAccept prop passed down from App.jsx!
+export default function CookieConsent({ onAccept }) {
   const [hiding, setHiding]   = useState(false)
 
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (!stored) {
-      const t = setTimeout(() => setVisible(true), 1500)
-      return () => clearTimeout(t)
-    }
-  }, [])
-
-  const dismiss = (accepted) => {
+  const dismiss = () => {
+    // 1. Trigger the slide-down animation
     setHiding(true)
-    localStorage.setItem(STORAGE_KEY, accepted ? "accepted" : "denied")
-    setTimeout(() => setVisible(false), 400)
-  }
 
-  if (!visible) return null
+    // 2. Wait 400ms for the animation to finish, then tell App.jsx to destroy this component and fire the Ad!
+    setTimeout(() => {
+      if (onAccept) onAccept();
+    }, 400)
+  }
 
   return (
     <>
@@ -33,9 +24,11 @@ export default function CookieConsent() {
           to   { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
       `}</style>
+
       <div
         className="fixed bottom-6 left-1/2 z-[9999]"
         style={{
+          // Play slide-up when it mounts, slide-down when hiding
           animation: hiding ? "none" : "cookieSlideUp 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) both",
           transform: hiding ? "translateX(-50%) translateY(120%)" : "translateX(-50%) translateY(0)",
           transition: hiding ? "transform 0.4s ease-in" : "none",
@@ -44,6 +37,7 @@ export default function CookieConsent() {
       >
         <div className="rounded-2xl px-6 py-5"
           style={{ backgroundColor: "white", border: "1px solid #e5e7eb", boxShadow: "0 20px 60px rgba(0,0,0,0.15), 0 4px 16px rgba(0,0,0,0.08)" }}>
+
           <div className="flex items-center gap-2.5 mb-2">
             <div className="w-8 h-8 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: "#e6f4ea" }}>
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke={DG} strokeWidth="1.8">
@@ -56,16 +50,18 @@ export default function CookieConsent() {
             </div>
             <p className="text-sm font-bold text-gray-800">We use cookies</p>
           </div>
+
           <p className="text-xs text-gray-500 leading-relaxed mb-5">
             To improve your experience, analyze traffic, and show you relevant content. Accept all cookies or select "Deny" to opt out of non-essential tracking.
           </p>
+
           <div className="flex items-center gap-3">
-            <button onClick={() => dismiss(false)}
+            <button onClick={dismiss}
               className="flex-1 py-2.5 rounded-xl text-sm font-semibold border-2 transition-all hover:bg-gray-50 active:scale-95"
               style={{ borderColor: "#e5e7eb", color: "#6b7280" }}>
               Deny
             </button>
-            <button onClick={() => dismiss(true)}
+            <button onClick={dismiss}
               className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white transition-all hover:opacity-90 active:scale-95"
               style={{ backgroundColor: DG }}>
               Accept all

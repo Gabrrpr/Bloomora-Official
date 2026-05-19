@@ -83,6 +83,7 @@ export default function DescribeArrangement({ onNavigate }) {
     }))
   }
 
+
   const handleGenerate = async () => {
     if (!customizationEnabled) {
       setError("AI Customization is temporarily disabled during peak seasons.")
@@ -95,35 +96,71 @@ export default function DescribeArrangement({ onNavigate }) {
     setUnavailableItems([])
 
     try {
+      // 🚀 THE FIX: Secretly supercharge the user's prompt!
+      
+      // 1. Gather all currently available inventory items from your React state
+      const availableInventory = products
+        .filter(p => p.is_available)
+        .map(p => p.name)
+        .join(", ");
+
+      // 2. Inject strict camera rules and inventory constraints into the prompt
+      const superchargedPrompt = `${prompt.trim()}. 
+        Strict visual rules: Professional product photography, front-view, eye-level camera angle, standing upright. DO NOT use a top-down or bird's-eye view. 
+        Strict inventory rules: You MUST ONLY utilize flowers, vases, and wrappings from this exact list: [${availableInventory}].`;
+
+      // 3. Send the supercharged prompt to the backend
       const payload = {
-        prompt_text: prompt.trim(),
+        prompt_text: superchargedPrompt, 
         flower_id: selectedMaterials.flower || undefined,
         vase_id: selectedMaterials.vase || undefined,
         wrapping_id: selectedMaterials.wrapping || undefined,
         accessory_id: selectedMaterials.accessory || undefined,
       }
+      
       const data = await api.checkAndGenerate(payload)
 
       if (data.unavailable_items && data.unavailable_items.length > 0) {
         setUnavailableItems(data.unavailable_items)
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
       } else if (data.success) {
-        // Enrich price_breakdown items with actual DB prices
+        // Enrich price_breakdown items with actual DB prices AND group duplicates!
         if (data.price_breakdown?.items) {
-          data.price_breakdown.items = data.price_breakdown.items.map(item => {
+
+          // 1. Assign correct DB prices to each raw item
+          const pricedItems = data.price_breakdown.items.map(item => {
             const dbPrice = getProductPrice(item.product_id)
             const qty = item.quantity || 1
             return {
               ...item,
+              quantity: qty,
               unit_price: dbPrice > 0 ? dbPrice : item.unit_price,
               subtotal: dbPrice > 0 ? dbPrice * qty : item.subtotal,
             }
           })
-          // Recalculate total from actual DB prices
+
+          // 2. 🚀 THE FIX: Group the items by name so we don't get "1x Sunflower" three times
+          const groupedMap = pricedItems.reduce((acc, item) => {
+            const key = item.product_name;
+            if (!acc[key]) {
+              acc[key] = { ...item }; // First time seeing it, add to list
+            } else {
+              // We've seen this flower before! Add to its quantity and subtotal
+              acc[key].quantity += item.quantity;
+              acc[key].subtotal += item.subtotal;
+            }
+            return acc;
+          }, {});
+
+          // 3. Convert our grouped object back into an array for the UI
+          data.price_breakdown.items = Object.values(groupedMap);
+
+          // 4. Recalculate the grand total
           data.price_breakdown.total_price = data.price_breakdown.items.reduce(
             (sum, item) => sum + item.subtotal, 0
           )
         }
+
         setResult(data)
         setCustomName(data.price_breakdown?.items?.[0]?.product_name || "AI Arrangement")
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
@@ -435,7 +472,10 @@ export default function DescribeArrangement({ onNavigate }) {
                             >
                               <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: G }} />
                               <span className="font-medium text-gray-700">{item.material_type}:</span>
-                              <span className="text-gray-500">{item.product_name}</span>
+                              <span className="text-gray-500">
+                                {item.product_name} 
+                                {item.quantity > 1 && <span className="ml-1 text-[10px] text-gray-400 font-semibold bg-gray-100 px-1.5 py-0.5 rounded-md">× {item.quantity}</span>}
+                              </span>
                             </span>
                           ))}
                         </div>
@@ -449,7 +489,10 @@ export default function DescribeArrangement({ onNavigate }) {
                         <div className="space-y-1">
                           {result.price_breakdown?.items?.map((item, idx) => (
                             <div key={idx} className="flex justify-between text-xs">
-                              <span className="text-gray-500">{item.product_name} × {item.quantity || 1}</span>
+                              <span className="text-gray-500">
+                                {item.product_name}
+                                {item.quantity > 1 && <span className="ml-1 text-[10px] text-gray-400 font-semibold bg-gray-100 px-1.5 py-0.5 rounded-md">× {item.quantity}</span>}
+                              </span>
                               <span className="text-gray-700 font-medium">₱{(+item.subtotal).toLocaleString()}</span>
                             </div>
                           ))}
