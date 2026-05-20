@@ -3,6 +3,8 @@ import { useTheme } from "../../context/ThemeContext"
 import { useAuth } from "../../context/AuthContext"
 import Footer from "../../components/Footer"
 
+import { api } from "../../services/api.js"
+
 const G   = "#2E8B34"
 const DG  = "#0C573E"
 const API_BASE = "http://localhost:8000/api/v1"
@@ -188,19 +190,74 @@ function WishlistPanel({ onNavigate, isDark }) {
 }
 
 // ── DetailsPanel ──────────────────────────────────────────────────────────────
+// ── DetailsPanel ──────────────────────────────────────────────────────────────
 function DetailsPanel({ user, showToast, isDark }) {
+  const { refreshUser } = useAuth() 
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({ firstName:user?.firstName||"", lastName:user?.lastName||"", email:user?.email||"", phone:user?.phoneNumber||"" })
   const fileRef = useRef(null)
-  const [avatar, setAvatar] = useState(null)
+  
+  const [avatar, setAvatar] = useState(user?.profilePictureUrl || user?.profile_picture_url || null)
+  const [selectedFile, setSelectedFile] = useState(null)
+  const [uploadingPic, setUploadingPic] = useState(false)
+
+  useEffect(() => {
+    setAvatar(user?.profilePictureUrl || user?.profile_picture_url || null)
+  }, [user?.profilePictureUrl, user?.profile_picture_url])
+
   const divC = isDark ? "#1e293b" : "#f0f0f0"
   const nameC = isDark ? "#f1f5f9" : "#111827"
   const linkC = isDark ? "#4ade80" : G
+
+  const handleFileSelect = (e) => {
+    const f = e.target.files?.[0]
+    if (f) {
+      setSelectedFile(f)
+      setAvatar(URL.createObjectURL(f))
+    }
+  }
+
+  const handleSavePicture = async () => {
+    if (!selectedFile) return
+    setUploadingPic(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", selectedFile)
+      
+      await api.uploadProfilePicture(formData)
+      showToast("Profile photo updated!")
+      setSelectedFile(null)
+      if (refreshUser) await refreshUser() 
+    } catch (err) {
+      showToast("Failed to upload photo.")
+    } finally {
+      setUploadingPic(false)
+    }
+  }
+
+  const handleCancelPicture = () => {
+    setSelectedFile(null)
+    setAvatar(user?.profile_picture_url || null) 
+  }
+
+  // 🚀 NEW: Handle complete photo removal
+  const handleRemovePicture = async () => {
+    if (!window.confirm("Are you sure you want to remove your profile photo?")) return;
+    try {
+      await api.removeProfilePicture();
+      setAvatar(null);
+      showToast("Profile photo removed.");
+      if (refreshUser) await refreshUser();
+    } catch (err) {
+      showToast("Failed to remove photo.");
+    }
+  }
+
   return (
     <div>
       <SectionHeader title="Personal Details" description="Update your name, email, and contact information." isDark={isDark}/>
-      <div className="flex items-center gap-4 sm:gap-5 mb-7 pb-6" style={{ borderBottom:`1px solid ${divC}` }}>
-        <div className="relative">
+      <div className="flex items-start gap-4 sm:gap-5 mb-7 pb-6 flex-wrap" style={{ borderBottom:`1px solid ${divC}` }}>
+        <div className="relative flex-shrink-0 mt-1">
           {avatar
             ? <img src={avatar} alt="Profile" className="w-16 h-16 rounded-full object-cover"/>
             : <div className="w-16 h-16 rounded-full flex items-center justify-center text-xl font-bold text-white" style={{ background:`linear-gradient(135deg,${G},${DG})` }}>
@@ -215,15 +272,55 @@ function DetailsPanel({ user, showToast, isDark }) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"/>
             </svg>
           </button>
-          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={e => { const f=e.target.files?.[0]; if(f) setAvatar(URL.createObjectURL(f)) }}/>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
         </div>
-        <div>
+        
+        <div className="flex-1">
           <p className="text-sm font-bold" style={{ color:nameC }}>{user?.firstName} {user?.lastName}</p>
-          <button onClick={() => fileRef.current?.click()} className="text-xs mt-0.5 hover:underline" style={{ color:linkC }}>
-            Change profile photo
-          </button>
+          
+          {!selectedFile ? (
+            <div className="mt-1 flex items-center gap-3">
+              <button onClick={() => fileRef.current?.click()} className="text-xs font-semibold hover:underline" style={{ color:linkC }}>
+                Change photo
+              </button>
+              {/* 🚀 NEW: The Remove Button */}
+              {user?.profile_picture_url && (
+                <button onClick={handleRemovePicture} className="text-xs font-semibold hover:underline" style={{ color:"#f87171" }}>
+                  Remove
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="mt-2 flex items-center gap-2">
+              <button 
+                onClick={handleSavePicture} disabled={uploadingPic}
+                className="text-xs px-3 py-1.5 rounded text-white font-bold transition-all hover:opacity-90 disabled:opacity-50"
+                style={{ backgroundColor: DG }}>
+                {uploadingPic ? "Saving..." : "Save Photo"}
+              </button>
+              <button 
+                onClick={handleCancelPicture} disabled={uploadingPic}
+                className="text-xs font-bold transition-all hover:opacity-70 disabled:opacity-50"
+                style={{ color: "#f87171" }}>
+                Cancel
+              </button>
+            </div>
+          )}
+
+          {/* 🚀 NEW: The Just-in-Time Privacy Disclaimer */}
+          <div className="mt-3 flex items-start gap-1.5 opacity-70">
+            <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+            <p className="text-[10px] leading-tight max-w-sm" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
+              Your photo is securely stored to personalize your account and is only visible to you and our fulfillment team. You can remove it at any time.
+            </p>
+          </div>
+
         </div>
       </div>
+      
+      {/* ... Rest of your form fields (First Name, Last Name, etc.) remain the same ... */}
       <div className="grid sm:grid-cols-2 gap-4 mb-6">
         <Field label="First Name"    value={form.firstName} onChange={e=>setForm({...form,firstName:e.target.value})} readOnly={!editing} isDark={isDark}/>
         <Field label="Last Name"     value={form.lastName}  onChange={e=>setForm({...form,lastName:e.target.value})}  readOnly={!editing} isDark={isDark}/>

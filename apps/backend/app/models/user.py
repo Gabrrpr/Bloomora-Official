@@ -5,7 +5,6 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from .base import Base, now_utc
 
-
 class RoleEnum(str, enum.Enum):
     admin    = "admin"
     staff    = "staff"
@@ -46,6 +45,7 @@ class User(Base):
     is_staff_verified = Column(Boolean, default=False, nullable=False)
     staff_verification_token = Column(String(255), nullable=True)
     staff_token_expires_at = Column(DateTime(timezone=True), nullable=True)
+    profile_picture_url = Column(String(255), nullable=True)
 
     # Relationships
     orders = relationship("Order", back_populates="user", foreign_keys="Order.user_id")

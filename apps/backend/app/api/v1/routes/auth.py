@@ -71,6 +71,7 @@ class RegisterRequest(BaseModel):
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
+    user: dict
 
 class ResetPasswordRequest(BaseModel):
     email: EmailStr
@@ -414,6 +415,7 @@ def get_me(current_user: User = Depends(get_current_user)):
     return {
         "id": str(current_user.id),
         "email": current_user.email,
+        "profile_picture_url": getattr(current_user, 'profile_picture_url', None),
         "first_name": current_user.first_name,
         "last_name": current_user.last_name,
         "role": current_user.role.value if hasattr(current_user.role, 'value') else current_user.role,

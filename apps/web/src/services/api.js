@@ -143,6 +143,14 @@ export const api = {
     return this.patch('/users/me', data);
   },
 
+  async uploadProfilePicture(formData) {
+    return this.post('/users/profile/upload-picture', formData);
+  },
+
+  async removeProfilePicture() {
+    return this.delete('/users/profile/picture');
+  },
+
   // ── Products (Admin) ──────────────────────────────────────────────────────
   async getAdminProducts() {
     return this.get('/products/admin/all');

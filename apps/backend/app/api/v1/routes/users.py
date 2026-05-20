@@ -11,8 +11,10 @@ from app.models import User, RoleEnum, BranchEnum
 from app.api.v1.routes.auth import hash_password, generate_username 
 from pydantic import BaseModel, EmailStr
 from app.services.email_service import send_otp_email, send_staff_confirm_email
+from fastapi import UploadFile, File
+from app.core.supabase import supabase
 
-router = APIRouter(tags=["Users"])
+router = APIRouter(tags=["Users"])  
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 def require_admin_or_staff(current_user: User):
@@ -45,6 +47,9 @@ def serialize_user(u: User) -> dict:
         "is_staff_verified": is_staff_verified,
         "staff_status": staff_status,
         "must_change_password": getattr(u, 'must_change_password', False),
+        
+        "profile_picture_url": getattr(u, 'profile_picture_url', None),
+        
         "created_at": u.created_at.isoformat() if getattr(u, 'created_at', None) else None,
         "updated_at": u.updated_at.isoformat() if getattr(u, 'updated_at', None) else None,
     }
@@ -301,6 +306,68 @@ def update_me(
     db.commit()
     db.refresh(user)
     return {"status": "success", "message": "Profile updated successfully.", "user": serialize_user(user)}
+
+@router.post("/profile/upload-picture")
+async def upload_profile_picture(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    try:
+        file_bytes = await file.read()
+        file_extension = file.filename.split(".")[-1]
+        file_path = f"{current_user.id}/avatar.{file_extension}"
+
+        # Upload to Supabase Storage
+        supabase.storage.from_("avatars").upload(
+            path=file_path,
+            file=file_bytes,
+            file_options={"content-type": file.content_type, "upsert": "true"} # <--- String
+        )
+
+        public_url = supabase.storage.from_("avatars").get_public_url(file_path)
+
+        current_user.profile_picture_url = public_url
+        db.commit()
+
+        return {"success": True, "message": "Profile picture updated", "url": public_url}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@router.delete("/profile/picture")
+def remove_profile_picture(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Removes the user's profile picture from both the database and Supabase storage."""
+    try:
+        # If they don't have a picture, just return success
+        if not current_user.profile_picture_url:
+            return {"success": True, "message": "No picture to remove"}
+
+        # 1. Clean up Supabase Storage (Delete the actual image file)
+        try:
+            # List files in the user's specific folder
+            files_to_remove = supabase.storage.from_("avatars").list(str(current_user.id))
+            if files_to_remove:
+                # Create a list of file paths to delete
+                paths = [f"{current_user.id}/{f['name']}" for f in files_to_remove]
+                supabase.storage.from_("avatars").remove(paths)
+        except Exception as storage_e:
+            # If storage deletion fails (e.g., file already gone), print it but don't crash
+            print(f"Notice: Failed to delete from Supabase storage: {storage_e}")
+
+        # 2. Erase the URL from the PostgreSQL database
+        current_user.profile_picture_url = None
+        current_user.updated_at = datetime.now(timezone.utc)
+
+        db.commit()
+
+        return {"success": True, "message": "Profile picture removed successfully"}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.patch("/{user_id}", response_model=dict)

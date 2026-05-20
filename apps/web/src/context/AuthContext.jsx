@@ -31,6 +31,7 @@ export function AuthProvider({ children }) {
         phoneNumber: profile.phone_number,
         address: profile.address,
         is_profile_complete: profile.is_profile_complete,
+        profilePictureUrl: profile.profile_picture_url,
       }
       localStorage.setItem("access_token", token)
       localStorage.setItem("user", JSON.stringify(userData))
@@ -71,6 +72,7 @@ export function AuthProvider({ children }) {
         phoneNumber: profile.phone_number,
         address: profile.address,
         is_profile_complete: profile.is_profile_complete,
+        profilePictureUrl: profile.profile_picture_url,
       }
       localStorage.setItem("user", JSON.stringify(userData))
       setUser(userData)
