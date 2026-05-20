@@ -249,6 +249,7 @@ async def check_and_generate(
 
     remaining = get_remaining_generations(db, current_user.id)
 
+    # Ensure frontend always gets a price_breakdown with items/total.
     return CustomizationResponse(
         success=True,
         message=f"Your arrangement has been generated! You have {remaining} AI generation(s) left today.",
@@ -256,5 +257,6 @@ async def check_and_generate(
         arrangement_id=str(arrangement.id),
         unavailable_items=[],
         remaining_generations=remaining,
-        price_breakdown=price_breakdown,
+        price_breakdown=price_breakdown if price_breakdown is not None else PriceBreakdown(items=[], total_price=0.0),
     )
+

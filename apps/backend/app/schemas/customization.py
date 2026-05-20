@@ -47,7 +47,7 @@ class CustomizationResponse(BaseModel):
     message: str
     generated_image_url: Optional[str] = None
     arrangement_id: Optional[str] = None
-    unavailable_items: List[UnavailableItem] = []
-    remaining_generations: int = 5      # ← how many AI uses left today
-    price_breakdown: Optional[PriceBreakdown] = None
+    # Ensure this field is here!
+    price_breakdown: Optional[PriceBreakdown] = None 
+    remaining_generations: int = 5
 
