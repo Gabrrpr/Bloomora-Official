@@ -19,4 +19,6 @@ class HeroCustomizationResponse(BaseModel):
 
 class HeroCustomizationUpdate(BaseModel):
     slides: List[HeroSlide]
+class CustomizationToggleUpdate(BaseModel):
+    enabled: bool
 

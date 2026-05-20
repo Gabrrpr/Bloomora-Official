@@ -10,26 +10,25 @@ import HomeFAQ           from "../../components/HomeFAQ.jsx"
 import Footer            from "../../components/Footer.jsx"
 import FallingRoses      from "../../components/FallingRoses.jsx"
 
-export default function Home({ onNavigate }) {
+// Updated Home.jsx snippet — Add the incoming prop argument
+export default function Home({ onNavigate, isCustomizationEnabled }) {
   return (
     <div>
-
-      {/* Hero with falling roses layered behind the carousel */}
       <div className="relative overflow-hidden">
         <FallingRoses />
         <HeroCarousel onNavigate={onNavigate} />
       </div>
 
-      
       <OccasionsStrip onNavigate={onNavigate} />
       <FeaturedFlowers onNavigate={onNavigate} />
       <FeaturedNonFloral onNavigate={onNavigate} />
-      <CustomizeSection onNavigate={onNavigate} />
-      <Testimonials />
       
+      {/* 🚀 Pass down the lock state to the dashboard element block */}
+      <CustomizeSection onNavigate={onNavigate} isCustomizationEnabled={isCustomizationEnabled} />
+      
+      <Testimonials />
       <HomeFAQ onNavigate={onNavigate} />
       <Footer onNavigate={onNavigate} />
-
     </div>
   )
 }

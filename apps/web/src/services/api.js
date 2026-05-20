@@ -173,7 +173,6 @@ export const api = {
     return this.post(`/orders/${orderId}/action`, { status });
   },
 
-
   async getMyOrders(status) {
     const params = new URLSearchParams();
     if (status && status !== 'All' && status !== 'today') params.append('status', status.toLowerCase().replace(/ /g, '_'));
@@ -223,10 +222,8 @@ export const api = {
   },
 
   async setCampaignProducts(campaignId, product_ids) {
-    // body: { product_ids: [...] }
     return this.post(`/campaigns/${campaignId}/products`, { product_ids });
   },
-
 
   // ── Vases ────────────────────────────────────────────────────────────────
   async getVases(category = null, minPrice = null, maxPrice = null) {
@@ -270,6 +267,16 @@ export const api = {
 
   async setDefaultAddress(addressId) {
     return this.patch(`/addresses/${addressId}/set-default`, {});
+  },
+
+  // ── Storage / Uploads ───────────────────────────────────────────────────
+  // 🚀 NEW: General-purpose upload function for your Supabase buckets!
+  async uploadImage(bucket, file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // This expects a route in your backend like: POST /api/v1/upload/{bucket}
+    return this.post(`/upload/${bucket}`, formData);
   },
 
   // ── Site Customization ──────────────────────────────────────────────────

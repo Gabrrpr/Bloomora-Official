@@ -211,7 +211,7 @@ const MIP_OPTIONS = [
   { page:"ai-gallery", icon:<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/></svg>, label:"See Examples", desc:"Browse arrangements made by our team for inspiration.", accent:"#d97706", accentBg:"#fffbeb" },
 ];
 
-function MakeItPersonalPopout({ onNavigate, onClose }) {
+function MakeItPersonalPopout({ onNavigate, onClose, isCustomizationEnabled }) {
   const { isDark } = useTheme();
   const bg     = isDark ? "#1a2332" : "white";
   const bdr    = isDark ? "#2d3748" : "#e9f5ea";
@@ -236,21 +236,31 @@ function MakeItPersonalPopout({ onNavigate, onClose }) {
             <p className="text-xs mt-1.5 leading-relaxed" style={{ color: isDark ? "#9ca3af" : "#9ca3af" }}>Choose how you'd like to create your perfect arrangement.</p>
           </div>
           <div className="py-2">
-            {MIP_OPTIONS.map((opt, i) => (
-              <button key={opt.page} onClick={() => { onNavigate(opt.page); onClose(); }}
-                className="w-full flex items-start gap-3 px-4 py-3 text-left transition-all group"
-                style={{ borderBottom: i < MIP_OPTIONS.length - 1 ? `1px solid ${divBdr}` : "none", backgroundColor:"transparent" }}
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = hoverBg(opt.accent)}
-                onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
-                <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 transition-all group-hover:scale-110"
-                  style={{ backgroundColor: isDark ? `${opt.accent}22` : opt.accentBg, color:opt.accent, border:`1.5px solid ${opt.accent}33` }}>{opt.icon}</div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold leading-snug" style={{ color: isDark ? "#e5e7eb" : "#111827" }}>{opt.label}</p>
-                  <p className="text-xs mt-0.5 leading-relaxed" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>{opt.desc}</p>
-                </div>
-                <svg className="w-3.5 h-3.5 flex-shrink-0 mt-1.5 transition-all group-hover:translate-x-0.5" style={{ color:opt.accent }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
-              </button>
-            ))}
+            {MIP_OPTIONS.map((opt, i) => {
+              const isOptionLocked = !isCustomizationEnabled && opt.page !== "ai-gallery";
+              return (
+                <button key={opt.page}
+                  disabled={isOptionLocked}
+                  onClick={() => { if (!isOptionLocked) { onNavigate(opt.page); onClose(); } }}
+                  className="w-full flex items-start gap-3 px-4 py-3 text-left transition-all group relative"
+                  style={{
+                    borderBottom: i < MIP_OPTIONS.length - 1 ? `1px solid ${divBdr}` : "none",
+                    backgroundColor: "transparent",
+                    opacity: isOptionLocked ? 0.45 : 1,
+                    cursor: isOptionLocked ? "not-allowed" : "pointer"
+                  }}
+                  onMouseEnter={e => { if (!isOptionLocked) e.currentTarget.style.backgroundColor = hoverBg(opt.accent); }}
+                  onMouseLeave={e => { if (!isOptionLocked) e.currentTarget.style.backgroundColor = "transparent"; }}>
+                  <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 mt-0.5 transition-all group-hover:scale-110"
+                    style={{ backgroundColor: isDark ? `${opt.accent}22` : opt.accentBg, color: isOptionLocked ? "#9ca3af" : opt.accent, border:`1.5px solid ${opt.accent}33` }}>{opt.icon}</div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold leading-snug" style={{ color: isDark ? "#e5e7eb" : "#111827" }}>{opt.label}</p>
+                    <p className="text-xs mt-0.5 leading-relaxed" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>{opt.desc}</p>
+                  </div>
+                  {!isOptionLocked && <svg className="w-3.5 h-3.5 flex-shrink-0 mt-1.5 transition-all group-hover:translate-x-0.5" style={{ color:opt.accent }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>}
+                </button>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -619,7 +629,6 @@ function BranchShippingPopup({ branch, onDismiss, onChangeBranch }) {
           padding: "16px",
         }}
       >
-        {/* Arrow */}
         <div style={{
           position:"absolute", top:"-7px", left:"18px",
           width:0, height:0,
@@ -635,8 +644,6 @@ function BranchShippingPopup({ branch, onDismiss, onChangeBranch }) {
           borderBottom:`6px solid ${bg}`,
           zIndex:1,
         }}/>
-
-        {/* Body */}
         <div className="flex items-start gap-2.5 mb-4">
           <div className="flex-shrink-0 w-7 h-7 rounded-full flex items-center justify-center mt-0.5"
             style={{ backgroundColor: isDark ? "rgba(46,139,52,0.18)" : "#f0fdf4" }}>
@@ -650,8 +657,6 @@ function BranchShippingPopup({ branch, onDismiss, onChangeBranch }) {
             To see items from a different branch, change your store location.
           </p>
         </div>
-
-        {/* Buttons */}
         <div className="flex items-center gap-2">
           <button
             onClick={onDismiss}
@@ -677,8 +682,6 @@ function BranchShippingPopup({ branch, onDismiss, onChangeBranch }) {
   );
 }
 
-// ── Sign-In Hint Popup ────────────────────────────────────────────────────────
-
 function useCartCount() {
   const [count, setCount] = useState(getCartCount);
   useEffect(() => {
@@ -690,7 +693,7 @@ function useCartCount() {
   return count;
 }
 
-export default function Navbar({ cartCount: propCartCount, onNavigate }) {
+export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomizationEnabled = true }) {
   const { user, logout } = useAuth();
   const { isDark } = useTheme();
   const liveCartCount = useCartCount();
@@ -715,7 +718,8 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
   const [unreadCount, setUnreadCount]           = useState(0);
   const [loadingNotifs, setLoadingNotifs]       = useState(false);
 
-  const [showBranchPopup, setShowBranchPopup] = useState(false);
+  const [showBranchPopup, setShowBranchPopup]   = useState(false);
+  const [showLockTooltip, setShowLockTooltip]   = useState(false);
 
   const navRef=useRef(null), cartRef=useRef(null), userRef=useRef(null), locationRef=useRef(null), mipRef=useRef(null);
   const menuTimer=useRef(null), cartTimer=useRef(null), userTimer=useRef(null), mipTimer=useRef(null);
@@ -724,9 +728,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
   const closeMenuD = ()  => { menuTimer.current = setTimeout(() => setOpenMenu(null), 200); };
   const openCartD  = ()  => { clearTimeout(cartTimer.current); setCartOpen(true); };
   const closeCartD = ()  => { cartTimer.current = setTimeout(() => setCartOpen(false), 200); };
-
   const openUserD  = ()  => { clearTimeout(userTimer.current); setUserOpen(true); };
-
   const closeUserD = ()  => { userTimer.current = setTimeout(() => setUserOpen(false), 200); };
   const openMipD   = ()  => { clearTimeout(mipTimer.current); setMipOpen(true); };
   const closeMipD  = ()  => { mipTimer.current = setTimeout(() => setMipOpen(false), 220); };
@@ -734,7 +736,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
   const handleBranchSelect = loc => { setSelectedLocation(loc); setLocationOpen(false); setBranchModal(loc); };
   const handleLogout       = ()  => { logout(); setUserOpen(false); onNavigate?.("login"); };
 
-  // ── NEW: Popup handlers ─────────────────────────────────────────────────────
   const handleDismissBranchPopup = () => {
     sessionStorage.setItem("bloomora_branch_popup_dismissed", "true");
     setShowBranchPopup(false);
@@ -771,7 +772,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
       .catch(err => console.error("Failed to load active campaigns", err));
   }, []);
 
-  // ── NEW: Branch popup — show once per session ───────────────────────────────
   useEffect(() => {
     const dismissed = sessionStorage.getItem("bloomora_branch_popup_dismissed");
     if (!dismissed) setShowBranchPopup(true);
@@ -840,10 +840,12 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
 
       <div className="w-full sticky top-0 z-50" ref={navRef}>
         <PromoCarousel onNavigate={onNavigate} />
+
         <nav className="border-b px-4 sm:px-6 lg:px-8 py-3" style={{
           backgroundColor: isDark ? "#111827" : "white",
           borderColor: isDark ? "#2d3748" : "#DAEDD5",
         }}>
+          {/* ── Top row: logo + desktop nav + icons ── */}
           <div className="flex items-center justify-between gap-4">
 
             {/* Logo */}
@@ -854,8 +856,10 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                 style={{ filter: isDark ? "brightness(0) invert(1)" : "none" }}/>
             </div>
 
-            {/* Desktop nav */}
-            <div className="hidden lg:flex items-center gap-6 xl:gap-8">
+            {/* Desktop nav links */}
+            <div className="hidden lg:flex items-center gap-6 xl:gap-8 flex-1 justify-center">
+
+              {/* Branch selector */}
               <div className="flex items-center gap-1.5" ref={locationRef}>
                 <span className="text-xs uppercase tracking-wide font-medium" style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>Store Branch</span>
                 <div className="relative">
@@ -870,10 +874,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                     {selectedLocation}
                     <svg className="w-3 h-3 text-gray-400 transition-transform" style={{ transform:locationOpen?"rotate(180deg)":"rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
                   </button>
-
                   {locationOpen && <LocationDropdown selected={selectedLocation} onChange={handleBranchSelect} onClose={() => setLocationOpen(false)} />}
-
-                  {/* ── Branch Shipping Popup ── */}
                   {showBranchPopup && !locationOpen && (
                     <BranchShippingPopup
                       branch={selectedLocation}
@@ -884,47 +885,68 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                 </div>
               </div>
 
-              <div className="flex items-center gap-5 xl:gap-7">
-                {FINAL_NAV_LINKS.map(link => (
-                  <div key={link.label} className="relative"
-                    onMouseEnter={() => (link.dropdown||link.categories) && openMenuD(link.label)}
-                    onMouseLeave={() => (link.dropdown||link.categories) && closeMenuD()}>
-                    <button onClick={() => handleNavClick(link)}
-                      className="flex items-center gap-0.5 text-sm font-medium pb-1 whitespace-nowrap transition-colors relative"
-                      style={{
-                        color: active===link.label ? (isDark?"#4ade80":SITE_GREEN) : (link.highlight ? (isDark?"#ff6b81":"#f43f5e") : (isDark ? "#d1d5db" : "#4b5563")),
-                        borderBottom: active===link.label ? `2px solid ${isDark?"#4ade80":SITE_GREEN}` : "2px solid transparent",
-                      }}
-                      onMouseEnter={e => { if (active!==link.label) e.currentTarget.style.color = link.highlight ? (isDark?"#ff4d6d":"#e11d48") : (isDark ? "#86efac" : NAVY_GREEN); }}
-                      onMouseLeave={e => { if (active!==link.label) e.currentTarget.style.color = link.highlight ? (isDark?"#ff6b81":"#f43f5e") : (isDark ? "#d1d5db" : "#4b5563"); }}>
-                      {link.highlight && <FloatingHearts />}
-                      {link.label}
-                      {(link.dropdown||link.categories) && <svg className="w-3 h-3 text-gray-400 ml-0.5 transition-transform" style={{ transform:openMenu===link.label?"rotate(180deg)":"rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>}
-                    </button>
-                    {(link.dropdown||link.categories) && openMenu===link.label && (
-                      <div onMouseEnter={() => openMenuD(link.label)} onMouseLeave={closeMenuD}>
-                        <DropdownMenu items={link.dropdown} categories={link.categories} onNavigate={onNavigate} onClose={() => setOpenMenu(null)} />
-                      </div>
-                    )}
-                  </div>
-                ))}
-
-                {/* Make it Personal Button */}
-                <div className="relative" ref={mipRef} onMouseEnter={openMipD} onMouseLeave={closeMipD}>
-                  <button onClick={() => onNavigate?.("make-it-personal")}
-                    className="whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full text-white flex items-center gap-1 transition-all hover:shadow-md hover:scale-105"
-                    style={{ background:"linear-gradient(135deg,#2E8B34,#0C573E)" }}>
-                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
-                    Make it Personal
-                    <svg className="w-2.5 h-2.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
+              {/* Nav links */}
+              {FINAL_NAV_LINKS.map(link => (
+                <div key={link.label} className="relative"
+                  onMouseEnter={() => (link.dropdown||link.categories) && openMenuD(link.label)}
+                  onMouseLeave={() => (link.dropdown||link.categories) && closeMenuD()}>
+                  <button onClick={() => handleNavClick(link)}
+                    className="flex items-center gap-0.5 text-sm font-medium pb-1 whitespace-nowrap transition-colors relative"
+                    style={{
+                      color: active===link.label ? (isDark?"#4ade80":SITE_GREEN) : (link.highlight ? (isDark?"#ff6b81":"#f43f5e") : (isDark ? "#d1d5db" : "#4b5563")),
+                      borderBottom: active===link.label ? `2px solid ${isDark?"#4ade80":SITE_GREEN}` : "2px solid transparent",
+                    }}
+                    onMouseEnter={e => { if (active!==link.label) e.currentTarget.style.color = link.highlight ? (isDark?"#ff4d6d":"#e11d48") : (isDark ? "#86efac" : NAVY_GREEN); }}
+                    onMouseLeave={e => { if (active!==link.label) e.currentTarget.style.color = link.highlight ? (isDark?"#ff6b81":"#f43f5e") : (isDark ? "#d1d5db" : "#4b5563"); }}>
+                    {link.highlight && <FloatingHearts />}
+                    {link.label}
+                    {(link.dropdown||link.categories) && <svg className="w-3 h-3 text-gray-400 ml-0.5 transition-transform" style={{ transform:openMenu===link.label?"rotate(180deg)":"rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>}
                   </button>
-                  {mipOpen && <MakeItPersonalPopout onNavigate={onNavigate} onClose={() => setMipOpen(false)} />}
+                  {(link.dropdown||link.categories) && openMenu===link.label && (
+                    <div onMouseEnter={() => openMenuD(link.label)} onMouseLeave={closeMenuD}>
+                      <DropdownMenu items={link.dropdown} categories={link.categories} onNavigate={onNavigate} onClose={() => setOpenMenu(null)} />
+                    </div>
+                  )}
                 </div>
+              ))}
+
+              {/* Make it Personal button */}
+              <div className="relative" ref={mipRef}
+                onMouseEnter={() => { openMipD(); if (!isCustomizationEnabled) setShowLockTooltip(true); }}
+                onMouseLeave={() => { closeMipD(); setShowLockTooltip(false); }}>
+                <button
+                  disabled={!isCustomizationEnabled}
+                  onClick={() => { if (isCustomizationEnabled) onNavigate?.("make-it-personal"); }}
+                  className={`whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full text-white flex items-center gap-1 transition-all select-none ${
+                    isCustomizationEnabled
+                      ? "hover:shadow-md hover:scale-105 cursor-pointer active:scale-95"
+                      : "opacity-40 cursor-not-allowed"
+                  }`}
+                  style={{ background: isCustomizationEnabled ? "linear-gradient(135deg,#2E8B34,#0C573E)" : "#6b7280" }}>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+                  Make it Personal
+                  <svg className="w-2.5 h-2.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
+                </button>
+
+                {mipOpen && isCustomizationEnabled && (
+                  <div onMouseEnter={openMipD} onMouseLeave={closeMipD}>
+                    <MakeItPersonalPopout onNavigate={onNavigate} isCustomizationEnabled={isCustomizationEnabled} onClose={() => setMipOpen(false)} />
+                  </div>
+                )}
+
+                {showLockTooltip && !isCustomizationEnabled && (
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 w-64 p-3 rounded-xl shadow-xl text-xs z-50 text-white bg-gray-900 border border-gray-800">
+                    <div className="font-bold text-amber-400 mb-1 flex items-center gap-1">⚠️ Customization Paused</div>
+                    Due to high seasonal demand, we are temporarily unable to cater customized products. Please choose from our signature catalogs!
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 border-4 border-transparent border-b-gray-900" />
+                  </div>
+                )}
               </div>
-            </div>
+            </div>{/* end desktop nav links */}
 
             {/* Right side icons */}
             <div className="flex items-center gap-1 sm:gap-2">
+              {/* Search */}
               <button onClick={() => setSearchOpen(true)}
                 className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors"
                 style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
@@ -935,6 +957,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
 
               <DarkModeToggle />
 
+              {/* Cart */}
               <div className="relative" ref={cartRef}>
                 <button onClick={() => onNavigate?.("cart")}
                   className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative"
@@ -947,7 +970,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                 {cartOpen && <div onMouseEnter={openCartD} onMouseLeave={closeCartD}><CartDropdown cartCount={cartCount} onNavigate={onNavigate} /></div>}
               </div>
 
-              {/* Notification Bell */}
+              {/* Notifications */}
               <div className="relative">
                 <button
                   onClick={() => setNotifOpen(p => !p)}
@@ -958,8 +981,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                   aria-label="Notifications"
                 >
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
-                    <path strokeLinecap="round" strokeLinejoin="round"
-                      d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
                   </svg>
                   {unreadCount > 0 && (
                     <span className="absolute -top-1 -right-1 flex items-center justify-center text-white font-bold rounded-full"
@@ -1034,7 +1056,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                 )}
               </div>
 
-              {/* User profile icon */}
+              {/* User */}
               <div className="relative" ref={userRef} onMouseEnter={openUserD} onMouseLeave={closeUserD}>
                 <button onClick={handleAccountClick}
                   className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative"
@@ -1045,34 +1067,65 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
                   </svg>
                 </button>
-
                 {userOpen && <UserHoverDropdown user={user} onNavigate={onNavigate} onLogout={handleLogout} />}
               </div>
 
-            </div>
-          </div>
+              {/* Mobile hamburger */}
+              <button className="lg:hidden w-8 h-8 flex items-center justify-center rounded-full transition-colors"
+                style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
+                onClick={() => setMobileOpen(p => !p)}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                  {mobileOpen
+                    ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    : <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>}
+                </svg>
+              </button>
+            </div>{/* end right icons */}
 
-          {/* Mobile menu */}
+          </div>{/* end top row */}
+
+          {/* ── Mobile menu ── */}
           {mobileOpen && (
-            <div className="lg:hidden mt-3 pt-3 border-t" style={{
-              borderColor: isDark ? "#2d3748" : "#DAEDD5",
-              backgroundColor: isDark ? "#111827" : "transparent",
-              maxHeight: "calc(100svh - 108px)",
-              overflowY: "auto",
-            }}>
-              <div className="flex items-center gap-2 px-2 mb-3 flex-wrap">
-                <span className="text-xs uppercase tracking-wide font-medium" style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>Store Branch</span>
-                {["Manila","Pampanga"].map(loc => (
-                  <button key={loc} onClick={() => { handleBranchSelect(loc); setMobileOpen(false); }}
-                    className="text-sm px-2 py-0.5 rounded border transition-colors"
-                    style={{
-                      borderColor: selectedLocation===loc ? (isDark?"#4ade80":SITE_GREEN) : (isDark ? "#2d3748" : "#e5e7eb"),
-                      color: selectedLocation===loc ? (isDark?"#4ade80":SITE_GREEN) : (isDark ? "#9ca3af" : "#6b7280"),
-                      fontWeight: selectedLocation===loc ? 600 : 400,
-                    }}>{loc}</button>
-                ))}
+            <div className="lg:hidden mt-2" style={{ borderTop: `1px solid ${isDark ? "#2d3748" : "#f3f4f6"}` }}>
+
+              {/* Make it Personal section */}
+              <div className="px-2 py-3 border-b" style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6" }}>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-bold uppercase tracking-widest" style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>Make it Personal</p>
+                  {!isCustomizationEnabled && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 uppercase">Disabled</span>}
+                </div>
+                {!isCustomizationEnabled && (
+                  <p className="text-[11px] leading-relaxed px-1 text-amber-600 font-medium mb-3">
+                    ⚠️ Custom bouquet ordering pipelines are temporarily paused to secure on-time deliveries during peak seasonal rush blocks. Please pick an elegant arrangement from our standard storefront options!
+                  </p>
+                )}
+                <div className="space-y-1">
+                  {MIP_OPTIONS.map(opt => {
+                    const isMobOptionLocked = !isCustomizationEnabled && opt.page !== "ai-gallery";
+                    return (
+                      <button key={opt.page}
+                        disabled={isMobOptionLocked}
+                        onClick={() => { if (!isMobOptionLocked) { onNavigate?.(opt.page); setMobileOpen(false); } }}
+                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all"
+                        style={{
+                          color: isMobOptionLocked ? "#9ca3af" : (isDark ? "#d1d5db" : "#374151"),
+                          opacity: isMobOptionLocked ? 0.4 : 1,
+                          cursor: isMobOptionLocked ? "not-allowed" : "pointer",
+                          backgroundColor: "transparent"
+                        }}
+                        onMouseEnter={e => { if (!isMobOptionLocked) e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4"; }}
+                        onMouseLeave={e => { if (!isMobOptionLocked) e.currentTarget.style.backgroundColor = "transparent"; }}>
+                        <span style={{ color: isMobOptionLocked ? "#9ca3af" : opt.accent }}>{opt.icon}</span>
+                        {opt.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
+              {/* Nav links */}
               {FINAL_NAV_LINKS.map(link => (
                 <div key={link.label}>
                   <button onClick={() => handleNavClick(link)}
@@ -1100,34 +1153,23 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                 </div>
               ))}
 
-              <div className="px-2 py-3 border-t" style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6" }}>
-                <p className="text-xs font-bold uppercase tracking-widest mb-2" style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>Make it Personal</p>
-                <div className="space-y-1">
-                  {MIP_OPTIONS.map(opt => (
-                    <button key={opt.page} onClick={() => { onNavigate?.(opt.page); setMobileOpen(false); }}
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all"
-                      style={{ color: isDark ? "#d1d5db" : "#374151" }}
-                      onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4"}
-                      onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
-                      <span style={{ color:opt.accent }}>{opt.icon}</span>{opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
+              {/* Auth section */}
               <div className="px-2 py-3 border-t" style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6" }}>
                 {user ? (
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 mb-3">
                       <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background:"linear-gradient(135deg,#2E8B34,#0C573E)" }}>{user.firstName?.[0]?.toUpperCase()}</div>
-                      <div><p className="text-sm font-semibold" style={{ color: isDark ? "#f3f4f6" : "#111827" }}>{user.firstName} {user.lastName}</p><p className="text-xs" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>{user.email}</p></div>
+                      <div>
+                        <p className="text-sm font-semibold" style={{ color: isDark ? "#f3f4f6" : "#111827" }}>{user.firstName} {user.lastName}</p>
+                        <p className="text-xs" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>{user.email}</p>
+                      </div>
                     </div>
                     {[{l:"My Account",p:"account"},{l:"My Orders",p:"orders"},{l:"Wishlist",p:"wishlist"},{l:"Settings",p:"settings"}].map(({l,p}) => (
                       <button key={p} onClick={() => { onNavigate?.(p); setMobileOpen(false); }}
                         className="w-full text-left text-sm px-2 py-1.5 rounded transition-colors"
                         style={{ color: isDark ? "#d1d5db" : "#4b5563" }}
-                        onMouseEnter={e=>{e.currentTarget.style.backgroundColor=isDark?"rgba(74,222,128,0.1)":"#f0fdf4";e.currentTarget.style.color=isDark?"#4ade80":SITE_GREEN}}
-                        onMouseLeave={e=>{e.currentTarget.style.backgroundColor="transparent";e.currentTarget.style.color=isDark?"#d1d5db":"#4b5563"}}>{l}</button>
+                        onMouseEnter={e=>{e.currentTarget.style.backgroundColor=isDark?"rgba(74,222,128,0.1)":"#f0fdf4";e.currentTarget.style.color=isDark?"#4ade80":SITE_GREEN;}}
+                        onMouseLeave={e=>{e.currentTarget.style.backgroundColor="transparent";e.currentTarget.style.color=isDark?"#d1d5db":"#4b5563";}}>{l}</button>
                     ))}
                     <button onClick={handleLogout} className="flex items-center gap-2 text-sm text-red-500 font-medium px-2 py-1.5 rounded hover:bg-red-50 transition-colors w-full mt-1">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
@@ -1141,8 +1183,10 @@ export default function Navbar({ cartCount: propCartCount, onNavigate }) {
                   </div>
                 )}
               </div>
+
             </div>
-          )}
+          )}{/* end mobile menu */}
+
         </nav>
       </div>
     </>

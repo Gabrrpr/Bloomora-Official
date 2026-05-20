@@ -1,12 +1,20 @@
 import json
-from fastapi import APIRouter, Depends, HTTPException
+import uuid
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, get_current_user
 from app.models import User, RoleEnum, SiteCustomization
-from app.schemas.site_customization import HeroCustomizationResponse, HeroCustomizationUpdate, HeroSlide
-from app.schemas.customization_toggle import CustomizationToggleResponse, CustomizationToggleUpdate
-
+from app.schemas.site_customization import (
+    HeroCustomizationResponse,
+    HeroCustomizationUpdate,
+    HeroSlide,
+)
+from app.schemas.customization_toggle import (
+    CustomizationToggleResponse,
+    CustomizationToggleUpdate,
+)
+from app.core.database import supabase
 
 router = APIRouter(prefix="/site-customization", tags=["Site Customization"])
 
@@ -67,10 +75,25 @@ def _get_or_seed_hero(db: Session):
     return row
 
 
+def _get_or_seed_toggle(db: Session):
+    row = db.query(SiteCustomization).filter(SiteCustomization.key == "customization_enabled").first()
+    if not row:
+        row = SiteCustomization(
+            key="customization_enabled",
+            value=json.dumps({"enabled": True}),
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+    return row
+
+
 def require_admin_or_staff(current_user: User):
     if current_user.role not in [RoleEnum.admin, RoleEnum.staff]:
         raise HTTPException(status_code=403, detail="Admin or staff access required.")
 
+
+# ── Hero Slides ───────────────────────────────────────────────────────────────
 
 @router.get("/hero", response_model=HeroCustomizationResponse)
 def get_hero_slides(db: Session = Depends(get_db)):
@@ -91,27 +114,14 @@ def update_hero_slides(
 ):
     """Update hero slides. Admin/Staff only."""
     require_admin_or_staff(current_user)
-
     row = _get_or_seed_hero(db)
     row.value = json.dumps([s.model_dump() for s in payload.slides])
     db.commit()
     db.refresh(row)
-
     return {"slides": json.loads(row.value)}
 
 
-def _get_or_seed_toggle(db: Session):
-    row = db.query(SiteCustomization).filter(SiteCustomization.key == "customization_enabled").first()
-    if not row:
-        row = SiteCustomization(
-            key="customization_enabled",
-            value=json.dumps({"enabled": True}),
-        )
-        db.add(row)
-        db.commit()
-        db.refresh(row)
-    return row
-
+# ── Customization Toggle ──────────────────────────────────────────────────────
 
 @router.get("/customization/toggle", response_model=CustomizationToggleResponse)
 def get_customization_toggle(db: Session = Depends(get_db)):
@@ -121,7 +131,7 @@ def get_customization_toggle(db: Session = Depends(get_db)):
         data = json.loads(row.value)
         return CustomizationToggleResponse(enabled=data.get("enabled", True))
     except json.JSONDecodeError:
-        return CustomizationToggleResponse(enabled=true)
+        return CustomizationToggleResponse(enabled=True)
 
 
 @router.put("/customization/toggle", response_model=CustomizationToggleResponse)
@@ -132,13 +142,42 @@ def update_customization_toggle(
 ):
     """Update customization toggle. Admin/Staff only."""
     require_admin_or_staff(current_user)
-
     row = _get_or_seed_toggle(db)
     row.value = json.dumps(payload.model_dump())
     db.commit()
     db.refresh(row)
-
     data = json.loads(row.value)
     return CustomizationToggleResponse(enabled=data["enabled"])
 
 
+# ── Image Upload ──────────────────────────────────────────────────────────────
+
+@router.post("/upload/{bucket}")
+async def upload_site_image(
+    bucket: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+):
+    """Upload an image to a Supabase storage bucket. Admin/Staff only."""
+    require_admin_or_staff(current_user)
+
+    allowed_buckets = ["hero-images", "advertisements", "products"]
+    if bucket not in allowed_buckets:
+        raise HTTPException(status_code=400, detail="Invalid storage bucket target.")
+
+    try:
+        contents = await file.read()
+        file_extension = file.filename.split(".")[-1]
+        unique_filename = f"{uuid.uuid4().hex}.{file_extension}"
+
+        supabase.storage.from_(bucket).upload(
+            path=unique_filename,
+            file=contents,
+            file_options={"content-type": file.content_type},
+        )
+
+        public_url = supabase.storage.from_(bucket).get_public_url(unique_filename)
+        return {"url": public_url}
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Storage upload error: {str(e)}")

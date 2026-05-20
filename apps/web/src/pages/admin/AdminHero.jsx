@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
+import ImageUploader from "../../components/ImageUploader"; // Adjust path as needed
 
 import heroBg1 from "../../assets/hero/HeroBG1.png"
 import heroBg2 from "../../assets/hero/HeroBG2.png"
@@ -33,7 +34,9 @@ const DEFAULT_SLIDES = [
 
 // ── Live Hero Preview ─────────────────────────────────────────────────────────
 function HeroPreview({ slide, isDark }) {
-  const bg = IMAGE_MAP[slide.image] || heroBg1
+  // 🚀 FIXED: Check if the image is a Supabase URL. If yes, use it directly! Otherwise, use the local MAP.
+  const bg = slide.image?.startsWith("http") ? slide.image : (IMAGE_MAP[slide.image] || heroBg1)
+  
   const overlay = isDark
     ? "linear-gradient(90deg, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.54) 55%, rgba(0,0,0,0.22) 100%)"
     : "linear-gradient(90deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.36) 50%, rgba(0,0,0,0.08) 100%)"
@@ -185,29 +188,18 @@ function FlowerIcon() {
     <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5">
       {/* Petals — 6 rounded petals radiating outward */}
       <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#f472b6" opacity="0.95"/>
-      <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#f472b6" opacity="0.95"
-        transform="rotate(60 20 20)"/>
-      <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#ec4899" opacity="0.90"
-        transform="rotate(120 20 20)"/>
-      <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#f472b6" opacity="0.95"
-        transform="rotate(180 20 20)"/>
-      <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#ec4899" opacity="0.90"
-        transform="rotate(240 20 20)"/>
-      <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#f472b6" opacity="0.95"
-        transform="rotate(300 20 20)"/>
+      <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#f472b6" opacity="0.95" transform="rotate(60 20 20)"/>
+      <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#ec4899" opacity="0.90" transform="rotate(120 20 20)"/>
+      <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#f472b6" opacity="0.95" transform="rotate(180 20 20)"/>
+      <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#ec4899" opacity="0.90" transform="rotate(240 20 20)"/>
+      <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#f472b6" opacity="0.95" transform="rotate(300 20 20)"/>
       {/* Inner petal layer (smaller, rotated 30°) */}
-      <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80"
-        transform="rotate(30 20 20)"/>
-      <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80"
-        transform="rotate(90 20 20)"/>
-      <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80"
-        transform="rotate(150 20 20)"/>
-      <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80"
-        transform="rotate(210 20 20)"/>
-      <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80"
-        transform="rotate(270 20 20)"/>
-      <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80"
-        transform="rotate(330 20 20)"/>
+      <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80" transform="rotate(30 20 20)"/>
+      <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80" transform="rotate(90 20 20)"/>
+      <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80" transform="rotate(150 20 20)"/>
+      <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80" transform="rotate(210 20 20)"/>
+      <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80" transform="rotate(270 20 20)"/>
+      <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80" transform="rotate(330 20 20)"/>
       {/* Center */}
       <circle cx="20" cy="20" r="5.5" fill="#fbbf24"/>
       <circle cx="20" cy="20" r="3.5" fill="#f59e0b"/>
@@ -455,7 +447,7 @@ export default function AdminHero() {
             </Field>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <Field label="Accent Color" hint="Controls the tag background and primary button color" isDark={isDark}>
               <div className="flex items-center gap-2">
                 <input type="color" value={activeSlide.accent}
@@ -465,9 +457,23 @@ export default function AdminHero() {
                   isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
               </div>
             </Field>
-            <Field label="Background Image" isDark={isDark}>
-              <Select value={activeSlide.image} onChange={v => updateSlide("image", v)} options={IMAGE_OPTIONS}
-                isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
+
+            {/* 🚀 FIXED: The New Hybrid Background Image Selector */}
+            <Field label="Background Image" hint="Select a default image or upload a new one" isDark={isDark}>
+              <div className="space-y-3">
+                <Select 
+                  value={activeSlide.image?.startsWith("http") ? "custom" : activeSlide.image} 
+                  onChange={v => { if (v !== "custom") updateSlide("image", v) }} 
+                  options={[...IMAGE_OPTIONS, { label: "Custom Upload...", value: "custom" }]}
+                  isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} 
+                />
+
+                {/* Supabase Image Uploader */}
+                <ImageUploader
+                  bucketName="hero-images" 
+                  onUploadComplete={(newUrl) => updateSlide("image", newUrl)} 
+                />
+              </div>
             </Field>
           </div>
 

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
+import { api } from "./services/api";
 import Navbar from "./components/Navbar";
 import Home from "./pages/customer/Home";
 import Login from "./pages/Login";
@@ -89,6 +90,7 @@ const DARK_CSS = `
   }
 `;
 
+// ── Module-level constants (no hooks here) ──────────────────────────────────
 const AUTH_PAGES = ["login", "register", "forgot-password", "terms", "activate-staff"];
 const isPreview = new URLSearchParams(window.location.search).get("preview") === "true";
 
@@ -101,9 +103,11 @@ function injectDarkCSS() {
 }
 injectDarkCSS();
 
+// ── AppContent ──────────────────────────────────────────────────────────────
 function AppContent() {
   const { user } = useAuth();
   const { forceMode, clearForce } = useTheme();
+
   const [page, setPage] = useState(() => {
     const path = window.location.pathname.replace("/", "");
     if (path.startsWith("activate-staff")) return "activate-staff";
@@ -113,7 +117,10 @@ function AppContent() {
   const [prevPage, setPrevPage] = useState("login");
   const [selectedOrderId, setSelectedOrderId] = useState(null);
 
-  // 🚀 NEW: State for Pop-up Orchestration
+  // ✅ FIXED: moved inside AppContent where hooks are allowed
+  const [isCustomizationEnabled, setIsCustomizationEnabled] = useState(true);
+
+  // Pop-up orchestration
   const [showCookieConsent, setShowCookieConsent] = useState(false);
   const [showAdPopup, setShowAdPopup] = useState(false);
   const [activeAdId, setActiveAdId] = useState("1");
@@ -121,34 +128,31 @@ function AppContent() {
   const pageRef = useRef(page);
   useEffect(() => { pageRef.current = page; }, [page]);
 
-  // 🚀 NEW: The Traffic Cop logic for Pop-ups
+  // Fetch customization toggle on every page change
   useEffect(() => {
-    // Only run this logic on customer storefront pages
+    api.isCustomizationEnabled()
+      .then(data => setIsCustomizationEnabled(data.enabled))
+      .catch(() => setIsCustomizationEnabled(true));
+  }, [page]);
+
+  // Pop-up traffic cop
+  useEffect(() => {
     if (isPreview || page === "admin" || AUTH_PAGES.includes(page)) return;
 
-    // 1. Find out which Ad the Admin wants to show
     const adminAdId = localStorage.getItem("bloomora_active_ad_id") || "1";
     setActiveAdId(adminAdId);
 
-    // 2. Check if cookies have been accepted
     const hasAcceptedCookies = localStorage.getItem("bloomora_cookies_accepted");
-    
     if (!hasAcceptedCookies) {
-      // Stop! Show cookies first. DO NOT show the ad yet.
       setShowCookieConsent(true);
     } else {
-      // Cookies are handled, safe to trigger the Ad!
       triggerAd(adminAdId);
     }
-  }, [page]); // Re-run if page changes, but sessionStorage keeps it to 1 pop-up per visit
+  }, [page]);
 
   const triggerAd = (adId) => {
-    // We use sessionStorage so the ad pops up once per browser session. 
-    // If we used localStorage, they would only ever see an ad ONCE in their entire life!
     const hasSeenAd = sessionStorage.getItem(`bloomora_seen_ad_${adId}`);
-    
     if (!hasSeenAd) {
-      // A smooth 2-second delay so the user isn't immediately bombarded
       setTimeout(() => setShowAdPopup(true), 2000);
     }
   };
@@ -156,7 +160,6 @@ function AppContent() {
   const handleAcceptCookies = () => {
     localStorage.setItem("bloomora_cookies_accepted", "true");
     setShowCookieConsent(false);
-    // Now that cookies are out of the way, trigger the Ad!
     triggerAd(activeAdId);
   };
 
@@ -165,6 +168,7 @@ function AppContent() {
     sessionStorage.setItem(`bloomora_seen_ad_${activeAdId}`, "true");
   };
 
+  // Redirect admin/staff after login
   useEffect(() => {
     if (isPreview) return;
     if (user && (user.role === "admin" || user.role === "staff")) {
@@ -177,6 +181,7 @@ function AppContent() {
     }
   }, [user]);
 
+  // Force light mode on auth pages
   useEffect(() => {
     if (AUTH_PAGES.includes(page)) {
       forceMode(false);
@@ -196,7 +201,12 @@ function AppContent() {
     if (isPreview) {
       return (
         <>
-          <Navbar cartCount={cartCount} setCartCount={setCartCount} onNavigate={navigate} />
+          <Navbar
+            cartCount={cartCount}
+            setCartCount={setCartCount}
+            onNavigate={navigate}
+            isCustomizationEnabled={isCustomizationEnabled}
+          />
           <Home onNavigate={navigate} />
           <ChatWidget />
         </>
@@ -210,12 +220,17 @@ function AppContent() {
       if (page === "register")        return <Register onNavigate={navigate} />;
       if (page === "forgot-password") return <ForgotPassword onNavigate={navigate} />;
       if (page === "terms")           return <TermsAndConditions onNavigate={navigate} onBack={() => navigate(prevPage)} />;
-      if (page === "activate-staff") return <ActivateStaff onNavigate={navigate} />;
+      if (page === "activate-staff")  return <ActivateStaff onNavigate={navigate} />;
     }
 
     return (
       <>
-        <Navbar cartCount={cartCount} setCartCount={setCartCount} onNavigate={navigate} />
+        <Navbar
+          cartCount={cartCount}
+          setCartCount={setCartCount}
+          onNavigate={navigate}
+          isCustomizationEnabled={isCustomizationEnabled}
+        />
         {(() => {
           switch (page) {
             case "home":                 return <Home onNavigate={navigate} />;
@@ -252,8 +267,6 @@ function AppContent() {
   return (
     <>
       {renderContent()}
-
-      {/* 🚀 NEW: The Orchestrated Pop-ups */}
       {!AUTH_PAGES.includes(page) && page !== "admin" && !isPreview && (
         <>
           {showCookieConsent && <CookieConsent onAccept={handleAcceptCookies} />}
