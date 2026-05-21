@@ -18,16 +18,30 @@ export default function WriteReviewPage({ onNavigate, orderId }) {
     // Fetch order details
     async function fetchOrder() {
       try {
-        const res = await api.get(`/orders/${orderId}`)
-        setOrder(res.data)
+        console.log("Fetching order ID:", orderId);
+        
+        // Let's see exactly what your API returns!
+        const res = await api.get(`/orders/${orderId}`);
+        console.log("Raw API Response:", res); 
+
+        // 🚀 THE FIX: Handle both Axios responses (res.data) and direct JSON responses (res)
+        const orderData = res.data ? res.data : res;
+        
+        setOrder(orderData);
       } catch (err) {
+        console.error("Failed to fetch order:", err);
         setError("Order not found")
       } finally {
         setLoading(false)
       }
     }
-    if (orderId) fetchOrder()
-    else setLoading(false)
+    
+    if (orderId) {
+        fetchOrder()
+    } else {
+        console.warn("No orderId was passed to WriteReviewPage!");
+        setLoading(false)
+    }
   }, [orderId])
 
   async function handleSubmit(e) {
@@ -95,6 +109,7 @@ export default function WriteReviewPage({ onNavigate, orderId }) {
           <div className="text-center p-8">
             <h2 className="text-xl font-bold text-gray-900 mb-2">Review Not Available</h2>
             <p className="text-gray-500 mb-4">You need a valid order to leave a review.</p>
+            {error && <p className="text-red-500 mb-4">{error}</p>}
             <button
               onClick={() => onNavigate?.("orders")}
               className="text-green-600 font-semibold hover:underline"
@@ -109,7 +124,7 @@ export default function WriteReviewPage({ onNavigate, orderId }) {
   }
 
   // Check if allowed to review
-  if (!order.can_review) {
+  if (!order.can_review || order.status !== 'delivered') {
     return (
       <div className="min-h-screen bg-white flex flex-col">
         <div className="flex-1 flex items-center justify-center">
@@ -172,20 +187,20 @@ export default function WriteReviewPage({ onNavigate, orderId }) {
           <p className="text-gray-500">Share your experience with this product</p>
         </div>
 
-        {/* Order Info Card */}
-        {order.product && (
-          <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg mb-6">
+        {/* 🚀 FIXED: Order Info Card using the new Backend mapping */}
+        <div className="flex items-center gap-4 p-4 bg-gray-50 rounded-lg mb-6">
+          {order.items && order.items.length > 0 && order.items[0].image_url && (
             <img
-              src={order.product.image_url}
-              alt={order.product.name}
+              src={order.items[0].image_url}
+              alt={order.product_name}
               className="w-16 h-16 object-cover rounded-lg"
             />
-            <div>
-              <h3 className="font-semibold text-gray-900">{order.product.name}</h3>
-              <p className="text-sm text-gray-500">Order #{order.id?.slice(0, 8)}</p>
-            </div>
+          )}
+          <div>
+            <h3 className="font-semibold text-gray-900">{order.product_name}</h3>
+            <p className="text-sm text-gray-500">Order #{order.order_number || order.id?.slice(0, 8)}</p>
           </div>
-        )}
+        </div>
 
         {/* Error */}
         {error && (

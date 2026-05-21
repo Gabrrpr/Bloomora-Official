@@ -190,8 +190,15 @@ function AppContent() {
     }
   }, [page]);
 
-  const navigate = (to, orderId = null) => {
-    if (orderId) setSelectedOrderId(orderId);
+  const navigate = (to, passedId = null) => {
+    // 🚀 THE TRAP: This will tell us exactly what the button is sending!
+    console.log(`[ROUTER] Going to: "${to}" | Passed ID:`, passedId);
+
+    // Ensure we only save valid IDs (and ignore accidental event objects)
+    if (passedId !== null && typeof passedId !== "object") {
+      setSelectedOrderId(passedId);
+    }
+    
     setPrevPage(page);
     setPage(to);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -254,7 +261,7 @@ function AppContent() {
             case "world-clock":          return <WorldClock onNavigate={navigate} />;
             case "vases":                return <VasesPage onNavigate={navigate} />;
             case "addons":               return <AddonsPage onNavigate={navigate} />;
-            case "write-review":         return <WriteReviewPage onNavigate={navigate} />;
+            case "write-review":         return <WriteReviewPage onNavigate={navigate} orderId={selectedOrderId} />;
             case "profile":              return <Profile onNavigate={navigate} />;
             default:                     return <Home onNavigate={navigate} />;
           }

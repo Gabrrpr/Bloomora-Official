@@ -14,40 +14,72 @@ from app.models import User, RoleEnum, Order, OrderStatusEnum, Arrangement, Tran
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 
-def serialize_order(o: Order) -> dict:
+def serialize_order(o) -> dict:
     """Serialize an Order for API responses."""
-    product_name = None
-    if o.product:
-        product_name = o.product.name
-    elif o.arrangement:
-        product_name = o.arrangement.name
+    
+    # 🚀 1. Calculate a dynamic display name based on the cart items
+    display_name = "Empty Order"
+    total_qty = 0
+    
+    if getattr(o, 'items', None) and len(o.items) > 0:
+        # Get the name of the first item in the cart
+        first_item_name = o.items[0].product.name if o.items[0].product else "Unknown Product"
+        
+        # If they bought multiple different items, summarize it
+        if len(o.items) > 1:
+            display_name = f"{first_item_name} + {len(o.items) - 1} more"
+        else:
+            display_name = first_item_name
+            
+        # Calculate total number of physical items bought
+        total_qty = sum(item.quantity for item in o.items)
+        
+    elif getattr(o, 'arrangement', None):
+        display_name = o.arrangement.name
+        total_qty = getattr(o, 'quantity', 1)
     else:
-        product_name = "Custom Arrangement"
+        display_name = "Custom Arrangement"
 
     return {
         "id": str(o.id),
         "order_number": f"ORD-{o.id.hex[:8].upper()}",
         "user_id": str(o.user_id),
-"customer_name": f"{getattr(o.user, 'first_name', '') or ''} {getattr(o.user, 'last_name', '') or ''}".strip() or getattr(o.user, 'email', 'Unknown'),
+        "customer_name": f"{getattr(o.user, 'first_name', '') or ''} {getattr(o.user, 'last_name', '') or ''}".strip() or getattr(o.user, 'email', 'Unknown'),
         "customer_email": o.user.email,
         "customer_phone": o.user.phone_number,
         "branch": o.branch_name or (o.user.branch.value if o.user.branch and hasattr(o.user.branch, "value") else (o.user.branch or "—")),
-        "product_name": product_name,
-        "product": {"id": str(o.product.id), "name": o.product.name, "image_url": o.product.image_url} if o.product else None,
-        "quantity": o.quantity,
+        
+        # 🚀 2. Use the dynamically calculated summaries
+        "product_name": display_name,
+        "quantity": total_qty,
+        
+        # 🚀 3. Removed the broken "product" dict since we use "items" now
+        
         "total_amount": float(o.total_amount),
         "status": o.status.value if hasattr(o.status, "value") else o.status,
         "delivery_address": o.delivery_address,
         "delivery_notes": o.delivery_notes,
-        "scheduled_at": o.scheduled_at.isoformat() if o.scheduled_at else None,
-        "payment_status": o.transaction.status.value if o.transaction and hasattr(o.transaction.status, "value") else "pending",
-        "can_review": o.can_review,
-        "has_reviewed": o.has_reviewed,
-        "created_at": o.created_at.isoformat() if o.created_at else None,
-        "updated_at": o.updated_at.isoformat() if o.updated_at else None,
+        "scheduled_at": o.scheduled_at.isoformat() if getattr(o, 'scheduled_at', None) else None,
+        "payment_status": o.transaction.status.value if hasattr(o, 'transaction') and o.transaction and hasattr(o.transaction.status, "value") else "pending",
+        "can_review": getattr(o, 'can_review', False),
+        "has_reviewed": getattr(o, 'has_reviewed', False),
+        "created_at": o.created_at.isoformat() if getattr(o, 'created_at', None) else None,
+        "updated_at": o.updated_at.isoformat() if getattr(o, 'updated_at', None) else None,
+        
+        # 🚀 4. Your correct items array
+        "items": [
+            {
+                "item_id": str(item.id),
+                "product_id": str(item.product.id) if item.product else None,
+                "product_name": item.product.name if item.product else "Unknown Product",
+                "quantity": item.quantity,
+                "price_at_purchase": item.price_at_purchase,
+                "image_url": item.product.image_url if item.product and hasattr(item.product, 'image_url') else None
+            }
+            for item in o.items
+        ] if getattr(o, 'items', None) else []
     }
-
-
+    
 def require_admin_or_staff(current_user: User):
     if current_user.role not in [RoleEnum.admin, RoleEnum.staff]:
         raise HTTPException(status_code=403, detail="Admin or staff access required.")

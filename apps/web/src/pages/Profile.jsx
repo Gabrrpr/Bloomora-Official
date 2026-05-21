@@ -66,7 +66,29 @@ export default function Profile({ onNavigate }) {
   const [addressForm, setAddressForm] = useState({ ...EMPTY_ADDRESS });
   const [savingAddress, setSavingAddress] = useState(false);
   const [addressError, setAddressError] = useState("");
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
 
+  useEffect(() => {
+    async function loadRecentOrders() {
+      if (!user) return;
+      setLoadingOrders(true);
+      try {
+        const data = await api.getMyOrders(); // Fetch the user's orders
+        const ordersArray = Array.isArray(data) ? data : data.data || [];
+        
+        // Sort by newest first and grab the top 3
+        const sorted = ordersArray.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+        setRecentOrders(sorted.slice(0, 3));
+      } catch (e) {
+        console.error("Failed to load recent orders:", e);
+      } finally {
+        setLoadingOrders(false);
+      }
+    }
+    loadRecentOrders();
+  }, [user]);
+  
   useEffect(() => {
     if (user) {
       setForm({

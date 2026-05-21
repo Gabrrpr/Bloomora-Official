@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, Form
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import uuid
@@ -8,6 +9,11 @@ from app.models import User, RoleEnum, Product, Order, Review, OrderStatusEnum
 
 router = APIRouter()
 
+# 🚀 1. Define exactly what JSON React will send us
+class ReviewSubmitSchema(BaseModel):
+    order_id: str
+    star_rating: int
+    comment: Optional[str] = None
 
 def serialize_review(r: Review) -> dict:
     return {
@@ -19,14 +25,12 @@ def serialize_review(r: Review) -> dict:
         "created_at": r.created_at.isoformat() if r.created_at else None,
     }
 
-
 # ── Public: Get reviews for a product ─────────────────────────────────────────────
 @router.get("/product/{product_id}", response_model=List[dict])
 def get_product_reviews(product_id: str, db: Session = Depends(get_db)):
     """Get all reviews for a specific product."""
     reviews = db.query(Review).filter(Review.product_id == product_id).order_by(Review.created_at.desc()).all()
     return [serialize_review(r) for r in reviews]
-
 
 # ── Public: Get average rating for a product ─────────────────────────────────────────
 @router.get("/product/{product_id}/rating")
@@ -42,24 +46,21 @@ def get_product_rating(product_id: str, db: Session = Depends(get_db)):
         "review_count": len(reviews),
     }
 
-
 # ── Customer: Submit a review ───────────────────────────────────────────────────────
 @router.post("/submit", response_model=dict)
 def submit_review(
-    order_id: str = Form(...),
-    star_rating: int = Form(..., ge=1, le=5),
-    comment: Optional[str] = Form(None),
+    payload: ReviewSubmitSchema,  # 🚀 2. Catch the JSON here
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Submit a review for a delivered order."""
     # Find the order
-    order = db.query(Order).filter(Order.id == order_id).first()
+    order = db.query(Order).filter(Order.id == payload.order_id).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
     # Check ownership
-    if order.user_id != current_user.id:
+    if str(order.user_id) != str(current_user.id):
         raise HTTPException(status_code=403, detail="Not your order")
     
     # Check if order can be reviewed
@@ -69,26 +70,27 @@ def submit_review(
     if order.has_reviewed:
         raise HTTPException(status_code=400, detail="You have already reviewed this order")
     
-    # Check if product exists
-    if not order.product_id:
-        raise HTTPException(status_code=400, detail="No product in this order")
+    # Check if product exists in the new items array
+    if not getattr(order, 'items', None) or len(order.items) == 0:
+        raise HTTPException(status_code=400, detail="No products in this order to review")
     
-    # Create the review
-    review = Review(
-        id=uuid.uuid4(),
-        user_id=current_user.id,
-        product_id=order.product_id,
-        star_rating=star_rating,
-        comment=comment,
-    )
-    db.add(review)
+    # 🚀 3. Apply the review to all items in the order
+    for item in order.items:
+        if item.product_id:
+            review = Review(
+                id=uuid.uuid4(),
+                user_id=current_user.id,
+                product_id=item.product_id,
+                star_rating=payload.star_rating,
+                comment=payload.comment,
+            )
+            db.add(review)
     
     # Mark order as reviewed
     order.has_reviewed = True
     db.commit()
     
-    return {"status": "success", "review": serialize_review(review)}
-
+    return {"status": "success", "message": "Review submitted successfully!"}
 
 # ── Customer: Get my reviews ─────────────────────────────────────────────────────
 @router.get("/my-reviews", response_model=List[dict])
@@ -99,7 +101,6 @@ def get_my_reviews(
     """Get all reviews submitted by the current user."""
     reviews = db.query(Review).filter(Review.user_id == current_user.id).order_by(Review.created_at.desc()).all()
     return [serialize_review(r) for r in reviews]
-
 
 # ── Admin: Get all reviews ─────────────────────────────────────────────────
 @router.get("/admin/all", response_model=List[dict])
@@ -113,7 +114,6 @@ def get_all_reviews(
     
     reviews = db.query(Review).order_by(Review.created_at.desc()).all()
     return [serialize_review(r) for r in reviews]
-
 
 # ── Admin: Delete a review ─────────────────────────────────────────────────
 @router.delete("/admin/{review_id}", response_model=dict)
