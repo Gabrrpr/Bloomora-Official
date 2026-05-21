@@ -3,6 +3,7 @@ import { useAuth } from "../context/AuthContext"
 import { sendOtp, verifyOtp } from "../services/auth"
 import { regions, getProvinces } from "../utils/philippines"
 import FlowerPanel from "../components/FlowerPanel"
+import TermsModal from "../components/TermsModal"
 import estingsLogo from "../assets/estings.svg"
 import bgImg from "../assets/BG_LoginRegister.png"
 
@@ -149,19 +150,34 @@ const PHASES = [
   { title: "Where do we deliver?", sub: "Fill in your delivery address to continue." },
 ]
 
+// ── Load persisted draft (form + step) ─────────────────────────────────────
+function loadDraft() {
+  try {
+    const saved = sessionStorage.getItem(STORAGE_KEY)
+    if (!saved) return null
+    const parsed = JSON.parse(saved)
+    return parsed && typeof parsed === "object" ? parsed : null
+  } catch { return null }
+}
+
 export default function Register({ onNavigate }) {
   const { register } = useAuth()
-  const [step, setStep]           = useState("form")
-  const [formPhase, setFormPhase] = useState(1)
-  const [otp, setOtp]             = useState("")
+  const [step, setStep]   = useState("form")
+  const [otp, setOtp]     = useState("")
+  const [showTerms, setShowTerms] = useState(false)
 
-  const [form, setForm] = useState(() => {
-    const saved = sessionStorage.getItem(STORAGE_KEY)
-    return saved ? JSON.parse(saved) : {
-      firstName: "", lastName: "", email: "", phone: "", username: "",
-      password: "", confirmPassword: "",
-      address: { regionId: "", provinceId: "", city: "", street: "", zip_code: "" }
-    }
+  // ── Init form + formPhase from sessionStorage (single source of truth) ──
+  const initial = loadDraft()
+
+  const [formPhase, setFormPhase] = useState(() => {
+    const p = initial?.formPhase
+    return p === 1 || p === 2 || p === 3 || p === 4 ? p : 1
+  })
+
+  const [form, setForm] = useState(() => initial?.form ?? {
+    firstName: "", lastName: "", email: "", phone: "", username: "",
+    password: "", confirmPassword: "",
+    address: { regionId: "", provinceId: "", city: "", street: "", zip_code: "" }
   })
 
   // ── Per-field touched & error state ──────────────────────────────────────
@@ -237,7 +253,13 @@ export default function Register({ onNavigate }) {
   const [loadingMsg, setLoadingMsg]       = useState("Please wait...")
   const [passwordStrength, setPasswordStrength] = useState("empty")
 
-  useEffect(() => { sessionStorage.setItem(STORAGE_KEY, JSON.stringify(form)) }, [form])
+  // Persist BOTH the form data AND the current step so the user resumes
+  // exactly where they left off (e.g. after opening Terms or accidentally
+  // navigating away and back).
+  useEffect(() => {
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ form, formPhase }))
+  }, [form, formPhase])
+
   useEffect(() => {
     const clean = () => sessionStorage.removeItem(STORAGE_KEY)
     window.addEventListener("beforeunload", clean)
@@ -351,6 +373,8 @@ export default function Register({ onNavigate }) {
         password: form.password, address: addressStr
       })
       if (result.success || result.status === "success") {
+        // Clear the registration draft on success so next sign-up starts fresh
+        sessionStorage.removeItem(STORAGE_KEY)
         sessionStorage.setItem("registerEmail", form.email)
         sessionStorage.setItem("registerPassword", form.password)
         onNavigate("login")
@@ -369,6 +393,14 @@ export default function Register({ onNavigate }) {
   return (
     <div className="min-h-screen flex">
       {loading && <FlowerLoader message={loadingMsg} />}
+
+      {/* Terms & Conditions popup — replaces the old onNavigate("terms") so
+          the user keeps their place in the registration flow. */}
+      <TermsModal
+        open={showTerms}
+        onClose={() => setShowTerms(false)}
+        onAgree={() => setAgreeTerms(true)}
+      />
 
       <div className="hidden lg:block lg:w-1/2 flex-shrink-0 sticky top-0 h-screen">
         <FlowerPanel />
@@ -625,7 +657,8 @@ export default function Register({ onNavigate }) {
                   <label className="flex items-start gap-2 cursor-pointer">
                     <input type="checkbox" checked={agreeTerms} onChange={e => setAgreeTerms(e.target.checked)} className="w-4 h-4 rounded accent-green-600 mt-0.5" />
                     <span className="text-sm text-gray-600">I agree to the{" "}
-                      <button type="button" onClick={() => onNavigate("terms")} className="text-green-700 hover:underline font-medium">Terms & Conditions</button>
+                      {/* Opens the popup instead of navigating away — preserves step 4 state. */}
+                      <button type="button" onClick={() => setShowTerms(true)} className="text-green-700 hover:underline font-medium">Terms &amp; Conditions</button>
                     </span>
                   </label>
 

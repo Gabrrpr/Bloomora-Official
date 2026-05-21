@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { addToCart } from "../utils/cart.js"
+import { useTheme } from "../context/ThemeContext"
 
-// Add-on images — place in src/assets/products/addons/
 import ferrero8Img    from "../assets/products/addons/ferrero8pcs.webp"
 import ferrero12Img   from "../assets/products/addons/ferrero12pcs.webp"
 import ferrero24Img   from "../assets/products/addons/ferrero24pcs.webp"
@@ -15,33 +15,32 @@ import mnmsPeanutImg  from "../assets/products/addons/M&MsPeanut.webp"
 import snickersImg    from "../assets/products/addons/Snickers.webp"
 import tobleroneImg   from "../assets/products/addons/Toblerone.webp"
 
-// Card choice images — place in src/assets/cards/
-import withCardImg    from "../assets/products/cards/withCard.webp"
-import noCardImg      from "../assets/products/cards/noCard.webp"
+import withCardImg from "../assets/productpreview/withCard.webp"
+import noCardImg   from "../assets/productpreview/noCard.webp"
+import letterImg   from "../assets/productpreview/Letter.png"
+import writingImg  from "../assets/productpreview/WritingLetter.png"
 
 const G   = "#2E8B34"
 const DG  = "#0C573E"
 const ERR = "#ef4444"
 
 const ALL_ADD_ONS = [
-  { id:"ferrero8",    label:"Ferrero Rocher",      sub:"8 pieces",           price:199, img:ferrero8Img    },
-  { id:"ferrero12",   label:"Ferrero Rocher",      sub:"12 pieces",          price:349, img:ferrero12Img   },
-  { id:"ferrero24",   label:"Ferrero Rocher",      sub:"24 pieces",          price:599, img:ferrero24Img   },
-  { id:"hersheyOrg",  label:"Hershey's Original",  sub:"Chocolate bar",      price:149, img:hersheyOrgImg  },
-  { id:"herseyCnC",   label:"Hershey's C&C",       sub:"Cookies & Cream",    price:149, img:herseyCncImg   },
-  { id:"twix",        label:"Twix",                sub:"Caramel chocolate",   price:149, img:twixImg        },
-  { id:"cadburyFN",   label:"Cadbury Fruit & Nut", sub:"Chocolate bar",      price:169, img:cadburyFNImg   },
-  { id:"cadburyMC",   label:"Cadbury Milk Choc",   sub:"Chocolate bar",      price:149, img:cadburyMCImg   },
-  { id:"mnmsMilk",    label:"M&M's Milk Choc",     sub:"Chocolate pouch",    price:179, img:mnmsMilkImg    },
-  { id:"mnmsPeanut",  label:"M&M's Peanut",        sub:"Chocolate pouch",    price:179, img:mnmsPeanutImg  },
-  { id:"snickers",    label:"Snickers",             sub:"Caramel & peanut",   price:149, img:snickersImg    },
-  { id:"toblerone",   label:"Toblerone",            sub:"Swiss chocolate",    price:199, img:tobleroneImg   },
+  { id:"ferrero8",   label:"Ferrero Rocher",      sub:"8 pieces",         price:199, img:ferrero8Img   },
+  { id:"ferrero12",  label:"Ferrero Rocher",      sub:"12 pieces",        price:349, img:ferrero12Img  },
+  { id:"ferrero24",  label:"Ferrero Rocher",      sub:"24 pieces",        price:599, img:ferrero24Img  },
+  { id:"hersheyOrg", label:"Hershey's Original",  sub:"Chocolate bar",    price:149, img:hersheyOrgImg },
+  { id:"herseyCnC",  label:"Hershey's C&C",       sub:"Cookies & Cream",  price:149, img:herseyCncImg  },
+  { id:"twix",       label:"Twix",                sub:"Caramel chocolate", price:149, img:twixImg       },
+  { id:"cadburyFN",  label:"Cadbury Fruit & Nut", sub:"Chocolate bar",    price:169, img:cadburyFNImg  },
+  { id:"cadburyMC",  label:"Cadbury Milk Choc",   sub:"Chocolate bar",    price:149, img:cadburyMCImg  },
+  { id:"mnmsMilk",   label:"M&M's Milk Choc",     sub:"Chocolate pouch",  price:179, img:mnmsMilkImg   },
+  { id:"mnmsPeanut", label:"M&M's Peanut",        sub:"Chocolate pouch",  price:179, img:mnmsPeanutImg },
+  { id:"snickers",   label:"Snickers",             sub:"Caramel & peanut", price:149, img:snickersImg   },
+  { id:"toblerone",  label:"Toblerone",            sub:"Swiss chocolate",  price:199, img:tobleroneImg  },
 ]
 
 const INITIAL_ADDON_COUNT = 4
-
 const QTY_OPTIONS = ["1 pc","3 pcs","6 pcs","Dozen"]
-
 const CATEGORY_COLORS = {
   Roses:        [{name:"Red",hex:"#e11d48"},{name:"Pink",hex:"#f472b6"},{name:"White",hex:"#e5e7eb",outline:true},{name:"Yellow",hex:"#fbbf24"}],
   Bouquets:     [{name:"Purple",hex:"#a78bfa"},{name:"Pink",hex:"#f9a8d4"},{name:"Green",hex:"#86efac"}],
@@ -52,49 +51,47 @@ const CATEGORY_COLORS = {
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"]
 const WDAYS  = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
 
-const pctOff      = (o,p) => Math.round((1-p/o)*100)
-const pad         = (d)   => String(d).padStart(2,"0")
-const toStr       = (d)   => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
-const todayD      = ()    => { const d=new Date(); d.setHours(0,0,0,0); return d }
-const tomorrowStr = ()    => { const d=new Date(); d.setDate(d.getDate()+1); return toStr(d) }
-const fmtDate     = (s)   => { if(!s) return ""; const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d).toLocaleDateString("en-PH",{weekday:"short",month:"short",day:"numeric"}) }
-const isTodayAvail= ()    => new Date().getHours() < 14
+const pctOff       = (o,p) => Math.round((1-p/o)*100)
+const pad          = d     => String(d).padStart(2,"0")
+const toStr        = d     => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
+const todayD       = ()    => { const d=new Date(); d.setHours(0,0,0,0); return d }
+const tomorrowStr  = ()    => { const d=new Date(); d.setDate(d.getDate()+1); return toStr(d) }
+const fmtDate      = s     => { if(!s)return""; const[y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d).toLocaleDateString("en-PH",{weekday:"short",month:"short",day:"numeric"}) }
+const isTodayAvail = ()    => new Date().getHours()<14
 
-// ── Mini Calendar ──────────────────────────────────────────────────────────────
-function MiniCalendar({ selected, onSelect }) {
-  const now = todayD()
-  const [vd,setVd] = useState({y:now.getFullYear(),m:now.getMonth()})
-  const prev= ()=>setVd(v=>v.m===0?{y:v.y-1,m:11}:{...v,m:v.m-1})
-  const next= ()=>setVd(v=>v.m===11?{y:v.y+1,m:0}:{...v,m:v.m+1})
-  const first = new Date(vd.y,vd.m,1).getDay()
-  const dim   = new Date(vd.y,vd.m+1,0).getDate()
-  const cells = [...Array(first).fill(null),...Array.from({length:dim},(_,i)=>i+1)]
-  const cd   = (d)=>new Date(vd.y,vd.m,d)
-  const past = (d)=>cd(d)<now
-  const tod  = (d)=>cd(d).toDateString()===now.toDateString()
-  const sel  = (d)=>{ if(!selected) return false; const [y,m,dd]=selected.split("-").map(Number); return cd(d).toDateString()===new Date(y,m-1,dd).toDateString() }
-  return (
-    <div style={{marginTop:10,border:"1px solid #e5e7eb",borderRadius:10,overflow:"hidden",background:"white"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 14px",borderBottom:"1px solid #f3f4f6",background:"#fafafa"}}>
-        <button onClick={prev} style={{width:24,height:24,border:"1px solid #e5e7eb",borderRadius:6,background:"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+function MiniCalendar({selected,onSelect}){
+  const now=todayD()
+  const[vd,setVd]=useState({y:now.getFullYear(),m:now.getMonth()})
+  const first=new Date(vd.y,vd.m,1).getDay()
+  const dim=new Date(vd.y,vd.m+1,0).getDate()
+  const cells=[...Array(first).fill(null),...Array.from({length:dim},(_,i)=>i+1)]
+  const cd=d=>new Date(vd.y,vd.m,d)
+  const past=d=>cd(d)<now
+  const tod=d=>cd(d).toDateString()===now.toDateString()
+  const sel=d=>{if(!selected)return false;const[y,m,dd]=selected.split("-").map(Number);return cd(d).toDateString()===new Date(y,m-1,dd).toDateString()}
+  return(
+    <div className="mt-2 border border-gray-200 rounded-xl overflow-hidden bg-white">
+      <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+        <button onClick={()=>setVd(v=>v.m===0?{y:v.y-1,m:11}:{...v,m:v.m-1})} className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 cursor-pointer">
           <svg width="10" height="10" fill="none" stroke="#6b7280" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7"/></svg>
         </button>
-        <span style={{fontSize:12,fontWeight:600,color:"#111827"}}>{MONTHS[vd.m]} {vd.y}</span>
-        <button onClick={next} style={{width:24,height:24,border:"1px solid #e5e7eb",borderRadius:6,background:"white",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <span className="text-sm font-semibold text-gray-800">{MONTHS[vd.m]} {vd.y}</span>
+        <button onClick={()=>setVd(v=>v.m===11?{y:v.y+1,m:0}:{...v,m:v.m+1})} className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 cursor-pointer">
           <svg width="10" height="10" fill="none" stroke="#6b7280" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
         </button>
       </div>
-      <div style={{padding:"10px 12px"}}>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",marginBottom:6}}>
-          {WDAYS.map((d,i)=><div key={i} style={{textAlign:"center",fontSize:9,fontWeight:500,color:"#9ca3af",letterSpacing:"0.03em"}}>{d}</div>)}
+      <div className="p-3">
+        <div className="grid grid-cols-7 mb-1.5">
+          {WDAYS.map((d,i)=><div key={i} className="text-center text-[10px] font-medium text-gray-400">{d}</div>)}
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:2}}>
+        <div className="grid grid-cols-7 gap-0.5">
           {cells.map((d,i)=>{
-            if(!d) return <div key={i}/>
+            if(!d)return<div key={i}/>
             const p=past(d),t=tod(d),s=sel(d)
             return(
               <button key={i} onClick={()=>!p&&onSelect(toStr(cd(d)))} disabled={p}
-                style={{height:28,borderRadius:6,border:"none",fontSize:11,fontWeight:s||t?600:400,cursor:p?"default":"pointer",color:s?"white":p?"#d1d5db":t?G:"#374151",background:s?G:t?"#f0fdf4":"transparent",outline:t&&!s?`1.5px solid ${G}`:"none",outlineOffset:-1,transition:"all 0.1s",padding:0}}>
+                className="h-8 rounded-lg text-xs transition-all"
+                style={{cursor:p?"default":"pointer",color:s?"white":p?"#d1d5db":t?G:"#374151",background:s?G:t?"#f0fdf4":"transparent",fontWeight:s||t?600:400,outline:t&&!s?`2px solid ${G}`:"none",outlineOffset:-1}}>
                 {d}
               </button>
             )
@@ -105,309 +102,201 @@ function MiniCalendar({ selected, onSelect }) {
   )
 }
 
-// ── Confetti burst from center ────────────────────────────────────────────────
-const CONFETTI_COLORS = ["#2E8B34","#f472b6","#fbbf24","#60a5fa","#a78bfa","#f87171","#34d399","#fb923c"]
-const CONFETTI_COUNT  = 56
-
-const CONFETTI_PIECES = Array.from({length:CONFETTI_COUNT},(_,i)=>{
-  const angle = (i/CONFETTI_COUNT)*360 + (Math.random()-0.5)*18
-  const dist  = 80+Math.random()*110
-  const rad   = angle*Math.PI/180
-  return {
-    id:i, color:CONFETTI_COLORS[i%CONFETTI_COLORS.length],
-    dx:Math.cos(rad)*dist, dy:Math.sin(rad)*dist,
-    delay:Math.random()*0.14, dur:0.9+Math.random()*0.55,
-    size:5+Math.random()*8, rot:(Math.random()-0.5)*680,
-    type:i%3===0?"circle":i%3===1?"rect":"tri",
-  }
+/* ── Confetti ── */
+const CONFETTI_COLORS=["#2E8B34","#f472b6","#fbbf24","#60a5fa","#a78bfa","#f87171","#34d399","#fb923c"]
+const CONFETTI_PIECES=Array.from({length:72},(_,i)=>{
+  const angle=(i/72)*360+(Math.random()-0.5)*18,dist=100+Math.random()*140,rad=angle*Math.PI/180
+  return{id:i,color:CONFETTI_COLORS[i%8],dx:Math.cos(rad)*dist,dy:Math.sin(rad)*dist,delay:Math.random()*0.16,dur:1+Math.random()*0.6,size:6+Math.random()*10,rot:(Math.random()-0.5)*720,type:i%3===0?"circle":i%3===1?"rect":"tri"}
 })
-
-const BURST_CSS_ID = "bloomora-confetti-css"
-function injectBurstCSS() {
-  if (document.getElementById(BURST_CSS_ID)) return
-  const s = document.createElement("style"); s.id = BURST_CSS_ID
-  s.textContent = `
-    @keyframes cf-burst {
-      0%   { transform:translate(0,0) rotate(0deg) scale(0.3); opacity:0; }
-      10%  { transform:translate(0,0) rotate(0deg) scale(1.1); opacity:1; }
-      60%  { transform:translate(var(--dx),var(--dy)) rotate(calc(var(--r)*0.65)) scale(1); opacity:1; }
-      100% { transform:translate(calc(var(--dx)*1.25),calc(var(--dy)*1.35)) rotate(var(--r)) scale(0.2); opacity:0; }
-    }
-  `
+function injectBurstCSS(){
+  if(document.getElementById("bloomora-confetti-css"))return
+  const s=document.createElement("style");s.id="bloomora-confetti-css"
+  s.textContent=`@keyframes cf-burst{0%{transform:translate(0,0) rotate(0deg) scale(0.3);opacity:0}10%{transform:translate(0,0) rotate(0deg) scale(1.1);opacity:1}60%{transform:translate(var(--dx),var(--dy)) rotate(calc(var(--r)*0.65)) scale(1);opacity:1}100%{transform:translate(calc(var(--dx)*1.25),calc(var(--dy)*1.35)) rotate(var(--r)) scale(0.2);opacity:0}}`
   document.head.appendChild(s)
 }
-
-function Confetti() {
-  useEffect(()=>{ injectBurstCSS() },[])
-  return (
-    <div style={{position:"absolute",inset:0,pointerEvents:"none",zIndex:10,display:"flex",alignItems:"center",justifyContent:"center"}}>
+function Confetti(){
+  useEffect(()=>{injectBurstCSS()},[])
+  return(
+    <div className="absolute inset-0 pointer-events-none z-10 flex items-center justify-center">
       {CONFETTI_PIECES.map(p=>(
-        <div key={p.id} style={{
-          position:"absolute",
-          width:p.type==="rect"?`${p.size*1.8}px`:`${p.size}px`,
-          height:`${p.size}px`,
-          background:p.type==="tri"?"transparent":p.color,
-          borderRadius:p.type==="circle"?"50%":p.type==="rect"?"2px":"0",
-          borderLeft:p.type==="tri"?`${p.size/2}px solid transparent`:"none",
-          borderRight:p.type==="tri"?`${p.size/2}px solid transparent`:"none",
-          borderBottom:p.type==="tri"?`${p.size}px solid ${p.color}`:"none",
-          "--dx":`${p.dx}px`,"--dy":`${p.dy}px`,"--r":`${p.rot}deg`,
-          animation:`cf-burst ${p.dur}s cubic-bezier(0.22,0.61,0.36,1) ${p.delay}s 1 forwards`,
-        }}/>
+        <div key={p.id} style={{position:"absolute",width:p.type==="rect"?`${p.size*1.8}px`:`${p.size}px`,height:`${p.size}px`,background:p.type==="tri"?"transparent":p.color,borderRadius:p.type==="circle"?"50%":p.type==="rect"?"2px":"0",borderLeft:p.type==="tri"?`${p.size/2}px solid transparent`:"none",borderRight:p.type==="tri"?`${p.size/2}px solid transparent`:"none",borderBottom:p.type==="tri"?`${p.size}px solid ${p.color}`:"none","--dx":`${p.dx}px`,"--dy":`${p.dy}px`,"--r":`${p.rot}deg`,animation:`cf-burst ${p.dur}s cubic-bezier(0.22,0.61,0.36,1) ${p.delay}s 1 forwards`}}/>
       ))}
     </div>
   )
 }
 
+/* ── AI Panel ── */
+const RELATIONSHIP_OPTIONS=["Best Friend","Partner / Lover","Spouse","Mother","Father","Sibling","Grandparent","Child","Colleague","Boss","Teacher","Mentor","Classmate","Neighbor","Acquaintance"]
+const OCCASION_OPTIONS=["Birthday","Anniversary","Valentine's Day","Mother's Day","Father's Day","Graduation","Get Well Soon","Thank You","Congratulations","Just Because","Sympathy","Wedding","New Baby","Farewell"]
+const TONE_OPTIONS=[{value:"warm",label:"Warm & Heartfelt"},{value:"playful",label:"Playful & Fun"},{value:"elegant",label:"Elegant & Formal"},{value:"simple",label:"Simple & Sweet"}]
 
-// ── AI Message Generator ──────────────────────────────────────────────────────
-const RELATIONSHIP_OPTIONS = ["Best Friend","Partner / Lover","Spouse","Mother","Father","Sibling","Grandparent","Child","Colleague","Boss","Teacher","Mentor","Classmate","Neighbor","Acquaintance"]
-const OCCASION_OPTIONS     = ["Birthday","Anniversary","Valentine's Day","Mother's Day","Father's Day","Graduation","Get Well Soon","Thank You","Congratulations","Just Because","Sympathy","Wedding","New Baby","Farewell"]
-const TONE_OPTIONS         = [
-  { value:"warm",    label:"Warm & Heartfelt" },
-  { value:"playful", label:"Playful & Fun"    },
-  { value:"elegant", label:"Elegant & Formal" },
-  { value:"simple",  label:"Simple & Sweet"   },
-]
+function AIPanel({onUse,onBack}){
+  const[relationship,setRelationship]=useState("")
+  const[occasion,setOccasion]=useState("")
+  const[tone,setTone]=useState("warm")
+  const[extra,setExtra]=useState("")
+  const[loading,setLoading]=useState(false)
+  const[generated,setGenerated]=useState("")
+  const[err,setErr]=useState("")
 
-function AIMessageGenerator({ onUse, onClose }) {
-  const [relationship, setRelationship] = useState("")
-  const [occasion,     setOccasion]     = useState("")
-  const [tone,         setTone]         = useState("warm")
-  const [extra,        setExtra]        = useState("")
-  const [loading,      setLoading]      = useState(false)
-  const [generated,    setGenerated]    = useState("")
-  const [err,          setErr]          = useState("")
-
-  const generate = async () => {
-    if (!relationship || !occasion) { setErr("Please select a relationship and occasion."); return }
-    setErr(""); setLoading(true); setGenerated("")
-    const toneLabel = TONE_OPTIONS.find(t => t.value === tone)?.label || "Warm & Heartfelt"
-    const prompt = `Write a short, genuine greeting card message for someone's ${occasion}. The sender's relationship to the recipient is: ${relationship}. Tone: ${toneLabel}.${extra ? ` Extra context: ${extra}.` : ""} Keep it 2–4 sentences, personal, and sincere. Write only the message itself — no quotes, no label, no explanation.`
-    try {
-      const res  = await fetch("https://api.anthropic.com/v1/messages", {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({
-          model:"claude-sonnet-4-20250514",
-          max_tokens:200,
-          system:"You write short, heartfelt greeting card messages. Never include hate, harmful content, or inappropriate language. Always be kind, genuine, and appropriate for the occasion. Respond with only the message text — no preamble, no quotation marks.",
-          messages:[{ role:"user", content:prompt }]
-        })
-      })
-      const data = await res.json()
-      const text = data?.content?.[0]?.text?.trim() || ""
-      if (!text) throw new Error("Empty response")
+  const generate=async()=>{
+    if(!relationship||!occasion){setErr("Please select a relationship and occasion.");return}
+    setErr("");setLoading(true);setGenerated("")
+    const toneLabel=TONE_OPTIONS.find(t=>t.value===tone)?.label||"Warm & Heartfelt"
+    const prompt=`Write a short, genuine greeting card message for someone's ${occasion}. The sender's relationship to the recipient is: ${relationship}. Tone: ${toneLabel}.${extra?` Extra context: ${extra}.`:""} Keep it 2-4 sentences, personal, and sincere. Write only the message itself.`
+    try{
+      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:200,system:"You write short, heartfelt greeting card messages. Respond with only the message text.",messages:[{role:"user",content:prompt}]})})
+      const data=await res.json()
+      const text=data?.content?.[0]?.text?.trim()||""
+      if(!text)throw new Error("Empty")
       setGenerated(text)
-    } catch(e) {
-      setErr("Could not generate message. Please try again.")
-    }
+    }catch(e){setErr("Could not generate message. Please try again.")}
     setLoading(false)
   }
 
-  const sel = (val, setter, list) => ({
-    value: val,
-    onChange: e => setter(e.target.value),
-    style: { width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"8px 12px", fontSize:13, color: val?"#1f2937":"#9ca3af", outline:"none", background:"white", fontFamily:"inherit", cursor:"pointer" }
-  })
-
-  return (
-    <div style={{ position:"fixed", inset:0, zIndex:300, display:"flex", alignItems:"center", justifyContent:"center", padding:16, backgroundColor:"rgba(0,0,0,0.45)", backdropFilter:"blur(5px)" }} onClick={onClose}>
-      <div onClick={e=>e.stopPropagation()} style={{ background:"white", borderRadius:14, width:"100%", maxWidth:440, boxShadow:"0 20px 60px rgba(0,0,0,0.18)", overflow:"hidden" }}>
-
-        {/* Header */}
-        <div style={{ padding:"18px 22px 14px", borderBottom:"1px solid #f3f4f6" }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <div style={{ width:32, height:32, borderRadius:8, background:`linear-gradient(135deg,${DG},${G})`, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <svg width="16" height="16" fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-              </div>
-              <div>
-                <p style={{ fontSize:14, fontWeight:700, color:"#111827", margin:0, fontFamily:"inherit" }}>AI Message Writer</p>
-                <p style={{ fontSize:11, color:"#9ca3af", margin:0, fontFamily:"inherit" }}>Generate a heartfelt message in seconds</p>
-              </div>
-            </div>
-            <button onClick={onClose} style={{ width:26, height:26, borderRadius:"50%", border:"1px solid #e5e7eb", background:"white", display:"flex", alignItems:"center", justifyContent:"center", cursor:"pointer" }}>
-              <svg width="10" height="10" fill="none" stroke="#374151" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
+  return(
+    <div className="pms-scroll flex-1 overflow-y-auto px-7 py-6 flex flex-col gap-4">
+      <div>
+        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 cursor-pointer bg-transparent border-none mb-4 p-0">
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7"/></svg>
+          Back to card form
+        </button>
+        <div className="flex items-center gap-3 mb-1">
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:`linear-gradient(135deg,${DG},${G})`}}>
+            <svg width="17" height="17" fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
           </div>
-        </div>
-
-        {/* Form */}
-        <div style={{ padding:"18px 22px" }}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
-            <div>
-              <label style={{ display:"block", fontSize:10, fontWeight:600, color:"#374151", letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:4, fontFamily:"inherit" }}>Relationship *</label>
-              <select {...sel(relationship, setRelationship, RELATIONSHIP_OPTIONS)} onChange={e=>{setRelationship(e.target.value);setErr("")}}>
-                <option value="">Select...</option>
-                {RELATIONSHIP_OPTIONS.map(r=><option key={r} value={r}>{r}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{ display:"block", fontSize:10, fontWeight:600, color:"#374151", letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:4, fontFamily:"inherit" }}>Occasion *</label>
-              <select {...sel(occasion, setOccasion, OCCASION_OPTIONS)} onChange={e=>{setOccasion(e.target.value);setErr("")}}>
-                <option value="">Select...</option>
-                {OCCASION_OPTIONS.map(o=><option key={o} value={o}>{o}</option>)}
-              </select>
-            </div>
+          <div>
+            <p className="text-base font-bold text-gray-900 m-0">AI Message Writer</p>
+            <p className="text-xs text-gray-400 m-0">Generate a heartfelt message in seconds</p>
           </div>
-
-          {/* Tone */}
-          <div style={{ marginBottom:10 }}>
-            <label style={{ display:"block", fontSize:10, fontWeight:600, color:"#374151", letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:6, fontFamily:"inherit" }}>Tone</label>
-            <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
-              {TONE_OPTIONS.map(t=>(
-                <button key={t.value} onClick={()=>setTone(t.value)}
-                  style={{ padding:"5px 12px", borderRadius:20, fontSize:11, fontWeight:tone===t.value?600:400, border:`1px solid ${tone===t.value?G:"#e5e7eb"}`, background:tone===t.value?"#f0fdf4":"white", color:tone===t.value?G:"#374151", cursor:"pointer", transition:"all 0.12s", fontFamily:"inherit" }}>
-                  {t.label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Extra context */}
-          <div style={{ marginBottom:14 }}>
-            <label style={{ display:"block", fontSize:10, fontWeight:600, color:"#374151", letterSpacing:"0.06em", textTransform:"uppercase", marginBottom:4, fontFamily:"inherit" }}>Extra context <span style={{ fontWeight:400, color:"#9ca3af", textTransform:"none", letterSpacing:0 }}>(optional)</span></label>
-            <input placeholder="e.g. She loves sunflowers, we've been friends for 10 years..." value={extra} onChange={e=>setExtra(e.target.value)}
-              style={{ width:"100%", border:"1px solid #e5e7eb", borderRadius:8, padding:"8px 12px", fontSize:12, color:"#374151", outline:"none", background:"white", boxSizing:"border-box", fontFamily:"inherit" }}
-              onFocus={e=>e.target.style.borderColor=G} onBlur={e=>e.target.style.borderColor="#e5e7eb"}/>
-          </div>
-
-          {err && <p style={{ fontSize:11, color:"#ef4444", marginBottom:8, fontFamily:"inherit" }}>{err}</p>}
-
-          {/* Generate button */}
-          <button onClick={generate} disabled={loading}
-            style={{ width:"100%", padding:"11px", borderRadius:8, border:"none", background:loading?"#e5e7eb":`linear-gradient(135deg,${DG},${G})`, color:loading?"#9ca3af":"white", fontSize:13, fontWeight:600, cursor:loading?"default":"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:8, transition:"opacity 0.15s", fontFamily:"inherit" }}>
-            {loading ? (
-              <>
-                <svg width="14" height="14" fill="none" viewBox="0 0 24 24" style={{ animation:"spin 1s linear infinite" }}><circle cx="12" cy="12" r="10" stroke="#d1d5db" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke={G} strokeWidth="3" strokeLinecap="round"/></svg>
-                Generating...
-              </>
-            ) : (
-              <>
-                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                {generated ? "Regenerate" : "Generate Message"}
-              </>
-            )}
-          </button>
-
-          {/* Generated result */}
-          {generated && (
-            <div style={{ marginTop:12, border:`1px solid ${G}30`, borderRadius:10, overflow:"hidden" }}>
-              <div style={{ padding:"10px 14px", background:"#f0fdf4", borderBottom:`1px solid ${G}20` }}>
-                <p style={{ fontSize:10, fontWeight:600, color:G, letterSpacing:"0.08em", textTransform:"uppercase", margin:0, fontFamily:"inherit" }}>Generated Message</p>
-              </div>
-              <div style={{ padding:"12px 14px", background:"white" }}>
-                <p style={{ fontSize:13, color:"#374151", lineHeight:1.7, margin:"0 0 12px", fontFamily:"inherit", fontStyle:"italic" }}>"{generated}"</p>
-                <div style={{ display:"flex", gap:8 }}>
-                  <button onClick={()=>{ onUse(generated); onClose() }}
-                    style={{ flex:1, padding:"9px", borderRadius:7, border:"none", background:`linear-gradient(135deg,${DG},${G})`, color:"white", fontSize:12, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
-                    Use this message
-                  </button>
-                  <button onClick={generate}
-                    style={{ padding:"9px 12px", borderRadius:7, border:"1px solid #e5e7eb", background:"white", color:"#374151", fontSize:12, cursor:"pointer", fontFamily:"inherit" }}>
-                    Try again
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       </div>
+
+      <div className="grid grid-cols-2 gap-3">
+        {[["Relationship",relationship,setRelationship,RELATIONSHIP_OPTIONS],["Occasion",occasion,setOccasion,OCCASION_OPTIONS]].map(([l,val,setter,opts])=>(
+          <div key={l}>
+            <label className="block text-xs font-semibold uppercase tracking-widest text-gray-500 mb-1.5">{l} *</label>
+            <select value={val} onChange={e=>{setter(e.target.value);setErr("")}} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 bg-white cursor-pointer" style={{color:val?"#1f2937":"#9ca3af",focusRingColor:G}}>
+              <option value="">Select...</option>
+              {opts.map(o=><option key={o} value={o}>{o}</option>)}
+            </select>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <label className="block text-xs font-semibold uppercase tracking-widest text-gray-500 mb-2">Tone</label>
+        <div className="flex gap-1.5 flex-wrap">
+          {TONE_OPTIONS.map(t=>(
+            <button key={t.value} onClick={()=>setTone(t.value)}
+              className="px-3 py-1.5 rounded-full text-xs cursor-pointer transition-all"
+              style={{fontWeight:tone===t.value?600:400,border:`1px solid ${tone===t.value?G:"#e5e7eb"}`,background:tone===t.value?"#f0fdf4":"white",color:tone===t.value?G:"#374151"}}>
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div>
+        <label className="block text-xs font-semibold uppercase tracking-widest text-gray-500 mb-1.5">Extra context <span className="normal-case tracking-normal font-normal text-gray-400">(optional)</span></label>
+        <input placeholder="e.g. She loves sunflowers, we have been friends for 10 years..." value={extra} onChange={e=>setExtra(e.target.value)}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 bg-white" style={{"--tw-ring-color":G}}/>
+      </div>
+
+      {err&&<p className="text-xs text-red-500">{err}</p>}
+
+      <button onClick={generate} disabled={loading}
+        className="w-full py-3 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 cursor-pointer border-none transition-opacity"
+        style={{background:loading?"#e5e7eb":`linear-gradient(135deg,${DG},${G})`,color:loading?"#9ca3af":"white"}}>
+        {loading?(<><svg width="15" height="15" fill="none" viewBox="0 0 24 24" style={{animation:"spin 1s linear infinite"}}><circle cx="12" cy="12" r="10" stroke="#d1d5db" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke={G} strokeWidth="3" strokeLinecap="round"/></svg>Generating...</>):(<><svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>{generated?"Regenerate":"Generate Message"}</>)}
+      </button>
+
+      {generated&&(
+        <div className="border rounded-xl overflow-hidden" style={{borderColor:`${G}30`}}>
+          <div className="px-4 py-2.5 border-b" style={{background:"#f0fdf4",borderColor:`${G}20`}}>
+            <p className="text-xs font-semibold uppercase tracking-widest m-0" style={{color:G}}>Generated Message</p>
+          </div>
+          <div className="p-4 bg-white">
+            <p className="text-sm text-gray-600 leading-relaxed italic mb-3">"{generated}"</p>
+            <div className="flex gap-2">
+              <button onClick={()=>onUse(generated)} className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white border-none cursor-pointer" style={{background:`linear-gradient(135deg,${DG},${G})`}}>Use this message</button>
+              <button onClick={generate} className="px-4 py-2.5 rounded-lg text-sm border border-gray-200 bg-white text-gray-600 cursor-pointer">Try again</button>
+            </div>
+          </div>
+        </div>
+      )}
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   )
 }
 
-// ── Card Choice Step ───────────────────────────────────────────────────────────
-function CardStep({ delivLabel, dest, onClose, onNavigate }) {
-  const [phase,   setPhase]   = useState("choice")   // "choice" | "form" | "done"
-  const [form,    setForm]    = useState({ msg:"", to:"", from:"" })
-  const [formErr, setFormErr] = useState({})
-  const [hovered, setHovered] = useState(null)
-  const [choice,  setChoice]  = useState(null)        // true = with card, false = without
-  const [showAI,  setShowAI]  = useState(false)
+/* ── Card Step ── */
+function CardStep({delivLabel,dest,onClose,onNavigate}){
+  const[phase,setPhase]=useState("choice")
+  const[form,setForm]=useState({msg:"",to:"",from:""})
+  const[formErr,setFormErr]=useState({})
+  const[hovered,setHovered]=useState(null)
+  const[choice,setChoice]=useState(null)
+  const[showAI,setShowAI]=useState(false)
 
-  const inp = (err) => ({
-    width:"100%", border:`1px solid ${err?"#fca5a5":"#e5e7eb"}`, borderRadius:8,
-    padding:"9px 12px", fontSize:13, color:"#1f2937", outline:"none",
-    background:"white", boxSizing:"border-box", transition:"border-color 0.15s", fontFamily:"inherit"
-  })
+  const inp=err=>({width:"100%",border:`1.5px solid ${err?"#fca5a5":"#e5e7eb"}`,borderRadius:10,padding:"10px 12px",fontSize:14,color:"#1f2937",outline:"none",background:"white",boxSizing:"border-box",transition:"border-color 0.15s"})
 
-  // User picks a card option
-  const handleChoice = (withCard) => {
-    setChoice(withCard)
-    setPhase(withCard ? "form" : "done")
-  }
-
-  // Validate & confirm card form
-  const handleConfirm = () => {
-    const e = {}
-    if (!form.msg.trim())  e.msg  = true
-    if (!form.to.trim())   e.to   = true
-    if (!form.from.trim()) e.from = true
-    setFormErr(e)
-    if (Object.keys(e).length > 0) return
-    setPhase("done")
-  }
-
-  // Navigate away after confetti
   useEffect(()=>{
-    if (phase==="done") {
-      const t = setTimeout(()=>{ onClose(); onNavigate?.(dest==="checkout"?"checkout":"cart") }, 2600)
-      return ()=>clearTimeout(t)
+    if(phase==="done"){
+      const t=setTimeout(()=>{onClose();onNavigate?.(dest==="checkout"?"checkout":"cart")},2800)
+      return()=>clearTimeout(t)
     }
   },[phase])
 
-  // ── Done / confetti screen ──
-  if (phase==="done") return (
-    <div style={{width:"100%",position:"relative",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 40px",boxSizing:"border-box",minHeight:440,overflow:"hidden"}}>
+  const handleConfirm=()=>{
+    const e={}
+    if(!form.msg.trim())e.msg=true
+    if(!form.to.trim())e.to=true
+    if(!form.from.trim())e.from=true
+    setFormErr(e);if(Object.keys(e).length>0)return
+    setPhase("done")
+  }
+
+  /* Done */
+  if(phase==="done") return(
+    <div className="w-full h-full relative flex items-center justify-center overflow-hidden bg-white">
       <Confetti/>
-      <div style={{position:"relative",zIndex:11,display:"flex",flexDirection:"column",alignItems:"center",gap:0}}>
-        {/* Big check */}
-        <div style={{width:80,height:80,borderRadius:"50%",background:`linear-gradient(135deg,${DG},${G})`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:22,boxShadow:"0 12px 32px rgba(46,139,52,0.32)"}}>
-          <svg width="38" height="38" fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M5 13l4 4L19 7"/></svg>
+      <div className="relative z-10 flex flex-col items-center px-10 py-12 text-center">
+        <div className="w-28 h-28 rounded-full flex items-center justify-center mb-8" style={{background:`linear-gradient(135deg,${DG},${G})`,boxShadow:"0 20px 60px rgba(46,139,52,0.35)"}}>
+          <svg width="54" height="54" fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
         </div>
-        <p style={{fontSize:26,fontWeight:700,color:"#111827",marginBottom:10,textAlign:"center",fontFamily:"inherit",letterSpacing:"-0.01em"}}>Item added to cart!</p>
-        <p style={{fontSize:15,color:"#6b7280",textAlign:"center",lineHeight:1.65,maxWidth:300,marginBottom:20,fontFamily:"inherit"}}>
-          {choice ? "Your greeting card has been included." : "No greeting card added."}
-        </p>
-        {delivLabel&&(
-          <div style={{display:"flex",alignItems:"center",gap:6,fontSize:13,fontWeight:600,color:DG,background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"8px 18px",borderRadius:24,marginBottom:20,fontFamily:"inherit"}}>
-            <svg width="13" height="13" fill="none" stroke={DG} strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-            Delivery: {delivLabel}
-          </div>
-        )}
-        <p style={{fontSize:12,color:"#9ca3af",textAlign:"center",fontFamily:"inherit"}}>Redirecting you now...</p>
+        <p className="text-4xl font-extrabold text-gray-900 mb-3 tracking-tight">Item added to cart!</p>
+        <p className="text-lg text-gray-500 leading-relaxed max-w-sm mb-6">{choice?"Your greeting card has been included.":"Your order has been added without a greeting card."}</p>
+        {delivLabel&&<div className="flex items-center gap-2 text-base font-semibold px-6 py-3 rounded-full border-2 mb-6" style={{color:DG,background:"#f0fdf4",borderColor:"#bbf7d0"}}>
+          <svg width="16" height="16" fill="none" stroke={DG} strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          Delivery: {delivLabel}
+        </div>}
+        <p className="text-sm text-gray-400">Redirecting you now...</p>
       </div>
     </div>
   )
 
-  // ── Choice screen ──
-  if (phase==="choice") return (
-    <div style={{width:"100%",display:"flex",flexDirection:"column",alignItems:"center",padding:"40px 40px",boxSizing:"border-box",minHeight:440,overflowY:"auto",maxHeight:"90vh"}}>
-      <div style={{width:44,height:44,borderRadius:"50%",background:`linear-gradient(135deg,${DG},${G})`,display:"flex",alignItems:"center",justifyContent:"center",marginBottom:14,boxShadow:"0 6px 20px rgba(46,139,52,0.22)"}}>
-        <svg width="20" height="20" fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+  /* Choice */
+  if(phase==="choice") return(
+    <div className="w-full h-full flex flex-col items-center justify-center px-12 py-10 overflow-y-auto">
+      <div className="w-16 h-16 rounded-full flex items-center justify-center mb-5" style={{background:`linear-gradient(135deg,${DG},${G})`,boxShadow:"0 10px 32px rgba(46,139,52,0.25)"}}>
+        <svg width="30" height="30" fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
       </div>
-      <p style={{fontSize:16,fontWeight:700,color:"#111827",marginBottom:4,textAlign:"center",fontFamily:"inherit"}}>Added to cart!</p>
-      <p style={{fontSize:13,color:"#6b7280",textAlign:"center",lineHeight:1.6,maxWidth:280,marginBottom:delivLabel?10:20,fontFamily:"inherit"}}>Would you like to include a greeting card with your order?</p>
-      {delivLabel&&<div style={{fontSize:11,fontWeight:600,color:DG,background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"4px 12px",borderRadius:20,marginBottom:20,fontFamily:"inherit"}}>Delivery: {delivLabel}</div>}
-
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,width:"100%",maxWidth:380}}>
-        {[
-          { key:true,  img:withCardImg, label:"Yes, add a card", sub:"Include a greeting card" },
-          { key:false, img:noCardImg,   label:"No thanks",       sub:"Continue without card"   },
-        ].map(opt=>(
-          <button key={String(opt.key)} onClick={()=>handleChoice(opt.key)}
-            style={{border:`1.5px solid ${hovered===opt.key?G:"#e5e7eb"}`,borderRadius:12,overflow:"hidden",background:"white",cursor:"pointer",textAlign:"left",padding:0,transition:"border-color 0.15s,box-shadow 0.15s",boxShadow:hovered===opt.key?"0 4px 16px rgba(46,139,52,0.12)":"none"}}
-            onMouseEnter={()=>setHovered(opt.key)}
-            onMouseLeave={()=>setHovered(null)}>
-            <div style={{height:120,background:"#f9fafb",overflow:"hidden"}}>
-              <img src={opt.img} alt={opt.label} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} onError={e=>{e.target.style.display="none"}}/>
+      <p className="text-3xl font-bold text-gray-900 mb-2 text-center">Added to cart!</p>
+      <p className="text-lg text-gray-500 text-center leading-relaxed max-w-sm mb-3">Would you like to include a greeting card with your order?</p>
+      {delivLabel&&<div className="text-sm font-semibold px-5 py-2 rounded-full border-2 mb-8" style={{color:DG,background:"#f0fdf4",borderColor:"#bbf7d0"}}>Delivery: {delivLabel}</div>}
+      <div className="pm-card-choice-grid grid grid-cols-2 gap-4 w-full max-w-lg">
+        {[{key:true,img:withCardImg,label:"Yes, add a card",sub:"Include a greeting card"},{key:false,img:noCardImg,label:"No thanks",sub:"Continue without card"}].map(opt=>(
+          <button key={String(opt.key)} onClick={()=>{setChoice(opt.key);setPhase(opt.key?"form":"done")}}
+            className="rounded-2xl overflow-hidden bg-white text-left p-0 cursor-pointer transition-all"
+            style={{border:`2px solid ${hovered===opt.key?G:"#e5e7eb"}`,boxShadow:hovered===opt.key?"0 8px 28px rgba(46,139,52,0.16)":"none"}}
+            onMouseEnter={()=>setHovered(opt.key)} onMouseLeave={()=>setHovered(null)}>
+            <div className="h-44 bg-gray-50 overflow-hidden">
+              <img src={opt.img} alt={opt.label} className="w-full h-full object-cover" onError={e=>{e.target.style.display="none"}}/>
             </div>
-            <div style={{padding:"10px 12px"}}>
-              <p style={{fontSize:12,fontWeight:600,color:"#111827",margin:0,fontFamily:"inherit"}}>{opt.label}</p>
-              <p style={{fontSize:11,color:"#9ca3af",margin:"2px 0 0",fontFamily:"inherit"}}>{opt.sub}</p>
+            <div className="p-4">
+              <p className="text-base font-semibold text-gray-900 m-0">{opt.label}</p>
+              <p className="text-sm text-gray-400 mt-1 m-0">{opt.sub}</p>
             </div>
           </button>
         ))}
@@ -415,534 +304,463 @@ function CardStep({ delivLabel, dest, onClose, onNavigate }) {
     </div>
   )
 
-  // ── Card form (all fields required, no skip) ──
-  const MSG_MAX  = 160
-  const NAME_MAX = 30
-
-  return (
-    <div style={{width:"100%",display:"flex",flexDirection:"column",alignItems:"center",padding:"32px 40px",boxSizing:"border-box",minHeight:440,overflowY:"auto",maxHeight:"90vh"}}>
-      <p style={{fontSize:15,fontWeight:700,color:"#111827",marginBottom:4,textAlign:"center",fontFamily:"inherit"}}>Write your greeting card</p>
-      <p style={{fontSize:12,color:"#9ca3af",textAlign:"center",marginBottom:16,fontFamily:"inherit"}}>All fields are required.</p>
-
-      {/* Friendly reminder */}
-      <div style={{display:"flex",alignItems:"flex-start",gap:8,padding:"9px 13px",borderRadius:8,background:"#fffbeb",border:"1px solid #fde68a",marginBottom:16,width:"100%",maxWidth:400,boxSizing:"border-box"}}>
-        <svg width="14" height="14" fill="none" stroke="#d97706" strokeWidth={2} viewBox="0 0 24 24" style={{flexShrink:0,marginTop:1}}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-        </svg>
-        <p style={{fontSize:11,color:"#92400e",margin:0,lineHeight:1.5,fontFamily:"inherit"}}>
-          Please keep your message kind and respectful. Hateful, harmful, or inappropriate content will not be allowed.
-        </p>
+  /* Form */
+  const MSG_MAX=160,NAME_MAX=30
+  const leftImg=showAI?writingImg:letterImg
+  return(
+    <div className="pm-card-form w-full h-full flex flex-row overflow-hidden">
+      <div className="pm-card-img flex-shrink-0 overflow-hidden bg-gray-50 flex items-center justify-center p-6" style={{width:"50%"}}>
+        <img src={leftImg} alt="" className="w-full h-full object-contain"/>
       </div>
+      <div className="pm-card-right flex flex-col bg-gray-100 overflow-hidden" style={{width:"50%"}}>
+        <div className="flex-1 flex flex-col m-4 rounded-2xl bg-white overflow-hidden" style={{boxShadow:"0 2px 16px rgba(0,0,0,0.08)"}}>
+          {showAI?(
+            <AIPanel onUse={msg=>{setForm(f=>({...f,msg}));setFormErr(e=>({...e,msg:false}));setShowAI(false)}} onBack={()=>setShowAI(false)}/>
+          ):(
+            <div className="pm-scroll pm-card-form-right flex-1 overflow-y-auto px-6 py-6 flex flex-col">
+              <p className="text-xl font-bold text-gray-900 mb-1">Write your greeting card</p>
+              <p className="text-sm text-gray-400 mb-4">All fields are required.</p>
 
-      <div style={{width:"100%",maxWidth:400}}>
-        {/* Live preview */}
-        <div style={{border:"1px solid #e5e7eb",borderRadius:10,padding:"14px 16px",marginBottom:14,background:"#fafafa"}}>
-          <p style={{fontSize:10,fontWeight:600,color:"#9ca3af",letterSpacing:"0.08em",textTransform:"uppercase",marginBottom:8,fontFamily:"inherit"}}>Preview</p>
-          <p style={{fontSize:13,color:form.msg?"#1f2937":"#d1d5db",fontStyle:form.msg?"normal":"italic",lineHeight:1.6,minHeight:36,marginBottom:10,fontFamily:"inherit",wordBreak:"break-word"}}>{form.msg||"Your message..."}</p>
-          <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #f3f4f6",paddingTop:8}}>
-            <span style={{fontSize:11,color:"#6b7280",fontFamily:"inherit"}}>To: <strong style={{color:"#1f2937"}}>{form.to||"—"}</strong></span>
-            <span style={{fontSize:11,color:"#6b7280",fontFamily:"inherit"}}>From: <strong style={{color:"#1f2937"}}>{form.from||"—"}</strong></span>
-          </div>
-        </div>
-
-        {/* Message */}
-        <div style={{marginBottom:10}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-            <label style={{display:"flex",alignItems:"center",gap:4,fontSize:10,fontWeight:600,color:formErr.msg?"#ef4444":"#374151",letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"inherit"}}>
-              Message <span style={{color:"#ef4444"}}>*</span>
-              {formErr.msg&&<span style={{fontWeight:500,textTransform:"none",letterSpacing:0,fontSize:10}}>— required</span>}
-            </label>
-            <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <button onClick={()=>setShowAI(true)}
-                style={{display:"flex",alignItems:"center",gap:4,background:"none",border:"none",cursor:"pointer",padding:0,fontSize:10,fontWeight:600,color:G,fontFamily:"inherit",textDecoration:"underline",textUnderlineOffset:"2px"}}>
-                <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-                No idea what to write?
-              </button>
-              <span style={{fontSize:10,color:form.msg.length>MSG_MAX*0.9?"#ef4444":"#9ca3af",fontFamily:"inherit"}}>{form.msg.length}/{MSG_MAX}</span>
-            </div>
-          </div>
-          <textarea rows={3} placeholder="Write a warm, kind message..." value={form.msg} maxLength={MSG_MAX}
-            onChange={e=>{setForm(f=>({...f,msg:e.target.value}));setFormErr(e=>({...e,msg:false}))}}
-            style={{...inp(formErr.msg),resize:"none"}}
-            onFocus={e=>e.target.style.borderColor=formErr.msg?"#ef4444":G}
-            onBlur={e=>e.target.style.borderColor=formErr.msg?"#fca5a5":"#e5e7eb"}/>
-        </div>
-
-        {/* To / From */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:20}}>
-          {[["to","e.g. Maria","To"],["from","e.g. Juan","From"]].map(([k,ph,l])=>(
-            <div key={k}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-                <label style={{display:"flex",alignItems:"center",gap:4,fontSize:10,fontWeight:600,color:formErr[k]?"#ef4444":"#374151",letterSpacing:"0.06em",textTransform:"uppercase",fontFamily:"inherit"}}>
-                  {l} <span style={{color:"#ef4444"}}>*</span>
-                  {formErr[k]&&<span style={{fontWeight:500,textTransform:"none",letterSpacing:0,fontSize:10}}>req.</span>}
-                </label>
-                <span style={{fontSize:10,color:form[k].length>NAME_MAX*0.85?"#ef4444":"#9ca3af",fontFamily:"inherit"}}>{form[k].length}/{NAME_MAX}</span>
+              <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 mb-4">
+                <svg width="15" height="15" fill="none" stroke="#d97706" strokeWidth={2} viewBox="0 0 24 24" className="flex-shrink-0 mt-0.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                <p className="text-xs text-amber-800 leading-relaxed m-0">Please keep your message kind and respectful.</p>
               </div>
-              <input placeholder={ph} value={form[k]} maxLength={NAME_MAX}
-                onChange={e=>{setForm(f=>({...f,[k]:e.target.value}));setFormErr(e=>({...e,[k]:false}))}}
-                style={inp(formErr[k])}
-                onFocus={e=>e.target.style.borderColor=formErr[k]?"#ef4444":G}
-                onBlur={e=>e.target.style.borderColor=formErr[k]?"#fca5a5":"#e5e7eb"}/>
+
+              {/* Preview */}
+              <div className="border border-gray-200 rounded-xl p-4 mb-4 bg-gray-50">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">Preview</p>
+                <p className="text-sm leading-relaxed min-h-10 mb-3 break-words" style={{color:form.msg?"#1f2937":"#d1d5db",fontStyle:form.msg?"normal":"italic"}}>{form.msg||"Your message..."}</p>
+                <div className="flex justify-between border-t border-gray-100 pt-2">
+                  <span className="text-sm text-gray-500">To: <strong className="text-gray-800">{form.to||"..."}</strong></span>
+                  <span className="text-sm text-gray-500">From: <strong className="text-gray-800">{form.from||"..."}</strong></span>
+                </div>
+              </div>
+
+              {/* Message field */}
+              <div className="mb-3">
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold uppercase tracking-widest flex items-center gap-1" style={{color:formErr.msg?"#ef4444":"#374151"}}>
+                    Message <span className="text-red-400">*</span>{formErr.msg&&<span className="normal-case tracking-normal font-normal">required</span>}
+                  </label>
+                  <div className="flex items-center gap-2.5">
+                    <button onClick={()=>setShowAI(true)} className="flex items-center gap-1 text-xs font-semibold cursor-pointer bg-transparent border-none p-0 underline underline-offset-2" style={{color:G}}>
+                      <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                      No idea what to write?
+                    </button>
+                    <span className="text-xs text-gray-400">{form.msg.length}/{MSG_MAX}</span>
+                  </div>
+                </div>
+                <textarea rows={3} placeholder="Write a warm, kind message..." value={form.msg} maxLength={MSG_MAX}
+                  onChange={e=>{setForm(f=>({...f,msg:e.target.value}));setFormErr(e=>({...e,msg:false}))}}
+                  style={{...inp(formErr.msg),resize:"none"}}
+                  onFocus={e=>e.target.style.borderColor=formErr.msg?"#ef4444":G}
+                  onBlur={e=>e.target.style.borderColor=formErr.msg?"#fca5a5":"#e5e7eb"}/>
+              </div>
+
+              {/* To / From */}
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                {[["to","e.g. Maria","To"],["from","e.g. Juan","From"]].map(([k,ph,l])=>(
+                  <div key={k}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold uppercase tracking-widest flex items-center gap-1" style={{color:formErr[k]?"#ef4444":"#374151"}}>
+                        {l} <span className="text-red-400">*</span>{formErr[k]&&<span className="normal-case tracking-normal font-normal">req.</span>}
+                      </label>
+                      <span className="text-xs text-gray-400">{form[k].length}/{NAME_MAX}</span>
+                    </div>
+                    <input placeholder={ph} value={form[k]} maxLength={NAME_MAX}
+                      onChange={e=>{setForm(f=>({...f,[k]:e.target.value}));setFormErr(e=>({...e,[k]:false}))}}
+                      style={inp(formErr[k])}
+                      onFocus={e=>e.target.style.borderColor=formErr[k]?"#ef4444":G}
+                      onBlur={e=>e.target.style.borderColor=formErr[k]?"#fca5a5":"#e5e7eb"}/>
+                  </div>
+                ))}
+              </div>
+
+              <button onClick={handleConfirm} className="w-full py-3.5 rounded-xl text-base font-semibold text-white border-none cursor-pointer mb-3" style={{background:`linear-gradient(135deg,${DG},${G})`}}>
+                Confirm & Add to Cart
+              </button>
+              <button onClick={()=>setPhase("choice")} className="w-full text-center bg-transparent border-none text-sm text-gray-400 cursor-pointer">Back</button>
             </div>
-          ))}
+          )}
         </div>
-
-        {/* Confirm only — no skip */}
-        <button onClick={handleConfirm}
-          style={{width:"100%",padding:"12px",borderRadius:8,border:"none",background:`linear-gradient(135deg,${DG},${G})`,color:"white",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginBottom:10}}>
-          Confirm & Add to Cart
-        </button>
-        <button onClick={()=>setPhase("choice")}
-          style={{display:"block",width:"100%",textAlign:"center",background:"none",border:"none",color:"#9ca3af",fontSize:12,cursor:"pointer",fontFamily:"inherit"}}>
-          ← Back
-        </button>
       </div>
-
-      {showAI && (
-        <AIMessageGenerator
-          onUse={(msg) => { setForm(f=>({...f,msg})); setFormErr(e=>({...e,msg:false})) }}
-          onClose={() => setShowAI(false)}
-        />
-      )}
     </div>
   )
 }
 
-// ── Section label (matches navbar style) ──────────────────────────────────────
-const SectionLabel = ({ children, error, required }) => (
-  <p style={{fontSize:11,fontWeight:600,color:error?ERR:"#374151",letterSpacing:"0.06em",textTransform:"uppercase",margin:"0 0 10px",display:"flex",alignItems:"center",gap:4,fontFamily:"inherit"}}>
-    {children}
-    {required && <span style={{color:ERR,fontSize:12,lineHeight:1}}>*</span>}
-    {error    && <span style={{fontSize:10,fontWeight:500,color:ERR,textTransform:"none",letterSpacing:0}}>required</span>}
-  </p>
-)
-
-// ── Image with cursor-follow zoom ─────────────────────────────────────────────
-function ImgZoom({ product }) {
-  const [pos, setPos]     = useState(null)   // {x,y} percentage 0-100
-  const [active, setActive] = useState(false)
-  const ref = useRef(null)
-
-  const handleMove = (e) => {
-    const rect = ref.current.getBoundingClientRect()
-    const x = ((e.clientX - rect.left) / rect.width)  * 100
-    const y = ((e.clientY - rect.top)  / rect.height) * 100
-    setPos({ x, y })
-  }
-
-  return (
-    <div
-      ref={ref}
-      className="pm-img"
-      onMouseMove={handleMove}
-      onMouseEnter={()=>setActive(true)}
-      onMouseLeave={()=>{ setActive(false); setPos(null) }}
-      style={{
-        flexShrink:0, width:"44%", position:"relative",
-        background:"#f3f4f6", overflow:"hidden",
-        display:"flex", alignItems:"center", justifyContent:"center",
-        cursor: active ? "crosshair" : "default",
-      }}
-    >
-      <img
-        src={product.image}
-        alt={product.name}
-        style={{
-          width:"100%", height:"100%",
-          objectFit:"cover", objectPosition:"center", display:"block",
-          transition: active ? "transform 0.25s ease-out" : "transform 0.4s ease",
-          transform: active && pos
-            ? `scale(1.7)`
-            : "scale(1)",
-          transformOrigin: pos ? `${pos.x}% ${pos.y}%` : "center center",
-          willChange: "transform",
-        }}
-      />
-
-      {/* Badges — always on top */}
-      <div style={{position:"absolute",top:14,left:14,background:DG,color:"white",fontSize:10,fontWeight:600,padding:"3px 10px",borderRadius:4,letterSpacing:"0.04em",pointerEvents:"none",zIndex:5}}>
-        -{pctOff(product.original,product.price)}% OFF
-      </div>
-      {product.ribbon&&(
-        <div style={{position:"absolute",top:38,left:0,pointerEvents:"none",zIndex:5}}>
-          <div style={{fontSize:9,fontWeight:700,color:"white",padding:"3px 14px 3px 10px",background:product._ribbonColor||G,clipPath:"polygon(0 0,calc(100% - 6px) 0,100% 50%,calc(100% - 6px) 100%,0 100%)"}}>
-            {product.ribbon}
-          </div>
-        </div>
-      )}
-
-      {/* Delivery badge */}
-      <div style={{position:"absolute",bottom:14,left:12,right:12,background:"rgba(255,255,255,0.94)",borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:8,boxShadow:"0 2px 8px rgba(0,0,0,0.07)",pointerEvents:"none",zIndex:5}}>
-        <svg width="13" height="13" fill="none" stroke={G} strokeWidth={1.8} viewBox="0 0 24 24" style={{flexShrink:0}}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"/>
-        </svg>
+/* ── Image Zoom ── */
+function ImgZoom({product,isDark}){
+  const[pos,setPos]=useState(null)
+  const[active,setActive]=useState(false)
+  const ref=useRef(null)
+  const move=e=>{const r=ref.current.getBoundingClientRect();setPos({x:((e.clientX-r.left)/r.width)*100,y:((e.clientY-r.top)/r.height)*100})}
+  return(
+    <div ref={ref} className="pm-img flex-shrink-0 relative overflow-hidden"
+      style={{width:"42%",cursor:active?"crosshair":"default",background:isDark?"#0f172a":"#f3f4f6"}}
+      onMouseMove={move} onMouseEnter={()=>setActive(true)} onMouseLeave={()=>{setActive(false);setPos(null)}}>
+      <img src={product.image} alt={product.name} className="w-full h-full object-cover block"
+        style={{transition:active?"transform 0.25s ease-out":"transform 0.4s ease",transform:active&&pos?"scale(1.7)":"scale(1)",transformOrigin:pos?`${pos.x}% ${pos.y}%`:"center",willChange:"transform"}}/>
+      <div className="absolute top-4 left-4 text-white text-xs font-bold px-3 py-1 rounded-md z-10 pointer-events-none" style={{background:DG}}>-{pctOff(product.original,product.price)}% OFF</div>
+      {product.ribbon&&<div className="absolute top-11 left-0 z-10 pointer-events-none"><div className="text-[11px] font-bold text-white px-4 py-1" style={{background:product._ribbonColor||G,clipPath:"polygon(0 0,calc(100% - 6px) 0,100% 50%,calc(100% - 6px) 100%,0 100%)"}}>{product.ribbon}</div></div>}
+      <div className="absolute bottom-4 left-3 right-3 rounded-xl px-3.5 py-2.5 flex items-center gap-2.5 pointer-events-none z-10"
+        style={{background:isDark?"rgba(15,23,42,0.92)":"rgba(255,255,255,0.95)",boxShadow:isDark?"0 0 12px rgba(0,255,136,0.08)":"0 2px 8px rgba(0,0,0,0.07)",border:isDark?"1px solid rgba(74,222,128,0.15)":"none"}}>
+        <svg width="14" height="14" fill="none" stroke={isDark?"#4ade80":G} strokeWidth={1.8} viewBox="0 0 24 24" className="flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"/></svg>
         <div>
-          <p style={{fontSize:11,fontWeight:600,color:"#111827",margin:0,fontFamily:"inherit"}}>Same-day delivery</p>
-          <p style={{fontSize:10,color:"#6b7280",margin:0,fontFamily:"inherit"}}>Before 2PM · Manila & Pampanga</p>
+          <p className="text-xs font-semibold m-0" style={{color:isDark?"#e2e8f0":"#111827"}}>Same-day delivery</p>
+          <p className="text-[10px] m-0" style={{color:isDark?"#4ade80":"#6b7280"}}>Before 2PM · Manila & Pampanga</p>
         </div>
       </div>
-
-      {/* Zoom hint on first hover */}
-      {active&&(
-        <div style={{position:"absolute",top:12,right:12,background:"rgba(0,0,0,0.45)",color:"white",fontSize:9,fontWeight:600,padding:"3px 8px",borderRadius:20,pointerEvents:"none",zIndex:5,backdropFilter:"blur(4px)",letterSpacing:"0.04em"}}>
-          ZOOM
-        </div>
-      )}
+      {active&&<div className="absolute top-3 right-3 bg-black/45 text-white text-[10px] font-bold px-2.5 py-1 rounded-full pointer-events-none z-10 backdrop-blur-sm">ZOOM</div>}
     </div>
   )
 }
 
-// ── Main Modal ────────────────────────────────────────────────────────────────
-export default function ProductPreviewModal({ product, onClose, onNavigate }) {
-  const [color,      setColor]     = useState(null)
-  const [qty,        setQty]       = useState(null)
-  const [addOns,     setAddOns]    = useState([])
-  const [delivType,  setDelivType] = useState(null)
-  const [customDate, setCustDate]  = useState("")
-  const [showCal,    setShowCal]   = useState(false)
-  const [step,       setStep]      = useState("product")
-  const [dest,       setDest]      = useState("cart")
-  const [visible,    setVisible]   = useState(false)
-  const [tab,        setTab]       = useState("details")
-  const [errors,     setErrors]    = useState({})
-  const [showAllAddons, setShowAllAddons] = useState(false)
+/* ── Main Export ── */
+export default function ProductPreviewModal({product,onClose,onNavigate}){
+  const[color,setColor]=useState(null)
+  const[qty,setQty]=useState(null)
+  const[addOns,setAddOns]=useState([])
+  const[delivType,setDelivType]=useState(null)
+  const[customDate,setCustDate]=useState("")
+  const[showCal,setShowCal]=useState(false)
+  const[step,setStep]=useState("product")
+  const[dest,setDest]=useState("cart")
+  const[visible,setVisible]=useState(false)
+  const[tab,setTab]=useState("details")
+  const[errors,setErrors]=useState({})
+  const[showAllAddons,setShowAllAddons]=useState(false)
 
-  const todayOk = isTodayAvail()
-  const colors  = CATEGORY_COLORS[product.category]||CATEGORY_COLORS.Roses
-  const visibleAddons = showAllAddons ? ALL_ADD_ONS : ALL_ADD_ONS.slice(0, INITIAL_ADDON_COUNT)
+  const todayOk=isTodayAvail()
+  const{isDark}=useTheme()
+
+  // Dark mode tokens
+  const modalBg   = isDark?"#1e293b":"white"
+  const rightBg   = isDark?"#0f172a":"#f3f4f6"
+  const cardBg    = isDark?"#1e293b":"white"
+  const cardBdr   = isDark?"rgba(0,255,136,0.08)":"rgba(0,0,0,0.08)"
+  const scrollThumb = isDark?"#334155":"#e5e7eb"
+  const colors=CATEGORY_COLORS[product.category]||CATEGORY_COLORS.Roses
+  const visibleAddons=showAllAddons?ALL_ADD_ONS:ALL_ADD_ONS.slice(0,INITIAL_ADDON_COUNT)
 
   useEffect(()=>{
     setColor(colors[0])
     requestAnimationFrame(()=>requestAnimationFrame(()=>setVisible(true)))
     document.body.style.overflow="hidden"
-    const onKey=(e)=>{if(e.key==="Escape") close()}
-    document.addEventListener("keydown",onKey)
-    return()=>{document.removeEventListener("keydown",onKey);document.body.style.overflow=""}
+    const esc=e=>{if(e.key==="Escape")close()}
+    document.addEventListener("keydown",esc)
+    return()=>{document.removeEventListener("keydown",esc);document.body.style.overflow=""}
   },[])
 
-  const close       = ()=>{setVisible(false);setTimeout(onClose,260)}
-  const toggleAddOn = (id)=>setAddOns(p=>p.includes(id)?p.filter(i=>i!==id):[...p,id])
-  const addOnTotal  = addOns.reduce((s,id)=>s+(ALL_ADD_ONS.find(a=>a.id===id)?.price||0),0)
-  const total       = product.price+addOnTotal
-  const delivLabel  = delivType==="today"?"Today (before 2PM)":delivType==="tomorrow"?`Tomorrow, ${fmtDate(tomorrowStr())}`:delivType==="custom"&&customDate?fmtDate(customDate):null
+  const close=()=>{setVisible(false);setTimeout(onClose,260)}
+  const toggleAddOn=id=>setAddOns(p=>p.includes(id)?p.filter(i=>i!==id):[...p,id])
+  const addOnTotal=addOns.reduce((s,id)=>s+(ALL_ADD_ONS.find(a=>a.id===id)?.price||0),0)
+  const total=product.price+addOnTotal
+  const delivLabel=delivType==="today"?"Today (before 2PM)":delivType==="tomorrow"?`Tomorrow, ${fmtDate(tomorrowStr())}`:delivType==="custom"&&customDate?fmtDate(customDate):null
 
   const validate=()=>{
     const e={}
-    if(!color) e.color=true
-    if(!qty)   e.qty=true
-    if(!delivType||(delivType==="custom"&&!customDate)) e.date=true
-    setErrors(e); return Object.keys(e).length===0
+    if(!color)e.color=true
+    if(!qty)e.qty=true
+    if(!delivType||(delivType==="custom"&&!customDate))e.date=true
+    setErrors(e);return Object.keys(e).length===0
   }
-  const startFlow=(d)=>{
-    if(!validate()) return
+  const startFlow=d=>{
+    if(!validate())return
     addToCart({id:product.id,name:product.name,price:product.price,qty:1,img:product.image,desc:product.category})
     window.dispatchEvent(new Event("bloomora:cart-updated"))
     setDest(d);setStep("card")
   }
 
-  const isCard = step==="card"
+  const isCard=step==="card"
 
   return(
     <>
       <style>{`
         .pm-scroll::-webkit-scrollbar{width:4px}
-        .pm-scroll::-webkit-scrollbar-thumb{background:#e5e7eb;border-radius:4px}
-        .pm-scroll::-webkit-scrollbar-track{background:transparent}
-        @media(max-width:760px){
-          .pm-wrap{flex-direction:column!important;height:auto!important;max-height:95vh!important}
-          .pm-img{width:100%!important;height:56vw!important;min-height:220px!important}
+        .pm-scroll::-webkit-scrollbar-thumb{background:${isDark?"#334155":"#e5e7eb"};border-radius:4px}
+        @media(max-width:900px){
+          .pm-wrap{flex-direction:column!important;border-radius:14px!important}
+          .pm-img{width:100%!important;height:auto!important;aspect-ratio:1/1!important;min-height:unset!important;max-height:none!important;flex-shrink:0!important}
+          .pm-right{margin:8px!important}
+          .pm-right-scroll{padding:14px 16px 0!important}
+          .pm-footer{padding:10px 16px 14px!important}
+          .pm-card-form{flex-direction:column!important}
+          .pm-card-img{width:100%!important;height:auto!important;aspect-ratio:1/1!important;padding:0!important;flex-shrink:0!important;max-height:none!important}
+          .pm-card-img img{object-fit:cover!important}
+          .pm-card-right{width:100%!important}
+          .pm-card-form-right{max-height:45vh!important}
+          .pm-card-choice-grid{grid-template-columns:1fr 1fr!important}
+        }
+        @media(max-width:600px){
+          .pm-overlay{padding:118px 14px 14px!important}
+          .pm-wrap{width:100%!important;border-radius:12px!important;height:calc(100vh - 146px)!important}
+          .pm-card-form-right{max-height:40vh!important}
+          .pm-card-choice-grid{grid-template-columns:1fr!important;max-width:280px!important}
+        }
+        @media(max-height:520px) and (orientation:landscape){
+          .pm-overlay{padding:82px 12px 12px!important}
+          .pm-img{width:40%!important;height:100%!important;aspect-ratio:unset!important;flex-shrink:0!important}
+          .pm-card-form{flex-direction:row!important}
+          .pm-card-img{width:36%!important;height:100%!important}
+          .pm-card-right{width:64%!important}
         }
       `}</style>
 
-      <div onClick={close}
-        style={{position:"fixed",inset:0,zIndex:200,display:"flex",alignItems:"center",justifyContent:"center",padding:16,backgroundColor:visible?"rgba(0,0,0,0.42)":"transparent",backdropFilter:visible?"blur(5px)":"none",WebkitBackdropFilter:visible?"blur(5px)":"none",transition:"background-color 0.22s,backdrop-filter 0.22s"}}>
+      <div className="pm-overlay fixed inset-0 z-[49] flex items-center justify-center box-border"
+        style={{padding:"148px 28px 28px",backgroundColor:visible?"rgba(0,0,0,0.58)":"transparent",backdropFilter:visible?"blur(8px)":"none",WebkitBackdropFilter:visible?"blur(8px)":"none",transition:"background-color 0.22s,backdrop-filter 0.22s"}}
+        onClick={close}>
 
-        <div className="pm-wrap" onClick={e=>e.stopPropagation()}
-          style={{position:"relative",display:"flex",flexDirection:"row",width:"100%",maxWidth:isCard?"480px":"min(1060px,97vw)",height:isCard?"auto":"min(88vh,680px)",background:"white",borderRadius:14,overflow:"hidden",boxShadow:"0 20px 60px rgba(0,0,0,0.16)",opacity:visible?1:0,transform:visible?"translateY(0)":"translateY(16px)",transition:"opacity 0.22s,transform 0.26s cubic-bezier(0.34,1.2,0.64,1)",fontFamily:"inherit"}}>
+        <div className="pm-wrap relative flex flex-row overflow-hidden w-[85vw] h-full"
+          style={{borderRadius:18,background:modalBg,boxShadow:"0 28px 80px rgba(0,0,0,0.28)",opacity:visible?1:0,transform:visible?"scale(1)":"scale(0.97)",transition:"opacity 0.22s,transform 0.26s cubic-bezier(0.34,1.1,0.64,1)"}}
+          onClick={e=>e.stopPropagation()}>
 
-          {/* Close */}
-          <button onClick={close}
-            style={{position:"absolute",top:12,right:12,zIndex:50,width:28,height:28,borderRadius:"50%",border:"1px solid #e5e7eb",background:"white",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"background 0.12s"}}
-            onMouseEnter={e=>e.currentTarget.style.background="#f3f4f6"}
-            onMouseLeave={e=>e.currentTarget.style.background="white"}>
-            <svg width="10" height="10" fill="none" stroke="#374151" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
+          <button onClick={close} className="absolute top-3.5 right-3.5 z-50 w-8 h-8 rounded-full flex items-center justify-center shadow-sm transition-colors cursor-pointer"
+            style={{border:`1px solid ${isDark?"#334155":"#e5e7eb"}`,background:isDark?"#334155":"white"}}
+            onMouseEnter={e=>e.currentTarget.style.background=isDark?"#475569":"#f3f4f6"}
+            onMouseLeave={e=>e.currentTarget.style.background=isDark?"#334155":"white"}>
+            <svg width="11" height="11" fill="none" stroke={isDark?"#e2e8f0":"#374151"} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
 
-          {isCard&&<CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate}/>}
+          {isCard&&<CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate} isDark={isDark}/>}
 
           {!isCard&&<>
+            <ImgZoom product={product} isDark={isDark}/>
 
-            {/* ── Image panel with cursor-follow zoom ── */}
-            <ImgZoom product={product}/>
+            <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{background:rightBg}}>
+              <div className="pm-right flex-1 flex flex-col m-4 rounded-2xl overflow-hidden" style={{background:cardBg,boxShadow:`0 2px 16px ${cardBdr}`}}>
 
-            {/* ── Right panel ── */}
-            <div style={{flex:1,display:"flex",flexDirection:"column",minWidth:0,overflow:"hidden"}}>
-              <div className="pm-scroll" style={{flex:1,overflowY:"auto",padding:"22px 24px 0"}}>
+                <div className="pm-scroll pm-right-scroll flex-1 overflow-y-auto px-6 pt-6 pb-0">
 
-                {/* Breadcrumb */}
-                <p style={{fontSize:11,color:"#9ca3af",margin:"0 0 6px",fontFamily:"inherit"}}>
-                  {product.category}
-                  <span style={{color:"#d1d5db",margin:"0 4px"}}>/</span>
-                  <span style={{color:G,fontWeight:500}}>{product.name}</span>
-                </p>
+                  <p className="text-xs mb-1.5" style={{color:isDark?"#64748b":"#9ca3af"}}>
+                    {product.category}<span style={{color:isDark?"#334155":"#d1d5db",margin:"0 4px"}}>/</span>
+                    <span className="font-medium" style={{color:G}}>{product.name}</span>
+                  </p>
 
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:8}}>
-                  <h2 style={{fontSize:17,fontWeight:700,color:"#111827",margin:0,lineHeight:1.3,fontFamily:"inherit",flex:1}}>
-                    {product.name}
-                  </h2>
-                  <a href="https://wa.me/639189022401" target="_blank" rel="noopener noreferrer"
-                    title="Ask us about this product"
-                    style={{display:"flex",alignItems:"center",gap:5,flexShrink:0,padding:"5px 10px",borderRadius:20,background:"#f0fdf4",border:"1px solid #bbf7d0",color:G,fontSize:11,fontWeight:600,textDecoration:"none",transition:"all 0.15s",whiteSpace:"nowrap"}}
-                    onMouseEnter={e=>{e.currentTarget.style.background=G;e.currentTarget.style.color="white";e.currentTarget.style.borderColor=G}}
-                    onMouseLeave={e=>{e.currentTarget.style.background="#f0fdf4";e.currentTarget.style.color=G;e.currentTarget.style.borderColor="#bbf7d0"}}>
-                    <svg width="13" height="13" fill="currentColor" viewBox="0 0 448 512">
-                      <path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/>
-                    </svg>
-                    Ask us
-                  </a>
-                </div>
-
-                {/* Rating */}
-                <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:12}}>
-                  {[1,2,3,4,5].map(i=>(
-                    <svg key={i} width="12" height="12" fill={i<=Math.floor(product.rating)?"#f59e0b":"#e5e7eb"} viewBox="0 0 20 20">
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
-                    </svg>
-                  ))}
-                  <span style={{fontSize:12,fontWeight:500,color:"#374151",fontFamily:"inherit"}}>{product.rating}</span>
-                  <span style={{fontSize:12,color:"#9ca3af",fontFamily:"inherit"}}>({product.reviews} reviews)</span>
-                  <span style={{color:"#e5e7eb",margin:"0 2px"}}>·</span>
-                  <span style={{fontSize:12,color:"#9ca3af",fontFamily:"inherit"}}>{(product.reviews*2).toLocaleString()} sold</span>
-                </div>
-
-                {/* Price */}
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16,paddingBottom:16,borderBottom:"1px solid #f3f4f6"}}>
-                  <span style={{fontSize:24,fontWeight:700,color:"#111827",fontFamily:"inherit",letterSpacing:"-0.01em"}}>₱{total.toLocaleString()}</span>
-                  <span style={{fontSize:13,color:"#9ca3af",textDecoration:"line-through",fontFamily:"inherit"}}>₱{product.original.toLocaleString()}</span>
-                  <span style={{fontSize:10,fontWeight:600,color:G,background:"#f0fdf4",border:"1px solid #bbf7d0",padding:"2px 8px",borderRadius:4,fontFamily:"inherit"}}>
-                    Save ₱{(product.original-product.price).toLocaleString()}
-                  </span>
-                </div>
-
-                {/* Tabs — match navbar text-sm font-medium style */}
-                <div style={{display:"flex",borderBottom:"1px solid #f3f4f6",marginBottom:18}}>
-                  {[["details","Details"],["care","Care Guide"],["reviews","Reviews"]].map(([k,l])=>(
-                    <button key={k} onClick={()=>setTab(k)}
-                      style={{padding:"7px 14px",fontSize:13,fontWeight:tab===k?600:400,color:tab===k?G:"#6b7280",background:"none",border:"none",borderBottom:`2px solid ${tab===k?G:"transparent"}`,cursor:"pointer",marginBottom:-1,transition:"color 0.12s",fontFamily:"inherit"}}>
-                      {l}
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <h2 className="text-2xl font-bold leading-tight flex-1" style={{color:isDark?"#f1f5f9":"#111827"}}>{product.name}</h2>
+                    <button
+                      onClick={()=>window.dispatchEvent(new CustomEvent("bloomora:open-chat"))}
+                      className="flex items-center gap-1.5 flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold text-white transition-all cursor-pointer border-none"
+                      style={{background:"linear-gradient(135deg,#25d366,#128c48)",boxShadow:"0 3px 10px rgba(37,211,102,0.35)"}}
+                      onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 5px 18px rgba(37,211,102,0.5)";e.currentTarget.style.transform="translateY(-1px)"}}
+                      onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 3px 10px rgba(37,211,102,0.35)";e.currentTarget.style.transform="none"}}>
+                      <svg width="13" height="13" fill="currentColor" viewBox="0 0 448 512"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg>
+                      Ask us
                     </button>
-                  ))}
-                </div>
+                  </div>
 
-                {/* ── Details ── */}
-                {tab==="details"&&(
-                  <div>
+                  <div className="flex items-center gap-1.5 mb-3">
+                    {[1,2,3,4,5].map(i=><svg key={i} width="13" height="13" fill={i<=Math.floor(product.rating)?"#f59e0b":isDark?"#334155":"#e5e7eb"} viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>)}
+                    <span className="text-sm font-medium" style={{color:isDark?"#cbd5e1":"#374151"}}>{product.rating}</span>
+                    <span className="text-sm" style={{color:isDark?"#64748b":"#9ca3af"}}>({product.reviews} reviews)</span>
+                    <span style={{color:isDark?"#334155":"#e5e7eb",margin:"0 2px"}}>·</span>
+                    <span className="text-sm" style={{color:isDark?"#64748b":"#9ca3af"}}>{(product.reviews*2).toLocaleString()} sold</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 mb-5 pb-5" style={{borderBottom:`1px solid ${isDark?"#1e293b":"#f3f4f6"}`}}>
+                    <span className="text-3xl font-bold tracking-tight" style={{color:isDark?"#00ff88":"#111827",textShadow:isDark?"0 0 20px rgba(0,255,136,0.4)":"none"}}>₱{total.toLocaleString()}</span>
+                    <span className="text-sm line-through" style={{color:isDark?"#64748b":"#9ca3af"}}>₱{product.original.toLocaleString()}</span>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{color:isDark?"#00ff88":G,background:isDark?"rgba(0,255,136,0.1)":"#f0fdf4",border:`1px solid ${isDark?"rgba(0,255,136,0.25)":"#bbf7d0"}`,textShadow:isDark?"0 0 8px rgba(0,255,136,0.5)":"none"}}>Save ₱{(product.original-product.price).toLocaleString()}</span>
+                  </div>
+
+                  <div className="flex mb-5" style={{borderBottom:`1px solid ${isDark?"#1e293b":"#f3f4f6"}`}}>
+                    {[["details","Details"],["care","Care Guide"],["reviews","Reviews"]].map(([k,l])=>(
+                      <button key={k} onClick={()=>setTab(k)} className="px-4 py-2 text-sm transition-colors"
+                        style={{color:tab===k?G:isDark?"#94a3b8":"#6b7280",fontWeight:tab===k?600:400,background:"none",border:"none",borderBottom:`2.5px solid ${tab===k?G:"transparent"}`,cursor:"pointer",marginBottom:-1}}>
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+
+                  {tab==="details"&&<div className="pb-4 space-y-5">
                     {/* Color */}
-                    <div style={{marginBottom:20}}>
-                      <SectionLabel error={errors.color} required>
-                        Color{color&&<span style={{color:G,fontWeight:500,textTransform:"none",letterSpacing:0,marginLeft:4}}>— {color.name}</span>}
-                      </SectionLabel>
-                      <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1"
+                        style={{color:errors.color?"#ef4444":isDark?"#94a3b8":"#374151"}}>
+                        Color {color&&<span className="normal-case tracking-normal font-medium ml-1" style={{color:isDark?"#4ade80":G}}>{color.name}</span>}
+                        <span className="text-red-400">*</span>
+                        {errors.color&&<span className="normal-case tracking-normal font-normal text-red-400">required</span>}
+                      </p>
+                      <div className="flex gap-3 items-center">
                         {colors.map(c=>(
                           <button key={c.name} title={c.name} onClick={()=>{setColor(c);setErrors(e=>({...e,color:false}))}}
-                            style={{width:26,height:26,borderRadius:"50%",background:c.hex,border:c.outline?"1.5px solid #d1d5db":"1.5px solid transparent",outline:color?.name===c.name?`2.5px solid ${errors.color?ERR:G}`:"2.5px solid transparent",outlineOffset:2,cursor:"pointer",transition:"transform 0.12s",transform:color?.name===c.name?"scale(1.15)":"scale(1)"}}/>
+                            className="w-8 h-8 rounded-full transition-transform cursor-pointer"
+                            style={{background:c.hex,border:c.outline?`1.5px solid ${isDark?"#4b5563":"#d1d5db"}`:"1.5px solid transparent",outline:color?.name===c.name?`3px solid ${errors.color?"#ef4444":isDark?"#4ade80":G}`:"3px solid transparent",outlineOffset:2,transform:color?.name===c.name?"scale(1.15)":"scale(1)"}}/>
                         ))}
                       </div>
                     </div>
 
-                    {/* Qty */}
-                    <div style={{marginBottom:20}}>
-                      <SectionLabel error={errors.qty} required>Size / Quantity</SectionLabel>
-                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {/* Size */}
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1"
+                        style={{color:errors.qty?"#ef4444":isDark?"#94a3b8":"#374151"}}>
+                        Size / Quantity <span className="text-red-400">*</span>
+                        {errors.qty&&<span className="normal-case tracking-normal font-normal text-red-400">required</span>}
+                      </p>
+                      <div className="flex gap-2 flex-wrap">
                         {QTY_OPTIONS.map(q=>(
                           <button key={q} onClick={()=>{setQty(q);setErrors(e=>({...e,qty:false}))}}
-                            style={{padding:"6px 14px",borderRadius:6,fontSize:13,fontWeight:qty===q?600:400,border:`1px solid ${qty===q?G:errors.qty?"#fca5a5":"#e5e7eb"}`,background:qty===q?G:"white",color:qty===q?"white":"#374151",cursor:"pointer",transition:"all 0.12s",fontFamily:"inherit"}}>
+                            className="px-4 py-2 rounded-lg text-sm transition-all cursor-pointer"
+                            style={{fontWeight:qty===q?600:400,
+                              border:`1.5px solid ${qty===q?(isDark?"#4ade80":G):errors.qty?"#fca5a5":isDark?"#334155":"#e5e7eb"}`,
+                              background:qty===q?(isDark?"rgba(74,222,128,0.15)":G):isDark?"#1e293b":"white",
+                              color:qty===q?(isDark?"#4ade80":"white"):isDark?"#e2e8f0":"#374151",
+                              boxShadow:qty===q&&isDark?"0 0 10px rgba(74,222,128,0.2)":"none"}}>
                             {q}
                           </button>
                         ))}
                       </div>
                     </div>
 
-                    {/* Add-ons — with images, show 4 + expand */}
-                    <div style={{marginBottom:20,paddingBottom:20,borderBottom:"1px solid #f3f4f6"}}>
-                      <p style={{fontSize:11,fontWeight:600,color:"#374151",letterSpacing:"0.06em",textTransform:"uppercase",margin:"0 0 10px",fontFamily:"inherit"}}>
-                        Add-ons <span style={{fontWeight:400,color:"#9ca3af",letterSpacing:0,textTransform:"none"}}>(optional)</span>
+                    {/* Add-ons */}
+                    <div className="pb-5" style={{borderBottom:`1px solid ${isDark?"#1e293b":"#f3f4f6"}`}}>
+                      <p className="text-xs font-semibold uppercase tracking-widest mb-3"
+                        style={{color:isDark?"#94a3b8":"#6b7280"}}>
+                        Add-ons <span className="normal-case tracking-normal font-normal" style={{color:isDark?"#4b5563":"#9ca3af"}}>(optional)</span>
                       </p>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}}>
+                      <div className="grid grid-cols-2 gap-1.5">
                         {visibleAddons.map(a=>{
                           const on=addOns.includes(a.id)
+                          const addonBg=on?(isDark?"rgba(74,222,128,0.12)":"#f0fdf4"):(isDark?"#0f172a":"white")
+                          const addonBdr=on?(isDark?"#4ade80":G):(isDark?"#1e293b":"#e5e7eb")
                           return(
                             <button key={a.id} onClick={()=>toggleAddOn(a.id)}
-                              style={{display:"flex",alignItems:"center",gap:9,padding:"8px 10px",borderRadius:8,border:`1px solid ${on?G:"#e5e7eb"}`,background:on?"#f0fdf4":"white",cursor:"pointer",textAlign:"left",transition:"all 0.12s",fontFamily:"inherit"}}
-                              onMouseEnter={e=>{if(!on){e.currentTarget.style.borderColor="#d1d5db"}}}
-                              onMouseLeave={e=>{if(!on){e.currentTarget.style.borderColor="#e5e7eb"}}}>
-                              {/* Product thumbnail */}
-                              <div style={{width:40,height:40,borderRadius:6,overflow:"hidden",flexShrink:0,background:"#f3f4f6",border:"1px solid #e5e7eb"}}>
-                                <img src={a.img} alt={a.label} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}
-                                  onError={e=>{e.target.style.display="none"}}/>
+                              className="flex items-center gap-2.5 p-2.5 rounded-xl text-left transition-all cursor-pointer"
+                              style={{border:`1.5px solid ${addonBdr}`,background:addonBg,boxShadow:on&&isDark?"0 0 8px rgba(74,222,128,0.15)":"none"}}
+                              onMouseEnter={e=>{if(!on)e.currentTarget.style.borderColor=isDark?"#334155":"#d1d5db"}}
+                              onMouseLeave={e=>{if(!on)e.currentTarget.style.borderColor=isDark?"#1e293b":"#e5e7eb"}}>
+                              <div className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0" style={{background:isDark?"#1e293b":"#f3f4f6",border:`1px solid ${isDark?"#334155":"#e5e7eb"}`}}>
+                                <img src={a.img} alt={a.label} className="w-full h-full object-cover" onError={e=>{e.target.style.display="none"}}/>
                               </div>
-                              <div style={{flex:1,minWidth:0}}>
-                                <p style={{fontSize:11,fontWeight:600,color:"#111827",margin:0,fontFamily:"inherit",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.label}</p>
-                                <p style={{fontSize:10,color:"#9ca3af",margin:"1px 0 0",fontFamily:"inherit"}}>{a.sub}</p>
-                                <p style={{fontSize:11,color:G,fontWeight:600,margin:"2px 0 0",fontFamily:"inherit"}}>+₱{a.price}</p>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-xs font-semibold truncate m-0" style={{color:isDark?"#e2e8f0":"#111827"}}>{a.label}</p>
+                                <p className="text-[10px] mt-0.5 m-0" style={{color:isDark?"#64748b":"#9ca3af"}}>{a.sub}</p>
+                                <p className="text-xs font-semibold mt-0.5 m-0" style={{color:isDark?"#4ade80":G}}>+₱{a.price}</p>
                               </div>
-                              <div style={{width:18,height:18,borderRadius:"50%",border:`1.5px solid ${on?G:"#d1d5db"}`,background:on?G:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all 0.12s"}}>
-                                {on
-                                  ?<svg width="9" height="9" fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>
-                                  :<svg width="8" height="8" fill="none" stroke="#9ca3af" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
-                                }
+                              <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
+                                style={{border:`2px solid ${on?(isDark?"#4ade80":G):isDark?"#334155":"#d1d5db"}`,background:on?(isDark?"rgba(74,222,128,0.2)":G):isDark?"#1e293b":"white"}}>
+                                {on?<svg width="9" height="9" fill="none" stroke={isDark?"#4ade80":"white"} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>
+                                   :<svg width="8" height="8" fill="none" stroke={isDark?"#4b5563":"#9ca3af"} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>}
                               </div>
                             </button>
                           )
                         })}
                       </div>
-
-                      {/* See more / less */}
-                      {ALL_ADD_ONS.length > INITIAL_ADDON_COUNT && (
-                        <button onClick={()=>setShowAllAddons(p=>!p)}
-                          style={{display:"flex",alignItems:"center",gap:5,marginTop:8,background:"none",border:"none",cursor:"pointer",color:G,fontSize:12,fontWeight:500,padding:0,fontFamily:"inherit"}}>
-                          <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showAllAddons?"M5 15l7-7 7 7":"M19 9l-7 7-7-7"}/>
-                          </svg>
-                          {showAllAddons ? "Show less" : `See all add-ons (${ALL_ADD_ONS.length - INITIAL_ADDON_COUNT} more)`}
+                      {ALL_ADD_ONS.length>INITIAL_ADDON_COUNT&&(
+                        <button onClick={()=>setShowAllAddons(p=>!p)} className="flex items-center gap-1.5 mt-2 text-xs font-medium cursor-pointer bg-transparent border-none p-0"
+                          style={{color:isDark?"#4ade80":G}}>
+                          <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showAllAddons?"M5 15l7-7 7 7":"M19 9l-7 7-7-7"}/></svg>
+                          {showAllAddons?"Show less":`See all add-ons (${ALL_ADD_ONS.length-INITIAL_ADDON_COUNT} more)`}
                         </button>
                       )}
                     </div>
 
                     {/* Delivery date */}
-                    <div style={{marginBottom:20}}>
-                      <SectionLabel error={errors.date} required>Delivery Date</SectionLabel>
-                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                        {/* Today */}
-                        <button disabled={!todayOk} onClick={()=>{if(todayOk){setDelivType("today");setShowCal(false);setErrors(e=>({...e,date:false}))}}}
-                          style={{padding:"7px 12px",borderRadius:6,border:`1px solid ${delivType==="today"?G:"#e5e7eb"}`,background:delivType==="today"?"#f0fdf4":!todayOk?"#fafafa":"white",cursor:todayOk?"pointer":"not-allowed",textAlign:"left",opacity:todayOk?1:0.5,transition:"all 0.12s"}}
-                          onMouseEnter={e=>{if(todayOk&&delivType!=="today")e.currentTarget.style.borderColor="#d1d5db"}}
-                          onMouseLeave={e=>{if(todayOk&&delivType!=="today")e.currentTarget.style.borderColor="#e5e7eb"}}>
-                          <p style={{fontSize:12,fontWeight:600,color:delivType==="today"?DG:!todayOk?"#9ca3af":"#374151",margin:0,fontFamily:"inherit"}}>Today</p>
-                          <p style={{fontSize:10,color:delivType==="today"?G:"#9ca3af",margin:0,fontFamily:"inherit"}}>{todayOk?"Before 2:00 PM":"Unavailable after 2PM"}</p>
-                        </button>
-                        {/* Tomorrow */}
-                        <button onClick={()=>{setDelivType("tomorrow");setShowCal(false);setErrors(e=>({...e,date:false}))}}
-                          style={{padding:"7px 12px",borderRadius:6,border:`1px solid ${delivType==="tomorrow"?G:"#e5e7eb"}`,background:delivType==="tomorrow"?"#f0fdf4":"white",cursor:"pointer",textAlign:"left",transition:"all 0.12s"}}
-                          onMouseEnter={e=>{if(delivType!=="tomorrow")e.currentTarget.style.borderColor="#d1d5db"}}
-                          onMouseLeave={e=>{if(delivType!=="tomorrow")e.currentTarget.style.borderColor="#e5e7eb"}}>
-                          <p style={{fontSize:12,fontWeight:600,color:delivType==="tomorrow"?DG:"#374151",margin:0,fontFamily:"inherit"}}>Tomorrow</p>
-                          <p style={{fontSize:10,color:delivType==="tomorrow"?G:"#9ca3af",margin:0,fontFamily:"inherit"}}>{fmtDate(tomorrowStr())}</p>
-                        </button>
-                        {/* Pick date */}
-                        <button onClick={()=>{setDelivType("custom");setShowCal(s=>!s);setErrors(e=>({...e,date:false}))}}
-                          style={{padding:"7px 12px",borderRadius:6,border:`1px solid ${delivType==="custom"?G:"#e5e7eb"}`,background:delivType==="custom"?"#f0fdf4":"white",cursor:"pointer",textAlign:"left",transition:"all 0.12s",display:"flex",alignItems:"center",gap:7}}
-                          onMouseEnter={e=>{if(delivType!=="custom")e.currentTarget.style.borderColor="#d1d5db"}}
-                          onMouseLeave={e=>{if(delivType!=="custom")e.currentTarget.style.borderColor="#e5e7eb"}}>
-                          <svg width="13" height="13" fill="none" stroke={delivType==="custom"?DG:"#6b7280"} strokeWidth={1.8} viewBox="0 0 24 24" style={{flexShrink:0}}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                          </svg>
-                          <div>
-                            <p style={{fontSize:12,fontWeight:600,color:delivType==="custom"?DG:"#374151",margin:0,fontFamily:"inherit"}}>{customDate?fmtDate(customDate):"Pick a date"}</p>
-                            <p style={{fontSize:10,color:delivType==="custom"?G:"#9ca3af",margin:0,fontFamily:"inherit"}}>{customDate?"Tap to change":"Open calendar"}</p>
-                          </div>
-                        </button>
-                      </div>
-                      {showCal&&delivType==="custom"&&(
-                        <MiniCalendar selected={customDate} onSelect={(d)=>{setCustDate(d);setShowCal(false);setErrors(e=>({...e,date:false}))}}/>
-                      )}
-                    </div>
-
-                    <p style={{fontSize:12,color:"#6b7280",lineHeight:1.7,margin:"0 0 16px",fontFamily:"inherit"}}>
-                      Hand-arranged by our skilled florists using the freshest blooms. Each arrangement is made to order.
-                    </p>
-                  </div>
-                )}
-
-                {/* ── Care ── */}
-                {tab==="care"&&(
-                  <div style={{paddingBottom:16}}>
-                    <p style={{fontSize:13,color:"#6b7280",lineHeight:1.7,marginBottom:14,fontFamily:"inherit"}}>Proper care significantly extends the life of your arrangement.</p>
-                    <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                      {[
-                        {icon:<svg width="16" height="16" fill="none" stroke="#3b82f6" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10"/><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6"/><ellipse cx="19" cy="5" rx="3" ry="3.5" fill="#bfdbfe" stroke="#3b82f6" strokeWidth={1.5}/></svg>,title:"Water daily",desc:"Replace water every 1–2 days with clean, room-temperature water.",bg:"#eff6ff",border:"#bfdbfe"},
-                        {icon:<svg width="16" height="16" fill="none" stroke="#6366f1" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z" fill="#e0e7ff"/></svg>,title:"Avoid direct sunlight",desc:"Keep away from heat sources and direct sun to slow wilting.",bg:"#eef2ff",border:"#c7d2fe"},
-                        {icon:<svg width="16" height="16" fill="none" stroke="#10b981" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 3l4 4-4 4M20 12H4"/></svg>,title:"Trim stems",desc:"Cut 1–2cm at a 45° angle every few days for better absorption.",bg:"#f0fdf4",border:"#bbf7d0"},
-                      ].map((t,i)=>(
-                        <div key={i} style={{display:"flex",gap:10,padding:"11px 13px",borderRadius:8,background:t.bg,border:`1px solid ${t.border}`,alignItems:"flex-start"}}>
-                          <div style={{flexShrink:0,marginTop:2}}>{t.icon}</div>
-                          <div>
-                            <p style={{fontSize:12,fontWeight:600,color:"#111827",margin:"0 0 2px",fontFamily:"inherit"}}>{t.title}</p>
-                            <p style={{fontSize:11,color:"#6b7280",margin:0,lineHeight:1.55,fontFamily:"inherit"}}>{t.desc}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* ── Reviews ── */}
-                {tab==="reviews"&&(
-                  <div style={{paddingBottom:16}}>
-                    <div style={{display:"flex",alignItems:"center",gap:16,padding:"14px 16px",background:"#fafafa",borderRadius:8,border:"1px solid #e5e7eb",marginBottom:16}}>
-                      <div style={{textAlign:"center",flexShrink:0}}>
-                        <p style={{fontSize:32,fontWeight:700,color:"#111827",lineHeight:1,margin:0,fontFamily:"inherit"}}>{product.rating}</p>
-                        <div style={{display:"flex",gap:2,justifyContent:"center",margin:"4px 0 2px"}}>
-                          {[1,2,3,4,5].map(i=><svg key={i} width="10" height="10" fill={i<=Math.floor(product.rating)?"#f59e0b":"#e5e7eb"} viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>)}
-                        </div>
-                        <p style={{fontSize:10,color:"#9ca3af",margin:0,fontFamily:"inherit"}}>out of 5</p>
-                      </div>
-                      <div style={{flex:1}}>
-                        {[5,4,3,2,1].map(s=>(
-                          <div key={s} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
-                            <span style={{fontSize:10,color:"#6b7280",width:8,textAlign:"right",fontFamily:"inherit"}}>{s}</span>
-                            <svg width="8" height="8" fill="#f59e0b" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-                            <div style={{flex:1,height:4,background:"#f0f0f0",borderRadius:2}}><div style={{width:"0%",height:"100%",background:"#f59e0b",borderRadius:2}}/></div>
-                            <span style={{fontSize:10,color:"#9ca3af",width:12,textAlign:"right",fontFamily:"inherit"}}>0</span>
-                          </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1"
+                        style={{color:errors.date?"#ef4444":isDark?"#94a3b8":"#6b7280"}}>
+                        Delivery Date <span className="text-red-400">*</span>
+                        {errors.date&&<span className="normal-case tracking-normal font-normal">required</span>}
+                      </p>
+                      <div className="flex gap-2 flex-wrap">
+                        {[
+                          {key:"today",label:"Today",sub:todayOk?"Before 2:00 PM":"Unavailable after 2PM",disabled:!todayOk,onClick:()=>{if(todayOk){setDelivType("today");setShowCal(false);setErrors(e=>({...e,date:false}))}}},
+                          {key:"tomorrow",label:"Tomorrow",sub:fmtDate(tomorrowStr()),disabled:false,onClick:()=>{setDelivType("tomorrow");setShowCal(false);setErrors(e=>({...e,date:false}))}},
+                        ].map(btn=>(
+                          <button key={btn.key} disabled={btn.disabled} onClick={btn.onClick}
+                            className="px-3 py-2 rounded-xl text-left transition-all"
+                            style={{cursor:btn.disabled?"not-allowed":"pointer",opacity:btn.disabled?0.45:1,
+                              border:`1.5px solid ${delivType===btn.key?(isDark?"#4ade80":G):isDark?"#334155":"#e5e7eb"}`,
+                              background:delivType===btn.key?(isDark?"rgba(74,222,128,0.1)":"#f0fdf4"):isDark?"#0f172a":"white",
+                              boxShadow:delivType===btn.key&&isDark?"0 0 8px rgba(74,222,128,0.2)":"none"}}>
+                            <p className="text-sm font-semibold m-0" style={{color:delivType===btn.key?(isDark?"#4ade80":DG):isDark?"#e2e8f0":"#374151"}}>{btn.label}</p>
+                            <p className="text-[10px] m-0" style={{color:delivType===btn.key?(isDark?"#4ade80":G):isDark?"#64748b":"#9ca3af"}}>{btn.sub}</p>
+                          </button>
                         ))}
+                        <button onClick={()=>{setDelivType("custom");setShowCal(s=>!s);setErrors(e=>({...e,date:false}))}}
+                          className="px-3 py-2 rounded-xl text-left transition-all cursor-pointer flex items-center gap-2"
+                          style={{border:`1.5px solid ${delivType==="custom"?(isDark?"#4ade80":G):isDark?"#334155":"#e5e7eb"}`,
+                            background:delivType==="custom"?(isDark?"rgba(74,222,128,0.1)":"#f0fdf4"):isDark?"#0f172a":"white",
+                            boxShadow:delivType==="custom"&&isDark?"0 0 8px rgba(74,222,128,0.2)":"none"}}>
+                          <svg width="13" height="13" fill="none" stroke={delivType==="custom"?(isDark?"#4ade80":DG):isDark?"#64748b":"#6b7280"} strokeWidth={1.8} viewBox="0 0 24 24" className="flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                          <div>
+                            <p className="text-sm font-semibold m-0" style={{color:delivType==="custom"?(isDark?"#4ade80":DG):isDark?"#e2e8f0":"#374151"}}>{customDate?fmtDate(customDate):"Pick a date"}</p>
+                            <p className="text-[10px] m-0" style={{color:delivType==="custom"?(isDark?"#4ade80":G):isDark?"#64748b":"#9ca3af"}}>{customDate?"Tap to change":"Open calendar"}</p>
+                          </div>
+                        </button>
                       </div>
+                      {showCal&&delivType==="custom"&&<MiniCalendar selected={customDate} onSelect={d=>{setCustDate(d);setShowCal(false);setErrors(e=>({...e,date:false}))}}/>}
                     </div>
-                    <div style={{display:"flex",flexDirection:"column",alignItems:"center",padding:"28px 20px",border:"1.5px dashed #e5e7eb",borderRadius:8,textAlign:"center"}}>
-                      <div style={{width:40,height:40,borderRadius:"50%",background:"#f9fafb",border:"1px solid #e5e7eb",display:"flex",alignItems:"center",justifyContent:"center",marginBottom:10}}>
-                        <svg width="18" height="18" fill="none" stroke="#d1d5db" strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
-                      </div>
-                      <p style={{fontSize:13,fontWeight:600,color:"#374151",margin:"0 0 4px",fontFamily:"inherit"}}>No reviews yet</p>
-                      <p style={{fontSize:12,color:"#9ca3af",margin:0,lineHeight:1.5,maxWidth:240,fontFamily:"inherit"}}>Be the first to review this product after your purchase.</p>
-                    </div>
-                  </div>
-                )}
-              </div>
 
-              {/* Validation error */}
-              {Object.values(errors).some(Boolean)&&(
-                <div style={{margin:"6px 24px 0",padding:"8px 12px",borderRadius:6,background:"#fef2f2",border:"1px solid #fecaca",display:"flex",alignItems:"center",gap:7}}>
-                  <svg width="12" height="12" fill="none" stroke={ERR} strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                  <p style={{fontSize:11,color:ERR,fontWeight:500,margin:0,fontFamily:"inherit"}}>
-                    Please select: {[errors.color&&"color",errors.qty&&"size",errors.date&&"delivery date"].filter(Boolean).join(", ")}
-                  </p>
+                    <p className="text-sm leading-relaxed" style={{color:isDark?"#64748b":"#6b7280"}}>Hand-arranged by our skilled florists using the freshest blooms. Each arrangement is made to order.</p>
+                  </div>}
+
+                  {tab==="care"&&<div className="pb-4 space-y-2.5">
+                    <p className="text-sm leading-relaxed mb-2" style={{color:isDark?"#64748b":"#6b7280"}}>Proper care significantly extends the life of your arrangement.</p>
+                    {[
+                      {lightBg:"#eff6ff",lightBdr:"#bfdbfe",darkBg:"rgba(59,130,246,0.08)",darkBdr:"rgba(59,130,246,0.2)",title:"Water daily",desc:"Replace water every 1-2 days with clean, room-temperature water.",icon:<svg width="17" height="17" fill="none" stroke={isDark?"#60a5fa":"#3b82f6"} strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10"/><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6"/><ellipse cx="19" cy="5" rx="3" ry="3.5" fill={isDark?"rgba(59,130,246,0.3)":"#bfdbfe"} stroke={isDark?"#60a5fa":"#3b82f6"} strokeWidth={1.5}/></svg>},
+                      {lightBg:"#eef2ff",lightBdr:"#c7d2fe",darkBg:"rgba(99,102,241,0.08)",darkBdr:"rgba(99,102,241,0.2)",title:"Avoid direct sunlight",desc:"Keep away from heat sources and direct sun to slow wilting.",icon:<svg width="17" height="17" fill="none" stroke={isDark?"#818cf8":"#6366f1"} strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z" fill={isDark?"rgba(99,102,241,0.2)":"#e0e7ff"}/></svg>},
+                      {lightBg:"#f0fdf4",lightBdr:"#bbf7d0",darkBg:"rgba(74,222,128,0.06)",darkBdr:"rgba(74,222,128,0.2)",title:"Trim stems",desc:"Cut 1-2cm at a 45 degree angle every few days for better absorption.",icon:<svg width="17" height="17" fill="none" stroke={isDark?"#4ade80":"#10b981"} strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 3l4 4-4 4M20 12H4"/></svg>},
+                    ].map((t,i)=>(
+                      <div key={i} className="flex gap-3 p-3.5 rounded-xl items-start"
+                        style={{background:isDark?t.darkBg:t.lightBg,border:`1px solid ${isDark?t.darkBdr:t.lightBdr}`}}>
+                        <div className="flex-shrink-0 mt-0.5">{t.icon}</div>
+                        <div>
+                          <p className="text-sm font-semibold mb-0.5 m-0" style={{color:isDark?"#e2e8f0":"#111827"}}>{t.title}</p>
+                          <p className="text-xs leading-snug m-0" style={{color:isDark?"#64748b":"#6b7280"}}>{t.desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>}
+
+                  {tab==="reviews"&&<div className="pb-4">
+                    <div className="flex items-center gap-5 p-4 rounded-xl border mb-4"
+                      style={{background:isDark?"#0f172a":"#fafafa",borderColor:isDark?"#1e293b":"#e5e7eb"}}>
+                      <div className="text-center flex-shrink-0">
+                        <p className="text-4xl font-bold leading-none mb-1" style={{color:isDark?"#00ff88":"#111827",textShadow:isDark?"0 0 12px rgba(0,255,136,0.4)":"none"}}>{product.rating}</p>
+                        <div className="flex gap-0.5 justify-center mb-1">{[1,2,3,4,5].map(i=><svg key={i} width="11" height="11" fill={i<=Math.floor(product.rating)?"#f59e0b":isDark?"#1e293b":"#e5e7eb"} viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>)}</div>
+                        <p className="text-xs" style={{color:isDark?"#64748b":"#9ca3af"}}>out of 5</p>
+                      </div>
+                      <div className="flex-1">{[5,4,3,2,1].map(s=><div key={s} className="flex items-center gap-1.5 mb-1"><span className="text-xs w-2 text-right" style={{color:isDark?"#64748b":"#6b7280"}}>{s}</span><svg width="9" height="9" fill="#f59e0b" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg><div className="flex-1 h-1 rounded-full" style={{background:isDark?"#1e293b":"#f0f0f0"}}/><span className="text-xs w-3 text-right" style={{color:isDark?"#64748b":"#9ca3af"}}>0</span></div>)}</div>
+                    </div>
+                    <div className="flex flex-col items-center p-7 rounded-xl text-center" style={{border:`2px dashed ${isDark?"#1e293b":"#e5e7eb"}`}}>
+                      <div className="w-11 h-11 rounded-full flex items-center justify-center mb-3" style={{background:isDark?"#0f172a":"#f9fafb",border:`1px solid ${isDark?"#1e293b":"#e5e7eb"}`}}><svg width="20" height="20" fill="none" stroke={isDark?"#334155":"#d1d5db"} strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg></div>
+                      <p className="text-sm font-semibold mb-1" style={{color:isDark?"#e2e8f0":"#374151"}}>No reviews yet</p>
+                      <p className="text-xs leading-snug max-w-[200px]" style={{color:isDark?"#64748b":"#9ca3af"}}>Be the first to review after your purchase.</p>
+                    </div>
+                  </div>}
                 </div>
-              )}
 
-              {/* Footer */}
-              <div style={{flexShrink:0,padding:"12px 24px 16px",borderTop:"1px solid #f3f4f6",background:"white"}}>
-                {addOnTotal>0&&(
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:10,paddingBottom:10,borderBottom:"1px dashed #f3f4f6"}}>
-                    <span style={{fontSize:11,color:"#9ca3af",fontFamily:"inherit"}}>Base ₱{product.price.toLocaleString()} + extras ₱{addOnTotal}</span>
-                    <span style={{fontSize:12,fontWeight:700,color:DG,fontFamily:"inherit"}}>Total ₱{total.toLocaleString()}</span>
+                {Object.values(errors).some(Boolean)&&(
+                  <div className="mx-5 mt-2 px-3 py-2 rounded-lg flex items-center gap-2" style={{background:isDark?"rgba(239,68,68,0.1)":"#fef2f2",border:`1px solid ${isDark?"rgba(239,68,68,0.3)":"#fecaca"}`}}>
+                    <svg width="13" height="13" fill="none" stroke="#ef4444" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                    <p className="text-xs font-medium text-red-500">Please select: {[errors.color&&"color",errors.qty&&"size",errors.date&&"delivery date"].filter(Boolean).join(", ")}</p>
                   </div>
                 )}
-                <div style={{display:"flex",gap:8}}>
-                  <button onClick={()=>startFlow("cart")}
-                    style={{flex:1,padding:"11px 0",borderRadius:8,border:`1.5px solid ${G}`,background:"white",color:G,fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all 0.15s",fontFamily:"inherit"}}
-                    onMouseEnter={e=>{e.currentTarget.style.background=G;e.currentTarget.style.color="white"}}
-                    onMouseLeave={e=>{e.currentTarget.style.background="white";e.currentTarget.style.color=G}}>
-                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                    Add to Cart
-                  </button>
-                  <button onClick={()=>startFlow("checkout")}
-                    style={{flex:1,padding:"11px 0",borderRadius:8,border:"none",background:`linear-gradient(135deg,${DG},${G})`,color:"white",fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"opacity 0.15s",fontFamily:"inherit"}}
-                    onMouseEnter={e=>e.currentTarget.style.opacity="0.88"}
-                    onMouseLeave={e=>e.currentTarget.style.opacity="1"}>
-                    <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                    Buy Now
-                  </button>
+
+                <div className="pm-footer flex-shrink-0 px-6 py-4 rounded-b-2xl" style={{borderTop:`1px solid ${isDark?"#1e293b":"#f3f4f6"}`,background:cardBg}}>
+                  {addOnTotal>0&&(
+                    <div className="flex justify-between mb-2.5 pb-2.5 border-b border-dashed border-gray-100">
+                      <span className="text-xs text-gray-400">Base ₱{product.price.toLocaleString()} + extras ₱{addOnTotal}</span>
+                      <span className="text-sm font-bold" style={{color:DG}}>Total ₱{total.toLocaleString()}</span>
+                    </div>
+                  )}
+                  <div className="flex gap-2.5">
+                    <button onClick={()=>startFlow("cart")} className="flex-1 py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                      style={{border:`2px solid ${isDark?"#4ade80":G}`,background:isDark?"rgba(74,222,128,0.05)":"white",color:isDark?"#4ade80":G,boxShadow:isDark?"0 0 10px rgba(74,222,128,0.15)":"none"}}
+                      onMouseEnter={e=>{e.currentTarget.style.background=isDark?"rgba(74,222,128,0.15)":G;e.currentTarget.style.color=isDark?"#4ade80":"white"}}
+                      onMouseLeave={e=>{e.currentTarget.style.background=isDark?"rgba(74,222,128,0.05)":"white";e.currentTarget.style.color=isDark?"#4ade80":G}}>
+                      <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                      Add to Cart
+                    </button>
+                    <button onClick={()=>startFlow("checkout")} className="flex-1 py-3.5 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all cursor-pointer border-none"
+                      style={{background:`linear-gradient(135deg,${DG},${G})`,boxShadow:isDark?"0 0 20px rgba(0,255,136,0.3)":"none"}}
+                      onMouseEnter={e=>e.currentTarget.style.boxShadow=isDark?"0 0 30px rgba(0,255,136,0.5)":"0 4px 12px rgba(46,139,52,0.3)"}
+                      onMouseLeave={e=>e.currentTarget.style.boxShadow=isDark?"0 0 20px rgba(0,255,136,0.3)":"none"}>
+                      <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                      Buy Now
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

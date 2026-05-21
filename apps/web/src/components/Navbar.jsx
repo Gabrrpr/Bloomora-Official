@@ -6,6 +6,10 @@ import { api } from "../services/api.js";
 import estingsLogo from "../assets/EstingsLogo.svg";
 import estingsText from "../assets/Estings.svg";
 
+// Branch photos
+import manilaBranchImg   from "../assets/homepage/ManilaBranch.png";
+import pampangaBranchImg from "../assets/homepage/PampangaBranch.png";
+
 const SITE_GREEN = "#2E8B34";
 const NAVY_GREEN = "#35530A";
 const DARK_GREEN = "#0C573E";
@@ -50,8 +54,8 @@ const SOCIAL_LINKS = [
 ];
 
 const BRANCHES = {
-  Manila:   { address: "Laon-Laan Cor. Dos Castillas St., Sampaloc, Manila", hours: "Mon – Sat, 9:00 AM – 9:00 PM",  phone: "+63 918 902 2401" },
-  Pampanga: { address: "McArthur Hi-way, Dolores, San Fernando, Pampanga",   hours: "Mon – Sat, 7:30 AM – 5:00 PM", phone: "+63 045 961 5378" },
+  Manila:   { address: "Laon-Laan Cor. Dos Castillas St., Sampaloc, Manila", hours: "Mon – Sat, 9:00 AM – 9:00 PM",  phone: "+63 918 902 2401", image: manilaBranchImg },
+  Pampanga: { address: "McArthur Hi-way, Dolores, San Fernando, Pampanga",   hours: "Mon – Sat, 7:30 AM – 5:00 PM", phone: "+63 045 961 5378", image: pampangaBranchImg },
 };
 
 // ── Dark Mode Toggle Button ───────────────────────────────────────────────────
@@ -142,9 +146,11 @@ function FloatingHearts() {
   );
 }
 
-// ── Branch Modal ──────────────────────────────────────────────────────────────
+// ── Branch Modal — clean image left, all text right ──────────────────────────
 function BranchModal({ branch, onClose }) {
   const info = BRANCHES[branch];
+  const [imgError, setImgError] = useState(false);
+
   useEffect(() => {
     const h = (e) => { if (e.key === "Escape") onClose(); };
     document.addEventListener("keydown", h);
@@ -154,49 +160,119 @@ function BranchModal({ branch, onClose }) {
   return (
     <>
       <style>{`@keyframes bmIn { from { opacity:0; transform:scale(0.93) translateY(-16px); } to { opacity:1; transform:scale(1) translateY(0); } }`}</style>
-      <div className="fixed inset-0 z-[200] flex items-center justify-center px-4"
+      <div
+        className="fixed inset-0 z-[200] flex items-center justify-center px-3 sm:px-4"
         style={{ backgroundColor: "rgba(0,0,0,0.50)", backdropFilter: "blur(5px)" }}
-        onClick={onClose}>
-        <div className="relative w-full overflow-hidden rounded-2xl"
-          style={{ maxWidth:"360px", animation:"bmIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both", boxShadow:"0 32px 80px rgba(0,0,0,0.28)" }}
-          onClick={e => e.stopPropagation()}>
-          <div className="relative overflow-hidden"
-            style={{ background:`linear-gradient(150deg, ${DARK_GREEN} 0%, #1a6b3f 50%, ${SITE_GREEN} 100%)`, padding:"32px 28px 28px" }}>
-            <div style={{ position:"absolute", top:"-40px", right:"-40px", width:"160px", height:"160px", borderRadius:"50%", background:"rgba(255,255,255,0.06)" }}/>
-            <div style={{ position:"absolute", bottom:"-30px", left:"-30px", width:"120px", height:"120px", borderRadius:"50%", background:"rgba(255,255,255,0.05)" }}/>
-            <button onClick={onClose} className="absolute top-4 right-4 flex items-center justify-center rounded-full transition-all"
-              style={{ width:"28px", height:"28px", background:"rgba(255,255,255,0.12)", color:"rgba(255,255,255,0.7)" }}
-              onMouseEnter={e => { e.currentTarget.style.background="rgba(255,255,255,0.22)"; e.currentTarget.style.color="white"; }}
-              onMouseLeave={e => { e.currentTarget.style.background="rgba(255,255,255,0.12)"; e.currentTarget.style.color="rgba(255,255,255,0.7)"; }}>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
-            <div className="relative z-10">
-              <p style={{ fontSize:"13px", fontWeight:500, color:"rgba(255,255,255,0.65)", margin:"0 0 4px" }}>You've selected</p>
-              <h2 style={{ fontSize:"26px", fontWeight:800, color:"white", lineHeight:1.1, letterSpacing:"-0.01em", margin:0 }}>{branch} Branch</h2>
-            </div>
-          </div>
-          <div className="bg-white" style={{ padding:"24px 28px" }}>
-            <div style={{ display:"flex", flexDirection:"column", gap:"16px", marginBottom:"24px" }}>
-              {[
-                { label:"Address", icon:<svg className="w-4 h-4" style={{color:SITE_GREEN}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>, value: info.address },
-                { label:"Store Hours", icon:<svg className="w-4 h-4" style={{color:SITE_GREEN}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>, value: info.hours },
-                { label:"Phone", icon:<svg className="w-4 h-4" style={{color:SITE_GREEN}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>, value: info.phone },
-              ].map(row => (
-                <div key={row.label} style={{ display:"flex", alignItems:"flex-start", gap:"12px" }}>
-                  <div className="flex items-center justify-center flex-shrink-0 rounded-lg" style={{ width:"34px", height:"34px", backgroundColor:"#f0fdf4", marginTop:"1px" }}>{row.icon}</div>
-                  <div>
-                    <p style={{ fontSize:"10px", fontWeight:700, letterSpacing:"0.1em", textTransform:"uppercase", color:"#9ca3af", margin:"0 0 2px" }}>{row.label}</p>
-                    <p style={{ fontSize:"13px", color:"#374151", lineHeight:"1.5", margin:0 }}>{row.value}</p>
-                  </div>
+        onClick={onClose}
+      >
+        <div
+          className="relative w-full max-w-[340px] sm:max-w-[640px] bg-white rounded-2xl overflow-hidden shadow-2xl"
+          style={{
+            animation: "bmIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both",
+            boxShadow: "0 32px 80px rgba(0,0,0,0.28)",
+          }}
+          onClick={e => e.stopPropagation()}
+        >
+          {/* Close button — floats top-right of the whole modal */}
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="absolute top-3 right-3 z-20 w-8 h-8 flex items-center justify-center rounded-full transition-all"
+            style={{
+              background: "rgba(0,0,0,0.45)",
+              backdropFilter: "blur(6px)",
+              color: "white",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(0,0,0,0.7)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "rgba(0,0,0,0.45)"; }}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+
+          {/* Responsive 2-column layout — stacks on mobile (image top, text bottom) */}
+          <div className="flex flex-col sm:flex-row">
+
+            {/* ── Left: clean square branch image ───────────────────── */}
+            <div
+              className="relative w-full sm:w-1/2 aspect-square flex-shrink-0 overflow-hidden bg-gray-100"
+            >
+              {info.image && !imgError ? (
+                <img
+                  src={info.image}
+                  alt={`${branch} branch storefront`}
+                  className="w-full h-full object-cover block"
+                  onError={() => setImgError(true)}
+                />
+              ) : (
+                // Fallback: branded gradient placeholder with branch icon
+                <div
+                  className="absolute inset-0 flex items-center justify-center"
+                  style={{ background: `linear-gradient(150deg, ${DARK_GREEN} 0%, #1a6b3f 50%, ${SITE_GREEN} 100%)` }}
+                >
+                  <div style={{ position:"absolute", top:"-40px", right:"-40px", width:"160px", height:"160px", borderRadius:"50%", background:"rgba(255,255,255,0.06)" }}/>
+                  <div style={{ position:"absolute", bottom:"-30px", left:"-30px", width:"120px", height:"120px", borderRadius:"50%", background:"rgba(255,255,255,0.05)" }}/>
+                  <svg className="w-20 h-20 text-white/40 relative z-10" fill="currentColor" viewBox="0 0 24 24">
+                    <path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742ZM12 13.5a3 3 0 100-6 3 3 0 000 6Z" clipRule="evenodd"/>
+                  </svg>
                 </div>
-              ))}
+              )}
             </div>
-            <button onClick={onClose} className="w-full font-semibold text-white rounded-xl transition-all"
-              style={{ padding:"13px", fontSize:"14px", background:`linear-gradient(135deg, ${SITE_GREEN}, ${DARK_GREEN})`, border:"none", cursor:"pointer" }}
-              onMouseEnter={e => e.currentTarget.style.opacity="0.92"}
-              onMouseLeave={e => e.currentTarget.style.opacity="1"}>
-              Got it, start shopping
-            </button>
+
+            {/* ── Right: header + info + CTA ────────────────────────── */}
+            <div className="flex-1 p-5 sm:p-6 flex flex-col min-w-0">
+              {/* Header — moved here from over the image */}
+              <div className="mb-4 sm:mb-5">
+                <p className="text-[10px] sm:text-xs font-bold tracking-widest uppercase text-gray-400 mb-1">
+                  You&apos;ve selected
+                </p>
+                <h2 className="text-xl sm:text-2xl font-extrabold leading-tight" style={{ color: DARK_GREEN }}>
+                  {branch} Branch
+                </h2>
+                <div className="w-10 h-[3px] rounded-sm mt-2" style={{ backgroundColor: SITE_GREEN }} />
+              </div>
+
+              {/* Info rows */}
+              <div className="space-y-3 sm:space-y-4 flex-1">
+                {[
+                  { label:"Address", icon:<svg className="w-4 h-4" style={{color:SITE_GREEN}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>, value: info.address },
+                  { label:"Store Hours", icon:<svg className="w-4 h-4" style={{color:SITE_GREEN}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>, value: info.hours },
+                  { label:"Phone", icon:<svg className="w-4 h-4" style={{color:SITE_GREEN}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>, value: info.phone },
+                ].map(row => (
+                  <div key={row.label} className="flex items-start gap-3">
+                    <div
+                      className="flex items-center justify-center flex-shrink-0 rounded-lg mt-px"
+                      style={{ width:"34px", height:"34px", backgroundColor:"#f0fdf4" }}
+                    >
+                      {row.icon}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400 mb-0.5">
+                        {row.label}
+                      </p>
+                      <p className="text-[13px] text-gray-700 leading-snug break-words">
+                        {row.value}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <button
+                onClick={onClose}
+                className="w-full mt-5 sm:mt-6 py-3 font-semibold text-white text-sm rounded-xl transition-all"
+                style={{
+                  background: `linear-gradient(135deg, ${SITE_GREEN}, ${DARK_GREEN})`,
+                  border: "none",
+                  cursor: "pointer",
+                }}
+                onMouseEnter={e => e.currentTarget.style.opacity = "0.92"}
+                onMouseLeave={e => e.currentTarget.style.opacity = "1"}
+              >
+                Got it, start shopping
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -208,6 +284,7 @@ function BranchModal({ branch, onClose }) {
 const MIP_OPTIONS = [
   { page:"describe-arrangement", icon:<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z"/><path strokeLinecap="round" strokeLinejoin="round" d="M18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z"/></svg>, label:"Describe Arrangement", desc:"Tell us what you have in mind and we'll bring it to life.", accent:"#7c3aed", accentBg:"#f5f3ff" },
   { page:"mix-and-match", icon:<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/></svg>, label:"Mix & Match", desc:"Pick your flowers and build your own bouquet your way.", accent:SITE_GREEN, accentBg:"#f0fdf4" },
+  { page:"ai-card-composer", icon:<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="M21.731 2.269a2.625 2.625 0 0 0-3.712 0l-1.157 1.157 3.712 3.712 1.157-1.157a2.625 2.625 0 0 0 0-3.712ZM19.513 8.199l-3.712-3.712-12.15 12.15a5.25 5.25 0 0 0-1.32 2.214l-.8 2.685a.75.75 0 0 0 .933.933l2.685-.8a5.25 5.25 0 0 0 2.214-1.32L19.513 8.2Z"/></svg>, label:"AI Card Composer", desc:"Let AI write the perfect card message for your bouquet.", accent:"#0ea5e9", accentBg:"#f0f9ff" },
   { page:"ai-gallery", icon:<svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.8}><path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z"/></svg>, label:"See Examples", desc:"Browse arrangements made by our team for inspiration.", accent:"#d97706", accentBg:"#fffbeb" },
 ];
 
@@ -225,7 +302,7 @@ function MakeItPersonalPopout({ onNavigate, onClose, isCustomizationEnabled }) {
       <div className="absolute" style={{ top:0, right:"-12px", width:"16px", height:"100%", zIndex:49 }}/>
       <div className="absolute z-50" style={{ top:"-8px", left:"calc(100% + 12px)", animation:"mipSlideIn 0.22s cubic-bezier(0.34,1.56,0.64,1) both", filter:"drop-shadow(0 16px 40px rgba(0,0,0,0.13))" }}>
         <div className="absolute" style={{ left:"-7px", top:"28px", width:0, height:0, borderTop:"7px solid transparent", borderBottom:"7px solid transparent", borderRight:`7px solid ${bg}`, filter:"drop-shadow(-2px 0 2px rgba(0,0,0,0.06))" }}/>
-        <div className="overflow-hidden" style={{ borderRadius:"16px", border:`1px solid ${bdr}`, width:"260px", backgroundColor:bg }}>
+        <div className="overflow-hidden" style={{ borderRadius:"16px", border:`1px solid ${bdr}`, width:"280px", backgroundColor:bg }}>
           <div className="px-4 pt-4 pb-3" style={{ borderBottom:`1px solid ${divBdr}` }}>
             <div className="flex items-center gap-2">
               <div className="w-6 h-6 rounded-md flex items-center justify-center" style={{ background:"linear-gradient(135deg,#2E8B34,#0C573E)" }}>
