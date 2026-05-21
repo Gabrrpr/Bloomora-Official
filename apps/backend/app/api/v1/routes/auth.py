@@ -304,7 +304,21 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
         raise HTTPException(status_code=400, detail="Please verify your email first.")
 
     token = create_access_token(str(user.id))
-    return TokenResponse(access_token=token)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user": {
+            "id": str(user.id),
+            "email": user.email,
+            "first_name": user.first_name,
+            "last_name": user.last_name,
+            "role": user.role.value if hasattr(user.role, 'value') else user.role,
+            "username": user.username,
+            "phone_number": user.phone_number,
+            "address": user.address,
+            "profile_picture_url": getattr(user, 'profile_picture_url', None)
+        }
+    }
 
 
 # ── Google OAuth ──────────────────────────────────────────────────────────────
