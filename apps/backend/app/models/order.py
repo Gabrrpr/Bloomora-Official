@@ -59,10 +59,10 @@ class Order(Base):
 
     # Relationships
     user = relationship("User", back_populates="orders", foreign_keys=[user_id])
-    product = relationship("Product", back_populates="order_items")
     arrangement = relationship("Arrangement", back_populates="orders")
     transaction = relationship("Transaction", back_populates="order", uselist=False)
     delivery = relationship("Delivery", back_populates="order", uselist=False)
+    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
 
 
 class Transaction(Base):

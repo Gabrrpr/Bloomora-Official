@@ -38,7 +38,7 @@ class Product(Base):
     status = Column(Enum(ProductStatusEnum), default=ProductStatusEnum.active)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
-
+    
     # Relationships (Unchanged)
     inventory = relationship("Inventory", back_populates="product", uselist=False)
     reviews = relationship("Review", back_populates="product")
@@ -48,6 +48,8 @@ class Product(Base):
     accessory = relationship("Accessory", back_populates="product", uselist=False)
     discounts = relationship("Discount", back_populates="product")
     campaigns = relationship("Campaign", secondary="product_campaigns", back_populates="products")
+    order_items = relationship("OrderItem", back_populates="product", cascade="all, delete-orphan")
+    
 
 
 class Inventory(Base):
