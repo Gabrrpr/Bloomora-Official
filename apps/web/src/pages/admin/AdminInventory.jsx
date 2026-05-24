@@ -70,16 +70,65 @@ function FL({ children, isDark }) {
   return <label className="block text-sm font-semibold mb-1" style={{ color: isDark ? "#94a3b8" : "#374151" }}>{children}</label>
 }
 
-function AddItemForm({ onBack, isDark }) {
-  const [f, setF] = useState({ name: "", sku: "", category: "", unit: "", branch: "", stock: "", reorderLevel: "", costPerUnit: "", status: "" })
+function AddItemForm({ onBack, onSaveSuccess, isDark, initialData }) {
+  // 1. Check if we are editing an existing item or adding a new one
+  const isEditing = Boolean(initialData);
+
+  // 2. Pre-fill the form with initialData if it exists
+  const [f, setF] = useState({ 
+    name: initialData?.name || "", 
+    sku: initialData?.sku || initialData?.id?.slice(0, 8) || "", 
+    category: initialData?.category || "", 
+    unit: initialData?.unit_type || "", 
+    branch: "", // Add to your DB if needed
+    stock: initialData?.stock ?? "", 
+    reorderLevel: initialData?.reorder_point ?? "", 
+    costPerUnit: initialData?.cost_per_unit ?? "", 
+    status: "" 
+  })
+  
   const s = k => v => setF(p => ({ ...p, [k]: v }))
   const CATEGORIES = ["Fresh Flowers", "Dried Flowers", "Artificial Flowers", "Foliage & Greenery", "Vases & Containers", "Ribbons & Wrapping", "Floral Foam & Supplies", "Seasonal & Event"]
   const UNITS      = ["piece", "bunch", "stem", "box", "pack", "roll", "sheet", "kg", "g", "L", "mL"]
   const STATUSES   = ["Active", "Low Stock", "Out of Stock", "Discontinued"]
+
+  const handleSave = async () => {
+    try {
+      // 1. Convert our data to FormData because FastAPI expects Form(...)
+      const formData = new FormData();
+      if (f.name) formData.append("name", f.name);
+      if (f.category) formData.append("category", f.category);
+      if (f.unit) formData.append("unit_type", f.unit);
+      if (f.stock !== "") formData.append("stock", parseInt(f.stock) || 0);
+      if (f.reorderLevel !== "") formData.append("reorder_point", parseInt(f.reorderLevel) || 10);
+      if (f.costPerUnit !== "") formData.append("cost_per_unit", parseFloat(f.costPerUnit) || 0.00);
+      
+      // Map the frontend status to the backend's expected "active"/"inactive"
+      const statusMap = { "Active": "active", "Low Stock": "active", "Out of Stock": "active", "Discontinued": "inactive" };
+      if (f.status) formData.append("status", statusMap[f.status] || "active");
+
+      // 2. Send it to the correct /admin/ URLs!
+      if (isEditing) {
+        await api.put(`/products/admin/${initialData.id}`, formData); 
+      } else {
+        // Assume you need some default price/category for new items if not provided
+        formData.append("price", "0.00"); 
+        await api.post(`/products/admin`, formData);
+      }
+
+      if (onSaveSuccess) onSaveSuccess();
+    } catch (err) {
+      console.error("Failed to save inventory item:", err);
+      alert("Failed to save. Check the console for details.");
+    }
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-lg font-bold" style={{ color: isDark ? "#e2e8f0" : "#111827" }}>Add New Inventory Item</h2>
+        <h2 className="text-lg font-bold" style={{ color: isDark ? "#e2e8f0" : "#111827" }}>
+          {isEditing ? "Edit Inventory Item" : "Add New Inventory Item"}
+        </h2>
         <button onClick={onBack}
           className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all"
           style={{ borderColor: isDark ? "#374151" : "#dde3ec", color: isDark ? "#94a3b8" : "#6b7280", backgroundColor: isDark ? "#1e293b" : "white" }}>
@@ -108,11 +157,66 @@ function AddItemForm({ onBack, isDark }) {
         </StepCard>
       </div>
       <div className="flex justify-end">
-        <button className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95"
+        <button 
+          onClick={handleSave}
+          className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95"
           style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
-          Add Item
+          {isEditing ? "Save Changes" : "Add Item"}
         </button>
+      </div>
+    </div>
+  )
+}
+
+// ── Delete Inventory Modal ────────────────────────────────────────────────────
+function DeleteInventoryModal({ item, onClose, onConfirm, isDeleting, isDark }) {
+  const overlayBg = "rgba(15,23,42,0.72)";
+  const modalBg = isDark ? "#1a2332" : "white";
+  const modalBdr = isDark ? "#2d3748" : "#e8edf2";
+  const headC = isDark ? "#f1f5f9" : "#111827";
+  const subC = isDark ? "#94a3b8" : "#6b7280";
+  const cellC = isDark ? "#e2e8f0" : "#1e293b";
+  const inputBg = isDark ? "#1e293b" : "white";
+  const inputBdr = isDark ? "#374151" : "#dde3ec";
+  const hdrBg = isDark ? "#111827" : "#fafbfc";
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ backgroundColor: overlayBg, backdropFilter: "blur(4px)" }}
+      onClick={e => { if (e.target === e.currentTarget && !isDeleting) onClose() }}>
+      <div className="rounded-xl w-full overflow-hidden transform transition-all"
+        style={{ maxWidth: "400px", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${modalBdr}`, backgroundColor: modalBg }}>
+        
+        <div className="p-6 text-center">
+          {/* Warning Icon */}
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+            style={{ backgroundColor: isDark ? "rgba(239,68,68,0.1)" : "#fee2e2", color: isDark ? "#ef4444" : "#dc2626" }}>
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </div>
+          
+          <h3 className="text-lg font-bold mb-2" style={{ color: headC }}>Delete Item</h3>
+          <p className="text-sm mb-6" style={{ color: subC }}>
+            Are you sure you want to delete <strong style={{ color: cellC }}>{item.name}</strong>? This action cannot be undone.
+          </p>
+          
+          <div className="flex gap-3">
+            <button onClick={onClose} disabled={isDeleting}
+              className="flex-1 py-2.5 text-sm font-semibold border rounded-lg transition-all"
+              style={{ borderColor: inputBdr, color: subC, backgroundColor: inputBg }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = hdrBg} 
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = inputBg}>
+              Cancel
+            </button>
+            <button onClick={() => onConfirm(item.id)} disabled={isDeleting}
+              className="flex-1 py-2.5 text-sm font-bold text-white rounded-lg transition-all hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: "#ef4444", boxShadow: "0 2px 8px rgba(239,68,68,0.3)" }}>
+              {isDeleting ? "Deleting..." : "Yes, Delete"}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -199,7 +303,33 @@ export default function AdminInventory() {
   const [page, setPage]           = useState(1)
   const [search, setSearch]       = useState("")
   const [showForm, setShowForm]   = useState(false)
+  const [editingItem, setEditingItem] = useState(null)
   const [statusFilter, setStatus] = useState("")
+  const [successMsg, setSuccessMsg] = useState("")
+  const [deletingItem, setDeletingItem] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const handleConfirmDelete = async (id) => {
+    setIsDeleting(true);
+    try {
+      // Hit the admin product delete route
+      await api.delete(`/products/admin/${id}`); 
+      
+      // Update the table and show success banner
+      setInventory(prev => prev.filter(item => item.id !== id));
+      setSuccessMsg("Item successfully deleted from inventory!");
+      setDeletingItem(null);
+      
+      // Clear banner after 3.5s
+      setTimeout(() => setSuccessMsg(""), 3500);
+    } catch (e) {
+      console.error("Delete failed:", e);
+      const errorMsg = e.response?.data?.detail || e.message || "Failed to delete";
+      alert("Error: " + errorMsg);
+    } finally {
+      setIsDeleting(false);
+    }
+  }
 
   const fetchInventory = useCallback(async () => {
     setLoading(true)
@@ -260,7 +390,26 @@ export default function AdminInventory() {
     a.click(); URL.revokeObjectURL(a.href)
   }
 
-  if (showForm) return <AddItemForm onBack={() => setShowForm(false)} isDark={isDark} />
+  if (showForm) return (
+    <AddItemForm 
+      initialData={editingItem} 
+      onBack={() => { setShowForm(false); setEditingItem(null); }} 
+      onSaveSuccess={async () => {
+        // 1. Close form and show success message
+        const isUpdate = Boolean(editingItem);
+        setShowForm(false);
+        setEditingItem(null);
+        setSuccessMsg(isUpdate ? "Item successfully updated!" : "New item added to inventory!");
+
+        // 2. 🚀 Force the table to pull the LIVE data immediately
+        await fetchInventory();
+
+        // 3. Make the banner disappear after 3.5 seconds
+        setTimeout(() => setSuccessMsg(""), 3500);
+      }}
+      isDark={isDark} 
+    />
+  )
 
   return (
     <div className="space-y-5">
@@ -291,6 +440,31 @@ export default function AdminInventory() {
         .print-only { display: none; }
         .print-summary { display: none; }
       `}</style>
+
+      {successMsg && (
+        <div className="no-print px-4 py-3 rounded-lg flex items-center gap-2 font-medium transition-all"
+          style={{ 
+            backgroundColor: isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4", 
+            color: isDark ? "#4ade80" : "#16a34a", 
+            border: `1px solid ${isDark ? "rgba(74,222,128,0.2)" : "#bbf7d0"}` 
+          }}>
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+          {successMsg}
+        </div>
+      )}
+
+      {/* 🚀 NEW: Render the delete modal */}
+      {deletingItem && (
+        <DeleteInventoryModal 
+          item={deletingItem} 
+          onClose={() => setDeletingItem(null)} 
+          onConfirm={handleConfirmDelete} 
+          isDeleting={isDeleting}
+          isDark={isDark} 
+        />
+      )}
 
       <div className="no-print flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold" style={{ color: d.headingC }}>Inventory Management</h1>
@@ -429,7 +603,7 @@ export default function AdminInventory() {
                       </td>
                       <td className="px-4 py-3" style={{ color: d.subC }}>₱{item.cost_per_unit || "0.00"}</td>
                       <td className="px-4 py-3"><InvStatusBadge status={invStatus} isDark={isDark} /></td>
-                      <td className="px-4 py-3 no-print"><ActionBtns onEdit={() => setShowForm(true)} /></td>
+                      <ActionBtns onEdit={() => { setEditingItem(item); setShowForm(true); }} onDelete={() => setDeletingItem(item)} />
                     </tr>
                   )
                 }) : (

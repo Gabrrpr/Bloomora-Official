@@ -345,7 +345,6 @@ def create_product(
 def update_product(
     product_id: str,
     name: Optional[str] = Form(None),
-
     description: Optional[str] = Form(None),
     price: Optional[str] = Form(None),
     category: Optional[str] = Form(None),
@@ -354,7 +353,12 @@ def update_product(
     image_url: Optional[str] = Form(None),
     stock: Optional[int] = Form(None),
 
-    # Seasonal button fields (optional)
+    # 🚀 NEW: Added the missing inventory fields!
+    unit_type: Optional[str] = Form(None),
+    reorder_point: Optional[int] = Form(None),
+    cost_per_unit: Optional[float] = Form(None),
+
+    # Seasonal button fields
     season_key: Optional[str] = Form(None),
     limited_start_at: Optional[str] = Form(None),
     limited_end_at: Optional[str] = Form(None),
@@ -379,7 +383,7 @@ def update_product(
         except Exception:
             raise HTTPException(status_code=400, detail="Invalid price value.")
     if category is not None:
-        product.category = category.lower().strip() # 👇 Directly use string instead of Enum
+        product.category = category.lower().strip() 
     if status is not None:
         try:
             product.status = ProductStatusEnum(status.lower())
@@ -388,28 +392,33 @@ def update_product(
     if is_available is not None:
         product.is_available = is_available
     if image_url is not None:
-        # Treat empty string as “no image”
         product.image_url = image_url or None
-
     if season_key is not None:
         product.season_key = season_key or None
-
     if limited_start_at is not None:
         product.limited_start_at = limited_start_at or None
-
     if limited_end_at is not None:
         product.limited_end_at = limited_end_at or None
 
     db.commit()
     db.refresh(product)
 
-    if stock is not None:
+    # 🚀 NEW: Update all the inventory fields safely
+    if stock is not None or unit_type is not None or reorder_point is not None or cost_per_unit is not None:
         inv = db.query(Inventory).filter(Inventory.product_id == product.id).first()
-        if inv:
-            inv.current_stock = stock
-        else:
-            inv = Inventory(product_id=product.id, current_stock=stock, reorder_point=10)
+        if not inv:
+            inv = Inventory(product_id=product.id, current_stock=stock or 0, reorder_point=reorder_point or 10)
             db.add(inv)
+        
+        if stock is not None:
+            inv.current_stock = stock
+        if unit_type is not None:
+            inv.unit_type = unit_type
+        if reorder_point is not None:
+            inv.reorder_point = reorder_point
+        if cost_per_unit is not None:
+            inv.cost_per_unit = cost_per_unit
+            
         db.commit()
 
     return {"status": "success", "product": serialize_product(product)}
@@ -426,9 +435,12 @@ def delete_product(
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+    
+    inventory = db.query(Inventory).filter(Inventory.product_id == product.id).first()
+    if inventory:
+        db.delete(inventory)
 
-    product.is_available = False
-    product.status = ProductStatusEnum.inactive
+    db.delete(product) 
     db.commit()
 
     return {"status": "success", "message": "Product deactivated successfully."}

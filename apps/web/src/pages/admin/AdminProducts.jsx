@@ -605,6 +605,51 @@ function ViewProductModal({ product, onClose }) {
   )
 }
 
+// ── Delete Product Modal ──────────────────────────────────────────────────────
+function DeleteProductModal({ product, onClose, onConfirm, isDeleting }) {
+  const d = useAdminTokens()
+  
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ backgroundColor: d.overlayBg, backdropFilter: "blur(4px)" }}
+      onClick={e => { if (e.target === e.currentTarget && !isDeleting) onClose() }}>
+      <div className="rounded-xl w-full overflow-hidden transform transition-all"
+        style={{ maxWidth: "400px", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${d.modalBdr}`, backgroundColor: d.modalBg }}>
+        
+        <div className="p-6 text-center">
+          {/* Warning Icon */}
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
+            style={{ backgroundColor: d.isDark ? "rgba(239,68,68,0.1)" : "#fee2e2", color: d.isDark ? "#ef4444" : "#dc2626" }}>
+            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+          </div>
+          
+          <h3 className="text-lg font-bold mb-2" style={{ color: d.headC }}>Delete Product</h3>
+          <p className="text-sm mb-6" style={{ color: d.subC }}>
+            Are you sure you want to delete <strong style={{ color: d.cellC }}>{product.name}</strong>? This action cannot be undone.
+          </p>
+          
+          <div className="flex gap-3">
+            <button onClick={onClose} disabled={isDeleting}
+              className="flex-1 py-2.5 text-sm font-semibold border rounded-lg transition-all"
+              style={{ borderColor: d.inputBdr, color: d.subC, backgroundColor: d.inputBg }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = d.hdrBg} 
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = d.inputBg}>
+              Cancel
+            </button>
+            <button onClick={() => onConfirm(product.id)} disabled={isDeleting}
+              className="flex-1 py-2.5 text-sm font-bold text-white rounded-lg transition-all hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: "#ef4444", boxShadow: "0 2px 8px rgba(239,68,68,0.3)" }}>
+              {isDeleting ? "Deleting..." : "Yes, Delete"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function AdminProducts() {
   const d = useAdminTokens()
@@ -619,6 +664,8 @@ export default function AdminProducts() {
   const [showModal, setShowModal]         = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
   const [viewingProduct, setViewingProduct] = useState(null)
+  const [deletingProduct, setDeletingProduct] = useState(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [products, setProducts]           = useState([])
   const [totalCount, setTotalCount]       = useState(0)
   const [lowCount, setLowCount]           = useState(0)
@@ -640,12 +687,33 @@ export default function AdminProducts() {
   useEffect(() => { fetchProducts() }, [fetchProducts])
   useEffect(() => { setPage(1) }, [search,category,status,priceSort])
 
+
   const handleSave     = p => { setProducts(prev=>[p,...prev]); setTotalCount(c=>c+1) }
   const handleEditSave = p => { setProducts(prev=>prev.map(x=>x.id===p.id?p:x)); setEditingProduct(null) }
-  const handleDelete   = async (id) => {
-    if (!window.confirm("Delete this product?")) return
-    try { await api.deleteProduct(id); setProducts(prev=>prev.filter(p=>p.id!==id)); setTotalCount(c=>Math.max(0,c-1)) }
-    catch (e) { alert(e.message||"Failed to delete") }
+
+  const handleConfirmDelete = async (id) => {
+    setIsDeleting(true);
+    try {
+      // Send the delete request to the backend
+      await api.delete(`/products/admin/${id}`); 
+
+      // 🚀 THE SOFT DELETE FIX: Update the UI to match the database
+      // Instead of erasing it from the screen, mark it as Inactive
+      setProducts(prev => prev.map(p => 
+        p.id === id ? { ...p, status: "inactive", is_available: false } : p
+      )); 
+
+      // Close the modal
+      setDeletingProduct(null);
+    }
+    catch (e) {
+      console.error("Delete failed:", e);
+      const errorMsg = e.response?.data?.detail || e.message || "Failed to delete";
+      alert("Error: " + errorMsg);
+    }
+    finally {
+      setIsDeleting(false);
+    }
   }
 
   const filtered = products.filter(p => {
@@ -664,12 +732,13 @@ export default function AdminProducts() {
 
   const selStyle = { borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }
 
+
   return (
     <div className="space-y-5">
       {showModal      && <AddProductModal  onClose={()=>setShowModal(false)}      onSave={handleSave}     categories={dynamicCategories}/>}
       {editingProduct && <EditProductModal product={editingProduct} onClose={()=>setEditingProduct(null)} onSave={handleEditSave} categories={dynamicCategories}/>}
       {viewingProduct && <ViewProductModal product={viewingProduct} onClose={()=>setViewingProduct(null)}/>}
-
+      {deletingProduct && <DeleteProductModal product={deletingProduct} onClose={()=>setDeletingProduct(null)} onConfirm={handleConfirmDelete} isDeleting={isDeleting}/>}
       <h1 className="text-xl font-bold" style={{ color:d.headC }}>Products</h1>
 
       {/* Stat cards */}
@@ -784,7 +853,7 @@ export default function AdminProducts() {
                     <td className="px-4 py-3"><StatusBadge status={p.status}/></td>
                     <td className="px-4 py-3"><StatusBadge status={avail}/></td>
                     <td className="px-4 py-3">
-                      <ActionBtns onEdit={()=>setEditingProduct(p)} onView={()=>setViewingProduct(p)} onDelete={()=>handleDelete(p.id)}/>
+                      <ActionBtns onEdit={()=>setEditingProduct(p)} onView={()=>setViewingProduct(p)} onDelete={()=>setDeletingProduct(p)}/>
                     </td>
                   </tr>
                 )
