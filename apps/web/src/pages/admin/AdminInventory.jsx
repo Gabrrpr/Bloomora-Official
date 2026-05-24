@@ -308,57 +308,86 @@ export default function AdminInventory() {
   const [successMsg, setSuccessMsg] = useState("")
   const [deletingItem, setDeletingItem] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [category, setCategory] = useState("")
+  const [stockSort, setStockSort] = useState("")
 
+  
   const handleConfirmDelete = async (id) => {
     setIsDeleting(true);
     try {
-      // Hit the admin product delete route
+      console.log("Attempting to delete ID:", id);
       await api.delete(`/products/admin/${id}`); 
       
-      // Update the table and show success banner
-      setInventory(prev => prev.filter(item => item.id !== id));
-      setSuccessMsg("Item successfully deleted from inventory!");
+      // 1. Force a clean state update
+      setInventory(currentInventory => {
+        const updated = currentInventory.filter(item => item.id !== id);
+        console.log("Old count:", currentInventory.length, "New count:", updated.length);
+        return updated;
+      });
+
+      // 2. Clear modal
       setDeletingItem(null);
+      setSuccessMsg("Item successfully deleted!");
       
-      // Clear banner after 3.5s
+      // 3. Optional: Re-fetch fresh data from the server to be 100% sure
+      // This solves the issue if the server didn't actually destroy the record
+      await fetchInventory();
+
       setTimeout(() => setSuccessMsg(""), 3500);
     } catch (e) {
       console.error("Delete failed:", e);
-      const errorMsg = e.response?.data?.detail || e.message || "Failed to delete";
-      alert("Error: " + errorMsg);
+      alert("Error: " + (e.response?.data?.detail || e.message));
     } finally {
       setIsDeleting(false);
     }
   }
 
-  const fetchInventory = useCallback(async () => {
-    setLoading(true)
-    try { const data = await api.get("/products/admin/all"); setInventory(data || []) }
-    catch (err) { console.error("Failed to load inventory:", err) }
-    finally { setLoading(false) }
-  }, [])
+  const dynamicCategories = Array.from(new Set(inventory.map(p => p.category?.toLowerCase()).filter(Boolean))).map(c => c.charAt(0).toUpperCase() + c.slice(1))
 
-  useEffect(() => { fetchInventory() }, [fetchInventory])
-
-  const totalItems      = inventory.length
-  const totalValue      = inventory.reduce((s, i) => s + ((i.cost_per_unit || (i.price * 0.4)) * (i.stock || 0)), 0)
-  const lowStockCount   = inventory.filter(i => i.stock > 0 && i.stock <= (i.reorder_point || 10)).length
-  const outOfStockCount = inventory.filter(i => i.stock <= 0).length
-
+  // The ONE and ONLY filtered variable
   const filtered = inventory.filter(item => {
     const matchSearch = !search || item.name.toLowerCase().includes(search.toLowerCase()) || item.id.includes(search)
     let matchStatus = true
     if (statusFilter === "Active")       matchStatus = item.stock > (item.reorder_point || 10)
     if (statusFilter === "Low Stock")    matchStatus = item.stock > 0 && item.stock <= (item.reorder_point || 10)
     if (statusFilter === "Out of Stock") matchStatus = item.stock <= 0
-    return matchSearch && matchStatus
+    const matchCat = !category || item.category?.toLowerCase() === category.toLowerCase()
+    return matchSearch && matchStatus && matchCat
+  }).sort((a, b) => {
+    if (stockSort === "asc") return a.stock - b.stock;
+    if (stockSort === "desc") return b.stock - a.stock;
+    return 0;
   })
+  
+
+  const fetchInventory = useCallback(async () => {
+    setLoading(true)
+    try { 
+      const data = await api.get("/products/admin/all"); 
+      // 🚀 ONLY keep items that are not 'inactive'
+      const activeItems = (data || []).filter(item => item.status !== 'inactive');
+      setInventory(activeItems); 
+    }
+    catch (err) { console.error("Failed to load inventory:", err) }
+    finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { fetchInventory() }, [fetchInventory])
+
+  const totalItems = inventory.length
+  const totalValue = inventory.reduce((s, i) => {
+  const cost = parseFloat(i.cost_per_unit || 0);
+  const stock = parseInt(i.stock || 0); return s + (cost * stock); }, 0);
+  const lowStockCount = inventory.filter(i => i.stock > 0 && i.stock <= (i.reorder_point || 10)).length
+  const outOfStockCount = inventory.filter(i => i.stock <= 0).length
+  console.log("Current Inventory Count:", inventory.length);
+  console.log("Calculated Total Value:", totalValue);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
-  const pageSafe   = Math.min(page, totalPages)
-  const paginated  = filtered.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE)
+  const pageSafe = Math.min(page, totalPages)
+  const paginated = filtered.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE)
 
-  useEffect(() => { setPage(1) }, [search, statusFilter])
+  useEffect(() => { setPage(1) }, [search, statusFilter, category, stockSort])
 
   const d = {
     headingC:  isDark ? "#e2e8f0" : "#0f172a",
@@ -541,33 +570,40 @@ export default function AdminInventory() {
           style={{ border: `1px solid ${d.cardBdr}`, backgroundColor: d.cardBg, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
 
           {/* Toolbar */}
-          <div className="p-3 sm:p-4 no-print" style={{ borderBottom: `1px solid ${d.toolbarBdr}`, backgroundColor: d.toolbarBg }}>
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="relative">
-                <select value={statusFilter} onChange={e => setStatus(e.target.value)}
+          <div className="flex items-center gap-2 flex-wrap">
+            {[
+              { val: category,     set: setCategory,   opts: ["All Categories", ...dynamicCategories], min: "130px" },
+              { val: statusFilter, set: setStatus,     opts: ["Status: All", "Active", "Low Stock", "Out of Stock"], min: "120px",
+                map: { "Status: All": "", "Active": "Active", "Low Stock": "Low Stock", "Out of Stock": "Out of Stock" },
+                unmap: { "": "Status: All", "Active": "Active", "Low Stock": "Low Stock", "Out of Stock": "Out of Stock" } },
+              { val: stockSort,    set: setStockSort,  opts: ["Sort: Default", "Stock: Low to High", "Stock: High to Low"], min: "160px",
+                map: { "Sort: Default": "", "Stock: Low to High": "asc", "Stock: High to Low": "desc" },
+                unmap: { "": "Sort: Default", "asc": "Stock: Low to High", "desc": "Stock: High to Low" } },
+            ].map((f, i) => (
+              <div key={i} className="relative">
+                <select value={f.unmap ? f.unmap[f.val] || f.opts[0] : f.val}
+                  onChange={e => f.set(f.map ? f.map[e.target.value] || "" : e.target.value === "All Categories" ? "" : e.target.value)}
                   className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md cursor-pointer outline-none transition-all"
-                  style={{ borderColor: d.inputBdr, minWidth: "130px", backgroundColor: d.inputBg, color: d.inputTxt }}
+                  style={{ borderColor: d.inputBdr, minWidth: f.min, backgroundColor: d.inputBg, color: d.inputTxt }}
                   onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
                   onBlur={e => { e.target.style.borderColor = d.inputBdr; e.target.style.boxShadow = "none" }}>
-                  <option value="">Status: All</option>
-                  <option value="Active">Active</option>
-                  <option value="Low Stock">Low Stock</option>
-                  <option value="Out of Stock">Out of Stock</option>
+                  {f.opts.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
                 <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                 </svg>
               </div>
-              <div className="relative flex-1" style={{ minWidth: "180px" }}>
-                <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
-                </svg>
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search item name or ID"
-                  className="w-full pl-9 pr-4 py-2 text-sm border rounded-md outline-none transition-all"
-                  style={{ borderColor: d.inputBdr, backgroundColor: d.inputBg, color: d.inputTxt }}
-                  onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
-                  onBlur={e => { e.target.style.borderColor = d.inputBdr; e.target.style.boxShadow = "none" }} />
-              </div>
+            ))}
+
+            <div className="relative flex-1" style={{ minWidth: "180px" }}>
+              <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
+              </svg>
+              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search item name or ID"
+                className="w-full pl-9 pr-4 py-2 text-sm border rounded-md outline-none transition-all"
+                style={{ borderColor: d.inputBdr, backgroundColor: d.inputBg, color: d.inputTxt }}
+                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
+                onBlur={e => { e.target.style.borderColor = d.inputBdr; e.target.style.boxShadow = "none" }} />
             </div>
           </div>
 
@@ -603,7 +639,14 @@ export default function AdminInventory() {
                       </td>
                       <td className="px-4 py-3" style={{ color: d.subC }}>₱{item.cost_per_unit || "0.00"}</td>
                       <td className="px-4 py-3"><InvStatusBadge status={invStatus} isDark={isDark} /></td>
-                      <ActionBtns onEdit={() => { setEditingItem(item); setShowForm(true); }} onDelete={() => setDeletingItem(item)} />
+  
+                      {/* 🚀 WRAP THE BUTTONS IN A TD TAG */}
+                      <td className="px-4 py-3 no-print">
+                        <ActionBtns 
+                          onDelete={() => setDeletingItem(item)} 
+                          onEdit={() => { setEditingItem(item); setShowForm(true); }} 
+                        />
+                      </td>
                     </tr>
                   )
                 }) : (
