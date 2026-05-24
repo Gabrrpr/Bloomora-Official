@@ -8,8 +8,6 @@
 
 ---
 
-for streakk im so sorry
-
 ## Overview
 
 Bloomora is a full-stack monorepo capstone project that provides Esting's Flowers International Inc. with a centralized digital platform for:
