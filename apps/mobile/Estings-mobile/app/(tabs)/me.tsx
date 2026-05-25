@@ -73,8 +73,8 @@ export default function MeScreen() {
           </View>
         </View>
         <View style={styles.identityCopy}>
-          <Text style={styles.profileName}>Bloomora member</Text>
-          <Text style={styles.profileEmail}>maya@bloomora.app</Text>
+          <Text style={styles.profileName}>{"Esting's member"}</Text>
+          <Text style={styles.profileEmail}>maya@estings.app</Text>
           <View style={styles.memberPill}>
             <Sparkles size={13} color={theme.colors.primaryDark} strokeWidth={2.2} />
             <Text style={styles.memberPillText}>New Customer</Text>

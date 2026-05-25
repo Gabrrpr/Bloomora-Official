@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronRight, Layers3, Sparkles, WandSparkles } from 'lucide-react-native';
 
@@ -41,15 +41,17 @@ const personalPaths: PersonalPath[] = [
 
 export default function GenerateScreen() {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const layout = getCreateChoiceLayout(width);
 
   return (
     <ScrollView
       showsVerticalScrollIndicator={false}
       style={styles.screen}
-      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 104 }]}>
+      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 96 }]}>
       <AppBrandHeader />
 
-      <View style={styles.body}>
+      <View style={[styles.body, { paddingHorizontal: layout.sidePadding }]}>
         <View style={styles.pageIntro}>
           <View style={styles.kickerRow}>
             <Sparkles size={theme.icon.sm} color={theme.colors.primary} />
@@ -59,9 +61,14 @@ export default function GenerateScreen() {
           <Text style={styles.subtitle}>Choose how you would like to build your arrangement.</Text>
         </View>
 
-        <View style={styles.cardGrid}>
+        <View style={[styles.cardGrid, layout.compactRows ? styles.cardRows : styles.cardColumns]}>
           {personalPaths.map((path) => (
-            <SelectionCard key={path.href} path={path} />
+            <SelectionCard
+              compactRows={layout.compactRows}
+              key={path.href}
+              path={path}
+              tileWidth={layout.compactRows ? undefined : layout.tileWidth}
+            />
           ))}
         </View>
 
@@ -71,23 +78,37 @@ export default function GenerateScreen() {
   );
 }
 
-function SelectionCard({ path }: { path: PersonalPath }) {
+function SelectionCard({
+  compactRows,
+  path,
+  tileWidth,
+}: {
+  compactRows: boolean;
+  path: PersonalPath;
+  tileWidth?: number;
+}) {
   const Icon = path.icon === 'describe' ? WandSparkles : Layers3;
 
   return (
     <Pressable
       accessibilityRole="button"
-      style={({ pressed }) => [styles.selectionCard, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        styles.selectionCard,
+        compactRows ? styles.selectionCardRow : { width: tileWidth },
+        pressed && styles.pressed,
+      ]}
       onPress={() => router.push(path.href)}>
-      <View style={styles.cardImageFrame}>
+      <View style={compactRows ? styles.cardImageThumb : styles.cardImageFrame}>
         <AnimatedGradientPreview variant={path.gradient} />
         <View style={[styles.cardIcon, { backgroundColor: `${path.tint}18` }]}>
-          <Icon size={theme.icon.md} color={path.tint} />
+          <Icon size={compactRows ? theme.icon.sm : theme.icon.md} color={path.tint} />
         </View>
       </View>
-      <View style={styles.cardBody}>
+      <View style={[styles.cardBody, compactRows && styles.cardBodyRow]}>
         <Text style={styles.cardTitle}>{path.title}</Text>
-        <Text style={styles.cardDescription}>{path.description}</Text>
+        <Text style={styles.cardDescription} numberOfLines={compactRows ? 2 : 3}>
+          {path.description}
+        </Text>
         <View style={styles.cardActionRow}>
           <Text style={[styles.cardActionText, { color: path.tint }]}>{path.action}</Text>
           <ChevronRight size={theme.icon.sm} color={path.tint} />
@@ -95,6 +116,19 @@ function SelectionCard({ path }: { path: PersonalPath }) {
       </View>
     </Pressable>
   );
+}
+
+function getCreateChoiceLayout(width: number) {
+  const sidePadding = Math.min(Math.max(width * 0.048, 16), 24);
+  const compactRows = width < 360;
+  const columnGap = theme.spacing.md;
+  const availableWidth = width - sidePadding * 2;
+
+  return {
+    compactRows,
+    sidePadding,
+    tileWidth: (availableWidth - columnGap) / 2,
+  };
 }
 
 function AnimatedGradientPreview({ variant }: { variant: PersonalPath['gradient'] }) {
@@ -189,16 +223,15 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
   body: {
-    gap: theme.spacing.xl,
-    paddingHorizontal: theme.spacing.lg,
+    gap: theme.spacing.lg,
   },
   pageIntro: {
     alignItems: 'center',
-    gap: theme.spacing.sm,
-    paddingTop: theme.spacing.sm,
+    gap: 7,
+    paddingTop: theme.spacing.xs,
   },
   kickerRow: {
     alignItems: 'center',
@@ -215,9 +248,9 @@ const styles = StyleSheet.create({
   },
   title: {
     color: theme.colors.text,
-    fontSize: 27,
+    fontSize: 25,
     fontWeight: '800',
-    lineHeight: 34,
+    lineHeight: 31,
     textAlign: 'center',
   },
   subtitle: {
@@ -228,21 +261,40 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   cardGrid: {
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md,
+  },
+  cardColumns: {
+    alignItems: 'stretch',
+    flexDirection: 'row',
+  },
+  cardRows: {
+    flexDirection: 'column',
   },
   selectionCard: {
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.md,
     borderWidth: theme.borderWidth,
     overflow: 'hidden',
   },
+  selectionCardRow: {
+    flexDirection: 'row',
+    minHeight: 132,
+    width: '100%',
+  },
   cardImageFrame: {
     backgroundColor: theme.colors.surfaceAlt,
-    height: 210,
+    height: 142,
     overflow: 'hidden',
     position: 'relative',
     width: '100%',
+  },
+  cardImageThumb: {
+    backgroundColor: theme.colors.surfaceAlt,
+    minHeight: 132,
+    overflow: 'hidden',
+    position: 'relative',
+    width: 112,
   },
   gradientPreview: {
     ...StyleSheet.absoluteFillObject,
@@ -271,32 +323,39 @@ const styles = StyleSheet.create({
   cardIcon: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
-    bottom: theme.spacing.md,
-    height: 46,
+    bottom: theme.spacing.sm,
+    height: 38,
     justifyContent: 'center',
     position: 'absolute',
-    right: theme.spacing.md,
-    width: 46,
+    right: theme.spacing.sm,
+    width: 38,
   },
   cardBody: {
     gap: theme.spacing.sm,
-    padding: theme.spacing.lg,
+    minHeight: 148,
+    padding: theme.spacing.md,
+  },
+  cardBodyRow: {
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 0,
   },
   cardTitle: {
     color: theme.colors.text,
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '800',
+    lineHeight: 20,
   },
   cardDescription: {
     color: theme.colors.textMuted,
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 13,
+    lineHeight: 19,
   },
   cardActionRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.xs,
-    marginTop: theme.spacing.xs,
+    marginTop: 'auto',
   },
   cardActionText: {
     fontSize: 14,

@@ -8,15 +8,15 @@ import { theme } from '@/constants/theme';
 const termsSections = [
   {
     title: '1. Acceptance of Terms',
-    body: 'By creating an account or accessing any part of the Bloomora Floral Management System ("Platform"), you confirm that you are at least 18 years of age and agree to comply with and be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our Platform.',
+    body: 'By creating an account or accessing any part of the Esting\'s Flower Shop platform ("Platform"), you confirm that you are at least 18 years of age and agree to comply with and be bound by these Terms and Conditions. If you do not agree to these terms, please do not use our Platform.',
   },
   {
-    title: '2. About Bloomora',
-    body: 'Bloomora (operating under "Esting\'s Flower International Inc.") is a digital platform providing floral arrangement management, ordering, and delivery coordination services. We connect customers with premium floral products and enable administrators to manage inventory, orders, and customer relationships.',
+    title: "2. About Esting's",
+    body: 'Esting\'s Flower International Inc. provides floral arrangement ordering and delivery coordination services through this digital platform. We connect customers with premium floral products and enable order, inventory, and customer support workflows.',
   },
   {
     title: '3. Account Registration',
-    body: 'To access certain features of the Platform, you must register for an account. You agree to: (a) provide accurate, current, and complete information during registration; (b) maintain the security of your password and accept all risks of unauthorized access to your account; (c) promptly notify us of any unauthorized use of your account; and (d) not create accounts using automated methods or false identities. Bloomora reserves the right to terminate accounts that violate these provisions.',
+    body: 'To access certain features of the Platform, you must register for an account. You agree to: (a) provide accurate, current, and complete information during registration; (b) maintain the security of your password and accept all risks of unauthorized access to your account; (c) promptly notify us of any unauthorized use of your account; and (d) not create accounts using automated methods or false identities. Esting\'s reserves the right to terminate accounts that violate these provisions.',
   },
   {
     title: '4. Products and Ordering',
@@ -40,19 +40,19 @@ const termsSections = [
   },
   {
     title: '9. Intellectual Property',
-    body: 'All content on the Bloomora Platform, including logos, images, text, and software, is the exclusive property of Bloomora or its content suppliers and is protected by applicable intellectual property laws. You may not reproduce, distribute, or create derivative works without our express written permission.',
+    body: 'All content on the Esting\'s Platform, including logos, images, text, and software, is the exclusive property of Esting\'s or its content suppliers and is protected by applicable intellectual property laws. You may not reproduce, distribute, or create derivative works without our express written permission.',
   },
   {
     title: '10. Limitation of Liability',
-    body: 'To the maximum extent permitted by law, Bloomora shall not be liable for any indirect, incidental, special, or consequential damages resulting from your use of the Platform. Our total liability for any claim arising from these Terms shall not exceed the amount paid by you for the specific order giving rise to the claim.',
+    body: 'To the maximum extent permitted by law, Esting\'s shall not be liable for any indirect, incidental, special, or consequential damages resulting from your use of the Platform. Our total liability for any claim arising from these Terms shall not exceed the amount paid by you for the specific order giving rise to the claim.',
   },
   {
     title: '11. Modifications to Terms',
-    body: 'Bloomora reserves the right to modify these Terms at any time. We will notify registered users of significant changes via email or through the Platform. Continued use of the Platform after changes become effective constitutes your acceptance of the revised Terms.',
+    body: 'Esting\'s reserves the right to modify these Terms at any time. We will notify registered users of significant changes via email or through the Platform. Continued use of the Platform after changes become effective constitutes your acceptance of the revised Terms.',
   },
   {
     title: '12. Contact Information',
-    body: 'If you have questions about these Terms and Conditions, please contact us at: legal@bloomora.com or through our customer support portal. We are committed to addressing your concerns in a timely manner.',
+    body: 'If you have questions about these Terms and Conditions, please contact us at: legal@estingsflowers.com or through our customer support portal. We are committed to addressing your concerns in a timely manner.',
   },
 ];
 
@@ -67,7 +67,7 @@ export default function TermsAndConditionScreen() {
         </Pressable>
       }
       title="Terms & Conditions"
-      subtitle="Bloomora Floral Management System">
+      subtitle="Esting's Flower Shop Platform">
       <View style={styles.metaCard}>
         <View style={styles.metaItem}>
           <Text style={styles.metaLabel}>Effective Date</Text>
@@ -82,7 +82,7 @@ export default function TermsAndConditionScreen() {
 
       <View style={styles.introCard}>
         <Text style={styles.introText}>
-          {"Please read these Terms and Conditions carefully before using Bloomora's platform. By "}
+          {"Please read these Terms and Conditions carefully before using Esting's platform. By "}
           accessing or using our services, you agree to be bound by these terms.
         </Text>
       </View>

@@ -1,6 +1,7 @@
 import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
-import { ChevronLeft, Flower2, Info, Layers3, Lightbulb, Sparkles } from 'lucide-react-native';
+import { ChevronDown, ChevronLeft, Info, Lightbulb, Sparkles } from 'lucide-react-native';
+import { useState } from 'react';
 
 import { PrimaryButton } from '@/components/bloom-ui';
 import { generatedLooks, type CreateOption, type CreateOptions } from '@/constants/shop';
@@ -37,48 +38,57 @@ export function BackHeaderAction() {
 
 export function DescribeForm({
   characterCount,
-  generatedImage,
   onGenerate,
   onPromptChange,
   onUsePromptIdea,
   prompt,
 }: {
   characterCount: number;
-  generatedImage: string;
   onGenerate: () => void;
   onPromptChange: (value: string) => void;
   onUsePromptIdea: (value: string) => void;
   prompt: string;
 }) {
   return (
-    <View style={styles.panel}>
-      <TextInput
-        multiline
-        maxLength={500}
-        onChangeText={onPromptChange}
-        placeholder="Describe bouquet style, flowers, color palette, and mood"
-        placeholderTextColor={theme.colors.textMuted}
-        style={styles.promptInput}
-        textAlignVertical="top"
-        value={prompt}
-      />
+    <View style={styles.aiFlow}>
+      <View style={styles.aiPromptCard}>
+        <View style={styles.aiPromptHeader}>
+          <View style={styles.aiIconBubble}>
+            <Sparkles size={theme.icon.md} color={theme.colors.primary} />
+          </View>
+          <View style={styles.flex}>
+            <Text style={styles.aiTitle}>Tell the florist AI what to make</Text>
+            <Text style={styles.aiSubtitle}>Occasion, colors, favorite flowers, and mood are enough.</Text>
+          </View>
+        </View>
 
-      <View style={styles.promptFooter}>
-        <Text style={styles.count}>{characterCount}/500</Text>
-        <Pressable style={styles.textActionButton} onPress={() => onUsePromptIdea(promptIdeas[0])}>
-          <Text style={styles.textAction}>Use an example</Text>
-        </Pressable>
+        <TextInput
+          multiline
+          maxLength={500}
+          onChangeText={onPromptChange}
+          placeholder="Example: Soft pink roses for an anniversary, elegant and romantic."
+          placeholderTextColor={theme.colors.textMuted}
+          style={styles.promptInput}
+          textAlignVertical="top"
+          value={prompt}
+        />
+
+        <View style={styles.promptFooter}>
+          <Text style={styles.count}>{characterCount}/500</Text>
+          <Pressable style={styles.textActionButton} onPress={() => onUsePromptIdea(promptIdeas[0])}>
+            <Text style={styles.textAction}>Use example</Text>
+          </Pressable>
+        </View>
       </View>
 
       <PromptTips />
       <PrimaryButton label="Create my bouquet" onPress={onGenerate} />
-      <PreviewArea eyebrow="AI preview" imageUrl={generatedImage} title="Generated concept" description={prompt} />
+      <PreviewArea eyebrow="AI output" title="Your generated arrangement will appear here." />
     </View>
   );
 }
 
 export function MixAndMatchForm({
-  generatedImage,
   onGenerate,
   onSelectColor,
   onSelectFlower,
@@ -86,10 +96,8 @@ export function MixAndMatchForm({
   options,
   selectedColor,
   selectedFlower,
-  selectedLabels,
   selectedWrapper,
 }: {
-  generatedImage: string;
   onGenerate: () => void;
   onSelectColor: (id: string) => void;
   onSelectFlower: (id: string) => void;
@@ -97,14 +105,13 @@ export function MixAndMatchForm({
   options: CreateOptions;
   selectedColor: string;
   selectedFlower: string;
-  selectedLabels: { color: string; flower: string; wrapper: string };
   selectedWrapper: string;
 }) {
   return (
     <View style={styles.panel}>
       <View style={styles.pathIntro}>
         <View style={styles.mixPathIcon}>
-          <Layers3 size={theme.icon.md} color={theme.colors.primary} />
+          <Sparkles size={theme.icon.md} color={theme.colors.primary} />
         </View>
         <View style={styles.flex}>
           <Text style={styles.pathTitle}>Build your own bouquet.</Text>
@@ -117,12 +124,7 @@ export function MixAndMatchForm({
       <OptionSelector label="Wrapper" options={options.wrappers} selectedId={selectedWrapper} onSelect={onSelectWrapper} />
 
       <PrimaryButton label="Preview my bouquet" onPress={onGenerate} />
-      <PreviewArea
-        eyebrow="Manual preview"
-        imageUrl={generatedImage}
-        title={`${selectedLabels.color} ${selectedLabels.flower}`}
-        description={`${selectedLabels.wrapper} arrangement preview`}
-      />
+      <PreviewArea eyebrow="Manual output" title="Your arrangement summary will appear here." />
     </View>
   );
 }
@@ -159,21 +161,33 @@ export function AiDisclaimer() {
 }
 
 function PromptTips() {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <View style={styles.tipsCard}>
-      <View style={styles.tipsHeader}>
+      <Pressable accessibilityRole="button" style={styles.tipsHeader} onPress={() => setExpanded((current) => !current)}>
         <Lightbulb size={theme.icon.sm} color="#B7791F" />
-        <Text style={styles.tipsTitle}>Prompt tips</Text>
-      </View>
-      {promptTips.map((tip) => (
-        <View key={tip.title} style={styles.tipRow}>
-          <Info size={theme.icon.sm - 2} color={theme.colors.textMuted} />
-          <View style={styles.flex}>
-            <Text style={styles.tipTitle}>{tip.title}</Text>
-            <Text style={styles.tipDescription}>{tip.description}</Text>
-          </View>
+        <View style={styles.flex}>
+          <Text style={styles.tipsTitle}>Prompt tips</Text>
+          <Text style={styles.tipsSummary}>{expanded ? 'Hide writing guidance' : 'Tap for quick writing guidance'}</Text>
         </View>
-      ))}
+        <ChevronDown
+          size={theme.icon.sm}
+          color={theme.colors.textMuted}
+          style={[styles.tipsChevron, expanded && styles.tipsChevronExpanded]}
+        />
+      </Pressable>
+      {expanded
+        ? promptTips.map((tip) => (
+            <View key={tip.title} style={styles.tipRow}>
+              <Info size={theme.icon.sm - 2} color={theme.colors.textMuted} />
+              <View style={styles.flex}>
+                <Text style={styles.tipTitle}>{tip.title}</Text>
+                <Text style={styles.tipDescription}>{tip.description}</Text>
+              </View>
+            </View>
+          ))
+        : null}
     </View>
   );
 }
@@ -211,32 +225,21 @@ function OptionSelector({
 }
 
 function PreviewArea({
-  description,
   eyebrow,
-  imageUrl,
   title,
 }: {
-  description: string;
   eyebrow: string;
-  imageUrl: string;
   title: string;
 }) {
   return (
     <View style={styles.previewCard}>
-      <View style={styles.previewImageFrame}>
-        <Image source={{ uri: imageUrl }} style={styles.previewImage} />
-      </View>
-      <View style={styles.previewFooter}>
+      <View style={styles.previewPlaceholder}>
         <View style={styles.previewIcon}>
-          <Flower2 size={theme.icon.md} color={theme.colors.primary} />
+          <Sparkles size={theme.icon.lg} color={theme.colors.primary} />
         </View>
-        <View style={styles.flex}>
-          <Text style={styles.previewLabel}>{eyebrow}</Text>
-          <Text style={styles.previewTitle}>{title}</Text>
-          <Text style={styles.previewPrompt} numberOfLines={2}>
-            {description}
-          </Text>
-        </View>
+        <Text style={styles.previewLabel}>{eyebrow}</Text>
+        <Text style={styles.previewTitle}>{title}</Text>
+        <Text style={styles.previewPrompt}>Generate when ready. No image or result is shown yet.</Text>
       </View>
     </View>
   );
@@ -322,11 +325,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.sm,
+    minHeight: 38,
   },
   tipsTitle: {
     color: theme.colors.text,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
+  },
+  tipsSummary: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  tipsChevron: {
+    transform: [{ rotate: '0deg' }],
+  },
+  tipsChevronExpanded: {
+    transform: [{ rotate: '180deg' }],
   },
   tipRow: {
     alignItems: 'flex-start',
@@ -407,21 +422,18 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     borderRadius: theme.radius.lg,
     borderWidth: theme.borderWidth,
-    overflow: 'hidden',
+    padding: theme.spacing.sm,
   },
-  previewImageFrame: {
-    backgroundColor: theme.colors.surfaceAlt,
-    height: 220,
-    width: '100%',
-  },
-  previewImage: {
-    height: '100%',
-    width: '100%',
-  },
-  previewFooter: {
+  previewPlaceholder: {
     alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.md,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderColor: theme.colors.subtleBorder,
+    borderRadius: theme.radius.md,
+    borderStyle: 'dashed',
+    borderWidth: theme.borderWidth,
+    gap: theme.spacing.sm,
+    justifyContent: 'center',
+    minHeight: 180,
     padding: theme.spacing.lg,
   },
   previewIcon: {
@@ -442,12 +454,15 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: 16,
     fontWeight: '800',
+    lineHeight: 21,
+    textAlign: 'center',
   },
   previewPrompt: {
     color: theme.colors.textMuted,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 18,
     marginTop: 2,
+    textAlign: 'center',
   },
   examplesList: {
     gap: theme.spacing.md,
@@ -507,5 +522,41 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.84,
+  },
+  aiFlow: {
+    gap: theme.spacing.lg,
+  },
+  aiPromptCard: {
+    backgroundColor: theme.colors.surface,
+    borderColor: 'rgba(46, 139, 52, 0.14)',
+    borderRadius: theme.radius.lg,
+    borderWidth: theme.borderWidth,
+    gap: theme.spacing.md,
+    padding: theme.spacing.lg,
+  },
+  aiPromptHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+  },
+  aiIconBubble: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.greenSoft,
+    borderRadius: theme.radius.pill,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  aiTitle: {
+    color: theme.colors.text,
+    fontSize: 17,
+    fontWeight: '800',
+    lineHeight: 22,
+  },
+  aiSubtitle: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 2,
   },
 });

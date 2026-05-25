@@ -23,6 +23,7 @@ import { Platform, View } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import '@/utils/register-svg-layout-event';
 
 export const unstable_settings = {
   anchor: '(tabs)',
