@@ -25,18 +25,18 @@ const DG  = "#0C573E"
 const ERR = "#ef4444"
 
 const ALL_ADD_ONS = [
-  { id:"ferrero8",   label:"Ferrero Rocher",      sub:"8 pieces",         price:199, img:ferrero8Img   },
-  { id:"ferrero12",  label:"Ferrero Rocher",      sub:"12 pieces",        price:349, img:ferrero12Img  },
-  { id:"ferrero24",  label:"Ferrero Rocher",      sub:"24 pieces",        price:599, img:ferrero24Img  },
-  { id:"hersheyOrg", label:"Hershey's Original",  sub:"Chocolate bar",    price:149, img:hersheyOrgImg },
-  { id:"herseyCnC",  label:"Hershey's C&C",       sub:"Cookies & Cream",  price:149, img:herseyCncImg  },
-  { id:"twix",       label:"Twix",                sub:"Caramel chocolate", price:149, img:twixImg       },
-  { id:"cadburyFN",  label:"Cadbury Fruit & Nut", sub:"Chocolate bar",    price:169, img:cadburyFNImg  },
-  { id:"cadburyMC",  label:"Cadbury Milk Choc",   sub:"Chocolate bar",    price:149, img:cadburyMCImg  },
-  { id:"mnmsMilk",   label:"M&M's Milk Choc",     sub:"Chocolate pouch",  price:179, img:mnmsMilkImg   },
-  { id:"mnmsPeanut", label:"M&M's Peanut",        sub:"Chocolate pouch",  price:179, img:mnmsPeanutImg },
-  { id:"snickers",   label:"Snickers",             sub:"Caramel & peanut", price:149, img:snickersImg   },
-  { id:"toblerone",  label:"Toblerone",            sub:"Swiss chocolate",  price:199, img:tobleroneImg  },
+  { id:"ferrero8",   label:"Ferrero Rocher",      sub:"8 pieces",         price:199, img:ferrero8Img,   stock: 10 },
+  { id:"ferrero12",  label:"Ferrero Rocher",      sub:"12 pieces",        price:349, img:ferrero12Img,  stock: 10 },
+  { id:"ferrero24",  label:"Ferrero Rocher",      sub:"24 pieces",        price:599, img:ferrero24Img,  stock: 10 },
+  { id:"hersheyOrg", label:"Hershey's Original",  sub:"Chocolate bar",    price:149, img:hersheyOrgImg, stock: 10 },
+  { id:"herseyCnC",  label:"Hershey's C&C",       sub:"Cookies & Cream",  price:149, img:herseyCncImg,  stock: 10 },
+  { id:"twix",       label:"Twix",                sub:"Caramel chocolate", price:149, img:twixImg,       stock: 10 },
+  { id:"cadburyFN",  label:"Cadbury Fruit & Nut", sub:"Chocolate bar",    price:169, img:cadburyFNImg,  stock: 10 },
+  { id:"cadburyMC",  label:"Cadbury Milk Choc",   sub:"Chocolate bar",    price:149, img:cadburyMCImg,  stock: 10 },
+  { id:"mnmsMilk",   label:"M&M's Milk Choc",     sub:"Chocolate pouch",  price:179, img:mnmsMilkImg,   stock: 10 },
+  { id:"mnmsPeanut", label:"M&M's Peanut",        sub:"Chocolate pouch",  price:179, img:mnmsPeanutImg, stock: 10 },
+  { id:"snickers",   label:"Snickers",             sub:"Caramel & peanut", price:149, img:snickersImg,   stock: 0 },
+  { id:"toblerone",  label:"Toblerone",            sub:"Swiss chocolate",  price:199, img:tobleroneImg,  stock: 10 },
 ]
 
 const INITIAL_ADDON_COUNT = 4
@@ -620,22 +620,25 @@ export default function ProductPreviewModal({product,onClose,onNavigate}){
                       </p>
                       <div className="grid grid-cols-2 gap-1.5">
                         {visibleAddons.map(a=>{
-                          const on=addOns.includes(a.id)
-                          const addonBg=on?(isDark?"rgba(74,222,128,0.12)":"#f0fdf4"):(isDark?"#0f172a":"white")
-                          const addonBdr=on?(isDark?"#4ade80":G):(isDark?"#1e293b":"#e5e7eb")
+                          const isOutOfStock = a.stock === 0;
+                          const on = addOns.includes(a.id) && !isOutOfStock;
+                          const addonBg = isOutOfStock ? (isDark ? "#0f172a" : "#f9fafb") : on ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : (isDark ? "#0f172a" : "white");
+                          const addonBdr = isOutOfStock ? (isDark ? "#1e293b" : "#e5e7eb") : on ? (isDark ? "#4ade80" : G) : (isDark ? "#1e293b" : "#e5e7eb");
+                          const addonOp = isOutOfStock ? 0.45 : 1;
+
                           return(
-                            <button key={a.id} onClick={()=>toggleAddOn(a.id)}
-                              className="flex items-center gap-2.5 p-2.5 rounded-xl text-left transition-all cursor-pointer"
-                              style={{border:`1.5px solid ${addonBdr}`,background:addonBg,boxShadow:on&&isDark?"0 0 8px rgba(74,222,128,0.15)":"none"}}
-                              onMouseEnter={e=>{if(!on)e.currentTarget.style.borderColor=isDark?"#334155":"#d1d5db"}}
-                              onMouseLeave={e=>{if(!on)e.currentTarget.style.borderColor=isDark?"#1e293b":"#e5e7eb"}}>
-                              <div className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0" style={{background:isDark?"#1e293b":"#f3f4f6",border:`1px solid ${isDark?"#334155":"#e5e7eb"}`}}>
-                                <img src={a.img} alt={a.label} className="w-full h-full object-cover" onError={e=>{e.target.style.display="none"}}/>
+                            <button key={a.id} disabled={isOutOfStock} onClick={()=>toggleAddOn(a.id)}
+                              className="flex items-center gap-2.5 p-2.5 rounded-xl text-left transition-all"
+                              style={{border:`1.5px solid ${addonBdr}`,background:addonBg,opacity:addonOp,cursor:isOutOfStock?"not-allowed":"pointer",boxShadow:on&&isDark?"0 0 8px rgba(74,222,128,0.15)":"none"}}
+                              onMouseEnter={e=>{if(!on&&!isOutOfStock)e.currentTarget.style.borderColor=isDark?"#334155":"#d1d5db"}}
+                              onMouseLeave={e=>{if(!on&&!isOutOfStock)e.currentTarget.style.borderColor=isDark?"#1e293b":"#e5e7eb"}}>
+                              <div className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 relative" style={{background:isDark?"#1e293b":"#f3f4f6",border:`1px solid ${isDark?"#334155":"#e5e7eb"}`}}>
+                                <img src={a.img} alt={a.label} className="w-full h-full object-cover" onError={e=>{e.target.style.display="none"}} style={{filter:isOutOfStock?"grayscale(100%)":"none"}}/>
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-xs font-semibold truncate m-0" style={{color:isDark?"#e2e8f0":"#111827"}}>{a.label}</p>
-                                <p className="text-[10px] mt-0.5 m-0" style={{color:isDark?"#64748b":"#9ca3af"}}>{a.sub}</p>
-                                <p className="text-xs font-semibold mt-0.5 m-0" style={{color:isDark?"#4ade80":G}}>+₱{a.price}</p>
+                                <p className="text-[10px] mt-0.5 m-0" style={{color:isOutOfStock?"#ef4444":isDark?"#64748b":"#9ca3af"}}>{isOutOfStock?"Out of stock":a.sub}</p>
+                                <p className="text-xs font-semibold mt-0.5 m-0" style={{color:isOutOfStock?(isDark?"#64748b":"#9ca3af"):(isDark?"#4ade80":G)}}>+₱{a.price}</p>
                               </div>
                               <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
                                 style={{border:`2px solid ${on?(isDark?"#4ade80":G):isDark?"#334155":"#d1d5db"}`,background:on?(isDark?"rgba(74,222,128,0.2)":G):isDark?"#1e293b":"white"}}>

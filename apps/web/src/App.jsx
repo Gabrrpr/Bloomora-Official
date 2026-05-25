@@ -32,7 +32,6 @@ import CookieConsent from "./components/CookieConsent";
 import AdPopup from "./components/AdPopup";
 import WorldClock from "./pages/customer/WorldClock";
 import VasesPage from "./pages/VasesPage";
-import AddonsPage from "./pages/AddonsPage";
 import WriteReviewPage from "./pages/WriteReviewPage";
 import Profile from "./pages/Profile";
 
@@ -116,6 +115,8 @@ function AppContent() {
   const [cartCount, setCartCount] = useState(0);
   const [prevPage, setPrevPage] = useState("login");
   const [selectedOrderId, setSelectedOrderId] = useState(null);
+  const [activeShopCategory, setActiveShopCategory] = useState("All");
+
 
   // ✅ FIXED: moved inside AppContent where hooks are allowed
   const [isCustomizationEnabled, setIsCustomizationEnabled] = useState(true);
@@ -190,13 +191,20 @@ function AppContent() {
     }
   }, [page]);
 
-  const navigate = (to, passedId = null) => {
+  const navigate = (to, passedData = null) => {
     // 🚀 THE TRAP: This will tell us exactly what the button is sending!
-    console.log(`[ROUTER] Going to: "${to}" | Passed ID:`, passedId);
+    console.log(`[ROUTER] Going to: "${to}" | Passed Data:`, passedData);
 
     // Ensure we only save valid IDs (and ignore accidental event objects)
-    if (passedId !== null && typeof passedId !== "object") {
-      setSelectedOrderId(passedId);
+    if (to === "shop" && typeof passedData === "string") {
+      setActiveShopCategory(passedData);
+    } else if (to === "shop") {
+      setActiveShopCategory("All"); // Reset to 'All' if they just click "Shop"
+    }
+
+    // 2. Keep your existing logic for Orders and Reviews
+    if ((to === "orders" || to === "write-review") && passedData !== null && typeof passedData !== "object") {
+      setSelectedOrderId(passedData);
     }
     
     setPrevPage(page);
@@ -241,7 +249,7 @@ function AppContent() {
         {(() => {
           switch (page) {
             case "home":                 return <Home onNavigate={navigate} />;
-            case "shop":                 return <Shop onNavigate={navigate} />;
+            case "shop":                 return <Shop onNavigate={navigate} initialCategory={activeShopCategory} />;
             case "cart":                 return <Cart onNavigate={navigate} cartCount={cartCount} setCartCount={setCartCount} />;
             case "checkout":             return <Checkout onNavigate={navigate} />;
             case "confirmation":         return <Confirmation onNavigate={navigate} />;
@@ -260,7 +268,6 @@ function AppContent() {
             case "ai-gallery":           return <AIGalleryPage onNavigate={navigate} />;
             case "world-clock":          return <WorldClock onNavigate={navigate} />;
             case "vases":                return <VasesPage onNavigate={navigate} />;
-            case "addons":               return <AddonsPage onNavigate={navigate} />;
             case "write-review":         return <WriteReviewPage onNavigate={navigate} orderId={selectedOrderId} />;
             case "profile":              return <Profile onNavigate={navigate} />;
             default:                     return <Home onNavigate={navigate} />;

@@ -29,7 +29,7 @@ const NAV_LINKS = [
     label: "Shop", page: "shop", categorized: true,
     categories: [
       { heading: "Flowers", items: [{ label: "Best Sellers", page: "shop" }, { label: "Classic Collection", page: "shop" }, { label: "Gift Sets", page: "shop" }] },
-      { heading: "Non-Floral", items: [{ label: "Vases & Containers", page: "vases" }, { label: "Pots & Planters", page: "shop" }, { label: "Floral Supplies", page: "shop" }, { label: "Wrapping & Accessories", page: "shop" }, { label: "Add-ons", page: "addons" }] },
+      { heading: "Non-Floral", items: [{ label: "Vases & Containers", page: "vases" }, { label: "Pots & Planters", page: "shop" }, { label: "Floral Supplies", page: "shop" }, { label: "Wrapping & Accessories", page: "shop" }]}, //{ label: "Add-ons", page: "addons" }] },
     ],
   },
   {

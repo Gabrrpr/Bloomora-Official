@@ -383,7 +383,7 @@ const VIEW_ALL = [
   { key:"grid4", mobileVisible:false, icon:<svg className="w-4 h-4" viewBox="0 0 18 15" fill="currentColor"><rect x="0" y="0" width="3.5" height="6" rx="0.6"/><rect x="4.8" y="0" width="3.5" height="6" rx="0.6"/><rect x="9.6" y="0" width="3.5" height="6" rx="0.6"/><rect x="14.5" y="0" width="3.5" height="6" rx="0.6"/><rect x="0" y="8" width="3.5" height="7" rx="0.6"/><rect x="4.8" y="8" width="3.5" height="7" rx="0.6"/><rect x="9.6" y="8" width="3.5" height="7" rx="0.6"/><rect x="14.5" y="8" width="3.5" height="7" rx="0.6"/></svg> },
 ]
 
-export default function Shop({ onNavigate }) {
+export default function Shop({ onNavigate, initialCategory = "All" }) {
   const width    = useWidth()
   const isMobile = width < 768
 
@@ -391,12 +391,20 @@ export default function Shop({ onNavigate }) {
   const [viewAs, setViewAs]                   = useState("grid3")
   const [sortBy, setSortBy]                   = useState("best-selling")
   const [activeCategory, setActiveCategory]   = useState("All")
+
+  // When Navbar clicks Wrapping & Accessories it stores a single label in localStorage.
+  // We convert that label into a Set of real product categories.
   const [priceRange, setPriceRange]           = useState([0, 2500])
+
   const [wishlist, setWishlist]               = useState([])
   const [sortOpen, setSortOpen]               = useState(false)
   const [filterOpen, setFilterOpen]           = useState(false)
   const [previewProduct, setPreviewProduct]   = useState(null)
   const sortRef = useRef(null)
+
+  useEffect(() => {
+    setActiveCategory(initialCategory);
+  }, [initialCategory]);
 
   useEffect(() => {
     api.get("/products/")
@@ -433,11 +441,38 @@ export default function Shop({ onNavigate }) {
 
   const toggleWishlist = id => setWishlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
 
-  const dynamicCategories = ["All", ...new Set(products.map(p => p.category).filter(Boolean))]
+  const dynamicCategories = ["All", ...new Set(products.map(p => p.category).filter(Boolean).filter(c => c.toLowerCase() !== 'add-on' && c.toLowerCase() !== 'addon'))]
+
+  const normalizeCat = (s) => (s || "").toString().trim().toLowerCase();
+
+  const getActiveCategorySet = () => {
+    const raw = localStorage.getItem("bloomora_active_category") || "";
+    const normalized = normalizeCat(raw);
+
+    // Multi-category mapping coming from Navbar
+    if (normalized === "wrapping & accessories" || normalized === "wrapping & accessory") {
+      return new Set(["wrapping", "accessory"]);
+    }
+    if (normalized === "wrapping") return new Set(["wrapping"]);
+    if (normalized === "accessory" || normalized === "accessories") return new Set(["accessory"]);
+
+    // Default: single category (case-insensitive)
+    if (!normalized || normalized === "all") return null;
+    return new Set([normalized]);
+  }
+
+  const activeCategorySet = getActiveCategorySet();
+
 
   const filtered = products
-    .filter(p => activeCategory === "All" || p.category.toLowerCase() === activeCategory.toLowerCase())
+    .filter(p => p.category !== 'Add-on') // Exclude 'Add-on' category from main listing
+    .filter(p => {
+      if (activeCategorySet === null) return activeCategory === "All" || !activeCategory || p.category.toLowerCase() === activeCategory.toLowerCase();
+      const pc = (p.category || "").toLowerCase();
+      return Array.from(activeCategorySet).some(c => pc === c.toLowerCase());
+    })
     .filter(p => p.price >= priceRange[0] && p.price <= priceRange[1])
+
     .sort((a, b) => {
       if (sortBy === "price-asc")  return a.price - b.price
       if (sortBy === "price-desc") return b.price - a.price

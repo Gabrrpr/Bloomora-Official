@@ -223,11 +223,11 @@ function DetailsPanel({ user, showToast, isDark }) {
     try {
       const formData = new FormData()
       formData.append("file", selectedFile)
-      
+
       await api.uploadProfilePicture(formData)
       showToast("Profile photo updated!")
       setSelectedFile(null)
-      if (refreshUser) await refreshUser() 
+      if (refreshUser) await refreshUser()
     } catch (err) {
       showToast("Failed to upload photo.")
     } finally {
@@ -237,10 +237,9 @@ function DetailsPanel({ user, showToast, isDark }) {
 
   const handleCancelPicture = () => {
     setSelectedFile(null)
-    setAvatar(user?.profile_picture_url || null) 
+    setAvatar(user?.profile_picture_url || null)
   }
 
-  // 🚀 NEW: Handle complete photo removal
   const handleRemovePicture = async () => {
     if (!window.confirm("Are you sure you want to remove your profile photo?")) return;
     try {
@@ -274,10 +273,10 @@ function DetailsPanel({ user, showToast, isDark }) {
           </button>
           <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFileSelect} />
         </div>
-        
+
         <div className="flex-1">
           <p className="text-sm font-bold" style={{ color:nameC }}>{user?.firstName} {user?.lastName}</p>
-          
+
           {!selectedFile ? (
             <div className="mt-1 flex items-center gap-3">
               <button onClick={() => fileRef.current?.click()} className="text-xs font-semibold hover:underline" style={{ color:linkC }}>
@@ -292,7 +291,7 @@ function DetailsPanel({ user, showToast, isDark }) {
             </div>
           ) : (
             <div className="mt-2 flex items-center gap-2">
-              <button 
+              <button
                 onClick={handleSavePicture} disabled={uploadingPic}
                 className="text-xs px-3 py-1.5 rounded text-white font-bold transition-all hover:opacity-90 disabled:opacity-50"
                 style={{ backgroundColor: DG }}>
@@ -319,7 +318,7 @@ function DetailsPanel({ user, showToast, isDark }) {
 
         </div>
       </div>
-      
+
       {/* ... Rest of your form fields (First Name, Last Name, etc.) remain the same ... */}
       <div className="grid sm:grid-cols-2 gap-4 mb-6">
         <Field label="First Name"    value={form.firstName} onChange={e=>setForm({...form,firstName:e.target.value})} readOnly={!editing} isDark={isDark}/>
