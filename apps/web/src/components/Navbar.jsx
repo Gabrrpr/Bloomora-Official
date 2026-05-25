@@ -10,6 +10,25 @@ import estingsText from "../assets/Estings.svg";
 import manilaBranchImg   from "../assets/homepage/ManilaBranch.png";
 import pampangaBranchImg from "../assets/homepage/PampangaBranch.png";
 
+const SHOP_CATEGORIES = [
+  {
+    title: "Flowers",
+    items: ["Roses", "Sunflowers", "Tulips", "Orchids", "Carnations"]
+  },
+  {
+    title: "Arrangements",
+    items: ["Bouquets", "Vase Arrangements", "Baskets", "Sympathy"]
+  },
+  {
+    title: "Vases",
+    items: ["Glass", "Ceramic", "Wood", "Premium"]
+  },
+  {
+    title: "Wrappings & Accessories",
+    items: ["Premium Wrappers", "Ribbons", "Greeting Cards", "Teddy Bears"]
+  }
+];
+
 const SITE_GREEN = "#2E8B34";
 const NAVY_GREEN = "#35530A";
 const DARK_GREEN = "#0C573E";
@@ -27,10 +46,17 @@ const NAV_LINKS = [
   { label: "Home", page: "home" },
   {
     label: "Shop", page: "shop", categorized: true,
-    categories: [
-      { heading: "Flowers", items: [{ label: "Best Sellers", page: "shop" }, { label: "Classic Collection", page: "shop" }, { label: "Gift Sets", page: "shop" }] },
-      { heading: "Non-Floral", items: [{ label: "Vases & Containers", page: "vases" }, { label: "Pots & Planters", page: "shop" }, { label: "Floral Supplies", page: "shop" }, { label: "Wrapping & Accessories", page: "shop" }]}, //{ label: "Add-ons", page: "addons" }] },
-    ],
+    // 🚀 Dynamically generate the Mega Menu using your SHOP_CATEGORIES constant
+    categories: SHOP_CATEGORIES.map(cat => ({
+      heading: cat.title,
+      headingPage: "shop",
+      headingParam: cat.title, // Passes the main category (e.g., "Flowers")
+      items: cat.items.map(subItem => ({
+        label: subItem,
+        page: "shop",
+        param: subItem // Passes the subcategory (e.g., "Roses")
+      }))
+    }))
   },
   {
     label: "Occasions", page: "occasions",
@@ -515,20 +541,29 @@ function DropdownMenu({ items, categories, onNavigate, onClose }) {
     animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards",
   };
   const itemHover = (e, on) => {
-    e.currentTarget.style.backgroundColor = on ? SITE_GREEN : "";
+    e.currentTarget.style.backgroundColor = on ? SITE_GREEN : "transparent";
     e.currentTarget.style.color = on ? "white" : (isDark ? "#d1d5db" : "#4b5563");
   };
   const headingGreen = isDark ? "#4ade80" : SITE_GREEN;
 
   if (categories) {
     return (
-      <div className="absolute top-full left-0 mt-2 z-50 overflow-hidden" style={{ ...dropStyle, minWidth:"340px" }}>
+      // 🚀 Increased width to 650px to fit 4 columns side-by-side beautifully
+      <div className="absolute top-full left-0 mt-2 z-50 overflow-hidden" style={{ ...dropStyle, minWidth:"650px" }}>
         <div className="flex" style={{ borderTop:"none" }}>
           {categories.map((cat, ci) => (
             <div key={cat.heading} className="flex-1 py-3" style={{ borderRight: ci < categories.length-1 ? `1px solid ${isDark?"#2d3748":"#f3f4f6"}` : "none" }}>
-              <p className="px-4 pb-2 text-xs font-bold uppercase tracking-widest" style={{ color:headingGreen }}>{cat.heading}</p>
+              
+              {/* 🚀 Clickable Headings */}
+              <button onClick={() => { if (cat.headingPage && onNavigate) onNavigate(cat.headingPage, cat.headingParam); onClose?.(); }}
+                className="w-full text-left px-4 pb-2 text-xs font-bold uppercase tracking-widest transition-colors hover:underline"
+                style={{ color:headingGreen, backgroundColor:"transparent", border:"none" }}>
+                {cat.heading}
+              </button>
+              
+              {/* 🚀 Clickable Sub-items passing the category parameter */}
               {cat.items.map(item => (
-                <button key={item.label} onClick={() => { if (item.page && onNavigate) onNavigate(item.page); onClose?.(); }}
+                <button key={item.label} onClick={() => { if (item.page && onNavigate) onNavigate(item.page, item.param); onClose?.(); }}
                   className="w-full text-left px-4 py-2 text-sm transition-all duration-150"
                   style={{ color: isDark ? "#d1d5db" : "#4b5563" }}
                   onMouseEnter={e => itemHover(e, true)}
@@ -543,7 +578,7 @@ function DropdownMenu({ items, categories, onNavigate, onClose }) {
   return (
     <div className="absolute top-full left-0 mt-2 z-50 min-w-[190px] overflow-hidden" style={dropStyle}>
       {items.map(item => (
-        <button key={item.label} onClick={() => { if (item.page && onNavigate) onNavigate(item.page); onClose?.(); }}
+        <button key={item.label} onClick={() => { if (item.page && onNavigate) onNavigate(item.page, item.param); onClose?.(); }}
           className="w-full text-left px-4 py-2.5 text-sm first:rounded-t-xl last:rounded-b-xl transition-all duration-150"
           style={{ color: isDark ? "#d1d5db" : "#4b5563" }}
           onMouseEnter={e => itemHover(e, true)}
@@ -1214,16 +1249,43 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                     {link.highlight && <span className="mr-1">✨</span>}
                     {link.label}
                   </button>
-                  {link.dropdown && (
+
+                  {/* 🚀 Renders both simple dropdowns and the complex Mega Menu categories on Mobile */}
+                  {(link.dropdown || link.categories) && (
                     <div style={{ paddingLeft:"16px", backgroundColor: isDark ? "#0f172a" : "#f9fafb" }}>
-                      {link.dropdown.map(sub => (
-                        <button key={sub.label} onClick={() => { onNavigate?.(sub.page); setMobileOpen(false); }}
+                      
+                      {/* Render standard simple dropdown items */}
+                      {link.dropdown && link.dropdown.map(sub => (
+                        <button key={sub.label} onClick={() => { onNavigate?.(sub.page, sub.param); setMobileOpen(false); }}
                           className="block w-full text-left px-2 py-2 text-xs border-b transition-colors"
                           style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6", color: isDark ? "#9ca3af" : "#6b7280" }}
                           onMouseEnter={e => e.currentTarget.style.color = isDark ? "#4ade80" : SITE_GREEN}
                           onMouseLeave={e => e.currentTarget.style.color = isDark ? "#9ca3af" : "#6b7280"}>
                           {sub.label}
                         </button>
+                      ))}
+
+                      {/* Render complex nested Mega Menu categories (e.g., Shop) */}
+                      {link.categories && link.categories.map(cat => (
+                        <div key={cat.heading} className="py-2 border-b last:border-b-0" style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6" }}>
+                          
+                          <button onClick={() => { onNavigate?.(cat.headingPage || "shop", cat.headingParam || cat.heading); setMobileOpen(false); }}
+                            className="block w-full text-left px-2 py-1.5 text-[11px] font-bold uppercase tracking-widest transition-colors"
+                            style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>
+                            {cat.heading}
+                          </button>
+                          
+                          {cat.items.map(sub => (
+                            <button key={sub.label} onClick={() => { onNavigate?.(sub.page, sub.param); setMobileOpen(false); }}
+                              className="block w-full text-left pl-4 pr-2 py-2 text-xs transition-colors"
+                              style={{ color: isDark ? "#9ca3af" : "#6b7280" }}
+                              onMouseEnter={e => e.currentTarget.style.color = isDark ? "#4ade80" : SITE_GREEN}
+                              onMouseLeave={e => e.currentTarget.style.color = isDark ? "#9ca3af" : "#6b7280"}>
+                              {sub.label}
+                            </button>
+                          ))}
+                          
+                        </div>
                       ))}
                     </div>
                   )}
