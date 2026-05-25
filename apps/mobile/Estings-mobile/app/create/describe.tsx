@@ -3,7 +3,6 @@ import { useLocalSearchParams } from 'expo-router';
 
 import { BloomScreen } from '@/components/bloom-ui';
 import { AiDisclaimer, BackHeaderAction, DescribeForm } from '@/components/make-personal-ui';
-import { generatedLooks } from '@/constants/shop';
 
 export default function DescribeArrangementScreen() {
   const params = useLocalSearchParams<{ prompt?: string }>();
@@ -12,8 +11,6 @@ export default function DescribeArrangementScreen() {
       ? params.prompt
       : "I'm ordering this for Valentine's Day. She likes pink and soft, romantic styles. I want it to look elegant and sweet.";
   const [prompt, setPrompt] = useState(initialPrompt);
-  const [generationIndex, setGenerationIndex] = useState(0);
-  const generatedImage = generatedLooks[generationIndex % generatedLooks.length];
   const characterCount = useMemo(() => prompt.trim().length, [prompt]);
 
   return (
@@ -23,8 +20,7 @@ export default function DescribeArrangementScreen() {
       title="Describe your arrangement.">
       <DescribeForm
         characterCount={characterCount}
-        generatedImage={generatedImage}
-        onGenerate={() => setGenerationIndex((current) => current + 1)}
+        onGenerate={() => {}}
         onPromptChange={setPrompt}
         onUsePromptIdea={setPrompt}
         prompt={prompt}

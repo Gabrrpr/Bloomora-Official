@@ -1,13 +1,48 @@
 import { router } from 'expo-router';
-import { CalendarDays, Check, ChevronLeft, ChevronRight } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  CalendarDays,
+  Check,
+  ChevronLeft,
+  CircleHelp,
+  Eye,
+  EyeOff,
+  Fingerprint,
+  LockKeyhole,
+  Mail,
+  MapPin,
+  Mars,
+  ShieldCheck,
+  UserRound,
+  Venus,
+} from 'lucide-react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableWithoutFeedback,
+  useWindowDimensions,
+  View,
+  type KeyboardTypeOptions,
+} from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AuthButton, AuthField, AuthScreen, OtpInput, authStyles } from '@/components/auth-ui';
-import { theme } from '@/constants/theme';
+import { AddressMapPicker } from '@/components/address-map-picker';
+import { Fonts, theme } from '@/constants/theme';
+import {
+  authenticateWithBiometrics,
+  getBiometricsAvailability,
+  type BiometricsAvailability,
+} from '@/services/biometrics';
 import {
   type FormErrors,
-  isFourDigitOtp,
+  isSixDigitOtp,
   isValidEmail,
   isValidPhilippinePhone,
   required,
@@ -22,13 +57,23 @@ type SignUpField =
   | 'phone'
   | 'password'
   | 'confirmPassword'
-  | 'terms'
   | 'otp';
-type SignUpStep = 'details' | 'otp';
-type CalendarMode = 'day' | 'month' | 'year';
+type SignUpPhase = 1 | 2 | 3;
+type SecurityStep = 'otp' | 'privacy' | 'biometrics';
+type GenderOption = 'Female' | 'Male' | 'Prefer not to say';
 type PasswordStrength = 'Weak' | 'Fair' | 'Good' | 'Strong';
 
-const monthNames = [
+const genderOptions: {
+  icon: typeof UserRound;
+  label: GenderOption;
+}[] = [
+  { icon: Venus, label: 'Female' },
+  { icon: Mars, label: 'Male' },
+  { icon: CircleHelp, label: 'Prefer not to say' },
+];
+
+const phaseLabels = ['Personal\nInformation', 'Set Up\nSecurity', 'Personalize\nProfile'];
+const birthdateMonths = [
   'January',
   'February',
   'March',
@@ -43,31 +88,47 @@ const monthNames = [
   'December',
 ];
 
-const weekDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
 export default function SignUpScreen() {
-  const [step, setStep] = useState<SignUpStep>('details');
+  const insets = useSafeAreaInsets();
+  const strengthAnim = useRef(new Animated.Value(0)).current;
+  const [phase, setPhase] = useState<SignUpPhase>(1);
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
-  const [gender, setGender] = useState('');
+  const [gender, setGender] = useState<GenderOption | ''>('');
   const [birthdate, setBirthdate] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [hasAcceptedTerms, setHasAcceptedTerms] = useState(false);
   const [otp, setOtp] = useState('');
-  const [otpMessage, setOtpMessage] = useState('');
+  const [securityStep, setSecurityStep] = useState<SecurityStep>('otp');
+  const [address, setAddress] = useState('');
+  const [profileNote, setProfileNote] = useState('');
   const [errors, setErrors] = useState<FormErrors<SignUpField>>({});
   const [isCalendarVisible, setIsCalendarVisible] = useState(false);
-  const [visibleMonth, setVisibleMonth] = useState(() => getInitialCalendarMonth());
-  const [selectedBirthdate, setSelectedBirthdate] = useState<Date | null>(null);
-  const [calendarMode, setCalendarMode] = useState<CalendarMode>('day');
+  const [isProtectionVisible, setIsProtectionVisible] = useState(false);
+  const [isDiscardVisible, setIsDiscardVisible] = useState(false);
+  const [biometricsAvailability, setBiometricsAvailability] = useState<BiometricsAvailability | null>(null);
+  const [biometricsMessage, setBiometricsMessage] = useState<string | null>(null);
 
+  const hasEnteredSignUpData = [
+    firstName,
+    lastName,
+    gender,
+    birthdate,
+    email,
+    phone,
+    password,
+    confirmPassword,
+    otp,
+    address,
+    profileNote,
+  ].some((value) => value.trim().length > 0);
+  const hasPasswordInput = password.length > 0;
   const passwordRules = useMemo(() => getPasswordRules(password), [password]);
   const passwordStrength = useMemo(() => getPasswordStrength(passwordRules), [passwordRules]);
-  const isPasswordValid = passwordRules.every((rule) => rule.isValid);
-  const isDetailsFormValid =
+  const isPasswordValid = hasPasswordInput && passwordRules.every((rule) => rule.isValid);
+  const canContinuePersonalInfo =
     required(firstName) &&
     required(lastName) &&
     required(gender) &&
@@ -75,11 +136,45 @@ export default function SignUpScreen() {
     isValidEmail(email) &&
     isValidPhilippinePhone(`+63${phone}`) &&
     isPasswordValid &&
-    required(confirmPassword) &&
-    confirmPassword === password &&
-    hasAcceptedTerms;
+    required(confirmPassword);
 
-  function validateDetails() {
+  useEffect(() => {
+    Animated.timing(strengthAnim, {
+      duration: 180,
+      toValue: hasPasswordInput ? 1 : 0,
+      useNativeDriver: true,
+    }).start();
+  }, [hasPasswordInput, strengthAnim]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getBiometricsAvailability().then((availability) => {
+      if (isMounted) {
+        setBiometricsAvailability(availability);
+      }
+    });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  function setFieldError(field: SignUpField, message?: string) {
+    setErrors((current) => {
+      const nextErrors = { ...current };
+
+      if (message) {
+        nextErrors[field] = message;
+      } else {
+        delete nextErrors[field];
+      }
+
+      return nextErrors;
+    });
+  }
+
+  function validatePersonalInfo() {
     const nextErrors: FormErrors<SignUpField> = {};
 
     if (!required(firstName)) {
@@ -91,7 +186,7 @@ export default function SignUpScreen() {
     }
 
     if (!required(gender)) {
-      nextErrors.gender = 'Select your gender.';
+      nextErrors.gender = 'Choose one option.';
     }
 
     if (!required(birthdate)) {
@@ -122,217 +217,522 @@ export default function SignUpScreen() {
       nextErrors.confirmPassword = 'Passwords must match.';
     }
 
-    if (!hasAcceptedTerms) {
-      nextErrors.terms = 'Accept the Terms and Conditions to continue.';
-    }
-
     setErrors(nextErrors);
 
     return Object.keys(nextErrors).length === 0;
   }
 
-  function validateOtp() {
-    const nextErrors: FormErrors<SignUpField> = {};
+  function handleBack() {
+    if (phase === 1) {
+      if (hasEnteredSignUpData) {
+        setIsDiscardVisible(true);
+        return;
+      }
 
+      router.back();
+      return;
+    }
+
+    if (phase === 2 && securityStep === 'privacy') {
+      setSecurityStep('otp');
+      return;
+    }
+
+    if (phase === 2 && securityStep === 'biometrics') {
+      setSecurityStep('privacy');
+      return;
+    }
+
+    setPhase((current) => (current - 1) as SignUpPhase);
+  }
+
+  function handleSignInPress() {
+    if (hasEnteredSignUpData) {
+      setIsDiscardVisible(true);
+      return;
+    }
+
+    router.replace('/login');
+  }
+
+  function handleDiscardAndSignIn() {
+    setIsDiscardVisible(false);
+    router.replace('/login');
+  }
+
+  function handlePersonalInfoContinue() {
+    if (validatePersonalInfo()) {
+      setSecurityStep('otp');
+      setPhase(2);
+    }
+  }
+
+  function handleVerifyOtp() {
     if (!required(otp)) {
-      nextErrors.otp = 'OTP is required.';
-    } else if (!isFourDigitOtp(otp)) {
-      nextErrors.otp = 'OTP must be 4 digits.';
+      setErrors({ otp: 'Enter the 6-digit code sent to your email.' });
+      return;
     }
 
-    setErrors(nextErrors);
-
-    return Object.keys(nextErrors).length === 0;
-  }
-
-  function handleSendOtp() {
-    if (validateDetails()) {
-      setOtpMessage('OTP sent for demo purposes.');
-      setStep('otp');
+    if (!isSixDigitOtp(otp)) {
+      setErrors({ otp: 'Code must be 6 digits.' });
+      return;
     }
+
+    setErrors({});
+    setSecurityStep('privacy');
+    setIsProtectionVisible(true);
   }
 
-  function handleSelectBirthdate(date: Date) {
-    setSelectedBirthdate(date);
-    setBirthdate(formatDateValue(date));
-    setIsCalendarVisible(false);
+  function handleAgreeAndContinue() {
+    setIsProtectionVisible(false);
+    setSecurityStep('biometrics');
   }
 
-  function handleSubmit() {
-    if (validateOtp()) {
-      router.replace('/login');
+  async function handleEnableBiometrics() {
+    const availability = await getBiometricsAvailability();
+    setBiometricsAvailability(availability);
+
+    if (!availability.isAvailable) {
+      setBiometricsMessage(availability.unavailableReason ?? 'Biometrics are unavailable on this device.');
+      return;
     }
+
+    const result = await authenticateWithBiometrics(`Enable ${availability.label} for Esting's.`);
+
+    if (result.success) {
+      setBiometricsMessage(`${availability.label} is enabled for your Esting's account.`);
+      setPhase(3);
+      return;
+    }
+
+    setBiometricsMessage(result.error ?? 'Biometric setup was not completed.');
+  }
+
+  function handleFinish() {
+    router.replace('/login');
   }
 
   return (
-    <AuthScreen
-      eyebrow="Create account"
-      title={step === 'details' ? 'Sign up' : 'Verify OTP'}
-      subtitle={
-        step === 'details'
-          ? 'Create your Bloomora account in a few quick steps.'
-          : 'Enter the 4-digit code sent to your contact details.'
-      }>
-      {step === 'details' ? (
-        <View style={styles.form}>
-          <FormSection title="Personal details">
-            <View style={styles.nameRow}>
-              <View style={styles.nameField}>
-                <AuthField
-                  autoCapitalize="words"
-                  error={errors.firstName}
-                  label="First name"
-                  onChangeText={setFirstName}
-                  placeholder="Juan"
-                  value={firstName}
-                />
-              </View>
-              <View style={styles.nameField}>
-                <AuthField
-                  autoCapitalize="words"
-                  error={errors.lastName}
-                  label="Last name"
-                  onChangeText={setLastName}
-                  placeholder="Dela Cruz"
-                  value={lastName}
-                />
-              </View>
+    <KeyboardAvoidingView
+      behavior={Platform.select({ ios: 'padding', android: 'height', default: undefined })}
+      style={styles.keyboardView}>
+      <ScrollView
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+        style={styles.screen}
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingBottom: insets.bottom + 120,
+            paddingTop: insets.top + theme.spacing.lg,
+          },
+        ]}>
+        <View style={styles.topBar}>
+          <Pressable accessibilityLabel="Go back" accessibilityRole="button" style={styles.backButton} onPress={handleBack}>
+            <ChevronLeft size={28} color={theme.colors.primary} strokeWidth={2.3} />
+          </Pressable>
+          <Pressable accessibilityRole="button" style={styles.signInButton} onPress={handleSignInPress}>
+            <Text style={styles.signInText}>Sign In</Text>
+          </Pressable>
+        </View>
+
+        <PhaseProgress currentPhase={phase} />
+
+        {phase === 1 ? (
+          <View style={styles.phaseBody}>
+            <View style={styles.headerCopy}>
+              <Text style={styles.title}>Create your account</Text>
+              <Text style={styles.subtitle}>{"Add your basic details to get started."}</Text>
             </View>
 
-            <Text style={styles.fieldLabel}>Gender</Text>
-            <View style={styles.genderRow}>
-              {['Female', 'Male', 'Prefer not to say'].map((option) => (
+            <View style={styles.formPanel}>
+              <View style={styles.nameRow}>
+                <View style={styles.nameField}>
+                  <OnboardingField
+                    autoCapitalize="words"
+                    error={errors.firstName}
+                    label="First name"
+                    onChangeText={(value) => {
+                      setFirstName(value);
+                      setFieldError('firstName', required(value) ? undefined : 'First name is required.');
+                    }}
+                    placeholder="Juan"
+                    value={firstName}
+                  />
+                </View>
+                <View style={styles.nameField}>
+                  <OnboardingField
+                    autoCapitalize="words"
+                    error={errors.lastName}
+                    label="Last name"
+                    onChangeText={(value) => {
+                      setLastName(value);
+                      setFieldError('lastName', required(value) ? undefined : 'Last name is required.');
+                    }}
+                    placeholder="Dela Cruz"
+                    value={lastName}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Gender</Text>
+                <View style={styles.genderGrid}>
+                  {genderOptions.map((option) => (
+                    <GenderButton
+                      key={option.label}
+                      icon={option.icon}
+                      isSelected={gender === option.label}
+                      label={option.label}
+                      onPress={() => {
+                        setGender(option.label);
+                        setFieldError('gender');
+                      }}
+                    />
+                  ))}
+                </View>
+                {errors.gender ? <Text style={styles.errorText}>{errors.gender}</Text> : null}
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>Birthdate</Text>
                 <Pressable
-                  key={option}
-                  style={[styles.genderButton, gender === option && styles.genderButtonActive]}
-                  onPress={() => setGender(option)}>
-                  <Text style={[styles.genderText, gender === option && styles.genderTextActive]}>
-                    {option}
+                  accessibilityRole="button"
+                  style={[styles.dateField, errors.birthdate && styles.inputError]}
+                  onPress={() => setIsCalendarVisible(true)}>
+                  <CalendarDays size={theme.icon.sm} color={theme.colors.textMuted} strokeWidth={2.1} />
+                  <Text style={[styles.dateText, !birthdate && styles.placeholderText]}>
+                    {birthdate || 'Select birthdate'}
                   </Text>
                 </Pressable>
-              ))}
-            </View>
-            {errors.gender ? <Text style={styles.errorText}>{errors.gender}</Text> : null}
-
-            <BirthdatePickerField
-              error={errors.birthdate}
-              value={birthdate}
-              onPress={() => {
-                setCalendarMode('year');
-                setIsCalendarVisible(true);
-              }}
-            />
-          </FormSection>
-
-          <FormSection title="Contact details">
-            <AuthField
-              error={errors.email}
-              keyboardType="email-address"
-              label="Email"
-              onChangeText={setEmail}
-              placeholder="juan@email.com"
-              value={email}
-            />
-            <AuthField
-              error={errors.phone}
-              keyboardType="phone-pad"
-              label="Phone number"
-              onChangeText={setPhone}
-              placeholder="9XX XXX XXXX"
-              prefix="+63"
-              value={phone}
-            />
-          </FormSection>
-
-          <FormSection title="Security">
-            <AuthField
-              error={errors.password}
-              label="Password"
-              onChangeText={setPassword}
-              placeholder="Create a secure password"
-              secureTextEntry
-              value={password}
-            />
-            <PasswordStrengthMeter strength={passwordStrength} />
-            <View style={styles.requirements}>
-              {passwordRules.map((rule) => (
-                <RequirementRow key={rule.label} isValid={rule.isValid} label={rule.label} />
-              ))}
-            </View>
-            <AuthField
-              error={errors.confirmPassword}
-              label="Confirm password"
-              onChangeText={setConfirmPassword}
-              placeholder="Re-enter your password"
-              secureTextEntry
-              value={confirmPassword}
-            />
-            {confirmPassword && confirmPassword === password ? (
-              <Text style={styles.matchText}>Passwords match.</Text>
-            ) : null}
-          </FormSection>
-
-          <View style={styles.termsWrap}>
-            <Pressable
-              accessibilityRole="checkbox"
-              accessibilityState={{ checked: hasAcceptedTerms }}
-              style={styles.termsButton}
-              onPress={() => setHasAcceptedTerms((current) => !current)}>
-              <View style={[styles.checkbox, hasAcceptedTerms && styles.checkboxChecked]}>
-                {hasAcceptedTerms ? <Check size={14} color={theme.colors.white} strokeWidth={3} /> : null}
+                {errors.birthdate ? <Text style={styles.errorText}>{errors.birthdate}</Text> : null}
               </View>
-              <Text style={styles.termsText}>
-                I agree to the{' '}
-                <Text style={styles.termsLink} onPress={() => router.push('/terms-and-condition')}>
-                  Terms and Conditions
-                </Text>
-              </Text>
-            </Pressable>
-            {errors.terms ? <Text style={styles.errorText}>{errors.terms}</Text> : null}
-          </View>
 
-          <View style={styles.actionGroup}>
-            <AuthButton
-              disabled={!isDetailsFormValid}
-              label="Continue to Verification"
-              onPress={handleSendOtp}
-              style={!isDetailsFormValid && styles.disabledButton}
-            />
-            <Pressable style={authStyles.linkButton} onPress={() => router.replace('/login')}>
-              <Text style={authStyles.linkText}>Already have an account? Sign In</Text>
-            </Pressable>
+              <OnboardingField
+                error={errors.email}
+                icon={Mail}
+                keyboardType="email-address"
+                label="Email"
+                onChangeText={(value) => {
+                  setEmail(value);
+                  setFieldError('email', !value || isValidEmail(value) ? undefined : 'Enter a valid email address.');
+                }}
+                placeholder="your@email.com"
+                value={email}
+              />
+
+              <OnboardingField
+                error={errors.phone}
+                keyboardType="phone-pad"
+                label="Phone number"
+                onChangeText={(value) => {
+                  setPhone(value);
+                  setFieldError(
+                    'phone',
+                    !value || isValidPhilippinePhone(`+63${value}`) ? undefined : 'Enter a valid Philippine phone number.',
+                  );
+                }}
+                placeholder="9XX XXX XXXX"
+                prefix="+63"
+                value={phone}
+              />
+
+              <OnboardingField
+                error={errors.password}
+                icon={LockKeyhole}
+                label="Password"
+                onChangeText={(value) => {
+                  setPassword(value);
+                  setFieldError(
+                    'password',
+                    !value || getPasswordRules(value).every((rule) => rule.isValid)
+                      ? undefined
+                      : 'Complete all password requirements.',
+                  );
+                }}
+                placeholder="Create a secure password"
+                secureTextEntry
+                value={password}
+              />
+
+              {hasPasswordInput ? (
+                <Animated.View
+                  style={[
+                    styles.passwordStatus,
+                    {
+                      opacity: strengthAnim,
+                      transform: [
+                        {
+                          translateY: strengthAnim.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [-8, 0],
+                          }),
+                        },
+                      ],
+                    },
+                  ]}>
+                  <PasswordStrengthMeter strength={passwordStrength} />
+                  <View style={styles.requirements}>
+                    {passwordRules.map((rule) => (
+                      <RequirementRow key={rule.label} isValid={rule.isValid} label={rule.label} />
+                    ))}
+                  </View>
+                </Animated.View>
+              ) : null}
+
+              <OnboardingField
+                error={errors.confirmPassword}
+                icon={LockKeyhole}
+                label="Confirm password"
+                onChangeText={(value) => {
+                  setConfirmPassword(value);
+                  setFieldError('confirmPassword');
+                }}
+                placeholder="Re-enter your password"
+                secureTextEntry
+                value={confirmPassword}
+              />
+            </View>
+
+            <PrimaryButton disabled={!canContinuePersonalInfo} label="Continue" onPress={handlePersonalInfoContinue} />
           </View>
-        </View>
-      ) : (
-        <View style={authStyles.form}>
-          {otpMessage ? <Text style={authStyles.successText}>{otpMessage}</Text> : null}
-          <OtpInput error={errors.otp} onChangeText={setOtp} value={otp} />
-          <View style={authStyles.actionGroup}>
-            <AuthButton label="Submit" onPress={handleSubmit} />
-            <AuthButton label="Edit Details" variant="secondary" onPress={() => setStep('details')} />
+        ) : null}
+
+        {phase === 2 ? (
+          <View style={styles.securityBody}>
+            {securityStep === 'otp' ? (
+              <>
+                <View style={styles.headerCopy}>
+                  <Text style={styles.title}>Verify your email</Text>
+                  <Text style={styles.subtitle}>We sent a 6-digit code to {email || 'your email'}.</Text>
+                </View>
+
+                <View style={styles.otpPanel}>
+                  <Text style={styles.otpLabel}>Enter code</Text>
+                  <OtpCodeInput error={errors.otp} value={otp} onChangeText={setOtp} />
+                </View>
+
+                <View style={styles.stickyActions}>
+                  <PrimaryButton label="Verify Code" onPress={handleVerifyOtp} />
+                  <SecondaryButton label="Edit email" onPress={() => setPhase(1)} />
+                </View>
+              </>
+            ) : securityStep === 'privacy' ? (
+              <>
+                <View style={styles.headerCopy}>
+                  <Text style={styles.title}>Would you like to enable biometrics?</Text>
+                  <Text style={styles.subtitle}>First, review how your account data is handled.</Text>
+                </View>
+
+                <View style={styles.biometricHero}>
+                  <View style={styles.biometricIcon}>
+                    <Fingerprint size={74} color={theme.colors.primary} strokeWidth={1.8} />
+                  </View>
+                  <Text style={styles.biometricTitle}>Security setup continues after consent.</Text>
+                </View>
+
+                <View style={styles.stickyActions}>
+                  <PrimaryButton label="Review Protection" onPress={() => setIsProtectionVisible(true)} />
+                  <SecondaryButton label="Back to Code" onPress={() => setSecurityStep('otp')} />
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.headerCopy}>
+                  <Text style={styles.title}>Would you like to enable biometrics?</Text>
+                  <Text style={styles.subtitle}>Use your device biometrics for faster access and protected profile changes.</Text>
+                </View>
+
+                <View style={styles.biometricHero}>
+                  <View style={styles.biometricIcon}>
+                    <Fingerprint size={74} color={theme.colors.primary} strokeWidth={1.8} />
+                  </View>
+                  <Text style={styles.biometricTitle}>
+                    Use {biometricsAvailability?.label ?? 'biometrics'} saved on this device
+                  </Text>
+                  {biometricsMessage ? <Text style={styles.biometricMessage}>{biometricsMessage}</Text> : null}
+                </View>
+
+                <View style={styles.stickyActions}>
+                  <PrimaryButton label="Enable" onPress={handleEnableBiometrics} />
+                  <SecondaryButton label="Skip" onPress={() => setPhase(3)} />
+                </View>
+              </>
+            )}
           </View>
-        </View>
-      )}
-      <BirthdateCalendarModal
-        selectedDate={selectedBirthdate}
+        ) : null}
+
+        {phase === 3 ? (
+          <View style={styles.phaseBody}>
+            <View style={styles.headerCopy}>
+              <Text style={styles.title}>Personalize your profile</Text>
+              <Text style={styles.subtitle}>Pin your delivery area or skip for now.</Text>
+            </View>
+
+            <View style={styles.profilePanel}>
+              <View style={styles.panelTitleRow}>
+                <MapPin size={theme.icon.sm} color={theme.colors.primary} strokeWidth={2.1} />
+                <Text style={styles.panelTitle}>Delivery location</Text>
+              </View>
+              <AddressMapPicker onAddressChange={setAddress} />
+              <LabeledInput
+                icon={MapPin}
+                label="Delivery address"
+                multiline
+                onChangeText={setAddress}
+                placeholder="Street, barangay, city, province"
+                value={address}
+              />
+              <LabeledInput
+                icon={UserRound}
+                label="Profile note"
+                onChangeText={setProfileNote}
+                placeholder="Example: prefers pastel bouquets"
+                value={profileNote}
+              />
+            </View>
+
+            <View style={styles.stickyActions}>
+              <PrimaryButton label="Finish Account Setup" onPress={handleFinish} />
+              <SecondaryButton label="Skip for now" onPress={handleFinish} />
+            </View>
+          </View>
+        ) : null}
+      </ScrollView>
+
+      <BirthdateModal
         visible={isCalendarVisible}
-        visibleMonth={visibleMonth}
         onClose={() => setIsCalendarVisible(false)}
-        onSelectDate={handleSelectBirthdate}
-        calendarMode={calendarMode}
-        onCalendarModeChange={setCalendarMode}
-        onVisibleMonthChange={setVisibleMonth}
+        onSelect={(value) => {
+          setBirthdate(value);
+          setFieldError('birthdate');
+          setIsCalendarVisible(false);
+        }}
       />
-    </AuthScreen>
+      <ProtectionConsentSheet
+        visible={isProtectionVisible}
+        onAgree={handleAgreeAndContinue}
+        onDecline={() => {
+          setIsProtectionVisible(false);
+          setSecurityStep('otp');
+        }}
+      />
+      <DiscardSignUpModal
+        visible={isDiscardVisible}
+        onCancel={() => setIsDiscardVisible(false)}
+        onDiscard={handleDiscardAndSignIn}
+      />
+    </KeyboardAvoidingView>
   );
 }
 
-function FormSection({ children, title }: { children: React.ReactNode; title: string }) {
+function PhaseProgress({ currentPhase }: { currentPhase: SignUpPhase }) {
+  const { width } = useWindowDimensions();
+  const trackWidth = Math.min(Math.max(width - theme.spacing.lg * 2, 252), 420);
+  const stepCenters = [trackWidth / 6, trackWidth / 2, (trackWidth * 5) / 6];
+  const connectorWidth = Math.max(stepCenters[1] - stepCenters[0] - 58, 28);
+  const firstState = getPhaseState(1, currentPhase);
+  const secondState = getPhaseState(2, currentPhase);
+  const thirdState = getPhaseState(3, currentPhase);
+
   return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      <View style={styles.sectionBody}>{children}</View>
+    <View style={[styles.progressWrap, { width: trackWidth }]}>
+      <View style={[styles.progressSteps, { width: trackWidth }]}>
+        <StepCircle phaseNumber={1} state={firstState} style={{ left: stepCenters[0] - 20 }} />
+        <ProgressConnector
+          isActive={currentPhase === 1}
+          isComplete={currentPhase > 1}
+          style={{ left: stepCenters[0] + 29, width: connectorWidth }}
+        />
+        <StepCircle phaseNumber={2} state={secondState} style={{ left: stepCenters[1] - 20 }} />
+        <ProgressConnector
+          isActive={currentPhase === 2}
+          isComplete={currentPhase > 2}
+          style={{ left: stepCenters[1] + 29, width: connectorWidth }}
+        />
+        <StepCircle phaseNumber={3} state={thirdState} style={{ left: stepCenters[2] - 20 }} />
+      </View>
+      <View style={[styles.progressLabels, { width: trackWidth }]}>
+        {phaseLabels.map((label, index) => {
+          const phaseNumber = (index + 1) as SignUpPhase;
+          const isActive = phaseNumber === currentPhase;
+
+          return (
+            <View key={label} style={styles.phaseLabelSlot}>
+              <Text style={[styles.phaseLabel, isActive && styles.phaseLabelActive]}>{label}</Text>
+            </View>
+          );
+        })}
+      </View>
     </View>
+  );
+}
+
+function StepCircle({
+  phaseNumber,
+  state,
+  style,
+}: {
+  phaseNumber: SignUpPhase;
+  state: 'active' | 'done' | 'upcoming';
+  style?: object;
+}) {
+  const isActive = state === 'active';
+  const isDone = state === 'done';
+
+  return (
+    <View style={[styles.stepCircle, isActive && styles.stepCircleActive, isDone && styles.stepCircleDone, style]}>
+      {isDone ? (
+        <Check size={18} color={theme.colors.primary} strokeWidth={2.8} />
+      ) : (
+        <Text style={[styles.stepNumber, isActive && styles.stepNumberActive]}>{phaseNumber}</Text>
+      )}
+    </View>
+  );
+}
+
+function ProgressConnector({
+  isActive,
+  isComplete,
+  style,
+}: {
+  isActive: boolean;
+  isComplete: boolean;
+  style?: object;
+}) {
+  return (
+    <View style={[styles.connector, style]}>
+      <View style={[styles.connectorFill, isComplete && styles.connectorFillComplete, isActive && styles.connectorFillActive]} />
+    </View>
+  );
+}
+
+function GenderButton({
+  icon: Icon,
+  isSelected,
+  label,
+  onPress,
+}: {
+  icon: typeof UserRound;
+  isSelected: boolean;
+  label: GenderOption;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      style={({ pressed }) => [
+        styles.genderButton,
+        isSelected && label === 'Female' && styles.genderButtonFemaleSelected,
+        isSelected && label === 'Male' && styles.genderButtonMaleSelected,
+        isSelected && label === 'Prefer not to say' && styles.genderButtonNeutralSelected,
+        pressed && styles.pressed,
+      ]}
+      onPress={onPress}>
+      <Icon size={21} color={getGenderAccentColor(label, isSelected)} strokeWidth={2.1} />
+      <Text style={[styles.genderText, isSelected && styles.genderTextSelected]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -372,255 +772,375 @@ function PasswordStrengthMeter({ strength }: { strength: PasswordStrength }) {
   );
 }
 
-function BirthdatePickerField({
+function OtpCodeInput({
   error,
-  onPress,
+  onChangeText,
   value,
 }: {
   error?: string;
-  onPress: () => void;
+  onChangeText: (value: string) => void;
   value: string;
 }) {
+  const inputRef = useRef<TextInput | null>(null);
+  const digits = Array.from({ length: 6 }, (_, index) => value[index] ?? '');
+
+  function handleChange(text: string) {
+    onChangeText(text.replace(/\D/g, '').slice(0, 6));
+  }
+
   return (
-    <>
-      <Text style={styles.fieldLabel}>Birthdate</Text>
-      <Pressable style={[styles.dateField, error && styles.dateFieldError]} onPress={onPress}>
-        <Text style={[styles.dateText, !value && styles.datePlaceholder]}>
-          {value || 'Select birthdate'}
-        </Text>
-        <CalendarDays size={theme.icon.sm} color={theme.colors.primary} />
-      </Pressable>
+    <Pressable style={styles.otpWrap} onPress={() => inputRef.current?.focus()}>
+      <TextInput
+        ref={inputRef}
+        autoFocus
+        caretHidden
+        keyboardType="number-pad"
+        maxLength={6}
+        onChangeText={handleChange}
+        style={styles.hiddenOtpInput}
+        value={value}
+      />
+      <View style={styles.otpRow}>
+        {digits.map((digit, index) => (
+          <View
+            key={index}
+            style={[
+              styles.otpBox,
+              index === value.length && styles.otpBoxActive,
+              error && styles.inputError,
+            ]}>
+            <Text style={styles.otpDigit}>{digit}</Text>
+          </View>
+        ))}
+      </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
-    </>
+    </Pressable>
   );
 }
 
-function BirthdateCalendarModal({
-  calendarMode,
-  onClose,
-  onCalendarModeChange,
-  onSelectDate,
-  onVisibleMonthChange,
-  selectedDate,
+function ProtectionConsentSheet({
+  onAgree,
+  onDecline,
   visible,
-  visibleMonth,
 }: {
-  calendarMode: CalendarMode;
-  onClose: () => void;
-  onCalendarModeChange: (mode: CalendarMode) => void;
-  onSelectDate: (date: Date) => void;
-  onVisibleMonthChange: (date: Date) => void;
-  selectedDate: Date | null;
+  onAgree: () => void;
+  onDecline: () => void;
   visible: boolean;
-  visibleMonth: Date;
 }) {
-  const dates = getCalendarDates(visibleMonth);
-  const today = stripTime(new Date());
-  const currentYear = new Date().getFullYear();
-  const yearPageStart = Math.floor(visibleMonth.getFullYear() / 12) * 12;
-  const years = Array.from({ length: 12 }, (_, index) => yearPageStart + index);
-
-  function changeMonth(offset: number) {
-    onVisibleMonthChange(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + offset, 1));
-  }
-
-  function changeYearPage(offset: number) {
-    onVisibleMonthChange(new Date(visibleMonth.getFullYear() + offset * 12, visibleMonth.getMonth(), 1));
-  }
-
-  function handleSelectYear(year: number) {
-    onVisibleMonthChange(new Date(year, visibleMonth.getMonth(), 1));
-    onCalendarModeChange('month');
-  }
-
-  function handleSelectMonth(month: number) {
-    onVisibleMonthChange(new Date(visibleMonth.getFullYear(), month, 1));
-    onCalendarModeChange('day');
-  }
-
-  function renderHeaderTitle() {
-    if (calendarMode === 'year') {
-      return `${yearPageStart} - ${yearPageStart + 11}`;
-    }
-
-    if (calendarMode === 'month') {
-      return `${visibleMonth.getFullYear()}`;
-    }
-
-    return `${monthNames[visibleMonth.getMonth()]} ${visibleMonth.getFullYear()}`;
-  }
-
-  function handlePrevious() {
-    if (calendarMode === 'year') {
-      changeYearPage(-1);
-      return;
-    }
-
-    if (calendarMode === 'month') {
-      onVisibleMonthChange(new Date(visibleMonth.getFullYear() - 1, visibleMonth.getMonth(), 1));
-      return;
-    }
-
-    changeMonth(-1);
-  }
-
-  function handleNext() {
-    if (calendarMode === 'year') {
-      changeYearPage(1);
-      return;
-    }
-
-    if (calendarMode === 'month') {
-      onVisibleMonthChange(new Date(visibleMonth.getFullYear() + 1, visibleMonth.getMonth(), 1));
-      return;
-    }
-
-    changeMonth(1);
-  }
-
-  function handleTitlePress() {
-    if (calendarMode === 'day') {
-      onCalendarModeChange('month');
-      return;
-    }
-
-    onCalendarModeChange('year');
-  }
-
   return (
-    <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
-      <View style={styles.modalOverlay}>
-        <View style={styles.calendarCard}>
-          <View style={styles.calendarHeader}>
-            <Pressable style={styles.monthButton} onPress={handlePrevious}>
-              <ChevronLeft size={theme.icon.md} color={theme.colors.primary} />
-            </Pressable>
-            <Pressable style={styles.calendarTitleButton} onPress={handleTitlePress}>
-              <Text style={styles.monthTitle}>{renderHeaderTitle()}</Text>
-              <Text style={styles.titleHint}>
-                {calendarMode === 'day' ? 'Tap to change month/year' : 'Tap to change year'}
+    <Modal animationType="slide" transparent visible={visible} onRequestClose={onDecline}>
+      <View style={styles.protectionOverlay}>
+        <TouchableWithoutFeedback onPress={onDecline}>
+          <View style={styles.protectionBackdrop} />
+        </TouchableWithoutFeedback>
+        <View style={styles.protectionSheet}>
+          <View style={styles.protectionPanel}>
+            <View style={styles.protectionHero}>
+              <View style={styles.protectionIconLarge}>
+                <ShieldCheck size={44} color={theme.colors.primary} strokeWidth={2} />
+              </View>
+              <Text style={styles.protectionTitle}>You are protected</Text>
+              <Text style={styles.protectionSubtitle}>Keeping your data safe</Text>
+            </View>
+
+            <View style={styles.privacyCopy}>
+              <Text style={styles.privacyText}>
+                By continuing, you agree to the collection and use of the information you provided for your Esting&apos;s account.
               </Text>
-            </Pressable>
-            <Pressable style={styles.monthButton} onPress={handleNext}>
-              <ChevronRight size={theme.icon.md} color={theme.colors.primary} />
-            </Pressable>
+              <Text style={styles.privacyText}>
+                This may include personal information needed to verify your account and complete flower orders.
+              </Text>
+              <Text style={styles.privacyText}>
+                Please review our{' '}
+                <Text style={styles.privacyLink} onPress={() => router.push('/terms-and-condition')}>
+                  Terms and Conditions
+                </Text>
+                .
+              </Text>
+            </View>
           </View>
 
-          {calendarMode === 'year' ? (
-            <View style={styles.yearGrid}>
-              {years.map((year) => {
-                const isSelectedYear = selectedDate?.getFullYear() === year;
-                const isDisabledYear = year > currentYear;
+          <View style={styles.stickyActions}>
+            <PrimaryButton label="Agree and Continue" onPress={onAgree} />
+            <SecondaryButton label="No, Thanks" onPress={onDecline} />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
 
-                return (
-                  <Pressable
-                    key={year}
-                    disabled={isDisabledYear}
-                    style={[
-                      styles.yearButton,
-                      isSelectedYear && styles.yearButtonSelected,
-                      isDisabledYear && styles.dayButtonDisabled,
-                    ]}
-                    onPress={() => handleSelectYear(year)}>
-                    <Text
-                      style={[
-                        styles.yearText,
-                        isSelectedYear && styles.dayTextSelected,
-                        isDisabledYear && styles.dayTextDisabled,
-                      ]}>
-                      {year}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ) : null}
-
-          {calendarMode === 'month' ? (
-            <View style={styles.monthGrid}>
-              {monthNames.map((month, index) => {
-                const isSelectedMonth =
-                  selectedDate?.getFullYear() === visibleMonth.getFullYear() &&
-                  selectedDate.getMonth() === index;
-                const isDisabledMonth =
-                  visibleMonth.getFullYear() > currentYear ||
-                  (visibleMonth.getFullYear() === currentYear && index > new Date().getMonth());
-
-                return (
-                  <Pressable
-                    key={month}
-                    disabled={isDisabledMonth}
-                    style={[
-                      styles.monthGridButton,
-                      isSelectedMonth && styles.yearButtonSelected,
-                      isDisabledMonth && styles.dayButtonDisabled,
-                    ]}
-                    onPress={() => handleSelectMonth(index)}>
-                    <Text
-                      style={[
-                        styles.monthGridText,
-                        isSelectedMonth && styles.dayTextSelected,
-                        isDisabledMonth && styles.dayTextDisabled,
-                      ]}>
-                      {month.slice(0, 3)}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          ) : null}
-
-          {calendarMode === 'day' ? (
-            <>
-              <View style={styles.weekRow}>
-                {weekDays.map((day, index) => (
-                  <Text key={`${day}-${index}`} style={styles.weekText}>
-                    {day}
-                  </Text>
-                ))}
-              </View>
-
-              <View style={styles.dayGrid}>
-                {dates.map((date, index) => {
-                  const isCurrentMonth = date.getMonth() === visibleMonth.getMonth();
-                  const isSelected = selectedDate ? isSameDate(date, selectedDate) : false;
-                  const isDisabled = stripTime(date).getTime() > today.getTime();
-
-                  return (
-                    <Pressable
-                      key={`${date.toISOString()}-${index}`}
-                      disabled={isDisabled}
-                      style={[
-                        styles.dayButton,
-                        !isCurrentMonth && styles.dayButtonMuted,
-                        isSelected && styles.dayButtonSelected,
-                        isDisabled && styles.dayButtonDisabled,
-                      ]}
-                      onPress={() => onSelectDate(date)}>
-                      <Text
-                        style={[
-                          styles.dayText,
-                          !isCurrentMonth && styles.dayTextMuted,
-                          isSelected && styles.dayTextSelected,
-                          isDisabled && styles.dayTextDisabled,
-                        ]}>
-                        {date.getDate()}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-            </>
-          ) : null}
-
-          <View style={styles.calendarActions}>
-            <Pressable style={styles.calendarCancelButton} onPress={onClose}>
-              <Text style={styles.calendarCancelText}>Cancel</Text>
+function DiscardSignUpModal({
+  onCancel,
+  onDiscard,
+  visible,
+}: {
+  onCancel: () => void;
+  onDiscard: () => void;
+  visible: boolean;
+}) {
+  return (
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={onCancel}>
+      <View style={styles.discardOverlay}>
+        <Pressable style={styles.discardBackdrop} onPress={onCancel} />
+        <View style={styles.discardCard}>
+          <Text style={styles.discardTitle}>Discard account setup?</Text>
+          <Text style={styles.discardMessage}>
+            All information you entered will be lost if you go back to Sign In.
+          </Text>
+          <View style={styles.discardActions}>
+            <Pressable
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.discardCancelButton, pressed && styles.pressed]}
+              onPress={onCancel}>
+              <Text style={styles.discardCancelText}>Keep editing</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.discardButton, pressed && styles.pressed]}
+              onPress={onDiscard}>
+              <Text style={styles.discardButtonText}>Discard and Sign In</Text>
             </Pressable>
           </View>
         </View>
       </View>
     </Modal>
+  );
+}
+
+function OnboardingField({
+  autoCapitalize = 'none',
+  error,
+  icon: Icon,
+  keyboardType = 'default',
+  label,
+  onChangeText,
+  placeholder,
+  prefix,
+  secureTextEntry = false,
+  value,
+}: {
+  autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
+  error?: string;
+  icon?: typeof UserRound;
+  keyboardType?: KeyboardTypeOptions;
+  label: string;
+  onChangeText: (value: string) => void;
+  placeholder: string;
+  prefix?: string;
+  secureTextEntry?: boolean;
+  value: string;
+}) {
+  const [isHidden, setIsHidden] = useState(secureTextEntry);
+
+  return (
+    <View style={styles.onboardingFieldWrap}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={[styles.onboardingInputFrame, error && styles.inputError]}>
+        {Icon ? (
+          <View style={styles.inputIcon}>
+            <Icon size={theme.icon.sm} color={theme.colors.textMuted} strokeWidth={2.1} />
+          </View>
+        ) : null}
+        {prefix ? <Text style={styles.prefixText}>{prefix}</Text> : null}
+        <TextInput
+          autoCapitalize={autoCapitalize}
+          keyboardType={keyboardType}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={theme.colors.textMuted}
+          secureTextEntry={isHidden}
+          style={styles.onboardingInput}
+          value={value}
+        />
+        {secureTextEntry ? (
+          <Pressable
+            accessibilityLabel={isHidden ? 'Show password' : 'Hide password'}
+            accessibilityRole="button"
+            style={styles.eyeButton}
+            onPress={() => setIsHidden((current) => !current)}>
+            {isHidden ? (
+              <Eye size={theme.icon.sm} color={theme.colors.textMuted} strokeWidth={2.1} />
+            ) : (
+              <EyeOff size={theme.icon.sm} color={theme.colors.textMuted} strokeWidth={2.1} />
+            )}
+          </Pressable>
+        ) : null}
+      </View>
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+    </View>
+  );
+}
+
+function LabeledInput({
+  icon: Icon,
+  label,
+  multiline = false,
+  onChangeText,
+  placeholder,
+  value,
+}: {
+  icon: typeof UserRound;
+  label: string;
+  multiline?: boolean;
+  onChangeText: (value: string) => void;
+  placeholder: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.labeledInputWrap}>
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <View style={[styles.profileInputFrame, multiline && styles.profileInputFrameTall]}>
+        <Icon size={theme.icon.sm} color={theme.colors.textMuted} strokeWidth={2.1} />
+        <TextInput
+          multiline={multiline}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={theme.colors.textMuted}
+          style={[styles.profileInput, multiline && styles.profileInputTall]}
+          value={value}
+        />
+      </View>
+    </View>
+  );
+}
+
+function PrimaryButton({
+  disabled = false,
+  label,
+  onPress,
+}: {
+  disabled?: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={disabled}
+      style={({ pressed }) => [styles.primaryButton, disabled && styles.buttonDisabled, pressed && !disabled && styles.pressed]}
+      onPress={onPress}>
+      <Text style={styles.primaryButtonText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function SecondaryButton({ label, onPress }: { label: string; onPress: () => void }) {
+  return (
+    <Pressable accessibilityRole="button" style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]} onPress={onPress}>
+      <Text style={styles.secondaryButtonText}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function BirthdateModal({
+  onClose,
+  onSelect,
+  visible,
+}: {
+  onClose: () => void;
+  onSelect: (value: string) => void;
+  visible: boolean;
+}) {
+  const currentYear = new Date().getFullYear();
+  const years = Array.from({ length: 80 }, (_, index) => currentYear - 12 - index);
+  const [selectedYear, setSelectedYear] = useState(currentYear - 18);
+  const [selectedMonth, setSelectedMonth] = useState(0);
+  const [selectedDay, setSelectedDay] = useState(1);
+  const dayCount = getDaysInMonth(selectedYear, selectedMonth);
+  const days = Array.from({ length: dayCount }, (_, index) => index + 1);
+
+  function handleSelectMonth(monthIndex: number) {
+    setSelectedMonth(monthIndex);
+    setSelectedDay((current) => Math.min(current, getDaysInMonth(selectedYear, monthIndex)));
+  }
+
+  function handleSelectYear(year: number) {
+    setSelectedYear(year);
+    setSelectedDay((current) => Math.min(current, getDaysInMonth(year, selectedMonth)));
+  }
+
+  function handleDone() {
+    onSelect(formatBirthdateValue(selectedYear, selectedMonth, selectedDay));
+  }
+
+  return (
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={onClose}>
+      <View style={styles.modalOverlay}>
+        <View style={styles.birthdateSheet}>
+          <Text style={styles.sheetTitle}>Select birthdate</Text>
+          <Text style={styles.sheetSubtitle}>{formatBirthdateDisplay(selectedYear, selectedMonth, selectedDay)}</Text>
+
+          <View style={styles.birthdatePickerGrid}>
+            <View style={styles.birthdatePickerColumn}>
+              <Text style={styles.pickerColumnTitle}>Month</Text>
+              <ScrollView showsVerticalScrollIndicator={false} style={styles.pickerList}>
+                {birthdateMonths.map((month, index) => (
+                  <PickerOption
+                    key={month}
+                    isSelected={selectedMonth === index}
+                    label={month.slice(0, 3)}
+                    onPress={() => handleSelectMonth(index)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+
+            <View style={styles.birthdatePickerColumn}>
+              <Text style={styles.pickerColumnTitle}>Day</Text>
+              <ScrollView showsVerticalScrollIndicator={false} style={styles.pickerList}>
+                {days.map((day) => (
+                  <PickerOption
+                    key={day}
+                    isSelected={selectedDay === day}
+                    label={`${day}`}
+                    onPress={() => setSelectedDay(day)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+
+            <View style={styles.birthdatePickerColumn}>
+              <Text style={styles.pickerColumnTitle}>Year</Text>
+              <ScrollView showsVerticalScrollIndicator={false} style={styles.pickerList}>
+                {years.map((year) => (
+                  <PickerOption
+                    key={year}
+                    isSelected={selectedYear === year}
+                    label={`${year}`}
+                    onPress={() => handleSelectYear(year)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          </View>
+
+          <View style={styles.sheetActions}>
+            <PrimaryButton label="Use Birthdate" onPress={handleDone} />
+            <SecondaryButton label="Cancel" onPress={onClose} />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function PickerOption({
+  isSelected,
+  label,
+  onPress,
+}: {
+  isSelected: boolean;
+  label: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      style={({ pressed }) => [styles.pickerOption, isSelected && styles.pickerOptionSelected, pressed && styles.pressed]}
+      onPress={onPress}>
+      <Text style={[styles.pickerOptionText, isSelected && styles.pickerOptionTextSelected]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -667,63 +1187,387 @@ function getStrengthBars(strength: PasswordStrength) {
   return 4;
 }
 
-function getInitialCalendarMonth() {
-  const date = new Date();
+function getGenderAccentColor(label: GenderOption, isSelected: boolean) {
+  if (!isSelected) {
+    return theme.colors.textMuted;
+  }
 
-  return new Date(date.getFullYear() - 18, date.getMonth(), 1);
+  if (label === 'Female') {
+    return '#C75B8A';
+  }
+
+  if (label === 'Male') {
+    return '#3478D8';
+  }
+
+  return theme.colors.primary;
 }
 
-function getCalendarDates(month: Date) {
-  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
-  const startDate = new Date(firstDay);
-  startDate.setDate(firstDay.getDate() - firstDay.getDay());
-
-  return Array.from({ length: 42 }, (_, index) => {
-    const date = new Date(startDate);
-    date.setDate(startDate.getDate() + index);
-
-    return date;
-  });
+function getDaysInMonth(year: number, monthIndex: number) {
+  return new Date(year, monthIndex + 1, 0).getDate();
 }
 
-function formatDateValue(date: Date) {
-  const year = date.getFullYear();
-  const month = `${date.getMonth() + 1}`.padStart(2, '0');
-  const day = `${date.getDate()}`.padStart(2, '0');
+function formatBirthdateValue(year: number, monthIndex: number, day: number) {
+  const month = `${monthIndex + 1}`.padStart(2, '0');
+  const date = `${day}`.padStart(2, '0');
 
-  return `${year}-${month}-${day}`;
+  return `${year}-${month}-${date}`;
 }
 
-function isSameDate(first: Date, second: Date) {
-  return (
-    first.getFullYear() === second.getFullYear() &&
-    first.getMonth() === second.getMonth() &&
-    first.getDate() === second.getDate()
-  );
+function formatBirthdateDisplay(year: number, monthIndex: number, day: number) {
+  return `${birthdateMonths[monthIndex]} ${day}, ${year}`;
 }
 
-function stripTime(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+function getPhaseState(phaseNumber: SignUpPhase, currentPhase: SignUpPhase) {
+  if (phaseNumber < currentPhase) {
+    return 'done';
+  }
+
+  if (phaseNumber === currentPhase) {
+    return 'active';
+  }
+
+  return 'upcoming';
 }
+
+const hairlineColor = 'rgba(31, 42, 36, 0.08)';
 
 const styles = StyleSheet.create({
-  form: {
-    gap: theme.spacing.xl,
-    marginTop: theme.spacing.xl,
-  },
-  section: {
-    gap: theme.spacing.md,
-  },
-  sectionTitle: {
-    color: theme.colors.text,
-    fontSize: 17,
-    fontWeight: '800',
-  },
-  sectionBody: {
+  keyboardView: {
     backgroundColor: theme.colors.surfaceAlt,
-    borderColor: theme.colors.subtleBorder,
-    borderRadius: theme.radius.lg,
+    flex: 1,
+  },
+  screen: {
+    backgroundColor: theme.colors.surfaceAlt,
+    flex: 1,
+  },
+  content: {
+    gap: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  topBar: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  backButton: {
+    alignItems: 'center',
+    height: 42,
+    justifyContent: 'center',
+    marginLeft: -8,
+    width: 42,
+  },
+  signInButton: {
+    justifyContent: 'center',
+    minHeight: 38,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  signInText: {
+    color: theme.colors.primary,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  progressWrap: {
+    alignSelf: 'center',
+    gap: 7,
+    minHeight: 82,
+  },
+  progressSteps: {
+    height: 42,
+    position: 'relative',
+  },
+  stepCircle: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: 'rgba(31, 42, 36, 0.08)',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: 'center',
+    position: 'absolute',
+    top: 0,
+    width: 40,
+  },
+  stepCircleActive: {
+    borderColor: theme.colors.primary,
+    borderWidth: 3,
+  },
+  stepCircleDone: {
+    backgroundColor: theme.colors.greenSoft,
+    borderColor: theme.colors.primary,
+    borderWidth: 3,
+  },
+  stepNumber: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansBold,
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  stepNumberActive: {
+    color: theme.colors.primary,
+  },
+  connector: {
+    backgroundColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    height: 4,
+    overflow: 'hidden',
+    position: 'absolute',
+    top: 18,
+  },
+  connectorFill: {
+    height: '100%',
+    width: 0,
+  },
+  connectorFillActive: {
+    backgroundColor: theme.colors.primary,
+    height: '100%',
+    width: '55%',
+  },
+  connectorFillComplete: {
+    backgroundColor: theme.colors.primary,
+    height: '100%',
+    width: '100%',
+  },
+  progressLabels: {
+    flexDirection: 'row',
+  },
+  phaseLabelSlot: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  phaseLabel: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 11,
+    lineHeight: 14,
+    minHeight: 34,
+    textAlign: 'center',
+  },
+  phaseLabelActive: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansBold,
+  },
+  phaseBody: {
+    gap: theme.spacing.lg,
+  },
+  securityBody: {
+    flex: 1,
+    gap: theme.spacing.xl,
+    minHeight: 560,
+  },
+  otpPanel: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: 'rgba(31, 42, 36, 0.07)',
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: theme.spacing.lg,
+    padding: theme.spacing.xl,
+  },
+  otpLabel: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  otpWrap: {
+    alignItems: 'center',
+    gap: theme.spacing.sm,
+    width: '100%',
+  },
+  hiddenOtpInput: {
+    height: 1,
+    opacity: 0,
+    position: 'absolute',
+    width: 1,
+  },
+  otpRow: {
+    flexDirection: 'row',
+    gap: 7,
+    justifyContent: 'center',
+    width: '100%',
+  },
+  otpBox: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceAlt,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
     borderWidth: theme.borderWidth,
+    color: theme.colors.text,
+    flex: 1,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 19,
+    height: 50,
+    justifyContent: 'center',
+    maxWidth: 46,
+    minWidth: 36,
+  },
+  otpBoxActive: {
+    borderColor: theme.colors.primary,
+  },
+  otpDigit: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 19,
+    lineHeight: 24,
+  },
+  protectionOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  protectionBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(31, 42, 36, 0.52)',
+  },
+  protectionSheet: {
+    backgroundColor: theme.colors.surface,
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    gap: theme.spacing.lg,
+    maxHeight: '86%',
+    padding: theme.spacing.lg,
+  },
+  protectionPanel: {
+    backgroundColor: theme.colors.surface,
+    borderColor: 'rgba(31, 42, 36, 0.07)',
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: theme.spacing.lg,
+    overflow: 'hidden',
+  },
+  protectionHero: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.greenSoft,
+    gap: theme.spacing.sm,
+    padding: theme.spacing.xl,
+  },
+  protectionIconLarge: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: 'rgba(46, 139, 52, 0.14)',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 82,
+    justifyContent: 'center',
+    width: 82,
+  },
+  protectionTitle: {
+    color: theme.colors.primaryDark,
+    fontFamily: Fonts.sansBold,
+    fontSize: 20,
+    lineHeight: 25,
+    textAlign: 'center',
+  },
+  protectionSubtitle: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  privacyCopy: {
+    gap: theme.spacing.md,
+    padding: theme.spacing.lg,
+    paddingTop: 0,
+  },
+  privacyText: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sans,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+  privacyLink: {
+    color: theme.colors.primary,
+    fontFamily: Fonts.sansSemiBold,
+  },
+  discardOverlay: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    padding: theme.spacing.lg,
+  },
+  discardBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(31, 42, 36, 0.48)',
+  },
+  discardCard: {
+    backgroundColor: theme.colors.surface,
+    borderColor: 'rgba(31, 42, 36, 0.08)',
+    borderRadius: 22,
+    borderWidth: 1,
+    gap: theme.spacing.md,
+    maxWidth: 420,
+    padding: theme.spacing.lg,
+    width: '100%',
+  },
+  discardTitle: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansBold,
+    fontSize: 21,
+    lineHeight: 27,
+    textAlign: 'center',
+  },
+  discardMessage: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+  discardActions: {
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
+  },
+  discardCancelButton: {
+    alignItems: 'center',
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.pill,
+    borderWidth: theme.borderWidth,
+    justifyContent: 'center',
+    minHeight: 50,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  discardCancelText: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  discardButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.danger,
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    minHeight: 50,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  discardButtonText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansBold,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  headerCopy: {
+    gap: theme.spacing.sm,
+  },
+  title: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansBold,
+    fontSize: 28,
+    lineHeight: 34,
+  },
+  subtitle: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+  formPanel: {
+    backgroundColor: theme.colors.surface,
+    borderColor: 'rgba(31, 42, 36, 0.07)',
+    borderRadius: 20,
+    borderWidth: 1,
     gap: theme.spacing.sm,
     padding: theme.spacing.lg,
   },
@@ -734,70 +1578,130 @@ const styles = StyleSheet.create({
   nameField: {
     flex: 1,
   },
+  fieldGroup: {
+    gap: theme.spacing.sm,
+  },
   fieldLabel: {
     color: theme.colors.text,
-    fontSize: 14,
-    fontWeight: '700',
-    marginTop: theme.spacing.sm,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 13,
+    lineHeight: 17,
   },
-  genderRow: {
+  onboardingFieldWrap: {
+    gap: theme.spacing.sm,
+  },
+  onboardingInputFrame: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceAlt,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borderWidth,
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    minHeight: 52,
+    paddingHorizontal: theme.spacing.md,
+  },
+  inputIcon: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: theme.spacing.sm,
+    width: 22,
+  },
+  onboardingInput: {
+    color: theme.colors.text,
+    flex: 1,
+    fontFamily: Fonts.sans,
+    fontSize: 15,
+    lineHeight: 20,
+    minHeight: 50,
+    padding: 0,
+  },
+  prefixText: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 15,
+    lineHeight: 20,
+    paddingRight: theme.spacing.sm,
+  },
+  eyeButton: {
+    alignItems: 'center',
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  genderGrid: {
+    flexDirection: 'row',
     gap: theme.spacing.sm,
   },
   genderButton: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.subtleBorder,
-    borderRadius: theme.radius.pill,
-    borderWidth: theme.borderWidth,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderColor: hairlineColor,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    flex: 1,
+    gap: 6,
     justifyContent: 'center',
-    minHeight: 40,
-    paddingHorizontal: theme.spacing.md,
+    minHeight: 76,
+    paddingHorizontal: theme.spacing.xs,
   },
-  genderButtonActive: {
-    backgroundColor: theme.colors.greenSoft,
-    borderColor: theme.colors.primary,
+  genderButtonFemaleSelected: {
+    backgroundColor: '#FDECF4',
+    borderColor: '#F3B8D2',
+  },
+  genderButtonMaleSelected: {
+    backgroundColor: '#EAF3FF',
+    borderColor: '#B9D7FF',
+  },
+  genderButtonNeutralSelected: {
+    backgroundColor: '#EEF8F2',
+    borderColor: '#B7DEC1',
   },
   genderText: {
-    color: theme.colors.text,
-    fontSize: 13,
-    fontWeight: '700',
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 11,
+    lineHeight: 14,
+    textAlign: 'center',
   },
-  genderTextActive: {
-    color: theme.colors.primary,
+  genderTextSelected: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansSemiBold,
   },
   errorText: {
     color: theme.colors.danger,
+    fontFamily: Fonts.sansMedium,
     fontSize: 12,
-    fontWeight: '600',
     lineHeight: 17,
+  },
+  inputError: {
+    borderColor: theme.colors.danger,
   },
   dateField: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.subtleBorder,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
     borderWidth: theme.borderWidth,
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
     minHeight: 52,
     paddingHorizontal: theme.spacing.md,
   },
-  dateFieldError: {
-    borderColor: theme.colors.danger,
-  },
   dateText: {
     color: theme.colors.text,
+    flex: 1,
+    fontFamily: Fonts.sansMedium,
     fontSize: 15,
-    fontWeight: '600',
+    lineHeight: 20,
   },
-  datePlaceholder: {
+  placeholderText: {
     color: theme.colors.textMuted,
+  },
+  passwordStatus: {
+    gap: theme.spacing.md,
   },
   requirements: {
     gap: theme.spacing.xs,
-    marginTop: theme.spacing.xs,
   },
   requirementRow: {
     alignItems: 'center',
@@ -818,8 +1722,8 @@ const styles = StyleSheet.create({
   requirementText: {
     color: theme.colors.textMuted,
     flex: 1,
+    fontFamily: Fonts.sansMedium,
     fontSize: 12,
-    fontWeight: '600',
     lineHeight: 17,
   },
   requirementTextValid: {
@@ -827,7 +1731,6 @@ const styles = StyleSheet.create({
   },
   strengthWrap: {
     gap: theme.spacing.sm,
-    marginTop: theme.spacing.xs,
   },
   strengthHeader: {
     alignItems: 'center',
@@ -836,12 +1739,14 @@ const styles = StyleSheet.create({
   },
   strengthLabel: {
     color: theme.colors.textMuted,
+    fontFamily: Fonts.sansMedium,
     fontSize: 12,
-    fontWeight: '700',
+    lineHeight: 16,
   },
   strengthValue: {
+    fontFamily: Fonts.sansSemiBold,
     fontSize: 12,
-    fontWeight: '800',
+    lineHeight: 16,
   },
   strengthWeak: {
     color: theme.colors.danger,
@@ -882,50 +1787,129 @@ const styles = StyleSheet.create({
   },
   matchText: {
     color: theme.colors.primary,
+    fontFamily: Fonts.sansSemiBold,
     fontSize: 12,
-    fontWeight: '700',
+    lineHeight: 17,
   },
-  termsWrap: {
-    gap: theme.spacing.xs,
+  primaryButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    minHeight: 56,
+    paddingHorizontal: theme.spacing.lg,
   },
-  termsButton: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    minHeight: 44,
+  primaryButtonText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansBold,
+    fontSize: 16,
+    lineHeight: 21,
   },
-  checkbox: {
+  secondaryButton: {
     alignItems: 'center',
     backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.sm,
-    borderWidth: theme.borderWidth,
-    height: 22,
-    justifyContent: 'center',
-    marginTop: 1,
-    width: 22,
-  },
-  checkboxChecked: {
-    backgroundColor: theme.colors.primary,
     borderColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1.4,
+    justifyContent: 'center',
+    minHeight: 54,
+    paddingHorizontal: theme.spacing.lg,
   },
-  termsText: {
-    color: theme.colors.textMuted,
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
-    lineHeight: 20,
-  },
-  termsLink: {
+  secondaryButtonText: {
     color: theme.colors.primary,
-    fontWeight: '800',
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 16,
+    lineHeight: 21,
   },
-  actionGroup: {
+  buttonDisabled: {
+    opacity: 0.45,
+  },
+  pressed: {
+    opacity: 0.78,
+    transform: [{ scale: 0.99 }],
+  },
+  biometricHero: {
     alignItems: 'center',
+    flex: 1,
+    gap: theme.spacing.lg,
+    justifyContent: 'center',
+    paddingHorizontal: theme.spacing.lg,
+  },
+  biometricIcon: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.greenSoft,
+    borderRadius: theme.radius.pill,
+    height: 132,
+    justifyContent: 'center',
+    width: 132,
+  },
+  biometricTitle: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 16,
+    lineHeight: 23,
+    textAlign: 'center',
+  },
+  biometricMessage: {
+    color: theme.colors.primaryDark,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  stickyActions: {
     gap: theme.spacing.md,
   },
-  disabledButton: {
-    opacity: 0.48,
+  profilePanel: {
+    backgroundColor: theme.colors.surface,
+    borderColor: 'rgba(31, 42, 36, 0.07)',
+    borderRadius: 20,
+    borderWidth: 1,
+    gap: theme.spacing.md,
+    padding: theme.spacing.lg,
+  },
+  panelTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  panelTitle: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansBold,
+    fontSize: 18,
+    lineHeight: 23,
+  },
+  labeledInputWrap: {
+    gap: theme.spacing.sm,
+  },
+  profileInputFrame: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceAlt,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borderWidth,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    minHeight: 52,
+    paddingHorizontal: theme.spacing.md,
+  },
+  profileInputFrameTall: {
+    alignItems: 'flex-start',
+    minHeight: 92,
+    paddingTop: theme.spacing.md,
+  },
+  profileInput: {
+    color: theme.colors.text,
+    flex: 1,
+    fontFamily: Fonts.sans,
+    fontSize: 15,
+    lineHeight: 20,
+    minHeight: 48,
+    padding: 0,
+  },
+  profileInputTall: {
+    minHeight: 70,
+    textAlignVertical: 'top',
   },
   modalOverlay: {
     alignItems: 'center',
@@ -934,151 +1918,71 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     padding: theme.spacing.lg,
   },
-  calendarCard: {
+  birthdateSheet: {
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.lg,
     borderWidth: theme.borderWidth,
     gap: theme.spacing.md,
-    maxWidth: 380,
+    maxHeight: 620,
     padding: theme.spacing.lg,
     width: '100%',
   },
-  calendarHeader: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  monthButton: {
-    alignItems: 'center',
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.pill,
-    borderWidth: theme.borderWidth,
-    height: 42,
-    justifyContent: 'center',
-    width: 42,
-  },
-  monthTitle: {
+  sheetTitle: {
     color: theme.colors.text,
-    fontSize: 17,
-    fontWeight: '800',
+    fontFamily: Fonts.sansBold,
+    fontSize: 18,
+    lineHeight: 23,
+    textAlign: 'center',
   },
-  calendarTitleButton: {
-    alignItems: 'center',
+  sheetSubtitle: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  birthdatePickerGrid: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  birthdatePickerColumn: {
     flex: 1,
+    gap: theme.spacing.sm,
+  },
+  pickerColumnTitle: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 12,
+    lineHeight: 16,
+    textAlign: 'center',
+  },
+  pickerList: {
+    maxHeight: 250,
+  },
+  pickerOption: {
+    alignItems: 'center',
+    borderColor: 'transparent',
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
     justifyContent: 'center',
     minHeight: 42,
   },
-  titleHint: {
-    color: theme.colors.textMuted,
-    fontSize: 11,
-    fontWeight: '600',
-    marginTop: theme.spacing.xs,
-    textAlign: 'center',
-  },
-  weekRow: {
-    flexDirection: 'row',
-  },
-  weekText: {
-    color: theme.colors.textMuted,
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '800',
-    textAlign: 'center',
-  },
-  dayGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  dayButton: {
-    alignItems: 'center',
-    aspectRatio: 1,
-    justifyContent: 'center',
-    width: `${100 / 7}%`,
-  },
-  dayButtonMuted: {
-    opacity: 0.48,
-  },
-  dayButtonSelected: {
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.pill,
-  },
-  dayButtonDisabled: {
-    opacity: 0.25,
-  },
-  dayText: {
-    color: theme.colors.text,
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  dayTextMuted: {
-    color: theme.colors.textMuted,
-  },
-  dayTextSelected: {
-    color: theme.colors.white,
-  },
-  dayTextDisabled: {
-    color: theme.colors.textMuted,
-  },
-  yearGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-    justifyContent: 'center',
-  },
-  yearButton: {
-    alignItems: 'center',
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    borderWidth: theme.borderWidth,
-    justifyContent: 'center',
-    minHeight: 46,
-    width: '30%',
-  },
-  yearButtonSelected: {
-    backgroundColor: theme.colors.primary,
+  pickerOptionSelected: {
+    backgroundColor: theme.colors.greenSoft,
     borderColor: theme.colors.primary,
   },
-  yearText: {
-    color: theme.colors.text,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  monthGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-    justifyContent: 'center',
-  },
-  monthGridButton: {
-    alignItems: 'center',
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    borderWidth: theme.borderWidth,
-    justifyContent: 'center',
-    minHeight: 46,
-    width: '30%',
-  },
-  monthGridText: {
-    color: theme.colors.text,
+  pickerOptionText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansMedium,
     fontSize: 14,
-    fontWeight: '800',
+    lineHeight: 18,
   },
-  calendarActions: {
-    alignItems: 'center',
+  pickerOptionTextSelected: {
+    color: theme.colors.primaryDark,
+    fontFamily: Fonts.sansSemiBold,
   },
-  calendarCancelButton: {
-    alignItems: 'center',
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    borderWidth: theme.borderWidth,
-    justifyContent: 'center',
-    minHeight: 46,
-    width: '100%',
-  },
-  calendarCancelText: {
-    color: theme.colors.text,
-    fontSize: 15,
-    fontWeight: '800',
+  sheetActions: {
+    gap: theme.spacing.md,
   },
 });

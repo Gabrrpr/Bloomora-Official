@@ -16,8 +16,8 @@ export function isValidEmailOrPhone(value: string) {
   return isValidEmail(value) || isValidPhilippinePhone(value);
 }
 
-export function isFourDigitOtp(value: string) {
-  return /^\d{4}$/.test(value.trim());
+export function isSixDigitOtp(value: string) {
+  return /^\d{6}$/.test(value.trim());
 }
 
 export function required(value: string) {

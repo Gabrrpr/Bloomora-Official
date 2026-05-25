@@ -1,10 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Check, ChevronLeft, Download, Flower2, Info, Leaf, Send, Sparkles } from 'lucide-react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Check, ChevronLeft, Info, Sparkles } from 'lucide-react-native';
 
 import { BloomScreen, PrimaryButton } from '@/components/bloom-ui';
 import { AiDisclaimer, BackHeaderAction } from '@/components/make-personal-ui';
-import { formatPhp, generatedLooks } from '@/constants/shop';
 import { theme } from '@/constants/theme';
 
 type MixStep = 1 | 2 | 3 | 4;
@@ -14,7 +13,7 @@ type OptionCard = {
   description: string;
   disabled?: boolean;
   id: string;
-  imageUrl: string;
+  imageUrl?: string;
   title: string;
 };
 
@@ -163,8 +162,6 @@ export default function MixAndMatchScreen() {
     }),
     [selectedFiller, selectedFinish, selectedFocal, selectedSize, selectedType],
   );
-  const resultTitle = `${selected.size.title} ${selected.type.title.replace(' Arrangement', '')}`;
-
   function continueStep() {
     setStep((current) => (current < 4 ? ((current + 1) as MixStep) : current));
   }
@@ -238,7 +235,6 @@ export default function MixAndMatchScreen() {
 
       {step === 4 ? (
         <FinalResult
-          resultTitle={resultTitle}
           selections={selected}
           selectedFinish={selectedFinish}
           onSelectFinish={setSelectedFinish}
@@ -257,7 +253,7 @@ export default function MixAndMatchScreen() {
         {step < 4 ? (
           <PrimaryButton label="Continue" style={styles.continueButton} onPress={continueStep} />
         ) : (
-          <PrimaryButton label="Add to shopping bag" style={styles.continueButton} onPress={() => {}} />
+          <PrimaryButton label="Create my bouquet" style={styles.continueButton} onPress={() => {}} />
         )}
       </View>
 
@@ -271,7 +267,7 @@ function MixProgress({ step }: { step: MixStep }) {
     <View style={styles.progressCard}>
       <View style={styles.progressTitleRow}>
         <View style={styles.progressBadge}>
-          <Flower2 size={theme.icon.lg} color="#A855F7" />
+          <Sparkles size={theme.icon.lg} color={theme.colors.primary} />
         </View>
         <View style={styles.progressTitleCopy}>
           <Text style={styles.progressTitle}>Mix and Match</Text>
@@ -370,18 +366,8 @@ function HorizontalOptions({
               pressed && !option.disabled && styles.pressed,
             ]}
             onPress={() => onSelect(option.id)}>
-            <View style={styles.optionImageFrame}>
-              <Image source={{ uri: option.imageUrl }} style={styles.optionImage} />
-              {option.disabled ? (
-                <View style={styles.stockPill}>
-                  <Text style={styles.stockText}>Out of stock</Text>
-                </View>
-              ) : null}
-              {selected ? (
-                <View style={styles.selectedCheck}>
-                  <Check size={theme.icon.sm} color={theme.colors.white} />
-                </View>
-              ) : null}
+            <View style={[styles.optionMark, selected && styles.optionMarkSelected]}>
+              {selected ? <Check size={theme.icon.sm} color={theme.colors.white} /> : null}
             </View>
             <Text style={styles.optionTitle} numberOfLines={2}>
               {option.title}
@@ -390,6 +376,7 @@ function HorizontalOptions({
               {option.description}
             </Text>
             {option.badge ? <Text style={styles.optionBadge}>{option.badge}</Text> : null}
+            {option.disabled ? <Text style={styles.stockText}>Out of stock</Text> : null}
           </Pressable>
         );
       })}
@@ -416,12 +403,10 @@ function TipsCard({ tips }: { tips: string[] }) {
 
 function FinalResult({
   onSelectFinish,
-  resultTitle,
   selectedFinish,
   selections,
 }: {
   onSelectFinish: (id: string) => void;
-  resultTitle: string;
   selectedFinish: string;
   selections: {
     filler: OptionCard;
@@ -430,56 +415,36 @@ function FinalResult({
     size: OptionCard;
     type: OptionCard;
   };
-  selectedFinish: string;
 }) {
-  const price = 272000;
-
   return (
     <View style={styles.resultCard}>
       <View style={styles.resultHeader}>
         <View style={styles.resultHeaderCopy}>
-          <Sparkles size={theme.icon.lg} color="#A855F7" />
+          <Sparkles size={theme.icon.lg} color={theme.colors.primary} />
           <View>
-            <Text style={styles.resultKicker}>Final result</Text>
-            <Text style={styles.resultSubtitle}>Preview and analysis</Text>
+            <Text style={styles.resultKicker}>Output placeholder</Text>
+            <Text style={styles.resultSubtitle}>No generated result is shown yet</Text>
           </View>
         </View>
-        <View style={styles.resultActions}>
-          <Send size={theme.icon.sm} color={theme.colors.text} />
-          <Download size={theme.icon.sm} color={theme.colors.text} />
-        </View>
       </View>
 
-      <Image source={{ uri: generatedLooks[0] }} style={styles.resultImage} />
       <View style={styles.resultBody}>
-        <Text style={styles.resultTitle}>{resultTitle}</Text>
+        <View style={styles.outputPlaceholder}>
+          <Sparkles size={theme.icon.lg} color={theme.colors.primary} />
+          <Text style={styles.resultTitle}>This is where the arrangement output will be.</Text>
+          <Text style={styles.resultDescription}>
+            Your selected options are saved below. The bouquet image, pricing, and analysis are hidden for now.
+          </Text>
+        </View>
+
+        <Text style={styles.resultSectionTitle}>Selected direction</Text>
         <Text style={styles.resultDescription}>
-          A {selections.size.title.toLowerCase()} {selections.type.title.toLowerCase()} of {selections.focal.title} with {selections.filler.title.toLowerCase()}, finished with {selections.finish.title.toLowerCase()}.
+          {[selections.size.title, selections.type.title, selections.focal.title, selections.filler.title].join(' / ')}
         </Text>
 
+        <Text style={styles.resultSectionTitle}>Finish</Text>
         <HorizontalOptions options={finishingOptions} selectedId={selectedFinish} onSelect={onSelectFinish} />
-
-        <View style={styles.analysisGrid}>
-          <ScoreCard label="Availability" value="10/10" />
-          <ScoreCard label="Popular" value="9/10" />
-          <ScoreCard label="Easy to care" value="9/10" />
-        </View>
-
-        <View style={styles.priceRow}>
-          <Text style={styles.priceLabel}>Total</Text>
-          <Text style={styles.priceValue}>{formatPhp(price)}</Text>
-        </View>
       </View>
-    </View>
-  );
-}
-
-function ScoreCard({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.scoreCard}>
-      <Leaf size={theme.icon.sm} color={theme.colors.primary} />
-      <Text style={styles.scoreValue}>{value}</Text>
-      <Text style={styles.scoreLabel}>{label}</Text>
     </View>
   );
 }
@@ -635,9 +600,9 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
     borderWidth: theme.borderWidth,
-    minHeight: 188,
-    padding: theme.spacing.sm,
-    width: 136,
+    minHeight: 132,
+    padding: theme.spacing.md,
+    width: 148,
   },
   optionCardSelected: {
     borderColor: theme.colors.primary,
@@ -646,59 +611,43 @@ const styles = StyleSheet.create({
   optionCardDisabled: {
     opacity: 0.48,
   },
-  optionImageFrame: {
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.radius.sm,
-    height: 102,
-    marginBottom: theme.spacing.sm,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  optionImage: {
-    height: '100%',
-    width: '100%',
-  },
-  selectedCheck: {
+  optionMark: {
     alignItems: 'center',
-    backgroundColor: theme.colors.primary,
+    backgroundColor: theme.colors.surfaceAlt,
+    borderColor: theme.colors.border,
     borderRadius: theme.radius.pill,
-    height: 24,
+    borderWidth: theme.borderWidth,
+    height: 30,
     justifyContent: 'center',
-    position: 'absolute',
-    right: 6,
-    top: 6,
-    width: 24,
+    marginBottom: theme.spacing.sm,
+    width: 30,
   },
-  stockPill: {
-    alignSelf: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.88)',
-    borderRadius: theme.radius.pill,
-    bottom: 10,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 3,
-    position: 'absolute',
+  optionMarkSelected: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
   stockText: {
-    color: theme.colors.textMuted,
+    color: theme.colors.danger,
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '800',
+    marginTop: theme.spacing.xs,
   },
   optionTitle: {
     color: theme.colors.text,
     fontSize: 13,
     fontWeight: '800',
     lineHeight: 17,
-    textAlign: 'center',
+    textAlign: 'left',
   },
   optionDescription: {
     color: theme.colors.textMuted,
     fontSize: 11,
     lineHeight: 15,
     marginTop: 2,
-    textAlign: 'center',
+    textAlign: 'left',
   },
   optionBadge: {
-    alignSelf: 'center',
+    alignSelf: 'flex-start',
     backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.pill,
     color: theme.colors.white,
@@ -810,69 +759,39 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontSize: 14,
   },
-  resultActions: {
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-  },
-  resultImage: {
-    backgroundColor: theme.colors.surfaceAlt,
-    height: 260,
-    width: '100%',
-  },
   resultBody: {
     gap: theme.spacing.md,
     padding: theme.spacing.lg,
   },
+  outputPlaceholder: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceAlt,
+    borderColor: theme.colors.subtleBorder,
+    borderRadius: theme.radius.md,
+    borderStyle: 'dashed',
+    borderWidth: theme.borderWidth,
+    gap: theme.spacing.sm,
+    minHeight: 180,
+    justifyContent: 'center',
+    padding: theme.spacing.lg,
+  },
   resultTitle: {
     color: theme.colors.text,
-    fontSize: 19,
+    fontSize: 16,
     fontWeight: '800',
+    lineHeight: 21,
+    textAlign: 'center',
   },
   resultDescription: {
     color: theme.colors.textMuted,
-    fontSize: 14,
-    lineHeight: 20,
+    fontSize: 13,
+    lineHeight: 19,
   },
-  analysisGrid: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
-  scoreCard: {
-    alignItems: 'center',
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    borderWidth: theme.borderWidth,
-    flex: 1,
-    gap: 2,
-    padding: theme.spacing.sm,
-  },
-  scoreValue: {
+  resultSectionTitle: {
     color: theme.colors.text,
     fontSize: 13,
     fontWeight: '800',
-  },
-  scoreLabel: {
-    color: theme.colors.textMuted,
-    fontSize: 10,
-    textAlign: 'center',
-  },
-  priceRow: {
-    alignItems: 'center',
-    borderTopColor: theme.colors.subtleBorder,
-    borderTopWidth: theme.borderWidth,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingTop: theme.spacing.md,
-  },
-  priceLabel: {
-    color: theme.colors.text,
-    fontSize: 15,
-    fontWeight: '800',
-  },
-  priceValue: {
-    color: theme.colors.text,
-    fontSize: 20,
-    fontWeight: '800',
+    textTransform: 'uppercase',
   },
   pressed: {
     opacity: 0.84,

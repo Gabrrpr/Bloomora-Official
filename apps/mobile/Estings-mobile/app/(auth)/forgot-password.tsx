@@ -5,7 +5,7 @@ import { Pressable, Text, View } from 'react-native';
 import { AuthButton, AuthCard, AuthField, AuthScreen, OtpInput, authStyles } from '@/components/auth-ui';
 import {
   type FormErrors,
-  isFourDigitOtp,
+  isSixDigitOtp,
   isValidEmailOrPhone,
   required,
 } from '@/utils/auth-validation';
@@ -41,8 +41,8 @@ export default function ForgotPasswordScreen() {
 
     if (!required(otp)) {
       nextErrors.otp = 'OTP is required.';
-    } else if (!isFourDigitOtp(otp)) {
-      nextErrors.otp = 'OTP must be 4 digits.';
+    } else if (!isSixDigitOtp(otp)) {
+      nextErrors.otp = 'OTP must be 6 digits.';
     }
 
     setErrors(nextErrors);
@@ -103,7 +103,7 @@ export default function ForgotPasswordScreen() {
         step === 'identifier'
           ? 'Enter your email or phone number first to receive an OTP.'
           : step === 'otp'
-            ? 'Enter the 4-digit code before changing your password.'
+            ? 'Enter the 6-digit code before changing your password.'
             : 'Choose a new password for your account.'
       }>
       {step === 'identifier' ? (

@@ -1,5 +1,5 @@
 export const DEFAULT_API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? 'http://127.0.0.1:8001/api/v1';
+  process.env.EXPO_PUBLIC_API_URL ?? 'http://127.0.0.1:8000/api/v1';
 
 let apiBaseUrl = DEFAULT_API_BASE_URL;
 

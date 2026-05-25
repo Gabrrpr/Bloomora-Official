@@ -127,16 +127,17 @@ export function OtpInput({
   value: string;
 }) {
   const refs = useRef<(TextInput | null)[]>([]);
-  const digits = Array.from({ length: 4 }, (_, index) => value[index] ?? '');
+  const otpLength = 6;
+  const digits = Array.from({ length: otpLength }, (_, index) => value[index] ?? '');
 
   function handleChange(text: string, index: number) {
     const nextDigit = text.replace(/\D/g, '').slice(-1);
     const nextDigits = [...digits];
 
     nextDigits[index] = nextDigit;
-    onChangeText(nextDigits.join('').slice(0, 4));
+    onChangeText(nextDigits.join('').slice(0, otpLength));
 
-    if (nextDigit && index < 3) {
+    if (nextDigit && index < otpLength - 1) {
       refs.current[index + 1]?.focus();
     }
   }
@@ -410,11 +411,13 @@ const styles = StyleSheet.create({
   otpWrap: {
     alignItems: 'center',
     gap: theme.spacing.sm,
+    width: '100%',
   },
   otpRow: {
     flexDirection: 'row',
-    gap: theme.spacing.md,
     justifyContent: 'center',
+    maxWidth: 340,
+    width: '100%',
   },
   otpBox: {
     backgroundColor: theme.colors.surface,
@@ -424,7 +427,10 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: 22,
     fontWeight: '800',
-    height: 58,
-    width: 58,
+    height: 52,
+    marginHorizontal: 3,
+    maxWidth: 48,
+    minWidth: 42,
+    flex: 1,
   },
 });

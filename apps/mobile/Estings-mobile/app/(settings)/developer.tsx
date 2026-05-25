@@ -9,8 +9,8 @@ import {
 } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import type { ReactNode } from 'react';
-import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Animated, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts, theme } from '@/constants/theme';
@@ -39,6 +39,36 @@ const aiColors = {
   text: '#FFFFFF',
 };
 
+const backendStatusTones = {
+  checking: {
+    border: '#F4DFA3',
+    dot: '#F8D879',
+    glow: 'rgba(248, 216, 121, 0.26)',
+    shadow: '#F8D879',
+    text: '#FFF0B8',
+  },
+  connected: {
+    border: '#A8E6C1',
+    dot: '#9EE7B8',
+    glow: 'rgba(158, 231, 184, 0.32)',
+    shadow: '#9EE7B8',
+    text: '#C9F6D8',
+  },
+  error: {
+    border: '#F1A7A7',
+    dot: '#F2A6A6',
+    glow: 'rgba(242, 166, 166, 0.34)',
+    shadow: '#F2A6A6',
+    text: '#FFD2D2',
+  },
+} satisfies Record<BackendConnectionResult['status'], {
+  border: string;
+  dot: string;
+  glow: string;
+  shadow: string;
+  text: string;
+}>;
+
 type BackendConnectionResult = {
   checkedAt: Date;
   latencyMs?: number;
@@ -55,6 +85,7 @@ type EndpointTestResult = {
 
 export default function DeveloperScreen() {
   const insets = useSafeAreaInsets();
+  const statusGlow = useRef(new Animated.Value(0)).current;
   const [result, setResult] = useState<PushRegistrationResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [backendResult, setBackendResult] = useState<BackendConnectionResult>({
@@ -64,11 +95,46 @@ export default function DeveloperScreen() {
   });
   const [apiUrlInput, setApiUrlInput] = useState(getApiBaseUrl());
   const [isCheckingBackend, setIsCheckingBackend] = useState(false);
-  const [endpointPath, setEndpointPath] = useState('/products');
+  const [endpointPath, setEndpointPath] = useState('/products/');
   const [endpointResult, setEndpointResult] = useState<EndpointTestResult>({
     checkedAt: new Date(),
     preview: 'No request run yet.',
     status: 'idle',
+  });
+  const backendTone = backendStatusTones[backendResult.status];
+
+  useEffect(() => {
+    statusGlow.setValue(0);
+
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(statusGlow, {
+          duration: 1050,
+          toValue: 1,
+          useNativeDriver: true,
+        }),
+        Animated.timing(statusGlow, {
+          duration: 850,
+          toValue: 0,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+
+    animation.start();
+
+    return () => {
+      animation.stop();
+    };
+  }, [backendResult.status, statusGlow]);
+
+  const glowOpacity = statusGlow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.54, 0.12],
+  });
+  const glowScale = statusGlow.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 2.15],
   });
 
   const loadPushToken = useCallback(async () => {
@@ -90,7 +156,7 @@ export default function DeveloperScreen() {
     const startedAt = Date.now();
 
     try {
-      await apiFetch<unknown[]>('/products');
+      await apiFetch<unknown[]>('/products/');
 
       setBackendResult({
         checkedAt: new Date(),
@@ -123,7 +189,7 @@ export default function DeveloperScreen() {
   }, [checkBackendConnection]);
 
   const testEndpoint = useCallback(async () => {
-    const path = endpointPath.trim() || '/products';
+    const path = endpointPath.trim() || '/products/';
     const normalizedPath = path.startsWith('/') ? path : `/${path}`;
     const startedAt = Date.now();
 
@@ -189,16 +255,30 @@ export default function DeveloperScreen() {
       </View>
 
       <DeveloperSection icon={Server} title="Backend Connection">
-        <View style={styles.card}>
+        <View
+          style={[
+            styles.card,
+            styles.backendStatusCard,
+            {
+              borderColor: backendTone.border,
+              shadowColor: backendTone.shadow,
+            },
+          ]}>
           <View style={styles.statusHeader}>
-            <View
-              style={[
-                styles.statusDot,
-                backendResult.status === 'connected' && styles.statusDotConnected,
-                backendResult.status === 'error' && styles.statusDotError,
-              ]}
-            />
-            <Text style={styles.label}>
+            <View style={styles.statusDotWrap}>
+              <Animated.View
+                style={[
+                  styles.statusGlow,
+                  {
+                    backgroundColor: backendTone.glow,
+                    opacity: glowOpacity,
+                    transform: [{ scale: glowScale }],
+                  },
+                ]}
+              />
+              <View style={[styles.statusDot, { backgroundColor: backendTone.dot }]} />
+            </View>
+            <Text style={[styles.label, { color: backendTone.text }]}>
               {backendResult.status === 'connected'
                 ? 'Connected'
                 : backendResult.status === 'error'
@@ -288,7 +368,7 @@ export default function DeveloperScreen() {
               autoCapitalize="none"
               autoCorrect={false}
               onChangeText={setEndpointPath}
-              placeholder="/products"
+              placeholder="/products/"
               placeholderTextColor={aiColors.muted}
               returnKeyType="go"
               selectTextOnFocus
@@ -453,6 +533,15 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     padding: theme.spacing.lg,
   },
+  backendStatusCard: {
+    elevation: 8,
+    shadowOffset: {
+      height: 0,
+      width: 0,
+    },
+    shadowOpacity: 0.18,
+    shadowRadius: 18,
+  },
   label: {
     color: aiColors.text,
     fontFamily: Fonts.sansExtraBold,
@@ -464,17 +553,31 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.sm,
   },
+  statusDotWrap: {
+    alignItems: 'center',
+    height: 18,
+    justifyContent: 'center',
+    width: 18,
+  },
+  statusGlow: {
+    borderRadius: theme.radius.pill,
+    height: 18,
+    position: 'absolute',
+    width: 18,
+  },
   statusDot: {
     backgroundColor: aiColors.muted,
     borderRadius: theme.radius.pill,
+    elevation: 4,
     height: 10,
+    shadowColor: aiColors.text,
+    shadowOffset: {
+      height: 0,
+      width: 0,
+    },
+    shadowOpacity: 0.34,
+    shadowRadius: 8,
     width: 10,
-  },
-  statusDotConnected: {
-    backgroundColor: aiColors.text,
-  },
-  statusDotError: {
-    backgroundColor: aiColors.muted,
   },
   tokenText: {
     backgroundColor: aiColors.cardAlt,

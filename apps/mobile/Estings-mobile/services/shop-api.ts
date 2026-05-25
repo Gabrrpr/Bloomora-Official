@@ -65,7 +65,7 @@ function getCategoriesFromProducts(products: Product[]): Category[] {
 }
 
 async function getBackendProducts() {
-  const products = await apiFetch<BackendProduct[]>('/products');
+  const products = await apiFetch<BackendProduct[]>('/products/');
   return products.map(mapBackendProduct);
 }
 
