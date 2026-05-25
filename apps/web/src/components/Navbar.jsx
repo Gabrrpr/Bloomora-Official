@@ -10,25 +10,6 @@ import estingsText from "../assets/Estings.svg";
 import manilaBranchImg   from "../assets/homepage/ManilaBranch.png";
 import pampangaBranchImg from "../assets/homepage/PampangaBranch.png";
 
-const SHOP_CATEGORIES = [
-  {
-    title: "Flowers",
-    items: ["Roses", "Sunflowers", "Tulips", "Orchids", "Carnations"]
-  },
-  {
-    title: "Arrangements",
-    items: ["Bouquets", "Vase Arrangements", "Baskets", "Sympathy"]
-  },
-  {
-    title: "Vases",
-    items: ["Glass", "Ceramic", "Wood", "Premium"]
-  },
-  {
-    title: "Wrappings & Accessories",
-    items: ["Premium Wrappers", "Ribbons", "Greeting Cards", "Teddy Bears"]
-  }
-];
-
 const SITE_GREEN = "#2E8B34";
 const NAVY_GREEN = "#35530A";
 const DARK_GREEN = "#0C573E";
@@ -42,35 +23,7 @@ const PROMOTIONS = [
   { text: "Visit us in", highlight: "Manila & Pampanga", cta: "GET DIRECTIONS", page: "contact" },
 ];
 
-const NAV_LINKS = [
-  { label: "Home", page: "home" },
-  {
-    label: "Shop", page: "shop", categorized: true,
-    // 🚀 Dynamically generate the Mega Menu using your SHOP_CATEGORIES constant
-    categories: SHOP_CATEGORIES.map(cat => ({
-      heading: cat.title,
-      headingPage: "shop",
-      headingParam: cat.title, // Passes the main category (e.g., "Flowers")
-      items: cat.items.map(subItem => ({
-        label: subItem,
-        page: "shop",
-        param: subItem // Passes the subcategory (e.g., "Roses")
-      }))
-    }))
-  },
-  {
-    label: "Occasions", page: "occasions",
-    dropdown: [
-      { label: "Birthdays", page: "occasions" }, { label: "Anniversaries", page: "occasions" },
-      { label: "Weddings", page: "occasions" }, { label: "Graduations", page: "occasions" },
-      { label: "Sympathy", page: "occasions" }, { label: "Just Because", page: "occasions" },
-      { label: "Openings", page: "occasions" },
-    ],
-  },
-  { label: "About Us", page: "about" },
-  { label: "Contact Us", page: "contact" },
-  { label: "Help Center", page: null, dropdown: [{ label: "FAQs", page: "faq" }, { label: "Track My Order", page: "orders" }, { label: "Return Policy", page: "return-policy" }, { label: "World Clock", page: "world-clock" }] },
-];
+
 
 const SOCIAL_LINKS = [
   { name: "Facebook",  href: "https://www.facebook.com/profile.php?id=100063877087893", icon: <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg> },
@@ -813,6 +766,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
 
   const [activeCampaigns, setActiveCampaigns] = useState([]);
   const [customCategories, setCustomCategories] = useState([]);
+  const [dynamicShopCategories, setDynamicShopCategories] = useState([]);
 
   const [active, setActive]                     = useState("Home");
   const [locationOpen, setLocationOpen]         = useState(false);
@@ -861,8 +815,46 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
 
   const handleMarkAllRead = () => { setUnreadCount(0); };
   const handleNotifClick  = (n) => {};
+  const NAV_LINKS = [
+    { label: "Home", page: "home" },
+    {
+      label: "Shop", page: "shop", categorized: true,
+      // We are now mapping over the state variable instead of the deleted constant!
+      categories: dynamicShopCategories.map(cat => ({
+        heading: cat.title,
+        headingPage: "shop",
+        headingParam: cat.title,
+        items: (cat.items || []).map(subItem => ({
+          label: subItem,
+          page: "shop",
+          param: subItem
+        }))
+      }))
+    },
+    {
+      label: "Occasions", page: "occasions",
+      dropdown: [
+        { label: "Birthdays", page: "occasions" }, { label: "Anniversaries", page: "occasions" },
+        { label: "Weddings", page: "occasions" }, { label: "Graduations", page: "occasions" },
+        { label: "Sympathy", page: "occasions" }, { label: "Just Because", page: "occasions" },
+        { label: "Openings", page: "occasions" },
+      ],
+    },
+    { label: "About Us", page: "about" },
+    { label: "Contact Us", page: "contact" },
+    { label: "Help Center", page: null, dropdown: [{ label: "FAQs", page: "faq" }, { label: "Track My Order", page: "orders" }, { label: "Return Policy", page: "return-policy" }, { label: "World Clock", page: "world-clock" }] },
+  ];
 
   useEffect(() => {
+    api.get("/products/categories/hierarchy") // Note: Updated to match your products route!
+      .then(data => {
+        if (data) setDynamicShopCategories(data);
+      })
+      .catch(err => console.error("Failed to load category hierarchy", err));
+  }, []);
+
+  useEffect(() => {
+    // 1. Fetch Products for custom categories
     api.get("/products/")
       .then(data => {
         if (data && data.length > 0) {
@@ -873,6 +865,21 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
         }
       })
       .catch(err => console.error("Failed to load nav categories", err));
+
+    // 2. Fetch Active Campaigns
+    api.getActiveCampaigns()
+      .then(data => setActiveCampaigns(data?.campaigns ? data.campaigns : data || []))
+      .catch(err => console.error("Failed to load campaigns", err));
+
+    // 3. Fetch Category Hierarchy for Mega Menu
+    api.get("/products/categories/hierarchy")
+       .then(data => { if (data) setDynamicShopCategories(data); })
+       .catch(err => console.error("Failed to load category hierarchy", err));
+
+    // 4. Branch Popup Logic
+    if (!sessionStorage.getItem("bloomora_branch_popup_dismissed")) {
+        setShowBranchPopup(true);
+    }
   }, []);
 
   useEffect(() => {

@@ -131,6 +131,30 @@ def get_customization_products(db: Session = Depends(get_db)):
         
     return result
 
+
+@router.get("/categories/hierarchy", response_model=List[dict])
+def get_category_hierarchy():
+    """Get dynamic category hierarchy for the frontend Mega Menu."""
+    # Note: Later you can update this to fetch dynamically from your database!
+    return [
+        {
+            "title": "Flowers",
+            "items": ["Roses", "Sunflowers", "Tulips", "Orchids", "Carnations"] 
+        },
+        {
+            "title": "Arrangements",
+            "items": ["Bouquets", "Vase Arrangements", "Baskets", "Sympathy", "Gift Sets"]
+        },
+        {
+            "title": "Vases",
+            "items": ["Glass", "Ceramic", "Wood", "Premium"]
+        },
+        {
+            "title": "Wrappings & Accessories",
+            "items": ["Premium Wrappers", "Ribbons", "Greeting Cards", "Teddy Bears"]
+        }
+    ]
+
 # ── Admin endpoints ───────────────────────────────────────────────────────────
 
 @router.get("/admin/all", response_model=List[dict])
