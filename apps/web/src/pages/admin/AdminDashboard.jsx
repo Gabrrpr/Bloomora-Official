@@ -16,6 +16,8 @@ import AdminSettings       from "./AdminSettings"
 import AdminHero           from "./AdminHero"
 import AdminAdvertisements from "./AdminAdvertisements"
 import AdminCampaigns    from "./AdminCampaigns"
+import AdminFAQ            from "./AdminFAQ"
+import AdminFeaturedProducts from "./AdminFeaturedProducts"
 
 import { api } from "../../services/api.js"
 import { GreenCard, StatCard, WhiteCard, ComingSoon } from "./_adminShared"
@@ -48,11 +50,12 @@ const NAV_MAIN = [
 ]
 
 const NAV_APPEARANCE = [
-  { label: "Hero Section",   d: "M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" },
-  { label: "Advertisements", d: "M3 7h18M3 7a2 2 0 00-2 2v8a2 2 0 002 2h18a2 2 0 002-2V9a2 2 0 00-2-2M3 7V5a2 2 0 012-2h14a2 2 0 012 2v2M8 13h4m-4 3h8" },
-  { label: "Preview Site",   d: "M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" },
-  { label: "Campaigns",     staff: true, d: "M12 2l3 7 7 3-7 3-3 7-3-7-7-3 7-3 3-7" },
-
+  { label: "Hero Section",      d: "M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" },
+  { label: "Advertisements",    d: "M3 7h18M3 7a2 2 0 00-2 2v8a2 2 0 002 2h18a2 2 0 002-2V9a2 2 0 00-2-2M3 7V5a2 2 0 012-2h14a2 2 0 012 2v2M8 13h4m-4 3h8" },
+  { label: "Featured Products", d: "M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" },
+  { label: "FAQ",               d: "M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093M12 17h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" },
+  { label: "Preview Site",      d: "M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" },
+  { label: "Campaigns", staff: true, d: "M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" },
 ]
 
 const REVENUE_PERIODS = [
@@ -1248,10 +1251,12 @@ export default function AdminDashboard({ onNavigate }) {
       case "Transactions":   return <AdminTransactions />
       case "Delivery":       return <AdminDelivery />
       case "Settings":       return <AdminSettings />
-      case "Hero Section":   return <AdminHero />
-      case "Advertisements": return <AdminAdvertisements />
-      case "Campaigns":      return <AdminCampaigns />
-      case "Preview Site":   return <PreviewSitePanel onBack={()=>goTo("Dashboard")} />
+      case "Hero Section":      return <AdminHero />
+      case "Advertisements":    return <AdminAdvertisements />
+      case "Featured Products": return <AdminFeaturedProducts />
+      case "FAQ":               return <AdminFAQ />
+      case "Campaigns":         return <AdminCampaigns />
+      case "Preview Site":      return <PreviewSitePanel onBack={()=>goTo("Dashboard")} />
       default:               return <ComingSoon label={active} />
     }
   }
