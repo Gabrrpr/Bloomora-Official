@@ -249,58 +249,209 @@ function GridCard({ product, wishlist, toggleWishlist, onPreview }) {
   )
 }
 
-function SidebarContent({ categories, activeCategory, setActiveCategory, priceRange, setPriceRange, onClose }) {
+function SidebarContent({ 
+  products, // 👈 Changed from 'hierarchy' to 'products' to build groups dynamically
+  activeCategory, 
+  setActiveCategory, 
+  activeTypes,
+  setActiveTypes,
+  priceRange, 
+  setPriceRange,
+  selectedLocations,
+  setSelectedLocations
+}) {
+  const [minInput, setMinInput] = useState("");
+  const [maxInput, setMaxInput] = useState("");
+
+  // Handle Location Checkboxes
+  const toggleLocation = (loc) => {
+    setSelectedLocations(prev => 
+      prev.includes(loc) ? prev.filter(l => l !== loc) : [...prev, loc]
+    );
+  };
+
+  // Handle Type Checkboxes (e.g., Rose, Sunflower)
+  const toggleType = (type) => {
+    setActiveTypes(prev => 
+      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+    );
+  };
+
+  const applyPrice = () => {
+    const min = minInput ? Number(minInput) : 0;
+    const max = maxInput ? Number(maxInput) : 99999;
+    setPriceRange([min, max]);
+  };
+
+  const clearAll = () => {
+    setActiveCategory("All");
+    setActiveTypes([]);
+    setSelectedLocations([]);
+    setPriceRange([0, 99999]);
+    setMinInput("");
+    setMaxInput("");
+  };
+
+  // 🚀 DYNAMIC GROUPING: Floral vs Non-Floral (and hide add-ons)
+  const groupedHierarchy = { floral: {}, 'non-floral': {} };
+  
+  (products || []).forEach(p => {
+    const catNorm = (p.category || "").toLowerCase().trim();
+    if (catNorm === 'add-on' || catNorm === 'addon') return; // Hide add-ons entirely
+
+    const group = (p.product_group || 'floral').toLowerCase().trim();
+    const cat = p.category || "Uncategorized";
+    const type = p.product_type;
+    
+    // Safety check just in case a weird group name gets in
+    if (!groupedHierarchy[group]) groupedHierarchy[group] = {};
+    if (!groupedHierarchy[group][cat]) groupedHierarchy[group][cat] = new Set();
+    if (type) groupedHierarchy[group][cat].add(type);
+  });
+
   return (
-    <div>
-      {onClose && (
-        <div className="flex items-center justify-between mb-5">
-          <h3 className="text-sm font-bold text-gray-800">Filters</h3>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-400 transition-all">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
-          </button>
-        </div>
-      )}
+    <div className="w-full text-[13px] text-gray-700 font-sans pr-4">
+      
+      {/* 1. CATEGORIES SECTION */}
       <div className="mb-6">
-        <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2.5">Category</p>
-        <div className="flex flex-col gap-0.5">
-          {categories.map(cat => (
-            <button key={cat} onClick={() => { setActiveCategory(cat); onClose?.() }}
-              className="text-left px-3 py-2 rounded-lg text-sm transition-all capitalize"
-              style={{ fontWeight:activeCategory===cat?600:400, color:activeCategory===cat?"white":"#4b5563", backgroundColor:activeCategory===cat?G:"transparent" }}
-              onMouseEnter={e => { if (activeCategory!==cat) e.currentTarget.style.backgroundColor="#f3f4f6" }}
-              onMouseLeave={e => { if (activeCategory!==cat) e.currentTarget.style.backgroundColor="transparent" }}>
-              {cat}
-            </button>
-          ))}
+        <h3 className="font-bold text-sm mb-4 flex items-center gap-2 text-gray-800">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h7"/></svg>
+          All Categories
+        </h3>
+        
+        <button 
+          onClick={() => { setActiveCategory("All"); setActiveTypes([]); }}
+          className="w-full text-left font-bold mb-4 transition-colors hover:text-[#2E8B34]"
+          style={{ color: activeCategory === "All" ? G : "#1f2937" }}>
+          All Products
+        </button>
+
+        <div className="space-y-6">
+          {Object.keys(groupedHierarchy).map(groupName => {
+            const categories = Object.keys(groupedHierarchy[groupName]);
+            if (categories.length === 0) return null;
+
+            return (
+              <div key={groupName}>
+                <h4 className="font-bold text-xs uppercase tracking-wider text-gray-400 mb-2">
+                  {groupName}
+                </h4>
+                <ul className="space-y-2.5">
+                  {categories.map(cat => (
+                    <li key={cat}>
+                      <button 
+                        onClick={() => {
+                          setActiveCategory(cat);
+                          setActiveTypes([]); // Reset types when switching categories
+                        }}
+                        className="w-full text-left flex items-center gap-1.5 transition-colors hover:text-[#2E8B34] capitalize"
+                        style={{ 
+                          color: activeCategory === cat ? G : "#4b5563",
+                          fontWeight: activeCategory === cat ? "600" : "500"
+                        }}>
+                        {activeCategory === cat && (
+                          <span style={{ color: G, fontSize: '10px' }}>▶</span>
+                        )}
+                        {cat}
+                      </button>
+
+                      {/* Collapsible Sub-types (e.g., Rose, Sunflower) */}
+                      {activeCategory === cat && groupedHierarchy[groupName][cat].size > 0 && (
+                        <ul className="mt-2 ml-4 space-y-2 border-l-2 pl-3" style={{ borderColor: "#e5e7eb" }}>
+                          {Array.from(groupedHierarchy[groupName][cat]).map(type => (
+                            <li key={type} className="flex items-center gap-2">
+                              <input 
+                                type="checkbox" 
+                                id={`type-${type}`}
+                                checked={activeTypes.includes(type)}
+                                onChange={() => toggleType(type)}
+                                className="w-3.5 h-3.5 rounded-sm border-gray-300 cursor-pointer focus:ring-0"
+                                style={{ accentColor: G }}
+                              />
+                              <label htmlFor={`type-${type}`} className="cursor-pointer hover:text-gray-900 capitalize">
+                                {type}
+                              </label>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
+          })}
         </div>
       </div>
-      <div className="mb-6">
-        <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2.5">Price Range</p>
-        <div className="flex flex-col gap-0.5">
-          {PRICE_RANGES.map(([min, max]) => (
-            <button key={`${min}-${max}`} onClick={() => setPriceRange([min, max])}
-              className="text-left px-3 py-2 rounded-lg text-sm transition-all"
-              style={{ fontWeight:priceRange[0]===min&&priceRange[1]===max?600:400, color:priceRange[0]===min&&priceRange[1]===max?"white":"#4b5563", backgroundColor:priceRange[0]===min&&priceRange[1]===max?G:"transparent" }}
-              onMouseEnter={e => { if (priceRange[0]!==min||priceRange[1]!==max) e.currentTarget.style.backgroundColor="#f3f4f6" }}
-              onMouseLeave={e => { if (priceRange[0]!==min||priceRange[1]!==max) e.currentTarget.style.backgroundColor="transparent" }}>
-              ₱{min.toLocaleString()} – ₱{max.toLocaleString()}
-            </button>
-          ))}
-          <button onClick={() => setPriceRange([0, 2500])}
-            className="text-left px-3 py-2 rounded-lg text-sm transition-all"
-            style={{ fontWeight:priceRange[0]===0&&priceRange[1]===2500?600:400, color:priceRange[0]===0&&priceRange[1]===2500?"white":"#4b5563", backgroundColor:priceRange[0]===0&&priceRange[1]===2500?G:"transparent" }}
-            onMouseEnter={e => { if (priceRange[0]!==0||priceRange[1]!==2500) e.currentTarget.style.backgroundColor="#f3f4f6" }}
-            onMouseLeave={e => { if (priceRange[0]!==0||priceRange[1]!==2500) e.currentTarget.style.backgroundColor="transparent" }}>
-            All Prices
-          </button>
-        </div>
-      </div>
+
+      <hr className="my-5 border-gray-200" />
+
+      {/* 2. SEARCH FILTERS SECTION */}
       <div>
-        <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2.5">Availability</p>
-        <label className="flex items-center gap-2 cursor-pointer px-1">
-          <input type="checkbox" defaultChecked className="w-3.5 h-3.5" style={{ accentColor:G }}/>
-          <span className="text-sm text-gray-600">In Stock</span>
-        </label>
+        <h3 className="font-bold text-sm mb-4 flex items-center gap-2 text-gray-800 uppercase tracking-wide">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
+          Search Filter
+        </h3>
+
+        {/* Shipped From */}
+        <div className="mb-6">
+          <h4 className="font-medium mb-3 text-gray-800">Shipped From</h4>
+          <ul className="space-y-2.5">
+            {["Manila", "Pampanga"].map(loc => (
+              <li key={loc} className="flex items-center gap-2">
+                <input 
+                  type="checkbox" 
+                  id={`loc-${loc}`}
+                  checked={selectedLocations.includes(loc)}
+                  onChange={() => toggleLocation(loc)}
+                  className="w-3.5 h-3.5 rounded-sm border-gray-300 cursor-pointer focus:ring-0"
+                  style={{ accentColor: G }}
+                />
+                <label htmlFor={`loc-${loc}`} className="cursor-pointer hover:text-gray-900">
+                  {loc}
+                </label>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <hr className="my-4 border-gray-100" />
+
+        {/* Price Range */}
+        <div className="mb-6">
+          <h4 className="font-medium mb-3 text-gray-800">Price Range</h4>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <input 
+              type="number" 
+              placeholder="₱ MIN" 
+              value={minInput}
+              onChange={(e) => setMinInput(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded shadow-sm outline-none focus:border-green-500"
+            />
+            <span className="text-gray-400">—</span>
+            <input 
+              type="number" 
+              placeholder="₱ MAX" 
+              value={maxInput}
+              onChange={(e) => setMaxInput(e.target.value)}
+              className="w-full px-2 py-1.5 text-xs border border-gray-300 rounded shadow-sm outline-none focus:border-green-500"
+            />
+          </div>
+          <button 
+            onClick={applyPrice}
+            className="w-full py-1.5 text-white font-bold rounded transition-opacity hover:opacity-90 active:scale-95 text-xs tracking-wider"
+            style={{ backgroundColor: G }}>
+            APPLY
+          </button>
+        </div>
+
+        {/* Clear All */}
+        <button 
+          onClick={clearAll}
+          className="w-full py-2 bg-gray-100 text-gray-700 font-bold rounded transition-colors hover:bg-gray-200 active:scale-95 text-xs tracking-wider border border-gray-200 mt-2">
+          CLEAR ALL
+        </button>
+
       </div>
     </div>
   )
@@ -355,8 +506,10 @@ export default function Shop({ onNavigate, initialCategory = "All" }) {
   const [sortBy, setSortBy]                   = useState("best-selling")
   const [activeCategory, setActiveCategory]   = useState("All")
   const [categoryHierarchy, setCategoryHierarchy] = useState([])
+  const [activeTypes, setActiveTypes] = useState([]) 
+  const [selectedLocations, setSelectedLocations] = useState([])
   
-  const [priceRange, setPriceRange]           = useState([0, 2500])
+  const [priceRange, setPriceRange]           = useState([0, 999999])
   const [wishlist, setWishlist]               = useState([])
   const [sortOpen, setSortOpen]               = useState(false)
   const [filterOpen, setFilterOpen]           = useState(false)
@@ -442,7 +595,10 @@ export default function Shop({ onNavigate, initialCategory = "All" }) {
 
   // 🚀 SMART FILTER LOGIC
   const filtered = products
+    // 1. Exclude Add-ons
     .filter(p => normalizeCat(p.category) !== 'add-on' && normalizeCat(p.category) !== 'addon')
+
+    // 2. Main Category Filter (Your existing logic)
     .filter(p => {
       const activeNorm = normalizeCat(activeCategory);
       const pcNorm = normalizeCat(p.category);
@@ -457,14 +613,39 @@ export default function Shop({ onNavigate, initialCategory = "All" }) {
 
       return pcNorm === activeNorm;
     })
-    .filter(p => p.price >= priceRange[0] && p.price <= priceRange[1])
-    .sort((a, b) => {
-      if (sortBy === "price-asc")  return a.price - b.price
-      if (sortBy === "price-desc") return b.price - a.price
-      if (sortBy === "rating")     return b.rating - a.rating
-      if (sortBy === "newest")     return b.id - a.id
-      return b.reviews - a.reviews
+
+    // 3. 🚀 NEW: Checkbox Types Filter (e.g., Only show "Rose" if checked)
+    .filter(p => {
+      if (!activeTypes || activeTypes.length === 0) return true; // Show all if no checkboxes are ticked
+      const ptNorm = normalizeCat(p.product_type || "");
+      const activeTypesNorm = activeTypes.map(normalizeCat);
+      return activeTypesNorm.includes(ptNorm);
     })
+
+    // 4. 🚀 NEW: Location Filter (Shipped From)
+    .filter(p => {
+      if (!selectedLocations || selectedLocations.length === 0) return true;
+      // Note: Assuming your API returns a 'shipped_from' or 'branch' field. 
+      // If it doesn't yet, this safely bypasses the filter until you add it to the backend.
+      const locNorm = normalizeCat(p.shipped_from || ""); 
+      const selectedLocsNorm = selectedLocations.map(normalizeCat);
+      return selectedLocsNorm.includes(locNorm);
+    })
+
+    // 5. Price Filter
+    .filter(p => p.price >= priceRange[0] && p.price <= priceRange[1])
+
+    // 6. 🚀 FIXED: Sorting (UUIDs cannot be subtracted, so we sort by date)
+    .sort((a, b) => {
+      if (sortBy === "price-asc")  return a.price - b.price;
+      if (sortBy === "price-desc") return b.price - a.price;
+      if (sortBy === "rating")     return (b.rating || 0) - (a.rating || 0);
+      if (sortBy === "newest") {
+        // Fallback to checking timestamps since IDs are now UUID strings
+        return new Date(b.created_at || 0) - new Date(a.created_at || 0);
+      }
+      return (b.reviews || 0) - (a.reviews || 0);
+    });
 
   const getGridStyle = () => {
     if (viewAs === "list")  return { display:"flex", flexDirection:"column", gap:"10px" }
@@ -493,15 +674,19 @@ export default function Shop({ onNavigate, initialCategory = "All" }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
         <div className="flex gap-6 lg:gap-8">
 
-          <aside className="w-48 flex-shrink-0 hidden lg:block">
-            <SidebarContent
-              categories={dynamicCategories}
-              activeCategory={activeCategory}
-              setActiveCategory={setActiveCategory}
-              priceRange={priceRange}
-              setPriceRange={setPriceRange}
-            />
-          </aside>
+          <aside className="w-48 hidden lg:block flex-shrink-0">
+          <SidebarContent 
+            products={products} // 👈 Change this from hierarchy to products
+            activeCategory={activeCategory} 
+            setActiveCategory={setActiveCategory}
+            activeTypes={activeTypes}
+            setActiveTypes={setActiveTypes}
+            priceRange={priceRange}
+            setPriceRange={setPriceRange}
+            selectedLocations={selectedLocations}
+            setSelectedLocations={setSelectedLocations}
+          />
+        </aside>
 
           <div className="flex-1 min-w-0">
 

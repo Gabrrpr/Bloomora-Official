@@ -1,19 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { addToCart } from "../utils/cart.js"
 import { useTheme } from "../context/ThemeContext"
-
-import ferrero8Img    from "../assets/products/addons/ferrero8pcs.webp"
-import ferrero12Img   from "../assets/products/addons/ferrero12pcs.webp"
-import ferrero24Img   from "../assets/products/addons/ferrero24pcs.webp"
-import hersheyOrgImg  from "../assets/products/addons/hersheyOriginal.webp"
-import herseyCncImg   from "../assets/products/addons/hersheyCnC.webp"
-import twixImg        from "../assets/products/addons/twix.webp"
-import cadburyFNImg   from "../assets/products/addons/CadburyFruit&Nut.webp"
-import cadburyMCImg   from "../assets/products/addons/CadburyMilkChoc.webp"
-import mnmsMilkImg    from "../assets/products/addons/M&MsMilkChoc.webp"
-import mnmsPeanutImg  from "../assets/products/addons/M&MsPeanut.webp"
-import snickersImg    from "../assets/products/addons/Snickers.webp"
-import tobleroneImg   from "../assets/products/addons/Toblerone.webp"
+import { api } from "../services/api.js"
 
 import withCardImg from "../assets/productpreview/withCard.webp"
 import noCardImg   from "../assets/productpreview/noCard.webp"
@@ -23,21 +11,6 @@ import writingImg  from "../assets/productpreview/WritingLetter.png"
 const G   = "#2E8B34"
 const DG  = "#0C573E"
 const ERR = "#ef4444"
-
-const ALL_ADD_ONS = [
-  { id:"ferrero8",   label:"Ferrero Rocher",      sub:"8 pieces",         price:199, img:ferrero8Img,   stock: 10 },
-  { id:"ferrero12",  label:"Ferrero Rocher",      sub:"12 pieces",        price:349, img:ferrero12Img,  stock: 10 },
-  { id:"ferrero24",  label:"Ferrero Rocher",      sub:"24 pieces",        price:599, img:ferrero24Img,  stock: 10 },
-  { id:"hersheyOrg", label:"Hershey's Original",  sub:"Chocolate bar",    price:149, img:hersheyOrgImg, stock: 10 },
-  { id:"herseyCnC",  label:"Hershey's C&C",       sub:"Cookies & Cream",  price:149, img:herseyCncImg,  stock: 10 },
-  { id:"twix",       label:"Twix",                sub:"Caramel chocolate", price:149, img:twixImg,       stock: 10 },
-  { id:"cadburyFN",  label:"Cadbury Fruit & Nut", sub:"Chocolate bar",    price:169, img:cadburyFNImg,  stock: 10 },
-  { id:"cadburyMC",  label:"Cadbury Milk Choc",   sub:"Chocolate bar",    price:149, img:cadburyMCImg,  stock: 10 },
-  { id:"mnmsMilk",   label:"M&M's Milk Choc",     sub:"Chocolate pouch",  price:179, img:mnmsMilkImg,   stock: 10 },
-  { id:"mnmsPeanut", label:"M&M's Peanut",        sub:"Chocolate pouch",  price:179, img:mnmsPeanutImg, stock: 10 },
-  { id:"snickers",   label:"Snickers",             sub:"Caramel & peanut", price:149, img:snickersImg,   stock: 0 },
-  { id:"toblerone",  label:"Toblerone",            sub:"Swiss chocolate",  price:199, img:tobleroneImg,  stock: 10 },
-]
 
 const INITIAL_ADDON_COUNT = 4
 const QTY_OPTIONS = ["1 pc","3 pcs","6 pcs","Dozen"]
@@ -51,47 +24,61 @@ const CATEGORY_COLORS = {
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"]
 const WDAYS  = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
 
-const pctOff       = (o,p) => Math.round((1-p/o)*100)
-const pad          = d     => String(d).padStart(2,"0")
-const toStr        = d     => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
-const todayD       = ()    => { const d=new Date(); d.setHours(0,0,0,0); return d }
-const tomorrowStr  = ()    => { const d=new Date(); d.setDate(d.getDate()+1); return toStr(d) }
-const fmtDate      = s     => { if(!s)return""; const[y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d).toLocaleDateString("en-PH",{weekday:"short",month:"short",day:"numeric"}) }
-const isTodayAvail = ()    => new Date().getHours()<14
+const pctOff      = (o, p) => Math.round((1 - p / o) * 100)
+const pad         = d      => String(d).padStart(2, "0")
+const toStr       = d      => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
+const todayD      = ()     => { const d = new Date(); d.setHours(0,0,0,0); return d }
+const tomorrowStr = ()     => { const d = new Date(); d.setDate(d.getDate()+1); return toStr(d) }
+const fmtDate     = s      => { if (!s) return ""; const [y,m,d] = s.split("-").map(Number); return new Date(y,m-1,d).toLocaleDateString("en-PH",{weekday:"short",month:"short",day:"numeric"}) }
+const isTodayAvail = ()    => new Date().getHours() < 14
 
-function MiniCalendar({selected,onSelect}){
-  const now=todayD()
-  const[vd,setVd]=useState({y:now.getFullYear(),m:now.getMonth()})
-  const first=new Date(vd.y,vd.m,1).getDay()
-  const dim=new Date(vd.y,vd.m+1,0).getDate()
-  const cells=[...Array(first).fill(null),...Array.from({length:dim},(_,i)=>i+1)]
-  const cd=d=>new Date(vd.y,vd.m,d)
-  const past=d=>cd(d)<now
-  const tod=d=>cd(d).toDateString()===now.toDateString()
-  const sel=d=>{if(!selected)return false;const[y,m,dd]=selected.split("-").map(Number);return cd(d).toDateString()===new Date(y,m-1,dd).toDateString()}
-  return(
+/* ── Mini Calendar ── */
+function MiniCalendar({ selected, onSelect }) {
+  const now = todayD()
+  const [vd, setVd] = useState({ y: now.getFullYear(), m: now.getMonth() })
+  const first = new Date(vd.y, vd.m, 1).getDay()
+  const dim   = new Date(vd.y, vd.m+1, 0).getDate()
+  const cells = [...Array(first).fill(null), ...Array.from({ length: dim }, (_, i) => i+1)]
+  const cd  = d => new Date(vd.y, vd.m, d)
+  const past = d => cd(d) < now
+  const tod  = d => cd(d).toDateString() === now.toDateString()
+  const sel  = d => {
+    if (!selected) return false
+    const [y,m,dd] = selected.split("-").map(Number)
+    return cd(d).toDateString() === new Date(y,m-1,dd).toDateString()
+  }
+  return (
     <div className="mt-2 border border-gray-200 rounded-xl overflow-hidden bg-white">
       <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-        <button onClick={()=>setVd(v=>v.m===0?{y:v.y-1,m:11}:{...v,m:v.m-1})} className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 cursor-pointer">
+        <button onClick={() => setVd(v => v.m===0 ? {y:v.y-1,m:11} : {...v,m:v.m-1})}
+          className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 cursor-pointer">
           <svg width="10" height="10" fill="none" stroke="#6b7280" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7"/></svg>
         </button>
         <span className="text-sm font-semibold text-gray-800">{MONTHS[vd.m]} {vd.y}</span>
-        <button onClick={()=>setVd(v=>v.m===11?{y:v.y+1,m:0}:{...v,m:v.m+1})} className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 cursor-pointer">
+        <button onClick={() => setVd(v => v.m===11 ? {y:v.y+1,m:0} : {...v,m:v.m+1})}
+          className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 cursor-pointer">
           <svg width="10" height="10" fill="none" stroke="#6b7280" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
         </button>
       </div>
       <div className="p-3">
         <div className="grid grid-cols-7 mb-1.5">
-          {WDAYS.map((d,i)=><div key={i} className="text-center text-[10px] font-medium text-gray-400">{d}</div>)}
+          {WDAYS.map((d,i) => <div key={i} className="text-center text-[10px] font-medium text-gray-400">{d}</div>)}
         </div>
         <div className="grid grid-cols-7 gap-0.5">
-          {cells.map((d,i)=>{
-            if(!d)return<div key={i}/>
-            const p=past(d),t=tod(d),s=sel(d)
-            return(
-              <button key={i} onClick={()=>!p&&onSelect(toStr(cd(d)))} disabled={p}
+          {cells.map((d,i) => {
+            if (!d) return <div key={i}/>
+            const p = past(d), t = tod(d), s = sel(d)
+            return (
+              <button key={i} onClick={() => !p && onSelect(toStr(cd(d)))} disabled={p}
                 className="h-8 rounded-lg text-xs transition-all"
-                style={{cursor:p?"default":"pointer",color:s?"white":p?"#d1d5db":t?G:"#374151",background:s?G:t?"#f0fdf4":"transparent",fontWeight:s||t?600:400,outline:t&&!s?`2px solid ${G}`:"none",outlineOffset:-1}}>
+                style={{
+                  cursor: p ? "default" : "pointer",
+                  color: s ? "white" : p ? "#d1d5db" : t ? G : "#374151",
+                  background: s ? G : t ? "#f0fdf4" : "transparent",
+                  fontWeight: s || t ? 600 : 400,
+                  outline: t && !s ? `2px solid ${G}` : "none",
+                  outlineOffset: -1
+                }}>
                 {d}
               </button>
             )
@@ -103,66 +90,112 @@ function MiniCalendar({selected,onSelect}){
 }
 
 /* ── Confetti ── */
-const CONFETTI_COLORS=["#2E8B34","#f472b6","#fbbf24","#60a5fa","#a78bfa","#f87171","#34d399","#fb923c"]
-const CONFETTI_PIECES=Array.from({length:72},(_,i)=>{
-  const angle=(i/72)*360+(Math.random()-0.5)*18,dist=100+Math.random()*140,rad=angle*Math.PI/180
-  return{id:i,color:CONFETTI_COLORS[i%8],dx:Math.cos(rad)*dist,dy:Math.sin(rad)*dist,delay:Math.random()*0.16,dur:1+Math.random()*0.6,size:6+Math.random()*10,rot:(Math.random()-0.5)*720,type:i%3===0?"circle":i%3===1?"rect":"tri"}
+const CONFETTI_COLORS = ["#2E8B34","#f472b6","#fbbf24","#60a5fa","#a78bfa","#f87171","#34d399","#fb923c"]
+const CONFETTI_PIECES = Array.from({ length: 72 }, (_, i) => {
+  const angle = (i/72)*360 + (Math.random()-0.5)*18
+  const dist  = 100 + Math.random()*140
+  const rad   = angle * Math.PI / 180
+  return {
+    id: i,
+    color: CONFETTI_COLORS[i%8],
+    dx: Math.cos(rad)*dist,
+    dy: Math.sin(rad)*dist,
+    delay: Math.random()*0.16,
+    dur: 1 + Math.random()*0.6,
+    size: 6 + Math.random()*10,
+    rot: (Math.random()-0.5)*720,
+    type: i%3===0 ? "circle" : i%3===1 ? "rect" : "tri"
+  }
 })
-function injectBurstCSS(){
-  if(document.getElementById("bloomora-confetti-css"))return
-  const s=document.createElement("style");s.id="bloomora-confetti-css"
-  s.textContent=`@keyframes cf-burst{0%{transform:translate(0,0) rotate(0deg) scale(0.3);opacity:0}10%{transform:translate(0,0) rotate(0deg) scale(1.1);opacity:1}60%{transform:translate(var(--dx),var(--dy)) rotate(calc(var(--r)*0.65)) scale(1);opacity:1}100%{transform:translate(calc(var(--dx)*1.25),calc(var(--dy)*1.35)) rotate(var(--r)) scale(0.2);opacity:0}}`
+
+function injectBurstCSS() {
+  if (document.getElementById("bloomora-confetti-css")) return
+  const s = document.createElement("style")
+  s.id = "bloomora-confetti-css"
+  s.textContent = `@keyframes cf-burst{0%{transform:translate(0,0) rotate(0deg) scale(0.3);opacity:0}10%{transform:translate(0,0) rotate(0deg) scale(1.1);opacity:1}60%{transform:translate(var(--dx),var(--dy)) rotate(calc(var(--r)*0.65)) scale(1);opacity:1}100%{transform:translate(calc(var(--dx)*1.25),calc(var(--dy)*1.35)) rotate(var(--r)) scale(0.2);opacity:0}}`
   document.head.appendChild(s)
 }
-function Confetti(){
-  useEffect(()=>{injectBurstCSS()},[])
-  return(
+
+function Confetti() {
+  useEffect(() => { injectBurstCSS() }, [])
+  return (
     <div className="absolute inset-0 pointer-events-none z-10 flex items-center justify-center">
-      {CONFETTI_PIECES.map(p=>(
-        <div key={p.id} style={{position:"absolute",width:p.type==="rect"?`${p.size*1.8}px`:`${p.size}px`,height:`${p.size}px`,background:p.type==="tri"?"transparent":p.color,borderRadius:p.type==="circle"?"50%":p.type==="rect"?"2px":"0",borderLeft:p.type==="tri"?`${p.size/2}px solid transparent`:"none",borderRight:p.type==="tri"?`${p.size/2}px solid transparent`:"none",borderBottom:p.type==="tri"?`${p.size}px solid ${p.color}`:"none","--dx":`${p.dx}px`,"--dy":`${p.dy}px`,"--r":`${p.rot}deg`,animation:`cf-burst ${p.dur}s cubic-bezier(0.22,0.61,0.36,1) ${p.delay}s 1 forwards`}}/>
+      {CONFETTI_PIECES.map(p => (
+        <div key={p.id} style={{
+          position: "absolute",
+          width:  p.type==="rect" ? `${p.size*1.8}px` : `${p.size}px`,
+          height: `${p.size}px`,
+          background: p.type==="tri" ? "transparent" : p.color,
+          borderRadius: p.type==="circle" ? "50%" : p.type==="rect" ? "2px" : "0",
+          borderLeft:   p.type==="tri" ? `${p.size/2}px solid transparent` : "none",
+          borderRight:  p.type==="tri" ? `${p.size/2}px solid transparent` : "none",
+          borderBottom: p.type==="tri" ? `${p.size}px solid ${p.color}` : "none",
+          "--dx": `${p.dx}px`,
+          "--dy": `${p.dy}px`,
+          "--r":  `${p.rot}deg`,
+          animation: `cf-burst ${p.dur}s cubic-bezier(0.22,0.61,0.36,1) ${p.delay}s 1 forwards`
+        }}/>
       ))}
     </div>
   )
 }
 
 /* ── AI Panel ── */
-const RELATIONSHIP_OPTIONS=["Best Friend","Partner / Lover","Spouse","Mother","Father","Sibling","Grandparent","Child","Colleague","Boss","Teacher","Mentor","Classmate","Neighbor","Acquaintance"]
-const OCCASION_OPTIONS=["Birthday","Anniversary","Valentine's Day","Mother's Day","Father's Day","Graduation","Get Well Soon","Thank You","Congratulations","Just Because","Sympathy","Wedding","New Baby","Farewell"]
-const TONE_OPTIONS=[{value:"warm",label:"Warm & Heartfelt"},{value:"playful",label:"Playful & Fun"},{value:"elegant",label:"Elegant & Formal"},{value:"simple",label:"Simple & Sweet"}]
+const RELATIONSHIP_OPTIONS = ["Best Friend","Partner / Lover","Spouse","Mother","Father","Sibling","Grandparent","Child","Colleague","Boss","Teacher","Mentor","Classmate","Neighbor","Acquaintance"]
+const OCCASION_OPTIONS     = ["Birthday","Anniversary","Valentine's Day","Mother's Day","Father's Day","Graduation","Get Well Soon","Thank You","Congratulations","Just Because","Sympathy","Wedding","New Baby","Farewell"]
+const TONE_OPTIONS         = [
+  { value:"warm",     label:"Warm & Heartfelt" },
+  { value:"playful",  label:"Playful & Fun" },
+  { value:"elegant",  label:"Elegant & Formal" },
+  { value:"simple",   label:"Simple & Sweet" },
+]
 
-function AIPanel({onUse,onBack}){
-  const[relationship,setRelationship]=useState("")
-  const[occasion,setOccasion]=useState("")
-  const[tone,setTone]=useState("warm")
-  const[extra,setExtra]=useState("")
-  const[loading,setLoading]=useState(false)
-  const[generated,setGenerated]=useState("")
-  const[err,setErr]=useState("")
+function AIPanel({ onUse, onBack }) {
+  const [relationship, setRelationship] = useState("")
+  const [occasion,     setOccasion]     = useState("")
+  const [tone,         setTone]         = useState("warm")
+  const [extra,        setExtra]        = useState("")
+  const [loading,      setLoading]      = useState(false)
+  const [generated,    setGenerated]    = useState("")
+  const [err,          setErr]          = useState("")
 
-  const generate=async()=>{
-    if(!relationship||!occasion){setErr("Please select a relationship and occasion.");return}
-    setErr("");setLoading(true);setGenerated("")
-    const toneLabel=TONE_OPTIONS.find(t=>t.value===tone)?.label||"Warm & Heartfelt"
-    const prompt=`Write a short, genuine greeting card message for someone's ${occasion}. The sender's relationship to the recipient is: ${relationship}. Tone: ${toneLabel}.${extra?` Extra context: ${extra}.`:""} Keep it 2-4 sentences, personal, and sincere. Write only the message itself.`
-    try{
-      const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:200,system:"You write short, heartfelt greeting card messages. Respond with only the message text.",messages:[{role:"user",content:prompt}]})})
-      const data=await res.json()
-      const text=data?.content?.[0]?.text?.trim()||""
-      if(!text)throw new Error("Empty")
+  const generate = async () => {
+    if (!relationship || !occasion) { setErr("Please select a relationship and occasion."); return }
+    setErr(""); setLoading(true); setGenerated("")
+    const toneLabel = TONE_OPTIONS.find(t => t.value===tone)?.label || "Warm & Heartfelt"
+    const prompt = `Write a short, genuine greeting card message for someone's ${occasion}. The sender's relationship to the recipient is: ${relationship}. Tone: ${toneLabel}.${extra ? ` Extra context: ${extra}.` : ""} Keep it 2-4 sentences, personal, and sincere. Write only the message itself.`
+    try {
+      const res  = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 200,
+          system: "You write short, heartfelt greeting card messages. Respond with only the message text.",
+          messages: [{ role: "user", content: prompt }]
+        })
+      })
+      const data = await res.json()
+      const text = data?.content?.[0]?.text?.trim() || ""
+      if (!text) throw new Error("Empty")
       setGenerated(text)
-    }catch(e){setErr("Could not generate message. Please try again.")}
+    } catch (e) {
+      setErr("Could not generate message. Please try again.")
+    }
     setLoading(false)
   }
 
-  return(
+  return (
     <div className="pms-scroll flex-1 overflow-y-auto px-7 py-6 flex flex-col gap-4">
       <div>
-        <button onClick={onBack} className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 cursor-pointer bg-transparent border-none mb-4 p-0">
+        <button onClick={onBack}
+          className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 cursor-pointer bg-transparent border-none mb-4 p-0">
           <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7"/></svg>
           Back to card form
         </button>
         <div className="flex items-center gap-3 mb-1">
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{background:`linear-gradient(135deg,${DG},${G})`}}>
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
             <svg width="17" height="17" fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
           </div>
           <div>
@@ -173,12 +206,14 @@ function AIPanel({onUse,onBack}){
       </div>
 
       <div className="grid grid-cols-2 gap-3">
-        {[["Relationship",relationship,setRelationship,RELATIONSHIP_OPTIONS],["Occasion",occasion,setOccasion,OCCASION_OPTIONS]].map(([l,val,setter,opts])=>(
+        {[["Relationship",relationship,setRelationship,RELATIONSHIP_OPTIONS],["Occasion",occasion,setOccasion,OCCASION_OPTIONS]].map(([l,val,setter,opts]) => (
           <div key={l}>
             <label className="block text-xs font-semibold uppercase tracking-widest text-gray-500 mb-1.5">{l} *</label>
-            <select value={val} onChange={e=>{setter(e.target.value);setErr("")}} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 bg-white cursor-pointer" style={{color:val?"#1f2937":"#9ca3af",focusRingColor:G}}>
+            <select value={val} onChange={e => { setter(e.target.value); setErr("") }}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 bg-white cursor-pointer"
+              style={{ color: val ? "#1f2937" : "#9ca3af" }}>
               <option value="">Select...</option>
-              {opts.map(o=><option key={o} value={o}>{o}</option>)}
+              {opts.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
           </div>
         ))}
@@ -187,10 +222,15 @@ function AIPanel({onUse,onBack}){
       <div>
         <label className="block text-xs font-semibold uppercase tracking-widest text-gray-500 mb-2">Tone</label>
         <div className="flex gap-1.5 flex-wrap">
-          {TONE_OPTIONS.map(t=>(
-            <button key={t.value} onClick={()=>setTone(t.value)}
+          {TONE_OPTIONS.map(t => (
+            <button key={t.value} onClick={() => setTone(t.value)}
               className="px-3 py-1.5 rounded-full text-xs cursor-pointer transition-all"
-              style={{fontWeight:tone===t.value?600:400,border:`1px solid ${tone===t.value?G:"#e5e7eb"}`,background:tone===t.value?"#f0fdf4":"white",color:tone===t.value?G:"#374151"}}>
+              style={{
+                fontWeight: tone===t.value ? 600 : 400,
+                border: `1px solid ${tone===t.value ? G : "#e5e7eb"}`,
+                background: tone===t.value ? "#f0fdf4" : "white",
+                color: tone===t.value ? G : "#374151"
+              }}>
               {t.label}
             </button>
           ))}
@@ -198,29 +238,54 @@ function AIPanel({onUse,onBack}){
       </div>
 
       <div>
-        <label className="block text-xs font-semibold uppercase tracking-widest text-gray-500 mb-1.5">Extra context <span className="normal-case tracking-normal font-normal text-gray-400">(optional)</span></label>
-        <input placeholder="e.g. She loves sunflowers, we have been friends for 10 years..." value={extra} onChange={e=>setExtra(e.target.value)}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 bg-white" style={{"--tw-ring-color":G}}/>
+        <label className="block text-xs font-semibold uppercase tracking-widest text-gray-500 mb-1.5">
+          Extra context <span className="normal-case tracking-normal font-normal text-gray-400">(optional)</span>
+        </label>
+        <input
+          placeholder="e.g. She loves sunflowers, we have been friends for 10 years..."
+          value={extra}
+          onChange={e => setExtra(e.target.value)}
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 bg-white"/>
       </div>
 
-      {err&&<p className="text-xs text-red-500">{err}</p>}
+      {err && <p className="text-xs text-red-500">{err}</p>}
 
       <button onClick={generate} disabled={loading}
-        className="w-full py-3 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 cursor-pointer border-none transition-opacity"
-        style={{background:loading?"#e5e7eb":`linear-gradient(135deg,${DG},${G})`,color:loading?"#9ca3af":"white"}}>
-        {loading?(<><svg width="15" height="15" fill="none" viewBox="0 0 24 24" style={{animation:"spin 1s linear infinite"}}><circle cx="12" cy="12" r="10" stroke="#d1d5db" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke={G} strokeWidth="3" strokeLinecap="round"/></svg>Generating...</>):(<><svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>{generated?"Regenerate":"Generate Message"}</>)}
+        className="w-full py-3 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 cursor-pointer border-none transition-opacity"
+        style={{ background: loading ? "#e5e7eb" : `linear-gradient(135deg,${DG},${G})`, color: loading ? "#9ca3af" : "white" }}>
+        {loading ? (
+          <>
+            <svg width="15" height="15" fill="none" viewBox="0 0 24 24" style={{ animation: "spin 1s linear infinite" }}>
+              <circle cx="12" cy="12" r="10" stroke="#d1d5db" strokeWidth="3"/>
+              <path d="M12 2a10 10 0 0 1 10 10" stroke={G} strokeWidth="3" strokeLinecap="round"/>
+            </svg>
+            Generating...
+          </>
+        ) : (
+          <>
+            <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            {generated ? "Regenerate" : "Generate Message"}
+          </>
+        )}
       </button>
 
-      {generated&&(
-        <div className="border rounded-xl overflow-hidden" style={{borderColor:`${G}30`}}>
-          <div className="px-4 py-2.5 border-b" style={{background:"#f0fdf4",borderColor:`${G}20`}}>
-            <p className="text-xs font-semibold uppercase tracking-widest m-0" style={{color:G}}>Generated Message</p>
+      {generated && (
+        <div className="border rounded-xl overflow-hidden" style={{ borderColor: `${G}30` }}>
+          <div className="px-4 py-2.5 border-b" style={{ background: "#f0fdf4", borderColor: `${G}20` }}>
+            <p className="text-xs font-semibold uppercase tracking-widest m-0" style={{ color: G }}>Generated Message</p>
           </div>
           <div className="p-4 bg-white">
             <p className="text-sm text-gray-600 leading-relaxed italic mb-3">"{generated}"</p>
             <div className="flex gap-2">
-              <button onClick={()=>onUse(generated)} className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white border-none cursor-pointer" style={{background:`linear-gradient(135deg,${DG},${G})`}}>Use this message</button>
-              <button onClick={generate} className="px-4 py-2.5 rounded-lg text-sm border border-gray-200 bg-white text-gray-600 cursor-pointer">Try again</button>
+              <button onClick={() => onUse(generated)}
+                className="flex-1 py-2.5 rounded-lg text-sm font-semibold text-white border-none cursor-pointer"
+                style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+                Use this message
+              </button>
+              <button onClick={generate}
+                className="px-4 py-2.5 rounded-lg text-sm border border-gray-200 bg-white text-gray-600 cursor-pointer">
+                Try again
+              </button>
             </div>
           </div>
         </div>
@@ -231,68 +296,101 @@ function AIPanel({onUse,onBack}){
 }
 
 /* ── Card Step ── */
-function CardStep({delivLabel,dest,onClose,onNavigate}){
-  const[phase,setPhase]=useState("choice")
-  const[form,setForm]=useState({msg:"",to:"",from:""})
-  const[formErr,setFormErr]=useState({})
-  const[hovered,setHovered]=useState(null)
-  const[choice,setChoice]=useState(null)
-  const[showAI,setShowAI]=useState(false)
+function CardStep({ delivLabel, dest, onClose, onNavigate }) {
+  const [phase,   setPhase]   = useState("choice")
+  const [form,    setForm]    = useState({ msg: "", to: "", from: "" })
+  const [formErr, setFormErr] = useState({})
+  const [hovered, setHovered] = useState(null)
+  const [choice,  setChoice]  = useState(null)
+  const [showAI,  setShowAI]  = useState(false)
 
-  const inp=err=>({width:"100%",border:`1.5px solid ${err?"#fca5a5":"#e5e7eb"}`,borderRadius:10,padding:"10px 12px",fontSize:14,color:"#1f2937",outline:"none",background:"white",boxSizing:"border-box",transition:"border-color 0.15s"})
+  const inp = err => ({
+    width: "100%",
+    border: `1.5px solid ${err ? "#fca5a5" : "#e5e7eb"}`,
+    borderRadius: 10,
+    padding: "10px 12px",
+    fontSize: 14,
+    color: "#1f2937",
+    outline: "none",
+    background: "white",
+    boxSizing: "border-box",
+    transition: "border-color 0.15s"
+  })
 
-  useEffect(()=>{
-    if(phase==="done"){
-      const t=setTimeout(()=>{onClose();onNavigate?.(dest==="checkout"?"checkout":"cart")},2800)
-      return()=>clearTimeout(t)
+  useEffect(() => {
+    if (phase === "done") {
+      const t = setTimeout(() => { onClose(); onNavigate?.(dest==="checkout" ? "checkout" : "cart") }, 2800)
+      return () => clearTimeout(t)
     }
-  },[phase])
+  }, [phase])
 
-  const handleConfirm=()=>{
-    const e={}
-    if(!form.msg.trim())e.msg=true
-    if(!form.to.trim())e.to=true
-    if(!form.from.trim())e.from=true
-    setFormErr(e);if(Object.keys(e).length>0)return
+  const handleConfirm = () => {
+    const e = {}
+    if (!form.msg.trim())  e.msg  = true
+    if (!form.to.trim())   e.to   = true
+    if (!form.from.trim()) e.from = true
+    setFormErr(e)
+    if (Object.keys(e).length > 0) return
     setPhase("done")
   }
 
-  /* Done */
-  if(phase==="done") return(
+  /* ── Done ── */
+  if (phase === "done") return (
     <div className="w-full h-full relative flex items-center justify-center overflow-hidden bg-white">
       <Confetti/>
       <div className="relative z-10 flex flex-col items-center px-10 py-12 text-center">
-        <div className="w-28 h-28 rounded-full flex items-center justify-center mb-8" style={{background:`linear-gradient(135deg,${DG},${G})`,boxShadow:"0 20px 60px rgba(46,139,52,0.35)"}}>
+        <div className="w-28 h-28 rounded-full flex items-center justify-center mb-8"
+          style={{ background: `linear-gradient(135deg,${DG},${G})`, boxShadow: "0 20px 60px rgba(46,139,52,0.35)" }}>
           <svg width="54" height="54" fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
         </div>
         <p className="text-4xl font-extrabold text-gray-900 mb-3 tracking-tight">Item added to cart!</p>
-        <p className="text-lg text-gray-500 leading-relaxed max-w-sm mb-6">{choice?"Your greeting card has been included.":"Your order has been added without a greeting card."}</p>
-        {delivLabel&&<div className="flex items-center gap-2 text-base font-semibold px-6 py-3 rounded-full border-2 mb-6" style={{color:DG,background:"#f0fdf4",borderColor:"#bbf7d0"}}>
-          <svg width="16" height="16" fill="none" stroke={DG} strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-          Delivery: {delivLabel}
-        </div>}
+        <p className="text-lg text-gray-500 leading-relaxed max-w-sm mb-6">
+          {choice ? "Your greeting card has been included." : "Your order has been added without a greeting card."}
+        </p>
+        {delivLabel && (
+          <div className="flex items-center gap-2 text-base font-semibold px-6 py-3 rounded-full border-2 mb-6"
+            style={{ color: DG, background: "#f0fdf4", borderColor: "#bbf7d0" }}>
+            <svg width="16" height="16" fill="none" stroke={DG} strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            Delivery: {delivLabel}
+          </div>
+        )}
         <p className="text-sm text-gray-400">Redirecting you now...</p>
       </div>
     </div>
   )
 
-  /* Choice */
-  if(phase==="choice") return(
+  /* ── Choice ── */
+  if (phase === "choice") return (
     <div className="w-full h-full flex flex-col items-center justify-center px-12 py-10 overflow-y-auto">
-      <div className="w-16 h-16 rounded-full flex items-center justify-center mb-5" style={{background:`linear-gradient(135deg,${DG},${G})`,boxShadow:"0 10px 32px rgba(46,139,52,0.25)"}}>
+      <div className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
+        style={{ background: `linear-gradient(135deg,${DG},${G})`, boxShadow: "0 10px 32px rgba(46,139,52,0.25)" }}>
         <svg width="30" height="30" fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
       </div>
       <p className="text-3xl font-bold text-gray-900 mb-2 text-center">Added to cart!</p>
       <p className="text-lg text-gray-500 text-center leading-relaxed max-w-sm mb-3">Would you like to include a greeting card with your order?</p>
-      {delivLabel&&<div className="text-sm font-semibold px-5 py-2 rounded-full border-2 mb-8" style={{color:DG,background:"#f0fdf4",borderColor:"#bbf7d0"}}>Delivery: {delivLabel}</div>}
+      {delivLabel && (
+        <div className="text-sm font-semibold px-5 py-2 rounded-full border-2 mb-8"
+          style={{ color: DG, background: "#f0fdf4", borderColor: "#bbf7d0" }}>
+          Delivery: {delivLabel}
+        </div>
+      )}
       <div className="pm-card-choice-grid grid grid-cols-2 gap-4 w-full max-w-lg">
-        {[{key:true,img:withCardImg,label:"Yes, add a card",sub:"Include a greeting card"},{key:false,img:noCardImg,label:"No thanks",sub:"Continue without card"}].map(opt=>(
-          <button key={String(opt.key)} onClick={()=>{setChoice(opt.key);setPhase(opt.key?"form":"done")}}
+        {[
+          { key: true,  img: withCardImg, label: "Yes, add a card", sub: "Include a greeting card" },
+          { key: false, img: noCardImg,   label: "No thanks",       sub: "Continue without card" }
+        ].map(opt => (
+          <button key={String(opt.key)}
+            onClick={() => { setChoice(opt.key); setPhase(opt.key ? "form" : "done") }}
             className="rounded-2xl overflow-hidden bg-white text-left p-0 cursor-pointer transition-all"
-            style={{border:`2px solid ${hovered===opt.key?G:"#e5e7eb"}`,boxShadow:hovered===opt.key?"0 8px 28px rgba(46,139,52,0.16)":"none"}}
-            onMouseEnter={()=>setHovered(opt.key)} onMouseLeave={()=>setHovered(null)}>
+            style={{
+              border: `2px solid ${hovered===opt.key ? G : "#e5e7eb"}`,
+              boxShadow: hovered===opt.key ? "0 8px 28px rgba(46,139,52,0.16)" : "none"
+            }}
+            onMouseEnter={() => setHovered(opt.key)}
+            onMouseLeave={() => setHovered(null)}>
             <div className="h-44 bg-gray-50 overflow-hidden">
-              <img src={opt.img} alt={opt.label} className="w-full h-full object-cover" onError={e=>{e.target.style.display="none"}}/>
+              <img src={opt.img} alt={opt.label} className="w-full h-full object-cover"
+                onError={e => { e.target.style.display="none" }}/>
             </div>
             <div className="p-4">
               <p className="text-base font-semibold text-gray-900 m-0">{opt.label}</p>
@@ -304,19 +402,23 @@ function CardStep({delivLabel,dest,onClose,onNavigate}){
     </div>
   )
 
-  /* Form */
-  const MSG_MAX=160,NAME_MAX=30
-  const leftImg=showAI?writingImg:letterImg
-  return(
+  /* ── Form ── */
+  const MSG_MAX  = 160
+  const NAME_MAX = 30
+  const leftImg  = showAI ? writingImg : letterImg
+
+  return (
     <div className="pm-card-form w-full h-full flex flex-row overflow-hidden">
-      <div className="pm-card-img flex-shrink-0 overflow-hidden bg-gray-50 flex items-center justify-center p-6" style={{width:"50%"}}>
+      <div className="pm-card-img flex-shrink-0 overflow-hidden bg-gray-50 flex items-center justify-center p-6" style={{ width: "50%" }}>
         <img src={leftImg} alt="" className="w-full h-full object-contain"/>
       </div>
-      <div className="pm-card-right flex flex-col bg-gray-100 overflow-hidden" style={{width:"50%"}}>
-        <div className="flex-1 flex flex-col m-4 rounded-2xl bg-white overflow-hidden" style={{boxShadow:"0 2px 16px rgba(0,0,0,0.08)"}}>
-          {showAI?(
-            <AIPanel onUse={msg=>{setForm(f=>({...f,msg}));setFormErr(e=>({...e,msg:false}));setShowAI(false)}} onBack={()=>setShowAI(false)}/>
-          ):(
+      <div className="pm-card-right flex flex-col bg-gray-100 overflow-hidden" style={{ width: "50%" }}>
+        <div className="flex-1 flex flex-col m-4 rounded-2xl bg-white overflow-hidden" style={{ boxShadow: "0 2px 16px rgba(0,0,0,0.08)" }}>
+          {showAI ? (
+            <AIPanel
+              onUse={msg => { setForm(f => ({...f,msg})); setFormErr(e => ({...e,msg:false})); setShowAI(false) }}
+              onBack={() => setShowAI(false)}/>
+          ) : (
             <div className="pm-scroll pm-card-form-right flex-1 overflow-y-auto px-6 py-6 flex flex-col">
               <p className="text-xl font-bold text-gray-900 mb-1">Write your greeting card</p>
               <p className="text-sm text-gray-400 mb-4">All fields are required.</p>
@@ -329,21 +431,28 @@ function CardStep({delivLabel,dest,onClose,onNavigate}){
               {/* Preview */}
               <div className="border border-gray-200 rounded-xl p-4 mb-4 bg-gray-50">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">Preview</p>
-                <p className="text-sm leading-relaxed min-h-10 mb-3 break-words" style={{color:form.msg?"#1f2937":"#d1d5db",fontStyle:form.msg?"normal":"italic"}}>{form.msg||"Your message..."}</p>
+                <p className="text-sm leading-relaxed min-h-10 mb-3 break-words"
+                  style={{ color: form.msg ? "#1f2937" : "#d1d5db", fontStyle: form.msg ? "normal" : "italic" }}>
+                  {form.msg || "Your message..."}
+                </p>
                 <div className="flex justify-between border-t border-gray-100 pt-2">
-                  <span className="text-sm text-gray-500">To: <strong className="text-gray-800">{form.to||"..."}</strong></span>
-                  <span className="text-sm text-gray-500">From: <strong className="text-gray-800">{form.from||"..."}</strong></span>
+                  <span className="text-sm text-gray-500">To: <strong className="text-gray-800">{form.to || "..."}</strong></span>
+                  <span className="text-sm text-gray-500">From: <strong className="text-gray-800">{form.from || "..."}</strong></span>
                 </div>
               </div>
 
               {/* Message field */}
               <div className="mb-3">
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-widest flex items-center gap-1" style={{color:formErr.msg?"#ef4444":"#374151"}}>
-                    Message <span className="text-red-400">*</span>{formErr.msg&&<span className="normal-case tracking-normal font-normal">required</span>}
+                  <label className="text-xs font-semibold uppercase tracking-widest flex items-center gap-1"
+                    style={{ color: formErr.msg ? "#ef4444" : "#374151" }}>
+                    Message <span className="text-red-400">*</span>
+                    {formErr.msg && <span className="normal-case tracking-normal font-normal">required</span>}
                   </label>
                   <div className="flex items-center gap-2.5">
-                    <button onClick={()=>setShowAI(true)} className="flex items-center gap-1 text-xs font-semibold cursor-pointer bg-transparent border-none p-0 underline underline-offset-2" style={{color:G}}>
+                    <button onClick={() => setShowAI(true)}
+                      className="flex items-center gap-1 text-xs font-semibold cursor-pointer bg-transparent border-none p-0 underline underline-offset-2"
+                      style={{ color: G }}>
                       <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
                       No idea what to write?
                     </button>
@@ -351,35 +460,42 @@ function CardStep({delivLabel,dest,onClose,onNavigate}){
                   </div>
                 </div>
                 <textarea rows={3} placeholder="Write a warm, kind message..." value={form.msg} maxLength={MSG_MAX}
-                  onChange={e=>{setForm(f=>({...f,msg:e.target.value}));setFormErr(e=>({...e,msg:false}))}}
-                  style={{...inp(formErr.msg),resize:"none"}}
-                  onFocus={e=>e.target.style.borderColor=formErr.msg?"#ef4444":G}
-                  onBlur={e=>e.target.style.borderColor=formErr.msg?"#fca5a5":"#e5e7eb"}/>
+                  onChange={e => { setForm(f => ({...f,msg:e.target.value})); setFormErr(e => ({...e,msg:false})) }}
+                  style={{ ...inp(formErr.msg), resize: "none" }}
+                  onFocus={e  => e.target.style.borderColor = formErr.msg ? "#ef4444" : G}
+                  onBlur={e   => e.target.style.borderColor = formErr.msg ? "#fca5a5" : "#e5e7eb"}/>
               </div>
 
               {/* To / From */}
               <div className="grid grid-cols-2 gap-3 mb-5">
-                {[["to","e.g. Maria","To"],["from","e.g. Juan","From"]].map(([k,ph,l])=>(
+                {[["to","e.g. Maria","To"],["from","e.g. Juan","From"]].map(([k,ph,l]) => (
                   <div key={k}>
                     <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-semibold uppercase tracking-widest flex items-center gap-1" style={{color:formErr[k]?"#ef4444":"#374151"}}>
-                        {l} <span className="text-red-400">*</span>{formErr[k]&&<span className="normal-case tracking-normal font-normal">req.</span>}
+                      <label className="text-xs font-semibold uppercase tracking-widest flex items-center gap-1"
+                        style={{ color: formErr[k] ? "#ef4444" : "#374151" }}>
+                        {l} <span className="text-red-400">*</span>
+                        {formErr[k] && <span className="normal-case tracking-normal font-normal">req.</span>}
                       </label>
                       <span className="text-xs text-gray-400">{form[k].length}/{NAME_MAX}</span>
                     </div>
                     <input placeholder={ph} value={form[k]} maxLength={NAME_MAX}
-                      onChange={e=>{setForm(f=>({...f,[k]:e.target.value}));setFormErr(e=>({...e,[k]:false}))}}
+                      onChange={e => { setForm(f => ({...f,[k]:e.target.value})); setFormErr(e => ({...e,[k]:false})) }}
                       style={inp(formErr[k])}
-                      onFocus={e=>e.target.style.borderColor=formErr[k]?"#ef4444":G}
-                      onBlur={e=>e.target.style.borderColor=formErr[k]?"#fca5a5":"#e5e7eb"}/>
+                      onFocus={e => e.target.style.borderColor = formErr[k] ? "#ef4444" : G}
+                      onBlur={e  => e.target.style.borderColor = formErr[k] ? "#fca5a5" : "#e5e7eb"}/>
                   </div>
                 ))}
               </div>
 
-              <button onClick={handleConfirm} className="w-full py-3.5 rounded-xl text-base font-semibold text-white border-none cursor-pointer mb-3" style={{background:`linear-gradient(135deg,${DG},${G})`}}>
+              <button onClick={handleConfirm}
+                className="w-full py-3.5 rounded-xl text-base font-semibold text-white border-none cursor-pointer mb-3"
+                style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
                 Confirm & Add to Cart
               </button>
-              <button onClick={()=>setPhase("choice")} className="w-full text-center bg-transparent border-none text-sm text-gray-400 cursor-pointer">Back</button>
+              <button onClick={() => setPhase("choice")}
+                className="w-full text-center bg-transparent border-none text-sm text-gray-400 cursor-pointer">
+                Back
+              </button>
             </div>
           )}
         </div>
@@ -389,91 +505,221 @@ function CardStep({delivLabel,dest,onClose,onNavigate}){
 }
 
 /* ── Image Zoom ── */
-function ImgZoom({product,isDark}){
-  const[pos,setPos]=useState(null)
-  const[active,setActive]=useState(false)
-  const ref=useRef(null)
-  const move=e=>{const r=ref.current.getBoundingClientRect();setPos({x:((e.clientX-r.left)/r.width)*100,y:((e.clientY-r.top)/r.height)*100})}
-  return(
+function ImgZoom({ product, isDark }) {
+  const [pos,    setPos]    = useState(null)
+  const [active, setActive] = useState(false)
+  const ref = useRef(null)
+
+  const move = e => {
+    const r = ref.current.getBoundingClientRect()
+    setPos({ x: ((e.clientX-r.left)/r.width)*100, y: ((e.clientY-r.top)/r.height)*100 })
+  }
+
+  return (
     <div ref={ref} className="pm-img flex-shrink-0 relative overflow-hidden"
-      style={{width:"42%",cursor:active?"crosshair":"default",background:isDark?"#0f172a":"#f3f4f6"}}
-      onMouseMove={move} onMouseEnter={()=>setActive(true)} onMouseLeave={()=>{setActive(false);setPos(null)}}>
+      style={{ width: "42%", cursor: active ? "crosshair" : "default", background: isDark ? "#0f172a" : "#f3f4f6" }}
+      onMouseMove={move}
+      onMouseEnter={() => setActive(true)}
+      onMouseLeave={() => { setActive(false); setPos(null) }}>
+
       <img src={product.image} alt={product.name} className="w-full h-full object-cover block"
-        style={{transition:active?"transform 0.25s ease-out":"transform 0.4s ease",transform:active&&pos?"scale(1.7)":"scale(1)",transformOrigin:pos?`${pos.x}% ${pos.y}%`:"center",willChange:"transform"}}/>
-      <div className="absolute top-4 left-4 text-white text-xs font-bold px-3 py-1 rounded-md z-10 pointer-events-none" style={{background:DG}}>-{pctOff(product.original,product.price)}% OFF</div>
-      {product.ribbon&&<div className="absolute top-11 left-0 z-10 pointer-events-none"><div className="text-[11px] font-bold text-white px-4 py-1" style={{background:product._ribbonColor||G,clipPath:"polygon(0 0,calc(100% - 6px) 0,100% 50%,calc(100% - 6px) 100%,0 100%)"}}>{product.ribbon}</div></div>}
+        style={{
+          transition: active ? "transform 0.25s ease-out" : "transform 0.4s ease",
+          transform: active && pos ? "scale(1.7)" : "scale(1)",
+          transformOrigin: pos ? `${pos.x}% ${pos.y}%` : "center",
+          willChange: "transform"
+        }}/>
+
+      <div className="absolute top-4 left-4 text-white text-xs font-bold px-3 py-1 rounded-md z-10 pointer-events-none"
+        style={{ background: DG }}>
+        -{pctOff(product.original, product.price)}% OFF
+      </div>
+
+      {product.ribbon && (
+        <div className="absolute top-11 left-0 z-10 pointer-events-none">
+          <div className="text-[11px] font-bold text-white px-4 py-1"
+            style={{ background: product._ribbonColor||G, clipPath: "polygon(0 0,calc(100% - 6px) 0,100% 50%,calc(100% - 6px) 100%,0 100%)" }}>
+            {product.ribbon}
+          </div>
+        </div>
+      )}
+
       <div className="absolute bottom-4 left-3 right-3 rounded-xl px-3.5 py-2.5 flex items-center gap-2.5 pointer-events-none z-10"
-        style={{background:isDark?"rgba(15,23,42,0.92)":"rgba(255,255,255,0.95)",boxShadow:isDark?"0 0 12px rgba(0,255,136,0.08)":"0 2px 8px rgba(0,0,0,0.07)",border:isDark?"1px solid rgba(74,222,128,0.15)":"none"}}>
-        <svg width="14" height="14" fill="none" stroke={isDark?"#4ade80":G} strokeWidth={1.8} viewBox="0 0 24 24" className="flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"/></svg>
+        style={{
+          background: isDark ? "rgba(15,23,42,0.92)" : "rgba(255,255,255,0.95)",
+          boxShadow: isDark ? "0 0 12px rgba(0,255,136,0.08)" : "0 2px 8px rgba(0,0,0,0.07)",
+          border: isDark ? "1px solid rgba(74,222,128,0.15)" : "none"
+        }}>
+        <svg width="14" height="14" fill="none" stroke={isDark ? "#4ade80" : G} strokeWidth={1.8} viewBox="0 0 24 24" className="flex-shrink-0">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"/>
+        </svg>
         <div>
-          <p className="text-xs font-semibold m-0" style={{color:isDark?"#e2e8f0":"#111827"}}>Same-day delivery</p>
-          <p className="text-[10px] m-0" style={{color:isDark?"#4ade80":"#6b7280"}}>Before 2PM · Manila & Pampanga</p>
+          <p className="text-xs font-semibold m-0" style={{ color: isDark ? "#e2e8f0" : "#111827" }}>Same-day delivery</p>
+          <p className="text-[10px] m-0" style={{ color: isDark ? "#4ade80" : "#6b7280" }}>Before 2PM · Manila & Pampanga</p>
         </div>
       </div>
-      {active&&<div className="absolute top-3 right-3 bg-black/45 text-white text-[10px] font-bold px-2.5 py-1 rounded-full pointer-events-none z-10 backdrop-blur-sm">ZOOM</div>}
+
+      {active && (
+        <div className="absolute top-3 right-3 bg-black/45 text-white text-[10px] font-bold px-2.5 py-1 rounded-full pointer-events-none z-10 backdrop-blur-sm">
+          ZOOM
+        </div>
+      )}
     </div>
   )
 }
 
+function ReviewSummary({ reviews }) {
+  const average = reviews.length > 0 
+    ? (reviews.reduce((acc, r) => acc + r.star_rating, 0) / reviews.length).toFixed(1) 
+    : 0;
+
+  const counts = {
+    5: reviews.filter(r => r.star_rating === 5).length,
+    4: reviews.filter(r => r.star_rating === 4).length,
+    3: reviews.filter(r => r.star_rating === 3).length,
+    2: reviews.filter(r => r.star_rating === 2).length,
+    1: reviews.filter(r => r.star_rating === 1).length,
+    media: reviews.filter(r => r.image_url).length,
+  };
+
+  return (
+    <div className="border rounded-lg p-6 mb-6 flex flex-wrap gap-4 items-center bg-gray-50">
+      <div className="text-center mr-4">
+        <p className="text-3xl font-bold">{average} <span className="text-lg text-gray-500">out of 5</span></p>
+        <div className="text-yellow-500 text-xl">★★★★★</div>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button className="px-4 py-1.5 border rounded hover:bg-green-50">All</button>
+        {[5, 4, 3, 2, 1].map(star => (
+          <button key={star} className="px-4 py-1.5 border rounded hover:bg-green-50">
+            {star} Star ({counts[star]})
+          </button>
+        ))}
+        <button className="px-4 py-1.5 border rounded hover:bg-green-50">
+          With Media ({counts.media})
+        </button>
+      </div>
+    </div>
+  );
+}
+
+
 /* ── Main Export ── */
-export default function ProductPreviewModal({product,onClose,onNavigate}){
-  const[color,setColor]=useState(null)
-  const[qty,setQty]=useState(null)
-  const[addOns,setAddOns]=useState([])
-  const[delivType,setDelivType]=useState(null)
-  const[customDate,setCustDate]=useState("")
-  const[showCal,setShowCal]=useState(false)
-  const[step,setStep]=useState("product")
-  const[dest,setDest]=useState("cart")
-  const[visible,setVisible]=useState(false)
-  const[tab,setTab]=useState("details")
-  const[errors,setErrors]=useState({})
-  const[showAllAddons,setShowAllAddons]=useState(false)
+export default function ProductPreviewModal({ product, onClose, onNavigate }) {
+  const [color,      setColor]      = useState(null)
+  const [qty,        setQty]        = useState(null)
+  const [addOns,     setAddOns]     = useState([])
+  const [delivType,  setDelivType]  = useState(null)
+  const [customDate, setCustDate]   = useState("")
+  const [showCal,    setShowCal]    = useState(false)
+  const [step,       setStep]       = useState("product")
+  const [dest,       setDest]       = useState("cart")
+  const [visible,    setVisible]    = useState(false)
+  const [tab,        setTab]        = useState("details")
+  const [errors,     setErrors]     = useState({})
+  const [reviews,    setReviews]    = useState([])
 
-  const todayOk=isTodayAvail()
-  const{isDark}=useTheme()
+  const [liveAddOns,    setLiveAddOns]    = useState([])
+  const [loadingAddOns, setLoadingAddOns] = useState(true)
+  const [showAllAddons, setShowAllAddons] = useState(false)
 
-  // Dark mode tokens
-  const modalBg   = isDark?"#1e293b":"white"
-  const rightBg   = isDark?"#0f172a":"#f3f4f6"
-  const cardBg    = isDark?"#1e293b":"white"
-  const cardBdr   = isDark?"rgba(0,255,136,0.08)":"rgba(0,0,0,0.08)"
-  const scrollThumb = isDark?"#334155":"#e5e7eb"
-  const colors=CATEGORY_COLORS[product.category]||CATEGORY_COLORS.Roses
-  const visibleAddons=showAllAddons?ALL_ADD_ONS:ALL_ADD_ONS.slice(0,INITIAL_ADDON_COUNT)
+  const todayOk = isTodayAvail()
+  const { isDark } = useTheme()
 
-  useEffect(()=>{
+  const modalBg  = isDark ? "#1e293b" : "white"
+  const rightBg  = isDark ? "#0f172a" : "#f3f4f6"
+  const cardBg   = isDark ? "#1e293b" : "white"
+  const cardBdr  = isDark ? "rgba(0,255,136,0.08)" : "rgba(0,0,0,0.08)"
+  const colors   = CATEGORY_COLORS[product.category] || CATEGORY_COLORS.Roses
+
+  /* Fetch reviews */
+  useEffect(() => {
+    api.get(`/products/${product.id}/reviews`)
+      .then(data => setReviews(data))
+      .catch(err => console.error("Error fetching reviews:", err))
+  }, [product.id])
+
+  /* Fetch live add-ons */
+  useEffect(() => {
+    const fetchAddOns = async () => {
+      try {
+        const allProducts = await api.getProducts()
+        const dbAddOns = allProducts.filter(p =>
+          p.category.toLowerCase() === "add-on" ||
+          p.category.toLowerCase() === "addon"
+        )
+        setLiveAddOns(dbAddOns)
+      } catch (err) {
+        console.error("Failed to load live add-ons:", err)
+      } finally {
+        setLoadingAddOns(false)
+      }
+    }
+    fetchAddOns()
+  }, [])
+
+  const visibleAddons = showAllAddons ? liveAddOns : liveAddOns.slice(0, INITIAL_ADDON_COUNT)
+
+  /* Mount */
+  useEffect(() => {
     setColor(colors[0])
-    requestAnimationFrame(()=>requestAnimationFrame(()=>setVisible(true)))
-    document.body.style.overflow="hidden"
-    const esc=e=>{if(e.key==="Escape")close()}
-    document.addEventListener("keydown",esc)
-    return()=>{document.removeEventListener("keydown",esc);document.body.style.overflow=""}
-  },[])
+    requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)))
+    document.body.style.overflow = "hidden"
+    const esc = e => { if (e.key==="Escape") close() }
+    document.addEventListener("keydown", esc)
+    return () => { document.removeEventListener("keydown", esc); document.body.style.overflow = "" }
+  }, [])
 
-  const close=()=>{setVisible(false);setTimeout(onClose,260)}
-  const toggleAddOn=id=>setAddOns(p=>p.includes(id)?p.filter(i=>i!==id):[...p,id])
-  const addOnTotal=addOns.reduce((s,id)=>s+(ALL_ADD_ONS.find(a=>a.id===id)?.price||0),0)
-  const total=product.price+addOnTotal
-  const delivLabel=delivType==="today"?"Today (before 2PM)":delivType==="tomorrow"?`Tomorrow, ${fmtDate(tomorrowStr())}`:delivType==="custom"&&customDate?fmtDate(customDate):null
+  const close       = () => { setVisible(false); setTimeout(onClose, 260) }
+  const toggleAddOn = id => setAddOns(p => p.includes(id) ? p.filter(i => i!==id) : [...p, id])
 
-  const validate=()=>{
-    const e={}
-    if(!color)e.color=true
-    if(!qty)e.qty=true
-    if(!delivType||(delivType==="custom"&&!customDate))e.date=true
-    setErrors(e);return Object.keys(e).length===0
+  const addOnTotal = addOns.reduce((s, id) => s + (liveAddOns.find(a => a.id===id)?.price || 0), 0)
+  const total      = product.price + addOnTotal
+
+  const delivLabel =
+    delivType === "today"   ? "Today (before 2PM)" :
+    delivType === "tomorrow" ? `Tomorrow, ${fmtDate(tomorrowStr())}` :
+    delivType === "custom" && customDate ? fmtDate(customDate) : null
+
+  const validate = () => {
+    const e = {}
+    if (!color)   e.color = true
+    if (!qty)     e.qty   = true
+    if (!delivType || (delivType==="custom" && !customDate)) e.date = true
+    setErrors(e)
+    return Object.keys(e).length === 0
   }
-  const startFlow=d=>{
-    if(!validate())return
-    addToCart({id:product.id,name:product.name,price:product.price,qty:1,img:product.image,desc:product.category})
+
+  const startFlow = d => {
+    if (!validate()) return
+
+    const selectedAddOnObjects = addOns.map(id => {
+      const addon = liveAddOns.find(a => a.id===id)
+      return { id: addon.id, name: addon.name, price: addon.price, qty: 1 }
+    })
+
+    addToCart({
+      id:           product.id,
+      name:         product.name,
+      price:        product.price,
+      qty:          parseInt(qty) || 1,
+      img:          product.image,
+      desc:         product.category,
+      color:        color?.name,
+      size:         qty,
+      deliveryDate: delivType==="custom" ? customDate : delivType,
+      addOns:       selectedAddOnObjects,
+      totalPrice:   total
+    })
+
     window.dispatchEvent(new Event("bloomora:cart-updated"))
-    setDest(d);setStep("card")
+    setDest(d)
+    setStep("card")
   }
 
-  const isCard=step==="card"
+  const isCard = step === "card"
 
-  return(
+  return (
     <>
       <style>{`
         .pm-scroll::-webkit-scrollbar{width:4px}
@@ -506,270 +752,462 @@ export default function ProductPreviewModal({product,onClose,onNavigate}){
         }
       `}</style>
 
+      {/* Overlay */}
       <div className="pm-overlay fixed inset-0 z-[49] flex items-center justify-center box-border"
-        style={{padding:"148px 28px 28px",backgroundColor:visible?"rgba(0,0,0,0.58)":"transparent",backdropFilter:visible?"blur(8px)":"none",WebkitBackdropFilter:visible?"blur(8px)":"none",transition:"background-color 0.22s,backdrop-filter 0.22s"}}
+        style={{
+          padding: "148px 28px 28px",
+          backgroundColor: visible ? "rgba(0,0,0,0.58)" : "transparent",
+          backdropFilter: visible ? "blur(8px)" : "none",
+          WebkitBackdropFilter: visible ? "blur(8px)" : "none",
+          transition: "background-color 0.22s,backdrop-filter 0.22s"
+        }}
         onClick={close}>
 
+        {/* Modal */}
         <div className="pm-wrap relative flex flex-row overflow-hidden w-[85vw] h-full"
-          style={{borderRadius:18,background:modalBg,boxShadow:"0 28px 80px rgba(0,0,0,0.28)",opacity:visible?1:0,transform:visible?"scale(1)":"scale(0.97)",transition:"opacity 0.22s,transform 0.26s cubic-bezier(0.34,1.1,0.64,1)"}}
-          onClick={e=>e.stopPropagation()}>
+          style={{
+            borderRadius: 18,
+            background: modalBg,
+            boxShadow: "0 28px 80px rgba(0,0,0,0.28)",
+            opacity: visible ? 1 : 0,
+            transform: visible ? "scale(1)" : "scale(0.97)",
+            transition: "opacity 0.22s,transform 0.26s cubic-bezier(0.34,1.1,0.64,1)"
+          }}
+          onClick={e => e.stopPropagation()}>
 
-          <button onClick={close} className="absolute top-3.5 right-3.5 z-50 w-8 h-8 rounded-full flex items-center justify-center shadow-sm transition-colors cursor-pointer"
-            style={{border:`1px solid ${isDark?"#334155":"#e5e7eb"}`,background:isDark?"#334155":"white"}}
-            onMouseEnter={e=>e.currentTarget.style.background=isDark?"#475569":"#f3f4f6"}
-            onMouseLeave={e=>e.currentTarget.style.background=isDark?"#334155":"white"}>
+          {/* Close button */}
+          <button onClick={close}
+            className="absolute top-3.5 right-3.5 z-50 w-8 h-8 rounded-full flex items-center justify-center shadow-sm transition-colors cursor-pointer"
+            style={{ border: `1px solid ${isDark?"#334155":"#e5e7eb"}`, background: isDark?"#334155":"white" }}
+            onMouseEnter={e => e.currentTarget.style.background = isDark?"#475569":"#f3f4f6"}
+            onMouseLeave={e => e.currentTarget.style.background = isDark?"#334155":"white"}>
             <svg width="11" height="11" fill="none" stroke={isDark?"#e2e8f0":"#374151"} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
 
-          {isCard&&<CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate} isDark={isDark}/>}
+          {/* ── Card step ── */}
+          {isCard && (
+            <CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate}/>
+          )}
 
-          {!isCard&&<>
-            <ImgZoom product={product} isDark={isDark}/>
+          {/* ── Product step ── */}
+          {!isCard && (
+            <>
+              <ImgZoom product={product} isDark={isDark}/>
 
-            <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{background:rightBg}}>
-              <div className="pm-right flex-1 flex flex-col m-4 rounded-2xl overflow-hidden" style={{background:cardBg,boxShadow:`0 2px 16px ${cardBdr}`}}>
+              <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: rightBg }}>
+                {/* White card */}
+                <div className="pm-right flex-1 flex flex-col m-4 rounded-2xl overflow-hidden"
+                  style={{ background: cardBg, boxShadow: `0 2px 16px ${cardBdr}` }}>
 
-                <div className="pm-scroll pm-right-scroll flex-1 overflow-y-auto px-6 pt-6 pb-0">
+                  {/* ── Scrollable area ── */}
+                  <div className="pm-scroll pm-right-scroll flex-1 overflow-y-auto px-6 pt-6 pb-0">
 
-                  <p className="text-xs mb-1.5" style={{color:isDark?"#64748b":"#9ca3af"}}>
-                    {product.category}<span style={{color:isDark?"#334155":"#d1d5db",margin:"0 4px"}}>/</span>
-                    <span className="font-medium" style={{color:G}}>{product.name}</span>
-                  </p>
+                    {/* Breadcrumb */}
+                    <p className="text-xs mb-1.5" style={{ color: isDark?"#64748b":"#9ca3af" }}>
+                      {product.category}
+                      <span style={{ color: isDark?"#334155":"#d1d5db", margin:"0 4px" }}>/</span>
+                      <span className="font-medium" style={{ color: G }}>{product.name}</span>
+                    </p>
 
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <h2 className="text-2xl font-bold leading-tight flex-1" style={{color:isDark?"#f1f5f9":"#111827"}}>{product.name}</h2>
-                    <button
-                      onClick={()=>window.dispatchEvent(new CustomEvent("bloomora:open-chat"))}
-                      className="flex items-center gap-1.5 flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold text-white transition-all cursor-pointer border-none"
-                      style={{background:"linear-gradient(135deg,#25d366,#128c48)",boxShadow:"0 3px 10px rgba(37,211,102,0.35)"}}
-                      onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 5px 18px rgba(37,211,102,0.5)";e.currentTarget.style.transform="translateY(-1px)"}}
-                      onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 3px 10px rgba(37,211,102,0.35)";e.currentTarget.style.transform="none"}}>
-                      <svg width="13" height="13" fill="currentColor" viewBox="0 0 448 512"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg>
-                      Ask us
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 mb-3">
-                    {[1,2,3,4,5].map(i=><svg key={i} width="13" height="13" fill={i<=Math.floor(product.rating)?"#f59e0b":isDark?"#334155":"#e5e7eb"} viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>)}
-                    <span className="text-sm font-medium" style={{color:isDark?"#cbd5e1":"#374151"}}>{product.rating}</span>
-                    <span className="text-sm" style={{color:isDark?"#64748b":"#9ca3af"}}>({product.reviews} reviews)</span>
-                    <span style={{color:isDark?"#334155":"#e5e7eb",margin:"0 2px"}}>·</span>
-                    <span className="text-sm" style={{color:isDark?"#64748b":"#9ca3af"}}>{(product.reviews*2).toLocaleString()} sold</span>
-                  </div>
-
-                  <div className="flex items-center gap-2 mb-5 pb-5" style={{borderBottom:`1px solid ${isDark?"#1e293b":"#f3f4f6"}`}}>
-                    <span className="text-3xl font-bold tracking-tight" style={{color:isDark?"#00ff88":"#111827",textShadow:isDark?"0 0 20px rgba(0,255,136,0.4)":"none"}}>₱{total.toLocaleString()}</span>
-                    <span className="text-sm line-through" style={{color:isDark?"#64748b":"#9ca3af"}}>₱{product.original.toLocaleString()}</span>
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded" style={{color:isDark?"#00ff88":G,background:isDark?"rgba(0,255,136,0.1)":"#f0fdf4",border:`1px solid ${isDark?"rgba(0,255,136,0.25)":"#bbf7d0"}`,textShadow:isDark?"0 0 8px rgba(0,255,136,0.5)":"none"}}>Save ₱{(product.original-product.price).toLocaleString()}</span>
-                  </div>
-
-                  <div className="flex mb-5" style={{borderBottom:`1px solid ${isDark?"#1e293b":"#f3f4f6"}`}}>
-                    {[["details","Details"],["care","Care Guide"],["reviews","Reviews"]].map(([k,l])=>(
-                      <button key={k} onClick={()=>setTab(k)} className="px-4 py-2 text-sm transition-colors"
-                        style={{color:tab===k?G:isDark?"#94a3b8":"#6b7280",fontWeight:tab===k?600:400,background:"none",border:"none",borderBottom:`2.5px solid ${tab===k?G:"transparent"}`,cursor:"pointer",marginBottom:-1}}>
-                        {l}
+                    {/* Title + WhatsApp */}
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <h2 className="text-2xl font-bold leading-tight flex-1"
+                        style={{ color: isDark?"#f1f5f9":"#111827" }}>
+                        {product.name}
+                      </h2>
+                      <button
+                        onClick={() => window.dispatchEvent(new CustomEvent("bloomora:open-chat"))}
+                        className="flex items-center gap-1.5 flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold text-white transition-all cursor-pointer border-none"
+                        style={{ background: "linear-gradient(135deg,#25d366,#128c48)", boxShadow: "0 3px 10px rgba(37,211,102,0.35)" }}
+                        onMouseEnter={e => { e.currentTarget.style.boxShadow="0 5px 18px rgba(37,211,102,0.5)"; e.currentTarget.style.transform="translateY(-1px)" }}
+                        onMouseLeave={e => { e.currentTarget.style.boxShadow="0 3px 10px rgba(37,211,102,0.35)"; e.currentTarget.style.transform="none" }}>
+                        <svg width="13" height="13" fill="currentColor" viewBox="0 0 448 512"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg>
+                        Ask us
                       </button>
-                    ))}
-                  </div>
-
-                  {tab==="details"&&<div className="pb-4 space-y-5">
-                    {/* Color */}
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1"
-                        style={{color:errors.color?"#ef4444":isDark?"#94a3b8":"#374151"}}>
-                        Color {color&&<span className="normal-case tracking-normal font-medium ml-1" style={{color:isDark?"#4ade80":G}}>{color.name}</span>}
-                        <span className="text-red-400">*</span>
-                        {errors.color&&<span className="normal-case tracking-normal font-normal text-red-400">required</span>}
-                      </p>
-                      <div className="flex gap-3 items-center">
-                        {colors.map(c=>(
-                          <button key={c.name} title={c.name} onClick={()=>{setColor(c);setErrors(e=>({...e,color:false}))}}
-                            className="w-8 h-8 rounded-full transition-transform cursor-pointer"
-                            style={{background:c.hex,border:c.outline?`1.5px solid ${isDark?"#4b5563":"#d1d5db"}`:"1.5px solid transparent",outline:color?.name===c.name?`3px solid ${errors.color?"#ef4444":isDark?"#4ade80":G}`:"3px solid transparent",outlineOffset:2,transform:color?.name===c.name?"scale(1.15)":"scale(1)"}}/>
-                        ))}
-                      </div>
                     </div>
 
-                    {/* Size */}
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1"
-                        style={{color:errors.qty?"#ef4444":isDark?"#94a3b8":"#374151"}}>
-                        Size / Quantity <span className="text-red-400">*</span>
-                        {errors.qty&&<span className="normal-case tracking-normal font-normal text-red-400">required</span>}
-                      </p>
-                      <div className="flex gap-2 flex-wrap">
-                        {QTY_OPTIONS.map(q=>(
-                          <button key={q} onClick={()=>{setQty(q);setErrors(e=>({...e,qty:false}))}}
-                            className="px-4 py-2 rounded-lg text-sm transition-all cursor-pointer"
-                            style={{fontWeight:qty===q?600:400,
-                              border:`1.5px solid ${qty===q?(isDark?"#4ade80":G):errors.qty?"#fca5a5":isDark?"#334155":"#e5e7eb"}`,
-                              background:qty===q?(isDark?"rgba(74,222,128,0.15)":G):isDark?"#1e293b":"white",
-                              color:qty===q?(isDark?"#4ade80":"white"):isDark?"#e2e8f0":"#374151",
-                              boxShadow:qty===q&&isDark?"0 0 10px rgba(74,222,128,0.2)":"none"}}>
-                            {q}
-                          </button>
-                        ))}
-                      </div>
+                    {/* Stars */}
+                    <div className="flex items-center gap-1.5 mb-3">
+                      {[1,2,3,4,5].map(i => (
+                        <svg key={i} width="13" height="13" fill={i<=Math.floor(product.rating)?"#f59e0b":isDark?"#334155":"#e5e7eb"} viewBox="0 0 20 20">
+                          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                        </svg>
+                      ))}
+                      <span className="text-sm font-medium" style={{ color: isDark?"#cbd5e1":"#374151" }}>{product.rating}</span>
+                      <span className="text-sm" style={{ color: isDark?"#64748b":"#9ca3af" }}>({product.reviews} reviews)</span>
+                      <span style={{ color: isDark?"#334155":"#e5e7eb", margin:"0 2px" }}>·</span>
+                      <span className="text-sm" style={{ color: isDark?"#64748b":"#9ca3af" }}>{(product.reviews*2).toLocaleString()} sold</span>
                     </div>
 
-                    {/* Add-ons */}
-                    <div className="pb-5" style={{borderBottom:`1px solid ${isDark?"#1e293b":"#f3f4f6"}`}}>
-                      <p className="text-xs font-semibold uppercase tracking-widest mb-3"
-                        style={{color:isDark?"#94a3b8":"#6b7280"}}>
-                        Add-ons <span className="normal-case tracking-normal font-normal" style={{color:isDark?"#4b5563":"#9ca3af"}}>(optional)</span>
-                      </p>
-                      <div className="grid grid-cols-2 gap-1.5">
-                        {visibleAddons.map(a=>{
-                          const isOutOfStock = a.stock === 0;
-                          const on = addOns.includes(a.id) && !isOutOfStock;
-                          const addonBg = isOutOfStock ? (isDark ? "#0f172a" : "#f9fafb") : on ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : (isDark ? "#0f172a" : "white");
-                          const addonBdr = isOutOfStock ? (isDark ? "#1e293b" : "#e5e7eb") : on ? (isDark ? "#4ade80" : G) : (isDark ? "#1e293b" : "#e5e7eb");
-                          const addonOp = isOutOfStock ? 0.45 : 1;
+                    {/* Price */}
+                    <div className="flex items-center gap-2 mb-5 pb-5"
+                      style={{ borderBottom: `1px solid ${isDark?"#1e293b":"#f3f4f6"}` }}>
+                      <span className="text-3xl font-bold tracking-tight"
+                        style={{ color: isDark?"#00ff88":"#111827", textShadow: isDark?"0 0 20px rgba(0,255,136,0.4)":"none" }}>
+                        ₱{total.toLocaleString()}
+                      </span>
+                      <span className="text-sm line-through" style={{ color: isDark?"#64748b":"#9ca3af" }}>
+                        ₱{(product.original||0).toLocaleString()}
+                      </span>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded"
+                        style={{
+                          color: isDark?"#00ff88":G,
+                          background: isDark?"rgba(0,255,136,0.1)":"#f0fdf4",
+                          border: `1px solid ${isDark?"rgba(0,255,136,0.25)":"#bbf7d0"}`,
+                          textShadow: isDark?"0 0 8px rgba(0,255,136,0.5)":"none"
+                        }}>
+                        Save ₱{((product.original||0)-product.price).toLocaleString()}
+                      </span>
+                    </div>
 
-                          return(
-                            <button key={a.id} disabled={isOutOfStock} onClick={()=>toggleAddOn(a.id)}
-                              className="flex items-center gap-2.5 p-2.5 rounded-xl text-left transition-all"
-                              style={{border:`1.5px solid ${addonBdr}`,background:addonBg,opacity:addonOp,cursor:isOutOfStock?"not-allowed":"pointer",boxShadow:on&&isDark?"0 0 8px rgba(74,222,128,0.15)":"none"}}
-                              onMouseEnter={e=>{if(!on&&!isOutOfStock)e.currentTarget.style.borderColor=isDark?"#334155":"#d1d5db"}}
-                              onMouseLeave={e=>{if(!on&&!isOutOfStock)e.currentTarget.style.borderColor=isDark?"#1e293b":"#e5e7eb"}}>
-                              <div className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 relative" style={{background:isDark?"#1e293b":"#f3f4f6",border:`1px solid ${isDark?"#334155":"#e5e7eb"}`}}>
-                                <img src={a.img} alt={a.label} className="w-full h-full object-cover" onError={e=>{e.target.style.display="none"}} style={{filter:isOutOfStock?"grayscale(100%)":"none"}}/>
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <p className="text-xs font-semibold truncate m-0" style={{color:isDark?"#e2e8f0":"#111827"}}>{a.label}</p>
-                                <p className="text-[10px] mt-0.5 m-0" style={{color:isOutOfStock?"#ef4444":isDark?"#64748b":"#9ca3af"}}>{isOutOfStock?"Out of stock":a.sub}</p>
-                                <p className="text-xs font-semibold mt-0.5 m-0" style={{color:isOutOfStock?(isDark?"#64748b":"#9ca3af"):(isDark?"#4ade80":G)}}>+₱{a.price}</p>
-                              </div>
-                              <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
-                                style={{border:`2px solid ${on?(isDark?"#4ade80":G):isDark?"#334155":"#d1d5db"}`,background:on?(isDark?"rgba(74,222,128,0.2)":G):isDark?"#1e293b":"white"}}>
-                                {on?<svg width="9" height="9" fill="none" stroke={isDark?"#4ade80":"white"} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>
-                                   :<svg width="8" height="8" fill="none" stroke={isDark?"#4b5563":"#9ca3af"} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>}
+                    {/* Tabs */}
+                    <div className="flex mb-5" style={{ borderBottom: `1px solid ${isDark?"#1e293b":"#f3f4f6"}` }}>
+                      {[["details","Details"],["care","Care Guide"],["reviews","Reviews"]].map(([k,l]) => (
+                        <button key={k} onClick={() => setTab(k)}
+                          className="px-4 py-2 text-sm transition-colors"
+                          style={{
+                            color: tab===k ? G : isDark?"#94a3b8":"#6b7280",
+                            fontWeight: tab===k ? 600 : 400,
+                            background: "none",
+                            border: "none",
+                            borderBottom: `2.5px solid ${tab===k ? G : "transparent"}`,
+                            cursor: "pointer",
+                            marginBottom: -1
+                          }}>
+                          {l}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* ── Details tab ── */}
+                    {tab === "details" && (
+                      <div className="pb-4 space-y-5">
+
+                        {/* Color */}
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1"
+                            style={{ color: errors.color?"#ef4444":isDark?"#94a3b8":"#374151" }}>
+                            Color
+                            {color && <span className="normal-case tracking-normal font-medium ml-1" style={{ color: isDark?"#4ade80":G }}>{color.name}</span>}
+                            <span className="text-red-400">*</span>
+                            {errors.color && <span className="normal-case tracking-normal font-normal text-red-400">required</span>}
+                          </p>
+                          <div className="flex gap-3 items-center">
+                            {colors.map(c => (
+                              <button key={c.name} title={c.name}
+                                onClick={() => { setColor(c); setErrors(e => ({...e,color:false})) }}
+                                className="w-8 h-8 rounded-full transition-transform cursor-pointer"
+                                style={{
+                                  background: c.hex,
+                                  border: c.outline ? `1.5px solid ${isDark?"#4b5563":"#d1d5db"}` : "1.5px solid transparent",
+                                  outline: color?.name===c.name ? `3px solid ${errors.color?"#ef4444":isDark?"#4ade80":G}` : "3px solid transparent",
+                                  outlineOffset: 2,
+                                  transform: color?.name===c.name ? "scale(1.15)" : "scale(1)"
+                                }}/>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Size / Qty */}
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1"
+                            style={{ color: errors.qty?"#ef4444":isDark?"#94a3b8":"#374151" }}>
+                            Size / Quantity <span className="text-red-400">*</span>
+                            {errors.qty && <span className="normal-case tracking-normal font-normal text-red-400">required</span>}
+                          </p>
+                          <div className="flex gap-2 flex-wrap">
+                            {QTY_OPTIONS.map(q => (
+                              <button key={q} onClick={() => { setQty(q); setErrors(e => ({...e,qty:false})) }}
+                                className="px-4 py-2 rounded-lg text-sm transition-all cursor-pointer"
+                                style={{
+                                  fontWeight: qty===q ? 600 : 400,
+                                  border: `1.5px solid ${qty===q?(isDark?"#4ade80":G):errors.qty?"#fca5a5":isDark?"#334155":"#e5e7eb"}`,
+                                  background: qty===q ? (isDark?"rgba(74,222,128,0.15)":G) : isDark?"#1e293b":"white",
+                                  color: qty===q ? (isDark?"#4ade80":"white") : isDark?"#e2e8f0":"#374151",
+                                  boxShadow: qty===q && isDark ? "0 0 10px rgba(74,222,128,0.2)" : "none"
+                                }}>
+                                {q}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Add-ons */}
+                        <div className="pb-5" style={{ borderBottom: `1px solid ${isDark?"#1e293b":"#f3f4f6"}` }}>
+                          <p className="text-xs font-semibold uppercase tracking-widest mb-3"
+                            style={{ color: isDark?"#94a3b8":"#6b7280" }}>
+                            Add-ons <span className="normal-case tracking-normal font-normal" style={{ color: isDark?"#4b5563":"#9ca3af" }}>(optional)</span>
+                          </p>
+
+                          {loadingAddOns ? (
+                            <p className="text-xs text-gray-500 animate-pulse">Loading live add-ons...</p>
+                          ) : liveAddOns.length > 0 ? (
+                            <div className="grid grid-cols-2 gap-1.5">
+                              {visibleAddons.map(a => {
+                                const isOutOfStock = a.stock <= 0
+                                const on = addOns.includes(a.id) && !isOutOfStock
+                                const addonBg  = isOutOfStock ? (isDark?"#0f172a":"#f9fafb") : on ? (isDark?"rgba(74,222,128,0.12)":"#f0fdf4") : (isDark?"#0f172a":"white")
+                                const addonBdr = isOutOfStock ? (isDark?"#1e293b":"#e5e7eb") : on ? (isDark?"#4ade80":G) : (isDark?"#1e293b":"#e5e7eb")
+                                return (
+                                  <button key={a.id} disabled={isOutOfStock} onClick={() => toggleAddOn(a.id)}
+                                    className="flex items-center gap-2.5 p-2.5 rounded-xl text-left transition-all"
+                                    style={{
+                                      border: `1.5px solid ${addonBdr}`,
+                                      background: addonBg,
+                                      opacity: isOutOfStock ? 0.45 : 1,
+                                      cursor: isOutOfStock ? "not-allowed" : "pointer",
+                                      boxShadow: on && isDark ? "0 0 8px rgba(74,222,128,0.15)" : "none"
+                                    }}
+                                    onMouseEnter={e => { if (!on && !isOutOfStock) e.currentTarget.style.borderColor = isDark?"#334155":"#d1d5db" }}
+                                    onMouseLeave={e => { if (!on && !isOutOfStock) e.currentTarget.style.borderColor = isDark?"#1e293b":"#e5e7eb" }}>
+                                    <div className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 relative"
+                                      style={{ background: isDark?"#1e293b":"#f3f4f6", border: `1px solid ${isDark?"#334155":"#e5e7eb"}` }}>
+                                      <img src={a.image_url} alt={a.name} className="w-full h-full object-cover"
+                                        onError={e => { e.target.style.display="none" }}
+                                        style={{ filter: isOutOfStock ? "grayscale(100%)" : "none" }}/>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-xs font-semibold truncate m-0" style={{ color: isDark?"#e2e8f0":"#111827" }}>{a.name}</p>
+                                      <p className="text-[10px] mt-0.5 m-0" style={{ color: isOutOfStock?"#ef4444":isDark?"#64748b":"#9ca3af" }}>
+                                        {isOutOfStock ? "Out of stock" : `${a.stock} available`}
+                                      </p>
+                                      <p className="text-xs font-semibold mt-0.5 m-0"
+                                        style={{ color: isOutOfStock?(isDark?"#64748b":"#9ca3af"):(isDark?"#4ade80":G) }}>
+                                        +₱{a.price}
+                                      </p>
+                                    </div>
+                                    <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
+                                      style={{
+                                        border: `2px solid ${on?(isDark?"#4ade80":G):isDark?"#334155":"#d1d5db"}`,
+                                        background: on ? (isDark?"rgba(74,222,128,0.2)":G) : isDark?"#1e293b":"white"
+                                      }}>
+                                      {on
+                                        ? <svg width="9" height="9" fill="none" stroke={isDark?"#4ade80":"white"} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>
+                                        : <svg width="8" height="8" fill="none" stroke={isDark?"#4b5563":"#9ca3af"} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
+                                      }
+                                    </div>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-gray-500">No add-ons available right now.</p>
+                          )}
+
+                          {liveAddOns.length > INITIAL_ADDON_COUNT && (
+                            <button onClick={() => setShowAllAddons(p => !p)}
+                              className="flex items-center gap-1.5 mt-2 text-xs font-medium cursor-pointer bg-transparent border-none p-0"
+                              style={{ color: isDark?"#4ade80":G }}>
+                              <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showAllAddons?"M5 15l7-7 7 7":"M19 9l-7 7-7-7"}/>
+                              </svg>
+                              {showAllAddons ? "Show less" : `See all add-ons (${liveAddOns.length-INITIAL_ADDON_COUNT} more)`}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Delivery date */}
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1"
+                            style={{ color: errors.date?"#ef4444":isDark?"#94a3b8":"#6b7280" }}>
+                            Delivery Date <span className="text-red-400">*</span>
+                            {errors.date && <span className="normal-case tracking-normal font-normal">required</span>}
+                          </p>
+                          <div className="flex gap-2 flex-wrap">
+                            {[
+                              { key:"today",    label:"Today",    sub: todayOk?"Before 2:00 PM":"Unavailable after 2PM", disabled:!todayOk, onClick:()=>{ if(todayOk){ setDelivType("today"); setShowCal(false); setErrors(e=>({...e,date:false})) } } },
+                              { key:"tomorrow", label:"Tomorrow", sub: fmtDate(tomorrowStr()), disabled:false, onClick:()=>{ setDelivType("tomorrow"); setShowCal(false); setErrors(e=>({...e,date:false})) } },
+                            ].map(btn => (
+                              <button key={btn.key} disabled={btn.disabled} onClick={btn.onClick}
+                                className="px-3 py-2 rounded-xl text-left transition-all"
+                                style={{
+                                  cursor: btn.disabled ? "not-allowed" : "pointer",
+                                  opacity: btn.disabled ? 0.45 : 1,
+                                  border: `1.5px solid ${delivType===btn.key?(isDark?"#4ade80":G):isDark?"#334155":"#e5e7eb"}`,
+                                  background: delivType===btn.key ? (isDark?"rgba(74,222,128,0.1)":"#f0fdf4") : isDark?"#0f172a":"white",
+                                  boxShadow: delivType===btn.key && isDark ? "0 0 8px rgba(74,222,128,0.2)" : "none"
+                                }}>
+                                <p className="text-sm font-semibold m-0"
+                                  style={{ color: delivType===btn.key?(isDark?"#4ade80":DG):isDark?"#e2e8f0":"#374151" }}>
+                                  {btn.label}
+                                </p>
+                                <p className="text-[10px] m-0"
+                                  style={{ color: delivType===btn.key?(isDark?"#4ade80":G):isDark?"#64748b":"#9ca3af" }}>
+                                  {btn.sub}
+                                </p>
+                              </button>
+                            ))}
+                            <button
+                              onClick={() => { setDelivType("custom"); setShowCal(s=>!s); setErrors(e=>({...e,date:false})) }}
+                              className="px-3 py-2 rounded-xl text-left transition-all cursor-pointer flex items-center gap-2"
+                              style={{
+                                border: `1.5px solid ${delivType==="custom"?(isDark?"#4ade80":G):isDark?"#334155":"#e5e7eb"}`,
+                                background: delivType==="custom" ? (isDark?"rgba(74,222,128,0.1)":"#f0fdf4") : isDark?"#0f172a":"white",
+                                boxShadow: delivType==="custom" && isDark ? "0 0 8px rgba(74,222,128,0.2)" : "none"
+                              }}>
+                              <svg width="13" height="13" fill="none" stroke={delivType==="custom"?(isDark?"#4ade80":DG):isDark?"#64748b":"#6b7280"} strokeWidth={1.8} viewBox="0 0 24 24" className="flex-shrink-0">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                              </svg>
+                              <div>
+                                <p className="text-sm font-semibold m-0"
+                                  style={{ color: delivType==="custom"?(isDark?"#4ade80":DG):isDark?"#e2e8f0":"#374151" }}>
+                                  {customDate ? fmtDate(customDate) : "Pick a date"}
+                                </p>
+                                <p className="text-[10px] m-0"
+                                  style={{ color: delivType==="custom"?(isDark?"#4ade80":G):isDark?"#64748b":"#9ca3af" }}>
+                                  {customDate ? "Tap to change" : "Open calendar"}
+                                </p>
                               </div>
                             </button>
-                          )
-                        })}
-                      </div>
-                      {ALL_ADD_ONS.length>INITIAL_ADDON_COUNT&&(
-                        <button onClick={()=>setShowAllAddons(p=>!p)} className="flex items-center gap-1.5 mt-2 text-xs font-medium cursor-pointer bg-transparent border-none p-0"
-                          style={{color:isDark?"#4ade80":G}}>
-                          <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showAllAddons?"M5 15l7-7 7 7":"M19 9l-7 7-7-7"}/></svg>
-                          {showAllAddons?"Show less":`See all add-ons (${ALL_ADD_ONS.length-INITIAL_ADDON_COUNT} more)`}
-                        </button>
-                      )}
-                    </div>
-
-                    {/* Delivery date */}
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1"
-                        style={{color:errors.date?"#ef4444":isDark?"#94a3b8":"#6b7280"}}>
-                        Delivery Date <span className="text-red-400">*</span>
-                        {errors.date&&<span className="normal-case tracking-normal font-normal">required</span>}
-                      </p>
-                      <div className="flex gap-2 flex-wrap">
-                        {[
-                          {key:"today",label:"Today",sub:todayOk?"Before 2:00 PM":"Unavailable after 2PM",disabled:!todayOk,onClick:()=>{if(todayOk){setDelivType("today");setShowCal(false);setErrors(e=>({...e,date:false}))}}},
-                          {key:"tomorrow",label:"Tomorrow",sub:fmtDate(tomorrowStr()),disabled:false,onClick:()=>{setDelivType("tomorrow");setShowCal(false);setErrors(e=>({...e,date:false}))}},
-                        ].map(btn=>(
-                          <button key={btn.key} disabled={btn.disabled} onClick={btn.onClick}
-                            className="px-3 py-2 rounded-xl text-left transition-all"
-                            style={{cursor:btn.disabled?"not-allowed":"pointer",opacity:btn.disabled?0.45:1,
-                              border:`1.5px solid ${delivType===btn.key?(isDark?"#4ade80":G):isDark?"#334155":"#e5e7eb"}`,
-                              background:delivType===btn.key?(isDark?"rgba(74,222,128,0.1)":"#f0fdf4"):isDark?"#0f172a":"white",
-                              boxShadow:delivType===btn.key&&isDark?"0 0 8px rgba(74,222,128,0.2)":"none"}}>
-                            <p className="text-sm font-semibold m-0" style={{color:delivType===btn.key?(isDark?"#4ade80":DG):isDark?"#e2e8f0":"#374151"}}>{btn.label}</p>
-                            <p className="text-[10px] m-0" style={{color:delivType===btn.key?(isDark?"#4ade80":G):isDark?"#64748b":"#9ca3af"}}>{btn.sub}</p>
-                          </button>
-                        ))}
-                        <button onClick={()=>{setDelivType("custom");setShowCal(s=>!s);setErrors(e=>({...e,date:false}))}}
-                          className="px-3 py-2 rounded-xl text-left transition-all cursor-pointer flex items-center gap-2"
-                          style={{border:`1.5px solid ${delivType==="custom"?(isDark?"#4ade80":G):isDark?"#334155":"#e5e7eb"}`,
-                            background:delivType==="custom"?(isDark?"rgba(74,222,128,0.1)":"#f0fdf4"):isDark?"#0f172a":"white",
-                            boxShadow:delivType==="custom"&&isDark?"0 0 8px rgba(74,222,128,0.2)":"none"}}>
-                          <svg width="13" height="13" fill="none" stroke={delivType==="custom"?(isDark?"#4ade80":DG):isDark?"#64748b":"#6b7280"} strokeWidth={1.8} viewBox="0 0 24 24" className="flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                          <div>
-                            <p className="text-sm font-semibold m-0" style={{color:delivType==="custom"?(isDark?"#4ade80":DG):isDark?"#e2e8f0":"#374151"}}>{customDate?fmtDate(customDate):"Pick a date"}</p>
-                            <p className="text-[10px] m-0" style={{color:delivType==="custom"?(isDark?"#4ade80":G):isDark?"#64748b":"#9ca3af"}}>{customDate?"Tap to change":"Open calendar"}</p>
                           </div>
-                        </button>
-                      </div>
-                      {showCal&&delivType==="custom"&&<MiniCalendar selected={customDate} onSelect={d=>{setCustDate(d);setShowCal(false);setErrors(e=>({...e,date:false}))}}/>}
-                    </div>
-
-                    <p className="text-sm leading-relaxed" style={{color:isDark?"#64748b":"#6b7280"}}>Hand-arranged by our skilled florists using the freshest blooms. Each arrangement is made to order.</p>
-                  </div>}
-
-                  {tab==="care"&&<div className="pb-4 space-y-2.5">
-                    <p className="text-sm leading-relaxed mb-2" style={{color:isDark?"#64748b":"#6b7280"}}>Proper care significantly extends the life of your arrangement.</p>
-                    {[
-                      {lightBg:"#eff6ff",lightBdr:"#bfdbfe",darkBg:"rgba(59,130,246,0.08)",darkBdr:"rgba(59,130,246,0.2)",title:"Water daily",desc:"Replace water every 1-2 days with clean, room-temperature water.",icon:<svg width="17" height="17" fill="none" stroke={isDark?"#60a5fa":"#3b82f6"} strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10"/><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6"/><ellipse cx="19" cy="5" rx="3" ry="3.5" fill={isDark?"rgba(59,130,246,0.3)":"#bfdbfe"} stroke={isDark?"#60a5fa":"#3b82f6"} strokeWidth={1.5}/></svg>},
-                      {lightBg:"#eef2ff",lightBdr:"#c7d2fe",darkBg:"rgba(99,102,241,0.08)",darkBdr:"rgba(99,102,241,0.2)",title:"Avoid direct sunlight",desc:"Keep away from heat sources and direct sun to slow wilting.",icon:<svg width="17" height="17" fill="none" stroke={isDark?"#818cf8":"#6366f1"} strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z" fill={isDark?"rgba(99,102,241,0.2)":"#e0e7ff"}/></svg>},
-                      {lightBg:"#f0fdf4",lightBdr:"#bbf7d0",darkBg:"rgba(74,222,128,0.06)",darkBdr:"rgba(74,222,128,0.2)",title:"Trim stems",desc:"Cut 1-2cm at a 45 degree angle every few days for better absorption.",icon:<svg width="17" height="17" fill="none" stroke={isDark?"#4ade80":"#10b981"} strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 3l4 4-4 4M20 12H4"/></svg>},
-                    ].map((t,i)=>(
-                      <div key={i} className="flex gap-3 p-3.5 rounded-xl items-start"
-                        style={{background:isDark?t.darkBg:t.lightBg,border:`1px solid ${isDark?t.darkBdr:t.lightBdr}`}}>
-                        <div className="flex-shrink-0 mt-0.5">{t.icon}</div>
-                        <div>
-                          <p className="text-sm font-semibold mb-0.5 m-0" style={{color:isDark?"#e2e8f0":"#111827"}}>{t.title}</p>
-                          <p className="text-xs leading-snug m-0" style={{color:isDark?"#64748b":"#6b7280"}}>{t.desc}</p>
+                          {showCal && delivType==="custom" && (
+                            <MiniCalendar selected={customDate} onSelect={d => { setCustDate(d); setShowCal(false); setErrors(e=>({...e,date:false})) }}/>
+                          )}
                         </div>
-                      </div>
-                    ))}
-                  </div>}
 
-                  {tab==="reviews"&&<div className="pb-4">
-                    <div className="flex items-center gap-5 p-4 rounded-xl border mb-4"
-                      style={{background:isDark?"#0f172a":"#fafafa",borderColor:isDark?"#1e293b":"#e5e7eb"}}>
-                      <div className="text-center flex-shrink-0">
-                        <p className="text-4xl font-bold leading-none mb-1" style={{color:isDark?"#00ff88":"#111827",textShadow:isDark?"0 0 12px rgba(0,255,136,0.4)":"none"}}>{product.rating}</p>
-                        <div className="flex gap-0.5 justify-center mb-1">{[1,2,3,4,5].map(i=><svg key={i} width="11" height="11" fill={i<=Math.floor(product.rating)?"#f59e0b":isDark?"#1e293b":"#e5e7eb"} viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>)}</div>
-                        <p className="text-xs" style={{color:isDark?"#64748b":"#9ca3af"}}>out of 5</p>
+                        <p className="text-sm leading-relaxed" style={{ color: isDark?"#64748b":"#6b7280" }}>
+                          Hand-arranged by our skilled florists using the freshest blooms. Each arrangement is made to order.
+                        </p>
                       </div>
-                      <div className="flex-1">{[5,4,3,2,1].map(s=><div key={s} className="flex items-center gap-1.5 mb-1"><span className="text-xs w-2 text-right" style={{color:isDark?"#64748b":"#6b7280"}}>{s}</span><svg width="9" height="9" fill="#f59e0b" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg><div className="flex-1 h-1 rounded-full" style={{background:isDark?"#1e293b":"#f0f0f0"}}/><span className="text-xs w-3 text-right" style={{color:isDark?"#64748b":"#9ca3af"}}>0</span></div>)}</div>
-                    </div>
-                    <div className="flex flex-col items-center p-7 rounded-xl text-center" style={{border:`2px dashed ${isDark?"#1e293b":"#e5e7eb"}`}}>
-                      <div className="w-11 h-11 rounded-full flex items-center justify-center mb-3" style={{background:isDark?"#0f172a":"#f9fafb",border:`1px solid ${isDark?"#1e293b":"#e5e7eb"}`}}><svg width="20" height="20" fill="none" stroke={isDark?"#334155":"#d1d5db"} strokeWidth={1.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg></div>
-                      <p className="text-sm font-semibold mb-1" style={{color:isDark?"#e2e8f0":"#374151"}}>No reviews yet</p>
-                      <p className="text-xs leading-snug max-w-[200px]" style={{color:isDark?"#64748b":"#9ca3af"}}>Be the first to review after your purchase.</p>
-                    </div>
-                  </div>}
-                </div>
+                    )}
 
-                {Object.values(errors).some(Boolean)&&(
-                  <div className="mx-5 mt-2 px-3 py-2 rounded-lg flex items-center gap-2" style={{background:isDark?"rgba(239,68,68,0.1)":"#fef2f2",border:`1px solid ${isDark?"rgba(239,68,68,0.3)":"#fecaca"}`}}>
-                    <svg width="13" height="13" fill="none" stroke="#ef4444" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                    <p className="text-xs font-medium text-red-500">Please select: {[errors.color&&"color",errors.qty&&"size",errors.date&&"delivery date"].filter(Boolean).join(", ")}</p>
+                    {/* ── Care tab ── */}
+                    {tab === "care" && (
+                      <div className="pb-4 space-y-2.5">
+                        <p className="text-sm leading-relaxed mb-2" style={{ color: isDark?"#64748b":"#6b7280" }}>
+                          Proper care significantly extends the life of your arrangement.
+                        </p>
+                        {[
+                          {
+                            lightBg:"#eff6ff", lightBdr:"#bfdbfe", darkBg:"rgba(59,130,246,0.08)", darkBdr:"rgba(59,130,246,0.2)",
+                            title:"Water daily", desc:"Replace water every 1-2 days with clean, room-temperature water.",
+                            icon:<svg width="17" height="17" fill="none" stroke={isDark?"#60a5fa":"#3b82f6"} strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10"/><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6"/><ellipse cx="19" cy="5" rx="3" ry="3.5" fill={isDark?"rgba(59,130,246,0.3)":"#bfdbfe"} stroke={isDark?"#60a5fa":"#3b82f6"} strokeWidth={1.5}/></svg>
+                          },
+                          {
+                            lightBg:"#eef2ff", lightBdr:"#c7d2fe", darkBg:"rgba(99,102,241,0.08)", darkBdr:"rgba(99,102,241,0.2)",
+                            title:"Avoid direct sunlight", desc:"Keep away from heat sources and direct sun to slow wilting.",
+                            icon:<svg width="17" height="17" fill="none" stroke={isDark?"#818cf8":"#6366f1"} strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z" fill={isDark?"rgba(99,102,241,0.2)":"#e0e7ff"}/></svg>
+                          },
+                          {
+                            lightBg:"#f0fdf4", lightBdr:"#bbf7d0", darkBg:"rgba(74,222,128,0.06)", darkBdr:"rgba(74,222,128,0.2)",
+                            title:"Trim stems", desc:"Cut 1-2cm at a 45 degree angle every few days for better absorption.",
+                            icon:<svg width="17" height="17" fill="none" stroke={isDark?"#4ade80":"#10b981"} strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 3l4 4-4 4M20 12H4"/></svg>
+                          },
+                        ].map((t,i) => (
+                          <div key={i} className="flex gap-3 p-3.5 rounded-xl items-start"
+                            style={{ background: isDark?t.darkBg:t.lightBg, border: `1px solid ${isDark?t.darkBdr:t.lightBdr}` }}>
+                            <div className="flex-shrink-0 mt-0.5">{t.icon}</div>
+                            <div>
+                              <p className="text-sm font-semibold mb-0.5 m-0" style={{ color: isDark?"#e2e8f0":"#111827" }}>{t.title}</p>
+                              <p className="text-xs leading-snug m-0" style={{ color: isDark?"#64748b":"#6b7280" }}>{t.desc}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* ── Reviews tab ── */}
+                    {tab === "reviews" && (
+                      <div className="pb-4">
+                        {/* Use the new Shopee-style summary component */}
+                        <ReviewSummary reviews={reviews} />
+
+                        {/* List the actual reviews */}
+                        {reviews.length > 0 ? (
+                          <div className="space-y-4">
+                            {reviews.map(review => (
+                              <div key={review.id} className="border-b pb-4">
+                                <div className="flex justify-between items-center mb-2">
+                                  <span className="font-bold text-sm">{review.user_name}</span>
+                                  <span className="text-yellow-500 text-xs">{"★".repeat(review.star_rating)}</span>
+                                </div>
+                                <p className="text-sm text-gray-600">{review.comment}</p>
+                                {review.image_url && (
+                                  <img src={review.image_url} alt="Review" className="w-20 h-20 rounded mt-2 object-cover border" />
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center p-7 rounded-xl text-center border-dashed border-2">
+                            <p className="text-sm font-semibold">No reviews yet</p>
+                            <p className="text-xs text-gray-400">Be the first to share your experience.</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
                   </div>
-                )}
+                  {/* ↑ pm-scroll closes here */}
 
-                <div className="pm-footer flex-shrink-0 px-6 py-4 rounded-b-2xl" style={{borderTop:`1px solid ${isDark?"#1e293b":"#f3f4f6"}`,background:cardBg}}>
-                  {addOnTotal>0&&(
-                    <div className="flex justify-between mb-2.5 pb-2.5 border-b border-dashed border-gray-100">
-                      <span className="text-xs text-gray-400">Base ₱{product.price.toLocaleString()} + extras ₱{addOnTotal}</span>
-                      <span className="text-sm font-bold" style={{color:DG}}>Total ₱{total.toLocaleString()}</span>
+                  {/* Errors banner — sibling of scroll, inside white card */}
+                  {Object.values(errors).some(Boolean) && (
+                    <div className="mx-5 mt-2 px-3 py-2 rounded-lg flex items-center gap-2"
+                      style={{
+                        background: isDark?"rgba(239,68,68,0.1)":"#fef2f2",
+                        border: `1px solid ${isDark?"rgba(239,68,68,0.3)":"#fecaca"}`
+                      }}>
+                      <svg width="13" height="13" fill="none" stroke="#ef4444" strokeWidth={2} viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+                      </svg>
+                      <p className="text-xs font-medium text-red-500">
+                        Please select: {[errors.color&&"color", errors.qty&&"size", errors.date&&"delivery date"].filter(Boolean).join(", ")}
+                      </p>
                     </div>
                   )}
-                  <div className="flex gap-2.5">
-                    <button onClick={()=>startFlow("cart")} className="flex-1 py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
-                      style={{border:`2px solid ${isDark?"#4ade80":G}`,background:isDark?"rgba(74,222,128,0.05)":"white",color:isDark?"#4ade80":G,boxShadow:isDark?"0 0 10px rgba(74,222,128,0.15)":"none"}}
-                      onMouseEnter={e=>{e.currentTarget.style.background=isDark?"rgba(74,222,128,0.15)":G;e.currentTarget.style.color=isDark?"#4ade80":"white"}}
-                      onMouseLeave={e=>{e.currentTarget.style.background=isDark?"rgba(74,222,128,0.05)":"white";e.currentTarget.style.color=isDark?"#4ade80":G}}>
-                      <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                      Add to Cart
-                    </button>
-                    <button onClick={()=>startFlow("checkout")} className="flex-1 py-3.5 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all cursor-pointer border-none"
-                      style={{background:`linear-gradient(135deg,${DG},${G})`,boxShadow:isDark?"0 0 20px rgba(0,255,136,0.3)":"none"}}
-                      onMouseEnter={e=>e.currentTarget.style.boxShadow=isDark?"0 0 30px rgba(0,255,136,0.5)":"0 4px 12px rgba(46,139,52,0.3)"}
-                      onMouseLeave={e=>e.currentTarget.style.boxShadow=isDark?"0 0 20px rgba(0,255,136,0.3)":"none"}>
-                      <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                      Buy Now
-                    </button>
+
+                  {/* Footer buttons — sibling of scroll, inside white card */}
+                  <div className="pm-footer flex-shrink-0 px-6 py-4 rounded-b-2xl"
+                    style={{ borderTop: `1px solid ${isDark?"#1e293b":"#f3f4f6"}`, background: cardBg }}>
+                    {addOnTotal > 0 && (
+                      <div className="flex justify-between mb-2.5 pb-2.5 border-b border-dashed border-gray-100">
+                        <span className="text-xs text-gray-400">Base ₱{product.price.toLocaleString()} + extras ₱{addOnTotal}</span>
+                        <span className="text-sm font-bold" style={{ color: DG }}>Total ₱{total.toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="flex gap-2.5">
+                      <button onClick={() => startFlow("cart")}
+                        className="flex-1 py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+                        style={{
+                          border: `2px solid ${isDark?"#4ade80":G}`,
+                          background: isDark?"rgba(74,222,128,0.05)":"white",
+                          color: isDark?"#4ade80":G,
+                          boxShadow: isDark?"0 0 10px rgba(74,222,128,0.15)":"none"
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.background=isDark?"rgba(74,222,128,0.15)":G; e.currentTarget.style.color=isDark?"#4ade80":"white" }}
+                        onMouseLeave={e => { e.currentTarget.style.background=isDark?"rgba(74,222,128,0.05)":"white"; e.currentTarget.style.color=isDark?"#4ade80":G }}>
+                        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+                        </svg>
+                        Add to Cart
+                      </button>
+                      <button onClick={() => startFlow("checkout")}
+                        className="flex-1 py-3.5 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all cursor-pointer border-none"
+                        style={{
+                          background: `linear-gradient(135deg,${DG},${G})`,
+                          boxShadow: isDark?"0 0 20px rgba(0,255,136,0.3)":"none"
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.boxShadow=isDark?"0 0 30px rgba(0,255,136,0.5)":"0 4px 12px rgba(46,139,52,0.3)"}
+                        onMouseLeave={e => e.currentTarget.style.boxShadow=isDark?"0 0 20px rgba(0,255,136,0.3)":"none"}>
+                        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                        Buy Now
+                      </button>
+                    </div>
                   </div>
+
                 </div>
+                {/* ↑ white card closes */}
               </div>
-            </div>
-          </>}
+              {/* ↑ right panel closes */}
+            </>
+          )}
+
         </div>
+        {/* ↑ pm-wrap closes */}
       </div>
+      {/* ↑ pm-overlay closes */}
     </>
   )
 }

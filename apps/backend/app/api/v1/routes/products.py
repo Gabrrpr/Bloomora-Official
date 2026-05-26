@@ -9,7 +9,7 @@ from supabase import create_client, Client
 from app.core.config import settings
 from app.core.dependencies import get_db, get_current_user
 # 👇 Notice we removed ProductCategoryEnum from this import list!
-from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum
+from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum, Review
 
 router = APIRouter()
 
@@ -39,19 +39,51 @@ def serialize_product(p: Product) -> dict:
     }
 
 # ── Public endpoints ──────────────────────────────────────────────────────────
+
+@router.get("/{product_id}/reviews", response_model=List[dict])
+def get_product_reviews(product_id: str, db: Session = Depends(get_db)):
+    """Fetch all reviews for a specific product."""
+    
+    # We join with User to get the name for the frontend display
+    reviews = (
+        db.query(Review, User)
+        .join(User, Review.user_id == User.id)
+        .filter(Review.product_id == product_id)
+        .order_by(Review.created_at.desc())
+        .all()
+    )
+    
+    return [{
+        "id": str(r.Review.id),
+        "user_name": f"{r.User.firstName} {r.User.lastName}",
+        "star_rating": r.Review.star_rating,
+        "comment": r.Review.comment,
+        "image_url": r.Review.image_url,
+        "created_at": r.Review.created_at.isoformat() if r.Review.created_at else None
+    } for r in reviews]
+    
 @router.get("/", response_model=List[dict])
 def get_products(db: Session = Depends(get_db)):
-    """Get all available products for public catalog."""
-    products = db.query(Product).filter(Product.is_available == True).all()
+    """Get all available products for public catalog, including stock."""
+    # We use outerjoin to get the inventory data for public products
+    products = (
+        db.query(Product)
+        .outerjoin(Inventory, Product.id == Inventory.product_id)
+        .filter(Product.is_available == True)
+        .options(joinedload(Product.inventory))
+        .all()
+    )
+    
     return [{
         "id": str(p.id),
         "name": p.name,
         "price": float(p.price) if p.price else 0,
-        "category": p.category.value if hasattr(p.category, "value") else p.category,
+        "category": p.category.lower().strip() if p.category else "",
+        "product_group": p.product_group.lower().strip() if p.product_group else "floral",
+        "product_type": p.product_type.lower().strip() if p.product_type else "",
         "image_url": p.image_url,
         "is_available": p.is_available,
-
-        # Seasonal fields (used by navbar)
+        "stock": p.inventory.current_stock if p.inventory else 0, # Live stock!
         "season_key": p.season_key,
         "limited_start_at": p.limited_start_at.isoformat() if p.limited_start_at else None,
         "limited_end_at": p.limited_end_at.isoformat() if p.limited_end_at else None,
@@ -134,53 +166,53 @@ def get_customization_products(db: Session = Depends(get_db)):
 
 @router.get("/categories/hierarchy", response_model=List[dict])
 def get_category_hierarchy(db: Session = Depends(get_db)):
-    """Get dynamic category hierarchy for the frontend Mega Menu.
+    """Get dynamic category hierarchy grouped by Floral/Non-Floral for Navbars."""
+    
+    products = db.query(Product).filter(Product.is_available == True).all()
 
-    Uses your existing `products.category` string.
+    hierarchy_dict = {}
+    
+    # 🚀 Define our strict Non-Floral categories here
+    NON_FLORAL_CATS = ["wrapping", "accessory", "vase", "tools"]
 
-    Bouquet parsing convention (recommended):
-    - `bouquet:rose`
-    - `bouquet/rose`
-    - `bouquet-rose`
+    for p in products:
+        cat = (p.category or "").lower().strip()
+        
+        # 1. Completely hide add-ons from all navigation menus
+        if cat in ['add-on', 'addon']:
+            continue
+        
+        # 2. Smart Grouping Logic
+        # If the admin set a group, use it. If not, auto-sort it based on the category name.
+        group = (p.product_group or "").lower().strip()
+        
+        if not group:
+            if cat in NON_FLORAL_CATS:
+                group = "non-floral"
+            else:
+                group = "floral"
 
-    Anything not matching bouquet parsing will be grouped under its whole category.
-    """
+        if group not in hierarchy_dict:
+            hierarchy_dict[group] = set()
+        
+        if cat:
+            hierarchy_dict[group].add(cat)
 
-    # Collect distinct categories from available products
-    cats = (
-        db.query(Product.category)
-        .filter(Product.is_available == True)
-        .distinct()
-        .all()
-    )
+    # 3. Format for the frontend mega menu
+    def title_case(s: str):
+        return " ".join(w.capitalize() for w in s.replace("_", " ").split("-"))
 
-    distinct_categories = sorted({(c[0] or "").strip() for c in cats if c and c[0]})
+    result = []
+    for group_name, cats in hierarchy_dict.items():
+        result.append({
+            "title": title_case(group_name), # "Floral" or "Non Floral"
+            "items": sorted([title_case(c) for c in cats]) # ["Arrangement", "Wrapping", etc.]
+        })
 
-    def normalize(s: str) -> str:
-        return (s or "").strip().lower()
+    # Force "Floral" to always be the left column, "Non-Floral" to be the right column
+    result.sort(key=lambda x: 0 if "floral" in x["title"].lower() and "non" not in x["title"].lower() else 1)
 
-    def title_case(s: str) -> str:
-        return " ".join(w[:1].upper() + w[1:] for w in (s or "").strip().split(" ") if w)
-
-    def parse_bouquet(cat_raw: str):
-        """Return subtype if category looks like bouquet:<sub> / bouquet-<sub> / bouquet/<sub>."""
-        c = normalize(cat_raw)
-
-        separators = [":", "/", "-"]
-        for sep in separators:
-            if c.startswith(f"bouquet{sep}"):
-                sub = c[len("bouquet" + sep) :].strip()
-                if sub:
-                    return sub
-
-        # also support 'bouquets' heading
-        if c.startswith("bouquet") and c not in ["bouquet", "bouquets"]:
-            # e.g. bouquetrose
-            if c.startswith("bouquet"):
-                sub = c[len("bouquet") :].strip()
-                return sub or None
-
-        return None
+    return result
 
     # Build bouquet group
     bouquet_subtypes = set()

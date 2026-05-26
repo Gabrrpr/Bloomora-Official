@@ -501,23 +501,23 @@ function DropdownMenu({ items, categories, onNavigate, onClose }) {
 
   if (categories) {
     return (
-      // 🚀 Increased width to 650px to fit 4 columns side-by-side beautifully
-      <div className="absolute top-full left-0 mt-2 z-50 overflow-hidden" style={{ ...dropStyle, minWidth:"650px" }}>
+      // 🚀 Changed minWidth from 650px to 400px to perfectly fit the 2 Floral/Non-Floral columns
+      <div className="absolute top-full left-0 mt-2 z-50 overflow-hidden" style={{ ...dropStyle, minWidth:"400px" }}>
         <div className="flex" style={{ borderTop:"none" }}>
           {categories.map((cat, ci) => (
             <div key={cat.heading} className="flex-1 py-3" style={{ borderRight: ci < categories.length-1 ? `1px solid ${isDark?"#2d3748":"#f3f4f6"}` : "none" }}>
               
-              {/* 🚀 Clickable Headings */}
+              {/* Clickable Headings (FLORAL / NON-FLORAL) */}
               <button onClick={() => { if (cat.headingPage && onNavigate) onNavigate(cat.headingPage, cat.headingParam); onClose?.(); }}
                 className="w-full text-left px-4 pb-2 text-xs font-bold uppercase tracking-widest transition-colors hover:underline"
                 style={{ color:headingGreen, backgroundColor:"transparent", border:"none" }}>
                 {cat.heading}
               </button>
               
-              {/* 🚀 Clickable Sub-items passing the category parameter */}
+              {/* Clickable Sub-items (Arrangement, Vase, etc.) */}
               {cat.items.map(item => (
                 <button key={item.label} onClick={() => { if (item.page && onNavigate) onNavigate(item.page, item.param); onClose?.(); }}
-                  className="w-full text-left px-4 py-2 text-sm transition-all duration-150"
+                  className="w-full text-left px-4 py-2 text-sm transition-all duration-150 capitalize"
                   style={{ color: isDark ? "#d1d5db" : "#4b5563" }}
                   onMouseEnter={e => itemHover(e, true)}
                   onMouseLeave={e => itemHover(e, false)}>{item.label}</button>
@@ -532,7 +532,7 @@ function DropdownMenu({ items, categories, onNavigate, onClose }) {
     <div className="absolute top-full left-0 mt-2 z-50 min-w-[190px] overflow-hidden" style={dropStyle}>
       {items.map(item => (
         <button key={item.label} onClick={() => { if (item.page && onNavigate) onNavigate(item.page, item.param); onClose?.(); }}
-          className="w-full text-left px-4 py-2.5 text-sm first:rounded-t-xl last:rounded-b-xl transition-all duration-150"
+          className="w-full text-left px-4 py-2.5 text-sm first:rounded-t-xl last:rounded-b-xl transition-all duration-150 capitalize"
           style={{ color: isDark ? "#d1d5db" : "#4b5563" }}
           onMouseEnter={e => itemHover(e, true)}
           onMouseLeave={e => itemHover(e, false)}>{item.label}</button>

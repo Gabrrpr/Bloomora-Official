@@ -431,27 +431,39 @@ function EditProductModal({ product, onClose, onSave, categories }) {
     
     try {
       const fd = new FormData();
+
+      // 🛡️ THE FIX: (form.field || "") prevents the 'undefined' crash
+      fd.append("name", (form.name || "").trim());
+      fd.append("group", (form.group || "floral").toLowerCase().trim());
+      fd.append("category", (form.category || "").toLowerCase().trim());
+      fd.append("product_type", (form.productType || "").toLowerCase().trim());
       
-      // These keys MUST match the variable names in your FastAPI 'create_product' function
-      fd.append("name", form.name);
-      fd.append("description", form.description || "");
-      fd.append("group", form.group.toLowerCase().trim()); // Matches 'group: str = Form(...)'
-      fd.append("category", form.category.toLowerCase().trim()); // Matches 'category: str = Form(...)'
-      fd.append("product_type", form.productType.toLowerCase().trim()); // Matches 'product_type: str = Form(None)'
-      fd.append("price", form.price);
-      fd.append("status", form.status.toLowerCase());
+      fd.append("price", String(form.price));
+      fd.append("status", (form.status || "active").toLowerCase());
       fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false");
       
+      // Optional Fields
+      if (form.description) fd.append("description", form.description.trim());
       if (form.image_url) fd.append("image_url", form.image_url);
-      fd.append("stock", String(form.availability === "Out of Stock" ? 0 : form.availability === "Limited" ? 5 : 50));
+      if (form.originalPrice) fd.append("original_price", String(form.originalPrice));
+      
+      // Inventory Logic
+      const stockVal = form.availability === "Out of Stock" ? 0 : (form.availability === "Limited" ? 5 : 50);
+      fd.append("stock", String(stockVal));
+
+      // Seasonal Fields
+      if (form.season_key?.trim()) {
+        fd.append("season_key", form.season_key.toLowerCase().trim());
+        if (form.limited_start_at) fd.append("limited_start_at", form.limited_start_at);
+        if (form.limited_end_at) fd.append("limited_end_at", form.limited_end_at);
+      }
 
       const res = await api.createProduct(fd); 
       onSave(res.product); 
       onClose();
     } catch (e) {
-      // This will show you exactly what FastAPI is complaining about
-      const msg = e.response?.data?.detail || e.message;
-      alert("Backend Error:\n" + JSON.stringify(msg, null, 2));
+      console.error("API Error:", e);
+      alert("Error: " + (e.response?.data?.detail || e.message));
     }
   }
 
