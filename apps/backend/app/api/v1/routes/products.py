@@ -26,12 +26,12 @@ def serialize_product(p: Product) -> dict:
         "description": p.description,
         "price": float(p.price) if p.price else 0,
         "original_price": float(p.price) * 1.2 if p.price else 0,
-        "category": p.category.value if hasattr(p.category, "value") else p.category,
+        "product_group": p.product_group, # ADD THIS
+        "product_type": p.product_type,   # ADD THIS
+        "category": p.category, 
         "image_url": p.image_url,
         "is_available": p.is_available,
         "status": p.status.value if hasattr(p.status, "value") else p.status,
-        "created_at": p.created_at.isoformat() if p.created_at else None,
-        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
         "stock": inv.current_stock if inv else 0,
         "reorder_point": inv.reorder_point if inv else 10,
         "unit_type": inv.unit_type if (inv and inv.unit_type) else "piece",
@@ -133,27 +133,81 @@ def get_customization_products(db: Session = Depends(get_db)):
 
 
 @router.get("/categories/hierarchy", response_model=List[dict])
-def get_category_hierarchy():
-    """Get dynamic category hierarchy for the frontend Mega Menu."""
-    # Note: Later you can update this to fetch dynamically from your database!
-    return [
-        {
-            "title": "Flowers",
-            "items": ["Roses", "Sunflowers", "Tulips", "Orchids", "Carnations"] 
-        },
-        {
-            "title": "Arrangements",
-            "items": ["Bouquets", "Vase Arrangements", "Baskets", "Sympathy", "Gift Sets"]
-        },
-        {
-            "title": "Vases",
-            "items": ["Glass", "Ceramic", "Wood", "Premium"]
-        },
-        {
-            "title": "Wrappings & Accessories",
-            "items": ["Premium Wrappers", "Ribbons", "Greeting Cards", "Teddy Bears"]
-        }
-    ]
+def get_category_hierarchy(db: Session = Depends(get_db)):
+    """Get dynamic category hierarchy for the frontend Mega Menu.
+
+    Uses your existing `products.category` string.
+
+    Bouquet parsing convention (recommended):
+    - `bouquet:rose`
+    - `bouquet/rose`
+    - `bouquet-rose`
+
+    Anything not matching bouquet parsing will be grouped under its whole category.
+    """
+
+    # Collect distinct categories from available products
+    cats = (
+        db.query(Product.category)
+        .filter(Product.is_available == True)
+        .distinct()
+        .all()
+    )
+
+    distinct_categories = sorted({(c[0] or "").strip() for c in cats if c and c[0]})
+
+    def normalize(s: str) -> str:
+        return (s or "").strip().lower()
+
+    def title_case(s: str) -> str:
+        return " ".join(w[:1].upper() + w[1:] for w in (s or "").strip().split(" ") if w)
+
+    def parse_bouquet(cat_raw: str):
+        """Return subtype if category looks like bouquet:<sub> / bouquet-<sub> / bouquet/<sub>."""
+        c = normalize(cat_raw)
+
+        separators = [":", "/", "-"]
+        for sep in separators:
+            if c.startswith(f"bouquet{sep}"):
+                sub = c[len("bouquet" + sep) :].strip()
+                if sub:
+                    return sub
+
+        # also support 'bouquets' heading
+        if c.startswith("bouquet") and c not in ["bouquet", "bouquets"]:
+            # e.g. bouquetrose
+            if c.startswith("bouquet"):
+                sub = c[len("bouquet") :].strip()
+                return sub or None
+
+        return None
+
+    # Build bouquet group
+    bouquet_subtypes = set()
+    other_categories = set()
+
+    for cat in distinct_categories:
+        sub = parse_bouquet(cat)
+        if sub:
+            bouquet_subtypes.add(sub)
+        else:
+            other_categories.add(cat)
+
+    hierarchy: List[dict] = []
+
+    if bouquet_subtypes:
+        bouquet_items = sorted({title_case(s.replace("_", " ")) for s in bouquet_subtypes})
+        hierarchy.append({"title": "Bouquet", "items": bouquet_items})
+
+    # Put remaining categories as single-item groups so nothing disappears from Mega Menu
+    for cat in sorted(other_categories):
+        clean = cat.strip()
+        if not clean:
+            continue
+        hierarchy.append({"title": title_case(clean), "items": [title_case(clean)]})
+
+    return hierarchy
+
 
 # ── Admin endpoints ───────────────────────────────────────────────────────────
 
@@ -308,6 +362,8 @@ async def upload_product_image(
 def create_product(
     name: str = Form(...),
     description: Optional[str] = Form(None),
+    group: str = Form(..., alias="group"),
+    product_type: str = Form(None),
     price: str = Form(...),
     category: str = Form(...),
     status: str = Form("active"),
@@ -339,9 +395,11 @@ def create_product(
     new_product = Product(
         id=uuid.uuid4(),
         name=name,
+        product_group=group.lower().strip(),
         description=description,
         price=price_val,
         category=category.lower().strip(),  # 👇 Directly use string instead of Enum
+        product_type=product_type.lower().strip() if product_type else None,  
         status=status_enum,
         is_available=is_available,
         image_url=image_url,
@@ -369,9 +427,11 @@ def create_product(
 def update_product(
     product_id: str,
     name: Optional[str] = Form(None),
+    group: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     price: Optional[str] = Form(None),
     category: Optional[str] = Form(None),
+    product_type: Optional[str] = Form(None),
     status: Optional[str] = Form(None),
     is_available: Optional[bool] = Form(None),
     image_url: Optional[str] = Form(None),
@@ -399,6 +459,8 @@ def update_product(
 
     if name is not None:
         product.name = name
+    if group is not None:
+        product.product_group = group.lower().strip()
     if description is not None:
         product.description = description
     if price is not None:
@@ -408,6 +470,8 @@ def update_product(
             raise HTTPException(status_code=400, detail="Invalid price value.")
     if category is not None:
         product.category = category.lower().strip() 
+    if product_type is not None:
+        product.product_type = product_type.lower().strip() if product_type.strip() else None
     if status is not None:
         try:
             product.status = ProductStatusEnum(status.lower())

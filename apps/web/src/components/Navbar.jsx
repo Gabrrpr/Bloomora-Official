@@ -920,11 +920,16 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
 
   const handleNavClick = link => {
     setActive(link.label);
-    if (link.isCustomCategory) {
+
+    if (link.page === 'shop' && link.param) {
+      // Mega-menu submenu click: store exact param for Shop sidebar filtering
+      localStorage.setItem("bloomora_active_category", String(link.param).toLowerCase());
+    } else if (link.isCustomCategory) {
       localStorage.setItem("bloomora_active_category", link.label.toLowerCase());
     } else {
       localStorage.removeItem("bloomora_active_category");
     }
+
     if (link.isCampaign) {
       localStorage.setItem("bloomora_active_campaign", link.campaignKey);
     } else {

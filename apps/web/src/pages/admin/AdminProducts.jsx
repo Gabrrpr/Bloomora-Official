@@ -112,7 +112,7 @@ function getProductImage(product) {
 // ── Shared modal input components ─────────────────────────────────────────────
 function MInput({ value, onChange, placeholder, type="text", error, d }) {
   return (
-    <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+    <input type={type} value={value || ""} onChange={e => onChange(e.target.value)} placeholder={placeholder}
       className="w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all"
       style={{ borderColor:error?"#ef4444":d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }}
       onFocus={e => { e.target.style.borderColor="#4ade80"; e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)" }}
@@ -143,7 +143,7 @@ function MLabel({ children, d }) {
 
 function MTextarea({ value, onChange, placeholder, rows=3, d }) {
   return (
-    <textarea value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows}
+    <textarea value={value || ""} onChange={e => onChange(e.target.value)} placeholder={placeholder} rows={rows}
       className="w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all resize-none"
       style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }}
       onFocus={e => { e.target.style.borderColor="#4ade80"; e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)" }}
@@ -198,8 +198,13 @@ function ProductPagination({ showing, page, totalPages, onPageChange, d }) {
 // ── Add Product Modal ─────────────────────────────────────────────────────────
 function AddProductModal({ onClose, onSave, categories }) {
   const d = useAdminTokens()
-  const [form, setForm] = useState({ name:"", category:"", price:"", originalPrice:"", availability:"Available", status:"Active", description:"", image_url:"", season_key:"", limited_start_at:"", limited_end_at:"" })
-  const [errors, setErrors]         = useState({})
+  const [form, setForm] = useState({ 
+    name:"", group:"floral", category:"", productType:"", 
+    price:"", originalPrice:"", availability:"Available", 
+    status:"Active", description:"", image_url:"", 
+    season_key:"", limited_start_at:"", limited_end_at:"" 
+  })
+  const [errors, setErrors] = useState({})
   const [isUploading, setUploading] = useState(false)
   const [lightboxSrc, setLightboxSrc] = useState(null)
   const set = key => val => setForm(f => ({...f,[key]:val}))
@@ -224,23 +229,49 @@ function AddProductModal({ onClose, onSave, categories }) {
     } catch (err) { alert("Upload failed: "+(err.message||"Unknown error")) }
     finally { setUploading(false) }
   }
-
   const handleSave = async () => {
-    const err=validate(); if (Object.keys(err).length){setErrors(err);return}
+    const err = validate(); 
+    if (Object.keys(err).length) { setErrors(err); return; }
+    
     try {
-      const fd=new FormData()
-      fd.append("name",form.name); fd.append("category",form.category.toLowerCase().trim()); fd.append("price",form.price)
-      if (form.originalPrice) fd.append("original_price",form.originalPrice)
-      if (form.season_key?.trim()) { fd.append("season_key",form.season_key.toLowerCase().trim()); if(form.limited_start_at)fd.append("limited_start_at",form.limited_start_at); if(form.limited_end_at)fd.append("limited_end_at",form.limited_end_at) } else fd.append("season_key","")
-      fd.append("status",form.status.toLowerCase()); fd.append("is_available",form.availability!=="Out of Stock"?"true":"false")
-      if (form.description) fd.append("description",form.description)
-      if (form.image_url) fd.append("image_url",form.image_url)
-      fd.append("stock",String(form.availability==="Out of Stock"?0:form.availability==="Limited"?5:50))
-      const res=await api.createProduct(fd); onSave(res.product); onClose()
+      const fd = new FormData();
+
+      // 1. Core Fields (Ensure these match your FastAPI route)
+      fd.append("name", form.name.trim());
+      fd.append("group", form.group.toLowerCase().trim());
+      fd.append("category", form.category.toLowerCase().trim());
+      fd.append("product_type", form.productType.toLowerCase().trim());
+      fd.append("price", String(form.price));
+      fd.append("status", form.status.toLowerCase());
+      fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false");
+      
+      // 2. Optional Fields
+      if (form.description) fd.append("description", form.description.trim());
+      if (form.image_url) fd.append("image_url", form.image_url);
+      if (form.originalPrice) fd.append("original_price", String(form.originalPrice));
+      
+      // 3. Inventory Logic
+      const stockVal = form.availability === "Out of Stock" ? 0 : (form.availability === "Limited" ? 5 : 50);
+      fd.append("stock", String(stockVal));
+
+      // 4. Seasonal Fields
+      if (form.season_key?.trim()) {
+        fd.append("season_key", form.season_key.toLowerCase().trim());
+        if (form.limited_start_at) fd.append("limited_start_at", form.limited_start_at);
+        if (form.limited_end_at) fd.append("limited_end_at", form.limited_end_at);
+      }
+
+      // 🚀 DEBUG: Check exactly what is being sent before the request
+      for (let [key, value] of fd.entries()) {
+        console.log(`Sending to API: ${key} = ${value}`);
+      }
+
+      const res = await api.createProduct(fd); 
+      onSave(res.product); 
+      onClose();
     } catch (e) {
-      let msg=e.response?.data?.detail||e.message
-      if (Array.isArray(msg)) msg=msg.map(x=>`${x.loc[x.loc.length-1]}: ${x.msg}`).join("\n")
-      alert("Error:\n\n"+msg)
+      console.error("API Error:", e);
+      alert("Error: " + (e.response?.data?.detail || e.message));
     }
   }
 
@@ -290,23 +321,22 @@ function AddProductModal({ onClose, onSave, categories }) {
             {errors.name && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.name}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          {/* 3-Tier Hierarchy Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <div className="flex items-end justify-between mb-1.5">
-                <MLabel d={d}>Category <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <span className="text-[10px] font-semibold" style={{ color:"#4ade80" }}>Type to create new</span>
-              </div>
-              <input list="cat-opts" value={form.category} onChange={e=>set("category")(e.target.value)} placeholder="Select or type new..."
-                className="w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all capitalize"
-                style={{ borderColor:errors.category?"#ef4444":d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }}
-                onFocus={e=>{ e.target.style.borderColor="#4ade80"; e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)" }}
-                onBlur={e=>{ e.target.style.borderColor=errors.category?"#ef4444":d.inputBdr; e.target.style.boxShadow="none" }}/>
-              <datalist id="cat-opts">{categories.map(c=><option key={c} value={c}/>)}</datalist>
-              {errors.category && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.category}</p>}
+              <MLabel d={d}>Group</MLabel>
+              <MSel value={form.group} onChange={set("group")} options={["floral", "non-floral"]} d={d}/>
             </div>
             <div>
-              <MLabel d={d}>Status</MLabel>
-              <MSel value={form.status} onChange={set("status")} options={STATUSES} d={d}/>
+              <MLabel d={d}>Category <span style={{ color:"#f87171" }}>*</span></MLabel>
+              <input list="cat-opts" value={form.category} onChange={e=>set("category")(e.target.value)} placeholder="e.g. Arrangement"
+                className="w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all capitalize"
+                style={{ borderColor:errors.category?"#ef4444":d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }}/>
+              <datalist id="cat-opts">{categories.map(c=><option key={c} value={c}/>)}</datalist>
+            </div>
+            <div>
+              <MLabel d={d}>Type</MLabel>
+              <MInput value={form.productType} onChange={set("productType")} placeholder="e.g. Rose" d={d}/>
             </div>
           </div>
 
@@ -314,12 +344,10 @@ function AddProductModal({ onClose, onSave, categories }) {
             <div>
               <MLabel d={d}>Selling Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
               <MInput type="number" value={form.price} onChange={set("price")} placeholder="999" error={errors.price} d={d}/>
-              {errors.price && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.price}</p>}
             </div>
             <div>
               <MLabel d={d}>Original Price (₱)</MLabel>
-              <MInput type="number" value={form.originalPrice} onChange={set("originalPrice")} placeholder="1299 (before discount)" error={errors.originalPrice} d={d}/>
-              {errors.originalPrice && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.originalPrice}</p>}
+              <MInput type="number" value={form.originalPrice} onChange={set("originalPrice")} placeholder="1299" error={errors.originalPrice} d={d}/>
             </div>
           </div>
 
@@ -337,7 +365,7 @@ function AddProductModal({ onClose, onSave, categories }) {
           </div>
 
           <div>
-            <MLabel d={d}>Description <span style={{ color:d.subC, fontWeight:400 }}>(optional)</span></MLabel>
+            <MLabel d={d}>Description</MLabel>
             <MTextarea value={form.description} onChange={set("description")} placeholder="Brief description..." d={d}/>
           </div>
         </div>
@@ -345,32 +373,16 @@ function AddProductModal({ onClose, onSave, categories }) {
         <div className="flex items-center justify-end gap-2 px-6 py-4 flex-shrink-0"
           style={{ borderTop:`1px solid ${d.modalFtrBdr}`, backgroundColor:d.modalFtr }}>
           <button onClick={onClose} className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
-            style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}
-            onMouseEnter={e=>e.currentTarget.style.backgroundColor=d.hdrBg} onMouseLeave={e=>e.currentTarget.style.backgroundColor=d.inputBg}>
+            style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}>
             Cancel
           </button>
           <button onClick={handleSave} disabled={isUploading}
-            className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
-            style={{ background:`linear-gradient(135deg,${DG},${G})`, boxShadow:"0 2px 8px rgba(12,87,62,0.3)" }}>
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
+            className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90"
+            style={{ background:`linear-gradient(135deg,${DG},${G})` }}>
             Add Product
           </button>
         </div>
       </div>
-      {lightboxSrc && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center px-4"
-          style={{ backgroundColor:"rgba(0,0,0,0.85)", backdropFilter:"blur(4px)" }}
-          onClick={()=>setLightboxSrc(null)}>
-          <div className="relative rounded-xl overflow-hidden" style={{ maxWidth:"860px", width:"100%" }}>
-            <button type="button" onClick={()=>setLightboxSrc(null)}
-              className="absolute -top-3 -right-3 z-10 rounded-full p-2 hover:bg-gray-200 transition-colors"
-              style={{ backgroundColor:"white" }}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
-            <FallbackImage src={lightboxSrc} alt="Enlarged" className="w-full max-h-[78vh] object-contain bg-white" fallbackSrc={PLACEHOLDER_IMAGE}/>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
@@ -414,22 +426,32 @@ function EditProductModal({ product, onClose, onSave, categories }) {
   }
 
   const handleSave = async () => {
-    const err=validate(); if(Object.keys(err).length){setErrors(err);return}
+    const err = validate(); 
+    if (Object.keys(err).length) { setErrors(err); return; }
+    
     try {
-      const fd=new FormData()
-      fd.append("name",form.name); fd.append("category",form.category.toLowerCase().trim()); fd.append("price",form.price)
-      if (form.originalPrice) fd.append("original_price",form.originalPrice)
-      fd.append("status",form.status.toLowerCase()); fd.append("is_available",form.availability!=="Out of Stock"?"true":"false")
-      if (form.description) fd.append("description",form.description)
-      if (removeImage) fd.append("image_url","none")
-      else if (form.image_url&&form.image_url!=="none") fd.append("image_url",form.image_url)
-      fd.append("stock",String(form.availability==="Out of Stock"?0:form.availability==="Limited"?5:50))
-      if (form.season_key?.trim()){fd.append("season_key",form.season_key.toLowerCase().trim());if(form.limited_start_at)fd.append("limited_start_at",form.limited_start_at);if(form.limited_end_at)fd.append("limited_end_at",form.limited_end_at)}else fd.append("season_key","")
-      const res=await api.updateProduct(product.id,fd); onSave(res.product); onClose()
+      const fd = new FormData();
+      
+      // These keys MUST match the variable names in your FastAPI 'create_product' function
+      fd.append("name", form.name);
+      fd.append("description", form.description || "");
+      fd.append("group", form.group.toLowerCase().trim()); // Matches 'group: str = Form(...)'
+      fd.append("category", form.category.toLowerCase().trim()); // Matches 'category: str = Form(...)'
+      fd.append("product_type", form.productType.toLowerCase().trim()); // Matches 'product_type: str = Form(None)'
+      fd.append("price", form.price);
+      fd.append("status", form.status.toLowerCase());
+      fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false");
+      
+      if (form.image_url) fd.append("image_url", form.image_url);
+      fd.append("stock", String(form.availability === "Out of Stock" ? 0 : form.availability === "Limited" ? 5 : 50));
+
+      const res = await api.createProduct(fd); 
+      onSave(res.product); 
+      onClose();
     } catch (e) {
-      let msg=e.response?.data?.detail||e.message
-      if(Array.isArray(msg))msg=msg.map(x=>`${x.loc[x.loc.length-1]}: ${x.msg}`).join("\n")
-      alert("Error:\n\n"+msg)
+      // This will show you exactly what FastAPI is complaining about
+      const msg = e.response?.data?.detail || e.message;
+      alert("Backend Error:\n" + JSON.stringify(msg, null, 2));
     }
   }
 
@@ -481,6 +503,7 @@ function EditProductModal({ product, onClose, onSave, categories }) {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
+            {/* 1. Category Field */}
             <div>
               <div className="flex items-end justify-between mb-1.5">
                 <MLabel d={d}>Category <span style={{ color:"#f87171" }}>*</span></MLabel>
@@ -494,10 +517,21 @@ function EditProductModal({ product, onClose, onSave, categories }) {
               <datalist id="cat-opts-edit">{categories.map(c=><option key={c} value={c}/>)}</datalist>
               {errors.category && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.category}</p>}
             </div>
+
+            {/* 2. Type Field */}
             <div>
-              <MLabel d={d}>Status</MLabel>
-              <MSel value={form.status} onChange={set("status")} options={STATUSES} d={d}/>
+              <div className="flex items-end justify-between mb-1.5">
+                <MLabel d={d}>Type <span style={{ color:d.subC, fontWeight:400 }}>(optional)</span></MLabel>
+                <span className="text-[10px] font-semibold" style={{ color:"#4ade80" }}>e.g. Rose, Vase</span>
+              </div>
+              <MInput value={form.productType} onChange={set("productType")} placeholder="e.g. Rose" d={d}/>
             </div>
+          </div>
+
+          {/* 3. Status Field (Moved to its own full-width line below the grid to fix the layout) */}
+          <div>
+            <MLabel d={d}>Status</MLabel>
+            <MSel value={form.status} onChange={set("status")} options={STATUSES} d={d}/>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

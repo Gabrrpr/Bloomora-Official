@@ -21,7 +21,9 @@ class Product(Base):
     price = Column(Numeric(10, 2), nullable=False)
     
     # 👇 CHANGED: Now a String to support any custom or seasonal categories
-    category = Column(String(100), nullable=False, index=True) 
+    product_group = Column(String(50), nullable=False)
+    category = Column(String(100), nullable=False, index=True)
+    product_type = Column(String(100), nullable=True, index=True)
     
     # ─── ✨ NEW SEASONAL FIELDS ✨ ───
     # The name of the season (e.g., "valentines", "mothers_day")

@@ -233,6 +233,10 @@ export const api = {
     return this.post(`/campaigns/${campaignId}/products`, { product_ids });
   },
 
+  async getCategoryHierarchy() {
+    return this.get('/products/categories/hierarchy');
+  },
+  
   // ── Vases ────────────────────────────────────────────────────────────────
   async getVases(category = null, minPrice = null, maxPrice = null) {
     const params = new URLSearchParams();

@@ -4,44 +4,8 @@ import Footer from "../../components/Footer.jsx"
 import FallbackImage from "../../components/FallbackImage.jsx"
 import { api } from "../../services/api.js"
 
-import SpringFlowers_PurpleWrapper from "../../assets/products/bouquets/SpringFlowers_PurpleWrapper.png"
-import SpringFlowers_PinkWrapper   from "../../assets/products/bouquets/SpringFlowers_PinkWrapper.png"
-import SpringFlowers_GreenWrapper  from "../../assets/products/bouquets/SpringFlowers_GreenWrapper.png"
-import RainbowEquadorRoses         from "../../assets/products/bouquets/RainbowEquadorRoses.png"
-import MixTulips                   from "../../assets/products/bouquets/MixTulips.png"
-import Dozen_YellowChinaRoses      from "../../assets/products/bouquets/Dozen_YellowChinaRoses.png"
-import Dozen_RedEquadorRoses       from "../../assets/products/bouquets/Dozen_RedEquadorRoses.png"
-import Dozen_RedChinaRoses         from "../../assets/products/bouquets/Dozen_RedChinaRoses.png"
-import Dozen_PinkChinaRoses        from "../../assets/products/bouquets/Dozen_PinkChinaRoses.png"
-import Dozen_OrangeChinaRoses      from "../../assets/products/bouquets/Dozen_OrangeChinaRoses.png"
-import Roses_24pcs_Red             from "../../assets/products/bouquets/24pcs_RedEquadorRoses.png"
-import Roses_10pcs_Blue            from "../../assets/products/bouquets/10pcs_BlueChinaRoses.png"
-import Roses_6pcs_White            from "../../assets/products/bouquets/6pcs_WhiteEquadorRoses.png"
-import Roses_6pcs_Purple           from "../../assets/products/bouquets/6pcs_PurpleChinaRoses.png"
-import Sunflower_3pcs              from "../../assets/products/bouquets/3pcs_Sunflower.png"
-import Tulips_3pc_Pink             from "../../assets/products/bouquets/3pc_PinkTulips.png"
-
 const G  = "#2E8B34"
 const DG = "#0C573E"
-
-const ALL_PRODUCTS = [
-  { id:1,  name:"Spring Flowers Purple Wrapper", image:SpringFlowers_PurpleWrapper, price:850,  original:1100, rating:4.9, reviews:124, ribbon:"Best Seller", category:"Bouquets" },
-  { id:2,  name:"Spring Flowers Pink Wrapper",   image:SpringFlowers_PinkWrapper,   price:850,  original:1100, rating:4.8, reviews:98,  ribbon:"Best Seller", category:"Bouquets" },
-  { id:3,  name:"Spring Flowers Green Wrapper",  image:SpringFlowers_GreenWrapper,  price:850,  original:1100, rating:4.7, reviews:76,  ribbon:null,          category:"Bouquets" },
-  { id:4,  name:"Rainbow Ecuador Roses",         image:RainbowEquadorRoses,         price:1299, original:1599, rating:5.0, reviews:210, ribbon:"Top Pick",    category:"Roses" },
-  { id:5,  name:"Mix Tulips",                    image:MixTulips,                   price:750,  original:950,  rating:4.8, reviews:88,  ribbon:"New",         category:"Tulips" },
-  { id:6,  name:"Dozen Yellow China Roses",      image:Dozen_YellowChinaRoses,      price:699,  original:899,  rating:4.6, reviews:57,  ribbon:null,          category:"Roses" },
-  { id:7,  name:"Dozen Red Ecuador Roses",       image:Dozen_RedEquadorRoses,       price:999,  original:1299, rating:4.9, reviews:183, ribbon:"Best Seller", category:"Roses" },
-  { id:8,  name:"Dozen Red China Roses",         image:Dozen_RedChinaRoses,         price:699,  original:899,  rating:4.7, reviews:65,  ribbon:null,          category:"Roses" },
-  { id:9,  name:"Dozen Pink China Roses",        image:Dozen_PinkChinaRoses,        price:699,  original:899,  rating:4.8, reviews:91,  ribbon:"Popular",     category:"Roses" },
-  { id:10, name:"Dozen Orange China Roses",      image:Dozen_OrangeChinaRoses,      price:699,  original:899,  rating:4.6, reviews:44,  ribbon:null,          category:"Roses" },
-  { id:11, name:"24pcs Red Ecuador Roses",       image:Roses_24pcs_Red,             price:1799, original:2199, rating:5.0, reviews:156, ribbon:"Premium",     category:"Roses" },
-  { id:12, name:"10pcs Blue China Roses",        image:Roses_10pcs_Blue,            price:599,  original:799,  rating:4.7, reviews:38,  ribbon:"Rare Find",   category:"Roses" },
-  { id:13, name:"6pcs White Ecuador Roses",      image:Roses_6pcs_White,            price:499,  original:649,  rating:4.8, reviews:72,  ribbon:null,          category:"Roses" },
-  { id:14, name:"6pcs Purple China Roses",       image:Roses_6pcs_Purple,           price:499,  original:649,  rating:4.9, reviews:61,  ribbon:"Popular",     category:"Roses" },
-  { id:15, name:"3pcs Sunflower",                image:Sunflower_3pcs,              price:350,  original:450,  rating:4.9, reviews:203, ribbon:"Best Seller", category:"Arrangements" },
-  { id:16, name:"3pcs Pink Tulips",              image:Tulips_3pc_Pink,             price:350,  original:450,  rating:4.7, reviews:49,  ribbon:"New",         category:"Tulips" },
-]
 
 const RIBBON_COLORS = {
   "Best Seller":"#2E8B34", "Top Pick":"#0C573E", "New":"#3b82f6",
@@ -342,7 +306,6 @@ function SidebarContent({ categories, activeCategory, setActiveCategory, priceRa
   )
 }
 
-// ── Fixed: uses props (categories, activeCategory, setActiveCategory) instead of outer scope vars
 function MobileFilterDrawer({ open, onClose, categories, activeCategory, setActiveCategory, priceRange, setPriceRange }) {
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden"
@@ -391,11 +354,9 @@ export default function Shop({ onNavigate, initialCategory = "All" }) {
   const [viewAs, setViewAs]                   = useState("grid3")
   const [sortBy, setSortBy]                   = useState("best-selling")
   const [activeCategory, setActiveCategory]   = useState("All")
-
-  // When Navbar clicks Wrapping & Accessories it stores a single label in localStorage.
-  // We convert that label into a Set of real product categories.
+  const [categoryHierarchy, setCategoryHierarchy] = useState([])
+  
   const [priceRange, setPriceRange]           = useState([0, 2500])
-
   const [wishlist, setWishlist]               = useState([])
   const [sortOpen, setSortOpen]               = useState(false)
   const [filterOpen, setFilterOpen]           = useState(false)
@@ -407,27 +368,35 @@ export default function Shop({ onNavigate, initialCategory = "All" }) {
   }, [initialCategory]);
 
   useEffect(() => {
+    // 1. Fetch Hierarchy (Navbar & Sidebar data)
+    api.get("/products/categories/hierarchy") 
+      .then(data => {
+        if (data) setCategoryHierarchy(data);
+      })
+      .catch(err => console.error("Failed to load hierarchy", err));
+
+    // 2. Fetch Products safely without crashing if empty
     api.get("/products/")
       .then(data => {
         if (data && data.length > 0) {
-          const mapped = data.map(p => {
-            const fallback = ALL_PRODUCTS.find(f => f.name === p.name) || {}
-            return {
-              ...p,
-              image: p.image_url || fallback.image || new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href,
-              original: p.original_price || fallback.original || p.price * 1.2,
-              rating: fallback.rating || 5.0,
-              reviews: fallback.reviews || 0,
-              ribbon: fallback.ribbon || null,
-            }
-          })
-          setProducts(mapped)
+          const mapped = data.map(p => ({
+            ...p,
+            image: p.image_url || new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href,
+            original: p.original_price || (p.price * 1.2),
+            rating: 5.0,
+            reviews: 0,
+            ribbon: p.ribbon || null,
+          }));
+          setProducts(mapped);
         } else {
-          setProducts(ALL_PRODUCTS)
+          setProducts([]);
         }
       })
-      .catch(() => setProducts(ALL_PRODUCTS))
-  }, [])
+      .catch(err => {
+        console.error("Failed to load products", err);
+        setProducts([]);
+      });
+  }, []);
 
   useEffect(() => {
     if (isMobile && (viewAs === "grid3" || viewAs === "grid4")) setViewAs("grid2")
@@ -441,38 +410,54 @@ export default function Shop({ onNavigate, initialCategory = "All" }) {
 
   const toggleWishlist = id => setWishlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
 
-  const dynamicCategories = ["All", ...new Set(products.map(p => p.category).filter(Boolean).filter(c => c.toLowerCase() !== 'add-on' && c.toLowerCase() !== 'addon'))]
-
   const normalizeCat = (s) => (s || "").toString().trim().toLowerCase();
 
-  const getActiveCategorySet = () => {
-    const raw = localStorage.getItem("bloomora_active_category") || "";
-    const normalized = normalizeCat(raw);
+  // 🚀 SMART SIDEBAR LOGIC
+  const getSidebarCategories = () => {
+    const activeNorm = normalizeCat(activeCategory);
 
-    // Multi-category mapping coming from Navbar
-    if (normalized === "wrapping & accessories" || normalized === "wrapping & accessory") {
-      return new Set(["wrapping", "accessory"]);
+    if (!activeNorm || activeNorm === "all") {
+      if (categoryHierarchy.length > 0) {
+        return ["All", ...categoryHierarchy.map(g => g.title)];
+      }
+      return ["All"];
     }
-    if (normalized === "wrapping") return new Set(["wrapping"]);
-    if (normalized === "accessory" || normalized === "accessories") return new Set(["accessory"]);
 
-    // Default: single category (case-insensitive)
-    if (!normalized || normalized === "all") return null;
-    return new Set([normalized]);
-  }
+    const parentGroup = categoryHierarchy.find(g => normalizeCat(g.title) === activeNorm);
+    if (parentGroup && parentGroup.items) {
+      return ["All", ...parentGroup.items];
+    }
 
-  const activeCategorySet = getActiveCategorySet();
+    const parentOfSub = categoryHierarchy.find(g => 
+      g.items && g.items.map(normalizeCat).includes(activeNorm)
+    );
+    if (parentOfSub && parentOfSub.items) {
+      return ["All", ...parentOfSub.items];
+    }
 
+    return ["All", activeCategory];
+  };
 
+  const dynamicCategories = getSidebarCategories();
+
+  // 🚀 SMART FILTER LOGIC
   const filtered = products
-    .filter(p => p.category !== 'Add-on') // Exclude 'Add-on' category from main listing
+    .filter(p => normalizeCat(p.category) !== 'add-on' && normalizeCat(p.category) !== 'addon')
     .filter(p => {
-      if (activeCategorySet === null) return activeCategory === "All" || !activeCategory || p.category.toLowerCase() === activeCategory.toLowerCase();
-      const pc = (p.category || "").toLowerCase();
-      return Array.from(activeCategorySet).some(c => pc === c.toLowerCase());
+      const activeNorm = normalizeCat(activeCategory);
+      const pcNorm = normalizeCat(p.category);
+
+      if (!activeNorm || activeNorm === "all") return true;
+
+      const parentGroup = categoryHierarchy.find(g => normalizeCat(g.title) === activeNorm);
+      if (parentGroup && parentGroup.items) {
+        const subItemsNorm = parentGroup.items.map(normalizeCat);
+        return subItemsNorm.includes(pcNorm) || pcNorm === activeNorm;
+      }
+
+      return pcNorm === activeNorm;
     })
     .filter(p => p.price >= priceRange[0] && p.price <= priceRange[1])
-
     .sort((a, b) => {
       if (sortBy === "price-asc")  return a.price - b.price
       if (sortBy === "price-desc") return b.price - a.price
