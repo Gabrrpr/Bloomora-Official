@@ -26,16 +26,16 @@ const RIBBON_COLORS = {
 const DEFAULT_DATA = {
   bouquets: {
     banner: {
-      eyebrow: "Fresh and Beautiful",
-      heading: "Fresh Flower Collections",
-      description: "From sunny sunflowers to romantic roses, there is something for every occasion and everyone you love.",
-      ctaLabel: "Shop All Flowers",
+      eyebrow: "",
+      heading: "",
+      description: "",
+      ctaLabel: "Shop All",
       ctaTarget: "shop",
     },
     categories: [
-      { label: "Sunflowers",  tag: "Sunny",    productId: null, nav: "shop" },
-      { label: "China Roses", tag: "Romantic", productId: null, nav: "shop" },
-      { label: "Tulips",      tag: "Seasonal", productId: null, nav: "shop" },
+      { label: "", tag: "", productId: null, nav: "shop" },
+      { label: "", tag: "", productId: null, nav: "shop" },
+      { label: "", tag: "", productId: null, nav: "shop" },
     ],
     featured: [
       { productId: null, ribbonOverride: null },
@@ -43,21 +43,21 @@ const DEFAULT_DATA = {
       { productId: null, ribbonOverride: null },
       { productId: null, ribbonOverride: null },
     ],
-    sectionHeading: "Featured Bouquets",
-    sectionEyebrow: "Our Top Picks",
+    sectionHeading: "",
+    sectionEyebrow: "",
   },
   nonFloral: {
     banner: {
-      eyebrow: "Elegantly Crafted",
-      heading: "Our Curated Vase Collection",
-      description: "A good vase makes every bouquet better. Shop our range in different styles, sizes, and finishes for any space.",
-      ctaLabel: "Shop All Vases",
-      ctaTarget: "vases",
+      eyebrow: "",
+      heading: "",
+      description: "",
+      ctaLabel: "Shop All",
+      ctaTarget: "shop",
     },
     categories: [
-      { label: "Black Gold Vases", tag: "Luxe",      productId: null, nav: "vases" },
-      { label: "Green Collection", tag: "Botanical", productId: null, nav: "vases" },
-      { label: "Marble Series",    tag: "Classic",   productId: null, nav: "vases" },
+      { label: "", tag: "", productId: null, nav: "shop" },
+      { label: "", tag: "", productId: null, nav: "shop" },
+      { label: "", tag: "", productId: null, nav: "shop" },
     ],
     featured: [
       { productId: null, ribbonOverride: null },
@@ -65,8 +65,8 @@ const DEFAULT_DATA = {
       { productId: null, ribbonOverride: null },
       { productId: null, ribbonOverride: null },
     ],
-    sectionHeading: "Featured Vases",
-    sectionEyebrow: "Staff Favorites",
+    sectionHeading: "",
+    sectionEyebrow: "",
   },
 }
 
@@ -742,23 +742,27 @@ export default function AdminFeaturedProducts() {
   const [loading, setLoading]= useState(true)
   const [dirty, setDirty]   = useState(false)
   const [saved, setSaved]   = useState(false)
+  const [saving, setSaving] = useState(false)
 
-  // ─── load saved layout ──
+  // ─── load saved layout from DATABASE ──
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        if (parsed && parsed.bouquets && parsed.nonFloral) setData(parsed)
-      }
-    } catch { /* ignore */ }
+    // Make sure you add this method to your api.js file:
+    // getHomepageSettings: () => request('/admin/settings/homepage'),
+    api.get("products/admin/settings/homepage") // Adjust path based on your router
+      .then(parsed => {
+        // If the database has data, merge it. Otherwise use the blank defaults.
+        if (parsed && parsed.bouquets && parsed.nonFloral) {
+          setData(parsed);
+        }
+      })
+      .catch(err => console.error("Failed to load homepage settings from DB:", err))
   }, [])
 
-  // ─── fetch products ──
+  // ─── fetch products for the picker ──
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    api.get("/products")
+    api.get("/products/")
       .then(rows => {
         if (cancelled) return
         const normalized = (Array.isArray(rows) ? rows : []).map(p => ({
@@ -786,19 +790,26 @@ export default function AdminFeaturedProducts() {
     setSaved(false)
   }
 
-  const handleSave = () => {
+  // ─── save layout to DATABASE ──
+  const handleSave = async () => {
+    setSaving(true)
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+      // Make sure you add this method to your api.js file:
+      // saveHomepageSettings: (data) => request('/admin/settings/homepage', { method: 'POST', body: JSON.stringify(data) }),
+      await api.post("/products/admin/settings/homepage", data) // Adjust path based on your router
+      
       setDirty(false)
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
     } catch (err) {
-      alert("Failed to save: " + err.message)
+      alert("Failed to save to database: " + err.message)
+    } finally {
+      setSaving(false)
     }
   }
 
   const handleReset = () => {
-    if (!window.confirm(`Reset the "${tab === "bouquets" ? "Featured Bouquets" : "Featured Non-Floral"}" section to defaults?`)) return
+    if (!window.confirm(`Reset the "${tab === "bouquets" ? "Featured Bouquets" : "Featured Non-Floral"}" section to blank defaults?`)) return
     setData(prev => ({ ...prev, [tab]: DEFAULT_DATA[tab] }))
     setDirty(true)
     setSaved(false)
@@ -821,7 +832,7 @@ export default function AdminFeaturedProducts() {
               <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
               </svg>
-              Saved
+              Live
             </span>
           )}
           <button onClick={handleReset}
@@ -829,15 +840,19 @@ export default function AdminFeaturedProducts() {
             style={{ borderColor: t.cardBorder, color: t.textSecondary, backgroundColor: t.surfaceBg }}
             onMouseEnter={e => e.currentTarget.style.backgroundColor = t.hoverBg}
             onMouseLeave={e => e.currentTarget.style.backgroundColor = t.surfaceBg}>
-            Reset This Tab
+            Clear Tab
           </button>
-          <button onClick={handleSave} disabled={!dirty}
+          <button onClick={handleSave} disabled={!dirty || saving}
             className="text-xs font-bold px-4 py-2 rounded-md text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
             style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
-            <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
-            </svg>
-            Save Changes
+            {saving ? (
+               <svg width="13" height="13" fill="none" viewBox="0 0 24 24" style={{animation:"spin 1s linear infinite"}}><circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round"/></svg>
+            ) : (
+              <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+              </svg>
+            )}
+            Publish to Homepage
           </button>
         </div>
       </div>

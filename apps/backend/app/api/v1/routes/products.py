@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Body
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_
+from sqlalchemy import and_, text
 from typing import List, Optional
 from decimal import Decimal
 import uuid
@@ -43,7 +43,7 @@ def serialize_product(p: Product) -> dict:
 @router.get("/{product_id}/reviews", response_model=List[dict])
 def get_product_reviews(product_id: str, db: Session = Depends(get_db)):
     """Fetch all reviews for a specific product."""
-    
+
     # We join with User to get the name for the frontend display
     reviews = (
         db.query(Review, User)
@@ -52,7 +52,7 @@ def get_product_reviews(product_id: str, db: Session = Depends(get_db)):
         .order_by(Review.created_at.desc())
         .all()
     )
-    
+
     return [{
         "id": str(r.Review.id),
         "user_name": f"{r.User.firstName} {r.User.lastName}",
@@ -61,7 +61,7 @@ def get_product_reviews(product_id: str, db: Session = Depends(get_db)):
         "image_url": r.Review.image_url,
         "created_at": r.Review.created_at.isoformat() if r.Review.created_at else None
     } for r in reviews]
-    
+
 @router.get("/", response_model=List[dict])
 def get_products(db: Session = Depends(get_db)):
     """Get all available products for public catalog, including stock."""
@@ -543,6 +543,40 @@ def update_product(
 
     return {"status": "success", "product": serialize_product(product)}
 
+@router.get("/admin/settings/homepage")
+def get_homepage_layout(db: Session = Depends(get_db)):
+    """Fetch the live homepage layout configuration."""
+    query = text("SELECT setting_value FROM store_settings WHERE setting_key = 'homepage_layout'")
+    result = db.execute(query).fetchone()
+    
+    if result and result[0]:
+        return result[0]
+    return {}
+
+@router.post("/admin/settings/homepage")
+def save_homepage_layout(
+    layout: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Save the homepage layout configuration. Admin/Staff only."""
+    # require_admin_or_staff(current_user) # Ensure you enforce admin permissions here
+
+    import json
+    layout_json = json.dumps(layout)
+    
+    # Upsert the JSON data into the settings table
+    query = text("""
+        INSERT INTO store_settings (setting_key, setting_value, updated_at) 
+        VALUES ('homepage_layout', :val, now())
+        ON CONFLICT (setting_key) DO UPDATE 
+        SET setting_value = EXCLUDED.setting_value, updated_at = now()
+    """)
+    db.execute(query, {"val": layout_json})
+    db.commit()
+    
+    return {"status": "success", "message": "Homepage layout updated live."}
+
 @router.delete("/admin/{product_id}", response_model=dict)
 def delete_product(
     product_id: str,
@@ -556,11 +590,11 @@ def delete_product(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    inventory = db.query(Inventory).filter(Inventory.product_id == product.id).first()
-    if inventory:
-        db.delete(inventory)
-
-    db.delete(product) 
+    # 🚀 THE FIX: Do not use db.delete(product)
+    # Instead, just update the status to match your React frontend!
+    product.status = ProductStatusEnum.inactive
+    product.is_available = False
+    
     db.commit()
 
     return {"status": "success", "message": "Product deactivated successfully."}

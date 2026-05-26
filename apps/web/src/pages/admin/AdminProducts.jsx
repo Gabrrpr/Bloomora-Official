@@ -717,6 +717,17 @@ export default function AdminProducts() {
   const [lowCount, setLowCount]           = useState(0)
   const [loading, setLoading]             = useState(true)
 
+
+  const handAddProduct = (newProduct) => {
+    setProducts(prev => [newProduct, ...prev]);
+    setShowAddModal(false);
+  };
+
+  const handEditProduct = (updatedProduct) => {
+    setProducts(products.map(p => p.id === updatedProduct.id ? updatedProduct : p));
+    setEditingProduct(null);
+  };
+
   const fetchProducts = useCallback(async () => {
     setLoading(true)
     try {
@@ -740,16 +751,11 @@ export default function AdminProducts() {
   const handleConfirmDelete = async (id) => {
     setIsDeleting(true);
     try {
-      // Send the delete request to the backend
       await api.delete(`/products/admin/${id}`); 
 
-      // 🚀 THE SOFT DELETE FIX: Update the UI to match the database
-      // Instead of erasing it from the screen, mark it as Inactive
-      setProducts(prev => prev.map(p => 
-        p.id === id ? { ...p, status: "inactive", is_available: false } : p
-      )); 
+      // 🚀 HARD DELETE FIX: Completely remove it from the screen instantly
+      setProducts(prev => prev.filter(p => p.id !== id)); 
 
-      // Close the modal
       setDeletingProduct(null);
     }
     catch (e) {
@@ -760,7 +766,7 @@ export default function AdminProducts() {
     finally {
       setIsDeleting(false);
     }
-  }
+}
 
   const filtered = products.filter(p => {
     const ms=!search||p.name?.toLowerCase().includes(search.toLowerCase())
