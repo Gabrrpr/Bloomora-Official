@@ -3,7 +3,6 @@ const API_BASE = 'http://localhost:8000/api/v1';
 export const api = {
   // ── Core Request Engine ───────────────────────────────────────────────────
   async request(endpoint, options = {}) {
-    // 1. Instant check: Is the browser completely offline?
     if (!navigator.onLine) {
       throw new Error("No internet connection. Please check your network and try again.");
     }
@@ -27,33 +26,27 @@ export const api = {
 
     let response;
     try {
-      // 2. Wrap the fetch in a try/catch to intercept "Failed to fetch" (Network drops)
       response = await fetch(url, config);
     } catch (error) {
-      // If fetch throws an error, it almost always means the network dropped 
-      // or the backend server is completely turned off/unreachable.
-      throw new Error("Unable to connect to the server. Please check your internet connection.");
+      throw new Error("Unable to connect to the server.");
     }
 
-    // 3. Handle normal HTTP errors (400, 500, etc.)
     if (!response.ok) {
       let errorMsg = `API Error: ${response.status}`;
       try {
         const errorData = await response.json();
         errorMsg = errorData.detail || JSON.stringify(errorData);
-      } catch (e) {
-        // Ignore parse errors
-      }
+      } catch (e) {}
       throw new Error(errorMsg);
     }
 
     return response.json();
   },
 
+  // ── Helper Methods (Using explicit 'api' reference to avoid 'this' errors) ──
   async post(endpoint, data, customOptions = {}) {
-    // Smart Body: Don't stringify if it's a file upload (FormData)
     const isFormData = data instanceof FormData;
-    return this.request(endpoint, {
+    return api.request(endpoint, {
       method: 'POST',
       body: isFormData ? data : JSON.stringify(data),
       ...customOptions
@@ -61,13 +54,12 @@ export const api = {
   },
 
   async get(endpoint) {
-    return this.request(endpoint);
+    return api.request(endpoint);
   },
 
   async put(endpoint, data, customOptions = {}) {
-    // Added PUT method for your updateProduct route
     const isFormData = data instanceof FormData;
-    return this.request(endpoint, {
+    return api.request(endpoint, {
       method: 'PUT',
       body: isFormData ? data : JSON.stringify(data),
       ...customOptions
@@ -76,7 +68,7 @@ export const api = {
 
   async patch(endpoint, data, customOptions = {}) {
     const isFormData = data instanceof FormData;
-    return this.request(endpoint, {
+    return api.request(endpoint, {
       method: 'PATCH',
       body: isFormData ? data : JSON.stringify(data),
       ...customOptions
@@ -84,39 +76,46 @@ export const api = {
   },
 
   async delete(endpoint) {
-    return this.request(endpoint, { method: 'DELETE' });
+    return api.request(endpoint, { method: 'DELETE' });
   },
 
   // ── Auth ──────────────────────────────────────────────────────────────────
   async exchangeOAuthCode(code) {
-    return this.get(`/auth/oauth/exchange?code=${code}`);
+    return api.get(`/auth/oauth/exchange?code=${code}`);
   },
 
   // ── Chat ──────────────────────────────────────────────────────────────────
   async createSession() {
-    return this.post('/chats/sessions');
+    return api.post('/chats/sessions');
   },
 
+  async deleteChatMessage(messageId) {
+    // 🚀 FIXED: Calling api.request directly
+    return await api.request(`/chats/messages/${messageId}`, { 
+      method: 'DELETE' 
+    });
+  },
+  
   async sendMessage(user_id, text, image_url = null) {
-    return this.post('/chats/messages', { user_id, text, image_url });
+    return api.post('/chats/messages', { user_id, text, image_url });
   },
 
   async uploadChatImage(file) {
     const formData = new FormData();
     formData.append('file', file);
-    return this.post('/chats/upload', formData); 
+    return api.post('/chats/upload', formData); 
   },
 
   async getChatHistory(user_id) {
-    return this.get(`/chats/history/${user_id}`);
+    return api.get(`/chats/history/${user_id}`);
   },
 
   async getConversations() {
-    return this.get('/chats/conversations');
+    return api.get('/chats/conversations');
   },
 
   async markRead(user_id) {
-    return this.request(`/chats/history/${user_id}/read`, { method: 'PATCH' });
+    return api.request(`/chats/history/${user_id}/read`, { method: 'PATCH' });
   },
 
   // ── Users (Admin) ─────────────────────────────────────────────────────────
@@ -128,63 +127,63 @@ export const api = {
     if (search) params.append('search', search);
     params.append('limit', String(limit));
     params.append('offset', String(offset));
-    return this.get(`/users/?${params.toString()}`);
+    return api.get(`/users/?${params.toString()}`);
   },
 
   async createStaff(data) {
-    return this.post('/users/', data);
+    return api.post('/users/', data);
   },
 
   async updateUser(userId, data) {
-    return this.patch(`/users/${userId}`, data);
+    return api.patch(`/users/${userId}`, data);
   },
 
   async updateProfile(data) {
-    return this.patch('/users/me', data);
+    return api.patch('/users/me', data);
   },
 
   async uploadProfilePicture(formData) {
-    return this.post('/users/profile/upload-picture', formData);
+    return api.post('/users/profile/upload-picture', formData);
   },
 
   async removeProfilePicture() {
-    return this.delete('/users/profile/picture');
+    return api.delete('/users/profile/picture');
   },
 
   // ── Products (Admin) ──────────────────────────────────────────────────────
   async getAdminProducts() {
-    return this.get('/products/admin/all');
+    return api.get('/products/admin/all');
   },
 
   async createProduct(formData) {
-    return this.post('/products/admin', formData);
+    return api.post('/products/admin', formData);
   },
 
   async updateProduct(productId, formData) {
-    return this.put(`/products/admin/${productId}`, formData); 
+    return api.put(`/products/admin/${productId}`, formData); 
   },
 
   async deleteProduct(productId) {
-    return this.delete(`/products/admin/${productId}`);
+    return api.delete(`/products/admin/${productId}`);
   },
 
   // ── Orders ────────────────────────────────────────────────────────────────
   async createOrder({ items, delivery_address, delivery_notes, scheduled_at, payment_method }) {
-    return this.post('/orders/', { items, delivery_address, delivery_notes, scheduled_at, payment_method });
+    return api.post('/orders/', { items, delivery_address, delivery_notes, scheduled_at, payment_method });
   },
 
   async confirmPayment(orderId) {
-    return this.post(`/orders/${orderId}/pay`, {});
+    return api.post(`/orders/${orderId}/pay`, {});
   },
 
   async updateAdminOrderStatus(orderId, status) {
-    return this.post(`/orders/${orderId}/action`, { status });
+    return api.post(`/orders/${orderId}/action`, { status });
   },
 
   async getMyOrders(status) {
     const params = new URLSearchParams();
     if (status && status !== 'All' && status !== 'today') params.append('status', status.toLowerCase().replace(/ /g, '_'));
-    return this.get(`/orders/my?${params.toString()}`);
+    return api.get(`/orders/my?${params.toString()}`);
   },
 
   async getAdminOrders({ status, search, branch, limit = 100, offset = 0 } = {}) {
@@ -194,47 +193,47 @@ export const api = {
     if (branch && branch !== 'All Branches') params.append('branch', branch.toLowerCase());
     params.append('limit', String(limit));
     params.append('offset', String(offset));
-    return this.get(`/orders/?${params.toString()}`);
+    return api.get(`/orders/?${params.toString()}`);
   },
 
   // ── Products (Public) ───────────────────────────────────────────────────
   async getProducts() {
-    return this.get('/products/');
+    return api.get('/products/');
   },
 
   async getCustomizationProducts() {
-    return this.get('/products/customization/all');
+    return api.get('/products/customization/all');
   },
 
-  // ── Campaigns (Admin + Public) ─────────────────────────────────────────
+  // ── Campaigns ───────────────────────────────────────────────────────────
   async getActiveCampaigns() {
-    return this.get('/campaigns/active');
+    return api.get('/campaigns/active');
   },
 
   async getCampaigns({ only_active = false } = {}) {
     const params = new URLSearchParams();
     params.append('only_active', String(!!only_active));
-    return this.get(`/campaigns/?${params.toString()}`);
+    return api.get(`/campaigns/?${params.toString()}`);
   },
 
   async createCampaign(data) {
-    return this.post('/campaigns/', data);
+    return api.post('/campaigns/', data);
   },
 
   async updateCampaign(campaignId, data) {
-    return this.put(`/campaigns/${campaignId}`, data);
+    return api.put(`/campaigns/${campaignId}`, data);
   },
 
   async deleteCampaign(campaignId) {
-    return this.delete(`/campaigns/${campaignId}`);
+    return api.delete(`/campaigns/${campaignId}`);
   },
 
   async setCampaignProducts(campaignId, product_ids) {
-    return this.post(`/campaigns/${campaignId}/products`, { product_ids });
+    return api.post(`/campaigns/${campaignId}/products`, { product_ids });
   },
 
   async getCategoryHierarchy() {
-    return this.get('/products/categories/hierarchy');
+    return api.get('/products/categories/hierarchy');
   },
   
   // ── Vases ────────────────────────────────────────────────────────────────
@@ -244,72 +243,68 @@ export const api = {
     if (minPrice !== null) params.append('min_price', String(minPrice));
     if (maxPrice !== null) params.append('max_price', String(maxPrice));
     const query = params.toString() ? `?${params.toString()}` : '';
-    return this.get(`/vases/${query}`);
+    return api.get(`/vases/${query}`);
   },
 
   async getVaseCategories() {
-    return this.get('/vases/categories/all');
+    return api.get('/vases/categories/all');
   },
 
   // ── Customization ───────────────────────────────────────────────────────
   async getAiUsage() {
-    return this.get('/customization/ai-usage');
+    return api.get('/customization/ai-usage');
   },
 
   async checkAndGenerate(data) {
-    return this.post('/customization/check-and-generate', data);
+    return api.post('/customization/check-and-generate', data);
   },
 
   // ── Addresses ───────────────────────────────────────────────────────────
   async getAddresses() {
-    return this.get('/addresses/');
+    return api.get('/addresses/');
   },
 
   async createAddress(data) {
-    return this.post('/addresses/', data);
+    return api.post('/addresses/', data);
   },
 
   async updateAddress(addressId, data) {
-    return this.patch(`/addresses/${addressId}`, data);
+    return api.patch(`/addresses/${addressId}`, data);
   },
 
   async deleteAddress(addressId) {
-    return this.delete(`/addresses/${addressId}`);
+    return api.delete(`/addresses/${addressId}`);
   },
 
   async setDefaultAddress(addressId) {
-    return this.patch(`/addresses/${addressId}/set-default`, {});
+    return api.patch(`/addresses/${addressId}/set-default`, {});
   },
 
   // ── Storage / Uploads ───────────────────────────────────────────────────
-  // 🚀 NEW: General-purpose upload function for your Supabase buckets!
   async uploadImage(bucket, file) {
     const formData = new FormData();
     formData.append('file', file);
-    
-    // This expects a route in your backend like: POST /api/v1/upload/{bucket}
-    return this.post(`/upload/${bucket}`, formData);
+    return api.post(`/upload/${bucket}`, formData);
   },
 
   // ── Site Customization ──────────────────────────────────────────────────
   async getHeroSlides() {
-    return this.get('/site-customization/hero');
+    return api.get('/site-customization/hero');
   },
 
   async updateHeroSlides(data) {
-    return this.request('/site-customization/hero', {
+    return api.request('/site-customization/hero', {
       method: 'PUT',
       body: JSON.stringify(data),
     });
   },
 
-  // ── Customization Toggle ─────────────────────────────────────────────────
   async isCustomizationEnabled() {
-    return this.get('/site-customization/customization/toggle');
+    return api.get('/site-customization/customization/toggle');
   },
 
   async setCustomizationEnabled(enabled) {
-    return this.request('/site-customization/customization/toggle', {
+    return api.request('/site-customization/customization/toggle', {
       method: 'PUT',
       body: JSON.stringify({ enabled }),
     });

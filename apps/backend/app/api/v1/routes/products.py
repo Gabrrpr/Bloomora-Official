@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, text
 from typing import List, Optional
 from decimal import Decimal
+from datetime import datetime, timezone
 import uuid
 
 from supabase import create_client, Client
@@ -373,12 +374,9 @@ async def upload_product_image(
         # Generate unique filename to prevent overwrites
         filename = f"products/{uuid.uuid4()}.{ext}"
         
-        file_bytes = await file.read()
-        
-        # Upload using service role key
-        supabase_admin.storage.from_(settings.SUPABASE_BUCKET).upload(
+        supabase_admin.storage.from_("chat_images").upload(
             path=filename,
-            file=file_bytes,
+            file=file.file,  # <--- CHANGE THIS LINE
             file_options={"content-type": file.content_type}
         )
         

@@ -4,6 +4,8 @@ from sqlalchemy import desc
 from typing import List
 from uuid import UUID
 from datetime import datetime, timezone
+from app.core.config import settings
+from supabase import create_client, Client
 import os
 import shutil
 
@@ -43,20 +45,65 @@ async def upload_chat_image(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
 ):
-    """Upload an image for chat messages. Returns the public URL."""
+    """Upload an image for chat messages to Supabase. Returns the public URL."""
+    
+    if not settings.SUPABASE_SERVICE_KEY:
+        raise HTTPException(status_code=500, detail="Supabase Service Key is not configured.")
+
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image files are allowed")
 
-    # Generate unique filename
-    ext = file.filename.split(".")[-1] if "." in file.filename else "png"
-    filename = f"{current_user.id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}.{ext}"
-    filepath = os.path.join(UPLOAD_DIR, filename)
-
-    with open(filepath, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
-
-    # Return the public URL path
-    return {"image_url": f"/uploads/chat_images/{filename}"}
+    try:
+        # Initialize Supabase
+        supabase_admin: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
+        
+        # Generate unique filename
+        ext = file.filename.split(".")[-1] if "." in file.filename else "png"
+        filename = f"{current_user.id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S%f')}.{ext}"
+        
+        # Read file bytes
+        file_bytes = await file.read()
+        
+        # 🚀 Upload directly to Supabase cloud storage
+        supabase_admin.storage.from_("chat_images").upload(
+            path=filename,
+            file=file_bytes,
+            file_options={"content-type": file.content_type}
+        )
+        
+        # Get the permanent public https://... URL
+        public_url = supabase_admin.storage.from_("chat_images").get_public_url(filename)
+        
+        # Return the actual cloud URL instead of a local folder path
+        return {"image_url": public_url}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
+    
+    
+@router.delete("/messages/{message_id}", response_model=dict)
+def delete_chat_message(
+    message_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Delete a specific chat message."""
+    # 1. Import your Chat model if it isn't already (e.g., from app.models import Chat)
+    from app.models import Chat 
+    
+    msg = db.query(Chat).filter(Chat.id == message_id).first()
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+        
+    # 2. Security Check: Staff can delete anything, Customers can only delete their own
+    is_staff = current_user.role in [RoleEnum.admin, RoleEnum.staff]
+    if not is_staff and str(msg.user_id) != str(current_user.id):
+        raise HTTPException(status_code=403, detail="You can only delete your own messages.")
+        
+    db.delete(msg)
+    db.commit()
+    
+    return {"status": "success", "deleted_id": message_id}
 
 @router.post("/messages", response_model=MessageOut)
 async def create_message(
