@@ -7,6 +7,7 @@ const DG = "#0C573E"
 
 const STORAGE_KEY = "bloomora:admin:featured"
 
+// Added the Funeral ribbons into the global options
 const RIBBON_OPTIONS = [
   { value: "",            label: "(none)" },
   { value: "Best Seller", label: "Best Seller" },
@@ -15,22 +16,25 @@ const RIBBON_OPTIONS = [
   { value: "Popular",     label: "Popular" },
   { value: "Premium",     label: "Premium" },
   { value: "Rare Find",   label: "Rare Find" },
+  { value: "Tribute",     label: "Tribute" },
+  { value: "Classic",     label: "Classic" },
+  { value: "Comfort",     label: "Comfort" },
+  { value: "Sympathy",    label: "Sympathy" },
 ]
+
 const RIBBON_COLORS = {
   "Best Seller": "#2E8B34", "Top Pick": "#0C573E",
   "New": "#3b82f6", "Popular": "#f59e0b",
   "Premium": "#7c3aed", "Rare Find": "#ec4899",
+  "Tribute": "#6b7280", "Classic": "#0C573E",
+  "Comfort": "#9d174d", "Sympathy": "#1d4ed8",
 }
 
 // ─── default seed shape ──────────────────────────────────────────────────────
 const DEFAULT_DATA = {
   bouquets: {
     banner: {
-      eyebrow: "",
-      heading: "",
-      description: "",
-      ctaLabel: "Shop All",
-      ctaTarget: "shop",
+      eyebrow: "", heading: "", description: "", ctaLabel: "Shop All", ctaTarget: "shop",
     },
     categories: [
       { label: "", tag: "", productId: null, nav: "shop" },
@@ -38,21 +42,14 @@ const DEFAULT_DATA = {
       { label: "", tag: "", productId: null, nav: "shop" },
     ],
     featured: [
-      { productId: null, ribbonOverride: null },
-      { productId: null, ribbonOverride: null },
-      { productId: null, ribbonOverride: null },
-      { productId: null, ribbonOverride: null },
+      { productId: null, ribbonOverride: null }, { productId: null, ribbonOverride: null },
+      { productId: null, ribbonOverride: null }, { productId: null, ribbonOverride: null },
     ],
-    sectionHeading: "",
-    sectionEyebrow: "",
+    sectionHeading: "", sectionEyebrow: "",
   },
   nonFloral: {
     banner: {
-      eyebrow: "",
-      heading: "",
-      description: "",
-      ctaLabel: "Shop All",
-      ctaTarget: "shop",
+      eyebrow: "", heading: "", description: "", ctaLabel: "Shop All", ctaTarget: "shop",
     },
     categories: [
       { label: "", tag: "", productId: null, nav: "shop" },
@@ -60,13 +57,31 @@ const DEFAULT_DATA = {
       { label: "", tag: "", productId: null, nav: "shop" },
     ],
     featured: [
-      { productId: null, ribbonOverride: null },
-      { productId: null, ribbonOverride: null },
-      { productId: null, ribbonOverride: null },
-      { productId: null, ribbonOverride: null },
+      { productId: null, ribbonOverride: null }, { productId: null, ribbonOverride: null },
+      { productId: null, ribbonOverride: null }, { productId: null, ribbonOverride: null },
     ],
-    sectionHeading: "",
-    sectionEyebrow: "",
+    sectionHeading: "", sectionEyebrow: "",
+  },
+  // 🚀 NEW: Funeral Section Defaults
+  funeral: {
+    banner: {
+      eyebrow: "With Sympathy",
+      heading: "Honoring Lives",
+      description: "Thoughtful arrangements to express your deepest condolences.",
+      ctaLabel: "Shop Funeral Flowers",
+      ctaTarget: "funeral-flowers",
+    },
+    categories: [
+      { label: "Memorial Candles", tag: "Remembrance", productId: null, nav: "candles" },
+      { label: "Mass Cards", tag: "Sympathy", productId: null, nav: "masscards" },
+      { label: "Funeral Flowers", tag: "Tribute", productId: null, nav: "funeral-flowers" },
+    ],
+    featured: [
+      { productId: null, ribbonOverride: null }, { productId: null, ribbonOverride: null },
+      { productId: null, ribbonOverride: null }, { productId: null, ribbonOverride: null },
+    ],
+    sectionHeading: "Funeral Arrangements",
+    sectionEyebrow: "Featured Tributes",
   },
 }
 
@@ -736,7 +751,7 @@ export default function AdminFeaturedProducts() {
   const { isDark } = useTheme()
   const t = useTokens(isDark)
 
-  const [tab, setTab]       = useState("bouquets") // "bouquets" | "nonFloral"
+  const [tab, setTab]       = useState("bouquets") // "bouquets" | "nonFloral" | "funeral"
   const [data, setData]     = useState(DEFAULT_DATA)
   const [products, setProds]= useState([])
   const [loading, setLoading]= useState(true)
@@ -746,13 +761,15 @@ export default function AdminFeaturedProducts() {
 
   // ─── load saved layout from DATABASE ──
   useEffect(() => {
-    // Make sure you add this method to your api.js file:
-    // getHomepageSettings: () => request('/admin/settings/homepage'),
-    api.get("products/admin/settings/homepage") // Adjust path based on your router
+    api.get("/products/admin/settings/homepage") // Adjust path based on your router
       .then(parsed => {
-        // If the database has data, merge it. Otherwise use the blank defaults.
-        if (parsed && parsed.bouquets && parsed.nonFloral) {
-          setData(parsed);
+        // Merge DB data with defaults safely to ensure 'funeral' exists even in old db entries
+        if (parsed) {
+          setData({
+            bouquets: parsed.bouquets || DEFAULT_DATA.bouquets,
+            nonFloral: parsed.nonFloral || DEFAULT_DATA.nonFloral,
+            funeral: parsed.funeral || DEFAULT_DATA.funeral,
+          });
         }
       })
       .catch(err => console.error("Failed to load homepage settings from DB:", err))
@@ -794,8 +811,6 @@ export default function AdminFeaturedProducts() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      // Make sure you add this method to your api.js file:
-      // saveHomepageSettings: (data) => request('/admin/settings/homepage', { method: 'POST', body: JSON.stringify(data) }),
       await api.post("/products/admin/settings/homepage", data) // Adjust path based on your router
       
       setDirty(false)
@@ -809,7 +824,10 @@ export default function AdminFeaturedProducts() {
   }
 
   const handleReset = () => {
-    if (!window.confirm(`Reset the "${tab === "bouquets" ? "Featured Bouquets" : "Featured Non-Floral"}" section to blank defaults?`)) return
+    // 🚀 NEW: Correct confirmation name based on active tab
+    const tabName = tab === "bouquets" ? "Featured Bouquets" : (tab === "nonFloral" ? "Featured Non-Floral" : "Featured Funeral");
+    if (!window.confirm(`Reset the "${tabName}" section to blank defaults?`)) return
+    
     setData(prev => ({ ...prev, [tab]: DEFAULT_DATA[tab] }))
     setDirty(true)
     setSaved(false)
@@ -862,6 +880,7 @@ export default function AdminFeaturedProducts() {
         {[
           { key: "bouquets",  label: "Featured Bouquets" },
           { key: "nonFloral", label: "Featured Non-Floral" },
+          { key: "funeral",   label: "Featured Funeral" }, // 🚀 NEW: Funeral Tab Added
         ].map(tt => {
           const on = tab === tt.key
           return (
