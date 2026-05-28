@@ -7,7 +7,6 @@ const DG = "#0C573E"
 
 const STORAGE_KEY = "bloomora:admin:featured"
 
-// Added the Funeral ribbons into the global options
 const RIBBON_OPTIONS = [
   { value: "",            label: "(none)" },
   { value: "Best Seller", label: "Best Seller" },
@@ -30,59 +29,29 @@ const RIBBON_COLORS = {
   "Comfort": "#9d174d", "Sympathy": "#1d4ed8",
 }
 
-// ─── default seed shape ──────────────────────────────────────────────────────
+// ─── Dynamic Section Generator ───────────────────────────────────────────────
+const generateBlankSection = (label = "New Section") => ({
+  tabLabel: label,
+  banner: {
+    eyebrow: "", heading: "", description: "", ctaLabel: "Shop All", ctaTarget: "shop",
+  },
+  categories: [
+    { label: "", tag: "", productId: null, nav: "shop" },
+    { label: "", tag: "", productId: null, nav: "shop" },
+    { label: "", tag: "", productId: null, nav: "shop" },
+  ],
+  featured: [
+    { productId: null, ribbonOverride: null }, { productId: null, ribbonOverride: null },
+    { productId: null, ribbonOverride: null }, { productId: null, ribbonOverride: null },
+  ],
+  sectionHeading: label,
+  sectionEyebrow: "Featured",
+})
+
 const DEFAULT_DATA = {
-  bouquets: {
-    banner: {
-      eyebrow: "", heading: "", description: "", ctaLabel: "Shop All", ctaTarget: "shop",
-    },
-    categories: [
-      { label: "", tag: "", productId: null, nav: "shop" },
-      { label: "", tag: "", productId: null, nav: "shop" },
-      { label: "", tag: "", productId: null, nav: "shop" },
-    ],
-    featured: [
-      { productId: null, ribbonOverride: null }, { productId: null, ribbonOverride: null },
-      { productId: null, ribbonOverride: null }, { productId: null, ribbonOverride: null },
-    ],
-    sectionHeading: "", sectionEyebrow: "",
-  },
-  nonFloral: {
-    banner: {
-      eyebrow: "", heading: "", description: "", ctaLabel: "Shop All", ctaTarget: "shop",
-    },
-    categories: [
-      { label: "", tag: "", productId: null, nav: "shop" },
-      { label: "", tag: "", productId: null, nav: "shop" },
-      { label: "", tag: "", productId: null, nav: "shop" },
-    ],
-    featured: [
-      { productId: null, ribbonOverride: null }, { productId: null, ribbonOverride: null },
-      { productId: null, ribbonOverride: null }, { productId: null, ribbonOverride: null },
-    ],
-    sectionHeading: "", sectionEyebrow: "",
-  },
-  // 🚀 NEW: Funeral Section Defaults
-  funeral: {
-    banner: {
-      eyebrow: "With Sympathy",
-      heading: "Honoring Lives",
-      description: "Thoughtful arrangements to express your deepest condolences.",
-      ctaLabel: "Shop Funeral Flowers",
-      ctaTarget: "funeral-flowers",
-    },
-    categories: [
-      { label: "Memorial Candles", tag: "Remembrance", productId: null, nav: "candles" },
-      { label: "Mass Cards", tag: "Sympathy", productId: null, nav: "masscards" },
-      { label: "Funeral Flowers", tag: "Tribute", productId: null, nav: "funeral-flowers" },
-    ],
-    featured: [
-      { productId: null, ribbonOverride: null }, { productId: null, ribbonOverride: null },
-      { productId: null, ribbonOverride: null }, { productId: null, ribbonOverride: null },
-    ],
-    sectionHeading: "Funeral Arrangements",
-    sectionEyebrow: "Featured Tributes",
-  },
+  bouquets: generateBlankSection("Featured Bouquets"),
+  nonFloral: generateBlankSection("Featured Non-Floral"),
+  funeral: generateBlankSection("Featured Funeral"),
 }
 
 // ─── tokens ──────────────────────────────────────────────────────────────────
@@ -325,7 +294,6 @@ function SlotCard({ slot, idx, product, onPickClick, onClear, onRibbonChange, t,
             </div>
           </div>
 
-          {/* ribbon override */}
           <div>
             <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: t.textMuted }}>
               Ribbon
@@ -390,7 +358,6 @@ function CategoryEditor({ tile, idx, products, onUpdate, t, isDark, onPickClick 
             placeholder="e.g. Sunny" t={t} maxLength={16} />
         </div>
 
-        {/* image-providing product */}
         <div>
           <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: t.textMuted }}>
             Image From Product
@@ -460,7 +427,6 @@ function FeaturedPreview({ data, products, isDark }) {
 
   return (
     <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${isDark ? "#2d3748" : "#e5e7eb"}` }}>
-      {/* banner */}
       <section style={{ backgroundColor: bannerBg, borderBottom: `1px solid ${bannerBdr}` }}>
         <div className="px-4 py-5 grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-4 items-center">
           <div className="text-center lg:text-left">
@@ -515,7 +481,6 @@ function FeaturedPreview({ data, products, isDark }) {
         </div>
       </section>
 
-      {/* featured grid */}
       <section style={{ backgroundColor: sectionBg }}>
         <div className="px-4 py-4">
           <div className="flex items-end justify-between mb-3">
@@ -584,7 +549,7 @@ function FeaturedPreview({ data, products, isDark }) {
 // ─── Tab Editor ──────────────────────────────────────────────────────────────
 function TabEditor({ data, onChange, products, loading, t, isDark }) {
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [pickerTarget, setPickerTarget] = useState(null) // { type:"featured"|"category", idx }
+  const [pickerTarget, setPickerTarget] = useState(null) 
 
   const handlePick = product => {
     if (!pickerTarget) return
@@ -751,7 +716,9 @@ export default function AdminFeaturedProducts() {
   const { isDark } = useTheme()
   const t = useTokens(isDark)
 
-  const [tab, setTab]       = useState("bouquets") // "bouquets" | "nonFloral" | "funeral"
+  const [tabIds, setTabIds] = useState(Object.keys(DEFAULT_DATA))
+  const [activeTab, setActiveTab] = useState(tabIds[0])
+  
   const [data, setData]     = useState(DEFAULT_DATA)
   const [products, setProds]= useState([])
   const [loading, setLoading]= useState(true)
@@ -759,23 +726,32 @@ export default function AdminFeaturedProducts() {
   const [saved, setSaved]   = useState(false)
   const [saving, setSaving] = useState(false)
 
-  // ─── load saved layout from DATABASE ──
+  // Modal State
+  const [modal, setModal] = useState({ isOpen: false, type: null, input: '', error: '' })
+
   useEffect(() => {
-    api.get("/products/admin/settings/homepage") // Adjust path based on your router
+    api.get("/products/admin/settings/homepage")
       .then(parsed => {
-        // Merge DB data with defaults safely to ensure 'funeral' exists even in old db entries
-        if (parsed) {
-          setData({
-            bouquets: parsed.bouquets || DEFAULT_DATA.bouquets,
-            nonFloral: parsed.nonFloral || DEFAULT_DATA.nonFloral,
-            funeral: parsed.funeral || DEFAULT_DATA.funeral,
-          });
+        if (parsed && Object.keys(parsed).length > 0) {
+          const upgradedData = {}
+          Object.keys(parsed).forEach(k => {
+            upgradedData[k] = {
+              ...generateBlankSection(k), 
+              ...parsed[k],
+              tabLabel: parsed[k].tabLabel || (k === 'bouquets' ? "Featured Bouquets" : (k === 'nonFloral' ? "Featured Non-Floral" : (k === 'funeral' ? "Featured Funeral" : k)))
+            }
+          })
+          setData(upgradedData)
+          setTabIds(Object.keys(upgradedData))
+          
+          if (!upgradedData[activeTab]) {
+             setActiveTab(Object.keys(upgradedData)[0])
+          }
         }
       })
       .catch(err => console.error("Failed to load homepage settings from DB:", err))
   }, [])
 
-  // ─── fetch products for the picker ──
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -800,19 +776,74 @@ export default function AdminFeaturedProducts() {
     return () => { cancelled = true }
   }, [])
 
-  const currentData = data[tab]
+  const currentData = data[activeTab] || generateBlankSection(activeTab)
+  
   const setCurrentData = next => {
-    setData(prev => ({ ...prev, [tab]: next }))
+    setData(prev => ({ ...prev, [activeTab]: next }))
     setDirty(true)
     setSaved(false)
   }
 
-  // ─── save layout to DATABASE ──
+  // ─── Modal Logic ──
+  const openModal = (type) => {
+    setModal({
+      isOpen: true,
+      type: type,
+      input: type === 'rename' ? data[activeTab].tabLabel : '',
+      error: ''
+    })
+  }
+
+  const handleModalConfirm = () => {
+    const trimmedInput = modal.input.trim()
+
+    if (modal.type === 'add' || modal.type === 'rename') {
+      if (!trimmedInput) {
+        setModal({ ...modal, error: "Section name cannot be empty." })
+        return
+      }
+    }
+
+    if (modal.type === 'add') {
+      const newId = `section_${Date.now()}`;
+      setData(prev => ({
+        ...prev,
+        [newId]: generateBlankSection(trimmedInput)
+      }));
+      setTabIds(prev => [...prev, newId]);
+      setActiveTab(newId);
+    } 
+    else if (modal.type === 'rename') {
+      setData(prev => ({
+        ...prev,
+        [activeTab]: {
+          ...prev[activeTab],
+          tabLabel: trimmedInput
+        }
+      }));
+    } 
+    else if (modal.type === 'delete') {
+      setData(prev => {
+        const newData = { ...prev };
+        delete newData[activeTab];
+        return newData;
+      });
+      setTabIds(prev => {
+        const newTabs = prev.filter(id => id !== activeTab);
+        setActiveTab(newTabs[0] || null);
+        return newTabs;
+      });
+    }
+
+    setDirty(true);
+    setSaved(false);
+    setModal({ isOpen: false, type: null, input: '', error: '' });
+  }
+
   const handleSave = async () => {
     setSaving(true)
     try {
-      await api.post("/products/admin/settings/homepage", data) // Adjust path based on your router
-      
+      await api.post("/products/admin/settings/homepage", data)
       setDirty(false)
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
@@ -823,14 +854,30 @@ export default function AdminFeaturedProducts() {
     }
   }
 
-  const handleReset = () => {
-    // 🚀 NEW: Correct confirmation name based on active tab
-    const tabName = tab === "bouquets" ? "Featured Bouquets" : (tab === "nonFloral" ? "Featured Non-Floral" : "Featured Funeral");
-    if (!window.confirm(`Reset the "${tabName}" section to blank defaults?`)) return
-    
-    setData(prev => ({ ...prev, [tab]: DEFAULT_DATA[tab] }))
-    setDirty(true)
-    setSaved(false)
+  if (!activeTab && tabIds.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center py-20">
+         <p className="text-gray-500 mb-4">No sections exist.</p>
+         <button onClick={() => openModal('add')} className="px-4 py-2 bg-green-600 text-white rounded-md font-bold">Add First Section</button>
+
+         {/* Render Modal even when empty if they are adding the first section */}
+         {modal.isOpen && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setModal({isOpen:false})}>
+              <div className="rounded-xl w-full max-w-sm overflow-hidden shadow-2xl p-6" style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}` }} onClick={e => e.stopPropagation()}>
+                 <h3 className="text-lg font-bold mb-4" style={{color: t.textPrimary}}>Add New Section</h3>
+                 <div className="mb-6">
+                   <input autoFocus value={modal.input} onChange={e => setModal({...modal, input: e.target.value, error: ''})} className="w-full px-3 py-2 text-sm rounded-md outline-none border" style={{ backgroundColor: t.inputBg, color: t.textPrimary, borderColor: t.inputBorder }} placeholder="e.g. Holiday Specials" />
+                   {modal.error && <p className="text-red-500 text-xs mt-1">{modal.error}</p>}
+                 </div>
+                 <div className="flex justify-end gap-2">
+                   <button onClick={() => setModal({isOpen:false})} className="px-4 py-2 text-sm font-semibold rounded-md" style={{ color: t.textSecondary }}>Cancel</button>
+                   <button onClick={handleModalConfirm} className="px-4 py-2 text-sm font-semibold rounded-md text-white bg-green-600">Save</button>
+                 </div>
+              </div>
+            </div>
+          )}
+      </div>
+    )
   }
 
   return (
@@ -853,13 +900,6 @@ export default function AdminFeaturedProducts() {
               Live
             </span>
           )}
-          <button onClick={handleReset}
-            className="text-xs font-semibold px-3 py-2 rounded-md border transition-all"
-            style={{ borderColor: t.cardBorder, color: t.textSecondary, backgroundColor: t.surfaceBg }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = t.hoverBg}
-            onMouseLeave={e => e.currentTarget.style.backgroundColor = t.surfaceBg}>
-            Clear Tab
-          </button>
           <button onClick={handleSave} disabled={!dirty || saving}
             className="text-xs font-bold px-4 py-2 rounded-md text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
             style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
@@ -875,27 +915,48 @@ export default function AdminFeaturedProducts() {
         </div>
       </div>
 
-      {/* internal tabs */}
-      <div className="inline-flex p-1 rounded-lg" style={{ backgroundColor: t.badgeBg, border: `1px solid ${t.cardBorder}` }}>
-        {[
-          { key: "bouquets",  label: "Featured Bouquets" },
-          { key: "nonFloral", label: "Featured Non-Floral" },
-          { key: "funeral",   label: "Featured Funeral" }, // 🚀 NEW: Funeral Tab Added
-        ].map(tt => {
-          const on = tab === tt.key
-          return (
-            <button key={tt.key}
-              onClick={() => setTab(tt.key)}
-              className="px-4 py-1.5 rounded-md text-xs font-semibold transition-all"
-              style={{
-                backgroundColor: on ? t.surfaceBg : "transparent",
-                color: on ? (isDark ? "#4ade80" : DG) : t.textSecondary,
-                boxShadow: on ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
-              }}>
-              {tt.label}
-            </button>
-          )
-        })}
+      {/* internal tabs and section controls */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div className="inline-flex p-1 rounded-lg flex-wrap gap-1" style={{ backgroundColor: t.badgeBg, border: `1px solid ${t.cardBorder}` }}>
+          {tabIds.map(id => {
+            const on = activeTab === id
+            return (
+              <button key={id}
+                onClick={() => setActiveTab(id)}
+                className="px-4 py-1.5 rounded-md text-xs font-semibold transition-all"
+                style={{
+                  backgroundColor: on ? t.surfaceBg : "transparent",
+                  color: on ? (isDark ? "#4ade80" : DG) : t.textSecondary,
+                  boxShadow: on ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
+                }}>
+                {data[id]?.tabLabel || id}
+              </button>
+            )
+          })}
+          <button onClick={() => openModal('add')} 
+            className="px-3 py-1.5 rounded-md text-xs font-bold text-white transition-all hover:opacity-90"
+            style={{ backgroundColor: G }}>
+            + Add Section
+          </button>
+        </div>
+
+        {/* Section Modifiers */}
+        <div className="flex items-center gap-2">
+          <button onClick={() => openModal('rename')}
+            className="text-xs font-semibold px-3 py-1.5 rounded-md border transition-all"
+            style={{ borderColor: t.cardBorder, color: t.textSecondary, backgroundColor: t.surfaceBg }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = t.hoverBg}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = t.surfaceBg}>
+            Rename Tab
+          </button>
+          <button onClick={() => openModal('delete')}
+            className="text-xs font-semibold px-3 py-1.5 rounded-md transition-all"
+            style={{ color: t.dangerColor, backgroundColor: t.dangerBg }}
+            onMouseEnter={e => e.currentTarget.style.opacity = 0.8}
+            onMouseLeave={e => e.currentTarget.style.opacity = 1}>
+            Delete Section
+          </button>
+        </div>
       </div>
 
       {/* split layout */}
@@ -925,6 +986,42 @@ export default function AdminFeaturedProducts() {
           </div>
         </div>
       </div>
+
+      {/* ── Action Modal ── */}
+      {modal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm" onClick={() => setModal({isOpen:false})}>
+          <div className="rounded-xl w-full max-w-sm overflow-hidden shadow-2xl p-6" style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}` }} onClick={e => e.stopPropagation()}>
+             <h3 className="text-lg font-bold mb-2" style={{color: t.textPrimary}}>
+                {modal.type === 'add' ? 'Add New Section' : modal.type === 'rename' ? 'Rename Section' : 'Delete Section'}
+             </h3>
+             
+             {modal.type === 'delete' ? (
+               <p className="text-sm mb-6 mt-2" style={{color: t.textSecondary}}>
+                 Are you sure you want to completely delete the <span className="font-bold text-red-500">"{data[activeTab]?.tabLabel}"</span> section? This will remove it from the homepage.
+               </p>
+             ) : (
+               <div className="mb-6 mt-4">
+                 <input 
+                    autoFocus 
+                    value={modal.input} 
+                    onChange={e => setModal({...modal, input: e.target.value, error: ''})} 
+                    className="w-full px-3 py-2 text-sm rounded-md outline-none border transition-all" 
+                    style={{ backgroundColor: t.inputBg, color: t.textPrimary, borderColor: t.inputBorder }} 
+                    placeholder="e.g. Holiday Specials" 
+                 />
+                 {modal.error && <p className="text-red-500 text-xs mt-1.5 font-medium">{modal.error}</p>}
+               </div>
+             )}
+
+             <div className="flex justify-end gap-2">
+               <button onClick={() => setModal({isOpen:false})} className="px-4 py-2 text-sm font-semibold rounded-md transition-all" style={{ color: t.textSecondary }} onMouseEnter={e => e.currentTarget.style.backgroundColor = t.hoverBg} onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>Cancel</button>
+               <button onClick={handleModalConfirm} className={`px-4 py-2 text-sm font-semibold rounded-md text-white transition-opacity hover:opacity-90 ${modal.type === 'delete' ? 'bg-red-500' : 'bg-green-600'}`}>
+                 {modal.type === 'delete' ? 'Delete Permanently' : 'Save Section'}
+               </button>
+             </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

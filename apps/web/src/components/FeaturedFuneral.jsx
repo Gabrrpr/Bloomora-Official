@@ -89,14 +89,13 @@ function ProductCard({ product, index, wishlist, toggleWishlist, onPreview, isDa
   const [ref, visible] = useScrollReveal(0.04)
   const wishlisted = wishlist.includes(product.id)
   
-  // Safe number conversions to prevent string math errors
+  // Safe number conversions
   const currentPrice = Number(product.price) || 0;
   const originalPrice = Number(product.original) || currentPrice;
   const disc = originalPrice > currentPrice 
     ? Math.round((1 - currentPrice / originalPrice) * 100) 
     : null;
 
-  // Ensure image string is valid, otherwise use placeholder
   const displayImage = product.image || FuneralPlaceholder;
 
   return (
@@ -126,8 +125,8 @@ function ProductCard({ product, index, wishlist, toggleWishlist, onPreview, isDa
           alt={product.name || "Product"}
           className="w-full h-full object-cover block transition-transform duration-[550ms] ease-out group-hover:scale-[1.07]"
           onError={(e) => { 
-            e.target.onerror = null; // Prevent infinite loop
-            e.target.src = FuneralPlaceholder; // Replace broken link with fallback
+            e.target.onerror = null; 
+            e.target.src = FuneralPlaceholder; 
           }}
         />
         {product.ribbon && <Ribbon label={product.ribbon} />}
@@ -219,12 +218,10 @@ export default function FeaturedFuneral({ onNavigate }) {
 
         if (!isMounted) return;
 
-        // Extract raw data from API response
         const rawProducts = Array.isArray(productsData) 
           ? productsData 
           : (productsData?.products || productsData?.items || productsData?.data || []);
 
-        // 🚀 SMART PARSER: Normalize identically to the admin side
         const allProducts = rawProducts.map(p => ({
           id: p.id,
           name: p.name || "Unnamed Product",
@@ -271,7 +268,7 @@ export default function FeaturedFuneral({ onNavigate }) {
             const prod = allProducts.find(p => String(p.id) === String(cat.productId));
             return {
               ...cat,
-              image: prod?.image || DEFAULT_SETTINGS.categories[i].image
+              image: prod?.image || prod?.image_url || DEFAULT_SETTINGS.categories[i].image
             };
           });
           
@@ -393,63 +390,63 @@ export default function FeaturedFuneral({ onNavigate }) {
       </section>
 
       {/* ── Featured grid ─────────────────────────────────────────────────── */}
-      {!loading && (
-        <section style={{ backgroundColor: sectionBg }}>
-          <div
-            ref={gridRef}
-            className="max-w-[1320px] mx-auto px-4 sm:px-7 pt-7 pb-10 lg:pt-10 lg:pb-[52px] transition-all duration-700 ease-out"
-            style={{
-              opacity: gridVisible ? 1 : 0,
-              transform: gridVisible ? "none" : "translateY(18px)",
-            }}
-          >
-            {/* The Header now ALWAYS renders */}
-            <div className="flex items-end justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-[3px] h-6 rounded-sm shrink-0" style={{ backgroundColor: G }} />
-                <div>
-                  <p className="text-xs font-bold tracking-widest uppercase mb-0.5" style={{ color: accentG }}>
-                    {settings.sectionEyebrow}
-                  </p>
-                  <h3 className="text-xl font-bold" style={{ color: secHdrC }}>
-                    {settings.sectionHeading}
-                  </h3>
-                </div>
+      <section style={{ backgroundColor: sectionBg }}>
+        <div
+          ref={gridRef}
+          className="max-w-[1320px] mx-auto px-4 sm:px-7 pt-7 pb-10 lg:pt-10 lg:pb-[52px] transition-all duration-700 ease-out"
+          style={{
+            opacity: gridVisible ? 1 : 0,
+            transform: gridVisible ? "none" : "translateY(18px)",
+          }}
+        >
+          {/* 🚀 The Header now ALWAYS renders immediately */}
+          <div className="flex items-end justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-[3px] h-6 rounded-sm shrink-0" style={{ backgroundColor: G }} />
+              <div>
+                <p className="text-xs font-bold tracking-widest uppercase mb-0.5" style={{ color: accentG }}>
+                  {settings.sectionEyebrow}
+                </p>
+                <h3 className="text-xl font-bold" style={{ color: secHdrC }}>
+                  {settings.sectionHeading}
+                </h3>
               </div>
-              <button
-                onClick={() => onNavigate?.("funeral-flowers")}
-                className="text-xs font-semibold bg-transparent border-none cursor-pointer whitespace-nowrap"
-                style={{ color: accentG }}
-              >
-                View All &rarr;
-              </button>
             </div>
+            <button
+              onClick={() => onNavigate?.("funeral-flowers")}
+              className="text-xs font-semibold bg-transparent border-none cursor-pointer whitespace-nowrap"
+              style={{ color: accentG }}
+            >
+              View All &rarr;
+            </button>
+          </div>
 
-            {/* Render Grid if products exist, otherwise show empty state message */}
-            {featuredProducts.length > 0 ? (
+          {/* 🚀 Ensure the grid inner renders appropriately without being restricted by loading bounds */}
+          {!loading && (
+            featuredProducts.length > 0 ? (
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-[18px]">
-              {featuredProducts.map((p, i) => (
-                <ProductCard
-                  key={`${p.id}-${i}`} // 🚀 Makes the key unique even if the product is duplicated
-                  product={p}
-                  index={i}
-                  wishlist={wishlist}
-                  toggleWishlist={toggleWishlist}
-                  onPreview={setPreviewProduct}
-                  isDark={isDark}
-                />
-              ))}
-            </div>
+                {featuredProducts.map((p, i) => (
+                  <ProductCard
+                    key={`${p.id}-${i}`}
+                    product={p}
+                    index={i}
+                    wishlist={wishlist}
+                    toggleWishlist={toggleWishlist}
+                    onPreview={setPreviewProduct}
+                    isDark={isDark}
+                  />
+                ))}
+              </div>
             ) : (
               <div className="py-12 border-t border-gray-100 dark:border-gray-800 mt-4">
                 <div className="text-center text-sm" style={{ color: subC }}>
                    Funeral arrangements will be available soon.
                 </div>
               </div>
-            )}
-          </div>
-        </section>
-      )}
+            )
+          )}
+        </div>
+      </section>
 
       {previewProduct && (
         <ProductPreviewModal
