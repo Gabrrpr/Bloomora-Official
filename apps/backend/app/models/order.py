@@ -50,6 +50,7 @@ class Order(Base):
     status = Column(Enum(OrderStatusEnum), default=OrderStatusEnum.pending)
     delivery_address = Column(Text, nullable=True)
     delivery_notes = Column(Text, nullable=True)
+    special_note = Column(Text, nullable=True)
     scheduled_at = Column(DateTime(timezone=True), nullable=True)
     can_review = Column(Boolean, default=False)
     has_reviewed = Column(Boolean, default=False)

@@ -48,13 +48,9 @@ def serialize_order(o) -> dict:
         "customer_email": o.user.email,
         "customer_phone": o.user.phone_number,
         "branch": o.branch_name or (o.user.branch.value if o.user.branch and hasattr(o.user.branch, "value") else (o.user.branch or "—")),
-        
-        # 🚀 2. Use the dynamically calculated summaries
+        "special_note": getattr(o,'special_note', None),
         "product_name": display_name,
         "quantity": total_qty,
-        
-        # 🚀 3. Removed the broken "product" dict since we use "items" now
-        
         "total_amount": float(o.total_amount),
         "status": o.status.value if hasattr(o.status, "value") else o.status,
         "delivery_address": o.delivery_address,
@@ -195,16 +191,24 @@ def get_customer_recent_orders(
 # ── Create Orders from Cart ─────────────────────────────────────────────────
 @router.post("/", response_model=dict, status_code=201)
 def create_orders(
-    payload: dict,
+    payload: dict, # 🚀 Ensure this is here!
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     """Create orders from cart items. Orders are created with 'pending' status and await payment."""
+    
+    # Debug print
+    print(f"DEBUG: Received Payload: {payload}")
+    
     cart_items = payload.get("items", [])
     delivery_address = payload.get("delivery_address", "")
     delivery_notes = payload.get("delivery_notes", "")
     scheduled_at = payload.get("scheduled_at")
     payment_method = payload.get("payment_method", "qrph")
+    
+    # 1. Grab the note using the payload variable
+    special_note = payload.get("special_note", None)
+    print(f"DEBUG: Extracted special_note: '{special_note}'")
 
     if not cart_items:
         raise HTTPException(status_code=400, detail="Cart is empty.")
@@ -237,11 +241,9 @@ def create_orders(
             db.refresh(arrangement)
             arrangement_id = arrangement.id
         else:
-            # Try to parse as product UUID
             try:
                 product_id = uuid.UUID(str(item_id))
             except ValueError:
-                # Fallback: create arrangement
                 arrangement = Arrangement(
                     id=uuid.uuid4(),
                     name=name,
@@ -264,13 +266,14 @@ def create_orders(
             status=OrderStatusEnum.pending,
             delivery_address=delivery_address,
             delivery_notes=delivery_notes,
+            special_note=special_note, # 🚀 Correctly saved here
             scheduled_at=scheduled_at,
         )
         db.add(order)
         db.commit()
         db.refresh(order)
 
-        # Create a transaction record for this order
+        # Create a transaction record
         try:
             pm = PaymentMethodEnum(payment_method)
         except ValueError:
@@ -291,7 +294,7 @@ def create_orders(
 
     return {
         "status": "success",
-        "message": f"{len(created_orders)} order(s) created. Please confirm payment to proceed.",
+        "message": f"{len(created_orders)} order(s) created.",
         "order_ids": created_orders,
     }
 
@@ -339,8 +342,8 @@ def confirm_payment(
         "message": "Payment confirmed successfully",
         "order_id": str(order.id),
         "order_number": f"ORD-{order.id.hex[:8].upper()}",
-        "payment_status": order.transaction.status.value,
-        "order_status": order.status.value,
+        "payment_status": order.transaction.status.value if hasattr(order.transaction.status, "value") else order.transaction.status,
+        "order_status": order.status.value if hasattr(order.status, "value") else order.status,
     }
 
 

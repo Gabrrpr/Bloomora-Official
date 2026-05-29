@@ -3,7 +3,6 @@ import { loginUser, googleLogin as googleLoginApi, facebookLogin as facebookLogi
 
 const AuthContext = createContext(null)
 
-// Module-level so it's read once before any redirects fire
 const isPreview = new URLSearchParams(window.location.search).get("preview") === "true"
 
 export function AuthProvider({ children }) {
@@ -15,7 +14,6 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     try {
       const data = await loginUser(email, password)
-      console.log("LOGIN DATA:", data)
       const token = data.access_token
       const profileRes = await fetch("http://localhost:8000/api/v1/auth/me", {
         headers: { Authorization: `Bearer ${token}` }
@@ -37,10 +35,8 @@ export function AuthProvider({ children }) {
       localStorage.setItem("user", JSON.stringify(userData))
       setUser(userData)
       window.dispatchEvent(new CustomEvent("bloomora:cart-updated"))
-      console.log("USER SET with real role:", userData)
       return { success: true, role: profile.role }
     } catch (err) {
-      console.error("LOGIN ERROR:", err)
       return { success: false, error: err.message }
     }
   }
@@ -102,24 +98,24 @@ export function AuthProvider({ children }) {
   const facebookLogin = () => facebookLoginApi()
 
   useEffect(() => {
+    // 🚀 NEW: Check if the user is on the activate-staff page
+    const isActivationPage = window.location.pathname.includes("activate-staff");
+
     const params = new URLSearchParams(window.location.search)
     const urlToken = params.get("token")
     const urlRole  = params.get("role")
-    console.log("[AuthContext] OAuth redirect check — token in URL:", !!urlToken, "role:", urlRole)
 
-    if (urlToken) {
+    // 🚀 NEW: If there is a token AND we are NOT on the activation page, it's an OAuth login.
+    if (urlToken && !isActivationPage) {
       localStorage.setItem("access_token", urlToken)
       if (urlRole) localStorage.setItem("role", urlRole)
-      console.log("[AuthContext] Storing OAuth token, calling setUserFromToken...")
+      
       setUserFromToken(urlToken).then(result => {
-        console.log("[AuthContext] setUserFromToken result:", result)
-        // Never redirect if in preview mode — it would wipe ?preview=true
         if (!isPreview && result && !result.is_profile_complete) {
           window.location.replace("/profile")
         }
       })
 
-      // Strip only token + role — preserve ?preview=true and other params
       const remaining = new URLSearchParams(window.location.search)
       remaining.delete("token")
       remaining.delete("role")
@@ -127,15 +123,14 @@ export function AuthProvider({ children }) {
         ? `${window.location.pathname}?${remaining.toString()}`
         : window.location.pathname
       window.history.replaceState({}, document.title, newUrl)
-    } else {
+      
+    } else if (!urlToken) {
+      // Normal session restore
       const existingToken = localStorage.getItem("access_token")
       const existingUser  = localStorage.getItem("user")
-      console.log("[AuthContext] No URL token. existingToken:", !!existingToken, "existingUser:", !!existingUser)
+      
       if (existingToken && !existingUser) {
-        console.log("[AuthContext] Restoring session from stored token...")
         setUserFromToken(existingToken).then(result => {
-          console.log("[AuthContext] setUserFromToken result:", result)
-          // Never redirect if in preview mode — it would wipe ?preview=true
           if (!isPreview && result && !result.is_profile_complete) {
             window.location.replace("/profile")
           }

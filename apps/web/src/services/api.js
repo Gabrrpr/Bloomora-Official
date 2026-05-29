@@ -43,7 +43,7 @@ export const api = {
     return response.json();
   },
 
-  // ── Helper Methods (Using explicit 'api' reference to avoid 'this' errors) ──
+  // ── Helper Methods ────────────────────────────────────────────────────────
   async post(endpoint, data, customOptions = {}) {
     const isFormData = data instanceof FormData;
     return api.request(endpoint, {
@@ -84,13 +84,18 @@ export const api = {
     return api.get(`/auth/oauth/exchange?code=${code}`);
   },
 
+  // 🚀 NEW: Added the activateStaff function!
+  async activateStaff(token, password) {
+    // Corrected to point to the users router!
+    return api.post('/users/staff/activate', { token, password });
+  },
+
   // ── Chat ──────────────────────────────────────────────────────────────────
   async createSession() {
     return api.post('/chats/sessions');
   },
 
   async deleteChatMessage(messageId) {
-    // 🚀 FIXED: Calling api.request directly
     return await api.request(`/chats/messages/${messageId}`, { 
       method: 'DELETE' 
     });
@@ -168,8 +173,9 @@ export const api = {
   },
 
   // ── Orders ────────────────────────────────────────────────────────────────
-  async createOrder({ items, delivery_address, delivery_notes, scheduled_at, payment_method }) {
-    return api.post('/orders/', { items, delivery_address, delivery_notes, scheduled_at, payment_method });
+  async createOrder({ items, delivery_address, delivery_notes, special_note, scheduled_at, payment_method }) {
+    // 🚀 Updated to pass special_note through
+    return api.post('/orders/', { items, delivery_address, delivery_notes, special_note, scheduled_at, payment_method });
   },
 
   async confirmPayment(orderId) {

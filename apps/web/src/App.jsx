@@ -89,7 +89,6 @@ const DARK_CSS = `
   }
 `;
 
-// ── Module-level constants (no hooks here) ──────────────────────────────────
 const AUTH_PAGES = ["login", "register", "forgot-password", "terms", "activate-staff"];
 const isPreview = new URLSearchParams(window.location.search).get("preview") === "true";
 
@@ -102,7 +101,6 @@ function injectDarkCSS() {
 }
 injectDarkCSS();
 
-// ── AppContent ──────────────────────────────────────────────────────────────
 function AppContent() {
   const { user } = useAuth();
   const { forceMode, clearForce } = useTheme();
@@ -116,9 +114,6 @@ function AppContent() {
   const [prevPage, setPrevPage] = useState("login");
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [activeShopCategory, setActiveShopCategory] = useState("All");
-
-
-  // ✅ FIXED: moved inside AppContent where hooks are allowed
   const [isCustomizationEnabled, setIsCustomizationEnabled] = useState(true);
 
   // Pop-up orchestration
@@ -129,14 +124,12 @@ function AppContent() {
   const pageRef = useRef(page);
   useEffect(() => { pageRef.current = page; }, [page]);
 
-  // Fetch customization toggle on every page change
   useEffect(() => {
     api.isCustomizationEnabled()
       .then(data => setIsCustomizationEnabled(data.enabled))
       .catch(() => setIsCustomizationEnabled(true));
   }, [page]);
 
-  // Pop-up traffic cop
   useEffect(() => {
     if (isPreview || page === "admin" || AUTH_PAGES.includes(page)) return;
 
@@ -169,9 +162,13 @@ function AppContent() {
     sessionStorage.setItem(`bloomora_seen_ad_${activeAdId}`, "true");
   };
 
-  // Redirect admin/staff after login
+  // 🚀 FIXED REDIRECT LOGIC: Stops the loop if on activate-staff page
   useEffect(() => {
     if (isPreview) return;
+    
+    // CRITICAL: Block the redirect if they are trying to activate!
+    if (page === "activate-staff") return; 
+
     if (user && (user.role === "admin" || user.role === "staff")) {
       if (pageRef.current === "login") {
         const t = setTimeout(() => setPage("admin"), 950);
@@ -180,9 +177,8 @@ function AppContent() {
         setPage("admin");
       }
     }
-  }, [user]);
+  }, [user, page]); // Added page to dependencies so it checks properly
 
-  // Force light mode on auth pages
   useEffect(() => {
     if (AUTH_PAGES.includes(page)) {
       forceMode(false);
@@ -192,17 +188,14 @@ function AppContent() {
   }, [page]);
 
   const navigate = (to, passedData = null) => {
-    // 🚀 THE TRAP: This will tell us exactly what the button is sending!
     console.log(`[ROUTER] Going to: "${to}" | Passed Data:`, passedData);
 
-    // Ensure we only save valid IDs (and ignore accidental event objects)
     if (to === "shop" && typeof passedData === "string") {
       setActiveShopCategory(passedData);
     } else if (to === "shop") {
-      setActiveShopCategory("All"); // Reset to 'All' if they just click "Shop"
+      setActiveShopCategory("All"); 
     }
 
-    // 2. Keep your existing logic for Orders and Reviews
     if ((to === "orders" || to === "write-review") && passedData !== null && typeof passedData !== "object") {
       setSelectedOrderId(passedData);
     }
@@ -216,12 +209,7 @@ function AppContent() {
     if (isPreview) {
       return (
         <>
-          <Navbar
-            cartCount={cartCount}
-            setCartCount={setCartCount}
-            onNavigate={navigate}
-            isCustomizationEnabled={isCustomizationEnabled}
-          />
+          <Navbar cartCount={cartCount} setCartCount={setCartCount} onNavigate={navigate} isCustomizationEnabled={isCustomizationEnabled} />
           <Home onNavigate={navigate} />
           <ChatWidget />
         </>
@@ -240,12 +228,7 @@ function AppContent() {
 
     return (
       <>
-        <Navbar
-          cartCount={cartCount}
-          setCartCount={setCartCount}
-          onNavigate={navigate}
-          isCustomizationEnabled={isCustomizationEnabled}
-        />
+        <Navbar cartCount={cartCount} setCartCount={setCartCount} onNavigate={navigate} isCustomizationEnabled={isCustomizationEnabled} />
         {(() => {
           switch (page) {
             case "home":                 return <Home onNavigate={navigate} />;

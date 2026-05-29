@@ -45,9 +45,7 @@ function useDark() {
 }
 
 // ── Form primitives ───────────────────────────────────────────────────────────
-// ── Form primitives ───────────────────────────────────────────────────────────
 function FInput({ placeholder, value, onChange, type = "text", hint, error, d }) {
-  // 🚀 Logic to decide border color
   const borderColor = error ? "#ef4444" : d.inputBdr;
   
   return (
@@ -63,7 +61,6 @@ function FInput({ placeholder, value, onChange, type = "text", hint, error, d })
           backgroundColor: d.inputBg, 
           color: d.inputTxt 
         }}
-        // 🚀 Focus/Blur: Green if okay, Red if there's an error
         onFocus={e => { 
           e.target.style.borderColor = error ? "#ef4444" : "#4ade80"; 
           e.target.style.boxShadow = error ? "0 0 0 2px rgba(239,68,68,0.2)" : "0 0 0 2px rgba(74,222,128,0.2)";
@@ -73,7 +70,6 @@ function FInput({ placeholder, value, onChange, type = "text", hint, error, d })
           e.target.style.boxShadow = "none"; 
         }}
       />
-      {/* 🚀 Render Error Message or Hint */}
       {error ? (
         <p className="text-[10px] font-bold mt-1 text-red-500 animate-pulse">{error}</p>
       ) : hint ? (
@@ -133,10 +129,11 @@ function RoleBadge({ role, isDark }) {
   )
 }
 
-function StatusBadge({ isActive, isStaffVerified, isDark }) {
-  const s = !isActive
+// 🚀 FIXED: Directly checking the clean 'staff_status' string from the backend
+function StatusBadge({ status, isDark }) {
+  const s = status === "inactive"
     ? { label:"Inactive", bg:isDark?"rgba(248,113,113,0.12)":"#fef2f2", color:isDark?"#f87171":"#dc2626" }
-    : !isStaffVerified
+    : status === "pending"
       ? { label:"Pending",  bg:isDark?"rgba(251,191,36,0.12)":"#fef9c3",  color:isDark?"#fcd34d":"#92400e" }
       : { label:"Active",   bg:isDark?"rgba(74,222,128,0.12)":"#dcfce7",  color:isDark?"#4ade80":"#15803d" }
 
@@ -153,7 +150,11 @@ function StatusBadge({ isActive, isStaffVerified, isDark }) {
 function ExportStaffBtn({ data=[], d }) {
   const handleExport = () => {
     const headers = ["User ID","Username","First Name","Last Name","Email","Phone","Role","Branch","Status"]
-    const rows = data.length ? data.map(r => [r.id,r.username,r.first_name,r.last_name,r.email,r.phone_number||"",r.role,r.branch||"",r.is_active?"Active":"Inactive"].join(",")) : [headers.map(()=>"—").join(",")]
+    // 🚀 FIXED: Now uses the actual staff_status variable for CSV exports
+    const rows = data.length ? data.map(r => [
+      r.id, r.username, r.first_name, r.last_name, r.email, r.phone_number||"", r.role, r.branch||"",
+      r.staff_status ? r.staff_status.charAt(0).toUpperCase() + r.staff_status.slice(1) : "Unknown"
+    ].join(",")) : [headers.map(()=>"—").join(",")]
     const csv=[headers.join(","),...rows].join("\n"), blob=new Blob([csv],{type:"text/csv"}), url=URL.createObjectURL(blob), a=document.createElement("a")
     a.href=url; a.download=`staff_export_${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url)
   }
@@ -190,8 +191,6 @@ function StaffPagination({ total=0, d }) {
 }
 
 // ── Add Staff Form ────────────────────────────────────────────────────────────
-// ── Add Staff Form ────────────────────────────────────────────────────────────
-// ── Add Staff Form ────────────────────────────────────────────────────────────
 function AddStaffForm({ onBack, onCreated }) {
   const d = useDark();
   const [f, setF] = useState({ fn:"", mn:"", ln:"", un:"", role:"", branch:"", email:"", phone:"" });
@@ -210,8 +209,6 @@ function AddStaffForm({ onBack, onCreated }) {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     const phoneRegex = /^[0-9]{11}$/; 
 
-    console.log("Validating Form State:", f); // 🚀 DEBUG: Watch what you typed!
-
     if (!f.fn.trim()) newErrors.fn = "First name is required.";
     if (!f.ln.trim()) newErrors.ln = "Last name is required.";
     if (!f.role) newErrors.role = "Role is required.";
@@ -221,8 +218,6 @@ function AddStaffForm({ onBack, onCreated }) {
     
     if (f.phone && !phoneRegex.test(f.phone)) newErrors.phone = "Must be 11 digits.";
 
-    console.log("Validation Errors Found:", newErrors); // 🚀 DEBUG: See what failed!
-    
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   }
@@ -328,7 +323,6 @@ function AddStaffForm({ onBack, onCreated }) {
           </div>
         </StepCard>
 
-        {/* 🚀 Changed Step 4 from "Passwords" to "Account Activation" */}
         <StepCard n={4} title="Account Activation" d={d}>
           <div className="flex items-start gap-3 p-4 rounded-lg border mt-2" 
             style={{ backgroundColor: d.isDark ? "rgba(56,189,248,0.1)" : "#f0f9ff", borderColor: d.isDark ? "rgba(56,189,248,0.2)" : "#bae6fd" }}>
@@ -364,7 +358,8 @@ function ViewStaffModal({ staff, onClose }) {
     { label:"Phone",     value:staff.phone_number||"—" },
     { label:"Role",      value:staff.role },
     { label:"Branch",    value:staff.branch||"—" },
-    { label:"Status",    value:staff.is_active?(staff.is_verified?"Active":"Pending"):"Inactive" },
+    // 🚀 FIXED: Render correct staff_status text
+    { label:"Status",    value:staff.staff_status ? staff.staff_status.charAt(0).toUpperCase() + staff.staff_status.slice(1) : "Unknown" },
     { label:"User ID",   value:staff.id, mono:true },
   ]
   return (
@@ -502,12 +497,10 @@ function EditStaffModal({ staff, onClose, onSaved }) {
 }
 
 // ── Deactivate Confirm ────────────────────────────────────────────────────────
-// ── Deactivate Confirm ────────────────────────────────────────────────────────
 function DeactivateModal({ staff, onClose, onConfirm }) {
   const d = useDark()
-  const [confirmText, setConfirmText] = useState("") // 🚀 NEW: Track what they type
+  const [confirmText, setConfirmText] = useState("")
 
-  // 🚀 NEW: The button will remain disabled until they type the EXACT username
   const isConfirmed = confirmText === staff.username
 
   return (
@@ -532,7 +525,6 @@ function DeactivateModal({ staff, onClose, onConfirm }) {
           </div>
         </div>
 
-        {/* 🚀 NEW: The Security Confirmation Input */}
         <div className="mb-6 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(0,0,0,0.2)" : "#f8fafc", border: `1px solid ${d.cardBdr}` }}>
           <label className="block text-xs font-bold mb-2" style={{ color:d.labelC }}>
             To verify, type <span className="font-mono px-1.5 py-0.5 rounded" style={{ backgroundColor: d.isDark ? "#334155" : "#e2e8f0", color: "#ef4444" }}>{staff.username}</span> below:
@@ -558,7 +550,7 @@ function DeactivateModal({ staff, onClose, onConfirm }) {
           
           <button 
             onClick={onConfirm}
-            disabled={!isConfirmed} // 🚀 NEW: Button is grayed out until the input matches!
+            disabled={!isConfirmed}
             className="px-5 py-2 text-sm font-bold text-white rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:opacity-90 active:scale-[0.98]"
             style={{ backgroundColor: "#dc2626", boxShadow: isConfirmed ? "0 2px 8px rgba(220,38,38,0.3)" : "none" }}>
             Deactivate
@@ -594,7 +586,7 @@ export default function AdminStaff() {
       if (branchFilter) params.branch = branchFilter.toLowerCase()
       if (roleFilter)   params.role   = roleFilter.toLowerCase()
       if (statusFilter) {
-        const m = { Active:"active", Inactive:"inactive", Suspended:"inactive", "Pending Activation":"unverified" }
+        const m = { Active:"active", Inactive:"inactive", Suspended:"inactive", "Pending Activation":"pending" }
         params.status = m[statusFilter]||statusFilter.toLowerCase()
       }
       const data = await api.getUsers(params)
@@ -733,7 +725,7 @@ export default function AdminStaff() {
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody style={{ borderTop:`1px solid ${isDark ? "#1e293b" : "#f1f5f9"}` }}>
               {loading ? (
                 <tr><td colSpan={7} className="px-5 py-12 text-center text-sm" style={{ color:d.muted }}>Loading staff...</td></tr>
               ) : staff.length===0 ? (
@@ -763,23 +755,21 @@ export default function AdminStaff() {
                     <RoleBadge role={s.role} isDark={isDark}/>
                   </td>
                   <td className="px-5 py-3.5">
-                    <StatusBadge isActive={s.is_active} isVerified={s.is_verified} isDark={isDark}/>
+                    {/* 🚀 FIXED: Directly passing the staff_status string */}
+                    <StatusBadge status={s.staff_status} isDark={isDark}/>
                   </td>
                   <td className="px-5 py-3.5">
                     <div className="flex items-center gap-1.5">
-                      {/* Edit */}
                       <button onClick={() => setEditing(s)}
                         className="px-3 py-1.5 text-xs font-bold text-white rounded-md transition-all hover:opacity-85 active:scale-95"
                         style={{ backgroundColor:DG }}>
                         Edit
                       </button>
-                      {/* View */}
                       <button onClick={() => setViewing(s)}
                         className="px-3 py-1.5 text-xs font-bold rounded-md border transition-all hover:shadow-sm active:scale-95"
                         style={{ backgroundColor:isDark?"rgba(74,222,128,0.1)":"#f0fdf4", borderColor:isDark?"rgba(74,222,128,0.3)":"#bbf7d0", color:isDark?"#4ade80":DG }}>
                         View
                       </button>
-                      {/* Deactivate */}
                       <button onClick={() => setDeactivating(s)}
                         className="w-7 h-7 flex items-center justify-center rounded-md transition-all active:scale-95"
                         style={{ backgroundColor:isDark?"rgba(248,113,113,0.12)":"#fef2f2", border:`1px solid ${isDark?"rgba(248,113,113,0.25)":"#fecaca"}` }}

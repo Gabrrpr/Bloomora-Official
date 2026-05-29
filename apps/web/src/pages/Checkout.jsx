@@ -15,6 +15,9 @@ export default function Checkout({ onNavigate }) {
   const [voucher, setVoucher] = useState("")
   const [placing, setPlacing] = useState(false)
   const [error, setError] = useState("")
+  
+  // 🚀 NEW: State for Special Instructions
+  const [orderNote, setOrderNote] = useState("")
 
   const [customer, setCustomer] = useState(null)
   const [loadingProfile, setLoadingProfile] = useState(true)
@@ -138,15 +141,11 @@ export default function Checkout({ onNavigate }) {
 const deliveryDetails = getDeliveryDetails()
 
   // ── Store-branch vs address-province confirmation ────────────────────────
-  // Navigation/branch selection lives elsewhere in the app; for now we infer the
-  // selected store branch from localStorage (set by the store-branch selector).
   const selectedStoreBranch = localStorage.getItem("bloomora_selected_branch") // "Manila" | "Pampanga"
 
   const provinceToBranch = (province) => {
     const p = (province || "").toLowerCase()
     if (!p) return null
-    // Very simple mapping based on common PH provinces in your flows.
-    // If you have a more accurate province list, extend this mapping.
     if (p.includes("pampanga") || p.includes("angeles") || p.includes("mabalacat")) return "Pampanga"
     if (p.includes("manila") || p.includes("quezon")) return "Manila"
     return null
@@ -158,7 +157,6 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
   const [branchConfirmOpen, setBranchConfirmOpen] = useState(false)
 
   const proceedAfterBranchConfirm = async () => {
-    // Close modal first to avoid double submits
     setBranchConfirmOpen(false)
 
     if (cartItems.length === 0) {
@@ -173,7 +171,6 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
     setPlacing(true)
     setError("")
     try {
-      // Save recipient address to address book if checkbox is checked
       if (
         saveAddressToBook &&
         recipientType === "someone_else" &&
@@ -214,6 +211,8 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
         delivery_notes: `Delivery time: ${deliveryTime} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone})`,
         scheduled_at: tomorrow.toISOString(),
         payment_method: paymentMethod,
+        // 🚀 NEW: Inject the user's special instructions here
+        special_note: orderNote.trim() || null 
       })
 
       const orderIds = res.order_ids || []
@@ -263,7 +262,6 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
     setPlacing(true)
     setError("")
     try {
-      // Save recipient address to address book if checkbox is checked
       if (saveAddressToBook && recipientType === "someone_else" && manualForm.recipient_name && manualForm.phone && manualForm.street) {
         try {
           await api.createAddress({
@@ -277,16 +275,13 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
             zip_code: manualForm.zip || "",
             is_default: false,
           })
-          // Refresh addresses list
           const res = await api.getAddresses()
           setAddresses(res.addresses || [])
         } catch (addrErr) {
           console.error("Failed to save address to book:", addrErr)
-          // Continue with order even if address save fails
         }
       }
       
-      // Create orders with payment method
       const res = await api.createOrder({
         items: cartItems.map(i => ({
           id: i.id,
@@ -301,11 +296,12 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
         delivery_notes: `Delivery time: ${deliveryTime} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone})`,
         scheduled_at: tomorrow.toISOString(),
         payment_method: paymentMethod,
+        // 🚀 NEW: Inject the user's special instructions here
+        special_note: orderNote.trim() || null 
       })
 
       const orderIds = res.order_ids || []
       
-      // Confirm payment for each order
       for (const orderId of orderIds) {
         try {
           await api.confirmPayment(orderId)
@@ -324,6 +320,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
         deliveryAddress: deliveryDetails.address,
         scheduledDate: fmt(tomorrow),
         placedAt: new Date().toISOString(),
+        special_note: orderNote.trim() || null
       }
       localStorage.setItem("bloomora_last_order", JSON.stringify(orderData))
 
@@ -645,6 +642,26 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
               </div>
             </div>
 
+            {/* 🚀 NEW: Special Instructions Textarea */}
+            <div className="bg-white border border-gray-200 rounded-xl p-5">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
+                Special Instructions
+              </label>
+              <p className="text-xs text-gray-500 mb-3">
+                Any specific requests? (e.g. ribbon color, delivery instructions)
+              </p>
+              <textarea
+                value={orderNote}
+                onChange={(e) => setOrderNote(e.target.value)}
+                placeholder="Leave your note here..."
+                rows="3"
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:ring-1 transition resize-y"
+                style={{ backgroundColor: "#F7F8FA", color: "#374151" }}
+                onFocus={e => e.target.style.borderColor = G}
+                onBlur={e => e.target.style.borderColor = "#e5e7eb"}
+              />
+            </div>
+
             {/* Summary + Place Order */}
             <div className="bg-white border border-gray-200 rounded-xl p-5">
               <div className="space-y-2.5 text-sm mb-4">
@@ -791,4 +808,3 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
     </div>
   )
 }
-

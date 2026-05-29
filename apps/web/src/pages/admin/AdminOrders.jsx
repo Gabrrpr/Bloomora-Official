@@ -28,7 +28,6 @@ function SelectFilter({ value, onChange, options, minWidth = "130px", isDark }) 
   )
 }
 
-
 function ExportCSVBtn({ onClick, isDark }) {
   return (
     <button
@@ -105,7 +104,7 @@ export default function AdminOrders() {
     return matchStatus && matchBranch && matchSearch
   })
 
-  const subTxt     = isDark ? "#94a3b8" : "#64748b"
+  const subTxt   = isDark ? "#94a3b8" : "#64748b"
   const toolbarBg  = isDark ? "#111827" : "#fafbfc"
   const toolbarBdr = isDark ? "#1e293b" : "#f1f5f9"
   const inputBg    = isDark ? "#1e293b" : "white"
@@ -186,24 +185,90 @@ export default function AdminOrders() {
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4 no-print"
           style={{ backgroundColor: modalD.overlayBg, backdropFilter: "blur(4px)" }}
           onClick={e => { if (e.target === e.currentTarget) setViewingOrder(null) }}>
-          <div className="rounded-xl w-full overflow-hidden"
-            style={{ maxWidth: "520px", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${modalD.modalBdr}`, backgroundColor: modalD.modalBg }}>
-            <div className="flex items-center justify-between px-6 py-4"
+          <div className="rounded-xl w-full overflow-hidden flex flex-col"
+            style={{ maxWidth: "560px", maxHeight: "90vh", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${modalD.modalBdr}`, backgroundColor: modalD.modalBg }}>
+            
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
+              
               style={{ borderBottom: `1px solid ${modalD.modalHdrBdr}`, background: modalD.modalHdr }}>
               <div>
                 <p className="text-base font-bold" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>Order Details</p>
                 <p className="text-sm mt-0.5" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>{viewingOrder.order_number}</p>
               </div>
-              <button onClick={() => setViewingOrder(null)} className="p-2 rounded-lg transition-all" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
+              <button onClick={() => setViewingOrder(null)} className="p-2 rounded-lg transition-all" style={{ color: isDark ? "#94a3b8" : "#64748b" }}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "#f1f5f9"}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
-            <div className="p-6 space-y-4">
+            
+            {/* Modal Body (Scrollable) */}
+            <div className="p-6 space-y-5 overflow-y-auto" style={{ maxHeight: "calc(90vh - 140px)" }}>
+              {/* Customer Info */}
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>Customer</p>
-                <p className="text-sm font-semibold" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{viewingOrder.customer_name || "—"}</p>
-                <p className="text-sm" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>{viewingOrder.customer_email || "—"}</p>
+                <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>Customer</p>
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{viewingOrder.customer_name || "—"}</p>
+                    <p className="text-sm" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>{viewingOrder.customer_email || "—"}</p>
+                    <p className="text-sm" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>{viewingOrder.customer_phone || "—"}</p>
+                  </div>
+                </div>
               </div>
+
+              {/* Delivery Info */}
+              <div className="p-4 rounded-lg" style={{ backgroundColor: isDark ? "#0f172a" : "#f8fafc", border: `1px solid ${isDark ? "#1e293b" : "#e2e8f0"}` }}>
+                <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>Delivery Address</p>
+                <p className="text-sm font-medium leading-relaxed" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>
+                  {viewingOrder.delivery_address || "No address provided"}
+                </p>
+                {viewingOrder.delivery_notes && (
+                  <p className="text-sm mt-2 pt-2 border-t" style={{ color: isDark ? "#94a3b8" : "#64748b", borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
+                    {viewingOrder.delivery_notes}
+                  </p>
+                )}
+              </div>
+              
+              {/* Special Instructions */}
+              {viewingOrder.special_note && (
+                <div 
+                  className="p-4 rounded-lg shadow-sm" 
+                  style={{ 
+                    backgroundColor: isDark ? "rgba(217, 119, 6, 0.1)" : "#fffbeb", 
+                    border: `1px solid ${isDark ? "rgba(217, 119, 6, 0.2)" : "#fde68a"}`,
+                    borderLeftWidth: "4px", 
+                    borderLeftColor: "#d97706" 
+                  }}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <svg width="18" height="18" fill="none" stroke="#d97706" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                    </svg>
+                    <span className="font-bold uppercase tracking-wider text-xs" style={{ color: isDark ? "#fbbf24" : "#b45309" }}>
+                      Customer Special Instructions
+                    </span>
+                  </div>
+                  <p className="text-sm italic font-medium whitespace-pre-wrap" style={{ color: isDark ? "#fde68a" : "#78350f" }}>
+                    "{viewingOrder.special_note}"
+                  </p>
+                </div>
+              )}
+
+              {/* Order Summary */}
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>Order Summary</p>
+                <div className="flex justify-between items-center pb-2 border-b" style={{ borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
+                  <p className="text-sm font-medium" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>
+                    {viewingOrder.product_name || "Custom Arrangement"}
+                  </p>
+                  <p className="text-sm font-bold" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
+                    x{viewingOrder.quantity || 1}
+                  </p>
+                </div>
+              </div>
+
+              {/* Status and Payment */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>Payment</p>
@@ -214,6 +279,8 @@ export default function AdminOrders() {
                   <StatusBadge status={formatStatus(viewingOrder.status)} />
                 </div>
               </div>
+
+              {/* Totals and Metadata */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>Total</p>
@@ -226,16 +293,22 @@ export default function AdminOrders() {
                   </p>
                 </div>
               </div>
+
               <div>
-                <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>Branch</p>
+                <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>Processing Branch</p>
                 <p className="text-sm font-semibold" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{viewingOrder.branch || "—"}</p>
               </div>
+
             </div>
-            <div className="flex items-center justify-end gap-2 px-6 py-4"
+            
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end gap-2 px-6 py-4 flex-shrink-0"
               style={{ borderTop: `1px solid ${modalD.modalFtrBdr}`, backgroundColor: modalD.modalFtr }}>
               <button onClick={() => setViewingOrder(null)}
                 className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
-                style={{ borderColor: modalD.modalBdr, color: isDark ? "#94a3b8" : "#64748b", backgroundColor: modalD.modalBg }}>
+                style={{ borderColor: modalD.modalBdr, color: isDark ? "#94a3b8" : "#64748b", backgroundColor: modalD.modalBg }}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "#f8fafc"}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = modalD.modalBg}>
                 Close
               </button>
             </div>
