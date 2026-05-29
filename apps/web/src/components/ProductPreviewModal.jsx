@@ -709,7 +709,8 @@ export default function ProductPreviewModal({ product, onClose, onNavigate }) {
       size:         qty,
       deliveryDate: delivType==="custom" ? customDate : delivType,
       addOns:       selectedAddOnObjects,
-      totalPrice:   total
+      totalPrice:   total,
+      special_note: itemNote.trim() || null
     })
 
     window.dispatchEvent(new Event("bloomora:cart-updated"))

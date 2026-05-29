@@ -1,11 +1,20 @@
+import { useState, useEffect } from "react"
 import { useTheme } from "../context/ThemeContext"
+import { api } from "../services/api"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
 
-export default function DynamicFeaturedSection({ data, products, onNavigate }) {
-  const { isDark } = useTheme()
-  
+const RIBBON_COLORS = {
+  "Best Seller": "#2E8B34", "Top Pick": "#0C573E",
+  "New": "#3b82f6", "Popular": "#f59e0b",
+  "Premium": "#7c3aed", "Rare Find": "#ec4899",
+  "Tribute": "#6b7280", "Classic": "#0C573E",
+  "Comfort": "#9d174d", "Sympathy": "#1d4ed8",
+}
+
+// ─── 1. Your Beautiful Single Section Layout ─────────────────────────────────
+function SectionBlock({ data, products, onNavigate, isDark }) {
   if (!data) return null;
 
   const accentG  = isDark ? "#4ade80" : G
@@ -18,17 +27,13 @@ export default function DynamicFeaturedSection({ data, products, onNavigate }) {
   const sectionBg= isDark ? "#111827" : "#fafafa"
   const secHdrC  = isDark ? "#f3f4f6" : "#1f2937"
 
-  const slotProducts = data.featured.map(slot => products.find(p => String(p.id) === String(slot.productId)))
-  const tileProducts = data.categories.map(cat => products.find(p => String(p.id) === String(cat.productId)))
-
-  const RIBBON_COLORS = {
-    "Best Seller": "#2E8B34", "Top Pick": "#0C573E",
-    "New": "#3b82f6", "Popular": "#f59e0b",
-    "Premium": "#7c3aed", "Rare Find": "#ec4899",
-  }
+  // Safely map products to slots based on Admin selections
+  const slotProducts = (data.featured || []).map(slot => products.find(p => String(p.id) === String(slot.productId)))
+  const tileProducts = (data.categories || []).map(cat => products.find(p => String(p.id) === String(cat.productId)))
 
   return (
     <div className="w-full">
+      {/* ── Banner Area ── */}
       <section style={{ backgroundColor: bannerBg, borderBottom: `1px solid ${bannerBdr}` }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16 grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-10 items-center">
           <div className="text-center lg:text-left">
@@ -61,8 +66,8 @@ export default function DynamicFeaturedSection({ data, products, onNavigate }) {
                 <button key={i} onClick={() => onNavigate(cat.nav || "shop")}
                   className={`group relative aspect-square overflow-hidden rounded-2xl transition-transform hover:-translate-y-1 hover:shadow-xl ${i === 1 ? "lg:mt-8" : ""}`}
                   style={{ border: `1px solid ${tileBdr}`, backgroundColor: tileBg }}>
-                  {linked?.image_url && (
-                    <img src={linked.image_url} alt={cat.label} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
+                  {linked?.image && (
+                    <img src={linked.image} alt={cat.label} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
                   )}
                   <div className="absolute inset-0 flex flex-col justify-end p-3 sm:p-4"
                     style={{ background: "linear-gradient(to top, rgba(12,87,62,0.85) 0%, rgba(12,87,62,0.1) 60%, transparent 100%)" }}>
@@ -78,6 +83,7 @@ export default function DynamicFeaturedSection({ data, products, onNavigate }) {
         </div>
       </section>
 
+      {/* ── Featured Grid Area ── */}
       <section style={{ backgroundColor: sectionBg }} className="py-12 lg:py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3 mb-8">
@@ -97,7 +103,7 @@ export default function DynamicFeaturedSection({ data, products, onNavigate }) {
                   className="group flex flex-col text-left rounded-xl overflow-hidden transition-all hover:shadow-xl"
                   style={{ backgroundColor: isDark ? "#1a2332" : "#ffffff", border: `1px solid ${isDark ? "#2d3748" : "#f3f4f6"}` }}>
                   <div className="relative aspect-square overflow-hidden bg-gray-50">
-                    <img src={p.image_url} alt={p.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                    <img src={p.image} alt={p.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
                     {ribbon && ribbonColor && (
                       <div className="absolute top-3 left-0 z-10 shadow-sm">
                         <div className="text-[10px] font-bold text-white py-1 pr-3 pl-2.5" style={{ backgroundColor: ribbonColor, clipPath: "polygon(0 0,calc(100% - 6px) 0,100% 50%,calc(100% - 6px) 100%,0 100%)" }}>{ribbon}</div>
@@ -116,5 +122,79 @@ export default function DynamicFeaturedSection({ data, products, onNavigate }) {
         </div>
       </section>
     </div>
+  )
+}
+
+// ─── 2. Master Loop Component ────────────────────────────────────────────────
+export default function DynamicFeaturedSections({ onNavigate }) {
+  const { isDark } = useTheme()
+  const [sectionsData, setSectionsData] = useState([])
+  const [allProducts, setAllProducts] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let isMounted = true;
+    
+    const loadAllData = async () => {
+      try {
+        const [settingsData, productsData] = await Promise.all([
+          api.get("/products/admin/settings/homepage").catch(() => null),
+          api.get("/products/").catch(() => [])
+        ]);
+
+        if (!isMounted) return;
+
+        // Normalize products
+        const rawProducts = Array.isArray(productsData) ? productsData : (productsData?.products || productsData?.items || productsData?.data || []);
+        const normalizedProducts = rawProducts.map(p => ({
+          ...p,
+          id: p.id,
+          name: p.name || "Unnamed",
+          price: Number(p.price) || 0,
+          image: p.image || p.image_url || null,
+        }));
+        
+        setAllProducts(normalizedProducts);
+
+        // Convert the database object of sections into an ordered Array so we can map() it
+        if (settingsData && Object.keys(settingsData).length > 0) {
+           const sectionsArray = Object.keys(settingsData).map(key => ({
+              id: key, // Keep the key (e.g. 'bouquets', 'funeral', 'section_173000') for React key prop
+              ...settingsData[key]
+           }));
+           setSectionsData(sectionsArray);
+        }
+      } catch (err) {
+        console.error("Failed to load sections data.", err);
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
+
+    loadAllData();
+    return () => { isMounted = false };
+  }, []);
+
+  if (loading) {
+     return (
+       <div className="py-24 text-center text-gray-500 animate-pulse">
+         Loading Featured Collections...
+       </div>
+     )
+  }
+
+  return (
+    <>
+      {/* 🚀 This loop is the magic! It creates a block for EVERY section the Admin created */}
+      {sectionsData.map((section) => (
+         <SectionBlock 
+            key={section.id} 
+            data={section} 
+            products={allProducts} 
+            isDark={isDark} 
+            onNavigate={onNavigate} 
+         />
+      ))}
+    </>
   )
 }
