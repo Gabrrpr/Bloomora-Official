@@ -205,7 +205,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
           desc: i.desc,
           price: i.price,
           qty: i.qty,
-          img: i.img,
+          img: i.img || i.image || i.image_url || i.generated_image_url || "",
         })),
         delivery_address: deliveryDetails.address,
         delivery_notes: `Delivery time: ${deliveryTime} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone})`,
@@ -290,7 +290,8 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
           desc: i.desc,
           price: i.price,
           qty: i.qty,
-          img: i.img,
+          // ✅ THIS CATCHES THE AI GENERATED IMAGES:
+          img: i.img || i.image || i.image_url || i.generated_image_url || "", 
         })),
         delivery_address: deliveryDetails.address,
         delivery_notes: `Delivery time: ${deliveryTime} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone})`,

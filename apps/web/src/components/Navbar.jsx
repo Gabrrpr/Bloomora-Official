@@ -914,7 +914,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
   const FINAL_NAV_LINKS = [
     ...NAV_LINKS.slice(0, shopIndex + 1),
     ...campaignLinks,
-    ...generatedLinks,
     ...NAV_LINKS.slice(shopIndex + 1)
   ];
 

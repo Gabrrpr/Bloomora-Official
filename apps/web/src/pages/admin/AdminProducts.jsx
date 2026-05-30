@@ -327,15 +327,27 @@ function AddProductModal({ onClose, onSave, categories }) {
               <MLabel d={d}>Group</MLabel>
               <MSel value={form.group} onChange={set("group")} options={["floral", "non-floral"]} d={d}/>
             </div>
+            
+            {/* 🚀 FIXED CATEGORY FIELD: Now a strict dropdown */}
             <div>
-              <MLabel d={d}>Category <span style={{ color:"#f87171" }}>*</span></MLabel>
-              <input list="cat-opts" value={form.category} onChange={e=>set("category")(e.target.value)} placeholder="e.g. Arrangement"
-                className="w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all capitalize"
-                style={{ borderColor:errors.category?"#ef4444":d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }}/>
-              <datalist id="cat-opts">{categories.map(c=><option key={c} value={c}/>)}</datalist>
+              <div className="flex items-end justify-between mb-1.5">
+                <MLabel d={d}>Category <span style={{ color:"#f87171" }}>*</span></MLabel>
+                <span className="text-[10px] font-semibold" style={{ color: d.subC }}>Main Navigation</span>
+              </div>
+              <MSel 
+                value={form.category} 
+                onChange={set("category")} 
+                options={["", ...categories]} 
+                d={d}
+              />
+              {errors.category && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.category}</p>}
             </div>
+
             <div>
-              <MLabel d={d}>Type</MLabel>
+              <div className="flex items-end justify-between mb-1.5">
+                <MLabel d={d}>Type</MLabel>
+                <span className="text-[10px] font-semibold" style={{ color:"#4ade80" }}>Sub-tag (e.g. Rose)</span>
+              </div>
               <MInput value={form.productType} onChange={set("productType")} placeholder="e.g. Rose" d={d}/>
             </div>
           </div>
@@ -515,18 +527,18 @@ function EditProductModal({ product, onClose, onSave, categories }) {
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            {/* 1. Category Field */}
+            {/* 🚀 FIXED CATEGORY FIELD: Now a strict dropdown */}
             <div>
               <div className="flex items-end justify-between mb-1.5">
                 <MLabel d={d}>Category <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <span className="text-[10px] font-semibold" style={{ color:"#4ade80" }}>Type to create new</span>
+                <span className="text-[10px] font-semibold" style={{ color: d.subC }}>Main Navigation</span>
               </div>
-              <input list="cat-opts-edit" value={form.category} onChange={e=>set("category")(e.target.value)} placeholder="Select or type new..."
-                className="w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all capitalize"
-                style={{ borderColor:errors.category?"#ef4444":d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }}
-                onFocus={e=>{e.target.style.borderColor="#4ade80";e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)"}}
-                onBlur={e=>{e.target.style.borderColor=errors.category?"#ef4444":d.inputBdr;e.target.style.boxShadow="none"}}/>
-              <datalist id="cat-opts-edit">{categories.map(c=><option key={c} value={c}/>)}</datalist>
+              <MSel 
+                value={form.category} 
+                onChange={set("category")} 
+                options={["", ...categories]} 
+                d={d}
+              />
               {errors.category && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.category}</p>}
             </div>
 

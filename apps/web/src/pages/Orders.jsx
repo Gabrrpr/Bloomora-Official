@@ -93,20 +93,38 @@ export default function Orders({ onNavigate }) {
                 : "—"
               return (
                 <div key={order.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 flex items-center gap-4 hover:shadow-md transition-shadow">
-                  <div className="w-14 h-14 rounded-xl bg-pink-50 flex items-center justify-center text-2xl flex-shrink-0">
-                    {order.product_name?.charAt(0) || "🌸"}
+                  
+                  {/* 🚀 FIXED IMAGE BLOCK: NO MORE LETTERS */}
+                  <div className="w-14 h-14 rounded-xl bg-gray-100 flex items-center justify-center flex-shrink-0 overflow-hidden border border-gray-200">
+                    <img 
+                      src={order.image_url || "https://images.unsplash.com/photo-1582794543139-8ac9cb0f7b11?q=80&w=250&auto=format&fit=crop"} 
+                      alt={order.product_name} 
+                      className="w-full h-full object-cover" 
+                      onError={(e) => { e.target.src = "https://images.unsplash.com/photo-1582794543139-8ac9cb0f7b11?q=80&w=250&auto=format&fit=crop" }}
+                    />
                   </div>
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm font-bold text-gray-800">{order.order_number}</span>
                       <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${s.bg} ${s.text}`}>{formatStatus(order.status)}</span>
                     </div>
-                    <p className="text-sm text-gray-500 truncate">{order.product_name} × {order.quantity}</p>
-<div className="flex items-center justify-between mt-1">
+                    
+                    {/* 🚀 Name and Custom Badge */}
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-sm font-semibold text-gray-700 truncate">{order.product_name} × {order.quantity}</p>
+                      {order.is_custom && (
+                        <span className="text-[10px] font-bold uppercase tracking-wider bg-purple-100 text-purple-700 px-2 py-0.5 rounded">
+                          Custom
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between mt-1">
                       <span className="text-xs text-gray-400">{dateStr}</span>
                       <span className="text-sm font-bold text-gray-800">₱{(order.total_amount || 0).toLocaleString()}</span>
                     </div>
-                    {/* Review Button - show for delivered orders */}
+                    
                     {order.status === "delivered" && (
                       <div className="mt-2">
                         {order.has_reviewed ? (
@@ -132,4 +150,3 @@ export default function Orders({ onNavigate }) {
     </div>
   )
 }
-

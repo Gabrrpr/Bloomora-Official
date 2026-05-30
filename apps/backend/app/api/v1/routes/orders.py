@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, object_session # 🚀 ADDED object_session here
 from sqlalchemy import or_, func, String
 from typing import List, Optional
 from decimal import Decimal
@@ -9,36 +9,56 @@ import uuid
 import secrets
 
 from app.core.dependencies import get_db, get_current_user
-from app.models import User, RoleEnum, Order, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum
+# 🚀 ADDED 'Product' to the models import below
+from app.models import User, RoleEnum, Order, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
-
 
 def serialize_order(o) -> dict:
     """Serialize an Order for API responses."""
     
-    # 🚀 1. Calculate a dynamic display name based on the cart items
-    display_name = "Empty Order"
-    total_qty = 0
+    # 🚀 Safely grab the database connection to make direct queries
+    db = object_session(o)
     
-    if getattr(o, 'items', None) and len(o.items) > 0:
-        # Get the name of the first item in the cart
-        first_item_name = o.items[0].product.name if o.items[0].product else "Unknown Product"
-        
-        # If they bought multiple different items, summarize it
+    img_url = ""
+    is_custom = False
+    display_name = "Unknown Item"
+    total_qty = getattr(o, 'quantity', 1)
+
+    # 1. BULLETPROOF DB QUERY: Directly find the Product using the ID
+    if db and getattr(o, 'product_id', None):
+        product = db.query(Product).filter(Product.id == o.product_id).first()
+        if product:
+            display_name = product.name
+            img_url = getattr(product, 'image_url', "") or getattr(product, 'image', "")
+            is_custom = False
+
+    # 2. BULLETPROOF DB QUERY: Directly find the Custom Arrangement using the ID
+    elif db and getattr(o, 'arrangement_id', None):
+        arrangement = db.query(Arrangement).filter(Arrangement.id == o.arrangement_id).first()
+        if arrangement:
+            display_name = getattr(arrangement, 'name', 'Custom Arrangement')
+            
+            # 🚀 DEFENSIVE CHECK: Check all possible image column names in your Arrangement model
+            img_url = getattr(arrangement, 'generated_image_url', "") or getattr(arrangement, 'image_url', "") or getattr(arrangement, 'image', "")
+            is_custom = True
+            
+    # 3. Fallback for multiple items (if cart used item arrays)
+    elif getattr(o, 'items', None) and len(o.items) > 0:
+        first_item = o.items[0]
+        if first_item.product:
+            first_item_name = first_item.product.name
+            img_url = getattr(first_item.product, 'image_url', "") or getattr(first_item.product, 'image', "")
+        else:
+            first_item_name = "Unknown Product"
+            
         if len(o.items) > 1:
             display_name = f"{first_item_name} + {len(o.items) - 1} more"
         else:
             display_name = first_item_name
             
-        # Calculate total number of physical items bought
         total_qty = sum(item.quantity for item in o.items)
-        
-    elif getattr(o, 'arrangement', None):
-        display_name = o.arrangement.name
-        total_qty = getattr(o, 'quantity', 1)
-    else:
-        display_name = "Custom Arrangement"
+        is_custom = False
 
     return {
         "id": str(o.id),
@@ -49,7 +69,12 @@ def serialize_order(o) -> dict:
         "customer_phone": o.user.phone_number,
         "branch": o.branch_name or (o.user.branch.value if o.user.branch and hasattr(o.user.branch, "value") else (o.user.branch or "—")),
         "special_note": getattr(o,'special_note', None),
+        
+        # 🚀 Injects the real name and image
         "product_name": display_name,
+        "image_url": img_url,
+        "is_custom": is_custom,
+        
         "quantity": total_qty,
         "total_amount": float(o.total_amount),
         "status": o.status.value if hasattr(o.status, "value") else o.status,
@@ -61,19 +86,7 @@ def serialize_order(o) -> dict:
         "has_reviewed": getattr(o, 'has_reviewed', False),
         "created_at": o.created_at.isoformat() if getattr(o, 'created_at', None) else None,
         "updated_at": o.updated_at.isoformat() if getattr(o, 'updated_at', None) else None,
-        
-        # 🚀 4. Your correct items array
-        "items": [
-            {
-                "item_id": str(item.id),
-                "product_id": str(item.product.id) if item.product else None,
-                "product_name": item.product.name if item.product else "Unknown Product",
-                "quantity": item.quantity,
-                "price_at_purchase": item.price_at_purchase,
-                "image_url": item.product.image_url if item.product and hasattr(item.product, 'image_url') else None
-            }
-            for item in o.items
-        ] if getattr(o, 'items', None) else []
+        "items": [] 
     }
     
 def require_admin_or_staff(current_user: User):
@@ -191,24 +204,16 @@ def get_customer_recent_orders(
 # ── Create Orders from Cart ─────────────────────────────────────────────────
 @router.post("/", response_model=dict, status_code=201)
 def create_orders(
-    payload: dict, # 🚀 Ensure this is here!
+    payload: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Create orders from cart items. Orders are created with 'pending' status and await payment."""
-    
-    # Debug print
-    print(f"DEBUG: Received Payload: {payload}")
-    
     cart_items = payload.get("items", [])
     delivery_address = payload.get("delivery_address", "")
     delivery_notes = payload.get("delivery_notes", "")
     scheduled_at = payload.get("scheduled_at")
     payment_method = payload.get("payment_method", "qrph")
-    
-    # 1. Grab the note using the payload variable
     special_note = payload.get("special_note", None)
-    print(f"DEBUG: Extracted special_note: '{special_note}'")
 
     if not cart_items:
         raise HTTPException(status_code=400, detail="Cart is empty.")
@@ -220,15 +225,17 @@ def create_orders(
         product_id = None
 
         item_id = item.get("id", "")
-        group = item.get("group", "")
-        name = item.get("name", "Custom Arrangement")
+        group = str(item.get("group", "")).lower()
+        name = item.get("name", "Unknown Item")
         desc = item.get("desc", "")
         price = Decimal(str(item.get("price", 0)))
         qty = int(item.get("qty", 1))
         img = item.get("img", "")
 
-        # If it's a custom arrangement, create arrangement record
-        if group in ("Describe your arrangement", "Mix and Match") or str(item_id).startswith("arr-"):
+        # 🚀 1. Check explicitly if this is a custom order
+        is_custom_request = "describe" in group or "mix" in group or "custom" in group or str(item_id).startswith("arr-")
+
+        if is_custom_request:
             arrangement = Arrangement(
                 id=uuid.uuid4(),
                 name=name,
@@ -241,20 +248,11 @@ def create_orders(
             db.refresh(arrangement)
             arrangement_id = arrangement.id
         else:
+            # 🚀 2. It's a normal product! Stop silently swallowing bad IDs.
             try:
                 product_id = uuid.UUID(str(item_id))
             except ValueError:
-                arrangement = Arrangement(
-                    id=uuid.uuid4(),
-                    name=name,
-                    description=desc,
-                    generated_image_url=img,
-                    estimated_price=price,
-                )
-                db.add(arrangement)
-                db.commit()
-                db.refresh(arrangement)
-                arrangement_id = arrangement.id
+                raise HTTPException(status_code=400, detail=f"Invalid Product ID passed from cart: {item_id}")
 
         order = Order(
             id=uuid.uuid4(),
@@ -266,14 +264,13 @@ def create_orders(
             status=OrderStatusEnum.pending,
             delivery_address=delivery_address,
             delivery_notes=delivery_notes,
-            special_note=special_note, # 🚀 Correctly saved here
+            special_note=special_note,
             scheduled_at=scheduled_at,
         )
         db.add(order)
         db.commit()
         db.refresh(order)
 
-        # Create a transaction record
         try:
             pm = PaymentMethodEnum(payment_method)
         except ValueError:

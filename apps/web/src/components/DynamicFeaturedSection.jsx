@@ -14,7 +14,8 @@ const RIBBON_COLORS = {
 }
 
 // ─── 1. Your Beautiful Single Section Layout ─────────────────────────────────
-function SectionBlock({ data, products, onNavigate, isDark }) {
+// 🚀 ADDED 'onPreview' to the props list here
+function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
   if (!data) return null;
 
   const accentG  = isDark ? "#4ade80" : G
@@ -99,7 +100,8 @@ function SectionBlock({ data, products, onNavigate, isDark }) {
               const ribbon = data.featured[i].ribbonOverride ?? p.ribbon
               const ribbonColor = RIBBON_COLORS[ribbon]
               return (
-                <button key={i} onClick={() => onNavigate("product", { id: p.id })}
+                // 🚀 CHANGED THIS LINE to trigger onPreview
+                <button key={i} onClick={() => onPreview(p)}
                   className="group flex flex-col text-left rounded-xl overflow-hidden transition-all hover:shadow-xl"
                   style={{ backgroundColor: isDark ? "#1a2332" : "#ffffff", border: `1px solid ${isDark ? "#2d3748" : "#f3f4f6"}` }}>
                   <div className="relative aspect-square overflow-hidden bg-gray-50">
@@ -126,7 +128,7 @@ function SectionBlock({ data, products, onNavigate, isDark }) {
 }
 
 // ─── 2. Master Loop Component ────────────────────────────────────────────────
-export default function DynamicFeaturedSections({ onNavigate }) {
+export default function DynamicFeaturedSections({ onNavigate, onPreview }) {
   const { isDark } = useTheme()
   const [sectionsData, setSectionsData] = useState([])
   const [allProducts, setAllProducts] = useState([])
@@ -190,9 +192,10 @@ export default function DynamicFeaturedSections({ onNavigate }) {
          <SectionBlock 
             key={section.id} 
             data={section} 
-            products={allProducts} 
+            products={allProducts}  
             isDark={isDark} 
             onNavigate={onNavigate} 
+            onPreview={onPreview} // 🚀 Pass onPreview down into the SectionBlock
          />
       ))}
     </>
