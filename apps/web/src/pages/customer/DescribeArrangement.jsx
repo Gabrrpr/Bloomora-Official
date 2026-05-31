@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
-import { api } from "../services/api.js"
-import { addToCart } from "../utils/cart.js"
+import { api } from "../../services/api.js"
+import { addToCart } from "../../utils/cart.js"
 
 const G = "#2E8B34"
 

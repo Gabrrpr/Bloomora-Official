@@ -41,7 +41,7 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
             <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: accentG }}>
               {data.banner.eyebrow}
             </p>
-            <h2 className="text-3xl md:text-4xl font-extrabold mb-4 leading-tight" style={{ color: headingC }}>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 leading-tight" style={{ color: headingC }}>
               {data.banner.heading}
             </h2>
             <div className="w-16 h-[3px] rounded-sm mx-auto lg:mx-0 mb-5" style={{ backgroundColor: G }} />
@@ -88,10 +88,10 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
       <section style={{ backgroundColor: sectionBg }} className="py-12 lg:py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-3 mb-8">
-            <div className="w-[3px] h-8 rounded-sm shrink-0" style={{ backgroundColor: G }} />
+            <div className="w-[3px] h-12 rounded-sm shrink-0" style={{ backgroundColor: G }} />
             <div>
               <p className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: accentG }}>{data.sectionEyebrow}</p>
-              <h3 className="text-2xl md:text-3xl font-extrabold" style={{ color: secHdrC }}>{data.sectionHeading}</h3>
+              <h3 className="text-2xl md:text-3xl font-bold" style={{ color: secHdrC }}>{data.sectionHeading}</h3>
             </div>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">

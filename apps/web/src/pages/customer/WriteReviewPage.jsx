@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
-import { api } from "../services/api"
-import Footer from "../components/Footer"
+import { api } from "../../services/api"
+import Footer from "../../components/Footer"
 
 const G = "#2E8B34"
 const DG = "#0C573E"

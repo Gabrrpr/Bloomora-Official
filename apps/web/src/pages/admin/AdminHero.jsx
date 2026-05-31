@@ -41,7 +41,7 @@ function HeroPreview({ slide, isDark }) {
     ? "linear-gradient(90deg, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.54) 55%, rgba(0,0,0,0.22) 100%)"
     : "linear-gradient(90deg, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.36) 50%, rgba(0,0,0,0.08) 100%)"
 
-  const lines = (slide.headline || "").split("\n")
+  const lines = (slide.headline || "").replace(/\\n/g, "\n").split("\n")
 
   return (
     <div

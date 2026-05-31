@@ -16,11 +16,15 @@ const ALL_OCCASIONS = [
   { label: "Graduation",  img: graduationImg },
   { label: "Sympathy",    img: sympathyImg },
   { label: "Openings",    img: openingsImg },
-  { label: "Wedding",     img: weddingImg,      hidden: true },
+  { label: "Wedding",     img: weddingImg },
   { label: "Just Because",img: justBecauseImg,  hidden: true },
 ]
 
-const VISIBLE = ALL_OCCASIONS.filter(o => !o.hidden)
+// 6 cards total for mobile (3 cols x 2 rows). The 6th card (Wedding) is hidden
+// at the sm breakpoint and up via `mobileOnly`, so desktop still shows exactly 5.
+const VISIBLE = ALL_OCCASIONS
+  .filter(o => !o.hidden)
+  .map((o, i) => ({ ...o, mobileOnly: i === 5 }))
 
 function useReveal(ref, delay = 0) {
   useEffect(() => {
@@ -40,32 +44,47 @@ function useReveal(ref, delay = 0) {
   }, [])
 }
 
-function OccasionCard({ label, img, onNavigate, delay, isDark, labelColor, accentG }) {
+function OccasionCard({ label, img, onNavigate, delay, labelColor, accentG, mobileOnly }) {
   const ref = useRef(null)
   useReveal(ref, delay)
 
   return (
-    <div ref={ref} style={{ opacity:0, transform:"translateY(28px)", transition:"opacity 0.55s ease, transform 0.55s ease" }}>
+    <div
+      ref={ref}
+      className={mobileOnly ? "sm:hidden" : ""}
+      style={{ opacity:0, transform:"translateY(28px)", transition:"opacity 0.55s ease, transform 0.55s ease" }}
+    >
       <button
         onClick={() => onNavigate?.("occasions")}
         className="group flex flex-col items-center gap-3 w-full focus:outline-none"
       >
-        <div
-          className="w-full aspect-square rounded-full overflow-hidden border-[3px] transition-all duration-300 group-hover:shadow-xl group-hover:scale-105"
-          style={{ borderColor:"transparent" }}
-          onMouseEnter={e => e.currentTarget.style.borderColor = accentG}
-          onMouseLeave={e => e.currentTarget.style.borderColor = "transparent"}
-        >
-          <img
-            src={img}
-            alt={label}
-            className="w-full h-full object-cover group-hover:scale-110"
-            style={{ transition:"transform 0.4s cubic-bezier(0.4,0,0.2,1)" }}
+        {/* Ring wrapper: the colored ring fades via opacity instead of swapping
+            border color, so there's no hard pop. The image scales on the same
+            easing curve as the ring + shadow for one unified motion. */}
+        <div className="relative w-full aspect-square">
+          {/* Soft glow / shadow layer */}
+          <div
+            className="absolute inset-0 rounded-full opacity-0 transition-opacity duration-300 ease-out group-hover:opacity-100"
+            style={{ boxShadow: `0 12px 28px -6px ${accentG}55` }}
           />
+          {/* Colored ring — sits OUTSIDE the image via negative inset, so the
+              full stroke is beyond the image edge (not overlapping it). */}
+          <div
+            className="absolute -inset-[3px] rounded-full border-[3px] opacity-0 transition-opacity duration-300 ease-out group-hover:opacity-100 z-10 pointer-events-none"
+            style={{ borderColor: accentG }}
+          />
+          {/* Image */}
+          <div className="absolute inset-0 rounded-full overflow-hidden transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04]">
+            <img
+              src={img}
+              alt={label}
+              className="w-full h-full object-cover transition-transform duration-[450ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.08]"
+            />
+          </div>
         </div>
         <span
-          className="text-sm font-semibold text-center leading-tight"
-          style={{ color: labelColor, transition:"color 0.2s ease" }}
+          className="text-sm font-semibold text-center leading-tight transition-colors duration-200"
+          style={{ color: labelColor }}
           onMouseEnter={e => e.currentTarget.style.color = accentG}
           onMouseLeave={e => e.currentTarget.style.color = labelColor}
         >
@@ -124,16 +143,16 @@ export default function OccasionsStrip({ onNavigate }) {
 
         {/* Cards */}
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-6 sm:gap-10 mb-8">
-          {VISIBLE.map(({ label, img }, i) => (
+          {VISIBLE.map(({ label, img, mobileOnly }, i) => (
             <OccasionCard
               key={label}
               label={label}
               img={img}
               onNavigate={onNavigate}
               delay={i * 80}
-              isDark={isDark}
               labelColor={labelC}
               accentG={accentG}
+              mobileOnly={mobileOnly}
             />
           ))}
         </div>

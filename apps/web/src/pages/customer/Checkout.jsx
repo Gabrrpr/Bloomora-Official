@@ -1,22 +1,23 @@
 import { useState, useEffect } from "react"
-import { api } from "../services/api.js"
-import { getCart, clearCart } from "../utils/cart.js"
-import { useAuth } from "../context/AuthContext"
+import { api } from "../../services/api.js"
+import { getCart, clearCart } from "../../utils/cart.js"
+import { useAuth } from "../../context/AuthContext"
+import { validateVoucher, computeDiscount } from "../../utils/vouchers.js"
 
 const G = "#2E8B34"
-
-const DELIVERY_TIMES = ["Anytime (9PM–6PM)", "7AM–10AM", "10AM–1PM", "1PM–4PM", "4PM–8PM", "8PM–11PM"]
 
 export default function Checkout({ onNavigate }) {
   const { user } = useAuth()
   const [cartItems, setCartItems] = useState([])
-  const [deliveryTime, setDeliveryTime] = useState("Anytime (9PM–6PM)")
+  const deliveryTime = "Anytime"
   const [paymentMethod, setPaymentMethod] = useState("qrph")
   const [voucher, setVoucher] = useState("")
+  const [appliedVoucher, setAppliedVoucher] = useState(null)
+  const [voucherMsg, setVoucherMsg] = useState(null) // { type: "error" | "success", text }
   const [placing, setPlacing] = useState(false)
   const [error, setError] = useState("")
-  
-  // 🚀 NEW: State for Special Instructions
+
+  // Special Instructions
   const [orderNote, setOrderNote] = useState("")
 
   const [customer, setCustomer] = useState(null)
@@ -28,7 +29,7 @@ export default function Checkout({ onNavigate }) {
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [loadingAddresses, setLoadingAddresses] = useState(true)
 
-// Manual address form for "someone else"
+  // Manual address form for "someone else"
   const [showManualModal, setShowManualModal] = useState(false)
   const [saveAddressToBook, setSaveAddressToBook] = useState(false)
   const [manualForm, setManualForm] = useState({
@@ -99,7 +100,22 @@ export default function Checkout({ onNavigate }) {
 
   const subtotal = cartItems.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0)
   const shipping = cartItems.length > 0 ? 100 : 0
-  const total = subtotal + shipping
+
+  // ── Voucher discount (validated via shared util — honors admin-created codes) ──
+  const discount = computeDiscount(appliedVoucher, subtotal)
+  const total = Math.max(0, subtotal + shipping - discount)
+
+  const applyVoucher = () => {
+    const result = validateVoucher(voucher, subtotal, cartItems.length > 0)
+    setVoucherMsg({ type: result.type, text: result.message })
+    setAppliedVoucher(result.ok ? result.voucher : null)
+  }
+
+  const removeVoucher = () => {
+    setAppliedVoucher(null)
+    setVoucher("")
+    setVoucherMsg(null)
+  }
 
   const today = new Date()
   const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
@@ -138,7 +154,7 @@ export default function Checkout({ onNavigate }) {
     }
   }
 
-const deliveryDetails = getDeliveryDetails()
+  const deliveryDetails = getDeliveryDetails()
 
   // ── Store-branch vs address-province confirmation ────────────────────────
   const selectedStoreBranch = localStorage.getItem("bloomora_selected_branch") // "Manila" | "Pampanga"
@@ -151,10 +167,28 @@ const deliveryDetails = getDeliveryDetails()
     return null
   }
 
-const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddress?.province : manualForm.province)
+  const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddress?.province : manualForm.province)
   const needsBranchConfirm = selectedStoreBranch && addressBranch && selectedStoreBranch !== addressBranch
 
   const [branchConfirmOpen, setBranchConfirmOpen] = useState(false)
+
+  const buildDeliveryNotes = () =>
+    `Delivery time: ${deliveryTime} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone})${appliedVoucher ? ` | Voucher: ${appliedVoucher.code}` : ""}`
+
+  const buildOrderData = (orderIds) => ({
+    orderIds,
+    items: cartItems,
+    subtotal,
+    shipping,
+    discount,
+    voucherCode: appliedVoucher?.code || null,
+    total,
+    deliveryTime,
+    deliveryAddress: deliveryDetails.address,
+    scheduledDate: fmt(tomorrow),
+    placedAt: new Date().toISOString(),
+    special_note: orderNote.trim() || null,
+  })
 
   const proceedAfterBranchConfirm = async () => {
     setBranchConfirmOpen(false)
@@ -208,11 +242,10 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
           img: i.img || i.image || i.image_url || i.generated_image_url || "",
         })),
         delivery_address: deliveryDetails.address,
-        delivery_notes: `Delivery time: ${deliveryTime} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone})`,
+        delivery_notes: buildDeliveryNotes(),
         scheduled_at: tomorrow.toISOString(),
         payment_method: paymentMethod,
-        // 🚀 NEW: Inject the user's special instructions here
-        special_note: orderNote.trim() || null 
+        special_note: orderNote.trim() || null
       })
 
       const orderIds = res.order_ids || []
@@ -224,18 +257,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
         }
       }
 
-      const orderData = {
-        orderIds: orderIds,
-        items: cartItems,
-        subtotal,
-        shipping,
-        total,
-        deliveryTime,
-        deliveryAddress: deliveryDetails.address,
-        scheduledDate: fmt(tomorrow),
-        placedAt: new Date().toISOString(),
-      }
-      localStorage.setItem("bloomora_last_order", JSON.stringify(orderData))
+      localStorage.setItem("bloomora_last_order", JSON.stringify(buildOrderData(orderIds)))
 
       clearCart()
       onNavigate("confirmation")
@@ -281,7 +303,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
           console.error("Failed to save address to book:", addrErr)
         }
       }
-      
+
       const res = await api.createOrder({
         items: cartItems.map(i => ({
           id: i.id,
@@ -291,18 +313,17 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
           price: i.price,
           qty: i.qty,
           // ✅ THIS CATCHES THE AI GENERATED IMAGES:
-          img: i.img || i.image || i.image_url || i.generated_image_url || "", 
+          img: i.img || i.image || i.image_url || i.generated_image_url || "",
         })),
         delivery_address: deliveryDetails.address,
-        delivery_notes: `Delivery time: ${deliveryTime} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone})`,
+        delivery_notes: buildDeliveryNotes(),
         scheduled_at: tomorrow.toISOString(),
         payment_method: paymentMethod,
-        // 🚀 NEW: Inject the user's special instructions here
-        special_note: orderNote.trim() || null 
+        special_note: orderNote.trim() || null
       })
 
       const orderIds = res.order_ids || []
-      
+
       for (const orderId of orderIds) {
         try {
           await api.confirmPayment(orderId)
@@ -311,19 +332,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
         }
       }
 
-      const orderData = {
-        orderIds: orderIds,
-        items: cartItems,
-        subtotal,
-        shipping,
-        total,
-        deliveryTime,
-        deliveryAddress: deliveryDetails.address,
-        scheduledDate: fmt(tomorrow),
-        placedAt: new Date().toISOString(),
-        special_note: orderNote.trim() || null
-      }
-      localStorage.setItem("bloomora_last_order", JSON.stringify(orderData))
+      localStorage.setItem("bloomora_last_order", JSON.stringify(buildOrderData(orderIds)))
 
       clearCart()
       onNavigate("confirmation")
@@ -335,7 +344,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
   }
 
   return (
-    <div className="min-h-screen" style={{ backgroundColor: "#F7F8FA" }}>
+    <div className="min-h-screen bg-[#F7F8FA]">
       {branchConfirmOpen && needsBranchConfirm && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -343,13 +352,13 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
             if (e.target === e.currentTarget) setBranchConfirmOpen(false)
           }}
         >
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl">
+          <div className="bg-white rounded-xl w-full max-w-md p-5 sm:p-6 shadow-xl">
             <h3 className="text-lg font-semibold text-gray-800 mb-2">Confirm your order branch</h3>
             <p className="text-sm text-gray-600 mb-4">
               You selected <b>{selectedStoreBranch}</b> branch, but the delivery address appears to be in <b>{addressBranch}</b>.
               Are you sure you want to proceed?
             </p>
-            <div className="flex gap-3">
+            <div className="flex flex-col sm:flex-row gap-3">
               <button
                 onClick={() => setBranchConfirmOpen(false)}
                 className="flex-1 py-2.5 text-sm font-semibold border border-gray-200 rounded-lg hover:bg-gray-50 text-gray-600"
@@ -358,8 +367,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
               </button>
               <button
                 onClick={proceedAfterBranchConfirm}
-                className="flex-1 py-2.5 text-sm font-semibold text-white rounded-lg"
-                style={{ backgroundColor: G }}
+                className="flex-1 py-2.5 text-sm font-semibold text-white rounded-lg bg-[#2E8B34] hover:brightness-105"
               >
                 Yes, proceed
               </button>
@@ -368,17 +376,17 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
         </div>
       )}
 
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
 
-        <h1 className="text-xl font-semibold text-gray-800 mb-6">Checkout</h1>
+        <h1 className="text-lg sm:text-xl font-semibold text-gray-800 mb-5 sm:mb-6">Checkout</h1>
 
-        <div className="grid lg:grid-cols-[1fr_300px] gap-5 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 lg:gap-5 items-start">
 
           {/* ── Left ── */}
-          <div className="space-y-4">
+          <div className="space-y-4 min-w-0">
 
             {/* Shipping Address */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
               <div className="flex items-center gap-2 mb-4">
                 <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                 <h2 className="text-sm font-semibold text-gray-700">Shipping Address</h2>
@@ -388,25 +396,15 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
               <div className="flex gap-2 mb-4 p-1 bg-gray-100 rounded-lg">
                 <button
                   onClick={() => setRecipientType("myself")}
-                  className="flex-1 py-2 text-xs font-semibold rounded-md transition"
-                  style={{
-                    backgroundColor: recipientType === "myself" ? "white" : "transparent",
-                    color: recipientType === "myself" ? G : "#6b7280",
-                    boxShadow: recipientType === "myself" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
-                  }}
+                  className={`flex-1 py-2 text-xs font-semibold rounded-md transition ${recipientType === "myself" ? "bg-white text-[#2E8B34] shadow-sm" : "bg-transparent text-gray-500"}`}
                 >
-                  📦 For Myself
+                  For Myself
                 </button>
                 <button
                   onClick={() => setRecipientType("someone_else")}
-                  className="flex-1 py-2 text-xs font-semibold rounded-md transition"
-                  style={{
-                    backgroundColor: recipientType === "someone_else" ? "white" : "transparent",
-                    color: recipientType === "someone_else" ? G : "#6b7280",
-                    boxShadow: recipientType === "someone_else" ? "0 1px 3px rgba(0,0,0,0.1)" : "none",
-                  }}
+                  className={`flex-1 py-2 text-xs font-semibold rounded-md transition ${recipientType === "someone_else" ? "bg-white text-[#2E8B34] shadow-sm" : "bg-transparent text-gray-500"}`}
                 >
-                  🎁 For Someone Else
+                  For Someone Else
                 </button>
               </div>
 
@@ -419,8 +417,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
                       <p className="text-sm text-gray-500 mb-2">No saved addresses yet</p>
                       <button
                         onClick={() => onNavigate("profile")}
-                        className="px-4 py-2 text-xs font-semibold text-white rounded-lg"
-                        style={{ backgroundColor: G }}
+                        className="px-4 py-2 text-xs font-semibold text-white rounded-lg bg-[#2E8B34] hover:brightness-105"
                       >
                         Add Address in Profile
                       </button>
@@ -431,19 +428,19 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
                         <div
                           key={addr.id}
                           onClick={() => setSelectedAddressId(addr.id)}
-                          className={`border rounded-lg p-3 cursor-pointer transition ${selectedAddressId === addr.id ? "border-green-500 bg-green-50" : "border-gray-200 hover:border-gray-300"}`}
+                          className={`border rounded-lg p-3 cursor-pointer transition ${selectedAddressId === addr.id ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200 hover:border-gray-300"}`}
                         >
                           <div className="flex items-start gap-2">
                             <div className="mt-0.5 flex-shrink-0">
-                              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${selectedAddressId === addr.id ? "border-green-500" : "border-gray-300"}`}>
-                                {selectedAddressId === addr.id && <div className="w-2 h-2 rounded-full" style={{ backgroundColor: G }} />}
+                              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${selectedAddressId === addr.id ? "border-[#2E8B34]" : "border-gray-300"}`}>
+                                {selectedAddressId === addr.id && <div className="w-2 h-2 rounded-full bg-[#2E8B34]" />}
                               </div>
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 mb-0.5">
                                 <span className="text-sm font-semibold text-gray-800">{addr.label}</span>
                                 {addr.is_default && (
-                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-white" style={{ backgroundColor: G }}>Default</span>
+                                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-white bg-[#2E8B34]">Default</span>
                                 )}
                               </div>
                               <p className="text-xs text-gray-700">{addr.recipient_name} — {addr.phone}</p>
@@ -466,9 +463,9 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
               ) : (
                 <div>
                   {manualForm.recipient_name && manualForm.phone && manualForm.street ? (
-                    <div className="border border-green-200 bg-green-50 rounded-lg p-3 mb-3">
-                      <div className="flex items-center justify-between">
-                        <div>
+                    <div className="border border-[#bbf7d0] bg-[#F0F7F1] rounded-lg p-3 mb-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
                           <p className="text-sm font-semibold text-gray-800">{manualForm.recipient_name}</p>
                           <p className="text-xs text-gray-600">{manualForm.phone}</p>
                           <p className="text-xs text-gray-500">
@@ -477,8 +474,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
                         </div>
                         <button
                           onClick={() => setShowManualModal(true)}
-                          className="text-xs font-semibold hover:underline"
-                          style={{ color: G }}
+                          className="text-xs font-semibold text-[#2E8B34] hover:underline flex-shrink-0"
                         >
                           EDIT
                         </button>
@@ -487,7 +483,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
                   ) : (
                     <button
                       onClick={() => setShowManualModal(true)}
-                      className="w-full py-3 text-sm font-semibold border-2 border-dashed border-gray-300 rounded-lg hover:border-green-400 hover:bg-green-50 transition text-gray-500"
+                      className="w-full py-3 text-sm font-semibold border-2 border-dashed border-gray-300 rounded-lg hover:border-[#2E8B34] hover:bg-[#F0F7F1] transition text-gray-500"
                     >
                       + Enter Recipient Details
                     </button>
@@ -497,18 +493,18 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
             </div>
 
             {/* Package */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
               <p className="text-xs text-gray-400 font-medium mb-4">Package 1 of 1</p>
 
               {/* Delivery option */}
               <p className="text-xs font-medium text-gray-500 mb-3">Choose your delivery option</p>
-              <div className="grid grid-cols-2 gap-3 mb-5">
-                <div className="border-2 rounded-lg p-3.5 cursor-pointer" style={{ borderColor: G }}>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+                <div className="border-2 border-[#2E8B34] rounded-lg p-3.5 cursor-pointer">
                   <div className="flex items-center gap-2 mb-1">
-                    <div className="w-5 h-5 rounded-full border-2 flex items-center justify-center" style={{ borderColor: G }}>
-                      <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: G }} />
+                    <div className="w-5 h-5 rounded-full border-2 border-[#2E8B34] flex items-center justify-center">
+                      <div className="w-2.5 h-2.5 rounded-full bg-[#2E8B34]" />
                     </div>
-                    <span className="text-sm font-semibold" style={{ color: G }}>₱100.00</span>
+                    <span className="text-sm font-semibold text-[#2E8B34]">₱100.00</span>
                   </div>
                   <p className="text-xs font-medium text-gray-700">Standard</p>
                   <p className="text-xs text-gray-400 mt-0.5">Guaranteed by {fmt(tomorrow)}<br />TOMORROW (Anytime)</p>
@@ -547,7 +543,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
               {cartItems.length === 0 && (
                 <div className="py-4 text-center">
                   <p className="text-sm text-gray-400">No items selected for checkout.</p>
-                  <button onClick={() => onNavigate("cart")} className="mt-2 px-4 py-2 text-xs font-semibold text-white rounded-lg" style={{ backgroundColor: G }}>
+                  <button onClick={() => onNavigate("cart")} className="mt-2 px-4 py-2 text-xs font-semibold text-white rounded-lg bg-[#2E8B34] hover:brightness-105">
                     Back to Cart
                   </button>
                 </div>
@@ -562,13 +558,13 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
           </div>
 
           {/* ── Right: delivery date + payment + summary ── */}
-          <div className="space-y-4">
+          <div className="space-y-4 min-w-0">
 
             {/* Delivery date */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
               <div className="flex items-center gap-2 mb-4">
                 <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                <h2 className="text-sm font-semibold text-gray-700">Select delivery date & time</h2>
+                <h2 className="text-sm font-semibold text-gray-700">Select delivery date</h2>
               </div>
 
               {/* Date row */}
@@ -578,9 +574,8 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
                   <p className="text-xs font-medium text-gray-500">{fmt(today)}</p>
                   <p className="text-xs text-gray-400">TODAY</p>
                 </div>
-                <div className="flex-1 border-2 rounded-lg p-2.5 text-center cursor-pointer" style={{ borderColor: G }}>
-                  <div className="w-2 h-2 rounded-full mx-auto mb-1" style={{ backgroundColor: G }} />
-                  <p className="text-xs font-semibold" style={{ color: G }}>{fmt(tomorrow)}</p>
+                <div className="flex-1 border-2 border-[#2E8B34] rounded-lg p-2.5 text-center cursor-pointer">
+                  <p className="text-xs font-semibold text-[#2E8B34]">{fmt(tomorrow)}</p>
                   <p className="text-xs font-medium text-gray-600">{fmtDay(tomorrow).toUpperCase()}</p>
                 </div>
                 <div className="flex-1 border border-gray-200 rounded-lg p-2.5 flex items-center justify-center cursor-pointer hover:bg-gray-50 transition">
@@ -589,62 +584,79 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
               </div>
 
               {/* Timezone note */}
-              <div className="flex items-center gap-1.5 mb-3 px-2.5 py-1.5 rounded-lg" style={{ backgroundColor: "#F0F7F1" }}>
-                <svg className="w-3.5 h-3.5 flex-shrink-0" style={{ color: G }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              <div className="flex items-center gap-1.5 mb-3 px-2.5 py-1.5 rounded-lg bg-[#F0F7F1]">
+                <svg className="w-3.5 h-3.5 flex-shrink-0 text-[#2E8B34]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 <span className="text-xs text-gray-600">Delivery time zone: Philippine Time (GMT+8)</span>
               </div>
 
-              {/* Time slots */}
-              <div className="grid grid-cols-2 gap-1.5">
-                {DELIVERY_TIMES.map(t => (
-                  <button key={t} onClick={() => setDeliveryTime(t)}
-                    className="py-2 px-2.5 text-xs rounded-lg border transition-all font-medium"
-                    style={{
-                      borderColor: deliveryTime === t ? G : "#e5e7eb",
-                      backgroundColor: deliveryTime === t ? "#F0F7F1" : "white",
-                      color: deliveryTime === t ? G : "#6b7280",
-                    }}>
-                    {t}
-                  </button>
-                ))}
-              </div>
+              {/* Delivery window note */}
+              <p className="text-xs text-gray-500 leading-relaxed">
+                Delivered anytime on <span className="font-semibold text-gray-700">{fmt(tomorrow)}</span> during business hours (9 AM – 6 PM). Our team coordinates the exact timing with the recipient.
+              </p>
             </div>
 
             {/* Payment method */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
                   <h2 className="text-sm font-semibold text-gray-700">Select payment method</h2>
                 </div>
-                <button className="text-xs font-semibold hover:underline" style={{ color: G }}>View all →</button>
+                <button className="text-xs font-semibold text-[#2E8B34] hover:underline">View all →</button>
               </div>
-              <div className="border-2 rounded-lg p-3 flex items-center gap-2" style={{ borderColor: G, backgroundColor: "#F0F7F1" }}>
+              <div className="border-2 border-[#2E8B34] bg-[#F0F7F1] rounded-lg p-3 flex items-center gap-2">
                 <div className="w-8 h-8 rounded bg-white flex items-center justify-center border border-gray-100 flex-shrink-0">
-                  <svg className="w-4 h-4" style={{ color: G }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
+                  <svg className="w-4 h-4 text-[#2E8B34]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
                 </div>
                 <div className="flex-1">
                   <p className="text-xs font-semibold text-gray-800">QR Ph</p>
-                  <p className="text-xs text-gray-400">Scan QR code & pay</p>
+                  <p className="text-xs text-gray-400">Scan QR code &amp; pay</p>
                 </div>
-                <div className="w-4 h-4 rounded-full border-2 flex items-center justify-center" style={{ borderColor: G }}>
-                  <div className="w-2 h-2 rounded-full" style={{ backgroundColor: G }} />
+                <div className="w-4 h-4 rounded-full border-2 border-[#2E8B34] flex items-center justify-center">
+                  <div className="w-2 h-2 rounded-full bg-[#2E8B34]" />
                 </div>
               </div>
 
               {/* Voucher */}
               <div className="mt-4">
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Voucher</label>
-                <div className="flex gap-2">
-                  <input value={voucher} onChange={e => setVoucher(e.target.value)} placeholder="Enter voucher code"
-                    className="flex-1 px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 transition placeholder-gray-400" />
-                  <button className="px-3 py-2 text-xs font-semibold rounded-lg border transition hover:bg-green-50" style={{ borderColor: G, color: G }}>APPLY</button>
-                </div>
+                {appliedVoucher ? (
+                  <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg border border-[#2E8B34] bg-[#F0F7F1]">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-[#2E8B34] truncate">{appliedVoucher.code}</p>
+                      <p className="text-[11px] text-gray-500">
+                        {appliedVoucher.type === "percent" ? `${appliedVoucher.value}% off` : `₱${appliedVoucher.value} off`} · −₱{discount.toLocaleString()}
+                      </p>
+                    </div>
+                    <button onClick={removeVoucher} className="text-xs font-semibold text-gray-500 hover:text-red-500 flex-shrink-0">REMOVE</button>
+                  </div>
+                ) : (
+                  <div className="flex gap-2">
+                    <input
+                      value={voucher}
+                      onChange={e => { setVoucher(e.target.value); if (voucherMsg) setVoucherMsg(null) }}
+                      onKeyDown={e => { if (e.key === "Enter") applyVoucher() }}
+                      placeholder="Enter voucher code"
+                      className="flex-1 px-3 py-2 text-xs border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2E8B34] transition placeholder-gray-400 uppercase placeholder:normal-case"
+                    />
+                    <button onClick={applyVoucher} className="px-3 py-2 text-xs font-semibold rounded-lg border border-[#2E8B34] text-[#2E8B34] transition hover:bg-[#F0F7F1]">APPLY</button>
+                  </div>
+                )}
+                {voucherMsg && (
+                  <div className={`mt-2 flex items-start gap-1.5 text-xs ${voucherMsg.type === "success" ? "text-[#2E8B34]" : "text-red-500"}`}>
+                    {voucherMsg.type === "success" ? (
+                      <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+                    ) : (
+                      <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    )}
+                    <span>{voucherMsg.text}</span>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* 🚀 NEW: Special Instructions Textarea */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
+            {/* Special Instructions */}
+            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Special Instructions
               </label>
@@ -656,27 +668,29 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
                 onChange={(e) => setOrderNote(e.target.value)}
                 placeholder="Leave your note here..."
                 rows="3"
-                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:ring-1 transition resize-y"
-                style={{ backgroundColor: "#F7F8FA", color: "#374151" }}
-                onFocus={e => e.target.style.borderColor = G}
-                onBlur={e => e.target.style.borderColor = "#e5e7eb"}
+                className="w-full px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none bg-[#F7F8FA] text-gray-700 transition resize-y focus:border-[#2E8B34] focus:ring-1 focus:ring-[#2E8B34]"
               />
             </div>
 
             {/* Summary + Place Order */}
-            <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
               <div className="space-y-2.5 text-sm mb-4">
                 <div className="flex justify-between text-gray-500"><span>Subtotal ({cartItems.length} item{cartItems.length !== 1 ? "s" : ""})</span><span className="font-medium text-gray-700">₱{subtotal.toLocaleString()}.00</span></div>
                 <div className="flex justify-between text-gray-500"><span>Shipping Fee</span><span className="font-medium text-gray-700">₱{shipping}.00</span></div>
+                {discount > 0 && (
+                  <div className="flex justify-between text-[#2E8B34]">
+                    <span>Voucher{appliedVoucher ? ` (${appliedVoucher.code})` : ""}</span>
+                    <span className="font-medium">−₱{discount.toLocaleString()}.00</span>
+                  </div>
+                )}
                 <div className="h-px bg-gray-100" />
-                <div className="flex justify-between font-semibold text-gray-800"><span>Order total</span><span style={{ color: G }}>₱{total.toLocaleString()}.00</span></div>
+                <div className="flex justify-between font-semibold text-gray-800"><span>Order total</span><span className="text-[#2E8B34]">₱{total.toLocaleString()}.00</span></div>
                 <p className="text-xs text-gray-400">VAT included, where applicable</p>
               </div>
               <button
                 onClick={handlePlaceOrder}
                 disabled={placing || cartItems.length === 0}
-                className="w-full py-2.5 text-sm font-semibold text-white rounded-lg transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-50"
-                style={{ backgroundColor: G }}
+                className="w-full py-2.5 text-sm font-semibold text-white rounded-lg bg-[#2E8B34] transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-50"
               >
                 {placing ? "Placing order..." : "PLACE ORDER NOW"}
               </button>
@@ -688,7 +702,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
       {/* Manual Recipient Modal */}
       {showManualModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-xl w-full max-w-md p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-xl w-full max-w-md p-5 sm:p-6 shadow-xl max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold text-gray-800 mb-1">Recipient Details</h3>
             <p className="text-sm text-gray-400 mb-4">Enter the delivery details for the recipient.</p>
             <form onSubmit={(e) => { e.preventDefault(); setShowManualModal(false); }} className="space-y-4">
@@ -700,7 +714,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
                   onChange={e => setManualForm({ ...manualForm, recipient_name: e.target.value })}
                   placeholder="Full name of recipient"
                   required
-                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2E8B34] focus:border-[#2E8B34]"
                 />
               </div>
               <div>
@@ -711,7 +725,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
                   onChange={e => setManualForm({ ...manualForm, phone: e.target.value })}
                   placeholder="0917 123 4567"
                   required
-                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2E8B34] focus:border-[#2E8B34]"
                 />
               </div>
               <div>
@@ -722,10 +736,10 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
                   onChange={e => setManualForm({ ...manualForm, street: e.target.value })}
                   placeholder="123 Main St, Building Name"
                   required
-                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                  className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2E8B34] focus:border-[#2E8B34]"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1.5">Barangay</label>
                   <input
@@ -733,7 +747,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
                     value={manualForm.barangay}
                     onChange={e => setManualForm({ ...manualForm, barangay: e.target.value })}
                     placeholder="Barangay Malabanias"
-                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2E8B34] focus:border-[#2E8B34]"
                   />
                 </div>
                 <div>
@@ -744,11 +758,11 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
                     onChange={e => setManualForm({ ...manualForm, city: e.target.value })}
                     placeholder="Angeles"
                     required
-                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2E8B34] focus:border-[#2E8B34]"
                   />
                 </div>
               </div>
-<div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-gray-500 mb-1.5">Province *</label>
                   <input
@@ -757,7 +771,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
                     onChange={e => setManualForm({ ...manualForm, province: e.target.value })}
                     placeholder="Pampanga"
                     required
-                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2E8B34] focus:border-[#2E8B34]"
                   />
                 </div>
                 <div>
@@ -767,11 +781,11 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
                     value={manualForm.zip}
                     onChange={e => setManualForm({ ...manualForm, zip: e.target.value })}
                     placeholder="2009"
-                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+                    className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2E8B34] focus:border-[#2E8B34]"
                   />
                 </div>
               </div>
-              
+
               {/* Save to address book checkbox */}
               <div className="flex items-center gap-2 pt-2">
                 <input
@@ -779,14 +793,14 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
                   id="saveToBook"
                   checked={saveAddressToBook}
                   onChange={e => setSaveAddressToBook(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-green-600 focus:ring-green-500"
+                  className="w-4 h-4 rounded border-gray-300 accent-[#2E8B34]"
                 />
                 <label htmlFor="saveToBook" className="text-xs text-gray-600">
                   Save to my address book for future orders
                 </label>
               </div>
-              
-              <div className="flex gap-3 pt-3">
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-3">
                 <button
                   type="button"
                   onClick={() => setShowManualModal(false)}
@@ -796,8 +810,7 @@ const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddr
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2.5 text-sm font-semibold text-white rounded-lg transition hover:brightness-105"
-                  style={{ backgroundColor: G }}
+                  className="flex-1 py-2.5 text-sm font-semibold text-white rounded-lg bg-[#2E8B34] transition hover:brightness-105"
                 >
                   Save Details
                 </button>

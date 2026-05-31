@@ -11,29 +11,30 @@ import TermsAndConditions from "./pages/customer/TermsAndConditions";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import ActivateStaff from "./pages/admin/ActivateStaff";
 import Cart from "./pages/customer/Cart";
-import Checkout from "./pages/Checkout";
+import Checkout from "./pages/customer/Checkout";
 import Confirmation from "./pages/Confirmation";
 import AccountPage from "./pages/customer/AccountPage";
-import Orders from "./pages/Orders";
-import Wishlist from "./pages/Wishlist";
-import Settings from "./pages/Settings";
+import Orders from "./pages/customer/Orders";
+import Wishlist from "./pages/customer/Wishlist";
+import Settings from "./pages/customer/Settings";
 import AboutUs from "./pages/customer/AboutUs";
 import ContactUs from "./pages/customer/ContactUs";
 import AllOccasions from "./pages/customer/AllOccasions";
 import Shop from "./pages/customer/Shop";
-import MakeItPersonal from "./pages/MakeItPersonal";
-import MixAndMatch from "./pages/MixAndMatch";
-import DescribeArrangement from "./pages/DescribeArrangement";
+import MakeItPersonal from "./pages/customer/MakeItPersonal";
+import MixAndMatch from "./pages/customer/MixAndMatch";
+import DescribeArrangement from "./pages/customer/DescribeArrangement";
 import FAQ from "./pages/customer/FAQ";
 import ReturnPolicy from "./pages/customer/ReturnPolicy";
-import AIGalleryPage from "./pages/AIGalleryPage";
+import AIGalleryPage from "./pages/customer/AIGalleryPage";
+import AICardComposer from "./pages/customer/AICardComposer";
 import ChatWidget from "./components/ChatWidget";
 import CookieConsent from "./components/CookieConsent";
 import AdPopup from "./components/AdPopup";
 import WorldClock from "./pages/customer/WorldClock";
 import VasesPage from "./pages/VasesPage";
-import WriteReviewPage from "./pages/WriteReviewPage";
-import Profile from "./pages/Profile";
+import WriteReviewPage from "./pages/customer/WriteReviewPage";
+import Profile from "./pages/customer/Profile";
 
 // ── Global dark-mode CSS ────────────────────────────────────────────────────
 const DARK_CSS = `
@@ -249,6 +250,7 @@ function AppContent() {
             case "faq":                  return <FAQ onNavigate={navigate} />;
             case "return-policy":        return <ReturnPolicy onNavigate={navigate} />;
             case "ai-gallery":           return <AIGalleryPage onNavigate={navigate} />;
+            case "ai-card-composer":     return <AICardComposer onNavigate={navigate} />;
             case "world-clock":          return <WorldClock onNavigate={navigate} />;
             case "vases":                return <VasesPage onNavigate={navigate} />;
             case "write-review":         return <WriteReviewPage onNavigate={navigate} orderId={selectedOrderId} />;

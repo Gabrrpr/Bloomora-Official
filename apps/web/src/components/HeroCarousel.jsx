@@ -163,12 +163,12 @@ export default function HeroCarousel({ onNavigate }) {
 
       {/* Content */}
       <div className="relative z-20 h-full flex items-center">
-        <div className="w-full max-w-7xl mx-auto px-16 sm:px-20 lg:px-24">
+        <div className="w-full max-w-7xl mx-auto px-20 sm:px-24 lg:px-28">
           <div className="max-w-xl">
             {animating && prevHero && (
               <div key={`prev-${prev}`} className="absolute"
                 style={{ animation: "slideOutLeft 0.55s cubic-bezier(0.4,0,0.2,1) forwards" }}>
-                <span className="inline-block text-xs font-bold tracking-[0.2em] uppercase px-3 py-1 rounded-full mb-4 text-white"
+                <span className="inline-block self-start max-w-max whitespace-nowrap text-xs font-bold tracking-[0.12em] sm:tracking-[0.2em] uppercase px-3 py-1 rounded-full mb-4 text-white"
                   style={{ backgroundColor: prevHero.accent + "55", border: `1px solid ${prevHero.accent}99` }}>
                   {prevHero.tag}
                 </span>
@@ -181,7 +181,7 @@ export default function HeroCarousel({ onNavigate }) {
 
             <div key={`curr-${current}`}
               style={{ animation: animating ? "slideInRight 0.6s cubic-bezier(0.4,0,0.2,1) forwards" : "none", opacity: animating ? 0 : 1 }}>
-              <span className="inline-block text-xs font-bold tracking-[0.2em] uppercase px-3 py-1 rounded-full mb-5 text-white"
+              <span className="inline-block self-start max-w-max whitespace-nowrap text-xs font-bold tracking-[0.12em] sm:tracking-[0.2em] uppercase px-3 py-1 rounded-full mb-5 text-white"
                 style={{ backgroundColor: hero.accent + "55", border: `1px solid ${hero.accent}99` }}>
                 {hero.tag}
               </span>
@@ -189,16 +189,17 @@ export default function HeroCarousel({ onNavigate }) {
                 {hero.headline.split("\n").map((line, i) => <span key={i} className="block">{line}</span>)}
               </h1>
               <p className="text-white/90 text-base sm:text-lg leading-relaxed mb-8 max-w-md">{hero.description}</p>
-              <div className="flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
+              <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3">
                 <button
                   onClick={() => onNavigate && onNavigate("shop")}
-                  className="w-full sm:w-auto px-7 py-3.5 text-sm font-bold text-white rounded-full shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl text-center"
+                  className="w-full max-w-[200px] sm:w-auto sm:max-w-none px-7 py-3.5 text-sm font-bold text-white rounded-full shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl text-center whitespace-nowrap"
                   style={{ backgroundColor: hero.accent }}>
                   {hero.cta}
                 </button>
                 <button
                   onClick={() => onNavigate && hero.ctaSecondaryNav && onNavigate(hero.ctaSecondaryNav)}
-                  className="w-full sm:w-auto px-7 py-3.5 text-sm font-semibold text-white rounded-full border border-white/40 backdrop-blur-sm hover:bg-white/10 transition-all duration-200 text-center">
+                  className="w-full max-w-[200px] sm:w-auto sm:max-w-none px-7 py-3.5 text-sm font-semibold text-white rounded-full border border-white/40 backdrop-blur-sm hover:bg-white/10 transition-all duration-200 text-center whitespace-nowrap"
+                  style={{ backgroundColor: "transparent" }}>
                   {hero.ctaSecondary}
                 </button>
               </div>

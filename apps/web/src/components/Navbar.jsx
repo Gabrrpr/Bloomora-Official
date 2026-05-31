@@ -16,6 +16,43 @@ const DARK_GREEN = "#0C573E";
 
 const STANDARD_CATEGORIES = ["flower", "vase", "wrapping", "accessory", "arrangement", "add-on"];
 
+// ── Admin announcements (created on the admin Promotions page, stored in localStorage) ──
+const ANNOUNCE_KEY = "bloomora_announcements";
+const ANNOUNCE_READ_KEY = "bloomora_announcements_read"; // ids the user has read
+
+// Map stored announcements -> notification objects the bell can render.
+function readAnnouncementNotifs() {
+  try {
+    const raw = localStorage.getItem(ANNOUNCE_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    let readIds = [];
+    try { readIds = JSON.parse(localStorage.getItem(ANNOUNCE_READ_KEY) || "[]") || []; } catch { readIds = []; }
+    return arr
+      .filter(a => a && a.active !== false && a.text && a.text.trim())
+      .map(a => ({
+        id: `ann-${a.id}`,
+        title: a.text.trim(),
+        message: "",
+        emoji: a.emoji || "",
+        image: a.image || "",
+        created_at: typeof a.id === "number" ? new Date(a.id).toISOString() : new Date().toISOString(),
+        is_read: readIds.includes(`ann-${a.id}`),
+        _announcement: true,
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function markAnnouncementsRead(notifs) {
+  try {
+    const ids = notifs.filter(n => n._announcement).map(n => n.id);
+    localStorage.setItem(ANNOUNCE_READ_KEY, JSON.stringify(ids));
+  } catch { /* ignore */ }
+}
+
 const PROMOTIONS = [
   { text: "Get", highlight: "3% off your first order", cta: "SHOP NOW", page: "shop" },
   { text: "Free delivery on orders over", highlight: "₱2,000", cta: "ORDER NOW", page: "shop" },
@@ -784,6 +821,26 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
   const [unreadCount, setUnreadCount]           = useState(0);
   const [loadingNotifs, setLoadingNotifs]       = useState(false);
 
+  // Load admin announcements into the bell + keep in sync with the admin page.
+useEffect(() => {
+  const refresh = () => {
+    const anns = readAnnouncementNotifs();
+    // If you later have an API feed, merge it here: [...apiNotifs, ...anns]
+    setNotifications(anns);
+    setUnreadCount(anns.filter(n => !n.is_read).length);
+  };
+  refresh();
+  const onStorage = (e) => {
+    if (!e || e.key === ANNOUNCE_KEY || e.key === ANNOUNCE_READ_KEY) refresh();
+  };
+  window.addEventListener("storage", onStorage);
+  window.addEventListener("bloomora:announcement-updated", refresh);
+  return () => {
+    window.removeEventListener("storage", onStorage);
+    window.removeEventListener("bloomora:announcement-updated", refresh);
+  };
+}, []);
+
   const [showBranchPopup, setShowBranchPopup]   = useState(false);
   const [showLockTooltip, setShowLockTooltip]   = useState(false);
 
@@ -813,8 +870,21 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
     setLocationOpen(true);
   };
 
-  const handleMarkAllRead = () => { setUnreadCount(0); };
-  const handleNotifClick  = (n) => {};
+  const handleMarkAllRead = () => {
+  markAnnouncementsRead(notifications);
+  setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+  setUnreadCount(0);
+};
+
+  const handleNotifClick = (n) => {
+  setNotifications(prev => {
+    const next = prev.map(x => x.id === n.id ? { ...x, is_read: true } : x);
+    markAnnouncementsRead(next);
+    setUnreadCount(next.filter(x => !x.is_read).length);
+    return next;
+  });
+};
+
   const NAV_LINKS = [
     { label: "Home", page: "home" },
     {
@@ -1158,12 +1228,18 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                             onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1e2a3a" : "#f9fafb"}
                             onMouseLeave={e => e.currentTarget.style.backgroundColor = n.is_read ? "transparent" : (isDark ? "rgba(46,139,52,0.08)" : "#f0fdf4")}
                           >
-                            <div className="flex-shrink-0 mt-1.5">
-                              {n.is_read
-                                ? <div className="w-2 h-2 rounded-full" style={{ backgroundColor: isDark ? "#374151" : "#e5e7eb" }} />
-                                : <div className="w-2 h-2 rounded-full" style={{ backgroundColor: SITE_GREEN }} />
-                              }
-                            </div>
+                            <div className="flex-shrink-0 mt-0.5 relative">
+  {n.image
+    ? <img src={n.image} alt="" className="w-8 h-8 rounded-lg object-cover" />
+    : <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base"
+        style={{ backgroundColor: isDark ? "rgba(46,139,52,0.15)" : "#dcfce7" }}>
+        {n.emoji || "📣"}
+      </span>}
+  {!n.is_read && (
+    <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2"
+      style={{ backgroundColor: SITE_GREEN, borderColor: isDark ? "#1a2332" : "white" }} />
+  )}
+</div>
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-semibold leading-snug" style={{ color: isDark ? "#e5e7eb" : "#111827" }}>{n.title}</p>
                               <p className="text-xs mt-0.5 leading-relaxed" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>{n.message}</p>

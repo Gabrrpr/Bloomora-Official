@@ -1,16 +1,16 @@
 import { useState, useEffect, useCallback, useRef } from "react"
-import { useTheme } from "../context/ThemeContext"
+import { useTheme } from "../../context/ThemeContext"
 
-import c1  from "../assets/customized/customized1.webp"
-import c2  from "../assets/customized/customized2.webp"
-import c3  from "../assets/customized/customized3.webp"
-import c4  from "../assets/customized/customized4.webp"
-import c5  from "../assets/customized/customized5.webp"
-import c6  from "../assets/customized/customized6.webp"
-import c7  from "../assets/customized/customized7.webp"
-import c8  from "../assets/customized/customized8.webp"
-import c9  from "../assets/customized/customized9.webp"
-import c10 from "../assets/customized/customized10.webp"
+import c1  from "../../assets/customized/customized1.webp"
+import c2  from "../../assets/customized/customized2.webp"
+import c3  from "../../assets/customized/customized3.webp"
+import c4  from "../../assets/customized/customized4.webp"
+import c5  from "../../assets/customized/customized5.webp"
+import c6  from "../../assets/customized/customized6.webp"
+import c7  from "../../assets/customized/customized7.webp"
+import c8  from "../../assets/customized/customized8.webp"
+import c9  from "../../assets/customized/customized9.webp"
+import c10 from "../../assets/customized/customized10.webp"
 
 const ARRANGEMENTS = [
   { id:1,  src:c1,  title:"Rose Cascade",   mood:"Romantic",   palette:["#e11d48","#f43f5e","#fda4af"], prompt:"A sweeping cascade of deep red roses with soft pink tips, perfect for a romantic anniversary gift." },

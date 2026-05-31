@@ -115,9 +115,9 @@ function OutlineAvatar({ isDark }) {
   (Previously 32px was too much — screenshot showed it too low.)
 */
 function QuoteMark({ isDark }) {
-  const bg    = isDark ? "rgba(74,222,128,0.12)" : "rgba(12,87,62,0.08)"
+  const bg    = isDark ? "#16352a" : "rgba(12,87,62,0.08)"
   const color = isDark ? G_D : DG
-  const glow  = isDark ? "0 0 20px rgba(74,222,128,0.25)" : "none"
+  const glow  = "none"
   return (
     <div className="w-[82px] h-[82px] rounded-full flex items-center justify-center mx-auto mb-[18px] shrink-0 overflow-hidden"
       style={{ backgroundColor:bg, boxShadow:glow }}>
@@ -126,7 +126,7 @@ function QuoteMark({ isDark }) {
         fontSize: 88,
         lineHeight: 0,
         color,
-        opacity: 0.65,
+        opacity: isDark ? 1 : 0.65,
         userSelect: "none",
         display: "block",
         transform: "translateY(20px)",   // reduced from 32px — was too low
@@ -139,7 +139,7 @@ function QuoteMark({ isDark }) {
 
 /* ── Verified badge ────────────────────────────────────────────── */
 function VerifiedBadge({ isDark }) {
-  const glow = isDark ? "0 0 12px rgba(74,222,128,0.4)" : "none"
+  const glow = "none"
   return (
     <div className="absolute top-[-1px] left-5 flex items-center gap-1 text-[10px] font-bold uppercase tracking-[0.07em] text-white px-[11px] py-1 rounded-b-lg"
       style={{ backgroundColor:DG, boxShadow:glow }}>
@@ -153,7 +153,9 @@ function VerifiedBadge({ isDark }) {
 
 /* ── Review card ───────────────────────────────────────────────── */
 function ReviewCard({ review, isDark }) {
-  const cardBg      = isDark ? "rgba(22,34,46,0.92)" : "rgba(255,255,255,0.93)"
+  // Dark mode: solid panel — fully opaque green-tinted dark bg, no backdrop
+  // blur, so cards read as solid elements rather than frosted glass.
+  const cardBg      = isDark ? "#0f1f17" : "rgba(255,255,255,0.93)"
   const cardBdr     = isDark ? "#4ade80" : "#b8d8b8"
   const cardShdw    = isDark ? "0 0 0 1px rgba(74,222,128,0.2), 0 8px 32px rgba(0,0,0,0.5)" : "0 4px 24px rgba(12,87,62,0.1)"
   const cardHovShdw = isDark ? "0 0 0 1px rgba(74,222,128,0.4), 0 16px 48px rgba(74,222,128,0.12)" : "0 12px 40px rgba(12,87,62,0.18)"
@@ -161,11 +163,14 @@ function ReviewCard({ review, isDark }) {
   const nameC  = isDark ? "#f0fdf4" : "#111827"
   const divC   = isDark ? "rgba(74,222,128,0.15)" : "#f0f0f0"
 
+  // Only apply the frosted-glass blur in light mode.
+  const blur = isDark ? "none" : "blur(12px)"
+
   return (
     <div
       className="relative flex flex-col items-center text-center rounded-[18px] p-9 pt-9 h-full box-border"
       style={{
-        backdropFilter:"blur(12px)", WebkitBackdropFilter:"blur(12px)",
+        backdropFilter:blur, WebkitBackdropFilter:blur,
         backgroundColor:cardBg, border:`1.5px solid ${cardBdr}`,
         boxShadow:cardShdw,
         transition:"box-shadow 0.25s ease, transform 0.25s ease",
@@ -238,7 +243,7 @@ export default function Testimonials() {
   const headingC   = isDark ? "#f0fdf4" : "#1f2937"
   const bodyC      = isDark ? "#94a3b8" : "#6b7280"
   const dotInact   = isDark ? "rgba(74,222,128,0.25)" : "#d1d5db"
-  const trustBg    = isDark ? "rgba(22,34,46,0.92)" : "rgba(255,255,255,0.95)"
+  const trustBg    = isDark ? "#0f1f17" : "rgba(255,255,255,0.95)"
   const trustBdr   = isDark ? "rgba(74,222,128,0.25)" : "#e5ede5"
   const trustDivC  = isDark ? "rgba(74,222,128,0.1)"  : "#eef2ee"
   const iconCircBg = isDark ? "rgba(74,222,128,0.1)"  : "#f0f7f0"
@@ -312,7 +317,7 @@ export default function Testimonials() {
         {/* Trust Bar */}
         <div ref={trustRef}
           className={`mt-[clamp(44px,6vw,64px)] rounded-2xl overflow-hidden transition-all duration-500`}
-          style={{ backdropFilter:"blur(16px)", WebkitBackdropFilter:"blur(16px)", backgroundColor:trustBg, border:`1px solid ${trustBdr}`, boxShadow:trustShdw, opacity:trustVisible?1:0, transform:trustVisible?"none":"translateY(16px)" }}>
+          style={{ backgroundColor:trustBg, border:`1px solid ${trustBdr}`, boxShadow:trustShdw, opacity:trustVisible?1:0, transform:trustVisible?"none":"translateY(16px)" }}>
           <div className={`grid ${trustColCls}`}>
             {FEATURES.map((f,i) => {
               const cols = isDesk?4:isMid?2:1

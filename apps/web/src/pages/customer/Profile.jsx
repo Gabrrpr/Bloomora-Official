@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
-import { useAuth } from "../context/AuthContext";
-import { api } from "../services/api";
-import { useTheme } from "../context/ThemeContext.jsx";
+import { useAuth } from "../../context/AuthContext.jsx";
+import { api } from "../../services/api.js";
+import { useTheme } from "../../context/ThemeContext.jsx";
 
 const G = "#2E8B34";
 const DG = "#0C573E";

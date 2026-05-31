@@ -120,6 +120,8 @@ export default function ChatWidget() {
     } catch { return null }
   })
   const [attachedImage, setAttachedImage] = useState(null)
+  const [attachedQuote, setAttachedQuote] = useState(null)
+  const [attachedProduct, setAttachedProduct] = useState(null)
   const [sending, setSending] = useState(false)
   const bottomRef       = useRef(null)
   const fileInputRef    = useRef(null)
@@ -143,7 +145,16 @@ export default function ChatWidget() {
   const dotAvatarBg   = isDark ? "#1e293b" : "white"
 
   useEffect(() => {
-    const handleOpenChat = () => setOpen(true)
+    const handleOpenChat = (e) => {
+      setOpen(true)
+      const d = e?.detail
+      // Quotation hand-off: attach it so the customer can send it with their own message
+      if (d?.quote?.text) setAttachedQuote(d.quote)
+      // Product hand-off ("Ask us"): attach the item so it goes with their message
+      if (d?.product?.name) setAttachedProduct(d.product)
+      // Backward-compatible: a plain prefill drops straight into the input
+      if (d?.prefill) setInput(prev => (prev ? `${prev}\n\n${d.prefill}` : d.prefill))
+    }
     window.addEventListener("bloomora:open-chat", handleOpenChat)
     return () => window.removeEventListener("bloomora:open-chat", handleOpenChat)
   }, [])
@@ -235,7 +246,7 @@ export default function ChatWidget() {
   }, [sessionId, sending])
 
   const handleSend = async () => {
-    if (!input.trim() && !attachedImage) return
+    if (!input.trim() && !attachedImage && !attachedQuote && !attachedProduct) return
     let imageUrl = null
     if (attachedImage?.file) {
       try {
@@ -247,7 +258,14 @@ export default function ChatWidget() {
         return
       }
     }
-    sendMessage(input, imageUrl)
+    // Attached product / quotation ride along with the customer's typed message
+    const productText = attachedProduct
+      ? `Product: ${attachedProduct.name}${attachedProduct.price != null ? ` — ₱${Number(attachedProduct.price).toLocaleString()}` : ""}`
+      : null
+    const outgoing = [productText, attachedQuote?.text, input.trim()].filter(Boolean).join("\n\n")
+    setAttachedQuote(null)
+    setAttachedProduct(null)
+    sendMessage(outgoing, imageUrl)
   }
 
   const handleFileChange = (e) => {
@@ -261,6 +279,10 @@ export default function ChatWidget() {
     if (attachedImage?.previewUrl) URL.revokeObjectURL(attachedImage.previewUrl)
     setAttachedImage(null)
   }
+
+  const removeQuote = () => setAttachedQuote(null)
+
+  const removeProduct = () => setAttachedProduct(null)
 
   useEffect(() => { if (open) createSession() }, [open, createSession])
 
@@ -279,6 +301,7 @@ export default function ChatWidget() {
   }
 
   const { w, h } = SIZES[size]
+  const canSend = (input.trim() || attachedImage || attachedQuote || attachedProduct) && user && sessionId && !sending
 
   return (
     <>
@@ -305,7 +328,8 @@ export default function ChatWidget() {
           <div
             className="chat-open flex flex-col rounded-2xl overflow-hidden"
             style={{
-              width: `${w}px`, height: `${h}px`,
+              width:  `min(${w}px, calc(100vw - 32px))`,
+              height: `min(${h}px, calc(100vh - 32px))`,
               backgroundColor: chatBg,
               transition: "width 0.3s cubic-bezier(0.4,0,0.2,1), height 0.3s cubic-bezier(0.4,0,0.2,1)",
               boxShadow: isDark
@@ -392,6 +416,8 @@ export default function ChatWidget() {
                           color: msg.from === "user" ? "white" : botMsgText,
                           boxShadow: msg.from === "bot" ? "0 1px 4px rgba(0,0,0,0.12)" : "none",
                           border: msg.from === "bot" ? `1px solid ${botMsgBdr}` : "none",
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
                         }}>
                         {msg.text}
                       </div>
@@ -442,6 +468,67 @@ export default function ChatWidget() {
               </div>
             )}
 
+            {/* Attached product (from "Ask us") */}
+            {attachedProduct && (
+              <div className="px-3 pt-2 border-t" style={{ backgroundColor: inputAreaBg, borderColor: inputBdr }}>
+                <div className="flex items-center gap-2.5 p-2.5 rounded-xl"
+                  style={{ border: `1px solid ${qrBdr}`, background: qrBg }}>
+                  <div className="w-9 h-9 rounded-lg overflow-hidden flex-shrink-0"
+                    style={{ border: `1px solid ${qrBdr}`, background: isDark ? "#0f172a" : "#f3f4f6" }}>
+                    {attachedProduct.image && (
+                      <img src={attachedProduct.image} alt={attachedProduct.name} className="w-full h-full object-cover"
+                        onError={e => { e.target.style.display = "none" }} />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold m-0 truncate" style={{ color: isDark ? "#e5e7eb" : "#111827" }}>
+                      {attachedProduct.name}
+                    </p>
+                    <p className="text-[11px] m-0 truncate" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>
+                      {attachedProduct.price != null ? `₱${Number(attachedProduct.price).toLocaleString()} · attached to your message` : "Attached to your message"}
+                    </p>
+                  </div>
+                  <button onClick={removeProduct}
+                    className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-white"
+                    style={{ backgroundColor: "#ef4444" }} title="Remove product">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Attached quotation */}
+            {attachedQuote && (
+              <div className="px-3 pt-2 border-t" style={{ backgroundColor: inputAreaBg, borderColor: inputBdr }}>
+                <div className="flex items-center gap-2.5 p-2.5 rounded-xl"
+                  style={{ border: `1px solid ${qrBdr}`, background: qrBg }}>
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                    style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+                    <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold m-0 truncate" style={{ color: isDark ? "#e5e7eb" : "#111827" }}>
+                      Bulk Order Quotation
+                    </p>
+                    <p className="text-[11px] m-0 truncate" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>
+                      {attachedQuote.summary || "Attached — will be sent with your message"}
+                    </p>
+                  </div>
+                  <button onClick={removeQuote}
+                    className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-white"
+                    style={{ backgroundColor: "#ef4444" }} title="Remove quotation">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Attachment preview */}
             {attachedImage && (
               <div className="px-3 pt-2 flex items-center gap-2 border-t"
@@ -480,7 +567,7 @@ export default function ChatWidget() {
               </button>
 
               <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
-                placeholder={user ? "Type your message..." : "Please log in to chat"}
+                placeholder={user ? (attachedProduct ? "Ask about this product..." : attachedQuote ? "Add a message (optional)..." : "Type your message...") : "Please log in to chat"}
                 disabled={!user}
                 className="flex-1 px-3.5 py-2.5 text-sm rounded-xl border outline-none transition-all"
                 style={{
@@ -492,12 +579,10 @@ export default function ChatWidget() {
                 onBlur={e => e.target.style.borderColor = inputFieldBdr} />
 
               <button onClick={handleSend}
-                disabled={(!input.trim() && !attachedImage) || !user || !sessionId || sending}
+                disabled={!canSend}
                 className="w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 transition-all hover:opacity-90 active:scale-95 disabled:opacity-40"
                 style={{
-                  background: ((input.trim() || attachedImage) && user && sessionId && !sending)
-                    ? `linear-gradient(135deg,${DG},${G})`
-                    : (isDark ? "#1e293b" : "#e5e7eb"),
+                  background: canSend ? `linear-gradient(135deg,${DG},${G})` : (isDark ? "#1e293b" : "#e5e7eb"),
                 }}>
                 <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
@@ -506,19 +591,19 @@ export default function ChatWidget() {
             </div>
           </div>
         ) : (
-          // Floating button
+          // Floating button — circle on mobile, full pill on larger screens
           <button onClick={() => setOpen(true)}
-            className="group flex items-center gap-3 px-4 py-3.5 text-white rounded-2xl transition-all duration-300 hover:scale-105 hover:shadow-2xl"
+            className="group flex items-center justify-center sm:justify-start gap-0 sm:gap-3 p-0 sm:px-4 sm:py-3.5 w-14 h-14 sm:w-auto sm:h-auto text-white rounded-full sm:rounded-2xl transition-all duration-300 hover:scale-105 hover:shadow-2xl"
             style={{
               background: `linear-gradient(135deg,${DG} 0%,${G} 100%)`,
               boxShadow: "0 8px 32px rgba(12,87,62,0.35)",
               border: "1px solid rgba(255,255,255,0.15)",
             }}>
-            <div className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 transition-all group-hover:scale-110 overflow-hidden"
+            <div className="w-11 h-11 rounded-full sm:rounded-xl flex items-center justify-center flex-shrink-0 transition-all group-hover:scale-110 overflow-hidden"
               style={{ backgroundColor: "white" }}>
               <img src={estingsLogo} alt="Esting's" style={{ width: "28px", height: "28px", objectFit: "contain" }} />
             </div>
-            <div className="text-left">
+            <div className="hidden sm:block text-left">
               <p className="font-bold text-sm leading-tight">Live Support</p>
               <p className="text-xs leading-tight" style={{ color: "rgba(255,255,255,0.8)" }}>Chat with our team</p>
             </div>

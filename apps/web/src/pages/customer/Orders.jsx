@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { api } from "../services/api.js"
+import { api } from "../../services/api.js"
 
 const G = "#2E8B34"
 const TABS = ["All", "Pending", "Preparing", "Out for Delivery", "Delivered", "Cancelled"]

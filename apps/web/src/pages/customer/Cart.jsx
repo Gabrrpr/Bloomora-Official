@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { getCart, setCart, removeFromCart, getCartCount } from "../../utils/cart.js"
+import { validateVoucher, computeDiscount } from "../../utils/vouchers.js"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -28,13 +29,26 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
   const [selectAll, setSelectAll] = useState(false)
   const [catalogOpen, setCatalogOpen] = useState(false)
 
+  // ── Voucher ──────────────────────────────────────────────────────────────
+  const [voucher, setVoucher]               = useState("")
+  const [appliedVoucher, setAppliedVoucher] = useState(null)
+  const [voucherMsg, setVoucherMsg]         = useState(null) // { type:"error"|"success", text }
+
   useEffect(() => { setItems(getCart()); setCartCount(getCartCount()) }, [setCartCount])
 
   const persist = (newItems) => { setItems(newItems); setCart(newItems); setCartCount(getCartCount()) }
   const checkedItems = items.filter(i => i.checked)
   const subtotal     = checkedItems.reduce((s,i) => s+(i.price||0)*(i.qty||1), 0)
   const shipping     = checkedItems.length > 0 ? 100 : 0
-  const total        = subtotal + shipping
+  const discount     = computeDiscount(appliedVoucher, subtotal)
+  const total        = Math.max(0, subtotal + shipping - discount)
+
+  const applyVoucher = () => {
+    const result = validateVoucher(voucher, subtotal, checkedItems.length > 0)
+    setVoucherMsg({ type: result.type, text: result.message })
+    setAppliedVoucher(result.ok ? result.voucher : null)
+  }
+  const removeVoucher = () => { setAppliedVoucher(null); setVoucher(""); setVoucherMsg(null) }
 
   const toggleItem   = (id,group) => persist(items.map(i => (i.id===id&&i.group===group)?{...i,checked:!i.checked}:i))
   const toggleAll    = () => { const n=!selectAll; setSelectAll(n); persist(items.map(i=>({...i,checked:n}))) }
@@ -73,6 +87,10 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
   const inBg     = isDark ? "#111827" : "white"
   const inBdr    = isDark ? "#334155" : "#e5e7eb"
   const inTxt    = isDark ? "#f1f5f9" : "#374151"
+
+  // Voucher feedback colours
+  const okC      = isDark ? "#4ade80" : G
+  const errC     = isDark ? "#f87171" : "#dc2626"
 
   // Delete/remove button hover colour
   const delHov   = "#f87171"
@@ -229,6 +247,12 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
                 <span style={{ color:subC }}>Shipping Fee</span>
                 <span className="font-semibold" style={{ color:labelC }}>{shipping>0?`₱${shipping}.00`:"—"}</span>
               </div>
+              {discount > 0 && (
+                <div className="flex justify-between">
+                  <span style={{ color:okC }}>Voucher{appliedVoucher ? ` (${appliedVoucher.code})` : ""}</span>
+                  <span className="font-semibold" style={{ color:okC }}>−₱{discount.toLocaleString()}.00</span>
+                </div>
+              )}
               <div className="h-px my-1" style={{ backgroundColor:divC }}/>
               <div className="flex justify-between font-bold text-sm">
                 <span style={{ color:labelC }}>Order total</span>
@@ -248,17 +272,53 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
             {/* Voucher */}
             <div className="mt-4 pt-4" style={{ borderTop:`1px solid ${divC}` }}>
               <label className="block text-xs font-semibold mb-2" style={{ color:subC }}>Voucher Code</label>
-              <div className="flex gap-2">
-                <input placeholder="Enter voucher code"
-                  className="flex-1 px-3 py-2 text-xs border rounded-lg outline-none transition-all"
-                  style={{ borderColor:inBdr, backgroundColor:inBg, color:inTxt }}
-                  onFocus={e => { e.target.style.borderColor="#4ade80"; e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)" }}
-                  onBlur={e => { e.target.style.borderColor=inBdr; e.target.style.boxShadow="none" }}/>
-                <button className="px-3 py-2 text-xs font-bold rounded-lg border transition-all hover:opacity-80"
-                  style={{ borderColor:isDark?"#4ade80":G, color:isDark?"#4ade80":G, backgroundColor:"transparent" }}>
-                  APPLY
-                </button>
-              </div>
+
+              {appliedVoucher ? (
+                <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-lg"
+                  style={{ border:`1px solid ${okC}`, backgroundColor:isDark?"rgba(74,222,128,0.08)":"#F0F7F1" }}>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold truncate" style={{ color:okC }}>{appliedVoucher.code}</p>
+                    <p className="text-[11px]" style={{ color:subC }}>
+                      {appliedVoucher.type==="percent" ? `${appliedVoucher.value}% off` : `₱${appliedVoucher.value} off`} · −₱{discount.toLocaleString()}
+                    </p>
+                  </div>
+                  <button onClick={removeVoucher}
+                    className="text-xs font-bold flex-shrink-0 transition-colors"
+                    style={{ color:subC }}
+                    onMouseEnter={e => e.currentTarget.style.color=errC}
+                    onMouseLeave={e => e.currentTarget.style.color=subC}>
+                    REMOVE
+                  </button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <input placeholder="Enter voucher code"
+                    value={voucher}
+                    onChange={e => { setVoucher(e.target.value); if (voucherMsg) setVoucherMsg(null) }}
+                    onKeyDown={e => { if (e.key==="Enter") applyVoucher() }}
+                    className="flex-1 px-3 py-2 text-xs border rounded-lg outline-none transition-all uppercase placeholder:normal-case"
+                    style={{ borderColor:inBdr, backgroundColor:inBg, color:inTxt }}
+                    onFocus={e => { e.target.style.borderColor="#4ade80"; e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)" }}
+                    onBlur={e => { e.target.style.borderColor=inBdr; e.target.style.boxShadow="none" }}/>
+                  <button onClick={applyVoucher}
+                    className="px-3 py-2 text-xs font-bold rounded-lg border transition-all hover:opacity-80"
+                    style={{ borderColor:isDark?"#4ade80":G, color:isDark?"#4ade80":G, backgroundColor:"transparent" }}>
+                    APPLY
+                  </button>
+                </div>
+              )}
+
+              {voucherMsg && (
+                <div className="mt-2 flex items-start gap-1.5 text-xs"
+                  style={{ color: voucherMsg.type==="success" ? okC : errC }}>
+                  {voucherMsg.type==="success" ? (
+                    <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+                  ) : (
+                    <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                  )}
+                  <span>{voucherMsg.text}</span>
+                </div>
+              )}
             </div>
           </div>
         </div>

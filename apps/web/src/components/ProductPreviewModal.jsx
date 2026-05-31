@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react"
 import { addToCart } from "../utils/cart.js"
 import { useTheme } from "../context/ThemeContext"
 import { api } from "../services/api.js"
+import { generateCardMessage, RELATIONSHIP_OPTIONS, OCCASION_OPTIONS, TONE_OPTIONS, getPendingCard, clearPendingCard } from "../utils/cardMessage.js"
 
 import withCardImg from "../assets/productpreview/withCard.webp"
 import noCardImg   from "../assets/productpreview/noCard.webp"
@@ -140,15 +141,7 @@ function Confetti() {
   )
 }
 
-/* ── AI Panel ── */
-const RELATIONSHIP_OPTIONS = ["Best Friend","Partner / Lover","Spouse","Mother","Father","Sibling","Grandparent","Child","Colleague","Boss","Teacher","Mentor","Classmate","Neighbor","Acquaintance"]
-const OCCASION_OPTIONS     = ["Birthday","Anniversary","Valentine's Day","Mother's Day","Father's Day","Graduation","Get Well Soon","Thank You","Congratulations","Just Because","Sympathy","Wedding","New Baby","Farewell"]
-const TONE_OPTIONS         = [
-  { value:"warm",     label:"Warm & Heartfelt" },
-  { value:"playful",  label:"Playful & Fun" },
-  { value:"elegant",  label:"Elegant & Formal" },
-  { value:"simple",   label:"Simple & Sweet" },
-]
+
 
 function AIPanel({ onUse, onBack }) {
   const [relationship, setRelationship] = useState("")
@@ -160,30 +153,16 @@ function AIPanel({ onUse, onBack }) {
   const [err,          setErr]          = useState("")
 
   const generate = async () => {
-    if (!relationship || !occasion) { setErr("Please select a relationship and occasion."); return }
-    setErr(""); setLoading(true); setGenerated("")
-    const toneLabel = TONE_OPTIONS.find(t => t.value===tone)?.label || "Warm & Heartfelt"
-    const prompt = `Write a short, genuine greeting card message for someone's ${occasion}. The sender's relationship to the recipient is: ${relationship}. Tone: ${toneLabel}.${extra ? ` Extra context: ${extra}.` : ""} Keep it 2-4 sentences, personal, and sincere. Write only the message itself.`
-    try {
-      const res  = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 200,
-          system: "You write short, heartfelt greeting card messages. Respond with only the message text.",
-          messages: [{ role: "user", content: prompt }]
-        })
-      })
-      const data = await res.json()
-      const text = data?.content?.[0]?.text?.trim() || ""
-      if (!text) throw new Error("Empty")
-      setGenerated(text)
-    } catch (e) {
-      setErr("Could not generate message. Please try again.")
-    }
-    setLoading(false)
+  if (!relationship || !occasion) { setErr("Please select a relationship and occasion."); return }
+  setErr(""); setLoading(true); setGenerated("")
+  try {
+    const text = await generateCardMessage({ relationship, occasion, tone, extra })
+    setGenerated(text)
+  } catch (e) {
+    setErr("Could not generate message. Please try again.")
   }
+  setLoading(false)
+}
 
   return (
     <div className="pms-scroll flex-1 overflow-y-auto px-7 py-6 flex flex-col gap-4">
@@ -298,7 +277,10 @@ function AIPanel({ onUse, onBack }) {
 /* ── Card Step ── */
 function CardStep({ delivLabel, dest, onClose, onNavigate }) {
   const [phase,   setPhase]   = useState("choice")
-  const [form,    setForm]    = useState({ msg: "", to: "", from: "" })
+  const [form,    setForm]    = useState(() => {
+  const pending = getPendingCard()
+  return { msg: pending?.message || "", to: "", from: "" }
+})
   const [formErr, setFormErr] = useState({})
   const [hovered, setHovered] = useState(null)
   const [choice,  setChoice]  = useState(null)
@@ -331,6 +313,8 @@ function CardStep({ delivLabel, dest, onClose, onNavigate }) {
     if (!form.from.trim()) e.from = true
     setFormErr(e)
     if (Object.keys(e).length > 0) return
+    if (Object.keys(e).length > 0) return
+  clearPendingCard()
     setPhase("done")
   }
 
@@ -504,6 +488,320 @@ function CardStep({ delivLabel, dest, onClose, onNavigate }) {
   )
 }
 
+/* ── Quote: single line-item row ── */
+function QuoteLineRow({ label, unit, qty, txt, subTxt, bdr, addon }) {
+  return (
+    <div className="flex justify-between items-start mb-1.5">
+      <div className="flex-1 min-w-0 pr-2">
+        <span className="text-xs font-medium" style={{ color: txt }}>{addon ? `+ ${label}` : label}</span>
+        <span className="text-[10px] block" style={{ color: subTxt }}>
+          ₱{unit.toLocaleString()} × {qty.toLocaleString()}
+        </span>
+      </div>
+      <span className="text-xs font-semibold whitespace-nowrap" style={{ color: txt }}>
+        ₱{(unit * qty).toLocaleString()}
+      </span>
+    </div>
+  )
+}
+
+/* ── Quote Step ── */
+function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark, onBack, onClose, onOpenChat }) {
+  const [phase,  setPhase]  = useState("input")   // "input" | "report"
+  const [qtyStr, setQtyStr] = useState("")
+  const [err,    setErr]    = useState("")
+  const [copied, setCopied] = useState(false)
+  const [meta,   setMeta]   = useState({ qty: 0, ref: "", date: "" })
+
+  const unitPrice = product.price + addOnTotal
+  const QUICK = [10, 25, 50, 100]
+
+  /* tokens (dark-aware, tuned for readable contrast in dark mode) */
+  const panelBg = isDark ? "#0f172a" : "#f3f4f6"
+  const docBg   = isDark ? "#1e293b" : "white"
+  const subBg   = isDark ? "#0f172a" : "#f9fafb"
+  const txt     = isDark ? "#f8fafc" : "#111827"
+  const subTxt  = isDark ? "#cbd5e1" : "#6b7280"
+  const faint   = isDark ? "#94a3b8" : "#9ca3af"
+  const bdr     = isDark ? "#475569" : "#e5e7eb"
+  const lineBdr = isDark ? "#334155" : "#f3f4f6"
+  const accent  = isDark ? "#4ade80" : G
+
+  const generate = () => {
+    const n = parseInt(qtyStr, 10)
+    if (!n || n < 1) { setErr("Please enter how many you'd like to order."); return }
+    const ref  = `BLM-${product.id}-${Date.now().toString().slice(-6)}`
+    const date = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
+    setMeta({ qty: n, ref, date })
+    setErr("")
+    setPhase("report")
+  }
+
+  const grand = unitPrice * meta.qty
+  const quoteSummary = `${product.name} · ${meta.qty.toLocaleString()} pcs · ₱${grand.toLocaleString()}`
+
+  /* Full itemised quotation text — used by Copy, Download, and the chat hand-off */
+  const buildReportText = () => {
+    const L = []
+    L.push("BULK ORDER QUOTATION")
+    L.push("Esting's Flower International Inc.")
+    L.push(`Ref ${meta.ref}  ·  ${meta.date}`)
+    L.push("")
+    L.push(`Item: ${product.name}`)
+    if (color?.name) L.push(`Color: ${color.name}`)
+    if (sizeLabel)   L.push(`Variant: ${sizeLabel}`)
+    L.push(`Quantity: ${meta.qty}`)
+    L.push("")
+    L.push(`Base: PHP ${product.price.toLocaleString()} x ${meta.qty} = PHP ${(product.price * meta.qty).toLocaleString()}`)
+    addOnObjects.forEach(a =>
+      L.push(`Add-on (${a.name}): PHP ${a.price.toLocaleString()} x ${meta.qty} = PHP ${(a.price * meta.qty).toLocaleString()}`)
+    )
+    L.push("")
+    L.push(`Per-unit total: PHP ${unitPrice.toLocaleString()}`)
+    L.push(`GRAND TOTAL: PHP ${grand.toLocaleString()}`)
+    L.push("")
+    L.push("This is a standard-rate estimate. Is a bulk discount available for this quantity?")
+    return L.join("\n")
+  }
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(buildReportText())
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* clipboard unavailable */ }
+  }
+
+  const download = () => {
+    try {
+      const blob = new Blob([buildReportText()], { type: "text/plain;charset=utf-8" })
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement("a")
+      a.href = url
+      a.download = `Quotation-${meta.ref}.txt`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch { /* download unavailable */ }
+  }
+
+  return (
+    <div className="pm-quote-form w-full h-full flex flex-row overflow-hidden">
+      <style>{`
+        @media(max-width:900px){
+          .pm-quote-form{flex-direction:column!important}
+          .pm-quote-img{display:none!important}
+          .pm-quote-right{width:100%!important;flex:1 1 auto!important;min-height:0!important}
+          .pm-quote-right > div{margin:10px!important}
+        }
+      `}</style>
+
+      {/* Left image (hidden on mobile so the report uses the full height) */}
+      <div className="pm-quote-img flex-shrink-0 overflow-hidden flex items-center justify-center"
+        style={{ width: "50%", background: isDark ? "#0f172a" : "#f3f4f6" }}>
+        <img src={product.image} alt={product.name} className="w-full h-full object-cover"
+          onError={e => { e.target.style.display="none" }}/>
+      </div>
+
+      {/* Right content */}
+      <div className="pm-quote-right flex flex-col overflow-hidden" style={{ width: "50%", background: panelBg }}>
+        <div className="flex-1 flex flex-col m-4 rounded-2xl overflow-hidden"
+          style={{ background: docBg, boxShadow: "0 2px 16px rgba(0,0,0,0.08)" }}>
+
+          {phase === "input" ? (
+            <div className="pm-scroll flex-1 overflow-y-auto px-6 py-6 flex flex-col">
+              {/* Back */}
+              <button onClick={onBack}
+                className="flex items-center gap-1.5 text-sm cursor-pointer bg-transparent border-none mb-4 p-0"
+                style={{ color: faint }}>
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7"/></svg>
+                Back to product
+              </button>
+
+              {/* Heading */}
+              <div className="flex items-center gap-3 mb-5">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+                  <svg width="17" height="17" fill="none" stroke="white" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                </div>
+                <div>
+                  <p className="text-base font-bold m-0" style={{ color: txt }}>Bulk Order Quotation</p>
+                  <p className="text-xs m-0" style={{ color: faint }}>Get an instant estimate for a large order</p>
+                </div>
+              </div>
+
+              {/* Item summary */}
+              <div className="flex items-center gap-3 p-3 rounded-xl mb-5"
+                style={{ background: subBg, border: `1px solid ${bdr}` }}>
+                <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0" style={{ border: `1px solid ${bdr}` }}>
+                  <img src={product.image} alt={product.name} className="w-full h-full object-cover"
+                    onError={e => { e.target.style.display="none" }}/>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold truncate m-0" style={{ color: txt }}>{product.name}</p>
+                  <p className="text-xs m-0" style={{ color: subTxt }}>
+                    {[color?.name, sizeLabel].filter(Boolean).join(" · ") || "Standard"}
+                  </p>
+                  <p className="text-xs font-semibold mt-0.5 m-0" style={{ color: accent }}>
+                    ₱{unitPrice.toLocaleString()} per unit{addOnTotal > 0 ? " (incl. add-ons)" : ""}
+                  </p>
+                </div>
+              </div>
+
+              {/* Quantity */}
+              <label className="block text-xs font-semibold uppercase tracking-widest mb-2"
+                style={{ color: err ? "#ef4444" : subTxt }}>
+                How many would you like to order? <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="number" min="1" inputMode="numeric" placeholder="e.g. 10"
+                value={qtyStr}
+                onChange={e => { setQtyStr(e.target.value.replace(/[^0-9]/g, "")); setErr("") }}
+                onKeyDown={e => { if (e.key === "Enter") generate() }}
+                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none mb-3"
+                style={{
+                  border: `1.5px solid ${err ? "#fca5a5" : bdr}`,
+                  background: isDark ? "#0f172a" : "white",
+                  color: txt
+                }}
+                onFocus={e => e.target.style.borderColor = err ? "#ef4444" : accent}
+                onBlur={e  => e.target.style.borderColor = err ? "#fca5a5" : bdr}/>
+
+              {/* Quick picks */}
+              <div className="flex gap-2 flex-wrap">
+                {QUICK.map(n => (
+                  <button key={n} onClick={() => { setQtyStr(String(n)); setErr("") }}
+                    className="px-3.5 py-1.5 rounded-full text-xs cursor-pointer transition-all"
+                    style={{
+                      fontWeight: qtyStr === String(n) ? 600 : 400,
+                      border: `1px solid ${qtyStr === String(n) ? accent : bdr}`,
+                      background: qtyStr === String(n) ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : "transparent",
+                      color: qtyStr === String(n) ? accent : subTxt
+                    }}>
+                    {n} pcs
+                  </button>
+                ))}
+              </div>
+
+              {err && <p className="text-xs text-red-500 mt-2">{err}</p>}
+
+              <div className="flex-1"/>
+
+              <button onClick={generate}
+                className="w-full py-3.5 rounded-xl text-sm font-semibold text-white border-none cursor-pointer flex items-center justify-center gap-2 mt-4"
+                style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+                <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Generate Quotation
+              </button>
+            </div>
+          ) : (
+            <div className="pm-scroll flex-1 overflow-y-auto px-6 py-6">
+              {/* Back to change qty */}
+              <button onClick={() => setPhase("input")}
+                className="flex items-center gap-1.5 text-sm cursor-pointer bg-transparent border-none mb-4 p-0"
+                style={{ color: faint }}>
+                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7"/></svg>
+                Change quantity
+              </button>
+
+              {/* Document */}
+              <div className="rounded-xl overflow-hidden mb-4" style={{ border: `1px solid ${bdr}` }}>
+                {/* Doc header */}
+                <div className="px-4 py-3" style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-white m-0" style={{ opacity: 0.85 }}>Bulk Order Quotation</p>
+                  <p className="text-sm font-bold text-white m-0">Esting's Flower International Inc.</p>
+                  <p className="text-[10px] text-white m-0 mt-0.5" style={{ opacity: 0.8 }}>Ref {meta.ref} · {meta.date}</p>
+                </div>
+
+                {/* Config */}
+                <div className="px-4 py-3" style={{ background: subBg, borderBottom: `1px solid ${lineBdr}` }}>
+                  <div className="flex justify-between mb-1 gap-3">
+                    <span className="text-xs flex-shrink-0" style={{ color: subTxt }}>Item</span>
+                    <span className="text-xs font-semibold text-right" style={{ color: txt }}>{product.name}</span>
+                  </div>
+                  {color?.name && (
+                    <div className="flex justify-between mb-1">
+                      <span className="text-xs" style={{ color: subTxt }}>Color</span>
+                      <span className="text-xs font-medium" style={{ color: txt }}>{color.name}</span>
+                    </div>
+                  )}
+                  {sizeLabel && (
+                    <div className="flex justify-between mb-1">
+                      <span className="text-xs" style={{ color: subTxt }}>Variant</span>
+                      <span className="text-xs font-medium" style={{ color: txt }}>{sizeLabel}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between">
+                    <span className="text-xs" style={{ color: subTxt }}>Quantity</span>
+                    <span className="text-xs font-semibold" style={{ color: accent }}>{meta.qty.toLocaleString()} pcs</span>
+                  </div>
+                </div>
+
+                {/* Line items */}
+                <div className="px-4 py-3" style={{ background: docBg }}>
+                  <QuoteLineRow label={product.name} unit={product.price} qty={meta.qty} txt={txt} subTxt={subTxt} bdr={bdr}/>
+                  {addOnObjects.map(a => (
+                    <QuoteLineRow key={a.id} label={a.name} unit={a.price} qty={meta.qty} txt={txt} subTxt={subTxt} bdr={bdr} addon/>
+                  ))}
+
+                  <div className="flex justify-between pt-2 mt-1" style={{ borderTop: `1px dashed ${bdr}` }}>
+                    <span className="text-xs" style={{ color: subTxt }}>Per-unit total</span>
+                    <span className="text-xs font-semibold" style={{ color: txt }}>₱{unitPrice.toLocaleString()}</span>
+                  </div>
+                </div>
+
+                {/* Grand total */}
+                <div className="px-4 py-3 flex items-center justify-between"
+                  style={{ background: isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4", borderTop: `1px solid ${lineBdr}` }}>
+                  <span className="text-sm font-semibold" style={{ color: txt }}>Grand Total</span>
+                  <span className="text-2xl font-bold tracking-tight" style={{ color: accent }}>₱{grand.toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Disclaimer */}
+              <div className="flex items-start gap-2 p-3 rounded-xl mb-4"
+                style={{ background: isDark ? "rgba(245,158,11,0.13)" : "#fffbeb", border: `1px solid ${isDark ? "rgba(245,158,11,0.35)" : "#fde68a"}` }}>
+                <svg width="14" height="14" fill="none" stroke={isDark ? "#fbbf24" : "#d97706"} strokeWidth={2} viewBox="0 0 24 24" className="flex-shrink-0 mt-0.5"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <p className="text-xs leading-relaxed m-0" style={{ color: isDark ? "#fde68a" : "#92400e" }}>
+                  This is a standard-rate estimate — bulk discounts aren't applied automatically. Message us to discuss a better rate for this quantity.
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-col gap-2.5">
+                <div className="flex gap-2.5">
+                  <button onClick={copy}
+                    className="flex-1 py-3 rounded-xl text-sm font-semibold cursor-pointer flex items-center justify-center gap-2 transition-all"
+                    style={{ border: `1.5px solid ${bdr}`, background: "transparent", color: copied ? accent : subTxt }}>
+                    {copied ? (
+                      <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Copied</>
+                    ) : (
+                      <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>Copy</>
+                    )}
+                  </button>
+                  <button onClick={download}
+                    className="flex-1 py-3 rounded-xl text-sm font-semibold cursor-pointer flex items-center justify-center gap-2 transition-all"
+                    style={{ border: `1.5px solid ${bdr}`, background: "transparent", color: subTxt }}>
+                    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+                    Download
+                  </button>
+                </div>
+                <button onClick={() => onOpenChat({ text: buildReportText(), summary: quoteSummary })}
+                  className="w-full py-3 rounded-xl text-sm font-semibold text-white cursor-pointer flex items-center justify-center gap-2 border-none transition-all"
+                  style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+                  <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.3-3.9A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                  Discuss on chat
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 /* ── Image Zoom ── */
 function ImgZoom({ product, isDark }) {
   const [pos,    setPos]    = useState(null)
@@ -568,10 +866,11 @@ function ImgZoom({ product, isDark }) {
   )
 }
 
-function ReviewSummary({ reviews }) {
-  const average = reviews.length > 0 
-    ? (reviews.reduce((acc, r) => acc + r.star_rating, 0) / reviews.length).toFixed(1) 
-    : 0;
+function ReviewSummary({ reviews, isDark }) {
+  const average = reviews.length > 0
+    ? (reviews.reduce((acc, r) => acc + r.star_rating, 0) / reviews.length).toFixed(1)
+    : "0.0"
+  const rounded = Math.round(Number(average))
 
   const counts = {
     5: reviews.filter(r => r.star_rating === 5).length,
@@ -580,27 +879,57 @@ function ReviewSummary({ reviews }) {
     2: reviews.filter(r => r.star_rating === 2).length,
     1: reviews.filter(r => r.star_rating === 1).length,
     media: reviews.filter(r => r.image_url).length,
-  };
+  }
+
+  const cardBg  = isDark ? "#0f172a" : "#f9fafb"
+  const cardBdr = isDark ? "#334155" : "#eef2f0"
+  const txt     = isDark ? "#f8fafc" : "#111827"
+  const subTxt  = isDark ? "#94a3b8" : "#9ca3af"
+  const starOff = isDark ? "#334155" : "#e5e7eb"
+  const pillBdr = isDark ? "#334155" : "#d1fae5"
+  const pillTxt = isDark ? "#cbd5e1" : "#374151"
+  const accent  = isDark ? "#4ade80" : G
+
+  const filters = [
+    { label: "All",        n: reviews.length, showN: false },
+    { label: "5 Star",     n: counts[5],      showN: true  },
+    { label: "4 Star",     n: counts[4],      showN: true  },
+    { label: "3 Star",     n: counts[3],      showN: true  },
+    { label: "2 Star",     n: counts[2],      showN: true  },
+    { label: "1 Star",     n: counts[1],      showN: true  },
+    { label: "With Media", n: counts.media,   showN: true  },
+  ]
 
   return (
-    <div className="border rounded-lg p-6 mb-6 flex flex-wrap gap-4 items-center bg-gray-50">
-      <div className="text-center mr-4">
-        <p className="text-3xl font-bold">{average} <span className="text-lg text-gray-500">out of 5</span></p>
-        <div className="text-yellow-500 text-xl">★★★★★</div>
+    <div className="rounded-xl p-5 mb-6 flex flex-wrap gap-5 items-center"
+      style={{ background: cardBg, border: `1px solid ${cardBdr}` }}>
+      <div className="text-center pr-5" style={{ borderRight: `1px solid ${cardBdr}` }}>
+        <p className="m-0 leading-none">
+          <span className="text-4xl font-bold" style={{ color: txt }}>{average}</span>
+          <span className="text-sm ml-1" style={{ color: subTxt }}>out of 5</span>
+        </p>
+        <div className="text-lg mt-1.5" style={{ letterSpacing: "1px" }}>
+          {[1,2,3,4,5].map(i => (
+            <span key={i} style={{ color: i <= rounded ? "#f59e0b" : starOff }}>★</span>
+          ))}
+        </div>
+        <p className="text-[11px] mt-1.5 m-0" style={{ color: subTxt }}>
+          {reviews.length} review{reviews.length === 1 ? "" : "s"}
+        </p>
       </div>
-      <div className="flex flex-wrap gap-2">
-        <button className="px-4 py-1.5 border rounded hover:bg-green-50">All</button>
-        {[5, 4, 3, 2, 1].map(star => (
-          <button key={star} className="px-4 py-1.5 border rounded hover:bg-green-50">
-            {star} Star ({counts[star]})
+      <div className="flex flex-wrap gap-1.5">
+        {filters.map(f => (
+          <button key={f.label}
+            className="px-3.5 py-1.5 rounded-full text-xs font-medium transition-all cursor-pointer"
+            style={{ border: `1px solid ${pillBdr}`, color: pillTxt, background: "transparent" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = accent; e.currentTarget.style.color = accent; e.currentTarget.style.background = isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4" }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = pillBdr; e.currentTarget.style.color = pillTxt; e.currentTarget.style.background = "transparent" }}>
+            {f.label}{f.showN ? ` (${f.n})` : ""}
           </button>
         ))}
-        <button className="px-4 py-1.5 border rounded hover:bg-green-50">
-          With Media ({counts.media})
-        </button>
       </div>
     </div>
-  );
+  )
 }
 
 
@@ -717,7 +1046,19 @@ export default function ProductPreviewModal({ product, onClose, onNavigate }) {
     setStep("card")
   }
 
-  const isCard = step === "card"
+  const isCard  = step === "card"
+  const isQuote = step === "quote"
+
+  /* Add-ons currently selected, shaped for the quotation breakdown */
+  const quoteAddOnObjects = addOns
+    .map(id => liveAddOns.find(a => a.id === id))
+    .filter(Boolean)
+    .map(a => ({ id: a.id, name: a.name, price: a.price }))
+
+  /* Open the live chat widget with the quotation attached; keep this modal open behind it */
+  const openChatWithQuote = (quote) => {
+    window.dispatchEvent(new CustomEvent("bloomora:open-chat", { detail: { quote } }))
+  }
 
   return (
     <>
@@ -789,8 +1130,23 @@ export default function ProductPreviewModal({ product, onClose, onNavigate }) {
             <CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate}/>
           )}
 
+          {/* ── Quote step ── */}
+          {isQuote && (
+            <QuoteStep
+              product={product}
+              color={color}
+              sizeLabel={qty}
+              addOnObjects={quoteAddOnObjects}
+              addOnTotal={addOnTotal}
+              isDark={isDark}
+              onBack={() => setStep("product")}
+              onClose={close}
+              onOpenChat={openChatWithQuote}
+            />
+          )}
+
           {/* ── Product step ── */}
-          {!isCard && (
+          {!isCard && !isQuote && (
             <>
               <ImgZoom product={product} isDark={isDark}/>
 
@@ -809,21 +1165,34 @@ export default function ProductPreviewModal({ product, onClose, onNavigate }) {
                       <span className="font-medium" style={{ color: G }}>{product.name}</span>
                     </p>
 
-                    {/* Title + WhatsApp */}
+                    {/* Title + Quote + WhatsApp */}
                     <div className="flex items-start justify-between gap-3 mb-2">
                       <h2 className="text-2xl font-bold leading-tight flex-1"
                         style={{ color: isDark?"#f1f5f9":"#111827" }}>
                         {product.name}
                       </h2>
-                      <button
-                        onClick={() => window.dispatchEvent(new CustomEvent("bloomora:open-chat"))}
-                        className="flex items-center gap-1.5 flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold text-white transition-all cursor-pointer border-none"
-                        style={{ background: "linear-gradient(135deg,#25d366,#128c48)", boxShadow: "0 3px 10px rgba(37,211,102,0.35)" }}
-                        onMouseEnter={e => { e.currentTarget.style.boxShadow="0 5px 18px rgba(37,211,102,0.5)"; e.currentTarget.style.transform="translateY(-1px)" }}
-                        onMouseLeave={e => { e.currentTarget.style.boxShadow="0 3px 10px rgba(37,211,102,0.35)"; e.currentTarget.style.transform="none" }}>
-                        <svg width="13" height="13" fill="currentColor" viewBox="0 0 448 512"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg>
-                        Ask us
-                      </button>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {/* Quote button */}
+                        <button
+                          onClick={() => setStep("quote")}
+                          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold text-white transition-all cursor-pointer border-none"
+                          style={{ background: `linear-gradient(135deg,${DG},${G})`, boxShadow: "0 3px 10px rgba(46,139,52,0.3)" }}
+                          onMouseEnter={e => { e.currentTarget.style.boxShadow="0 5px 18px rgba(46,139,52,0.45)"; e.currentTarget.style.transform="translateY(-1px)" }}
+                          onMouseLeave={e => { e.currentTarget.style.boxShadow="0 3px 10px rgba(46,139,52,0.3)"; e.currentTarget.style.transform="none" }}>
+                          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                          Quote
+                        </button>
+                        {/* WhatsApp / Ask us */}
+                        <button
+                          onClick={() => window.dispatchEvent(new CustomEvent("bloomora:open-chat", { detail: { product: { name: product.name, price: product.price, image: product.image } } }))}
+                          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold text-white transition-all cursor-pointer border-none"
+                          style={{ background: "linear-gradient(135deg,#25d366,#128c48)", boxShadow: "0 3px 10px rgba(37,211,102,0.35)" }}
+                          onMouseEnter={e => { e.currentTarget.style.boxShadow="0 5px 18px rgba(37,211,102,0.5)"; e.currentTarget.style.transform="translateY(-1px)" }}
+                          onMouseLeave={e => { e.currentTarget.style.boxShadow="0 3px 10px rgba(37,211,102,0.35)"; e.currentTarget.style.transform="none" }}>
+                          <svg width="13" height="13" fill="currentColor" viewBox="0 0 448 512"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg>
+                          Ask us
+                        </button>
+                      </div>
                     </div>
 
                     {/* Stars */}
@@ -1091,7 +1460,7 @@ export default function ProductPreviewModal({ product, onClose, onNavigate }) {
                           {
                             lightBg:"#f0fdf4", lightBdr:"#bbf7d0", darkBg:"rgba(74,222,128,0.06)", darkBdr:"rgba(74,222,128,0.2)",
                             title:"Trim stems", desc:"Cut 1-2cm at a 45 degree angle every few days for better absorption.",
-                            icon:<svg width="17" height="17" fill="none" stroke={isDark?"#4ade80":"#10b981"} strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 3l4 4-4 4M20 12H4"/></svg>
+                            icon:<svg width="17" height="17" fill="none" stroke={isDark?"#4ade80":"#10b981"} strokeWidth={1.8} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
                           },
                         ].map((t,i) => (
                           <div key={i} className="flex gap-3 p-3.5 rounded-xl items-start"
@@ -1109,29 +1478,37 @@ export default function ProductPreviewModal({ product, onClose, onNavigate }) {
                     {/* ── Reviews tab ── */}
                     {tab === "reviews" && (
                       <div className="pb-4">
-                        {/* Use the new Shopee-style summary component */}
-                        <ReviewSummary reviews={reviews} />
+                        {/* Shopee-style summary */}
+                        <ReviewSummary reviews={reviews} isDark={isDark} />
 
                         {/* List the actual reviews */}
                         {reviews.length > 0 ? (
                           <div className="space-y-4">
                             {reviews.map(review => (
-                              <div key={review.id} className="border-b pb-4">
+                              <div key={review.id} className="pb-4" style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
                                 <div className="flex justify-between items-center mb-2">
-                                  <span className="font-bold text-sm">{review.user_name}</span>
-                                  <span className="text-yellow-500 text-xs">{"★".repeat(review.star_rating)}</span>
+                                  <span className="font-bold text-sm" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>{review.user_name}</span>
+                                  <span className="text-xs" style={{ color: "#f59e0b" }}>{"★".repeat(review.star_rating)}</span>
                                 </div>
-                                <p className="text-sm text-gray-600">{review.comment}</p>
+                                <p className="text-sm" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>{review.comment}</p>
                                 {review.image_url && (
-                                  <img src={review.image_url} alt="Review" className="w-20 h-20 rounded mt-2 object-cover border" />
+                                  <img src={review.image_url} alt="Review" className="w-20 h-20 rounded-lg mt-2 object-cover"
+                                    style={{ border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}` }} />
                                 )}
                               </div>
                             ))}
                           </div>
                         ) : (
-                          <div className="flex flex-col items-center p-7 rounded-xl text-center border-dashed border-2">
-                            <p className="text-sm font-semibold">No reviews yet</p>
-                            <p className="text-xs text-gray-400">Be the first to share your experience.</p>
+                          <div className="flex flex-col items-center p-8 rounded-xl text-center"
+                            style={{ border: `1.5px dashed ${isDark ? "#334155" : "#d1fae5"}`, background: isDark ? "#0f172a" : "#f9fafb" }}>
+                            <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
+                              style={{ background: isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4" }}>
+                              <svg width="22" height="22" fill="none" stroke={isDark ? "#4ade80" : G} strokeWidth={1.6} viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M11.048 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.977-2.888a1 1 0 00-1.176 0l-3.977 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118L2.063 10.79c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+                              </svg>
+                            </div>
+                            <p className="text-sm font-semibold m-0" style={{ color: isDark ? "#f8fafc" : "#111827" }}>No reviews yet</p>
+                            <p className="text-xs mt-1 m-0" style={{ color: isDark ? "#94a3b8" : "#9ca3af" }}>Be the first to share your experience.</p>
                           </div>
                         )}
                       </div>
