@@ -31,6 +31,49 @@ export const api = {
       throw new Error("Unable to connect to the server.");
     }
 
+    // 🚀 NEW: Token Auto-Refresh Interceptor
+    if (response.status === 401) {
+      const refreshToken = localStorage.getItem('refresh_token');
+      
+      if (refreshToken) {
+        try {
+          // 1. Pause the error and ask backend for a new access token
+          const refreshRes = await fetch(`${API_BASE}/auth/refresh`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ refresh_token: refreshToken })
+          });
+
+          if (refreshRes.ok) {
+            const data = await refreshRes.json();
+            
+            // 2. Save the shiny new tokens
+            localStorage.setItem('access_token', data.access_token);
+            if (data.refresh_token) {
+              localStorage.setItem('refresh_token', data.refresh_token);
+            }
+            
+            // 3. Update the authorization header and RETRY the original request!
+            config.headers['Authorization'] = `Bearer ${data.access_token}`;
+            response = await fetch(url, config);
+            
+          } else {
+            // Refresh token is also dead (expired or banned)
+            throw new Error("Session expired"); 
+          }
+        } catch (refreshErr) {
+          // Nuke the session and redirect to login
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('user');
+          window.dispatchEvent(new CustomEvent("bloomora:logout"));
+          window.location.href = '/login?error=session_expired';
+          throw new Error("Your session has expired. Please log in again.");
+        }
+      }
+    }
+
+    // Standard error handling if the request still failed (or wasn't a 401)
     if (!response.ok) {
       let errorMsg = `API Error: ${response.status}`;
       try {
@@ -84,9 +127,7 @@ export const api = {
     return api.get(`/auth/oauth/exchange?code=${code}`);
   },
 
-  // 🚀 NEW: Added the activateStaff function!
   async activateStaff(token, password) {
-    // Corrected to point to the users router!
     return api.post('/users/staff/activate', { token, password });
   },
 
@@ -174,7 +215,6 @@ export const api = {
 
   // ── Orders ────────────────────────────────────────────────────────────────
   async createOrder({ items, delivery_address, delivery_notes, special_note, scheduled_at, payment_method }) {
-    // 🚀 Updated to pass special_note through
     return api.post('/orders/', { items, delivery_address, delivery_notes, special_note, scheduled_at, payment_method });
   },
 

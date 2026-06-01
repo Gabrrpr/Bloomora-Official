@@ -1,26 +1,27 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 import uuid
 import secrets
+import io
+from PIL import Image
 
-from app.core.dependencies import get_db, get_current_user
+from app.core.dependencies import get_db, get_current_user, require_staff
 from app.models import User, RoleEnum, BranchEnum
 from app.api.v1.routes.auth import hash_password, generate_username 
 from pydantic import BaseModel, EmailStr
 from app.services.email_service import send_otp_email, send_staff_confirm_email
-from fastapi import UploadFile, File
 from app.core.supabase import supabase
 
-router = APIRouter(tags=["Users"])  
+router = APIRouter(tags=["Users"]) 
+
+# 🛡️ Hard limits for profile picture uploads
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
+ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
-def require_admin_or_staff(current_user: User):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.staff]:
-        raise HTTPException(status_code=403, detail="Admin or staff access required.")
-
 def serialize_user(u: User) -> dict:
     is_staff_verified = getattr(u, 'is_staff_verified', True)
     
@@ -68,7 +69,6 @@ class StaffCreateRequest(BaseModel):
     branch: Optional[str] = None
     email: EmailStr
     phone_number: Optional[str] = None
-    # 🚀 REMOVED: password and force_password_change
 
 class StaffActivateRequest(BaseModel):
     token: str
@@ -97,9 +97,8 @@ def list_users(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_staff), # 🚀 Fully delegates security to the dependency
 ):
-    require_admin_or_staff(current_user)
     query = db.query(User)
 
     if role:
@@ -144,10 +143,9 @@ def list_users(
 def create_staff(
     payload: StaffCreateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_staff),
 ):
     """Create a new staff/admin/delivery account. Generates an invite link."""
-    require_admin_or_staff(current_user)
 
     try: role_enum = RoleEnum(payload.role.lower())
     except ValueError: raise HTTPException(status_code=400, detail=f"Invalid role: {payload.role}")
@@ -167,11 +165,8 @@ def create_staff(
     if db.query(User).filter(User.username == username).first():
         raise HTTPException(status_code=400, detail="Username already taken.")
 
-    # 🚀 Use a highly secure token instead of a UUID
     token = secrets.token_urlsafe(32)
     expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
-    
-    # Generate a random dummy password hash since they haven't set one yet
     dummy_hash = hash_password(secrets.token_urlsafe(16))
 
     new_user = User(
@@ -182,11 +177,11 @@ def create_staff(
         username=username,
         email=payload.email,
         phone_number=payload.phone_number,
-        password_hash=dummy_hash, # Temporary!
+        password_hash=dummy_hash, 
         role=role_enum,
         branch=branch_enum,
         is_active=True,
-        is_verified=False, # 🚀 Set to False so they are "Pending"
+        is_verified=False, 
         is_staff_verified=False,
         staff_verification_token=token,
         staff_token_expires_at=expires_at,
@@ -196,7 +191,6 @@ def create_staff(
     db.commit()
     db.refresh(new_user)
 
-    # 🚀 Send confirmation email pointing to the REACT FRONTEND
     verify_url = f"http://localhost:5173/activate-staff?token={token}"
     sent, error = send_staff_confirm_email(payload.email, payload.first_name, verify_url)
     
@@ -210,10 +204,9 @@ def create_staff(
 def resend_staff_invite(
     user_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_staff),
 ):
     """Resend the invite email with a fresh token."""
-    require_admin_or_staff(current_user)
 
     try: user_uuid = uuid.UUID(user_id)
     except ValueError: raise HTTPException(status_code=400, detail="Invalid user ID format")
@@ -225,13 +218,11 @@ def resend_staff_invite(
     if getattr(user, 'is_staff_verified', False):
         raise HTTPException(status_code=400, detail="User is already verified and active.")
 
-    # Generate fresh token
     new_token = secrets.token_urlsafe(32)
     user.staff_verification_token = new_token
     user.staff_token_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
     db.commit()
 
-    # Send email
     verify_url = f"http://localhost:5173/activate-staff?token={new_token}"
     sent, error = send_staff_confirm_email(user.email, user.first_name, verify_url)
     
@@ -245,7 +236,6 @@ def resend_staff_invite(
 def activate_staff_account(payload: StaffActivateRequest, db: Session = Depends(get_db)):
     """The endpoint the React frontend hits when the staff sets their new password."""
     
-    # 1. Find user by the unique token
     user = db.query(User).filter(
         User.staff_verification_token == payload.token,
         User.staff_token_expires_at > datetime.now(timezone.utc)
@@ -254,15 +244,11 @@ def activate_staff_account(payload: StaffActivateRequest, db: Session = Depends(
     if not user:
         raise HTTPException(status_code=400, detail="Invalid or expired verification link. Please ask your administrator to resend the invite.")
     
-    # 2. Securely hash the password the user provided
     user.password_hash = hash_password(payload.password)
-    
-    # 3. Mark them as officially active!
     user.is_verified = True
     user.is_staff_verified = True
     user.must_change_password = False
     
-    # 4. Destroy the token so it can't be reused
     user.staff_verification_token = None
     user.staff_token_expires_at = None
     user.updated_at = datetime.now(timezone.utc)
@@ -275,12 +261,14 @@ def activate_staff_account(payload: StaffActivateRequest, db: Session = Depends(
 def get_user(
     user_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user) # 👈 Kept get_current_user to allow self-access
 ):
     try: user_uuid = uuid.UUID(user_id)
     except ValueError: raise HTTPException(status_code=400, detail="Invalid user ID format")
     
-    if str(current_user.id) != user_id and current_user.role not in [RoleEnum.admin, RoleEnum.staff]:
+    # 🛡️ Explicit IDOR check: You can only see your own profile, unless you are staff
+    role_val = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    if str(current_user.id) != user_id and role_val not in ["admin", "staff"]:
         raise HTTPException(status_code=403, detail="You do not have permission to view this profile.")
 
     user = db.query(User).filter(User.id == user_uuid).first()
@@ -307,6 +295,7 @@ def update_me(
     db.refresh(user)
     return {"status": "success", "message": "Profile updated successfully.", "user": serialize_user(user)}
 
+
 @router.post("/profile/upload-picture")
 async def upload_profile_picture(
     file: UploadFile = File(...),
@@ -315,14 +304,30 @@ async def upload_profile_picture(
 ):
     try:
         file_bytes = await file.read()
-        file_extension = file.filename.split(".")[-1]
-        file_path = f"{current_user.id}/avatar.{file_extension}"
+        
+        # 🛡️ DEFENSE 1: File size check
+        if len(file_bytes) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="File too large. Maximum size is 5MB.")
+
+        # 🛡️ DEFENSE 2: Extension Check
+        ext = file.filename.split(".")[-1].lower() if "." in file.filename else ""
+        if ext not in ALLOWED_EXTENSIONS:
+            raise HTTPException(status_code=400, detail="Unsupported file extension. Use JPG, PNG, or WEBP.")
+
+        # 🛡️ DEFENSE 3: Deep Byte Verification (Trojan Horse Killer)
+        try:
+            img = Image.open(io.BytesIO(file_bytes))
+            img.verify() 
+        except Exception:
+            raise HTTPException(status_code=400, detail="Malicious or corrupted file detected. Upload rejected.")
+
+        file_path = f"{current_user.id}/avatar.{ext}"
 
         # Upload to Supabase Storage
         supabase.storage.from_("avatars").upload(
             path=file_path,
             file=file_bytes,
-            file_options={"content-type": file.content_type, "upsert": "true"} # <--- String
+            file_options={"content-type": f"image/{ext}", "upsert": "true"}
         )
 
         public_url = supabase.storage.from_("avatars").get_public_url(file_path)
@@ -332,8 +337,11 @@ async def upload_profile_picture(
 
         return {"success": True, "message": "Profile picture updated", "url": public_url}
 
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
     
 @router.delete("/profile/picture")
 def remove_profile_picture(
@@ -342,23 +350,17 @@ def remove_profile_picture(
 ):
     """Removes the user's profile picture from both the database and Supabase storage."""
     try:
-        # If they don't have a picture, just return success
         if not current_user.profile_picture_url:
             return {"success": True, "message": "No picture to remove"}
 
-        # 1. Clean up Supabase Storage (Delete the actual image file)
         try:
-            # List files in the user's specific folder
             files_to_remove = supabase.storage.from_("avatars").list(str(current_user.id))
             if files_to_remove:
-                # Create a list of file paths to delete
                 paths = [f"{current_user.id}/{f['name']}" for f in files_to_remove]
                 supabase.storage.from_("avatars").remove(paths)
         except Exception as storage_e:
-            # If storage deletion fails (e.g., file already gone), print it but don't crash
             print(f"Notice: Failed to delete from Supabase storage: {storage_e}")
 
-        # 2. Erase the URL from the PostgreSQL database
         current_user.profile_picture_url = None
         current_user.updated_at = datetime.now(timezone.utc)
 
@@ -375,9 +377,8 @@ def update_user(
     user_id: str,
     payload: UserUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_staff), # 🚀 Fully delegates security
 ):
-    require_admin_or_staff(current_user)
     user = db.query(User).filter(User.id == user_id).first()
     if not user: raise HTTPException(status_code=404, detail="User not found.")
 

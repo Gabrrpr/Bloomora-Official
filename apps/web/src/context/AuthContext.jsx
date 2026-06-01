@@ -14,12 +14,18 @@ export function AuthProvider({ children }) {
   const login = async (email, password) => {
     try {
       const data = await loginUser(email, password)
+      
+      // 🚀 Grab BOTH tokens from your backend payload
       const token = data.access_token
+      const refreshToken = data.refresh_token
+
       const profileRes = await fetch("http://localhost:8000/api/v1/auth/me", {
         headers: { Authorization: `Bearer ${token}` }
       })
+      
       if (!profileRes.ok) throw new Error('Failed to fetch profile: ' + profileRes.status)
       const profile = await profileRes.json()
+      
       const userData = {
         token,
         role: profile.role,
@@ -31,10 +37,17 @@ export function AuthProvider({ children }) {
         is_profile_complete: profile.is_profile_complete,
         profilePictureUrl: profile.profile_picture_url,
       }
+      
+      // 🚀 Safely store everything
       localStorage.setItem("access_token", token)
+      if (refreshToken) {
+          localStorage.setItem("refresh_token", refreshToken)
+      }
       localStorage.setItem("user", JSON.stringify(userData))
+      
       setUser(userData)
       window.dispatchEvent(new CustomEvent("bloomora:cart-updated"))
+      
       return { success: true, role: profile.role }
     } catch (err) {
       return { success: false, error: err.message }
@@ -44,6 +57,7 @@ export function AuthProvider({ children }) {
   const setUserFromToken = async (token) => {
     if (!token || token === "null" || token === "undefined") {
       localStorage.removeItem("access_token")
+      localStorage.removeItem("refresh_token") // 🚀 Securely wipe
       localStorage.removeItem("user")
       setUser(null)
       return null
@@ -54,6 +68,7 @@ export function AuthProvider({ children }) {
       })
       if (!profileRes.ok) {
         localStorage.removeItem("access_token")
+        localStorage.removeItem("refresh_token") // 🚀 Securely wipe
         localStorage.removeItem("user")
         setUser(null)
         return null
@@ -75,6 +90,7 @@ export function AuthProvider({ children }) {
       return userData
     } catch {
       localStorage.removeItem("access_token")
+      localStorage.removeItem("refresh_token") // 🚀 Securely wipe
       localStorage.removeItem("user")
       setUser(null)
       return null
@@ -88,6 +104,7 @@ export function AuthProvider({ children }) {
 
   const logout = () => {
     localStorage.removeItem("access_token")
+    localStorage.removeItem("refresh_token") // 🚀 Ensure refresh token is destroyed on logout
     localStorage.removeItem("user")
     setUser(null)
     window.dispatchEvent(new CustomEvent("bloomora:cart-updated"))
@@ -98,14 +115,12 @@ export function AuthProvider({ children }) {
   const facebookLogin = () => facebookLoginApi()
 
   useEffect(() => {
-    // 🚀 NEW: Check if the user is on the activate-staff page
     const isActivationPage = window.location.pathname.includes("activate-staff");
 
     const params = new URLSearchParams(window.location.search)
     const urlToken = params.get("token")
     const urlRole  = params.get("role")
 
-    // 🚀 NEW: If there is a token AND we are NOT on the activation page, it's an OAuth login.
     if (urlToken && !isActivationPage) {
       localStorage.setItem("access_token", urlToken)
       if (urlRole) localStorage.setItem("role", urlRole)
@@ -125,7 +140,6 @@ export function AuthProvider({ children }) {
       window.history.replaceState({}, document.title, newUrl)
       
     } else if (!urlToken) {
-      // Normal session restore
       const existingToken = localStorage.getItem("access_token")
       const existingUser  = localStorage.getItem("user")
       

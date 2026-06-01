@@ -47,44 +47,62 @@ def get_product_rating(product_id: str, db: Session = Depends(get_db)):
     }
 
 # ── Customer: Submit a review ───────────────────────────────────────────────────────
+# ── Customer: Submit a review ───────────────────────────────────────────────────────
 @router.post("/submit", response_model=dict)
 def submit_review(
-    payload: ReviewSubmitSchema,  # 🚀 2. Catch the JSON here
+    payload: ReviewSubmitSchema,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Submit a review for a delivered order."""
-    # Find the order
-    order = db.query(Order).filter(Order.id == payload.order_id).first()
+    
+    # 🚀 FIX 1: Safely string-cast to UUID to prevent database driver panic
+    try:
+        order_uuid = uuid.UUID(payload.order_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid Order ID format")
+
+    order = db.query(Order).filter(Order.id == order_uuid).first()
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    # Check ownership
+    # 🛡️ SECURITY SAFEGUARD: Safe against IDOR
     if str(order.user_id) != str(current_user.id):
-        raise HTTPException(status_code=403, detail="Not your order")
+        raise HTTPException(status_code=403, detail="Not authorized to review this order")
     
-    # Check if order can be reviewed
     if not order.can_review:
         raise HTTPException(status_code=400, detail="You can only review delivered orders")
     
     if order.has_reviewed:
         raise HTTPException(status_code=400, detail="You have already reviewed this order")
     
-    # Check if product exists in the new items array
-    if not getattr(order, 'items', None) or len(order.items) == 0:
-        raise HTTPException(status_code=400, detail="No products in this order to review")
+    # 🚀 FIX 2: Collect all product IDs from BOTH single-item columns and multi-item arrays
+    product_ids_to_review = []
     
-    # 🚀 3. Apply the review to all items in the order
-    for item in order.items:
-        if item.product_id:
-            review = Review(
-                id=uuid.uuid4(),
-                user_id=current_user.id,
-                product_id=item.product_id,
-                star_rating=payload.star_rating,
-                comment=payload.comment,
-            )
-            db.add(review)
+    if getattr(order, 'product_id', None):
+        product_ids_to_review.append(order.product_id)
+        
+    if getattr(order, 'items', None) and len(order.items) > 0:
+        for item in order.items:
+            if item.product_id:
+                product_ids_to_review.append(item.product_id)
+
+    # Dedup IDs just in case
+    product_ids_to_review = list(set(product_ids_to_review))
+
+    if not product_ids_to_review:
+        raise HTTPException(status_code=400, detail="No reviewable catalog products found in this order")
+    
+    # 🚀 3. Generate the database review records safely
+    for prod_id in product_ids_to_review:
+        review = Review(
+            id=uuid.uuid4(),
+            user_id=current_user.id,
+            product_id=prod_id,
+            star_rating=payload.star_rating,
+            comment=payload.comment,
+        )
+        db.add(review)
     
     # Mark order as reviewed
     order.has_reviewed = True

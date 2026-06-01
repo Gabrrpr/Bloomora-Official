@@ -1,4 +1,4 @@
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, UploadFile, File
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, UploadFile, File, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from typing import List
@@ -11,6 +11,7 @@ import shutil
 
 from app.core.dependencies import get_db, get_current_user
 from app.core.connection_manager import manager
+from app.core.security import decode_token
 from app.models import User, RoleEnum, Chat, Order
 from app.schemas.chat_schemas import MessageCreate, MessageOut, ConversationList, ConversationOut
 
@@ -88,14 +89,20 @@ def delete_chat_message(
     current_user: User = Depends(get_current_user)
 ):
     """Delete a specific chat message."""
-    # 1. Import your Chat model if it isn't already (e.g., from app.models import Chat)
     from app.models import Chat 
     
-    msg = db.query(Chat).filter(Chat.id == message_id).first()
+    # 🛡️ SECURITY FIX: Safely parse UUID to prevent 500 Server Crashes
+    import uuid
+    try:
+        valid_msg_id = uuid.UUID(message_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid Message ID")
+    
+    msg = db.query(Chat).filter(Chat.id == valid_msg_id).first()
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
         
-    # 2. Security Check: Staff can delete anything, Customers can only delete their own
+    # Security Check: Staff can delete anything, Customers can only delete their own
     is_staff = current_user.role in [RoleEnum.admin, RoleEnum.staff]
     if not is_staff and str(msg.user_id) != str(current_user.id):
         raise HTTPException(status_code=403, detail="You can only delete your own messages.")
@@ -112,6 +119,12 @@ async def create_message(
     current_user: User = Depends(get_current_user),
 ):
     sender = 'customer' if current_user.role == RoleEnum.customer else 'staff'
+    
+    if sender == 'customer':
+        verified_user_id = current_user.id
+    else:
+        verified_user_id = message.user_id
+    
     new_message = Chat(
         user_id=message.user_id,
         message=message.text,
@@ -246,6 +259,10 @@ def mark_messages_as_read(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    is_staff = current_user.role in [RoleEnum.admin, RoleEnum.staff]
+    if not is_staff and str(current_user.id) != user_id:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
     db.query(Chat).filter(
         Chat.user_id == user_id,
         Chat.is_read == 0
@@ -258,49 +275,64 @@ def mark_messages_as_read(
 async def websocket_endpoint(
     websocket: WebSocket,
     user_id: str,
+    token: str = Query(...), 
     db: Session = Depends(get_db),
 ):
     print(f"\n--- 🔌 NEW WS CONNECTION ATTEMPT --- ID: {user_id}")
     
-    # 1. Safely convert the string to a UUID object so PostgreSQL doesn't reject the query
+    # 🛡️ USE YOUR ACTUAL DECODE FUNCTION
+    payload = decode_token(token, expected_type="access")
+    
+    if not payload:
+        print("❌ WebSocket Auth Failed: Invalid or expired token")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+        
+    try:
+        token_user_id = payload.get("sub")
+        
+        # Prevent users from listening to other people's sockets
+        if token_user_id != user_id and payload.get("role") not in ["admin", "staff"]:
+            print("❌ WebSocket Auth Failed: ID mismatch (IDOR attempt)")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+            
+    except Exception as e:
+        print(f"❌ WebSocket Auth Failed: {e}")
+        await websock
+
+    # Safely convert the string to a UUID object
     try:
         from uuid import UUID
         valid_uuid = UUID(user_id)
         user = db.query(User).filter(User.id == valid_uuid).first()
     except Exception as e:
-        print(f"⚠️ Could not parse UUID or query DB: {e}")
-        user = None
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
 
-    # 2. Check the role
+    # Check the role
     is_staff = False
     if user:
         role_val = user.role.value if hasattr(user.role, 'value') else str(user.role)
-        print(f"👤 User found in DB! Role recognized as: '{role_val}'")
-    
-        # Make the check case-insensitive just to be safe
         if role_val.lower() in ['admin', 'staff', 'roleenum.admin', 'roleenum.staff']:
             is_staff = True
-            print("✅ User granted STAFF broadcast privileges!")
-    else:
-        print("❌ User NOT found in database. Defaulting to customer privileges.")
 
-    # 3. Connect to the manager
+    # Connect to the manager
     await manager.connect(websocket, user_id, is_staff=is_staff)
 
     try:
         while True:
             data = await websocket.receive_json()
-            # Real-time: if message comes through WS directly
             data["customer_id"] = data.get("customer_id", user_id)
+            
             if is_staff:
-                # Staff sending to a customer
                 target = data.get("customer_id")
                 if target:
                     await manager.send_to_user(target, data)
             else:
-                # Customer sending — notify all staff
                 await manager.broadcast_to_staff(data)
                 await manager.send_to_user(user_id, data)
+                
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)
 

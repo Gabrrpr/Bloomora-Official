@@ -32,7 +32,6 @@ import ChatWidget from "./components/ChatWidget";
 import CookieConsent from "./components/CookieConsent";
 import AdPopup from "./components/AdPopup";
 import WorldClock from "./pages/customer/WorldClock";
-import VasesPage from "./pages/VasesPage";
 import WriteReviewPage from "./pages/customer/WriteReviewPage";
 import Profile from "./pages/customer/Profile";
 

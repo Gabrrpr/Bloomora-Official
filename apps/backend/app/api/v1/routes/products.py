@@ -5,20 +5,21 @@ from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime, timezone
 import uuid
+import io
+from PIL import Image
 
 from supabase import create_client, Client
 from app.core.config import settings
-from app.core.dependencies import get_db, get_current_user
-# 👇 Notice we removed ProductCategoryEnum from this import list!
+from app.core.dependencies import get_db, get_current_user, require_staff
 from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum, Review
 
 router = APIRouter()
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-def require_admin_or_staff(current_user: User):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.staff]:
-        raise HTTPException(status_code=403, detail="Admin or staff access required.")
+# 🛡️ Hard limits for image uploads
+MAX_FILE_SIZE = 5 * 1024 * 1024  
+ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif"}
 
+# ── Helpers ───────────────────────────────────────────────────────────────────
 def serialize_product(p: Product) -> dict:
     inv = p.inventory
     return {
@@ -27,8 +28,8 @@ def serialize_product(p: Product) -> dict:
         "description": p.description,
         "price": float(p.price) if p.price else 0,
         "original_price": float(p.price) * 1.2 if p.price else 0,
-        "product_group": p.product_group, # ADD THIS
-        "product_type": p.product_type,   # ADD THIS
+        "product_group": p.product_group, 
+        "product_type": p.product_type,  
         "category": p.category, 
         "image_url": p.image_url,
         "is_available": p.is_available,
@@ -44,8 +45,6 @@ def serialize_product(p: Product) -> dict:
 @router.get("/{product_id}/reviews", response_model=List[dict])
 def get_product_reviews(product_id: str, db: Session = Depends(get_db)):
     """Fetch all reviews for a specific product."""
-
-    # We join with User to get the name for the frontend display
     reviews = (
         db.query(Review, User)
         .join(User, Review.user_id == User.id)
@@ -56,7 +55,7 @@ def get_product_reviews(product_id: str, db: Session = Depends(get_db)):
 
     return [{
         "id": str(r.Review.id),
-        "user_name": f"{r.User.firstName} {r.User.lastName}",
+        "user_name": f"{r.User.first_name} {r.User.last_name}",
         "star_rating": r.Review.star_rating,
         "comment": r.Review.comment,
         "image_url": r.Review.image_url,
@@ -66,7 +65,6 @@ def get_product_reviews(product_id: str, db: Session = Depends(get_db)):
 @router.get("/", response_model=List[dict])
 def get_products(db: Session = Depends(get_db)):
     """Get all available products for public catalog, including stock."""
-    # We use outerjoin to get the inventory data for public products
     products = (
         db.query(Product)
         .outerjoin(Inventory, Product.id == Inventory.product_id)
@@ -84,7 +82,7 @@ def get_products(db: Session = Depends(get_db)):
         "product_type": p.product_type.lower().strip() if p.product_type else "",
         "image_url": p.image_url,
         "is_available": p.is_available,
-        "stock": p.inventory.current_stock if p.inventory else 0, # Live stock!
+        "stock": p.inventory.current_stock if p.inventory else 0,
         "season_key": p.season_key,
         "limited_start_at": p.limited_start_at.isoformat() if p.limited_start_at else None,
         "limited_end_at": p.limited_end_at.isoformat() if p.limited_end_at else None,
@@ -93,7 +91,6 @@ def get_products(db: Session = Depends(get_db)):
 @router.get("/customization/all", response_model=List[dict])
 def get_customization_products(db: Session = Depends(get_db)):
     """Get all available products with customization attributes for Mix & Match."""
-    # Ensure we load relationships to avoid N+1 queries
     products = (
         db.query(Product)
         .filter(Product.is_available == True)
@@ -102,7 +99,6 @@ def get_customization_products(db: Session = Depends(get_db)):
             joinedload(Product.flower),
             joinedload(Product.wrapping),
             joinedload(Product.accessory)
-            # Add joinedload(Product.vase) here if you have a Vase relationship
         )
         .order_by(Product.category, Product.name)
         .all()
@@ -115,7 +111,6 @@ def get_customization_products(db: Session = Depends(get_db)):
         reorder = inv.reorder_point if inv else 10
         stock_status = "out_of_stock" if stock <= 0 else "low_stock" if stock <= reorder else "in_stock"
         
-        # Clean the category string to match frontend expectations exactly
         raw_category = p.category.value if hasattr(p.category, "value") else str(p.category)
         clean_category = raw_category.strip().lower()
 
@@ -123,14 +118,13 @@ def get_customization_products(db: Session = Depends(get_db)):
             "id": str(p.id),
             "name": p.name,
             "price": float(p.price) if p.price else 0,
-            "category": clean_category, # Use the cleaned category!
+            "category": clean_category, 
             "image_url": p.image_url,
             "is_available": p.is_available,
             "stock": stock,
             "stock_status": stock_status,
         }
 
-        # Safely extract attributes if the relationship exists
         if p.flower:
             item["attrs"] = {
                 "color": p.flower.color,
@@ -154,39 +148,24 @@ def get_customization_products(db: Session = Depends(get_db)):
                 "size": getattr(p.accessory, 'size', None),
                 "quantity": getattr(p.accessory, 'quantity', 1),
             }
-            
-        # We don't necessarily need a specific 'elif p.vase:' block unless 
-        # your Vase model has specific attributes (like 'material' or 'height') 
-        # that you want the frontend to use in the prompt generation. 
-        # The base 'item' dictionary is enough to display the card!
 
         result.append(item)
         
     return result
 
-
 @router.get("/categories/hierarchy", response_model=List[dict])
 def get_category_hierarchy(db: Session = Depends(get_db)):
     """Get dynamic category hierarchy grouped by Floral/Non-Floral for Navbars."""
-    
     products = db.query(Product).filter(Product.is_available == True).all()
-
     hierarchy_dict = {}
-    
-    # 🚀 Define our strict Non-Floral categories here
     NON_FLORAL_CATS = ["wrapping", "accessory", "vase", "tools"]
 
     for p in products:
         cat = (p.category or "").lower().strip()
-        
-        # 1. Completely hide add-ons from all navigation menus
         if cat in ['add-on', 'addon']:
             continue
         
-        # 2. Smart Grouping Logic
-        # If the admin set a group, use it. If not, auto-sort it based on the category name.
         group = (p.product_group or "").lower().strip()
-        
         if not group:
             if cat in NON_FLORAL_CATS:
                 group = "non-floral"
@@ -199,72 +178,33 @@ def get_category_hierarchy(db: Session = Depends(get_db)):
         if cat:
             hierarchy_dict[group].add(cat)
 
-    # 3. Format for the frontend mega menu
     def title_case(s: str):
         return " ".join(w.capitalize() for w in s.replace("_", " ").split("-"))
 
     result = []
     for group_name, cats in hierarchy_dict.items():
         result.append({
-            "title": title_case(group_name), # "Floral" or "Non Floral"
-            "items": sorted([title_case(c) for c in cats]) # ["Arrangement", "Wrapping", etc.]
+            "title": title_case(group_name),
+            "items": sorted([title_case(c) for c in cats])
         })
 
-    # Force "Floral" to always be the left column, "Non-Floral" to be the right column
     result.sort(key=lambda x: 0 if "floral" in x["title"].lower() and "non" not in x["title"].lower() else 1)
-
     return result
-
-    # Build bouquet group
-    bouquet_subtypes = set()
-    other_categories = set()
-
-    for cat in distinct_categories:
-        sub = parse_bouquet(cat)
-        if sub:
-            bouquet_subtypes.add(sub)
-        else:
-            other_categories.add(cat)
-
-    hierarchy: List[dict] = []
-
-    if bouquet_subtypes:
-        bouquet_items = sorted({title_case(s.replace("_", " ")) for s in bouquet_subtypes})
-        hierarchy.append({"title": "Bouquet", "items": bouquet_items})
-
-    # Put remaining categories as single-item groups so nothing disappears from Mega Menu
-    for cat in sorted(other_categories):
-        clean = cat.strip()
-        if not clean:
-            continue
-        hierarchy.append({"title": title_case(clean), "items": [title_case(clean)]})
-
-    return hierarchy
-
 
 # ── Admin endpoints ───────────────────────────────────────────────────────────
 
 @router.get("/admin/all", response_model=List[dict])
 def get_admin_products(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_staff), # 🚀 SECURED
 ):
-    """Get all products including inactive for admin panel.
-
-    Inventory fields (stock/reorder/unit_type/cost_per_unit) are sourced from Supabase
-    `inventory` table so the admin inventory view matches Supabase.
-    """
-
-    require_admin_or_staff(current_user)
-
+    """Get all products including inactive for admin panel."""
     try:
         if not settings.SUPABASE_SERVICE_KEY:
             raise HTTPException(status_code=500, detail="Supabase Service Key is not configured.")
 
         supabase_admin: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
 
-        # Fetch inventory from Supabase
-        # If Supabase fails (RLS, wrong key, etc.), we still return products with default stock.
         inv_rows = []
         try:
             inv_resp = supabase_admin.table("inventory").select(
@@ -274,8 +214,6 @@ def get_admin_products(
         except Exception:
             inv_rows = []
 
-
-        # Index by product_id (Supabase returns UUID as string)
         inv_by_product_id = {}
         for r in inv_rows:
             pid = str(r.get("product_id")) if r.get("product_id") else None
@@ -283,7 +221,6 @@ def get_admin_products(
                 continue
             inv_by_product_id[pid] = r
 
-        # Fetch products from backend DB (includes product name/category/image/etc.)
         products = (
             db.query(Product)
             .order_by(Product.created_at.desc())
@@ -307,7 +244,6 @@ def get_admin_products(
                 "status": p.status.value if hasattr(p.status, "value") else p.status,
                 "created_at": p.created_at.isoformat() if p.created_at else None,
                 "updated_at": p.updated_at.isoformat() if p.updated_at else None,
-                # Inventory from Supabase
                 "stock": int(inv.get("current_stock") or 0) if inv else 0,
                 "reorder_point": int(inv.get("reorder_point") or 10) if inv else 10,
                 "unit_type": inv.get("unit_type") if inv and inv.get("unit_type") else "piece",
@@ -325,10 +261,9 @@ def get_admin_products(
 def get_low_stock(
     limit: int = 5,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_staff), # 🚀 SECURED
 ):
     """Get low stock products. Admin/Staff only."""
-    require_admin_or_staff(current_user)
     products = (
         db.query(Product)
         .outerjoin(Inventory, Product.id == Inventory.product_id)
@@ -348,42 +283,44 @@ def get_low_stock(
 @router.post("/admin/upload-image", response_model=dict)
 async def upload_product_image(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_staff) # 🚀 SECURED
 ):
-    """Upload product image to Supabase Storage and return public URL."""
-    require_admin_or_staff(current_user)
-    
+    """Upload product image to Supabase Storage safely."""
     if not settings.SUPABASE_SERVICE_KEY:
         raise HTTPException(status_code=500, detail="Supabase Service Key is not configured.")
 
-    # 🛡️ STRICT FILE TYPE CHECK
     try:
-        ext = file.filename.split(".")[-1].lower()
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid filename.")
+        file_bytes = await file.read()
         
-    allowed_extensions = {"jpg", "jpeg", "png", "webp", "gif"}
-    if ext not in allowed_extensions:
-        raise HTTPException(status_code=400, detail=f"Only {', '.join(allowed_extensions)} images are allowed.")
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Invalid file type. Must be an image.")
+        # 🛡️ TROJAN HORSE KILLER: Strict Byte Verification
+        if len(file_bytes) > MAX_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="File too large. Maximum size is 5MB.")
 
-    try:
+        ext = file.filename.split(".")[-1].lower() if "." in file.filename else ""
+        if ext not in ALLOWED_EXTENSIONS:
+            raise HTTPException(status_code=400, detail=f"Only {', '.join(ALLOWED_EXTENSIONS)} images are allowed.")
+
+        try:
+            img = Image.open(io.BytesIO(file_bytes))
+            img.verify() 
+        except Exception:
+            raise HTTPException(status_code=400, detail="Malicious or corrupted file detected. Upload rejected.")
+
         supabase_admin: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
-        
-        # Generate unique filename to prevent overwrites
         filename = f"products/{uuid.uuid4()}.{ext}"
         
-        supabase_admin.storage.from_("chat_images").upload(
+        # Using settings.SUPABASE_BUCKET for consistency
+        supabase_admin.storage.from_(settings.SUPABASE_BUCKET).upload(
             path=filename,
-            file=file.file,  # <--- CHANGE THIS LINE
-            file_options={"content-type": file.content_type}
+            file=file_bytes, 
+            file_options={"content-type": f"image/{ext}"}
         )
         
-        # Get public URL
         public_url = supabase_admin.storage.from_(settings.SUPABASE_BUCKET).get_public_url(filename)
-        
         return {"status": "success", "url": public_url}
+        
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
 
@@ -400,18 +337,13 @@ def create_product(
     is_available: bool = Form(True),
     image_url: Optional[str] = Form(None),
     stock: int = Form(0),
-
-    # Seasonal button fields (optional)
     season_key: Optional[str] = Form(None),
     limited_start_at: Optional[str] = Form(None),
     limited_end_at: Optional[str] = Form(None),
-
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_staff), # 🚀 SECURED
 ):
     """Create a new product. Admin/Staff only."""
-    require_admin_or_staff(current_user)
-
     try:
         status_enum = ProductStatusEnum(status.lower())
     except ValueError:
@@ -428,13 +360,11 @@ def create_product(
         product_group=group.lower().strip(),
         description=description,
         price=price_val,
-        category=category.lower().strip(),  # 👇 Directly use string instead of Enum
+        category=category.lower().strip(), 
         product_type=product_type.lower().strip() if product_type else None,  
         status=status_enum,
         is_available=is_available,
         image_url=image_url,
-
-        # Seasonal button fields (optional)
         season_key=season_key or None,
         limited_start_at=(limited_start_at or None),
         limited_end_at=(limited_end_at or None),
@@ -466,23 +396,16 @@ def update_product(
     is_available: Optional[bool] = Form(None),
     image_url: Optional[str] = Form(None),
     stock: Optional[int] = Form(None),
-
-    # 🚀 NEW: Added the missing inventory fields!
     unit_type: Optional[str] = Form(None),
     reorder_point: Optional[int] = Form(None),
     cost_per_unit: Optional[float] = Form(None),
-
-    # Seasonal button fields
     season_key: Optional[str] = Form(None),
     limited_start_at: Optional[str] = Form(None),
     limited_end_at: Optional[str] = Form(None),
-
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_staff), # 🚀 SECURED
 ):
     """Update an existing product. Admin/Staff only."""
-    require_admin_or_staff(current_user)
-
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -521,7 +444,6 @@ def update_product(
     db.commit()
     db.refresh(product)
 
-    # 🚀 NEW: Update all the inventory fields safely
     if stock is not None or unit_type is not None or reorder_point is not None or cost_per_unit is not None:
         inv = db.query(Inventory).filter(Inventory.product_id == product.id).first()
         if not inv:
@@ -555,15 +477,12 @@ def get_homepage_layout(db: Session = Depends(get_db)):
 def save_homepage_layout(
     layout: dict = Body(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_staff) # 🚀 SECURED
 ):
     """Save the homepage layout configuration. Admin/Staff only."""
-    # require_admin_or_staff(current_user) # Ensure you enforce admin permissions here
-
     import json
     layout_json = json.dumps(layout)
     
-    # Upsert the JSON data into the settings table
     query = text("""
         INSERT INTO store_settings (setting_key, setting_value, updated_at) 
         VALUES ('homepage_layout', :val, now())
@@ -579,17 +498,13 @@ def save_homepage_layout(
 def delete_product(
     product_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_staff), # 🚀 SECURED
 ):
     """Soft-delete a product. Admin/Staff only."""
-    require_admin_or_staff(current_user)
-
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    # 🚀 THE FIX: Do not use db.delete(product)
-    # Instead, just update the status to match your React frontend!
     product.status = ProductStatusEnum.inactive
     product.is_available = False
     

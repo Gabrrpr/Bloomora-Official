@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.orm import Session, object_session # 🚀 ADDED object_session here
+from sqlalchemy.orm import Session, object_session 
 from sqlalchemy import or_, func, String
 from typing import List, Optional
 from decimal import Decimal
@@ -8,24 +8,19 @@ from app.services.email_service import send_order_status_email
 import uuid
 import secrets
 
-from app.core.dependencies import get_db, get_current_user
-# 🚀 ADDED 'Product' to the models import below
+# 🚀 INJECTED SECURE DEPENDENCIES
+from app.core.dependencies import get_db, get_current_user, require_staff
 from app.models import User, RoleEnum, Order, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
 def serialize_order(o) -> dict:
-    """Serialize an Order for API responses."""
-    
-    # 🚀 Safely grab the database connection to make direct queries
     db = object_session(o)
-    
     img_url = ""
     is_custom = False
     display_name = "Unknown Item"
     total_qty = getattr(o, 'quantity', 1)
 
-    # 1. BULLETPROOF DB QUERY: Directly find the Product using the ID
     if db and getattr(o, 'product_id', None):
         product = db.query(Product).filter(Product.id == o.product_id).first()
         if product:
@@ -33,17 +28,13 @@ def serialize_order(o) -> dict:
             img_url = getattr(product, 'image_url', "") or getattr(product, 'image', "")
             is_custom = False
 
-    # 2. BULLETPROOF DB QUERY: Directly find the Custom Arrangement using the ID
     elif db and getattr(o, 'arrangement_id', None):
         arrangement = db.query(Arrangement).filter(Arrangement.id == o.arrangement_id).first()
         if arrangement:
             display_name = getattr(arrangement, 'name', 'Custom Arrangement')
-            
-            # 🚀 DEFENSIVE CHECK: Check all possible image column names in your Arrangement model
             img_url = getattr(arrangement, 'generated_image_url', "") or getattr(arrangement, 'image_url', "") or getattr(arrangement, 'image', "")
             is_custom = True
             
-    # 3. Fallback for multiple items (if cart used item arrays)
     elif getattr(o, 'items', None) and len(o.items) > 0:
         first_item = o.items[0]
         if first_item.product:
@@ -69,12 +60,9 @@ def serialize_order(o) -> dict:
         "customer_phone": o.user.phone_number,
         "branch": o.branch_name or (o.user.branch.value if o.user.branch and hasattr(o.user.branch, "value") else (o.user.branch or "—")),
         "special_note": getattr(o,'special_note', None),
-        
-        # 🚀 Injects the real name and image
         "product_name": display_name,
         "image_url": img_url,
         "is_custom": is_custom,
-        
         "quantity": total_qty,
         "total_amount": float(o.total_amount),
         "status": o.status.value if hasattr(o.status, "value") else o.status,
@@ -88,11 +76,6 @@ def serialize_order(o) -> dict:
         "updated_at": o.updated_at.isoformat() if getattr(o, 'updated_at', None) else None,
         "items": [] 
     }
-    
-def require_admin_or_staff(current_user: User):
-    if current_user.role not in [RoleEnum.admin, RoleEnum.staff]:
-        raise HTTPException(status_code=403, detail="Admin or staff access required.")
-
 
 # ── Public: My Orders ───────────────────────────────────────────────────────
 @router.get("/my", response_model=List[dict])
@@ -101,15 +84,10 @@ def get_my_orders(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get all orders for the currently authenticated user."""
     query = db.query(Order).filter(Order.user_id == current_user.id)
-
     if status:
-        try:
-            query = query.filter(Order.status == OrderStatusEnum(status.lower()))
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
-
+        try: query = query.filter(Order.status == OrderStatusEnum(status.lower()))
+        except ValueError: raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
     orders = query.order_by(Order.created_at.desc()).all()
     return [serialize_order(o) for o in orders]
 
@@ -117,31 +95,23 @@ def get_my_orders(
 # ── Admin: All Orders ───────────────────────────────────────────────────────
 @router.get("/", response_model=List[dict])
 def list_orders(
-    status: Optional[str] = Query(None, description="Filter by status: pending, confirmed, preparing, out_for_delivery, delivered, cancelled"),
+    status: Optional[str] = Query(None, description="Filter by status"),
     search: Optional[str] = Query(None, description="Search by order number or customer name/email"),
     branch: Optional[str] = Query(None, description="Filter by branch"),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_staff), # 🚀 SECURED
 ):
-    """List all orders. Admin/Staff only."""
-    require_admin_or_staff(current_user)
-
     query = db.query(Order)
-
     if status:
-        try:
-            query = query.filter(Order.status == OrderStatusEnum(status.lower()))
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+        try: query = query.filter(Order.status == OrderStatusEnum(status.lower()))
+        except ValueError: raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
 
     if branch:
         from app.models import BranchEnum
-        try:
-            query = query.join(User).filter(User.branch == BranchEnum(branch.lower()))
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid branch: {branch}")
+        try: query = query.join(User).filter(User.branch == BranchEnum(branch.lower()))
+        except ValueError: raise HTTPException(status_code=400, detail=f"Invalid branch: {branch}")
 
     if search:
         search_term = f"%{search}%"
@@ -157,8 +127,6 @@ def list_orders(
     orders = query.order_by(Order.created_at.desc()).offset(offset).limit(limit).all()
     return [serialize_order(o) for o in orders]
 
-
-# ── Admin/Staff: Get recent orders for a customer ───────────────────────────
 # ── Get Single Order ─────────────────────────────────────────────────────
 @router.get("/{order_id}", response_model=dict)
 def get_order(
@@ -166,18 +134,15 @@ def get_order(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Get a single order by ID. Only the order owner or admin can view."""
-    try:
-        order_uuid = uuid.UUID(order_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid order ID")
+    try: order_uuid = uuid.UUID(order_id)
+    except ValueError: raise HTTPException(status_code=400, detail="Invalid order ID")
 
     order = db.query(Order).filter(Order.id == order_uuid).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+    if not order: raise HTTPException(status_code=404, detail="Order not found")
 
-    # Check if user owns the order or is admin
-    if order.user_id != current_user.id and current_user.role not in [RoleEnum.admin, RoleEnum.staff]:
+    # 🚀 SECURED ENUM CHECK
+    role_val = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    if order.user_id != current_user.id and role_val not in ["admin", "staff"]:
         raise HTTPException(status_code=403, detail="Not authorized to view this order")
 
     return serialize_order(order)
@@ -187,17 +152,9 @@ def get_order(
 def get_customer_recent_orders(
     customer_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_staff) # 🚀 SECURED
 ):
-    """Get last 5 recent orders for a customer (staff/admin only)."""
-    require_admin_or_staff(current_user)
-
-    orders = db.query(Order)\
-        .filter(Order.user_id == customer_id)\
-        .order_by(Order.created_at.desc())\
-        .limit(5)\
-        .all()
-
+    orders = db.query(Order).filter(Order.user_id == customer_id).order_by(Order.created_at.desc()).limit(5).all()
     return [serialize_order(o) for o in orders]
 
 
@@ -226,33 +183,36 @@ def create_orders(
 
         item_id = item.get("id", "")
         group = str(item.get("group", "")).lower()
-        name = item.get("name", "Unknown Item")
-        desc = item.get("desc", "")
-        price = Decimal(str(item.get("price", 0)))
         qty = int(item.get("qty", 1))
-        img = item.get("img", "")
 
-        # 🚀 1. Check explicitly if this is a custom order
         is_custom_request = "describe" in group or "mix" in group or "custom" in group or str(item_id).startswith("arr-")
+        
+        # 🚀 ZERO-DOLLAR EXPLOIT FIX: Force backend price calculation
+        db_price = Decimal("0.00")
 
         if is_custom_request:
-            arrangement = Arrangement(
-                id=uuid.uuid4(),
-                name=name,
-                description=desc,
-                generated_image_url=img,
-                estimated_price=price,
-            )
-            db.add(arrangement)
-            db.commit()
-            db.refresh(arrangement)
-            arrangement_id = arrangement.id
+            try:
+                # Attempt to find the pre-generated AI arrangement in the database
+                arr_uuid = uuid.UUID(str(item_id))
+                arrangement = db.query(Arrangement).filter(Arrangement.id == arr_uuid).first()
+                if not arrangement:
+                    raise HTTPException(status_code=404, detail="Custom arrangement session expired or invalid.")
+                
+                db_price = arrangement.estimated_price
+                arrangement_id = arrangement.id
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid custom arrangement ID.")
         else:
-            # 🚀 2. It's a normal product! Stop silently swallowing bad IDs.
             try:
                 product_id = uuid.UUID(str(item_id))
+                product = db.query(Product).filter(Product.id == product_id).first()
+                if not product or not product.is_available:
+                    raise HTTPException(status_code=404, detail=f"Product unavailable: {item_id}")
+                
+                # 🚀 The golden rule: Extract price from DB, not from frontend payload
+                db_price = product.price
             except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid Product ID passed from cart: {item_id}")
+                raise HTTPException(status_code=400, detail=f"Invalid Product ID: {item_id}")
 
         order = Order(
             id=uuid.uuid4(),
@@ -260,7 +220,7 @@ def create_orders(
             product_id=product_id,
             arrangement_id=arrangement_id,
             quantity=qty,
-            total_amount=price * qty,
+            total_amount=db_price * qty, # 🚀 Uses secure backend price
             status=OrderStatusEnum.pending,
             delivery_address=delivery_address,
             delivery_notes=delivery_notes,
@@ -271,10 +231,8 @@ def create_orders(
         db.commit()
         db.refresh(order)
 
-        try:
-            pm = PaymentMethodEnum(payment_method)
-        except ValueError:
-            pm = PaymentMethodEnum.qrph
+        try: pm = PaymentMethodEnum(payment_method)
+        except ValueError: pm = PaymentMethodEnum.qrph
 
         transaction = Transaction(
             id=uuid.uuid4(),
@@ -295,100 +253,7 @@ def create_orders(
         "order_ids": created_orders,
     }
 
-
-# ── Confirm Payment for Order ───────────────────────────────────────────────────
-@router.post("/{order_id}/pay", response_model=dict)
-def confirm_payment(
-    order_id: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user)
-):
-
-    """Confirm payment for an order. Updates transaction status and order status."""
-    try:
-        order_uuid = uuid.UUID(order_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid order ID")
-
-    order = db.query(Order).filter(Order.id == order_uuid).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
-
-    # Verify ownership
-    if order.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    # Check if transaction exists
-    if not order.transaction:
-        raise HTTPException(status_code=400, detail="No transaction found for this order")
-
-    # Check if already paid
-    if order.transaction.status == PaymentStatusEnum.paid:
-        raise HTTPException(status_code=400, detail="Payment already confirmed for this order")
-
-    # Update transaction to paid
-    order.transaction.status = PaymentStatusEnum.paid
-    # Update order status to confirmed
-    order.status = OrderStatusEnum.confirmed
-    db.commit()
-    db.refresh(order)
-    db.refresh(order.transaction)
-
-    return {
-        "status": "success",
-        "message": "Payment confirmed successfully",
-        "order_id": str(order.id),
-        "order_number": f"ORD-{order.id.hex[:8].upper()}",
-        "payment_status": order.transaction.status.value if hasattr(order.transaction.status, "value") else order.transaction.status,
-        "order_status": order.status.value if hasattr(order.status, "value") else order.status,
-    }
-
-
-@router.post("/{order_id}/action", response_model=dict)
-def admin_order_action(
-    order_id: str,
-    payload: dict,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Admin/Staff action to update an order status."""
-    require_admin_or_staff(current_user)
-
-    action_status = payload.get("status")
-    if not action_status:
-        raise HTTPException(status_code=400, detail="Missing 'status' in payload")
-
-    # Normalize to backend enum value (expects: pending|confirmed|preparing|out_for_delivery|delivered|cancelled)
-    status_key = str(action_status).lower().replace(" ", "_")
-
-    try:
-        new_status = OrderStatusEnum(status_key)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid status: {action_status}")
-
-    try:
-        order_uuid = uuid.UUID(order_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid order ID")
-
-    order = db.query(Order).filter(Order.id == order_uuid).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
-
-    # Optional transition rules could be enforced here.
-    order.status = new_status
-    db.commit()
-    db.refresh(order)
-
-    return {
-        "status": "success",
-        "message": "Order status updated",
-        **serialize_order(order),
-    }
-
 def _notify_order(db: Session, order: Order, status: str):
-    """Create a notification row + send email if user has order_updates enabled."""
-
     status_messages = {
         "confirmed":        ("Order Confirmed 🌸",        "Your order {num} has been confirmed and is being processed."),
         "preparing":        ("We're Preparing Your Order 🌿", "Your order {num} is now being prepared by our florists."),
@@ -398,14 +263,12 @@ def _notify_order(db: Session, order: Order, status: str):
     }
 
     cfg = status_messages.get(status)
-    if not cfg:
-        return
+    if not cfg: return
 
     order_number = f"ORD-{order.id.hex[:8].upper()}"
     title   = cfg[0]
     message = cfg[1].format(num=order_number)
 
-    # 1. Insert notification row
     db.execute(
         text("""
             INSERT INTO notifications (user_id, type, title, message, order_id)
@@ -420,13 +283,11 @@ def _notify_order(db: Session, order: Order, status: str):
     )
     db.commit()
 
-    # 2. Check preferences before sending email
     pref = db.execute(
         text("SELECT order_updates FROM user_notification_preferences WHERE user_id = :uid"),
         {"uid": str(order.user_id)}
     ).fetchone()
 
-    # Default to True if no preference row yet
     if pref is None or pref.order_updates:
         send_order_status_email(
             to_email=order.user.email,
@@ -436,7 +297,6 @@ def _notify_order(db: Session, order: Order, status: str):
             message=message,
         )
 
-
 # ── Confirm Payment for Order ───────────────────────────────────────────────────
 @router.post("/{order_id}/pay", response_model=dict)
 def confirm_payment(
@@ -444,23 +304,15 @@ def confirm_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    try:
-        order_uuid = uuid.UUID(order_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid order ID")
+    try: order_uuid = uuid.UUID(order_id)
+    except ValueError: raise HTTPException(status_code=400, detail="Invalid order ID")
 
     order = db.query(Order).filter(Order.id == order_uuid).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+    if not order: raise HTTPException(status_code=404, detail="Order not found")
 
-    if order.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    if not order.transaction:
-        raise HTTPException(status_code=400, detail="No transaction found for this order")
-
-    if order.transaction.status == PaymentStatusEnum.paid:
-        raise HTTPException(status_code=400, detail="Payment already confirmed for this order")
+    if order.user_id != current_user.id: raise HTTPException(status_code=403, detail="Not authorized")
+    if not order.transaction: raise HTTPException(status_code=400, detail="No transaction found for this order")
+    if order.transaction.status == PaymentStatusEnum.paid: raise HTTPException(status_code=400, detail="Payment already confirmed")
 
     order.transaction.status = PaymentStatusEnum.paid
     order.status = OrderStatusEnum.confirmed
@@ -468,7 +320,6 @@ def confirm_payment(
     db.refresh(order)
     db.refresh(order.transaction)
 
-    # Fire notification + email
     _notify_order(db, order, "confirmed")
 
     return {
@@ -476,10 +327,9 @@ def confirm_payment(
         "message": "Payment confirmed successfully",
         "order_id": str(order.id),
         "order_number": f"ORD-{order.id.hex[:8].upper()}",
-        "payment_status": order.transaction.status.value,
-        "order_status": order.status.value,
+        "payment_status": order.transaction.status.value if hasattr(order.transaction.status, "value") else order.transaction.status,
+        "order_status": order.status.value if hasattr(order.status, "value") else order.status,
     }
-
 
 # ── Admin/Staff: Update Order Status ───────────────────────────────────────────
 @router.post("/{order_id}/action", response_model=dict)
@@ -487,35 +337,25 @@ def admin_order_action(
     order_id: str,
     payload: dict,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_staff), # 🚀 SECURED
 ):
-    require_admin_or_staff(current_user)
-
     action_status = payload.get("status")
-    if not action_status:
-        raise HTTPException(status_code=400, detail="Missing 'status' in payload")
+    if not action_status: raise HTTPException(status_code=400, detail="Missing 'status' in payload")
 
     status_key = str(action_status).lower().replace(" ", "_")
+    try: new_status = OrderStatusEnum(status_key)
+    except ValueError: raise HTTPException(status_code=400, detail=f"Invalid status: {action_status}")
 
-    try:
-        new_status = OrderStatusEnum(status_key)
-    except ValueError:
-        raise HTTPException(status_code=400, detail=f"Invalid status: {action_status}")
-
-    try:
-        order_uuid = uuid.UUID(order_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid order ID")
+    try: order_uuid = uuid.UUID(order_id)
+    except ValueError: raise HTTPException(status_code=400, detail="Invalid order ID")
 
     order = db.query(Order).filter(Order.id == order_uuid).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found")
+    if not order: raise HTTPException(status_code=404, detail="Order not found")
 
     order.status = new_status
     db.commit()
     db.refresh(order)
 
-    # Fire notification + email
     _notify_order(db, order, status_key)
 
     return {
@@ -523,4 +363,3 @@ def admin_order_action(
         "message": "Order status updated",
         **serialize_order(order),
     }
-

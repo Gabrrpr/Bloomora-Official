@@ -185,9 +185,15 @@ export default function ChatWidget() {
         console.error('History load error:', histErr)
       }
       if (!wsRef.current) {
-        const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/${currentSessionId}`)
+        
+        // 🚀 SECURITY FIX 1: Retrieve the active JWT token from storage
+        const token = localStorage.getItem("access_token")
+        
+        // 🚀 SECURITY FIX 2: Append the token directly to the WS connection URL
+        const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/${currentSessionId}?token=${token}`)
+        
         wsRef.current = websocket
-        websocket.onopen = () => console.log('WS connected')
+        websocket.onopen = () => console.log('Secure WS connected')
         websocket.onmessage = (event) => {
           const data = JSON.parse(event.data)
           console.log("Raw Message Data from Backend:", data)
