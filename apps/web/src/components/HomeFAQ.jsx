@@ -164,11 +164,22 @@ export default function HomeFAQ({ onNavigate }) {
   const tabActiveColor = isDark ? "#0a1f0d" : "#ffffff"
   const tabIdleColor   = isDark ? "#cbd5e1" : "#4A7C59"
 
-  const ctaBg       = isDark ? "#0C573E" : DG
-  const ctaTitleC   = "#F2F7F3"
-  const ctaSubC     = "rgba(242,247,243,0.7)"
-  const ctaBtnBg    = isDark ? "#4ade80" : G
-  const ctaBtnColor = isDark ? "#0a1f0d" : "#ffffff"
+  // ── Support CTA — redesigned to remove green-on-green ──
+  // Light: clean neutral card (cream/white) so the green button reads as a sharp accent.
+  // Dark:  green-tinted dark panel (matches the review cards / trust bar) with a neon button.
+  const ctaBg        = isDark ? "#0f1f17" : "#F2F7F3"
+  const ctaBdr       = isDark ? "rgba(74,222,128,0.22)" : "#dceadd"
+  const ctaShdw      = isDark
+    ? "0 0 0 1px rgba(74,222,128,0.12), 0 12px 40px rgba(0,0,0,0.4)"
+    : "0 8px 28px rgba(12,87,62,0.08)"
+  const ctaTitleC    = isDark ? "#f0fdf4" : "#132015"
+  const ctaSubC      = isDark ? "#9ca3af" : "#4A7C59"
+  const ctaIconWrapBg= isDark ? "rgba(74,222,128,0.12)" : "rgba(46,139,52,0.1)"
+  const ctaIconColor = isDark ? "#4ade80" : DG
+  const ctaBtnBg     = isDark ? "#4ade80" : DG
+  const ctaBtnColor  = isDark ? "#0a1f0d" : "#ffffff"
+  const ctaBtnGlow   = isDark ? "0 0 18px rgba(74,222,128,0.4)" : "0 6px 18px rgba(12,87,62,0.3)"
+  const ctaBtnIconBg = isDark ? "rgba(10,31,13,0.22)" : "rgba(255,255,255,0.22)"
 
   const active = FAQS[activeTab]
 
@@ -226,24 +237,34 @@ export default function HomeFAQ({ onNavigate }) {
           ))}
         </div>
 
-        {/* Support CTA */}
+        {/* Support CTA — neutral surface so the button is a clean accent (no green-on-green) */}
         <div className="mt-[clamp(32px,4vw,48px)] flex flex-col sm:flex-row items-center justify-between gap-5 rounded-[24px] p-6 sm:p-8 transition-all duration-500"
           style={{
             backgroundColor: ctaBg,
-            boxShadow: isDark ? "0 0 0 1px rgba(74,222,128,0.15), 0 12px 40px rgba(0,0,0,0.4)" : "0 12px 32px rgba(12,87,62,0.18)",
+            border: `1px solid ${ctaBdr}`,
+            boxShadow: ctaShdw,
             opacity: visible?1:0,
             transform: visible?"none":"translateY(14px)",
             transitionDelay: "0.22s",
           }}>
-          <div className="text-center sm:text-left">
-            <p className="text-lg font-bold mb-1" style={{ color:ctaTitleC }}>Still have questions?</p>
-            <p className="text-sm" style={{ color:ctaSubC }}>Chat with our friendly support team, we would love to help.</p>
+          <div className="flex items-center gap-4 text-center sm:text-left">
+            {/* Leading chat glyph in a soft tinted circle — ties the block together */}
+            <span className="hidden sm:flex w-11 h-11 rounded-full items-center justify-center shrink-0"
+              style={{ backgroundColor:ctaIconWrapBg, color:ctaIconColor }}>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>
+              </svg>
+            </span>
+            <div>
+              <p className="text-lg font-bold mb-1" style={{ color:ctaTitleC }}>Still have questions?</p>
+              <p className="text-sm" style={{ color:ctaSubC }}>Chat with our friendly support team, we would love to help.</p>
+            </div>
           </div>
           <button onClick={openChat}
             className="flex items-center gap-2 py-3 pl-3 pr-5 rounded-full text-sm font-semibold border-none cursor-pointer whitespace-nowrap transition-transform duration-200 hover:scale-[1.03]"
-            style={{ backgroundColor:ctaBtnBg, color:ctaBtnColor, boxShadow:isDark?"0 0 18px rgba(74,222,128,0.35)":"0 6px 18px rgba(46,139,52,0.35)" }}>
+            style={{ backgroundColor:ctaBtnBg, color:ctaBtnColor, boxShadow:ctaBtnGlow }}>
             <span className="w-7 h-7 rounded-full flex items-center justify-center"
-              style={{ backgroundColor:isDark?"rgba(10,31,13,0.25)":"rgba(255,255,255,0.22)" }}>
+              style={{ backgroundColor:ctaBtnIconBg }}>
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               </svg>

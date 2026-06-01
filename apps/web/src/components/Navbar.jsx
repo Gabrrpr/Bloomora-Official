@@ -13,6 +13,7 @@ import pampangaBranchImg from "../assets/homepage/PampangaBranch.png";
 const SITE_GREEN = "#2E8B34";
 const NAVY_GREEN = "#35530A";
 const DARK_GREEN = "#0C573E";
+const VIBRANT_GREEN = "#16a34a"; // more vibrant hover green for light mode
 
 const STANDARD_CATEGORIES = ["flower", "vase", "wrapping", "accessory", "arrangement", "add-on"];
 
@@ -164,6 +165,7 @@ function FloatingHearts() {
 
 // ── Branch Modal — clean image left, all text right ──────────────────────────
 function BranchModal({ branch, onClose }) {
+  const { isDark } = useTheme();
   const info = BRANCHES[branch];
   const [imgError, setImgError] = useState(false);
 
@@ -172,6 +174,9 @@ function BranchModal({ branch, onClose }) {
     document.addEventListener("keydown", h);
     return () => document.removeEventListener("keydown", h);
   }, [onClose]);
+
+  // Neon green that pops on the dark surface; brand green in light mode.
+  const neonG = isDark ? "#4ade80" : SITE_GREEN;
 
   return (
     <>
@@ -182,10 +187,13 @@ function BranchModal({ branch, onClose }) {
         onClick={onClose}
       >
         <div
-          className="relative w-full max-w-[340px] sm:max-w-[640px] bg-white rounded-2xl overflow-hidden shadow-2xl"
+          className="relative w-full max-w-[340px] sm:max-w-[640px] rounded-2xl overflow-hidden shadow-2xl"
           style={{
+            backgroundColor: isDark ? "#0f1f17" : "#ffffff",
             animation: "bmIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both",
-            boxShadow: "0 32px 80px rgba(0,0,0,0.28)",
+            boxShadow: isDark
+              ? "0 0 0 1px rgba(74,222,128,0.2), 0 32px 80px rgba(0,0,0,0.6)"
+              : "0 32px 80px rgba(0,0,0,0.28)",
           }}
           onClick={e => e.stopPropagation()}
         >
@@ -193,12 +201,8 @@ function BranchModal({ branch, onClose }) {
           <button
             onClick={onClose}
             aria-label="Close"
-            className="absolute top-3 right-3 z-20 w-8 h-8 flex items-center justify-center rounded-full transition-all"
-            style={{
-              background: "rgba(0,0,0,0.45)",
-              backdropFilter: "blur(6px)",
-              color: "white",
-            }}
+            className="absolute top-3 right-3 z-20 w-8 h-8 flex items-center justify-center rounded-full text-white transition-all"
+            style={{ background: "rgba(0,0,0,0.45)", backdropFilter: "blur(6px)" }}
             onMouseEnter={e => { e.currentTarget.style.background = "rgba(0,0,0,0.7)"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "rgba(0,0,0,0.45)"; }}
           >
@@ -211,9 +215,7 @@ function BranchModal({ branch, onClose }) {
           <div className="flex flex-col sm:flex-row">
 
             {/* ── Left: clean square branch image ───────────────────── */}
-            <div
-              className="relative w-full sm:w-1/2 aspect-square flex-shrink-0 overflow-hidden bg-gray-100"
-            >
+            <div className="relative w-full sm:w-1/2 aspect-square flex-shrink-0 overflow-hidden bg-gray-100">
               {info.image && !imgError ? (
                 <img
                   src={info.image}
@@ -227,8 +229,8 @@ function BranchModal({ branch, onClose }) {
                   className="absolute inset-0 flex items-center justify-center"
                   style={{ background: `linear-gradient(150deg, ${DARK_GREEN} 0%, #1a6b3f 50%, ${SITE_GREEN} 100%)` }}
                 >
-                  <div style={{ position:"absolute", top:"-40px", right:"-40px", width:"160px", height:"160px", borderRadius:"50%", background:"rgba(255,255,255,0.06)" }}/>
-                  <div style={{ position:"absolute", bottom:"-30px", left:"-30px", width:"120px", height:"120px", borderRadius:"50%", background:"rgba(255,255,255,0.05)" }}/>
+                  <div className="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/[0.06]"/>
+                  <div className="absolute -bottom-8 -left-8 w-28 h-28 rounded-full bg-white/[0.05]"/>
                   <svg className="w-20 h-20 text-white/40 relative z-10" fill="currentColor" viewBox="0 0 24 24">
                     <path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742ZM12 13.5a3 3 0 100-6 3 3 0 000 6Z" clipRule="evenodd"/>
                   </svg>
@@ -240,34 +242,43 @@ function BranchModal({ branch, onClose }) {
             <div className="flex-1 p-5 sm:p-6 flex flex-col min-w-0">
               {/* Header — moved here from over the image */}
               <div className="mb-4 sm:mb-5">
-                <p className="text-[10px] sm:text-xs font-bold tracking-widest uppercase text-gray-400 mb-1">
+                <p className="text-[10px] sm:text-xs font-bold tracking-widest uppercase mb-1"
+                  style={{ color: isDark ? "#6b7280" : "#9ca3af" }}>
                   You&apos;ve selected
                 </p>
-                <h2 className="text-xl sm:text-2xl font-extrabold leading-tight" style={{ color: DARK_GREEN }}>
+                <h2 className="text-xl sm:text-2xl font-extrabold leading-tight"
+                  style={{ color: neonG, textShadow: isDark ? "0 0 18px rgba(74,222,128,0.45)" : "none" }}>
                   {branch} Branch
                 </h2>
-                <div className="w-10 h-[3px] rounded-sm mt-2" style={{ backgroundColor: SITE_GREEN }} />
+                <div className="w-10 h-[3px] rounded-sm mt-2"
+                  style={{ backgroundColor: neonG, boxShadow: isDark ? "0 0 10px rgba(74,222,128,0.6)" : "none" }} />
               </div>
 
               {/* Info rows */}
               <div className="space-y-3 sm:space-y-4 flex-1">
                 {[
-                  { label:"Address", icon:<svg className="w-4 h-4" style={{color:SITE_GREEN}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>, value: info.address },
-                  { label:"Store Hours", icon:<svg className="w-4 h-4" style={{color:SITE_GREEN}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>, value: info.hours },
-                  { label:"Phone", icon:<svg className="w-4 h-4" style={{color:SITE_GREEN}} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>, value: info.phone },
+                  { label:"Address", icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>, value: info.address },
+                  { label:"Store Hours", icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>, value: info.hours },
+                  { label:"Phone", icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>, value: info.phone },
                 ].map(row => (
                   <div key={row.label} className="flex items-start gap-3">
                     <div
-                      className="flex items-center justify-center flex-shrink-0 rounded-lg mt-px"
-                      style={{ width:"34px", height:"34px", backgroundColor:"#f0fdf4" }}
+                      className="flex items-center justify-center flex-shrink-0 rounded-lg mt-px w-[34px] h-[34px]"
+                      style={{
+                        backgroundColor: isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4",
+                        color: neonG,
+                        border: isDark ? "1px solid rgba(74,222,128,0.3)" : "none",
+                      }}
                     >
                       {row.icon}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[10px] font-bold tracking-widest uppercase text-gray-400 mb-0.5">
+                      <p className="text-[10px] font-bold tracking-widest uppercase mb-0.5"
+                        style={{ color: isDark ? "#6b7280" : "#9ca3af" }}>
                         {row.label}
                       </p>
-                      <p className="text-[13px] text-gray-700 leading-snug break-words">
+                      <p className="text-[13px] leading-snug break-words"
+                        style={{ color: isDark ? "#d1d5db" : "#374151" }}>
                         {row.value}
                       </p>
                     </div>
@@ -280,8 +291,7 @@ function BranchModal({ branch, onClose }) {
                 className="w-full mt-5 sm:mt-6 py-3 font-semibold text-white text-sm rounded-xl transition-all"
                 style={{
                   background: `linear-gradient(135deg, ${SITE_GREEN}, ${DARK_GREEN})`,
-                  border: "none",
-                  cursor: "pointer",
+                  boxShadow: isDark ? "0 0 16px rgba(74,222,128,0.25)" : "none",
                 }}
                 onMouseEnter={e => e.currentTarget.style.opacity = "0.92"}
                 onMouseLeave={e => e.currentTarget.style.opacity = "1"}
@@ -531,7 +541,7 @@ function DropdownMenu({ items, categories, onNavigate, onClose }) {
     animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards",
   };
   const itemHover = (e, on) => {
-    e.currentTarget.style.backgroundColor = on ? SITE_GREEN : "transparent";
+    e.currentTarget.style.backgroundColor = on ? (isDark ? VIBRANT_GREEN : VIBRANT_GREEN) : "transparent";
     e.currentTarget.style.color = on ? "white" : (isDark ? "#d1d5db" : "#4b5563");
   };
   const headingGreen = isDark ? "#4ade80" : SITE_GREEN;
@@ -907,7 +917,7 @@ useEffect(() => {
         { label: "Birthdays", page: "occasions" }, { label: "Anniversaries", page: "occasions" },
         { label: "Weddings", page: "occasions" }, { label: "Graduations", page: "occasions" },
         { label: "Sympathy", page: "occasions" }, { label: "Just Because", page: "occasions" },
-        { label: "Openings", page: "occasions" },
+        { label: "Openings", page: "occasions" }, { label: "Get Well Soon", page: "occasions" },
       ],
     },
     { label: "About Us", page: "about" },
@@ -1045,8 +1055,14 @@ useEffect(() => {
             <div className="flex items-center gap-2 flex-shrink-0 cursor-pointer" onClick={() => onNavigate?.("home")}>
               <img src={estingsLogo} alt="Esting's Logo" className="w-9 h-9 sm:w-10 sm:h-10 object-contain"
                 style={{ filter: isDark ? "brightness(1.15)" : "none" }}/>
-              <img src={estingsText} alt="Esting's" className="h-6 sm:h-7 object-contain hidden sm:block"
-                style={{ filter: isDark ? "brightness(0) invert(1)" : "none" }}/>
+              <div className="hidden sm:flex flex-col leading-none items-start">
+                <img src={estingsText} alt="Esting's" className="h-6 sm:h-7 object-contain"
+                  style={{ filter: isDark ? "brightness(0) invert(1)" : "none" }}/>
+                <span className="text-[7px] sm:text-[8px] font-semibold uppercase tracking-[0.08em] mt-0.5 self-start text-left"
+                  style={{ color: isDark ? "#ffffff" : SITE_GREEN }}>
+                  Flower International Inc.
+                </span>
+              </div>
             </div>
 
             {/* Desktop nav links */}
@@ -1089,7 +1105,7 @@ useEffect(() => {
                       color: active===link.label ? (isDark?"#4ade80":SITE_GREEN) : (link.highlight ? (isDark?"#ff6b81":"#f43f5e") : (isDark ? "#d1d5db" : "#4b5563")),
                       borderBottom: active===link.label ? `2px solid ${isDark?"#4ade80":SITE_GREEN}` : "2px solid transparent",
                     }}
-                    onMouseEnter={e => { if (active!==link.label) e.currentTarget.style.color = link.highlight ? (isDark?"#ff4d6d":"#e11d48") : (isDark ? "#86efac" : NAVY_GREEN); }}
+                    onMouseEnter={e => { if (active!==link.label) e.currentTarget.style.color = link.highlight ? (isDark?"#ff4d6d":"#e11d48") : (isDark ? "#86efac" : VIBRANT_GREEN); }}
                     onMouseLeave={e => { if (active!==link.label) e.currentTarget.style.color = link.highlight ? (isDark?"#ff6b81":"#f43f5e") : (isDark ? "#d1d5db" : "#4b5563"); }}>
                     {link.highlight && <FloatingHearts />}
                     {link.label}
@@ -1346,7 +1362,7 @@ useEffect(() => {
                         <button key={sub.label} onClick={() => { onNavigate?.(sub.page, sub.param); setMobileOpen(false); }}
                           className="block w-full text-left px-2 py-2 text-xs border-b transition-colors"
                           style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6", color: isDark ? "#9ca3af" : "#6b7280" }}
-                          onMouseEnter={e => e.currentTarget.style.color = isDark ? "#4ade80" : SITE_GREEN}
+                          onMouseEnter={e => e.currentTarget.style.color = isDark ? "#4ade80" : VIBRANT_GREEN}
                           onMouseLeave={e => e.currentTarget.style.color = isDark ? "#9ca3af" : "#6b7280"}>
                           {sub.label}
                         </button>
@@ -1366,7 +1382,7 @@ useEffect(() => {
                             <button key={sub.label} onClick={() => { onNavigate?.(sub.page, sub.param); setMobileOpen(false); }}
                               className="block w-full text-left pl-4 pr-2 py-2 text-xs transition-colors"
                               style={{ color: isDark ? "#9ca3af" : "#6b7280" }}
-                              onMouseEnter={e => e.currentTarget.style.color = isDark ? "#4ade80" : SITE_GREEN}
+                              onMouseEnter={e => e.currentTarget.style.color = isDark ? "#4ade80" : VIBRANT_GREEN}
                               onMouseLeave={e => e.currentTarget.style.color = isDark ? "#9ca3af" : "#6b7280"}>
                               {sub.label}
                             </button>
@@ -1394,7 +1410,7 @@ useEffect(() => {
                       <button key={p} onClick={() => { onNavigate?.(p); setMobileOpen(false); }}
                         className="w-full text-left text-sm px-2 py-1.5 rounded transition-colors"
                         style={{ color: isDark ? "#d1d5db" : "#4b5563" }}
-                        onMouseEnter={e=>{e.currentTarget.style.backgroundColor=isDark?"rgba(74,222,128,0.1)":"#f0fdf4";e.currentTarget.style.color=isDark?"#4ade80":SITE_GREEN;}}
+                        onMouseEnter={e=>{e.currentTarget.style.backgroundColor=isDark?"rgba(74,222,128,0.1)":"#f0fdf4";e.currentTarget.style.color=isDark?"#4ade80":VIBRANT_GREEN;}}
                         onMouseLeave={e=>{e.currentTarget.style.backgroundColor="transparent";e.currentTarget.style.color=isDark?"#d1d5db":"#4b5563";}}>{l}</button>
                     ))}
                     <button onClick={handleLogout} className="flex items-center gap-2 text-sm text-red-500 font-medium px-2 py-1.5 rounded hover:bg-red-50 transition-colors w-full mt-1">

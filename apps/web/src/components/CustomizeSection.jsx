@@ -86,8 +86,8 @@ export default function CustomizeSection({ onNavigate }) {
   const subC       = isDark ? "#94a3b8" : "#6b7280"
   const captionC   = isDark ? "rgba(255,255,255,0.45)" : "rgba(0,0,0,0.35)"
 
-  // Overlay: user-requested values
-  const overlayColor = isDark ? "rgba(5,12,7,0.82)" : "rgba(255,255,255,0.78)"
+  // Overlay — light veil on all sizes so the bg image stays clearly visible.
+  const overlayColor = isDark ? "rgba(5,12,7,0.55)" : "rgba(255,255,255,0.5)"
 
   // Frosted card colors
   const cardBg     = isDark ? "rgba(15,25,18,0.88)" : "rgba(255,255,255,0.93)"

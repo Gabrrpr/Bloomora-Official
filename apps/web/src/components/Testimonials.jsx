@@ -261,9 +261,9 @@ export default function Testimonials() {
       {/* Background image */}
       <div className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage:`url(${testimonialsBG})` }}/>
-      {/* Overlay — reduced opacity so image shows through clearly */}
+      {/* Overlay — light veil on all sizes so the bg image stays clearly visible */}
       <div className="absolute inset-0 z-[1]"
-        style={{ backgroundColor: isDark ? "rgba(8,15,10,0.72)" : "rgba(255,255,255,0.72)" }}/>
+        style={{ backgroundColor: isDark ? "rgba(8,15,10,0.5)" : "rgba(255,255,255,0.45)" }}/>
       {/* Dark mode neon radial hint */}
       {isDark && (
         <div className="absolute inset-0 z-[1] pointer-events-none"

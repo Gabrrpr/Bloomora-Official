@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useTheme } from "../context/ThemeContext"
 import { api } from "../services/api"
 
@@ -12,6 +12,23 @@ const RIBBON_COLORS = {
   "Tribute": "#6b7280", "Classic": "#0C573E",
   "Comfort": "#9d174d", "Sympathy": "#1d4ed8",
 }
+
+// Scroll reveal — same pattern as OccasionsStrip / Testimonials.
+// Fades in and slides up the first time the element enters the viewport.
+function useScrollReveal(threshold = 0.08) {
+  const ref = useRef(null)
+  const [visible, setVisible] = useState(false)
+  useEffect(() => {
+    const obs = new IntersectionObserver(
+      ([e]) => { if (e.isIntersecting) { setVisible(true); obs.disconnect() } },
+      { threshold }
+    )
+    if (ref.current) obs.observe(ref.current)
+    return () => obs.disconnect()
+  }, [threshold])
+  return [ref, visible]
+}
+
 
 // ─── 1. Your Beautiful Single Section Layout ─────────────────────────────────
 // 🚀 ADDED 'onPreview' to the props list here
@@ -28,6 +45,13 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
   const sectionBg= isDark ? "#111827" : "#fafafa"
   const secHdrC  = isDark ? "#f3f4f6" : "#1f2937"
 
+  // Glowing green line in dark mode; solid brand green in light mode.
+  const lineGlow = isDark ? "0 0 10px rgba(74,222,128,0.6)" : "none"
+
+  // Scroll-reveal refs for the two areas of this section.
+  const [bannerRef, bannerVisible] = useScrollReveal(0.08)
+  const [gridRef, gridVisible]     = useScrollReveal(0.06)
+
   // Safely map products to slots based on Admin selections
   const slotProducts = (data.featured || []).map(slot => products.find(p => String(p.id) === String(slot.productId)))
   const tileProducts = (data.categories || []).map(cat => products.find(p => String(p.id) === String(cat.productId)))
@@ -36,7 +60,11 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
     <div className="w-full">
       {/* ── Banner Area ── */}
       <section style={{ backgroundColor: bannerBg, borderBottom: `1px solid ${bannerBdr}` }}>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16 grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-10 items-center">
+        <div
+          ref={bannerRef}
+          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16 grid grid-cols-1 lg:grid-cols-[5fr_7fr] gap-10 items-center transition-all duration-500"
+          style={{ opacity: bannerVisible ? 1 : 0, transform: bannerVisible ? "none" : "translateY(24px)" }}
+        >
           <div className="text-center lg:text-left">
             <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: accentG }}>
               {data.banner.eyebrow}
@@ -44,7 +72,7 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
             <h2 className="text-3xl md:text-4xl font-bold mb-4 leading-tight" style={{ color: headingC }}>
               {data.banner.heading}
             </h2>
-            <div className="w-16 h-[3px] rounded-sm mx-auto lg:mx-0 mb-5" style={{ backgroundColor: G }} />
+            <div className="w-16 h-[3px] rounded-sm mx-auto lg:mx-0 mb-5" style={{ backgroundColor: accentG, boxShadow: lineGlow }} />
             <p className="text-base mb-8 leading-relaxed max-w-lg mx-auto lg:mx-0" style={{ color: subC }}>
               {data.banner.description}
             </p>
@@ -86,9 +114,13 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
 
       {/* ── Featured Grid Area ── */}
       <section style={{ backgroundColor: sectionBg }} className="py-12 lg:py-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div
+          ref={gridRef}
+          className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 transition-all duration-500"
+          style={{ opacity: gridVisible ? 1 : 0, transform: gridVisible ? "none" : "translateY(24px)" }}
+        >
           <div className="flex items-center gap-3 mb-8">
-            <div className="w-[3px] h-12 rounded-sm shrink-0" style={{ backgroundColor: G }} />
+            <div className="w-[3px] h-12 rounded-sm shrink-0" style={{ backgroundColor: accentG, boxShadow: lineGlow }} />
             <div>
               <p className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: accentG }}>{data.sectionEyebrow}</p>
               <h3 className="text-2xl md:text-3xl font-bold" style={{ color: secHdrC }}>{data.sectionHeading}</h3>
