@@ -8,6 +8,7 @@ import Testimonials      from "../../components/Testimonials.jsx"
 import HomeFAQ           from "../../components/HomeFAQ.jsx"
 import Footer            from "../../components/Footer.jsx"
 import FallingRoses      from "../../components/FallingRoses.jsx"
+import FeaturesBar from "../../components/FeaturesBar.jsx"
 // 🚀 1. Import the modal
 import ProductPreviewModal from "../../components/ProductPreviewModal.jsx" 
 
@@ -21,6 +22,7 @@ export default function Home({ onNavigate, isCustomizationEnabled }) {
         <FallingRoses />
         <HeroCarousel onNavigate={onNavigate} />
       </div>
+      <FeaturesBar />
       <OccasionsStrip onNavigate={onNavigate} />
       <ChooseYourBloom onNavigate={onNavigate} />
       

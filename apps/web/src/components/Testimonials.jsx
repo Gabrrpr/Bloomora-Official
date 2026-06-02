@@ -15,16 +15,19 @@ const REVIEWS = [
   { id:6, name:"John Clark",               source:"Google",   text:"I have used this place a few times now and every time their flower arrangements are amazing. Very professional service.", rating:4 },
 ]
 
-const FEATURES = [
-  { title:"Same Day Delivery",  subtitle:"Order before 2:00 PM",
-    icon:<svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"/></svg> },
-  { title:"Handled With Care",  subtitle:"Every order inspected",
-    icon:<svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/></svg> },
-  { title:"65+ Years of Trust", subtitle:"Serving since 1959",
-    icon:<svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z"/></svg> },
-  { title:"Always Fresh",       subtitle:"Blooms that last 7+ days",
-    icon:<svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M15.362 5.214A8.252 8.252 0 0 1 12 21 8.25 8.25 0 0 1 6.038 7.047 8.287 8.287 0 0 0 9 9.601a8.983 8.983 0 0 1 3.361-6.867 8.21 8.21 0 0 0 3 2.48Z"/><path strokeLinecap="round" strokeLinejoin="round" d="M12 18a3.75 3.75 0 0 0 .495-7.468 5.99 5.99 0 0 0-1.925 3.547 5.975 5.975 0 0 1-2.133-1.001A3.75 3.75 0 0 0 12 18Z"/></svg> },
-]
+/* ── Social icons ──────────────────────────────────────────────── */
+const FbIcon = (p) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" {...p}>
+    <path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/>
+  </svg>
+)
+const IgIcon = (p) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round" {...p}>
+    <rect x="3" y="3" width="18" height="18" rx="5"/>
+    <circle cx="12" cy="12" r="4"/>
+    <circle cx="17.3" cy="6.7" r="1" fill="currentColor" stroke="none"/>
+  </svg>
+)
 
 function useWidth() {
   const [w, setW] = useState(typeof window !== "undefined" ? window.innerWidth : 1100)
@@ -112,7 +115,6 @@ function OutlineAvatar({ isDark }) {
   The Georgia " glyph renders above the baseline.
   translateY(20px) nudges the 0-height box just enough below centre
   so the glyph ink sits visually centred in the circle.
-  (Previously 32px was too much — screenshot showed it too low.)
 */
 function QuoteMark({ isDark }) {
   const bg    = isDark ? "#16352a" : "rgba(12,87,62,0.08)"
@@ -129,7 +131,7 @@ function QuoteMark({ isDark }) {
         opacity: isDark ? 1 : 0.65,
         userSelect: "none",
         display: "block",
-        transform: "translateY(20px)",   // reduced from 32px — was too low
+        transform: "translateY(20px)",
       }}>
         &ldquo;
       </span>
@@ -216,7 +218,7 @@ export default function Testimonials() {
   const w = useWidth()
   const [headerRef, headerVisible] = useScrollReveal(0.08)
   const [cardsRef,  cardsVisible]  = useScrollReveal(0.06)
-  const [trustRef,  trustVisible]  = useScrollReveal(0.06)
+  const [socialRef, socialVisible] = useScrollReveal(0.1)
   const [current, setCurrent]      = useState(0)
   const total = REVIEWS.length
 
@@ -241,20 +243,13 @@ export default function Testimonials() {
   const accentG    = isDark ? G_D : G
   const accentDG   = isDark ? G_D : DG
   const headingC   = isDark ? "#f0fdf4" : "#1f2937"
-  const bodyC      = isDark ? "#94a3b8" : "#6b7280"
+  const bodyC      = isDark ? "#cbd5e1" : "#6b7280"
   const dotInact   = isDark ? "rgba(74,222,128,0.25)" : "#d1d5db"
-  const trustBg    = isDark ? "#0f1f17" : "rgba(255,255,255,0.95)"
-  const trustBdr   = isDark ? "rgba(74,222,128,0.25)" : "#e5ede5"
-  const trustDivC  = isDark ? "rgba(74,222,128,0.1)"  : "#eef2ee"
-  const iconCircBg = isDark ? "rgba(74,222,128,0.1)"  : "#f0f7f0"
-  const iconCircBdr= isDark ? "rgba(74,222,128,0.3)"  : "#c8e0c8"
-  const iconColor  = isDark ? G_D : DG
-  const titleC     = isDark ? "#f0fdf4" : "#111827"
-  const subC       = isDark ? "#6b7280" : "#9ca3af"
-  const trustShdw  = isDark ? "0 0 0 1px rgba(74,222,128,0.15), 0 4px 24px rgba(0,0,0,0.4)" : "0 2px 16px rgba(0,0,0,0.06)"
 
-  // Trust bar column class
-  const trustColCls = isDesk ? "grid-cols-4" : isMid ? "grid-cols-2" : "grid-cols-1"
+  // Social CTA button tokens — bright in dark mode for contrast on the overlay
+  const socialBtnBg   = isDark ? "#4ade80" : DG
+  const socialBtnHov  = isDark ? "#86efac" : G
+  const socialBtnText = isDark ? "#08120c" : "#ffffff"
 
   return (
     <section className="relative overflow-hidden py-[clamp(56px,7vw,100px)]">
@@ -263,7 +258,7 @@ export default function Testimonials() {
         style={{ backgroundImage:`url(${testimonialsBG})` }}/>
       {/* Overlay — light veil on all sizes so the bg image stays clearly visible */}
       <div className="absolute inset-0 z-[1]"
-        style={{ backgroundColor: isDark ? "rgba(8,15,10,0.5)" : "rgba(255,255,255,0.45)" }}/>
+        style={{ backgroundColor: isDark ? "rgba(8,15,10,0.7)" : "rgba(255,255,255,0.45)" }}/>
       {/* Dark mode neon radial hint */}
       {isDark && (
         <div className="absolute inset-0 z-[1] pointer-events-none"
@@ -314,32 +309,39 @@ export default function Testimonials() {
           </div>
         </div>
 
-        {/* Trust Bar */}
-        <div ref={trustRef}
-          className={`mt-[clamp(44px,6vw,64px)] rounded-2xl overflow-hidden transition-all duration-500`}
-          style={{ backgroundColor:trustBg, border:`1px solid ${trustBdr}`, boxShadow:trustShdw, opacity:trustVisible?1:0, transform:trustVisible?"none":"translateY(16px)" }}>
-          <div className={`grid ${trustColCls}`}>
-            {FEATURES.map((f,i) => {
-              const cols = isDesk?4:isMid?2:1
-              const isLastCol = (i+1)%cols===0 || i===FEATURES.length-1
-              const isLastRow = i>=FEATURES.length-cols
-              return (
-                <div key={f.title}
-                  className="flex items-center gap-4 transition-colors duration-200"
-                  style={{ padding:isDesk?"22px 26px":"18px 20px", borderRight:!isLastCol?`1px solid ${trustDivC}`:"none", borderBottom:!isLastRow?`1px solid ${trustDivC}`:"none", opacity:trustVisible?1:0, transform:trustVisible?"none":"translateY(10px)", transition:`opacity 0.5s ease ${i*70}ms, transform 0.5s ease ${i*70}ms, background-color 0.2s` }}
-                  onMouseEnter={e => { e.currentTarget.style.backgroundColor=isDark?"rgba(74,222,128,0.04)":"rgba(46,139,52,0.025)" }}
-                  onMouseLeave={e => { e.currentTarget.style.backgroundColor="transparent" }}>
-                  <div className="w-[50px] h-[50px] rounded-full flex items-center justify-center shrink-0"
-                    style={{ backgroundColor:iconCircBg, color:iconColor, border:`1.5px solid ${iconCircBdr}`, boxShadow:isDark?"0 0 12px rgba(74,222,128,0.15)":"none" }}>
-                    {f.icon}
-                  </div>
-                  <div>
-                    <p className="text-sm font-bold mb-0.5 leading-snug" style={{ color:titleC }}>{f.title}</p>
-                    <p className="text-xs leading-snug" style={{ color:subC }}>{f.subtitle}</p>
-                  </div>
-                </div>
-              )
-            })}
+        {/* ── Tag Us / Social CTA ── */}
+        <div ref={socialRef}
+          className="max-w-2xl mx-auto text-center mt-[clamp(48px,7vw,72px)] transition-all duration-500"
+          style={{ opacity:socialVisible?1:0, transform:socialVisible?"none":"translateY(24px)" }}>
+          <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color:accentG }}>
+            Share the Joy
+          </p>
+          <h2 className="text-2xl sm:text-3xl font-bold mb-3" style={{ color:headingC, fontFamily:"inherit" }}>
+            Tag Us When Your Bouquet Arrives
+          </h2>
+          <p className="text-sm sm:text-[15px] leading-relaxed mb-4" style={{ color:bodyC }}>
+            We love seeing your blooms in their new home. Share a photo on Facebook or
+            Instagram, tag us, and we'll feature our favorites every week.
+          </p>
+          <div className="w-12 h-[3px] mx-auto rounded-full mb-9"
+            style={{ backgroundColor:accentG, boxShadow:isDark?"0 0 10px rgba(74,222,128,0.5)":"none" }}/>
+          <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-3">
+            <a href="https://facebook.com" target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2.5 rounded-full px-7 py-3 text-sm font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-95"
+              style={{ minWidth:160, backgroundColor:socialBtnBg, color:socialBtnText, boxShadow:isDark?"0 0 20px rgba(74,222,128,0.4)":"0 8px 20px -6px rgba(12,87,62,0.4)" }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor=socialBtnHov}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor=socialBtnBg}>
+              <FbIcon className="w-[18px] h-[18px]"/>
+              Facebook
+            </a>
+            <a href="https://instagram.com" target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2.5 rounded-full px-7 py-3 text-sm font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-95"
+              style={{ minWidth:160, backgroundColor:socialBtnBg, color:socialBtnText, boxShadow:isDark?"0 0 20px rgba(74,222,128,0.4)":"0 8px 20px -6px rgba(12,87,62,0.4)" }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor=socialBtnHov}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor=socialBtnBg}>
+              <IgIcon className="w-[18px] h-[18px]"/>
+              Instagram
+            </a>
           </div>
         </div>
 
