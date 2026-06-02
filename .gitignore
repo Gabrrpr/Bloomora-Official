@@ -57,4 +57,3 @@ htmlcov/
 *.zip
 *.tar.gz
 .turbo/
-apps/mobile/Estings-mobile/google-services.json

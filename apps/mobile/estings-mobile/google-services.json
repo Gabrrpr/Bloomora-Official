@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "695557796421",
+    "project_id": "bloomora-mobile",
+    "storage_bucket": "bloomora-mobile.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:695557796421:android:e12a49adf1df946290292c",
+        "android_client_info": {
+          "package_name": "com.makkuuu.bloomoramobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAXMtyImcLLn1YveRD1q5T_8l1Rn7bIOaw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
