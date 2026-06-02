@@ -1,6 +1,7 @@
 import { useState } from "react"
 import HeroCarousel      from "../../components/HeroCarousel.jsx"
 import OccasionsStrip    from "../../components/OccasionsStrip.jsx"
+import ChooseYourBloom from "../../components/ChooseYourBloom.jsx"
 import DynamicFeaturedSections from "../../components/DynamicFeaturedSection.jsx" 
 import CustomizeSection  from "../../components/CustomizeSection.jsx"
 import Testimonials      from "../../components/Testimonials.jsx"
@@ -20,8 +21,9 @@ export default function Home({ onNavigate, isCustomizationEnabled }) {
         <FallingRoses />
         <HeroCarousel onNavigate={onNavigate} />
       </div>
-
       <OccasionsStrip onNavigate={onNavigate} />
+      <ChooseYourBloom onNavigate={onNavigate} />
+      
 
       {/* 🚀 3. Pass "setPreviewProduct" down as a prop called "onPreview" */}
       <DynamicFeaturedSections 
