@@ -266,7 +266,7 @@ function AddProductModal({ onClose, onSave, categories }) {
         console.log(`Sending to API: ${key} = ${value}`);
       }
 
-      const res = await api.createProduct(fd); 
+      const res = await api.put("/products/admin${product.id", fd);
       onSave(res.product); 
       onClose();
     } catch (e) {
@@ -743,7 +743,7 @@ export default function AdminProducts() {
   const fetchProducts = useCallback(async () => {
     setLoading(true)
     try {
-      const [productsRes, vasesRes] = await Promise.all([api.getAdminProducts(), api.get("/vases/admin/all")])
+      const productsRes = await api.getAdminProducts();
       const prods = productsRes.data || productsRes
       const vases = (vasesRes.data || vasesRes).map(v => ({ ...v, category:"vase", status:v.is_available?"active":"inactive", stock:v.quantity||0, reorder_point:10 }))
       const combined = [...prods, ...vases]
