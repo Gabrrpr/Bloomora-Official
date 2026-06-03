@@ -75,56 +75,6 @@ const BRANCHES = {
   Pampanga: { address: "McArthur Hi-way, Dolores, San Fernando, Pampanga",   hours: "Mon – Sat, 7:30 AM – 5:00 PM", phone: "+63 045 961 5378", image: pampangaBranchImg },
 };
 
-// ── Dark Mode Toggle Button ───────────────────────────────────────────────────
-function DarkModeToggle() {
-  const { isDark, toggleDark } = useTheme();
-  return (
-    <button
-      onClick={toggleDark}
-      title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-      className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-all relative overflow-hidden"
-      style={{
-        background: isDark
-          ? "linear-gradient(135deg, #1e3a5f, #2d4a7a)"
-          : "linear-gradient(135deg, #fef3c7, #fde68a)",
-        border: isDark ? "1.5px solid #3b5fa0" : "1.5px solid #f59e0b",
-        boxShadow: isDark
-          ? "0 0 10px rgba(59,130,246,0.25)"
-          : "0 0 10px rgba(245,158,11,0.25)",
-        transition: "all 0.3s cubic-bezier(0.34,1.56,0.64,1)",
-      }}
-      onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.1)"; }}
-      onMouseLeave={e => { e.currentTarget.style.transform = "scale(1)"; }}
-    >
-      <span
-        style={{
-          position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
-          opacity: isDark ? 0 : 1,
-          transform: isDark ? "rotate(90deg) scale(0.5)" : "rotate(0deg) scale(1)",
-          transition: "all 0.3s cubic-bezier(0.34,1.56,0.64,1)",
-        }}
-      >
-        <svg width="16" height="16" fill="none" stroke="#d97706" strokeWidth="2" strokeLinecap="round" viewBox="0 0 24 24">
-          <circle cx="12" cy="12" r="4"/>
-          <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-        </svg>
-      </span>
-      <span
-        style={{
-          position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
-          opacity: isDark ? 1 : 0,
-          transform: isDark ? "rotate(0deg) scale(1)" : "rotate(-90deg) scale(0.5)",
-          transition: "all 0.3s cubic-bezier(0.34,1.56,0.64,1)",
-        }}
-      >
-        <svg width="14" height="14" fill="#93c5fd" viewBox="0 0 24 24">
-          <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
-        </svg>
-      </span>
-    </button>
-  );
-}
-
 // ── Floating Hearts ───────────────────────────────────────────────────────────
 const HEART_CSS = `
   @keyframes hRise1 { 0%{opacity:0;transform:translateY(4px) translateX(0) scale(0.5) rotate(-20deg)} 25%{opacity:1} 100%{opacity:0;transform:translateY(-38px) translateX(-10px) scale(1) rotate(-20deg)} }
@@ -383,18 +333,22 @@ function PromoCarousel({ onNavigate }) {
   return (
     <div style={{ backgroundColor:DARK_GREEN, minHeight:"52px", display:"flex", alignItems:"center", padding:"4px 10px" }}>
       <div className="hidden sm:flex items-center gap-1.5" style={{ visibility:"hidden", flexShrink:0 }}>{SOCIAL_LINKS.map(s=><div key={s.name} style={{ width:"28px", height:"28px" }}/>)}</div>
-      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:"6px", minWidth:0 }}>
+      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:"4px", minWidth:0 }}>
         {arrowBtn("prev")}
         <div style={{ overflow:"hidden", minWidth:0, flex:1, maxWidth:"560px", textAlign:"center" }}>
-          <span className="text-xs sm:text-sm font-medium text-white" style={{
+          <span className="font-medium text-white" style={{
             display:"block",
             transition:animating?"opacity 0.26s ease, transform 0.26s ease":"none",
             opacity:animating?0:1,
             transform:animating?(direction==="next"?"translateX(-14px)":"translateX(14px)"):"translateX(0)",
-            lineHeight:1.5, wordBreak:"break-word",
+            lineHeight:1.4,
+            whiteSpace:"nowrap",
+            overflow:"hidden",
+            textOverflow:"ellipsis",
+            fontSize:"clamp(10px, 3vw, 14px)",
           }}>
             {promo.text}&nbsp;<strong>{promo.highlight}</strong>{" — "}
-            <button onClick={(e) => { e.stopPropagation(); onNavigate?.(promo.page); }} style={{ fontWeight:700, textDecoration:"underline", textUnderlineOffset:"2px", background:"none", border:"none", color:"white", cursor:"pointer", letterSpacing:"0.05em", padding:0, display:"inline" }}
+            <button onClick={(e) => { e.stopPropagation(); onNavigate?.(promo.page); }} style={{ fontWeight:700, textDecoration:"underline", textUnderlineOffset:"2px", background:"none", border:"none", color:"white", cursor:"pointer", letterSpacing:"0.05em", padding:0, display:"inline", whiteSpace:"nowrap" }}
               onMouseEnter={e => e.currentTarget.style.opacity="0.75"} onMouseLeave={e => e.currentTarget.style.opacity="1"}>{promo.cta}</button>
           </span>
         </div>
@@ -444,7 +398,7 @@ function SearchOverlay({ onClose, onNavigate }) {
   const suggText  = isDark ? "#d1d5db" : "#374151";
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-start justify-center px-3 sm:px-4"
+    <div className="fixed inset-0 z-[100000] flex items-start justify-center px-3 sm:px-4"
       style={{ backgroundColor:"rgba(0,0,0,0.72)", backdropFilter:"blur(6px)", paddingTop:"clamp(52px,10vh,110px)" }}
       onClick={onClose}>
       <style>{`
@@ -1149,8 +1103,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                 onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
                 <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/></svg>
               </button>
-
-              <DarkModeToggle />
 
               {/* Cart */}
               <div className="relative" ref={cartRef}>

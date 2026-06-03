@@ -161,8 +161,8 @@ export default function HeroCarousel({ onNavigate }) {
         </svg>
       </button>
 
-      {/* Content */}
-      <div className="relative z-20 h-full flex items-center">
+      {/* Content — bottom padding optically centers text above the FeaturesBar overlap */}
+      <div className="relative z-20 h-full flex items-center pb-10 sm:pb-14">
         <div className="w-full max-w-7xl mx-auto px-20 sm:px-24 lg:px-28">
           <div className="max-w-xl">
             {animating && prevHero && (
@@ -192,13 +192,13 @@ export default function HeroCarousel({ onNavigate }) {
               <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-3">
                 <button
                   onClick={() => onNavigate && onNavigate("shop")}
-                  className="w-full max-w-[200px] sm:w-auto sm:max-w-none px-7 py-3.5 text-sm font-bold text-white rounded-full shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl text-center whitespace-nowrap"
+                  className="w-[160px] sm:w-auto px-7 py-3.5 text-sm font-bold text-white rounded-full shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl text-center whitespace-nowrap"
                   style={{ backgroundColor: hero.accent }}>
                   {hero.cta}
                 </button>
                 <button
                   onClick={() => onNavigate && hero.ctaSecondaryNav && onNavigate(hero.ctaSecondaryNav)}
-                  className="w-full max-w-[200px] sm:w-auto sm:max-w-none px-7 py-3.5 text-sm font-semibold text-white rounded-full border border-white/40 backdrop-blur-sm hover:bg-white/10 transition-all duration-200 text-center whitespace-nowrap"
+                  className="w-[160px] sm:w-auto px-7 py-3.5 text-sm font-semibold text-white rounded-full border border-white/40 backdrop-blur-sm hover:bg-white/10 transition-all duration-200 text-center whitespace-nowrap"
                   style={{ backgroundColor: "transparent" }}>
                   {hero.ctaSecondary}
                 </button>

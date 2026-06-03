@@ -372,6 +372,22 @@ export default function DescribeArrangement({ onNavigate }) {
                 className="w-full px-5 py-4 text-base border rounded-2xl focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition resize-none leading-relaxed"
                 style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
               />
+
+              {/* ── Inline validation / error — shown directly under the prompt box ── */}
+              {error && (
+                <div className="mt-3 flex items-start gap-2.5 px-4 py-3 rounded-xl text-sm"
+                  style={{
+                    backgroundColor: isDark ? "rgba(239,68,68,0.12)" : "#fef2f2",
+                    border: `1px solid ${isDark ? "rgba(239,68,68,0.3)" : "#fecaca"}`,
+                    color: isDark ? "#fca5a5" : "#dc2626",
+                  }}>
+                  <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="leading-snug">{error}</span>
+                </div>
+              )}
+
               <div className="flex items-center justify-between mt-2.5">
                 <span className="text-sm" style={{ color: mutedC }}>{prompt.length} / {MAX}</span>
                 <button
@@ -498,14 +514,6 @@ export default function DescribeArrangement({ onNavigate }) {
                 </button>
               </div>
             </div>
-
-            {/* Error */}
-            {error && (
-              <div className="border rounded-2xl p-5 text-sm"
-                style={{ backgroundColor: cardBg, borderColor: isDark ? "rgba(239,68,68,0.3)" : "#fecaca", color: isDark ? "#fca5a5" : "#dc2626" }}>
-                {error}
-              </div>
-            )}
 
             {/* Unavailable items */}
             {unavailableItems.length > 0 && (
