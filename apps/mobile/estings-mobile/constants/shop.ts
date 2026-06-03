@@ -244,12 +244,10 @@ export function getCartSummary(items: CartItem[]) {
     0,
   );
   const deliveryCents = 15000;
-  const discountCents = 25000;
 
   return {
     subtotalCents,
     deliveryCents,
-    discountCents,
-    totalCents: subtotalCents + deliveryCents - discountCents,
+    totalCents: subtotalCents + deliveryCents,
   };
 }

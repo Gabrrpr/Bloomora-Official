@@ -12,6 +12,7 @@ type AppBrandHeaderProps = {
   onSearchPress?: () => void;
   panHandlers?: GestureResponderHandlers;
   shadowLogo?: boolean;
+  showSearchAction?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -22,6 +23,7 @@ export function AppBrandHeader({
   onSearchPress,
   panHandlers,
   shadowLogo = false,
+  showSearchAction = true,
   style,
 }: AppBrandHeaderProps) {
   const { height, width } = useWindowDimensions();
@@ -48,7 +50,7 @@ export function AppBrandHeader({
         {shadowLogo ? <EstingsLogo color="rgba(0, 0, 0, 0.72)" style={styles.logoShadowImage} /> : null}
         <EstingsLogo color={logoColor} style={styles.logoImage} />
       </View>
-      <PageHeaderActions color={actionColor} onSearchPress={onSearchPress} />
+      <PageHeaderActions color={actionColor} onSearchPress={onSearchPress} showSearch={showSearchAction} />
     </View>
   );
 }

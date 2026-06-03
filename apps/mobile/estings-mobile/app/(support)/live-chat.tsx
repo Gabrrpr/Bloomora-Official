@@ -4,7 +4,6 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import * as NavigationBar from 'expo-navigation-bar';
-import * as SystemUI from 'expo-system-ui';
 import {
   Camera,
   ChevronLeft,
@@ -205,11 +204,7 @@ export default function LiveChatScreen() {
 
   useEffect(() => {
     if (Platform.OS === 'android') {
-      void SystemUI.setBackgroundColorAsync('#FFFFFF').catch(() => {});
-      void NavigationBar.setPositionAsync('relative').catch(() => {});
       void NavigationBar.setVisibilityAsync('visible').catch(() => {});
-      void NavigationBar.setBackgroundColorAsync('#FFFFFF').catch(() => {});
-      void NavigationBar.setBorderColorAsync('#FFFFFF').catch(() => {});
       void NavigationBar.setButtonStyleAsync('dark').catch(() => {});
     }
 

@@ -9,20 +9,14 @@ import {
 import { useState } from 'react';
 import {
   LayoutAnimation,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
-  UIManager,
   View,
 } from 'react-native';
 
 import { BloomScreen, PrimaryButton } from '@/components/bloom-ui';
 import { theme } from '@/constants/theme';
-
-if (Platform.OS === 'android') {
-  UIManager.setLayoutAnimationEnabledExperimental?.(true);
-}
 
 const faqCategories = [
   {

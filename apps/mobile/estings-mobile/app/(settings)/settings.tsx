@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import {
   Bell,
   Check,
@@ -24,25 +24,22 @@ import {
   RotateCcw,
   Search,
   ShieldCheck,
-  ShieldOff,
   SlidersHorizontal,
   Trash2,
   UserRound,
 } from 'lucide-react-native';
 import type { ReactNode } from 'react';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Animated,
   LayoutAnimation,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Switch,
   Text,
   TextInput,
-  UIManager,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -53,6 +50,7 @@ import {
   getBiometricsAvailability,
   type BiometricsAvailability,
 } from '@/services/biometrics';
+import { clearAuthSession, getAuthSession, type AuthSession } from '@/services/auth-session';
 import { isValidEmail, isValidPhilippinePhone, required } from '@/utils/auth-validation';
 
 type RowIcon = typeof Pencil;
@@ -89,7 +87,8 @@ type SettingsGroup = {
 };
 
 export default function SettingsScreen() {
-  const isSignedIn = false;
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const isSignedIn = Boolean(session);
   const [activeView, setActiveView] = useState<ActiveView>('settings');
   const [isLogoutVisible, setIsLogoutVisible] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -122,11 +121,50 @@ export default function SettingsScreen() {
   const isPasswordValid = passwordRules.every((rule) => rule.isValid);
   const displayName = formatDisplayName(firstName, middleName, lastName);
 
-  useEffect(() => {
-    if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
-      UIManager.setLayoutAnimationEnabledExperimental(true);
-    }
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      getAuthSession()
+        .then((nextSession) => {
+          if (!isActive) {
+            return;
+          }
+
+          setSession(nextSession);
+
+          if (nextSession?.user) {
+            const nextFirstName = nextSession.user.first_name?.trim() || '';
+            const nextLastName = nextSession.user.last_name?.trim() || '';
+            const nextEmail = nextSession.user.email?.trim() || '';
+            const nextPhone = nextSession.user.phone_number?.trim() || '';
+            const nextUsername = nextSession.user.username?.trim() || nextEmail;
+
+            setFirstName(nextFirstName || nextUsername || 'Estings');
+            setMiddleName('');
+            setLastName(nextLastName);
+            setEmail(nextEmail);
+            setPhone(nextPhone);
+            setUsername(nextUsername);
+            setDraftFirstName(nextFirstName || nextUsername || 'Estings');
+            setDraftMiddleName('');
+            setDraftLastName(nextLastName);
+            setDraftEmail(nextEmail);
+            setDraftPhone(nextPhone);
+            setDraftUsername(nextUsername);
+          }
+        })
+        .catch(() => {
+          if (isActive) {
+            setSession(null);
+          }
+        });
+
+      return () => {
+        isActive = false;
+      };
+    }, []),
+  );
 
   useEffect(() => {
     let isMounted = true;
@@ -142,9 +180,11 @@ export default function SettingsScreen() {
     };
   }, []);
 
-  function handleLogout() {
+  async function handleLogout() {
     setIsLogoutVisible(false);
-    router.replace('/login');
+    await clearAuthSession();
+    setSession(null);
+    router.replace('/(tabs)/me');
   }
 
   function handleBack() {
@@ -432,7 +472,6 @@ export default function SettingsScreen() {
             email={email}
             phone={phone}
             username={username}
-            onDisableAccount={() => {}}
             onOpenDisplayName={() => openAccountEdit('displayName')}
             onOpenEmail={() => openAccountEdit('email')}
             onOpenPassword={handleOpenPassword}
@@ -608,7 +647,6 @@ function SettingsHome({
 function AccountView({
   displayName,
   email,
-  onDisableAccount,
   onOpenDisplayName,
   onOpenEmail,
   onOpenPassword,
@@ -619,7 +657,6 @@ function AccountView({
 }: {
   displayName: string;
   email: string;
-  onDisableAccount: () => void;
   onOpenDisplayName: () => void;
   onOpenEmail: () => void;
   onOpenPassword: () => void;
@@ -650,8 +687,6 @@ function AccountView({
 
       <SettingsSection danger title="Account Management">
         <View style={styles.groupCard}>
-          <SettingsRow danger icon={ShieldOff} title="Disable account" onPress={onDisableAccount} />
-          <Divider />
           <SettingsRow danger icon={Trash2} title="Delete account" />
         </View>
       </SettingsSection>

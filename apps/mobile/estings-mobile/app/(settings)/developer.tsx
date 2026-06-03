@@ -18,6 +18,7 @@ import {
   apiFetch,
   DEFAULT_API_BASE_URL,
   getApiBaseUrl,
+  initializeApiBaseUrl,
   resetApiBaseUrl,
   setApiBaseUrl,
 } from '@/services/api-client';
@@ -176,14 +177,14 @@ export default function DeveloperScreen() {
     }
   }, []);
 
-  const applyApiUrl = useCallback(() => {
-    const nextBaseUrl = setApiBaseUrl(apiUrlInput);
+  const applyApiUrl = useCallback(async () => {
+    const nextBaseUrl = await setApiBaseUrl(apiUrlInput);
     setApiUrlInput(nextBaseUrl);
     void checkBackendConnection();
   }, [apiUrlInput, checkBackendConnection]);
 
-  const resetApiUrl = useCallback(() => {
-    const nextBaseUrl = resetApiBaseUrl();
+  const resetApiUrl = useCallback(async () => {
+    const nextBaseUrl = await resetApiBaseUrl();
     setApiUrlInput(nextBaseUrl);
     void checkBackendConnection();
   }, [checkBackendConnection]);
@@ -221,8 +222,11 @@ export default function DeveloperScreen() {
   }, [endpointPath]);
 
   useEffect(() => {
+    void initializeApiBaseUrl().then((nextBaseUrl) => {
+      setApiUrlInput(nextBaseUrl);
+      void checkBackendConnection();
+    });
     void loadPushToken();
-    void checkBackendConnection();
   }, [checkBackendConnection, loadPushToken]);
 
   return (

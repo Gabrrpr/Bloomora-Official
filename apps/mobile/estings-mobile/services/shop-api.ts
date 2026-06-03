@@ -26,6 +26,14 @@ type BackendProduct = {
   stock?: number | null;
 };
 
+type CatalogRequestOptions = {
+  forceRefresh?: boolean;
+};
+
+const productCacheDurationMs = 30_000;
+let productCache: { products: Product[]; storedAt: number } | null = null;
+let productRequest: Promise<Product[]> | null = null;
+
 function toCategoryId(category?: string | null) {
   return `cat-${(category || 'flowers').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 }
@@ -93,7 +101,7 @@ function getCategoriesFromProducts(products: Product[]): Category[] {
   })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-async function getBackendProducts() {
+async function fetchBackendProducts() {
   const products = await apiFetch<BackendProduct[]>('/products/');
   return products
     .map(mapBackendProduct)
@@ -106,6 +114,33 @@ async function getBackendProducts() {
 
       return first.name.localeCompare(second.name);
     });
+}
+
+async function getBackendProducts(options: CatalogRequestOptions = {}) {
+  const now = Date.now();
+
+  if (!options.forceRefresh && productCache && now - productCache.storedAt < productCacheDurationMs) {
+    return productCache.products;
+  }
+
+  if (!options.forceRefresh && productRequest) {
+    return productRequest;
+  }
+
+  productRequest = fetchBackendProducts()
+    .then((products) => {
+      productCache = {
+        products,
+        storedAt: Date.now(),
+      };
+
+      return products;
+    })
+    .finally(() => {
+      productRequest = null;
+    });
+
+  return productRequest;
 }
 
 export const shopSnapshot = {
@@ -121,29 +156,46 @@ export const shopSnapshot = {
 };
 
 export const shopApi = {
-  async getProducts() {
+  async getProducts(options?: CatalogRequestOptions) {
     try {
-      return await getBackendProducts();
+      return await getBackendProducts(options);
     } catch (error) {
       console.warn('Failed to load backend products.', error);
       return [];
     }
   },
-  async getFeaturedProducts() {
+  async getFeaturedProducts(options?: CatalogRequestOptions) {
     try {
-      return await getBackendProducts();
+      return await getBackendProducts(options);
     } catch (error) {
       console.warn('Failed to load backend products.', error);
       return [];
     }
   },
-  async getCategories() {
+  async getCategories(options?: CatalogRequestOptions) {
     try {
-      const products = await getBackendProducts();
+      const products = await getBackendProducts(options);
       return getCategoriesFromProducts(products);
     } catch (error) {
       console.warn('Failed to load backend categories.', error);
       return [];
+    }
+  },
+  async getCatalog(options?: CatalogRequestOptions) {
+    try {
+      const products = await getBackendProducts(options);
+
+      return {
+        categories: getCategoriesFromProducts(products),
+        products,
+      };
+    } catch (error) {
+      console.warn('Failed to load backend catalog.', error);
+
+      return {
+        categories: [],
+        products: [],
+      };
     }
   },
   async getCart() {

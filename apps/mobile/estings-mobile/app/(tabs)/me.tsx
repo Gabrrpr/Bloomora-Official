@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import {
   Bell,
   ChevronRight,
@@ -14,7 +14,7 @@ import {
   Truck,
   UserRound,
 } from 'lucide-react-native';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -28,6 +28,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts, theme } from '@/constants/theme';
+import { getAuthSession, type AuthSession } from '@/services/auth-session';
 
 type RowIcon = typeof UserRound;
 
@@ -44,6 +45,31 @@ const accountBenefits = [
 export default function MeScreen() {
   const insets = useSafeAreaInsets();
   const topPadding = insets.top + theme.spacing.lg;
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const user = session?.user;
+  const displayName = getDisplayName(user);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      getAuthSession()
+        .then((nextSession) => {
+          if (isActive) {
+            setSession(nextSession);
+          }
+        })
+        .catch(() => {
+          if (isActive) {
+            setSession(null);
+          }
+        });
+
+      return () => {
+        isActive = false;
+      };
+    }, []),
+  );
 
   return (
     <ScrollView
@@ -68,27 +94,47 @@ export default function MeScreen() {
         </Pressable>
       </View>
 
-      <View style={styles.signInPanel}>
-        <AnimatedAccountPreview />
-        <View style={styles.signInCopy}>
-          <Text style={styles.signInTitle}>Sign in to track orders</Text>
-          <Text style={styles.signInText}>Save delivery details, keep favorite arrangements, and checkout faster next time.</Text>
+      {user ? (
+        <View style={styles.signInPanel}>
+          <View style={styles.signedInAvatar}>
+            <UserRound size={40} color={theme.colors.white} strokeWidth={2.2} />
+          </View>
+          <View style={styles.signInCopy}>
+            <Text style={styles.signInTitle}>{displayName}</Text>
+            <Text style={styles.signInText}>{user.email}</Text>
+          </View>
+          <View style={styles.authActions}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/settings')}
+              style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}>
+              <Text style={styles.primaryActionText}>Account settings</Text>
+            </Pressable>
+          </View>
         </View>
-        <View style={styles.authActions}>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push('/(auth)/login')}
-            style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}>
-            <Text style={styles.primaryActionText}>Sign in</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            onPress={() => router.push('/(auth)/sign-up')}
-            style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}>
-            <Text style={styles.secondaryActionText}>Create account</Text>
-          </Pressable>
+      ) : (
+        <View style={styles.signInPanel}>
+          <AnimatedAccountPreview />
+          <View style={styles.signInCopy}>
+            <Text style={styles.signInTitle}>Sign in to track orders</Text>
+            <Text style={styles.signInText}>Save delivery details, keep favorite arrangements, and checkout faster next time.</Text>
+          </View>
+          <View style={styles.authActions}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/(auth)/login')}
+              style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}>
+              <Text style={styles.primaryActionText}>Sign in</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => router.push('/(auth)/sign-up')}
+              style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}>
+              <Text style={styles.secondaryActionText}>Create account</Text>
+            </Pressable>
+          </View>
         </View>
-      </View>
+      )}
 
       <View style={styles.benefitGrid}>
         {accountBenefits.map((benefit) => (
@@ -217,6 +263,16 @@ function Divider() {
   return <View style={styles.divider} />;
 }
 
+function getDisplayName(user: AuthSession['user'] | undefined) {
+  if (!user) {
+    return 'Your Account';
+  }
+
+  const name = [user.first_name, user.last_name].map((part) => part?.trim()).filter(Boolean).join(' ');
+
+  return name || user.username || user.email;
+}
+
 const styles = StyleSheet.create({
   screen: {
     backgroundColor: theme.colors.surfaceAlt,
@@ -314,6 +370,20 @@ const styles = StyleSheet.create({
     left: 36,
     position: 'absolute',
     width: 38,
+  },
+  signedInAvatar: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderColor: 'rgba(255, 255, 255, 0.86)',
+    borderRadius: theme.radius.pill,
+    borderWidth: 3,
+    height: 94,
+    justifyContent: 'center',
+    shadowColor: theme.colors.primaryDark,
+    shadowOffset: { height: 10, width: 0 },
+    shadowOpacity: 0.16,
+    shadowRadius: 18,
+    width: 94,
   },
   signInCopy: {
     alignItems: 'center',

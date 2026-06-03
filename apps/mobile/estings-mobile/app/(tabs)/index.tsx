@@ -1,11 +1,11 @@
 import * as NavigationBar from 'expo-navigation-bar';
 import { router, useFocusEffect } from 'expo-router';
 import { setStatusBarBackgroundColor, setStatusBarStyle, setStatusBarTranslucent, StatusBar } from 'expo-status-bar';
-import * as SystemUI from 'expo-system-ui';
 import { EllipsisVertical, Heart, Search, Star, X, type LucideIcon } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  ActivityIndicator,
   Easing,
   FlatList,
   Image,
@@ -26,7 +26,9 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import { AppBrandHeader, getAppBrandHeaderLayout } from '@/components/app-brand-header';
+import { formatPhp, type Product } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
+import { shopApi } from '@/services/shop-api';
 
 const feedImage1 = require('@/assets/images/feed/explore/1.webp');
 const feedImage2 = require('@/assets/images/feed/explore/2.webp');
@@ -211,6 +213,9 @@ export default function HomeScreen() {
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isSearchBarMounted, setIsSearchBarMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
+  const [isProductSearchLoading, setIsProductSearchLoading] = useState(false);
+  const [productSearchError, setProductSearchError] = useState<string | null>(null);
   const [addedProductId, setAddedProductId] = useState<string | null>(null);
   const [likedProductIds, setLikedProductIds] = useState<ReadonlySet<string>>(() => new Set());
   const [likeBurstProductId, setLikeBurstProductId] = useState<string | null>(null);
@@ -234,6 +239,30 @@ export default function HomeScreen() {
       ),
     [],
   );
+  const searchResults = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLowerCase();
+
+    if (!normalizedQuery) {
+      return [];
+    }
+
+    return catalogProducts
+      .filter((product) =>
+        [
+          product.name,
+          product.description,
+          product.categoryName,
+          product.productGroup,
+          product.productType,
+          product.tag,
+        ]
+          .filter(Boolean)
+          .join(' ')
+          .toLowerCase()
+          .includes(normalizedQuery),
+      )
+      .slice(0, 6);
+  }, [catalogProducts, searchQuery]);
   const verticalFeedRefs = useRef<Record<FeedSection, ProductFeedListRef | null>>({
     explore: null,
     new: null,
@@ -284,11 +313,7 @@ export default function HomeScreen() {
     setStatusBarStyle('light');
     setStatusBarTranslucent(true);
     setStatusBarBackgroundColor('transparent', false);
-    void SystemUI.setBackgroundColorAsync('transparent').catch(() => { });
-    void NavigationBar.setPositionAsync('absolute').catch(() => { });
     void NavigationBar.setVisibilityAsync('visible').catch(() => { });
-    void NavigationBar.setBackgroundColorAsync('transparent').catch(() => { });
-    void NavigationBar.setBorderColorAsync('transparent').catch(() => { });
     void NavigationBar.setButtonStyleAsync('dark').catch(() => { });
   }, []);
 
@@ -317,10 +342,6 @@ export default function HomeScreen() {
         setStatusBarStyle('dark');
         setStatusBarTranslucent(false);
         setStatusBarBackgroundColor('#FFFFFF', false);
-        void SystemUI.setBackgroundColorAsync('#FFFFFF').catch(() => { });
-        void NavigationBar.setPositionAsync('relative').catch(() => { });
-        void NavigationBar.setBackgroundColorAsync('#FFFFFF').catch(() => { });
-        void NavigationBar.setBorderColorAsync('#FFFFFF').catch(() => { });
         void NavigationBar.setButtonStyleAsync('dark').catch(() => { });
       };
     }, [setImmersiveSystemBars]),
@@ -457,9 +478,27 @@ export default function HomeScreen() {
     router.push('/categories');
   }
 
+  const loadCatalogProductsForSearch = useCallback(async () => {
+    if (catalogProducts.length > 0 || isProductSearchLoading) {
+      return;
+    }
+
+    setIsProductSearchLoading(true);
+    setProductSearchError(null);
+
+    try {
+      setCatalogProducts(await shopApi.getProducts());
+    } catch (error) {
+      setProductSearchError(error instanceof Error ? error.message : 'Unable to load products.');
+    } finally {
+      setIsProductSearchLoading(false);
+    }
+  }, [catalogProducts.length, isProductSearchLoading]);
+
   function handleOpenSearch() {
     setIsSearchOpen(true);
     setIsSearchBarMounted(true);
+    void loadCatalogProductsForSearch();
     searchBarProgress.stopAnimation();
     Animated.timing(searchBarProgress, {
       duration: 240,
@@ -522,10 +561,18 @@ export default function HomeScreen() {
       {isSearchBarMounted ? (
         <SearchBar
           isOpen={isSearchOpen}
+          isLoading={isProductSearchLoading}
           layout={layout}
           onChangeText={setSearchQuery}
           onClose={handleCloseSearch}
+          onOpenCatalog={(nextQuery) => {
+            const catalogQuery = (nextQuery ?? searchQuery).trim();
+            handleCloseSearch();
+            router.push(catalogQuery ? `/search-results?q=${encodeURIComponent(catalogQuery)}` : '/search-results');
+          }}
           progress={searchBarProgress}
+          results={searchResults}
+          searchError={productSearchError}
           value={searchQuery}
         />
       ) : null}
@@ -1025,19 +1072,28 @@ function TopTabs({
 
 function SearchBar({
   isOpen,
+  isLoading,
   layout,
   onChangeText,
   onClose,
+  onOpenCatalog,
   progress,
+  results,
+  searchError,
   value,
 }: {
   isOpen: boolean;
+  isLoading: boolean;
   layout: HomeLayout;
   onChangeText: (value: string) => void;
   onClose: () => void;
+  onOpenCatalog: (query?: string) => void;
   progress: Animated.Value;
+  results: Product[];
+  searchError: string | null;
   value: string;
 }) {
+  const trimmedValue = value.trim();
   const opacity = progress.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 1],
@@ -1055,9 +1111,8 @@ function SearchBar({
     <Animated.View
       pointerEvents={isOpen ? 'auto' : 'none'}
       style={[
-        styles.searchBar,
+        styles.searchOverlay,
         {
-          height: layout.searchBarHeight,
           left: layout.sidePadding,
           opacity,
           right: layout.sidePadding,
@@ -1065,20 +1120,65 @@ function SearchBar({
           transform: [{ translateY }, { scale }],
         },
       ]}>
-      <Search size={layout.searchIcon} color={theme.colors.textMuted} strokeWidth={2} />
-      <TextInput
-        autoCapitalize="none"
-        autoCorrect={false}
-        onChangeText={onChangeText}
-        placeholder="Search bouquets, flowers, gifts..."
-        placeholderTextColor={theme.colors.textMuted}
-        returnKeyType="search"
-        style={[styles.searchInput, layout.text.search]}
-        value={value}
-      />
-      <Pressable accessibilityLabel="Close search" accessibilityRole="button" hitSlop={layout.hitSlop} onPress={onClose}>
-        <X size={layout.searchIcon} color={theme.colors.text} strokeWidth={2.2} />
-      </Pressable>
+      <View style={[styles.searchBar, { height: layout.searchBarHeight }]}>
+        <Search size={layout.searchIcon} color={theme.colors.textMuted} strokeWidth={2} />
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          onChangeText={onChangeText}
+          placeholder="Search bouquets, flowers, gifts..."
+          placeholderTextColor={theme.colors.textMuted}
+          returnKeyType="search"
+          style={[styles.searchInput, layout.text.search]}
+          value={value}
+        />
+        <Pressable accessibilityLabel="Close search" accessibilityRole="button" hitSlop={layout.hitSlop} onPress={onClose}>
+          <X size={layout.searchIcon} color={theme.colors.text} strokeWidth={2.2} />
+        </Pressable>
+      </View>
+
+      {trimmedValue ? (
+        <View style={styles.searchResultsPanel}>
+          {isLoading ? (
+            <View style={styles.searchStateRow}>
+              <ActivityIndicator color={theme.colors.primary} size="small" />
+              <Text style={styles.searchStateText}>Searching products</Text>
+            </View>
+          ) : searchError ? (
+            <Text style={styles.searchStateText}>{searchError}</Text>
+          ) : results.length > 0 ? (
+            <>
+              {results.map((product) => (
+                <Pressable
+                  key={product.id}
+                  accessibilityRole="button"
+                  style={({ pressed }) => [styles.searchResultRow, pressed && styles.searchResultRowPressed]}
+                  onPress={() => onOpenCatalog(product.name)}>
+                  {product.imageUrl ? (
+                    <Image source={{ uri: product.imageUrl }} style={styles.searchResultImage} resizeMode="cover" />
+                  ) : (
+                    <View style={styles.searchResultImageFallback} />
+                  )}
+                  <View style={styles.searchResultCopy}>
+                    <Text numberOfLines={1} style={styles.searchResultName}>
+                      {product.name}
+                    </Text>
+                    <Text numberOfLines={1} style={styles.searchResultMeta}>
+                      {product.categoryName ?? product.tag}
+                    </Text>
+                  </View>
+                  <Text style={styles.searchResultPrice}>{formatPhp(product.priceCents)}</Text>
+                </Pressable>
+              ))}
+              <Pressable accessibilityRole="button" style={styles.searchCatalogButton} onPress={() => onOpenCatalog(trimmedValue)}>
+                <Text style={styles.searchCatalogButtonText}>View all products</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Text style={styles.searchStateText}>No products found for &quot;{trimmedValue}&quot;.</Text>
+          )}
+        </View>
+      ) : null}
     </Animated.View>
   );
 }
@@ -1588,6 +1688,11 @@ const styles = StyleSheet.create({
     height: 2,
     position: 'absolute',
   },
+  searchOverlay: {
+    gap: theme.spacing.sm,
+    position: 'absolute',
+    zIndex: 11,
+  },
   searchBar: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
@@ -1595,14 +1700,94 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
-    position: 'absolute',
-    zIndex: 11,
   },
   searchInput: {
     color: theme.colors.text,
     flex: 1,
     fontFamily: Fonts.sans,
     paddingVertical: 0,
+  },
+  searchResultsPanel: {
+    backgroundColor: 'rgba(255, 255, 255, 0.98)',
+    borderColor: 'rgba(31, 42, 36, 0.1)',
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    gap: theme.spacing.xs,
+    padding: theme.spacing.sm,
+  },
+  searchStateRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    minHeight: 48,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  searchStateText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 13,
+    lineHeight: 18,
+    padding: theme.spacing.sm,
+  },
+  searchResultRow: {
+    alignItems: 'center',
+    borderRadius: theme.radius.md,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    minHeight: 58,
+    padding: theme.spacing.sm,
+  },
+  searchResultRowPressed: {
+    backgroundColor: theme.colors.surfaceAlt,
+  },
+  searchResultImage: {
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: theme.radius.sm,
+    height: 42,
+    width: 42,
+  },
+  searchResultImageFallback: {
+    backgroundColor: theme.colors.greenSoft,
+    borderRadius: theme.radius.sm,
+    height: 42,
+    width: 42,
+  },
+  searchResultCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  searchResultName: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansBold,
+    fontSize: 14,
+    lineHeight: 18,
+  },
+  searchResultMeta: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 12,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  searchResultPrice: {
+    color: theme.colors.primary,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  searchCatalogButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    minHeight: 42,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  searchCatalogButtonText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansBold,
+    fontSize: 13,
+    lineHeight: 17,
   },
   productText: {
     position: 'absolute',

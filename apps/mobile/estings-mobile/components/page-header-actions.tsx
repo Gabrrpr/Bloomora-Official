@@ -7,19 +7,23 @@ import { theme } from '@/constants/theme';
 export function PageHeaderActions({
   color = theme.colors.primary,
   onSearchPress,
+  showSearch = true,
 }: {
   color?: string;
   onSearchPress?: () => void;
+  showSearch?: boolean;
 }) {
   return (
     <View style={styles.headerActions}>
-      <Pressable
-        accessibilityLabel="Search products"
-        accessibilityRole="button"
-        onPress={onSearchPress ?? (() => router.push('/categories'))}
-        style={({ pressed }) => [styles.headerIconButton, pressed && styles.headerIconButtonPressed]}>
-        <Search size={23} color={color} strokeWidth={2.2} />
-      </Pressable>
+      {showSearch ? (
+        <Pressable
+          accessibilityLabel="Search products"
+          accessibilityRole="button"
+          onPress={onSearchPress ?? (() => router.push('/categories'))}
+          style={({ pressed }) => [styles.headerIconButton, pressed && styles.headerIconButtonPressed]}>
+          <Search size={23} color={color} strokeWidth={2.2} />
+        </Pressable>
+      ) : null}
       <Pressable
         accessibilityLabel="Open notifications"
         accessibilityRole="button"

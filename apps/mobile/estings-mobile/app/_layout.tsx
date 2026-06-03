@@ -17,7 +17,6 @@ import { useFonts } from 'expo-font';
 import * as NavigationBar from 'expo-navigation-bar';
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import * as SystemUI from 'expo-system-ui';
 import { useEffect } from 'react';
 import { Platform, View } from 'react-native';
 import 'react-native-reanimated';
@@ -50,11 +49,7 @@ export default function RootLayout() {
       return;
     }
 
-    void SystemUI.setBackgroundColorAsync('#FFFFFF').catch(() => {});
-    void NavigationBar.setPositionAsync('relative').catch(() => {});
     void NavigationBar.setVisibilityAsync('visible').catch(() => {});
-    void NavigationBar.setBackgroundColorAsync('#FFFFFF').catch(() => {});
-    void NavigationBar.setBorderColorAsync('#FFFFFF').catch(() => {});
     void NavigationBar.setButtonStyleAsync('dark').catch(() => {});
   }, []);
 
@@ -80,7 +75,9 @@ export default function RootLayout() {
           <Stack.Screen name="(legal)" options={{ headerShown: false }} />
           <Stack.Screen name="(settings)" options={{ headerShown: false }} />
           <Stack.Screen name="create" options={{ headerShown: false }} />
-          <Stack.Screen name="(modals)" options={{ presentation: 'modal', title: 'Modal' }} />
+          <Stack.Screen name="product-details" options={{ headerShown: false }} />
+          <Stack.Screen name="search-results" options={{ headerShown: false }} />
+          <Stack.Screen name="(modals)/modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <StatusBar backgroundColor="#FFFFFF" style="dark" translucent={false} />
       </View>

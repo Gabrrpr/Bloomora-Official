@@ -52,6 +52,16 @@ export async function getAuthSession() {
   return parseAuthSession(await FileSystem.readAsStringAsync(authSessionFileUri));
 }
 
+export async function clearAuthSession() {
+  if (Platform.OS === 'web') {
+    globalThis.localStorage?.removeItem(authSessionStorageKey);
+    return;
+  }
+
+  writeQueue = writeQueue.then(() => FileSystem.deleteAsync(authSessionFileUri, { idempotent: true }));
+  await writeQueue;
+}
+
 function parseAuthSession(serializedSession: string) {
   const parsed = JSON.parse(serializedSession) as Partial<AuthSession>;
 

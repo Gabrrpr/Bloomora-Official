@@ -21,7 +21,7 @@ type FloatingTabRoute = 'index' | 'categories' | 'generate' | 'cart' | 'me';
 
 const tabConfig: Record<FloatingTabRoute, { icon: LucideIcon; label: string }> = {
   cart: { icon: ShoppingBag, label: 'Orders' },
-  categories: { icon: Search, label: 'Search' },
+  categories: { icon: Search, label: 'Shop' },
   generate: { icon: Sparkles, label: 'Create' },
   index: { icon: Home, label: 'Home' },
   me: { icon: UserRound, label: 'Profile' },
