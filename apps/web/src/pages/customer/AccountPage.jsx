@@ -108,10 +108,17 @@ function OverviewPanel({ user, setPanel, isDark }) {
       {/* User info */}
       <div className="flex items-center gap-4 sm:gap-5 p-4 sm:p-5 rounded-xl"
         style={{ backgroundColor:infoBg, border:`1px solid ${infoBdr}` }}>
-        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-xl font-bold text-white flex-shrink-0"
-          style={{ background:`linear-gradient(135deg,${G},${DG})` }}>
-          {user?.firstName?.[0]?.toUpperCase()||"U"}
+        
+        {/* 🚀 THE FIX: Check for the profile picture before showing initials */}
+        <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-xl font-bold text-white flex-shrink-0 overflow-hidden border border-gray-200"
+          style={{ background: (user?.profilePictureUrl || user?.profile_picture_url) ? "transparent" : `linear-gradient(135deg,${G},${DG})` }}>
+          {(user?.profilePictureUrl || user?.profile_picture_url) ? (
+            <img src={user.profilePictureUrl || user.profile_picture_url} alt="Profile" className="w-full h-full object-cover" />
+          ) : (
+            user?.firstName?.[0]?.toUpperCase()||"U"
+          )}
         </div>
+
         <div>
           <p className="text-base font-bold" style={{ color:nameC }}>{user?.firstName} {user?.lastName}</p>
           <p className="text-sm" style={{ color:emailC }}>{user?.email}</p>
@@ -192,7 +199,8 @@ function WishlistPanel({ onNavigate, isDark }) {
 // ── DetailsPanel ──────────────────────────────────────────────────────────────
 // ── DetailsPanel ──────────────────────────────────────────────────────────────
 function DetailsPanel({ user, showToast, isDark }) {
-  const { refreshUser } = useAuth() 
+  // 🚀 WE DESTRUCTURE updateUserContext HERE
+  const { refreshUser, updateUserContext } = useAuth() 
   const [editing, setEditing] = useState(false)
   const [form, setForm] = useState({ firstName:user?.firstName||"", lastName:user?.lastName||"", email:user?.email||"", phone:user?.phoneNumber||"" })
   const fileRef = useRef(null)
@@ -224,7 +232,13 @@ function DetailsPanel({ user, showToast, isDark }) {
       const formData = new FormData()
       formData.append("file", selectedFile)
 
-      await api.uploadProfilePicture(formData)
+      const res = await api.uploadProfilePicture(formData)
+      
+      // 🚀 THE FIX: Instantly sync the new image to the Navbar!
+      if (updateUserContext) {
+        updateUserContext({ profilePictureUrl: res.url });
+      }
+      
       showToast("Profile photo updated!")
       setSelectedFile(null)
       if (refreshUser) await refreshUser()
@@ -237,13 +251,19 @@ function DetailsPanel({ user, showToast, isDark }) {
 
   const handleCancelPicture = () => {
     setSelectedFile(null)
-    setAvatar(user?.profile_picture_url || null)
+    setAvatar(user?.profilePictureUrl || user?.profile_picture_url || null)
   }
 
   const handleRemovePicture = async () => {
     if (!window.confirm("Are you sure you want to remove your profile photo?")) return;
     try {
       await api.removeProfilePicture();
+      
+      // 🚀 THE FIX: Instantly remove image from the Navbar!
+      if (updateUserContext) {
+        updateUserContext({ profilePictureUrl: null });
+      }
+      
       setAvatar(null);
       showToast("Profile photo removed.");
       if (refreshUser) await refreshUser();
@@ -282,8 +302,7 @@ function DetailsPanel({ user, showToast, isDark }) {
               <button onClick={() => fileRef.current?.click()} className="text-xs font-semibold hover:underline" style={{ color:linkC }}>
                 Change photo
               </button>
-              {/* 🚀 NEW: The Remove Button */}
-              {user?.profile_picture_url && (
+              {(user?.profilePictureUrl || user?.profile_picture_url) && (
                 <button onClick={handleRemovePicture} className="text-xs font-semibold hover:underline" style={{ color:"#f87171" }}>
                   Remove
                 </button>
@@ -306,7 +325,6 @@ function DetailsPanel({ user, showToast, isDark }) {
             </div>
           )}
 
-          {/* 🚀 NEW: The Just-in-Time Privacy Disclaimer */}
           <div className="mt-3 flex items-start gap-1.5 opacity-70">
             <svg className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -319,7 +337,6 @@ function DetailsPanel({ user, showToast, isDark }) {
         </div>
       </div>
 
-      {/* ... Rest of your form fields (First Name, Last Name, etc.) remain the same ... */}
       <div className="grid sm:grid-cols-2 gap-4 mb-6">
         <Field label="First Name"    value={form.firstName} onChange={e=>setForm({...form,firstName:e.target.value})} readOnly={!editing} isDark={isDark}/>
         <Field label="Last Name"     value={form.lastName}  onChange={e=>setForm({...form,lastName:e.target.value})}  readOnly={!editing} isDark={isDark}/>
@@ -337,26 +354,91 @@ function DetailsPanel({ user, showToast, isDark }) {
 }
 
 // ── PasswordPanel ─────────────────────────────────────────────────────────────
-function PasswordPanel({ showToast, isDark }) {
-  const [form, setForm] = useState({ current:"", next:"", confirm:"" })
-  const [error, setError] = useState("")
-  const handleSubmit = (e) => {
-    e.preventDefault(); setError("")
-    if (!form.current) { setError("Please enter your current password."); return }
-    if (form.next.length < 8) { setError("New password must be at least 8 characters."); return }
-    if (form.next !== form.confirm) { setError("New passwords do not match."); return }
-    setForm({ current:"", next:"", confirm:"" }); showToast("Password updated successfully")
-  }
+function PasswordPanel({ user, showToast, isDark }) {
+  const [step, setStep] = useState(1);
+  const [otp, setOtp] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const requestOTP = async () => {
+    if (!user?.email) return setError("User email not found.");
+    setLoading(true);
+    setError("");
+    try {
+      await api.post("/auth/forgot-password/send-otp", { email: user.email });
+      setStep(2);
+      showToast(`A confirmation code was sent to ${user.email}`);
+    } catch (err) {
+      setError(err.message || "Failed to send code.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const confirmAndChange = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!otp) return setError("Please enter the confirmation code.");
+    if (newPassword.length < 8) return setError("New password must be at least 8 characters.");
+    if (newPassword !== confirmPassword) return setError("Passwords do not match.");
+    
+    setLoading(true);
+    try {
+      await api.post("/auth/forgot-password/reset", {
+        email: user.email,
+        otp: otp,
+        new_password: newPassword
+      });
+      showToast("Password changed successfully!");
+      setStep(1);
+      setOtp("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      setError(err.message || "Invalid OTP or failed to change password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div>
-      <SectionHeader title="Change Password" description="Choose a strong password to protect your account." isDark={isDark}/>
-      <form onSubmit={handleSubmit} className="max-w-md space-y-4">
-        <Field label="Current Password"     type="password" value={form.current}  onChange={e=>setForm({...form,current:e.target.value})}  placeholder="Enter current password" isDark={isDark}/>
-        <Field label="New Password"         type="password" value={form.next}     onChange={e=>setForm({...form,next:e.target.value})}     placeholder="At least 8 characters" isDark={isDark}/>
-        <Field label="Confirm New Password" type="password" value={form.confirm}  onChange={e=>setForm({...form,confirm:e.target.value})}  placeholder="Repeat new password" isDark={isDark}/>
-        {error && <p className="text-xs font-medium" style={{ color:"#f87171" }}>{error}</p>}
-        <div className="pt-1"><PrimaryBtn type="submit">Update Password</PrimaryBtn></div>
-      </form>
+      <SectionHeader title="Change Password" description="Secure your account with an OTP confirmation." isDark={isDark}/>
+      
+      <div className="max-w-md">
+        {step === 1 ? (
+          <div className="space-y-4">
+            <p className="text-sm" style={{ color: isDark ? "#e2e8f0" : "#374151" }}>
+              For your security, we will send a 6-digit confirmation code to <b>{user?.email}</b> before allowing a password change.
+            </p>
+            {error && <p className="text-xs font-medium text-red-500">{error}</p>}
+            <PrimaryBtn onClick={requestOTP} disabled={loading}>
+              {loading ? "Sending..." : "Send Confirmation Code"}
+            </PrimaryBtn>
+          </div>
+        ) : (
+          <form onSubmit={confirmAndChange} className="space-y-4">
+            <div className="p-3 mb-4 rounded-lg text-sm" style={{ background: isDark?"rgba(74,222,128,0.1)":"#f0fdf4", color: isDark?"#4ade80":DG, border: `1px solid ${isDark?"rgba(74,222,128,0.2)":"#bbf7d0"}` }}>
+              Code sent! Please check your email inbox (and spam folder).
+            </div>
+
+            <Field label="6-Digit OTP Code" type="text" value={otp} onChange={e=>setOtp(e.target.value)} placeholder="123456" isDark={isDark}/>
+            <Field label="New Password" type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="At least 8 characters" isDark={isDark}/>
+            <Field label="Confirm New Password" type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Repeat new password" isDark={isDark}/>
+            
+            {error && <p className="text-xs font-medium text-red-500">{error}</p>}
+            
+            <div className="flex gap-3 pt-2">
+              <PrimaryBtn type="submit" disabled={loading}>
+                {loading ? "Updating..." : "Verify & Update"}
+              </PrimaryBtn>
+              <GhostBtn type="button" onClick={() => setStep(1)} isDark={isDark}>Cancel</GhostBtn>
+            </div>
+          </form>
+        )}
+      </div>
     </div>
   )
 }

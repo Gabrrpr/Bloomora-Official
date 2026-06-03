@@ -1,165 +1,111 @@
-import { createContext, useContext, useState, useEffect } from "react"
-import { loginUser, googleLogin as googleLoginApi, facebookLogin as facebookLoginApi } from "../services/auth"
+import { createContext, useContext, useState, useEffect } from "react";
+import { loginUser, googleLogin as googleLoginApi, facebookLogin as facebookLoginApi } from "../services/auth";
 
-const AuthContext = createContext(null)
-
-const isPreview = new URLSearchParams(window.location.search).get("preview") === "true"
+const AuthContext = createContext(null);
+const isPreview = new URLSearchParams(window.location.search).get("preview") === "true";
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem("user")
-    return saved ? JSON.parse(saved) : null
-  })
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const setUserFromToken = async (token) => {
+    // We do NOT set loading(true) here because initialization handles it
+    if (!token || token === "null" || token === "undefined") {
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      localStorage.removeItem("user");
+      setUser(null);
+      return null;
+    }
+
+    try {
+      const profileRes = await fetch("http://localhost:8000/api/v1/auth/me", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (!profileRes.ok) throw new Error("Auth failed");
+      
+      const profile = await profileRes.json();
+      const userData = {
+        token,
+        role: profile.role,
+        firstName: profile.first_name,
+        lastName: profile.last_name,
+        email: profile.email,
+        phoneNumber: profile.phone_number,
+        address: profile.address,
+        is_profile_complete: profile.is_profile_complete,
+        profilePictureUrl: profile.profile_picture_url,
+      };
+      
+      localStorage.setItem("user", JSON.stringify(userData));
+      setUser(userData);
+      return userData;
+    } catch (err) {
+      console.error("Auth Fetch Error:", err);
+      localStorage.removeItem("access_token");
+      localStorage.removeItem("refresh_token");
+      localStorage.removeItem("user");
+      setUser(null);
+      return null;
+    }
+  };
+
+  useEffect(() => {
+    const initializeAuth = async () => {
+      setLoading(true); // Start loading
+      
+      const params = new URLSearchParams(window.location.search);
+      const urlToken = params.get("token");
+      const existingToken = localStorage.getItem("access_token");
+
+      if (urlToken) {
+        localStorage.setItem("access_token", urlToken);
+        const userData = await setUserFromToken(urlToken);
+        if (!isPreview && userData && !userData.is_profile_complete) {
+            window.location.replace("/profile");
+        }
+        // Cleanup URL
+        const remaining = new URLSearchParams(window.location.search);
+        remaining.delete("token");
+        window.history.replaceState({}, document.title, window.location.pathname + "?" + remaining.toString());
+      } else if (existingToken) {
+        await setUserFromToken(existingToken);
+      }
+      
+      setLoading(false); // ALWAYS stop loading, no matter what happens above
+    };
+
+    initializeAuth();
+  }, []);
 
   const login = async (email, password) => {
     try {
-      const data = await loginUser(email, password)
-      
-      // 🚀 Grab BOTH tokens from your backend payload
-      const token = data.access_token
-      const refreshToken = data.refresh_token
-
-      const profileRes = await fetch("http://localhost:8000/api/v1/auth/me", {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      
-      if (!profileRes.ok) throw new Error('Failed to fetch profile: ' + profileRes.status)
-      const profile = await profileRes.json()
-      
-      const userData = {
-        token,
-        role: profile.role,
-        firstName: profile.first_name,
-        lastName: profile.last_name,
-        email: profile.email,
-        phoneNumber: profile.phone_number,
-        address: profile.address,
-        is_profile_complete: profile.is_profile_complete,
-        profilePictureUrl: profile.profile_picture_url,
-      }
-      
-      // 🚀 Safely store everything
-      localStorage.setItem("access_token", token)
-      if (refreshToken) {
-          localStorage.setItem("refresh_token", refreshToken)
-      }
-      localStorage.setItem("user", JSON.stringify(userData))
-      
-      setUser(userData)
-      window.dispatchEvent(new CustomEvent("bloomora:cart-updated"))
-      
-      return { success: true, role: profile.role }
+      const data = await loginUser(email, password);
+      localStorage.setItem("access_token", data.access_token);
+      if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token);
+      const userData = await setUserFromToken(data.access_token);
+      return { success: true, role: userData?.role };
     } catch (err) {
-      return { success: false, error: err.message }
+      return { success: false, error: err.message };
     }
-  }
-
-  const setUserFromToken = async (token) => {
-    if (!token || token === "null" || token === "undefined") {
-      localStorage.removeItem("access_token")
-      localStorage.removeItem("refresh_token") // 🚀 Securely wipe
-      localStorage.removeItem("user")
-      setUser(null)
-      return null
-    }
-    try {
-      const profileRes = await fetch("http://localhost:8000/api/v1/auth/me", {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      if (!profileRes.ok) {
-        localStorage.removeItem("access_token")
-        localStorage.removeItem("refresh_token") // 🚀 Securely wipe
-        localStorage.removeItem("user")
-        setUser(null)
-        return null
-      }
-      const profile = await profileRes.json()
-      const userData = {
-        token,
-        role: profile.role,
-        firstName: profile.first_name,
-        lastName: profile.last_name,
-        email: profile.email,
-        phoneNumber: profile.phone_number,
-        address: profile.address,
-        is_profile_complete: profile.is_profile_complete,
-        profilePictureUrl: profile.profile_picture_url,
-      }
-      localStorage.setItem("user", JSON.stringify(userData))
-      setUser(userData)
-      return userData
-    } catch {
-      localStorage.removeItem("access_token")
-      localStorage.removeItem("refresh_token") // 🚀 Securely wipe
-      localStorage.removeItem("user")
-      setUser(null)
-      return null
-    }
-  }
-
-  const register = async (userData) => {
-    const { registerUser } = await import("../services/auth")
-    return await registerUser(userData)
-  }
+  };
 
   const logout = () => {
-    localStorage.removeItem("access_token")
-    localStorage.removeItem("refresh_token") // 🚀 Ensure refresh token is destroyed on logout
-    localStorage.removeItem("user")
-    setUser(null)
-    window.dispatchEvent(new CustomEvent("bloomora:cart-updated"))
-    window.dispatchEvent(new CustomEvent("bloomora:logout"))
-  }
-
-  const googleLogin = () => googleLoginApi()
-  const facebookLogin = () => facebookLoginApi()
-
-  useEffect(() => {
-    const isActivationPage = window.location.pathname.includes("activate-staff");
-
-    const params = new URLSearchParams(window.location.search)
-    const urlToken = params.get("token")
-    const urlRole  = params.get("role")
-
-    if (urlToken && !isActivationPage) {
-      localStorage.setItem("access_token", urlToken)
-      if (urlRole) localStorage.setItem("role", urlRole)
-      
-      setUserFromToken(urlToken).then(result => {
-        if (!isPreview && result && !result.is_profile_complete) {
-          window.location.replace("/profile")
-        }
-      })
-
-      const remaining = new URLSearchParams(window.location.search)
-      remaining.delete("token")
-      remaining.delete("role")
-      const newUrl = remaining.toString()
-        ? `${window.location.pathname}?${remaining.toString()}`
-        : window.location.pathname
-      window.history.replaceState({}, document.title, newUrl)
-      
-    } else if (!urlToken) {
-      const existingToken = localStorage.getItem("access_token")
-      const existingUser  = localStorage.getItem("user")
-      
-      if (existingToken && !existingUser) {
-        setUserFromToken(existingToken).then(result => {
-          if (!isPreview && result && !result.is_profile_complete) {
-            window.location.replace("/profile")
-          }
-        })
-      }
-    }
-  }, [])
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("user");
+    setUser(null);
+    window.location.reload();
+  };
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, googleLogin, facebookLogin, setUserFromToken }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, googleLogin: googleLoginApi, facebookLogin: facebookLoginApi, setUserFromToken }}>
       {children}
     </AuthContext.Provider>
-  )
+  );
 }
 
 export function useAuth() {
-  return useContext(AuthContext)
+  return useContext(AuthContext);
 }

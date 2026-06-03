@@ -99,10 +99,16 @@ def store_oauth_tokens(access_token: str, refresh_token: str, role: str) -> str:
 
 @router.get("/oauth/exchange")
 def exchange_oauth_code(code: str):
-    """Frontend calls this immediately after redirect to get the real token."""
-    data = _oauth_codes.pop(code, None)   # one-time use
+    """Frontend calls this immediately after redirect."""
+    data = _oauth_codes.get(code) # Use .get() instead of .pop() to inspect first
+    
     if not data:
+        # If it's already gone, maybe it was already processed?
+        # For now, let's keep the error but make it descriptive
         raise HTTPException(status_code=400, detail="Invalid or expired code.")
+
+    # Only pop it if we are sure we are returning it
+    _oauth_codes.pop(code) 
     return {
         "access_token": data["access_token"], 
         "refresh_token": data["refresh_token"], 

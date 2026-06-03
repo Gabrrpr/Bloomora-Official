@@ -175,7 +175,6 @@ function BranchModal({ branch, onClose }) {
     return () => document.removeEventListener("keydown", h);
   }, [onClose]);
 
-  // Neon green that pops on the dark surface; brand green in light mode.
   const neonG = isDark ? "#4ade80" : SITE_GREEN;
 
   return (
@@ -197,7 +196,6 @@ function BranchModal({ branch, onClose }) {
           }}
           onClick={e => e.stopPropagation()}
         >
-          {/* Close button — floats top-right of the whole modal */}
           <button
             onClick={onClose}
             aria-label="Close"
@@ -211,10 +209,7 @@ function BranchModal({ branch, onClose }) {
             </svg>
           </button>
 
-          {/* Responsive 2-column layout — stacks on mobile (image top, text bottom) */}
           <div className="flex flex-col sm:flex-row">
-
-            {/* ── Left: clean square branch image ───────────────────── */}
             <div className="relative w-full sm:w-1/2 aspect-square flex-shrink-0 overflow-hidden bg-gray-100">
               {info.image && !imgError ? (
                 <img
@@ -224,7 +219,6 @@ function BranchModal({ branch, onClose }) {
                   onError={() => setImgError(true)}
                 />
               ) : (
-                // Fallback: branded gradient placeholder with branch icon
                 <div
                   className="absolute inset-0 flex items-center justify-center"
                   style={{ background: `linear-gradient(150deg, ${DARK_GREEN} 0%, #1a6b3f 50%, ${SITE_GREEN} 100%)` }}
@@ -237,10 +231,7 @@ function BranchModal({ branch, onClose }) {
                 </div>
               )}
             </div>
-
-            {/* ── Right: header + info + CTA ────────────────────────── */}
             <div className="flex-1 p-5 sm:p-6 flex flex-col min-w-0">
-              {/* Header — moved here from over the image */}
               <div className="mb-4 sm:mb-5">
                 <p className="text-[10px] sm:text-xs font-bold tracking-widest uppercase mb-1"
                   style={{ color: isDark ? "#6b7280" : "#9ca3af" }}>
@@ -253,8 +244,6 @@ function BranchModal({ branch, onClose }) {
                 <div className="w-10 h-[3px] rounded-sm mt-2"
                   style={{ backgroundColor: neonG, boxShadow: isDark ? "0 0 10px rgba(74,222,128,0.6)" : "none" }} />
               </div>
-
-              {/* Info rows */}
               <div className="space-y-3 sm:space-y-4 flex-1">
                 {[
                   { label:"Address", icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>, value: info.address },
@@ -285,7 +274,6 @@ function BranchModal({ branch, onClose }) {
                   </div>
                 ))}
               </div>
-
               <button
                 onClick={onClose}
                 className="w-full mt-5 sm:mt-6 py-3 font-semibold text-white text-sm rounded-xl transition-all"
@@ -344,7 +332,7 @@ function MakeItPersonalPopout({ onNavigate, onClose, isCustomizationEnabled }) {
               return (
                 <button key={opt.page}
                   disabled={isOptionLocked}
-                  onClick={() => { if (!isOptionLocked) { onNavigate(opt.page); onClose(); } }}
+                  onClick={(e) => { e.stopPropagation(); if (!isOptionLocked) { onNavigate(opt.page); onClose(); } }}
                   className="w-full flex items-start gap-3 px-4 py-3 text-left transition-all group relative"
                   style={{
                     borderBottom: i < MIP_OPTIONS.length - 1 ? `1px solid ${divBdr}` : "none",
@@ -386,7 +374,7 @@ function PromoCarousel({ onNavigate }) {
   useEffect(() => { intervalRef.current = setInterval(() => go("next"), 4000); return () => clearInterval(intervalRef.current); }, [animating]);
   const promo = PROMOTIONS[current];
   const arrowBtn = (dir) => (
-    <button onClick={() => { clearInterval(intervalRef.current); go(dir); }}
+    <button onClick={(e) => { e.stopPropagation(); clearInterval(intervalRef.current); go(dir); }}
       style={{ width:"26px", height:"26px", display:"flex", alignItems:"center", justifyItems:"center", borderRadius:"50%", border:"none", background:"transparent", color:"rgba(255,255,255,0.85)", cursor:"pointer", flexShrink:0, transition:"background 0.15s" }}
       onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,0.18)"} onMouseLeave={e => e.currentTarget.style.background="transparent"}>
       <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d={dir==="prev"?"M15 19l-7-7 7-7":"M9 5l7 7-7 7"}/></svg>
@@ -406,7 +394,7 @@ function PromoCarousel({ onNavigate }) {
             lineHeight:1.5, wordBreak:"break-word",
           }}>
             {promo.text}&nbsp;<strong>{promo.highlight}</strong>{" — "}
-            <button onClick={() => onNavigate?.(promo.page)} style={{ fontWeight:700, textDecoration:"underline", textUnderlineOffset:"2px", background:"none", border:"none", color:"white", cursor:"pointer", letterSpacing:"0.05em", padding:0, display:"inline" }}
+            <button onClick={(e) => { e.stopPropagation(); onNavigate?.(promo.page); }} style={{ fontWeight:700, textDecoration:"underline", textUnderlineOffset:"2px", background:"none", border:"none", color:"white", cursor:"pointer", letterSpacing:"0.05em", padding:0, display:"inline" }}
               onMouseEnter={e => e.currentTarget.style.opacity="0.75"} onMouseLeave={e => e.currentTarget.style.opacity="1"}>{promo.cta}</button>
           </span>
         </div>
@@ -494,7 +482,7 @@ function SearchOverlay({ onClose, onNavigate }) {
               style={{ color: textC, caretColor: SITE_GREEN, WebkitAppearance:"none" }}
             />
             {query && (
-              <button type="button" onClick={() => setQuery("")}
+              <button type="button" onClick={(e) => { e.stopPropagation(); setQuery(""); }}
                 className="px-2 flex-shrink-0 transition-opacity hover:opacity-70"
                 style={{ color: iconC, backgroundColor:"transparent", border:"none" }}>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -502,7 +490,7 @@ function SearchOverlay({ onClose, onNavigate }) {
                 </svg>
               </button>
             )}
-            <button type="submit"
+            <button type="submit" onClick={(e) => e.stopPropagation()}
               className="flex items-center justify-center gap-1.5 text-white font-bold self-stretch transition-all hover:opacity-90 flex-shrink-0"
               style={{ backgroundColor: SITE_GREEN, borderRadius:"0 16px 16px 0", padding:"0 12px", minWidth:"44px" }}>
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
@@ -514,7 +502,7 @@ function SearchOverlay({ onClose, onNavigate }) {
         </form>
         <div className="mt-3 flex flex-wrap gap-2 justify-center">
           {SEARCH_SUGGESTIONS.map(s => (
-            <button key={s} onClick={() => doSearch(s)}
+            <button key={s} onClick={(e) => { e.stopPropagation(); doSearch(s); }}
               className="text-xs font-medium px-3 py-1.5 rounded-full transition-all hover:scale-105"
               style={{ backgroundColor:suggBg, border:`1px solid ${suggBdr}`, color:suggText }}
               onMouseEnter={e => { e.currentTarget.style.borderColor=SITE_GREEN; e.currentTarget.style.color=isDark?"#4ade80":SITE_GREEN; }}
@@ -548,22 +536,19 @@ function DropdownMenu({ items, categories, onNavigate, onClose }) {
 
   if (categories) {
     return (
-      // 🚀 Changed minWidth from 650px to 400px to perfectly fit the 2 Floral/Non-Floral columns
       <div className="absolute top-full left-0 mt-2 z-50 overflow-hidden" style={{ ...dropStyle, minWidth:"400px" }}>
         <div className="flex" style={{ borderTop:"none" }}>
           {categories.map((cat, ci) => (
             <div key={cat.heading} className="flex-1 py-3" style={{ borderRight: ci < categories.length-1 ? `1px solid ${isDark?"#2d3748":"#f3f4f6"}` : "none" }}>
               
-              {/* Clickable Headings (FLORAL / NON-FLORAL) */}
-              <button onClick={() => { if (cat.headingPage && onNavigate) onNavigate(cat.headingPage, cat.headingParam); onClose?.(); }}
+              <button onClick={(e) => { e.stopPropagation(); if (cat.headingPage && onNavigate) onNavigate(cat.headingPage, cat.headingParam); onClose?.(); }}
                 className="w-full text-left px-4 pb-2 text-xs font-bold uppercase tracking-widest transition-colors hover:underline"
                 style={{ color:headingGreen, backgroundColor:"transparent", border:"none" }}>
                 {cat.heading}
               </button>
               
-              {/* Clickable Sub-items (Arrangement, Vase, etc.) */}
               {cat.items.map(item => (
-                <button key={item.label} onClick={() => { if (item.page && onNavigate) onNavigate(item.page, item.param); onClose?.(); }}
+                <button key={item.label} onClick={(e) => { e.stopPropagation(); if (item.page && onNavigate) onNavigate(item.page, item.param); onClose?.(); }}
                   className="w-full text-left px-4 py-2 text-sm transition-all duration-150 capitalize"
                   style={{ color: isDark ? "#d1d5db" : "#4b5563" }}
                   onMouseEnter={e => itemHover(e, true)}
@@ -578,7 +563,7 @@ function DropdownMenu({ items, categories, onNavigate, onClose }) {
   return (
     <div className="absolute top-full left-0 mt-2 z-50 min-w-[190px] overflow-hidden" style={dropStyle}>
       {items.map(item => (
-        <button key={item.label} onClick={() => { if (item.page && onNavigate) onNavigate(item.page, item.param); onClose?.(); }}
+        <button key={item.label} onClick={(e) => { e.stopPropagation(); if (item.page && onNavigate) onNavigate(item.page, item.param); onClose?.(); }}
           className="w-full text-left px-4 py-2.5 text-sm first:rounded-t-xl last:rounded-b-xl transition-all duration-150 capitalize"
           style={{ color: isDark ? "#d1d5db" : "#4b5563" }}
           onMouseEnter={e => itemHover(e, true)}
@@ -633,7 +618,7 @@ function CartDropdown({ cartCount, onNavigate }) {
           <span className="text-sm font-bold" style={{ color:textPrimary }}>₱{subtotal.toLocaleString()}.00</span>
         </div>
         <p className="text-xs mb-3" style={{ color:textSecondary }}>Shipping and taxes calculated at checkout.</p>
-        <button onClick={()=>onNavigate?.("cart")} className="w-full py-2 text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90" style={{ backgroundColor:SITE_GREEN }}>View Cart</button>
+        <button onClick={(e) => { e.stopPropagation(); onNavigate?.("cart"); }} className="w-full py-2 text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90" style={{ backgroundColor:SITE_GREEN }}>View Cart</button>
       </div>
     </div>
   );
@@ -655,8 +640,8 @@ function UserHoverDropdown({ user, onNavigate, onLogout }) {
         <p className="text-xs mt-0.5" style={{ color:ts }}>Sign in to manage your orders</p>
       </div>
       <div className="p-3 space-y-2">
-        <button onClick={()=>onNavigate("login")} className="w-full py-2 text-sm font-semibold text-white rounded-lg hover:opacity-90 transition-all" style={{ backgroundColor:SITE_GREEN }}>Login</button>
-        <button onClick={()=>onNavigate("register")} className="w-full py-2 text-sm font-semibold rounded-lg border hover:opacity-80 transition-all" style={{ borderColor:SITE_GREEN, color:SITE_GREEN, backgroundColor:"transparent" }}>Create Account</button>
+        <button onClick={(e) => { e.stopPropagation(); onNavigate?.("login"); }} className="w-full py-2 text-sm font-semibold text-white rounded-lg hover:opacity-90 transition-all" style={{ backgroundColor:SITE_GREEN }}>Login</button>
+        <button onClick={(e) => { e.stopPropagation(); onNavigate?.("register"); }} className="w-full py-2 text-sm font-semibold rounded-lg border hover:opacity-80 transition-all" style={{ borderColor:SITE_GREEN, color:SITE_GREEN, backgroundColor:"transparent" }}>Create Account</button>
       </div>
     </div>
   );
@@ -668,14 +653,14 @@ function UserHoverDropdown({ user, onNavigate, onLogout }) {
       </div>
       <div className="py-1">
         {[{label:"My Account",page:"account"},{label:"My Orders",page:"orders"},{label:"Wishlist",page:"wishlist"}].map(({label,page})=>(
-          <button key={label} onClick={()=>onNavigate(page)}
+          <button key={label} onClick={(e) => { e.stopPropagation(); onNavigate?.(page); }}
             className="w-full text-left px-4 py-2.5 text-sm transition-all"
             style={{ color: isDark?"#d1d5db":"#4b5563" }}
             onMouseEnter={e=>linkHover(e,true)} onMouseLeave={e=>linkHover(e,false)}>{label}</button>
         ))}
       </div>
       <div style={{ borderTop:`1px solid ${bdr}` }}>
-        <button onClick={onLogout} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-500 rounded-b-xl transition-all"
+        <button onClick={(e) => { e.stopPropagation(); onLogout(); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-500 rounded-b-xl transition-all"
           style={{ backgroundColor:"transparent" }}
           onMouseEnter={e=>e.currentTarget.style.backgroundColor=isDark?"rgba(239,68,68,0.1)":"#fef2f2"}
           onMouseLeave={e=>e.currentTarget.style.backgroundColor="transparent"}>
@@ -696,7 +681,7 @@ function LocationDropdown({ selected, onChange, onClose }) {
     <div className="absolute top-full left-0 mt-1.5 z-50 w-36 overflow-hidden"
       style={{ backgroundColor:bg, border:`1px solid ${bdr}`, borderRadius:"10px", boxShadow: isDark?"0 8px 24px rgba(0,0,0,0.5)":"0 8px 24px rgba(0,0,0,0.10)", animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards" }}>
       {["Manila","Pampanga"].map(loc=>(
-        <button key={loc} onClick={()=>{ onChange(loc); onClose(); }}
+        <button key={loc} onClick={(e) => { e.stopPropagation(); onChange(loc); onClose(); }}
           className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-left transition-all first:rounded-t-xl last:rounded-b-xl"
           style={{ color: selected===loc ? brightG : (isDark?"#d1d5db":"#374151"), fontWeight: selected===loc?600:400 }}
           onMouseEnter={e=>{ e.currentTarget.style.backgroundColor=isDark?"rgba(74,222,128,0.12)":"#f0fdf4"; e.currentTarget.style.color=brightG; }}
@@ -771,7 +756,7 @@ function BranchShippingPopup({ branch, onDismiss, onChangeBranch }) {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={onDismiss}
+            onClick={(e) => { e.stopPropagation(); onDismiss(); }}
             className="flex-1 py-1.5 text-xs font-semibold rounded-lg border transition-all"
             style={{ borderColor: bdr, color: ts, backgroundColor: "transparent" }}
             onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "#f9fafb"}
@@ -780,7 +765,7 @@ function BranchShippingPopup({ branch, onDismiss, onChangeBranch }) {
             Dismiss
           </button>
           <button
-            onClick={onChangeBranch}
+            onClick={(e) => { e.stopPropagation(); onChangeBranch(); }}
             className="flex-1 py-1.5 text-xs font-semibold text-white rounded-lg transition-all"
             style={{ backgroundColor: SITE_GREEN }}
             onMouseEnter={e => e.currentTarget.style.opacity = "0.88"}
@@ -831,25 +816,23 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
   const [unreadCount, setUnreadCount]           = useState(0);
   const [loadingNotifs, setLoadingNotifs]       = useState(false);
 
-  // Load admin announcements into the bell + keep in sync with the admin page.
-useEffect(() => {
-  const refresh = () => {
-    const anns = readAnnouncementNotifs();
-    // If you later have an API feed, merge it here: [...apiNotifs, ...anns]
-    setNotifications(anns);
-    setUnreadCount(anns.filter(n => !n.is_read).length);
-  };
-  refresh();
-  const onStorage = (e) => {
-    if (!e || e.key === ANNOUNCE_KEY || e.key === ANNOUNCE_READ_KEY) refresh();
-  };
-  window.addEventListener("storage", onStorage);
-  window.addEventListener("bloomora:announcement-updated", refresh);
-  return () => {
-    window.removeEventListener("storage", onStorage);
-    window.removeEventListener("bloomora:announcement-updated", refresh);
-  };
-}, []);
+  useEffect(() => {
+    const refresh = () => {
+      const anns = readAnnouncementNotifs();
+      setNotifications(anns);
+      setUnreadCount(anns.filter(n => !n.is_read).length);
+    };
+    refresh();
+    const onStorage = (e) => {
+      if (!e || e.key === ANNOUNCE_KEY || e.key === ANNOUNCE_READ_KEY) refresh();
+    };
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("bloomora:announcement-updated", refresh);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("bloomora:announcement-updated", refresh);
+    };
+  }, []);
 
   const [showBranchPopup, setShowBranchPopup]   = useState(false);
   const [showLockTooltip, setShowLockTooltip]   = useState(false);
@@ -881,25 +864,24 @@ useEffect(() => {
   };
 
   const handleMarkAllRead = () => {
-  markAnnouncementsRead(notifications);
-  setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
-  setUnreadCount(0);
-};
+    markAnnouncementsRead(notifications);
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
+    setUnreadCount(0);
+  };
 
   const handleNotifClick = (n) => {
-  setNotifications(prev => {
-    const next = prev.map(x => x.id === n.id ? { ...x, is_read: true } : x);
-    markAnnouncementsRead(next);
-    setUnreadCount(next.filter(x => !x.is_read).length);
-    return next;
-  });
-};
+    setNotifications(prev => {
+      const next = prev.map(x => x.id === n.id ? { ...x, is_read: true } : x);
+      markAnnouncementsRead(next);
+      setUnreadCount(next.filter(x => !x.is_read).length);
+      return next;
+    });
+  };
 
   const NAV_LINKS = [
     { label: "Home", page: "home" },
     {
       label: "Shop", page: "shop", categorized: true,
-      // We are now mapping over the state variable instead of the deleted constant!
       categories: dynamicShopCategories.map(cat => ({
         heading: cat.title,
         headingPage: "shop",
@@ -926,7 +908,7 @@ useEffect(() => {
   ];
 
   useEffect(() => {
-    api.get("/products/categories/hierarchy") // Note: Updated to match your products route!
+    api.get("/products/categories/hierarchy") 
       .then(data => {
         if (data) setDynamicShopCategories(data);
       })
@@ -934,7 +916,6 @@ useEffect(() => {
   }, []);
 
   useEffect(() => {
-    // 1. Fetch Products for custom categories
     api.get("/products/")
       .then(data => {
         if (data && data.length > 0) {
@@ -946,17 +927,14 @@ useEffect(() => {
       })
       .catch(err => console.error("Failed to load nav categories", err));
 
-    // 2. Fetch Active Campaigns
     api.getActiveCampaigns()
       .then(data => setActiveCampaigns(data?.campaigns ? data.campaigns : data || []))
       .catch(err => console.error("Failed to load campaigns", err));
 
-    // 3. Fetch Category Hierarchy for Mega Menu
     api.get("/products/categories/hierarchy")
        .then(data => { if (data) setDynamicShopCategories(data); })
        .catch(err => console.error("Failed to load category hierarchy", err));
 
-    // 4. Branch Popup Logic
     if (!sessionStorage.getItem("bloomora_branch_popup_dismissed")) {
         setShowBranchPopup(true);
     }
@@ -1001,7 +979,6 @@ useEffect(() => {
     setActive(link.label);
 
     if (link.page === 'shop' && link.param) {
-      // Mega-menu submenu click: store exact param for Shop sidebar filtering
       localStorage.setItem("bloomora_active_category", String(link.param).toLowerCase());
     } else if (link.isCustomCategory) {
       localStorage.setItem("bloomora_active_category", link.label.toLowerCase());
@@ -1018,7 +995,11 @@ useEffect(() => {
     setMobileOpen(false);
   };
 
-  const handleAccountClick = () => { setUserOpen(false); onNavigate?.(user ? "account" : "login"); };
+  const handleAccountClick = (e) => { 
+    e.stopPropagation(); 
+    setUserOpen(false); 
+    onNavigate?.(user ? "account" : "login"); 
+  };
 
   useEffect(() => {
     const h = e => {
@@ -1041,7 +1022,12 @@ useEffect(() => {
       {branchModal && <BranchModal branch={branchModal} onClose={() => setBranchModal(null)} />}
       {searchOpen && <SearchOverlay onClose={() => setSearchOpen(false)} onNavigate={onNavigate} />}
 
-      <div className="w-full sticky top-0 z-50" ref={navRef}>
+      {/* 🚀 THE FIX: Forced z-index and pointer-events */}
+      <div 
+        className="w-full sticky top-0" 
+        ref={navRef} 
+        style={{ zIndex: 99999, pointerEvents: "auto", position: "sticky" }}
+      >
         <PromoCarousel onNavigate={onNavigate} />
 
         <nav className="border-b px-4 sm:px-6 lg:px-8 py-3" style={{
@@ -1052,7 +1038,7 @@ useEffect(() => {
           <div className="flex items-center justify-between gap-4">
 
             {/* Logo */}
-            <div className="flex items-center gap-2 flex-shrink-0 cursor-pointer" onClick={() => onNavigate?.("home")}>
+            <div className="flex items-center gap-2 flex-shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onNavigate?.("home"); }}>
               <img src={estingsLogo} alt="Esting's Logo" className="w-9 h-9 sm:w-10 sm:h-10 object-contain"
                 style={{ filter: isDark ? "brightness(1.15)" : "none" }}/>
               <div className="hidden sm:flex flex-col leading-none items-start">
@@ -1072,7 +1058,7 @@ useEffect(() => {
               <div className="flex items-center gap-1.5" ref={locationRef}>
                 <span className="text-xs uppercase tracking-wide font-medium" style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>Store Branch</span>
                 <div className="relative">
-                  <button onClick={() => setLocationOpen(p => !p)}
+                  <button onClick={(e) => { e.stopPropagation(); setLocationOpen(p => !p); }}
                     className="flex items-center gap-1.5 border rounded-lg px-3 py-1.5 text-sm hover:border-green-400 transition-all"
                     style={{
                       borderColor: locationOpen ? (isDark?"#4ade80":SITE_GREEN) : (isDark ? "#2d3748" : "#e5e7eb"),
@@ -1099,7 +1085,7 @@ useEffect(() => {
                 <div key={link.label} className="relative"
                   onMouseEnter={() => (link.dropdown||link.categories) && openMenuD(link.label)}
                   onMouseLeave={() => (link.dropdown||link.categories) && closeMenuD()}>
-                  <button onClick={() => handleNavClick(link)}
+                  <button onClick={(e) => { e.stopPropagation(); handleNavClick(link); }}
                     className="flex items-center gap-0.5 text-sm font-medium pb-1 whitespace-nowrap transition-colors relative"
                     style={{
                       color: active===link.label ? (isDark?"#4ade80":SITE_GREEN) : (link.highlight ? (isDark?"#ff6b81":"#f43f5e") : (isDark ? "#d1d5db" : "#4b5563")),
@@ -1125,7 +1111,7 @@ useEffect(() => {
                 onMouseLeave={() => { closeMipD(); setShowLockTooltip(false); }}>
                 <button
                   disabled={!isCustomizationEnabled}
-                  onClick={() => { if (isCustomizationEnabled) onNavigate?.("make-it-personal"); }}
+                  onClick={(e) => { e.stopPropagation(); if (isCustomizationEnabled) onNavigate?.("make-it-personal"); }}
                   className={`whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full text-white flex items-center gap-1 transition-all select-none ${
                     isCustomizationEnabled
                       ? "hover:shadow-md hover:scale-105 cursor-pointer active:scale-95"
@@ -1156,7 +1142,7 @@ useEffect(() => {
             {/* Right side icons */}
             <div className="flex items-center gap-1 sm:gap-2">
               {/* Search */}
-              <button onClick={() => setSearchOpen(true)}
+              <button onClick={(e) => { e.stopPropagation(); setSearchOpen(true); }}
                 className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors"
                 style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
                 onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"}
@@ -1168,7 +1154,7 @@ useEffect(() => {
 
               {/* Cart */}
               <div className="relative" ref={cartRef}>
-                <button onClick={() => onNavigate?.("cart")}
+                <button onClick={(e) => { e.stopPropagation(); onNavigate?.("cart"); }}
                   className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative"
                   style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
                   onMouseEnter={e => { openCartD(); e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"; }}
@@ -1182,7 +1168,7 @@ useEffect(() => {
               {/* Notifications */}
               <div className="relative">
                 <button
-                  onClick={() => setNotifOpen(p => !p)}
+                  onClick={(e) => { e.stopPropagation(); setNotifOpen(p => !p); }}
                   className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative"
                   style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
                   onMouseEnter={e => { e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"; }}
@@ -1217,7 +1203,7 @@ useEffect(() => {
                       style={{ borderBottom: `1px solid ${isDark ? "#2d3748" : "#f3f4f6"}` }}>
                       <span className="text-sm font-semibold" style={{ color: isDark ? "#e5e7eb" : "#111827" }}>Notifications</span>
                       {unreadCount > 0 && (
-                        <button onClick={handleMarkAllRead} className="text-xs font-medium transition-opacity hover:opacity-70" style={{ color: SITE_GREEN }}>
+                        <button onClick={(e) => { e.stopPropagation(); handleMarkAllRead(); }} className="text-xs font-medium transition-opacity hover:opacity-70" style={{ color: SITE_GREEN }}>
                           Mark all read
                         </button>
                       )}
@@ -1235,7 +1221,7 @@ useEffect(() => {
                         </div>
                       ) : (
                         notifications.map(n => (
-                          <button key={n.id} onClick={() => handleNotifClick(n)}
+                          <button key={n.id} onClick={(e) => { e.stopPropagation(); handleNotifClick(n); }}
                             className="w-full flex items-start gap-3 px-4 py-3 text-left transition-colors"
                             style={{
                               borderBottom: `1px solid ${isDark ? "#1e2a3a" : "#f9fafb"}`,
@@ -1245,17 +1231,17 @@ useEffect(() => {
                             onMouseLeave={e => e.currentTarget.style.backgroundColor = n.is_read ? "transparent" : (isDark ? "rgba(46,139,52,0.08)" : "#f0fdf4")}
                           >
                             <div className="flex-shrink-0 mt-0.5 relative">
-  {n.image
-    ? <img src={n.image} alt="" className="w-8 h-8 rounded-lg object-cover" />
-    : <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base"
-        style={{ backgroundColor: isDark ? "rgba(46,139,52,0.15)" : "#dcfce7" }}>
-        {n.emoji || "📣"}
-      </span>}
-  {!n.is_read && (
-    <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2"
-      style={{ backgroundColor: SITE_GREEN, borderColor: isDark ? "#1a2332" : "white" }} />
-  )}
-</div>
+                              {n.image
+                                ? <img src={n.image} alt="" className="w-8 h-8 rounded-lg object-cover" />
+                                : <span className="w-8 h-8 rounded-lg flex items-center justify-center text-base"
+                                    style={{ backgroundColor: isDark ? "rgba(46,139,52,0.15)" : "#dcfce7" }}>
+                                    {n.emoji || "📣"}
+                                  </span>}
+                              {!n.is_read && (
+                                <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2"
+                                  style={{ backgroundColor: SITE_GREEN, borderColor: isDark ? "#1a2332" : "white" }} />
+                              )}
+                            </div>
                             <div className="flex-1 min-w-0">
                               <p className="text-xs font-semibold leading-snug" style={{ color: isDark ? "#e5e7eb" : "#111827" }}>{n.title}</p>
                               <p className="text-xs mt-0.5 leading-relaxed" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>{n.message}</p>
@@ -1274,13 +1260,22 @@ useEffect(() => {
               {/* User */}
               <div className="relative" ref={userRef} onMouseEnter={openUserD} onMouseLeave={closeUserD}>
                 <button onClick={handleAccountClick}
-                  className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative"
-                  style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
-                  onMouseEnter={e => { e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"; }}
-                  onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; }}>
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                  </svg>
+                  className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative overflow-hidden border"
+                  style={{ 
+                    borderColor: isDark ? "#334155" : "#e5e7eb",
+                    backgroundColor: user?.profilePictureUrl ? "transparent" : (isDark ? "#1a2332" : "#f9fafb"),
+                    color: isDark ? "#e5e7eb" : "#4b5563"
+                  }}
+                  onMouseEnter={e => { if (!user?.profilePictureUrl) e.currentTarget.style.backgroundColor = isDark ? "#2d3748" : "#f3f4f6"; }}
+                  onMouseLeave={e => { if (!user?.profilePictureUrl) e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"; }}>
+                  
+                  {user?.profilePictureUrl ? (
+                    <img src={user.profilePictureUrl} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                    </svg>
+                  )}
                 </button>
                 {userOpen && <UserHoverDropdown user={user} onNavigate={onNavigate} onLogout={handleLogout} />}
               </div>
@@ -1288,7 +1283,7 @@ useEffect(() => {
               {/* Mobile hamburger */}
               <button className="lg:hidden w-8 h-8 flex items-center justify-center rounded-full transition-colors"
                 style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
-                onClick={() => setMobileOpen(p => !p)}
+                onClick={(e) => { e.stopPropagation(); setMobileOpen(p => !p); }}
                 onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"}
                 onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
@@ -1322,7 +1317,7 @@ useEffect(() => {
                     return (
                       <button key={opt.page}
                         disabled={isMobOptionLocked}
-                        onClick={() => { if (!isMobOptionLocked) { onNavigate?.(opt.page); setMobileOpen(false); } }}
+                        onClick={(e) => { e.stopPropagation(); if (!isMobOptionLocked) { onNavigate?.(opt.page); setMobileOpen(false); } }}
                         className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all"
                         style={{
                           color: isMobOptionLocked ? "#9ca3af" : (isDark ? "#d1d5db" : "#374151"),
@@ -1343,7 +1338,7 @@ useEffect(() => {
               {/* Nav links */}
               {FINAL_NAV_LINKS.map(link => (
                 <div key={link.label}>
-                  <button onClick={() => handleNavClick(link)}
+                  <button onClick={(e) => { e.stopPropagation(); handleNavClick(link); }}
                     className="w-full flex items-center text-left px-2 py-2.5 text-sm font-medium border-b transition-colors"
                     style={{
                       color: active===link.label ? (isDark ? "#4ade80" : SITE_GREEN) : (link.highlight ? (isDark ? "#ff6b81" : "#f43f5e") : (isDark ? "#d1d5db" : "#4b5563")),
@@ -1353,13 +1348,11 @@ useEffect(() => {
                     {link.label}
                   </button>
 
-                  {/* 🚀 Renders both simple dropdowns and the complex Mega Menu categories on Mobile */}
                   {(link.dropdown || link.categories) && (
                     <div style={{ paddingLeft:"16px", backgroundColor: isDark ? "#0f172a" : "#f9fafb" }}>
                       
-                      {/* Render standard simple dropdown items */}
                       {link.dropdown && link.dropdown.map(sub => (
-                        <button key={sub.label} onClick={() => { onNavigate?.(sub.page, sub.param); setMobileOpen(false); }}
+                        <button key={sub.label} onClick={(e) => { e.stopPropagation(); onNavigate?.(sub.page, sub.param); setMobileOpen(false); }}
                           className="block w-full text-left px-2 py-2 text-xs border-b transition-colors"
                           style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6", color: isDark ? "#9ca3af" : "#6b7280" }}
                           onMouseEnter={e => e.currentTarget.style.color = isDark ? "#4ade80" : VIBRANT_GREEN}
@@ -1368,18 +1361,17 @@ useEffect(() => {
                         </button>
                       ))}
 
-                      {/* Render complex nested Mega Menu categories (e.g., Shop) */}
                       {link.categories && link.categories.map(cat => (
                         <div key={cat.heading} className="py-2 border-b last:border-b-0" style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6" }}>
                           
-                          <button onClick={() => { onNavigate?.(cat.headingPage || "shop", cat.headingParam || cat.heading); setMobileOpen(false); }}
+                          <button onClick={(e) => { e.stopPropagation(); onNavigate?.(cat.headingPage || "shop", cat.headingParam || cat.heading); setMobileOpen(false); }}
                             className="block w-full text-left px-2 py-1.5 text-[11px] font-bold uppercase tracking-widest transition-colors"
                             style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>
                             {cat.heading}
                           </button>
                           
                           {cat.items.map(sub => (
-                            <button key={sub.label} onClick={() => { onNavigate?.(sub.page, sub.param); setMobileOpen(false); }}
+                            <button key={sub.label} onClick={(e) => { e.stopPropagation(); onNavigate?.(sub.page, sub.param); setMobileOpen(false); }}
                               className="block w-full text-left pl-4 pr-2 py-2 text-xs transition-colors"
                               style={{ color: isDark ? "#9ca3af" : "#6b7280" }}
                               onMouseEnter={e => e.currentTarget.style.color = isDark ? "#4ade80" : VIBRANT_GREEN}
@@ -1400,28 +1392,37 @@ useEffect(() => {
                 {user ? (
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 mb-3">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white" style={{ background:"linear-gradient(135deg,#2E8B34,#0C573E)" }}>{user.firstName?.[0]?.toUpperCase()}</div>
+                      
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white overflow-hidden border border-gray-200" 
+                        style={{ background: user?.profilePictureUrl ? "transparent" : "linear-gradient(135deg,#2E8B34,#0C573E)" }}>
+                        {user?.profilePictureUrl ? (
+                          <img src={user.profilePictureUrl} alt="Profile" className="w-full h-full object-cover" />
+                        ) : (
+                          user?.firstName?.[0]?.toUpperCase() || "U"
+                        )}
+                      </div>
+
                       <div>
                         <p className="text-sm font-semibold" style={{ color: isDark ? "#f3f4f6" : "#111827" }}>{user.firstName} {user.lastName}</p>
                         <p className="text-xs" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>{user.email}</p>
                       </div>
                     </div>
                     {[{l:"My Account",p:"account"},{l:"My Orders",p:"orders"},{l:"Wishlist",p:"wishlist"},{l:"Settings",p:"settings"}].map(({l,p}) => (
-                      <button key={p} onClick={() => { onNavigate?.(p); setMobileOpen(false); }}
+                      <button key={p} onClick={(e) => { e.stopPropagation(); onNavigate?.(p); setMobileOpen(false); }}
                         className="w-full text-left text-sm px-2 py-1.5 rounded transition-colors"
                         style={{ color: isDark ? "#d1d5db" : "#4b5563" }}
                         onMouseEnter={e=>{e.currentTarget.style.backgroundColor=isDark?"rgba(74,222,128,0.1)":"#f0fdf4";e.currentTarget.style.color=isDark?"#4ade80":VIBRANT_GREEN;}}
                         onMouseLeave={e=>{e.currentTarget.style.backgroundColor="transparent";e.currentTarget.style.color=isDark?"#d1d5db":"#4b5563";}}>{l}</button>
                     ))}
-                    <button onClick={handleLogout} className="flex items-center gap-2 text-sm text-red-500 font-medium px-2 py-1.5 rounded hover:bg-red-50 transition-colors w-full mt-1">
+                    <button onClick={(e) => { e.stopPropagation(); handleLogout(); }} className="flex items-center gap-2 text-sm text-red-500 font-medium px-2 py-1.5 rounded hover:bg-red-50 transition-colors w-full mt-1">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
                       Logout
                     </button>
                   </div>
                 ) : (
                   <div className="flex gap-2">
-                    <button onClick={() => { onNavigate?.("login"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold text-white rounded-lg" style={{ backgroundColor:SITE_GREEN }}>Login</button>
-                    <button onClick={() => { onNavigate?.("register"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold rounded-lg border" style={{ borderColor:SITE_GREEN, color:SITE_GREEN }}>Sign Up</button>
+                    <button onClick={(e) => { e.stopPropagation(); onNavigate?.("login"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold text-white rounded-lg" style={{ backgroundColor:SITE_GREEN }}>Login</button>
+                    <button onClick={(e) => { e.stopPropagation(); onNavigate?.("register"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold rounded-lg border" style={{ borderColor:SITE_GREEN, color:SITE_GREEN }}>Sign Up</button>
                   </div>
                 )}
               </div>

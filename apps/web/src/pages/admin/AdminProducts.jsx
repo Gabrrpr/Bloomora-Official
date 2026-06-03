@@ -207,6 +207,7 @@ function AddProductModal({ onClose, onSave, categories }) {
   const [errors, setErrors] = useState({})
   const [isUploading, setUploading] = useState(false)
   const [lightboxSrc, setLightboxSrc] = useState(null)
+  const [isSaving, setIsSaving] = useState(false)
   const set = key => val => setForm(f => ({...f,[key]:val}))
 
   const validate = () => {
@@ -266,7 +267,7 @@ function AddProductModal({ onClose, onSave, categories }) {
         console.log(`Sending to API: ${key} = ${value}`);
       }
 
-      const res = await api.put("/products/admin${product.id", fd);
+      const res = await api.createProduct(fd);
       onSave(res.product); 
       onClose();
     } catch (e) {
@@ -415,6 +416,7 @@ function EditProductModal({ product, onClose, onSave, categories }) {
   const [isUploading,setUploading]=useState(false)
   const [removeImage,setRemoveImage]=useState(false)
   const [lightboxSrc,setLightboxSrc]=useState(null)
+  const [isSaving, setIsSaving] = useState(false)
   const set = key => val => setForm(f=>({...f,[key]:val}))
 
   const validate = () => {
@@ -440,6 +442,8 @@ function EditProductModal({ product, onClose, onSave, categories }) {
   const handleSave = async () => {
     const err = validate(); 
     if (Object.keys(err).length) { setErrors(err); return; }
+
+    setIsSaving(true);
     
     try {
       const fd = new FormData();
@@ -470,12 +474,14 @@ function EditProductModal({ product, onClose, onSave, categories }) {
         if (form.limited_end_at) fd.append("limited_end_at", form.limited_end_at);
       }
 
-      const res = await api.createProduct(fd); 
+      const res = await api.updateProduct(product.id, fd);
       onSave(res.product); 
       onClose();
     } catch (e) {
       console.error("API Error:", e);
       alert("Error: " + (e.response?.data?.detail || e.message));
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -597,7 +603,7 @@ function EditProductModal({ product, onClose, onSave, categories }) {
             onMouseEnter={e=>e.currentTarget.style.backgroundColor=d.hdrBg} onMouseLeave={e=>e.currentTarget.style.backgroundColor=d.inputBg}>
             Cancel
           </button>
-          <button onClick={handleSave} disabled={isUploading}
+          <button onClick={handleSave} disabled={isUploading || isSaving}
             className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
             style={{ background:`linear-gradient(135deg,${DG},${G})`, boxShadow:"0 2px 8px rgba(12,87,62,0.3)" }}>
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
@@ -745,12 +751,13 @@ export default function AdminProducts() {
     try {
       const productsRes = await api.getAdminProducts();
       const prods = productsRes.data || productsRes
-      const vases = (vasesRes.data || vasesRes).map(v => ({ ...v, category:"vase", status:v.is_available?"active":"inactive", stock:v.quantity||0, reorder_point:10 }))
-      const combined = [...prods, ...vases]
-      setProducts(combined); setTotalCount(combined.length)
-      setLowCount(combined.filter(p => p.stock<=(p.reorder_point||10)).length)
-    } catch (e) { console.error("Failed to fetch products",e) }
-    finally { setLoading(false) }
+      setProducts(prods);
+      setLowCount(prods.filter(p => p.stock<=(p.reorder_point||10)).length);
+    } catch (e) { 
+      console.error("Failed to fetch products",e);
+    } finally { 
+      setLoading(false);
+    }
   }, [])
 
   useEffect(() => { fetchProducts() }, [fetchProducts])
@@ -764,9 +771,11 @@ export default function AdminProducts() {
     setIsDeleting(true);
     try {
       await api.delete(`/products/admin/${id}`); 
-
-      // 🚀 HARD DELETE FIX: Completely remove it from the screen instantly
-      setProducts(prev => prev.filter(p => p.id !== id)); 
+      setProducts(prev => prev.map(p => 
+        p.id === id 
+          ? { ...p, status: "inactive", is_available: false } 
+          : p
+      ));
 
       setDeletingProduct(null);
     }
@@ -778,7 +787,7 @@ export default function AdminProducts() {
     finally {
       setIsDeleting(false);
     }
-}
+  }
 
   const filtered = products.filter(p => {
     const ms=!search||p.name?.toLowerCase().includes(search.toLowerCase())

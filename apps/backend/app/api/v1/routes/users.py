@@ -6,6 +6,7 @@ from datetime import datetime, timezone, timedelta
 import uuid
 import secrets
 import io
+import time
 from PIL import Image
 
 from app.core.dependencies import get_db, get_current_user, require_staff
@@ -305,29 +306,37 @@ async def upload_profile_picture(
     try:
         file_bytes = await file.read()
         
-        # 🛡️ DEFENSE 1: File size check
         if len(file_bytes) > MAX_FILE_SIZE:
             raise HTTPException(status_code=400, detail="File too large. Maximum size is 5MB.")
 
-        # 🛡️ DEFENSE 2: Extension Check
         ext = file.filename.split(".")[-1].lower() if "." in file.filename else ""
         if ext not in ALLOWED_EXTENSIONS:
             raise HTTPException(status_code=400, detail="Unsupported file extension. Use JPG, PNG, or WEBP.")
 
-        # 🛡️ DEFENSE 3: Deep Byte Verification (Trojan Horse Killer)
         try:
             img = Image.open(io.BytesIO(file_bytes))
             img.verify() 
         except Exception:
-            raise HTTPException(status_code=400, detail="Malicious or corrupted file detected. Upload rejected.")
+            raise HTTPException(status_code=400, detail="Malicious or corrupted file detected.")
 
-        file_path = f"{current_user.id}/avatar.{ext}"
+        # 🚀 1. CLEANUP: Delete old avatars in this user's folder first
+        try:
+            old_files = supabase.storage.from_("avatars").list(str(current_user.id))
+            if old_files:
+                paths = [f"{current_user.id}/{f['name']}" for f in old_files]
+                supabase.storage.from_("avatars").remove(paths)
+        except Exception:
+            pass # Ignore cleanup errors if folder is empty
+
+        # 🚀 2. CACHE BUSTER: Add a timestamp to guarantee a unique URL
+        timestamp = int(time.time())
+        file_path = f"{current_user.id}/avatar_{timestamp}.{ext}"
 
         # Upload to Supabase Storage
         supabase.storage.from_("avatars").upload(
             path=file_path,
             file=file_bytes,
-            file_options={"content-type": f"image/{ext}", "upsert": "true"}
+            file_options={"content-type": f"image/{ext}"}
         )
 
         public_url = supabase.storage.from_("avatars").get_public_url(file_path)

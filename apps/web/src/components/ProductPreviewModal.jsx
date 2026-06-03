@@ -1314,37 +1314,53 @@ export default function ProductPreviewModal({ product, onClose, onNavigate }) {
                             <div className="grid grid-cols-2 gap-1.5">
                               {visibleAddons.map(a => {
                                 const isOutOfStock = a.stock <= 0
+                                const isUnavailable = a.stock <= 0 || a.is_available === false;
                                 const on = addOns.includes(a.id) && !isOutOfStock
                                 const addonBg  = isOutOfStock ? (isDark?"#0f172a":"#f9fafb") : on ? (isDark?"rgba(74,222,128,0.12)":"#f0fdf4") : (isDark?"#0f172a":"white")
                                 const addonBdr = isOutOfStock ? (isDark?"#1e293b":"#e5e7eb") : on ? (isDark?"#4ade80":G) : (isDark?"#1e293b":"#e5e7eb")
                                 return (
-                                  <button key={a.id} disabled={isOutOfStock} onClick={() => toggleAddOn(a.id)}
-                                    className="flex items-center gap-2.5 p-2.5 rounded-xl text-left transition-all"
+                                  <button key={a.id} 
+                                    disabled={isUnavailable} 
+                                    onClick={() => !isUnavailable && toggleAddOn(a.id)}
+                                    className="flex items-center gap-2.5 p-2.5 rounded-xl text-left transition-all relative overflow-hidden"
                                     style={{
                                       border: `1.5px solid ${addonBdr}`,
                                       background: addonBg,
-                                      opacity: isOutOfStock ? 0.45 : 1,
-                                      cursor: isOutOfStock ? "not-allowed" : "pointer",
+                                      // 🚀 We apply the grayscale and opacity here to gray it out
+                                      opacity: isUnavailable ? 0.5 : 1,
+                                      filter: isUnavailable ? "grayscale(100%)" : "none",
+                                      cursor: isUnavailable ? "not-allowed" : "pointer",
                                       boxShadow: on && isDark ? "0 0 8px rgba(74,222,128,0.15)" : "none"
                                     }}
-                                    onMouseEnter={e => { if (!on && !isOutOfStock) e.currentTarget.style.borderColor = isDark?"#334155":"#d1d5db" }}
-                                    onMouseLeave={e => { if (!on && !isOutOfStock) e.currentTarget.style.borderColor = isDark?"#1e293b":"#e5e7eb" }}>
+                                    onMouseEnter={e => { if (!on && !isUnavailable) e.currentTarget.style.borderColor = isDark?"#334155":"#d1d5db" }}
+                                    onMouseLeave={e => { if (!on && !isUnavailable) e.currentTarget.style.borderColor = isDark?"#1e293b":"#e5e7eb" }}>
+                                    
+                                    {/* 🚀 OVERLAY TEXT FOR OUT OF STOCK */}
+                                    {isUnavailable && (
+                                      <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/10 backdrop-blur-[1px]">
+                                        <span className="bg-gray-800 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">
+                                          Out of Stock
+                                        </span>
+                                      </div>
+                                    )}
+
                                     <div className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 relative"
                                       style={{ background: isDark?"#1e293b":"#f3f4f6", border: `1px solid ${isDark?"#334155":"#e5e7eb"}` }}>
                                       <img src={a.image_url} alt={a.name} className="w-full h-full object-cover"
-                                        onError={e => { e.target.style.display="none" }}
-                                        style={{ filter: isOutOfStock ? "grayscale(100%)" : "none" }}/>
+                                        onError={e => { e.target.style.display="none" }} />
                                     </div>
+                                    
                                     <div className="flex-1 min-w-0">
                                       <p className="text-xs font-semibold truncate m-0" style={{ color: isDark?"#e2e8f0":"#111827" }}>{a.name}</p>
-                                      <p className="text-[10px] mt-0.5 m-0" style={{ color: isOutOfStock?"#ef4444":isDark?"#64748b":"#9ca3af" }}>
-                                        {isOutOfStock ? "Out of stock" : `${a.stock} available`}
+                                      <p className="text-[10px] mt-0.5 m-0" style={{ color: isUnavailable?"#ef4444":isDark?"#64748b":"#9ca3af" }}>
+                                        {isUnavailable ? "Unavailable" : `${a.stock} available`}
                                       </p>
                                       <p className="text-xs font-semibold mt-0.5 m-0"
-                                        style={{ color: isOutOfStock?(isDark?"#64748b":"#9ca3af"):(isDark?"#4ade80":G) }}>
+                                        style={{ color: isUnavailable?(isDark?"#64748b":"#9ca3af"):(isDark?"#4ade80":G) }}>
                                         +₱{a.price}
                                       </p>
                                     </div>
+                                    
                                     <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
                                       style={{
                                         border: `2px solid ${on?(isDark?"#4ade80":G):isDark?"#334155":"#d1d5db"}`,

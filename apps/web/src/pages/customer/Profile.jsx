@@ -32,7 +32,7 @@ const EMPTY_ADDRESS = {
 };
 
 export default function Profile({ onNavigate }) {
-  const { user } = useAuth();
+  const { user, updateUserContext } = useAuth();
 
   const setupMode = user && !user.is_profile_complete;
   const [editing, setEditing] = useState(setupMode);
@@ -190,13 +190,53 @@ export default function Profile({ onNavigate }) {
     if (editing) fileInputRef.current?.click();
   };
 
-  const handlePhotoChange = (e) => {
+  const handlePhotoChange = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) return;
+
+    // 1. Rip the token straight from browser memory to guarantee it exists
+    const rawToken = localStorage.getItem("access_token");
+    if (!rawToken) {
+      alert("Authentication error: No token found. Please log in again.");
+      return;
+    }
+
+    // 2. Show the local preview instantly
     const reader = new FileReader();
     reader.onload = (ev) => setAvatarSrc(ev.target.result);
     reader.readAsDataURL(file);
+
+    // 3. Prepare the file
+    const formData = new FormData();
+    formData.append("file", file); // Must exactly match the FastAPI parameter name
+
+    try {
+      // 4. Send directly to backend with the raw token
+      const response = await fetch("http://localhost:8000/api/v1/users/profile/upload-picture", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${rawToken}`
+        },
+        body: formData
+      });
+
+      if (!response.ok) {
+        if (response.status === 401) throw new Error("Session expired. Please log out and log back in.");
+        throw new Error(`Upload failed with status: ${response.status}`);
+      }
+
+      const res = await response.json();
+
+      // 5. Update UI
+      updateUserContext({ profilePictureUrl: res.profile_picture_url || res.url });
+      alert("Profile picture updated successfully!");
+
+    } catch (error) {
+      console.error("Failed to upload avatar:", error);
+      alert(error.message);
+      setAvatarSrc(user?.profilePictureUrl || null); // Revert preview on fail
+    }
   };
 
   const checkUsername = async (username) => {
@@ -541,15 +581,72 @@ export default function Profile({ onNavigate }) {
         </div>
 
         <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5">
-          <div className="flex items-center justify-between">
+          <div className="flex items-start justify-between mb-4">
             <div>
-              <h3 className="text-sm font-semibold text-gray-700">Password</h3>
-              <p className="text-xs text-gray-400 mt-0.5">Change your account password</p>
+              <h3 className="text-sm font-semibold text-gray-700">Password & Security</h3>
+              <p className="text-xs text-gray-400 mt-0.5">Securely change your account password</p>
             </div>
-            <button onClick={() => onNavigate("forgot-password")} className="px-4 py-2 text-sm font-semibold border rounded-lg transition hover:bg-green-50" style={{ borderColor: G, color: G }}>
-              Change Password
-            </button>
           </div>
+
+          {pwdStep === 1 ? (
+            <div className="flex items-center justify-between p-4 bg-gray-50 border border-gray-100 rounded-lg">
+              <p className="text-sm text-gray-600 max-w-sm">
+                For your security, we will send a 6-digit confirmation code to <b>{user.email}</b> to verify your identity.
+              </p>
+              <button 
+                onClick={requestPasswordOTP} 
+                disabled={pwdLoading} 
+                className="px-4 py-2 text-sm font-semibold border rounded-lg transition hover:bg-green-50 disabled:opacity-50" 
+                style={{ borderColor: G, color: G }}
+              >
+                {pwdLoading ? "Sending..." : "Send Code"}
+              </button>
+            </div>
+          ) : (
+            <div className="p-4 border border-green-200 bg-green-50 rounded-lg space-y-4">
+              <p className="text-sm font-medium text-green-800">
+                Code sent! Please check your email inbox (and spam folder).
+              </p>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5 uppercase">6-Digit Code</label>
+                  <input 
+                    type="text" 
+                    placeholder="123456" 
+                    value={pwdOtp} 
+                    onChange={e => setPwdOtp(e.target.value)} 
+                    className="w-full px-3.5 py-2.5 text-sm border rounded-lg focus:ring-green-600 focus:border-green-600 outline-none" 
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1.5 uppercase">New Password</label>
+                  <input 
+                    type="password" 
+                    placeholder="Enter new password" 
+                    value={newPassword} 
+                    onChange={e => setNewPassword(e.target.value)} 
+                    className="w-full px-3.5 py-2.5 text-sm border rounded-lg focus:ring-green-600 focus:border-green-600 outline-none" 
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button 
+                  onClick={() => setPwdStep(1)} 
+                  className="px-4 py-2 text-sm font-semibold border border-gray-300 rounded-lg text-gray-600 bg-white hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={confirmAndChangePassword} 
+                  disabled={pwdLoading} 
+                  className="px-4 py-2 text-sm font-semibold text-white rounded-lg transition disabled:opacity-50" 
+                  style={{ backgroundColor: G }}
+                >
+                  {pwdLoading ? "Updating..." : "Verify & Change Password"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="bg-white border border-red-100 rounded-xl p-6">
