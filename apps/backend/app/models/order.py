@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Text, Numeric, Enum, Integer, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, Numeric, Enum, Integer, Boolean, DateTime, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from .base import Base, now_utc
@@ -75,6 +75,13 @@ class Transaction(Base):
     total_amount = Column(Numeric(10, 2), nullable=False)
     status = Column(String(20), default="pending")
     reference_number = Column(String(255), nullable=True)
+    provider = Column(String(50), nullable=False, default="manual")
+    provider_checkout_session_id = Column(String(255), nullable=True)
+    provider_payment_intent_id = Column(String(255), nullable=True)
+    provider_payment_id = Column(String(255), nullable=True)
+    checkout_url = Column(Text, nullable=True)
+    paid_at = Column(DateTime(timezone=True), nullable=True)
+    raw_webhook_event = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 

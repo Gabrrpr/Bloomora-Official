@@ -75,6 +75,7 @@ export default function RootLayout() {
           <Stack.Screen name="(legal)" options={{ headerShown: false }} />
           <Stack.Screen name="(settings)" options={{ headerShown: false }} />
           <Stack.Screen name="create" options={{ headerShown: false }} />
+          <Stack.Screen name="payment" options={{ headerShown: false }} />
           <Stack.Screen name="product-details" options={{ headerShown: false }} />
           <Stack.Screen name="search-results" options={{ headerShown: false }} />
           <Stack.Screen name="(modals)/modal" options={{ presentation: 'modal', title: 'Modal' }} />

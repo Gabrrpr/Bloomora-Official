@@ -26,7 +26,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 # ── JWT Operations ────────────────────────────────────────────────────────────
 def create_access_token(data: dict) -> str:
     payload = data.copy()
-    payload["exp"] = datetime.utcnow() + timedelta(minutes=15)
+    payload["exp"] = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     payload["type"] = "access"
     return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
 

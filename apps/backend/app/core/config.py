@@ -25,6 +25,13 @@ class Settings(BaseSettings):
     LALAMOVE_SECRET: str = ""
     LALAMOVE_BASE_URL: str = "https://rest.lalamove.com"
 
+    # PayMongo
+    PAYMONGO_SECRET_KEY: str = ""
+    PAYMONGO_BASE_URL: str = "https://api.paymongo.com"
+    PAYMONGO_SUCCESS_URL: str = "bloomoramobile://payment/success"
+    PAYMONGO_CANCEL_URL: str = "bloomoramobile://payment/cancel"
+    PAYMONGO_WEBHOOK_SECRET: str = ""
+
     # Email
     MAIL_USERNAME: str = "johngbatac@gmail.com"
     MAIL_PASSWORD: str = "avwp fsqs okgn qowy"

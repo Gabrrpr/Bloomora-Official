@@ -1,8 +1,10 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, type Href } from 'expo-router';
 import { Image } from 'expo-image';
+import * as WebBrowser from 'expo-web-browser';
 import { ArrowRight, Check, ChevronUp, Flower2, Gift, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Easing,
   Pressable,
@@ -18,13 +20,17 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppBrandHeader } from '@/components/app-brand-header';
 import { formatPhp, getCartSummary, type CartItem, type Product } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
-import { getAuthSession, type AuthSession } from '@/services/auth-session';
+import { ApiError } from '@/services/api-client';
+import { clearAuthSession, getAuthSession, type AuthSession } from '@/services/auth-session';
 import { getGuestCartItems, removeGuestCartItem, updateGuestCartItemQuantity } from '@/services/guest-cart';
+import { createOrdersFromCart, createPayMongoCheckout } from '@/services/payments-api';
 import { shopApi } from '@/services/shop-api';
 
 const outlineColor = 'rgba(31, 42, 36, 0.11)';
 const hairlineColor = 'rgba(31, 42, 36, 0.09)';
 const floatingCheckoutOffset = 92;
+const paymentCancelRoute = '/payment/cancel' as Href;
+const paymentSuccessRoute = '/payment/success' as Href;
 
 export default function CartScreen() {
   const insets = useSafeAreaInsets();
@@ -36,6 +42,7 @@ export default function CartScreen() {
   const [selectedProductIds, setSelectedProductIds] = useState<ReadonlySet<string>>(() => new Set());
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [isAppendingRecommendations, setIsAppendingRecommendations] = useState(false);
   const [isRecommendationLoading, setIsRecommendationLoading] = useState(false);
   const [visibleRecommendationCount, setVisibleRecommendationCount] = useState(4);
@@ -136,6 +143,64 @@ export default function CartScreen() {
     },
     [appendRecommendationBatch, requestRecommendations],
   );
+
+  const handleCheckout = useCallback(async () => {
+    if (isCheckingOut) {
+      return;
+    }
+
+    if (!session) {
+      router.push('/(auth)/login');
+      return;
+    }
+
+    if (selectedCartItems.length === 0) {
+      Alert.alert('Select an item', 'Choose at least one item before checkout.');
+      return;
+    }
+
+    setIsCheckingOut(true);
+
+    try {
+      const orderResponse = await createOrdersFromCart({
+        items: selectedCartItems,
+        session,
+      });
+      const checkout = await createPayMongoCheckout({
+        orderIds: orderResponse.order_ids,
+        session,
+      });
+      const browserResult = await WebBrowser.openAuthSessionAsync(
+        checkout.checkout_url,
+        'bloomoramobile://payment',
+      );
+
+      if (browserResult.type === 'success') {
+        if (browserResult.url.includes('/payment/cancel')) {
+          router.push(paymentCancelRoute);
+        } else {
+          router.push(paymentSuccessRoute);
+        }
+      }
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        await clearAuthSession();
+        setSession(null);
+        Alert.alert('Sign in again', 'Your session expired. Please sign in again before checkout.', [
+          {
+            text: 'Sign in',
+            onPress: () => router.push('/(auth)/login'),
+          },
+        ]);
+        return;
+      }
+
+      const message = error instanceof Error ? error.message : 'Unable to start PayMongo checkout.';
+      Alert.alert('Checkout unavailable', message);
+    } finally {
+      setIsCheckingOut(false);
+    }
+  }, [isCheckingOut, selectedCartItems, session]);
 
   useEffect(() => {
     if (!hasRequestedRecommendations || recommendedProducts.length > 0 || isRecommendationLoading) {
@@ -261,7 +326,9 @@ export default function CartScreen() {
       {cartItems.length > 0 && isSignedIn ? (
         <CheckoutBar
           isAllSelected={isAllSelected}
+          isCheckingOut={isCheckingOut}
           itemCount={selectedItemCount}
+          onCheckout={handleCheckout}
           onToggleAll={() => {
             setSelectedProductIds((current) =>
               current.size === cartItems.length ? new Set() : new Set(cartItems.map((item) => item.product.id)),
@@ -496,13 +563,17 @@ function RecommendationAppendLoader() {
 function CheckoutBar({
   bottomInset,
   isAllSelected,
+  isCheckingOut,
   itemCount,
+  onCheckout,
   onToggleAll,
   summary,
 }: {
   bottomInset: number;
   isAllSelected: boolean;
+  isCheckingOut: boolean;
   itemCount: number;
+  onCheckout: () => void;
   onToggleAll: () => void;
   summary: ReturnType<typeof getCartSummary>;
 }) {
@@ -531,8 +602,17 @@ function CheckoutBar({
             style={{ transform: [{ rotate: isBreakdownOpen ? '180deg' : '0deg' }] }}
           />
         </Pressable>
-        <Pressable accessibilityRole="button" style={({ pressed }) => [styles.checkoutBarButton, pressed && styles.pressed]} onPress={() => {}}>
-          <Text style={styles.checkoutBarText}>Checkout ({itemCount})</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityState={{ busy: isCheckingOut, disabled: isCheckingOut || itemCount === 0 }}
+          disabled={isCheckingOut || itemCount === 0}
+          style={({ pressed }) => [
+            styles.checkoutBarButton,
+            (isCheckingOut || itemCount === 0) && styles.checkoutBarButtonDisabled,
+            pressed && !isCheckingOut && itemCount > 0 && styles.pressed,
+          ]}
+          onPress={onCheckout}>
+          <Text style={styles.checkoutBarText}>{isCheckingOut ? 'Opening...' : `Checkout (${itemCount})`}</Text>
         </Pressable>
       </View>
     </View>
@@ -1180,6 +1260,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 44,
     paddingHorizontal: theme.spacing.md,
+  },
+  checkoutBarButtonDisabled: {
+    opacity: 0.58,
   },
   checkoutBarText: {
     color: theme.colors.white,
