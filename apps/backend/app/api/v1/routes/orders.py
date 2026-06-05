@@ -205,12 +205,33 @@ def create_orders(
         else:
             try:
                 product_id = uuid.UUID(str(item_id))
-                product = db.query(Product).filter(Product.id == product_id).first()
+                
+                # We use with_for_update() to lock the row temporarily. 
+                # This prevents two customers from buying the exact same last item at the exact same millisecond!
+                product = db.query(Product).filter(Product.id == product_id).with_for_update().first()
+                
                 if not product or not product.is_available:
                     raise HTTPException(status_code=404, detail=f"Product unavailable: {item_id}")
                 
-                # 🚀 The golden rule: Extract price from DB, not from frontend payload
+                # 🚀 INVENTORY CHECK: Do we have enough?
+                # (Change 'stock' to 'quantity' if your database column is named differently)
+                current_stock = getattr(product, 'stock', 0) 
+                if current_stock < qty:
+                    raise HTTPException(
+                        status_code=400, 
+                        detail=f"Insufficient stock for {product.name}. Only {current_stock} left."
+                    )
+                
+                # 🚀 INVENTORY DEDUCTION: Take it off the shelf!
+                product.stock -= qty
+                
+                # Optional: If stock hits 0, automatically mark it as unavailable so it hides from the store
+                if product.stock <= 0:
+                    product.is_available = False
+                
+                # 🚀 The golden rule: Extract price from DB
                 db_price = product.price
+                
             except ValueError:
                 raise HTTPException(status_code=400, detail=f"Invalid Product ID: {item_id}")
 
