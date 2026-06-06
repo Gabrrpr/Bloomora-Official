@@ -208,6 +208,7 @@ function AddProductModal({ onClose, onSave, categories }) {
   const [isUploading, setUploading] = useState(false)
   const [lightboxSrc, setLightboxSrc] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [isCustomCategory, setIsCustomCategory] = useState(false)
   const set = key => val => setForm(f => ({...f,[key]:val}))
 
   const validate = () => {
@@ -273,6 +274,8 @@ function AddProductModal({ onClose, onSave, categories }) {
     } catch (e) {
       console.error("API Error:", e);
       alert("Error: " + (e.response?.data?.detail || e.message));
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -333,14 +336,39 @@ function AddProductModal({ onClose, onSave, categories }) {
             <div>
               <div className="flex items-end justify-between mb-1.5">
                 <MLabel d={d}>Category <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <span className="text-[10px] font-semibold" style={{ color: d.subC }}>Main Navigation</span>
+                {isCustomCategory ? (
+                  <button type="button" onClick={() => { setIsCustomCategory(false); set("category")(""); }} 
+                    className="text-[10px] font-semibold hover:underline transition-all" style={{ color: "#ef4444" }}>
+                    Cancel Custom
+                  </button>
+                ) : (
+                  <span className="text-[10px] font-semibold" style={{ color: d.subC }}>Main Navigation</span>
+                )}
               </div>
-              <MSel 
-                value={form.category} 
-                onChange={set("category")} 
-                options={["", ...categories]} 
-                d={d}
-              />
+              
+              {isCustomCategory ? (
+                <MInput 
+                  value={form.category} 
+                  onChange={set("category")} 
+                  placeholder="Type new category..." 
+                  error={errors.category} 
+                  d={d}
+                />
+              ) : (
+                <MSel 
+                  value={form.category} 
+                  onChange={(val) => {
+                    if (val === "+ Add New Category") {
+                      setIsCustomCategory(true);
+                      set("category")("");
+                    } else {
+                      set("category")(val);
+                    }
+                  }} 
+                  options={["", ...categories, "+ Add New Category"]} 
+                  d={d}
+                />
+              )}
               {errors.category && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.category}</p>}
             </div>
 
@@ -389,10 +417,11 @@ function AddProductModal({ onClose, onSave, categories }) {
             style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}>
             Cancel
           </button>
-          <button onClick={handleSave} disabled={isUploading}
-            className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90"
+          <button onClick={handleSave} disabled={isUploading || isSaving}
+            className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background:`linear-gradient(135deg,${DG},${G})` }}>
-            Add Product
+            {/* 🚀 4. Show "Saving..." text while locked */}
+            {isSaving ? "Adding..." : "Add Product"}
           </button>
         </div>
       </div>
@@ -417,6 +446,7 @@ function EditProductModal({ product, onClose, onSave, categories }) {
   const [removeImage,setRemoveImage]=useState(false)
   const [lightboxSrc,setLightboxSrc]=useState(null)
   const [isSaving, setIsSaving] = useState(false)
+  const [isCustomCategory, setIsCustomCategory] = useState(false)
   const set = key => val => setForm(f=>({...f,[key]:val}))
 
   const validate = () => {
@@ -440,6 +470,8 @@ function EditProductModal({ product, onClose, onSave, categories }) {
   }
 
   const handleSave = async () => {
+    if (isSaving) return;
+
     const err = validate(); 
     if (Object.keys(err).length) { setErrors(err); return; }
 
@@ -453,7 +485,6 @@ function EditProductModal({ product, onClose, onSave, categories }) {
       fd.append("group", (form.group || "floral").toLowerCase().trim());
       fd.append("category", (form.category || "").toLowerCase().trim());
       fd.append("product_type", (form.productType || "").toLowerCase().trim());
-      
       fd.append("price", String(form.price));
       fd.append("status", (form.status || "active").toLowerCase());
       fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false");

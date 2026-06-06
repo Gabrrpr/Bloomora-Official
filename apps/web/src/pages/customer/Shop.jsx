@@ -497,9 +497,9 @@ const VIEW_ALL = [
   { key:"grid4", mobileVisible:false, icon:<svg className="w-4 h-4" viewBox="0 0 18 15" fill="currentColor"><rect x="0" y="0" width="3.5" height="6" rx="0.6"/><rect x="4.8" y="0" width="3.5" height="6" rx="0.6"/><rect x="9.6" y="0" width="3.5" height="6" rx="0.6"/><rect x="14.5" y="0" width="3.5" height="6" rx="0.6"/><rect x="0" y="8" width="3.5" height="7" rx="0.6"/><rect x="4.8" y="8" width="3.5" height="7" rx="0.6"/><rect x="9.6" y="8" width="3.5" height="7" rx="0.6"/><rect x="14.5" y="8" width="3.5" height="7" rx="0.6"/></svg> },
 ]
 
-export default function Shop({ onNavigate, initialCategory = "All" }) {
+export default function Shop({ onNavigate, initialCategory }) {
   const width    = useWidth()
-  const isMobile = width < 768
+  const isMobile = width < 768  
 
   const [products, setProducts]               = useState([])
   const [viewAs, setViewAs]                   = useState("grid3")
@@ -517,7 +517,25 @@ export default function Shop({ onNavigate, initialCategory = "All" }) {
   const sortRef = useRef(null)
 
   useEffect(() => {
-    setActiveCategory(initialCategory);
+    // 1. If a category was passed directly from App.jsx, use it!
+    if (initialCategory && initialCategory !== "All") {
+      setActiveCategory(initialCategory);
+    } 
+    // 2. If no direct prop was passed, check if the Navbar left a sticky note in localStorage
+    else {
+      const storedCategory = localStorage.getItem("bloomora_active_category");
+      if (storedCategory) {
+        // Convert something like "funerals" to "Funeral" to match your UI
+        const formattedCat = storedCategory.charAt(0).toUpperCase() + storedCategory.slice(1);
+        setActiveCategory(formattedCat);
+        
+        // Remove the sticky note so it doesn't get stuck forever
+        localStorage.removeItem("bloomora_active_category"); 
+      } else {
+        // 3. Default state if nothing else is active
+        setActiveCategory("All");
+      }
+    }
   }, [initialCategory]);
 
   useEffect(() => {
