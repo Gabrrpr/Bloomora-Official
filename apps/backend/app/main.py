@@ -1,0 +1,120 @@
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
+from starlette.responses import JSONResponse
+
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+
+import os
+import traceback
+
+from app.api.v1.routes import (
+    addresses,
+    auth,
+    campaigns,
+    chats,
+    customization,
+    dashboard,
+    orders,
+    payments,
+    products,
+    reviews,
+    site_customization,
+    users,
+    vases,
+)
+from app.core.config import settings
+from app.core.limiter import limiter
+
+app = FastAPI(
+    title="Bloomora API",
+    description="Backend API for Bloomora - Floral E-Commerce Platform for Esting's Flowers International Inc.",
+    version="1.0.0",
+    redirect_slashes=False,
+)
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# SessionMiddleware must be added before CORSMiddleware so CORS wraps all responses.
+app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://localhost:5175",
+        "http://localhost:5176",
+        "http://localhost:5177",
+        "http://localhost:5178",
+        "http://localhost:5179",
+        "http://localhost:8081",
+        "http://localhost:19006",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+ALLOWED_ORIGINS = {
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+    "http://localhost:5176",
+    "http://localhost:5177",
+    "http://localhost:5178",
+    "http://localhost:5179",
+    "http://localhost:8081",
+    "http://localhost:19006",
+}
+
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    traceback_str = traceback.format_exc()
+    print(f"Unhandled exception: {traceback_str}")
+
+    origin = request.headers.get("origin", "")
+    headers = {}
+    if origin in ALLOWED_ORIGINS:
+        headers["Access-Control-Allow-Origin"] = origin
+        headers["Access-Control-Allow-Credentials"] = "true"
+
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+        headers=headers,
+    )
+
+
+# Serve uploaded chat images statically.
+uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
+if os.path.exists(uploads_dir):
+    app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
+
+app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
+app.include_router(dashboard.router, prefix="/api/v1", tags=["Dashboard"])
+app.include_router(products.router, prefix="/api/v1/products", tags=["Products"])
+app.include_router(customization.router, prefix="/api/v1", tags=["customization"])
+app.include_router(chats.router, prefix="/api/v1", tags=["chats"])
+app.include_router(orders.router, prefix="/api/v1", tags=["orders"])
+app.include_router(payments.router, prefix="/api/v1", tags=["payments"])
+app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
+app.include_router(site_customization.router, prefix="/api/v1", tags=["site-customization"])
+app.include_router(addresses.router, prefix="/api/v1", tags=["addresses"])
+app.include_router(reviews.router, prefix="/api/v1", tags=["Reviews"])
+app.include_router(vases.router, prefix="/api/v1/vases", tags=["Vases"])
+app.include_router(campaigns.router, prefix="/api/v1", tags=["campaigns"])
+
+
+@app.get("/", tags=["Health"])
+def root():
+    return {"status": "ok", "message": "Bloomora API is running"}
+
+
+@app.get("/health", tags=["Health"])
+def health():
+    return {"status": "healthy"}
