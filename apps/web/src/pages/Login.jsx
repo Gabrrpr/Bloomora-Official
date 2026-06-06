@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react"
 import { useAuth } from "../context/AuthContext"
 import FlowerPanel from "../components/FlowerPanel"
 import Footer from "../components/Footer"
-import estingsLogo from "../assets/estings.svg"
+import estingsLogo from "../assets/Estings.svg"
 import bgImg from "../assets/BG_LoginRegister.png"
 
 // ── Constants ───────────────────────────────────────────────────────────────

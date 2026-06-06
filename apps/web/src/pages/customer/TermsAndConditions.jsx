@@ -1,5 +1,5 @@
 import { useTheme } from "../../context/ThemeContext"
-import estingsLogo from "../../assets/estings.svg"
+import estingsLogo from "../../assets/Estings.svg"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"

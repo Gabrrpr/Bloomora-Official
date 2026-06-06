@@ -4,7 +4,7 @@ import { sendOtp, verifyOtp } from "../services/auth"
 import { regions, getProvinces } from "../utils/philippines"
 import FlowerPanel from "../components/FlowerPanel"
 import TermsModal from "../components/TermsModal"
-import estingsLogo from "../assets/estings.svg"
+import estingsLogo from "../assets/Estings.svg"
 import bgImg from "../assets/BG_LoginRegister.png"
 
 // ── Validation helpers ──────────────────────────────────────────────────────

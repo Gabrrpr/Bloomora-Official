@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react"
 import FlowerPanel from "../components/FlowerPanel"
 import { sendForgotPasswordOtp, resetPassword } from "../services/auth"
-import estingsLogo from "../assets/estings.svg"
+import estingsLogo from "../assets/Estings.svg"
 import bgImg from "../assets/BG_LoginRegister.png"
 
 function TypewriterText({ text, typingSpeed = 100, deletingSpeed = 65, pauseAfterTyping = 2500, pauseAfterDeleting = 600 }) {

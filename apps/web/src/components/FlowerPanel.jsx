@@ -1,4 +1,4 @@
-import estingsLogo from "../assets/estings.svg"
+import estingsLogo from "../assets/Estings.svg"
 import bgImg from "../assets/BG_LoginRegister.png"
 
 /**
