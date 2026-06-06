@@ -1,5 +1,6 @@
 fastapi
 uvicorn
+slowapi
 sqlalchemy
 psycopg2-binary
 python-dotenv
