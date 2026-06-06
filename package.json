@@ -1,4 +1,7 @@
 {
+  "scripts": {
+    "build": "npm --prefix apps/web install && npm --prefix apps/web run build"
+  },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.0",
