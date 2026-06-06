@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useAuth } from "./AuthContext";
+import { API_BASE } from "../config/api";
 
 export default function OAuthCallback({ onNavigate }) {
   const { setUserFromToken } = useAuth();
@@ -20,7 +21,7 @@ export default function OAuthCallback({ onNavigate }) {
   }
 
   try {
-    const response = await fetch(`http://localhost:8000/api/v1/auth/oauth/exchange?code=${code}`);
+    const response = await fetch(`${API_BASE}/auth/oauth/exchange?code=${code}`);
     const data = await response.json();
 
     if (response.ok && data.access_token) {

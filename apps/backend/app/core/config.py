@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     FACEBOOK_CLIENT_SECRET: str = ""
     FACEBOOK_REDIRECT_URI: str = ""
     OAUTH_REDIRECT_URI: str = "http://localhost:8000/api/v1/auth"
+    CORS_ORIGINS: str = ""
 
     class Config:
         env_file = ".env"

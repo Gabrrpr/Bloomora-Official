@@ -28,6 +28,30 @@ from app.api.v1.routes import (
 from app.core.config import settings
 from app.core.limiter import limiter
 
+LOCAL_ORIGINS = {
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+    "http://localhost:5176",
+    "http://localhost:5177",
+    "http://localhost:5178",
+    "http://localhost:5179",
+    "http://localhost:8081",
+    "http://localhost:19006",
+}
+
+DEPLOYED_ORIGINS = {
+    "https://blueviolet-otter-621683.hostingersite.com",
+}
+
+CONFIGURED_ORIGINS = {
+    origin.strip().rstrip("/")
+    for origin in settings.CORS_ORIGINS.split(",")
+    if origin.strip()
+}
+
+ALLOWED_ORIGINS = LOCAL_ORIGINS | DEPLOYED_ORIGINS | CONFIGURED_ORIGINS
+
 app = FastAPI(
     title="Bloomora API",
     description="Backend API for Bloomora - Floral E-Commerce Platform for Esting's Flowers International Inc.",
@@ -43,33 +67,11 @@ app.add_middleware(SessionMiddleware, secret_key=settings.SECRET_KEY)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:5174",
-        "http://localhost:5175",
-        "http://localhost:5176",
-        "http://localhost:5177",
-        "http://localhost:5178",
-        "http://localhost:5179",
-        "http://localhost:8081",
-        "http://localhost:19006",
-    ],
+    allow_origins=sorted(ALLOWED_ORIGINS),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-ALLOWED_ORIGINS = {
-    "http://localhost:5173",
-    "http://localhost:5174",
-    "http://localhost:5175",
-    "http://localhost:5176",
-    "http://localhost:5177",
-    "http://localhost:5178",
-    "http://localhost:5179",
-    "http://localhost:8081",
-    "http://localhost:19006",
-}
 
 
 @app.exception_handler(Exception)

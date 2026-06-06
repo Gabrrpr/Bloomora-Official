@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { api } from "../../services/api.js";
 import { useTheme } from "../../context/ThemeContext.jsx";
+import { API_BASE } from "../../config/api.js";
 
 const G = "#2E8B34";
 const DG = "#0C573E";
@@ -213,7 +214,7 @@ export default function Profile({ onNavigate }) {
 
     try {
       // 4. Send directly to backend with the raw token
-      const response = await fetch("http://localhost:8000/api/v1/users/profile/upload-picture", {
+      const response = await fetch(`${API_BASE}/users/profile/upload-picture`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${rawToken}`
@@ -242,7 +243,7 @@ export default function Profile({ onNavigate }) {
   const checkUsername = async (username) => {
     if (!username) return;
     try {
-      const res = await fetch(`http://localhost:8000/api/v1/users/?search=${username}`, {
+      const res = await fetch(`${API_BASE}/users/?search=${username}`, {
         headers: { Authorization: `Bearer ${user.token}` },
       });
       const data = await res.json();

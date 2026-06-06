@@ -2,6 +2,7 @@
 import { useAuth } from '../context/AuthContext.jsx'
 import { useTheme } from '../context/ThemeContext.jsx'
 import { api } from '../services/api.js'
+import { chatWsUrl } from '../config/api.js'
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -190,7 +191,7 @@ export default function ChatWidget() {
         const token = localStorage.getItem("access_token")
         
         // 🚀 SECURITY FIX 2: Append the token directly to the WS connection URL
-        const websocket = new WebSocket(`ws://localhost:8000/api/v1/chats/ws/${currentSessionId}?token=${token}`)
+        const websocket = new WebSocket(chatWsUrl(currentSessionId, token))
         
         wsRef.current = websocket
         websocket.onopen = () => console.log('Secure WS connected')

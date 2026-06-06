@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react"
 import { useAuth } from "../../context/AuthContext"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
+import { chatWsUrl } from "../../config/api.js"
 import UnsendModal from "../../components/UnsendModal"
 
 const DG = "#0C573E"
@@ -205,7 +206,7 @@ export default function AdminChat() {
     // 5. Only connect if we have an ID and aren't already connected
     if (wsRef.current) return;
 
-    const wsUrl = `ws://localhost:8000/api/v1/chats/ws/${adminId}?token=${user.token}`;
+    const wsUrl = chatWsUrl(adminId, user.token);
     const websocket = new WebSocket(wsUrl);
     wsRef.current = websocket;
 

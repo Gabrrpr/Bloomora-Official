@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { loginUser, googleLogin as googleLoginApi, facebookLogin as facebookLoginApi } from "../services/auth";
+import { API_BASE } from "../config/api";
 
 const AuthContext = createContext(null);
 const isPreview = new URLSearchParams(window.location.search).get("preview") === "true";
@@ -19,7 +20,7 @@ export function AuthProvider({ children }) {
     }
 
     try {
-      const profileRes = await fetch("http://localhost:8000/api/v1/auth/me", {
+      const profileRes = await fetch(`${API_BASE}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       

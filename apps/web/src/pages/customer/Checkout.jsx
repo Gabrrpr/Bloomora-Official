@@ -3,6 +3,7 @@ import { api } from "../../services/api.js"
 import { getCart, clearCart } from "../../utils/cart.js"
 import { useAuth } from "../../context/AuthContext"
 import { validateVoucher, computeDiscount } from "../../utils/vouchers.js"
+import { API_BASE } from "../../config/api.js"
 
 const G = "#2E8B34"
 
@@ -55,7 +56,7 @@ export default function Checkout({ onNavigate }) {
         return
       }
       try {
-        const res = await fetch("http://localhost:8000/api/v1/auth/me", {
+        const res = await fetch(`${API_BASE}/auth/me`, {
           headers: { Authorization: `Bearer ${token}` }
         })
         if (res.ok) {

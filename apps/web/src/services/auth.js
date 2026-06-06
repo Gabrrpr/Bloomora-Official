@@ -1,4 +1,4 @@
-const API_BASE = 'http://localhost:8000/api/v1'
+import { API_BASE } from "../config/api"
 
 export async function sendOtp(email) {
   const response = await fetch(`${API_BASE}/auth/send-otp`, {
