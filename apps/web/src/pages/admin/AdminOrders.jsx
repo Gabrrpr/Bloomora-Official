@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
 import { DG, G, StatusBadge } from "./_adminShared"
+import { Pagination } from "./_adminShared"
 
 const ORDER_STATUSES = ["All", "Pending", "Preparing", "Out for Delivery", "Delivered", "Cancelled"]
 const BRANCHES       = ["All Branches", "Manila", "Pampanga"]
@@ -68,6 +69,7 @@ function formatStatus(status) {
 export default function AdminOrders() {
   const { isDark } = useTheme()
 
+  const PAGE_SIZE = 35;
   const [search, setSearch]         = useState("")
   const [statusFilter, setStatus]   = useState("All")
   const [branch, setBranch]         = useState("All Branches")
@@ -76,6 +78,7 @@ export default function AdminOrders() {
   const [loading, setLoading]       = useState(false)
   const [error, setError]           = useState(null)
   const [viewingOrder, setViewingOrder] = useState(null)
+  const [page, setPage] = useState(1);
 
   const fetchOrders = useCallback(async () => {
     setLoading(true); setError(null)
@@ -96,13 +99,19 @@ export default function AdminOrders() {
   }
 
   const filtered = orders.filter(o => {
-    const matchStatus = statusFilter === "All" || formatStatus(o.status) === statusFilter
-    const matchBranch = branch === "All Branches" || (o.branch || "").toLowerCase() === branch.toLowerCase()
+    const matchStatus = statusFilter === "All" || formatStatus(o.status) === statusFilter;
+    const matchBranch = branch === "All Branches" || (o.branch || "").toLowerCase() === branch.toLowerCase();
     const matchSearch = !search ||
       (o.order_number || "").toLowerCase().includes(search.toLowerCase()) ||
-      (o.customer_name || "").toLowerCase().includes(search.toLowerCase())
-    return matchStatus && matchBranch && matchSearch
-  })
+      (o.customer_name || "").toLowerCase().includes(search.toLowerCase());
+      
+    return matchStatus && matchBranch && matchSearch;
+  });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const pageSafe = Math.min(page, totalPages);
+  // 3. THIRD: Slice the final array for the current page
+  const paginatedOrders = filtered.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
 
   const subTxt   = isDark ? "#94a3b8" : "#64748b"
   const toolbarBg  = isDark ? "#111827" : "#fafbfc"

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
-import { DG, G } from "./_adminShared"
+import { DG, G, Pagination } from "./_adminShared"
+
 
 // ── Dark token hook ───────────────────────────────────────────────────────────
 function useDark() {

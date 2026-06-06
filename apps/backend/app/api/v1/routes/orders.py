@@ -192,44 +192,66 @@ def create_orders(
 
         if is_custom_request:
             try:
-                # Attempt to find the pre-generated AI arrangement in the database
                 arr_uuid = uuid.UUID(str(item_id))
-                arrangement = db.query(Arrangement).filter(Arrangement.id == arr_uuid).first()
+                
+                # 1. Lock the arrangement
+                arrangement = db.query(Arrangement).filter(Arrangement.id == arr_uuid).with_for_update().first()
                 if not arrangement:
                     raise HTTPException(status_code=404, detail="Custom arrangement session expired or invalid.")
                 
+                # 🚀 2. DEDUCT RAW MATERIALS (The Mix & Match Recipe)
+                # We loop through whatever items make up this custom arrangement.
+                # NOTE: You will need to adjust `arrangement.items` to match whatever your DB relationship is called!
+                if hasattr(arrangement, 'items'):
+                    for component in arrangement.items:
+                        inv = db.query(Inventory).filter(Inventory.product_id == component.product_id).with_for_update().first()
+                        
+                        # Check if we have enough raw materials to build this custom arrangement
+                        if not inv or inv.current_stock < (component.quantity * qty):
+                            raise HTTPException(
+                                status_code=400, 
+                                detail=f"Insufficient raw materials: Not enough stock for component ID {component.product_id}"
+                            )
+                        
+                        # Take the raw materials off the shelf
+                        inv.current_stock -= (component.quantity * qty)
+                        
+                        # Auto-hide the raw material if we just used the very last one!
+                        if inv.current_stock <= 0:
+                            prod = db.query(Product).filter(Product.id == component.product_id).first()
+                            if prod: prod.is_available = False
+
                 db_price = arrangement.estimated_price
                 arrangement_id = arrangement.id
+                
             except ValueError:
                 raise HTTPException(status_code=400, detail="Invalid custom arrangement ID.")
+                
         else:
             try:
                 product_id = uuid.UUID(str(item_id))
                 
-                # We use with_for_update() to lock the row temporarily. 
-                # This prevents two customers from buying the exact same last item at the exact same millisecond!
-                product = db.query(Product).filter(Product.id == product_id).with_for_update().first()
+                # 1. Lock the product and its inventory
+                product = db.query(Product).filter(Product.id == product_id).first()
+                inventory = db.query(Inventory).filter(Inventory.product_id == product_id).with_for_update().first()
                 
-                if not product or not product.is_available:
+                if not product or not product.is_available or not inventory:
                     raise HTTPException(status_code=404, detail=f"Product unavailable: {item_id}")
                 
-                # 🚀 INVENTORY CHECK: Do we have enough?
-                # (Change 'stock' to 'quantity' if your database column is named differently)
-                current_stock = getattr(product, 'stock', 0) 
-                if current_stock < qty:
+                # 🚀 2. DEDUCT STANDARD INVENTORY
+                if inventory.current_stock < qty:
                     raise HTTPException(
                         status_code=400, 
-                        detail=f"Insufficient stock for {product.name}. Only {current_stock} left."
+                        detail=f"Insufficient stock for {product.name}. Only {inventory.current_stock} left."
                     )
                 
-                # 🚀 INVENTORY DEDUCTION: Take it off the shelf!
-                product.stock -= qty
+                # Take it off the shelf
+                inventory.current_stock -= qty
                 
-                # Optional: If stock hits 0, automatically mark it as unavailable so it hides from the store
-                if product.stock <= 0:
+                # Auto-hide if sold out
+                if inventory.current_stock <= 0:
                     product.is_available = False
                 
-                # 🚀 The golden rule: Extract price from DB
                 db_price = product.price
                 
             except ValueError:

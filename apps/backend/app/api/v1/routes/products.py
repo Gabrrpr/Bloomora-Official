@@ -11,7 +11,7 @@ from PIL import Image
 from supabase import create_client, Client
 from app.core.config import settings
 from app.core.dependencies import get_db, get_current_user, require_staff
-from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum, Review
+from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum, Review, Order
 
 router = APIRouter()
 
@@ -500,17 +500,35 @@ def delete_product(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff), # 🚀 SECURED
 ):
-    """Soft-delete a product. Admin/Staff only."""
-    product = db.query(Product).filter(Product.id == product_id).first()
+    """Smart-delete a product. Admin/Staff only."""
+    # 1. Safely parse the UUID
+    try:
+        prod_uuid = uuid.UUID(product_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid product ID format")
+
+    # 2. Find the product
+    product = db.query(Product).filter(Product.id == prod_uuid).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    
-    product.status = ProductStatusEnum.inactive
-    product.is_available = False
-    
-    db.commit()
 
-    return {"status": "success", "message": "Product deactivated successfully."}
+    # 🚀 3. SMART DELETE LOGIC: Check the Order table
+    orders_count = db.query(Order).filter(Order.product_id == prod_uuid).count()
+
+    if orders_count == 0:
+        # 🚀 FIX: We must delete the inventory record FIRST to satisfy the database constraints
+        db.query(Inventory).filter(Inventory.product_id == prod_uuid).delete(synchronize_session=False)
+        
+        # Hard Delete: No one bought it, safe to completely erase.
+        db.delete(product)
+        db.commit()
+        return {"status": "success", "delete_type": "hard", "message": "Product permanently deleted."}
+    else:
+        # Soft Delete: People bought it. Hide it to protect the order receipts.
+        product.status = ProductStatusEnum.inactive
+        product.is_available = False
+        db.commit()
+        return {"status": "success", "delete_type": "soft", "message": "Product archived to protect order history."}
 
 # ── Public wildcard route — MUST be last ─────────────────────────────────────
 @router.get("/{product_id}", response_model=dict)

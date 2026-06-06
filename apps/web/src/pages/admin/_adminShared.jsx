@@ -190,18 +190,49 @@ export function FilterBar({ dropdowns = [], searchPlaceholder = "Search...", sea
 }
 
 // ── Pagination ────────────────────────────────────────────────────────────────
-export function Pagination({ showing = "0 entries" }) {
+export function Pagination({ showing = "0 entries", page = 1, totalPages = 1, onPageChange }) {
   const t = useTokens()
+  const canPrev = page > 1
+  const canNext = page < totalPages
+
+  const baseBtn = "px-3 py-1.5 rounded-md text-xs transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+
   return (
     <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: `1px solid ${t.tableBorder}` }}>
       <span className="text-sm" style={{ color: t.textMuted }}>{showing}</span>
-      <div className="flex items-center gap-1">
-        {["Previous", "1", "2", "3", ">", "Next →"].map(p => (
-          <button key={p} className="px-2.5 py-1.5 rounded-md text-xs transition-all hover:scale-105 active:scale-95"
-            style={{ background: p === "1" ? `linear-gradient(135deg,${DG},${G})` : t.cardBg, color: p === "1" ? "white" : t.textSecondary, border: p === "1" ? "none" : `1px solid ${t.cardBorder}`, fontWeight: p === "1" ? 600 : 400 }}>
+      
+      <div className="flex items-center gap-1.5">
+        <button 
+          onClick={() => onPageChange(page - 1)} 
+          disabled={!canPrev}
+          className={`${baseBtn} hover:scale-105 active:scale-95 disabled:hover:scale-100`}
+          style={{ backgroundColor: t.cardBg, color: t.textSecondary, border: `1px solid ${t.cardBorder}` }}>
+          ← Prev
+        </button>
+
+        {/* Dynamically render previous, current, and next page buttons */}
+        {([page - 1, page, page + 1]).filter(p => p >= 1 && p <= totalPages).map(p => (
+          <button 
+            key={p} 
+            onClick={() => onPageChange(p)}
+            className="px-3 py-1.5 rounded-md text-xs transition-all hover:scale-105 active:scale-95"
+            style={{ 
+              background: p === page ? `linear-gradient(135deg,${DG},${G})` : t.cardBg, 
+              color: p === page ? "white" : t.textSecondary, 
+              border: p === page ? "none" : `1px solid ${t.cardBorder}`, 
+              fontWeight: p === page ? 600 : 400 
+            }}>
             {p}
           </button>
         ))}
+
+        <button 
+          onClick={() => onPageChange(page + 1)} 
+          disabled={!canNext}
+          className={`${baseBtn} hover:scale-105 active:scale-95 disabled:hover:scale-100`}
+          style={{ backgroundColor: t.cardBg, color: t.textSecondary, border: `1px solid ${t.cardBorder}` }}>
+          Next →
+        </button>
       </div>
     </div>
   )

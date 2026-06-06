@@ -801,12 +801,20 @@ export default function AdminProducts() {
   const handleConfirmDelete = async (id) => {
     setIsDeleting(true);
     try {
-      await api.delete(`/products/admin/${id}`); 
-      setProducts(prev => prev.map(p => 
-        p.id === id 
-          ? { ...p, status: "inactive", is_available: false } 
-          : p
-      ));
+      // 1. Send the delete request
+      const response = await api.delete(`/products/admin/${id}`); 
+      
+      // 2. Check what the backend did
+      if (response.delete_type === "hard") {
+        // It was permanently deleted from the DB. Remove it from the table entirely!
+        setProducts(prev => prev.filter(p => p.id !== id));
+        setTotalCount(c => c - 1); // Adjust your total count stat block
+      } else {
+        // It was soft-deleted to protect receipts. Just update the UI badges.
+        setProducts(prev => prev.map(p => 
+          p.id === id ? { ...p, status: "inactive", is_available: false } : p
+        ));
+      }
 
       setDeletingProduct(null);
     }

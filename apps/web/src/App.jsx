@@ -164,7 +164,7 @@ function AppContent() {
           switch (page) {
             case "oauth-callback": return <OAuthCallback onNavigate={navigate} />;
             case "home": return <Home onNavigate={navigate} />;
-            case "shop": return <Shop onNavigate={navigate} activeCategory={activeShopCategory} />;
+            case "shop": return <Shop onNavigate={navigate} initialCategory={activeShopCategory} />;
             case "occasions": return <AllOccasions onNavigate={navigate} />;
             case "about": return <AboutUs onNavigate={navigate} />;
             case "contact": return <ContactUs onNavigate={navigate} />;
