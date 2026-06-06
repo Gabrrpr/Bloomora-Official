@@ -12,6 +12,7 @@ httpx
 python-multipart
 websockets
 pydantic[email]==2.9.2
+pydantic-settings==2.6.1
 pillow==12.1.1
 supabase==2.7.4
 authlib==1.3.1
