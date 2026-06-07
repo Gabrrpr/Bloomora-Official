@@ -280,7 +280,7 @@ def create_orders(
     
     # If the user chose an online payment method, create a PayMongo link
     if payment_method in ["gcash", "paymaya", "card", "qrph"]:
-        PAYMONGO_SECRET_KEY = "sk_test_SCjLKPkxCYgqpKhXMuqhtdB2" # ⚠️ Replace with your actual PayMongo Secret Key!
+        PAYMONGO_SECRET_KEY = "sk_test_YOUR_TEST_KEY_HERE" # ⚠️ Replace with your actual PayMongo Secret Key!
         
         # PayMongo expects amounts in cents (₱500.00 = 50000)
         amount_in_cents = int(total_checkout_amount * 100) 
