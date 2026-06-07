@@ -147,43 +147,56 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
                 {/* Items */}
                 {groupItems.map(item => (
                   <div key={`${item.id}-${item.group}`}
-                    className="px-4 py-4 flex items-start gap-3 sm:gap-4"
+                    className="px-4 py-4"
                     style={{ borderBottom:`1px solid ${hdrBdr}` }}>
-                    <input type="checkbox" checked={item.checked} onChange={() => toggleItem(item.id,item.group)}
-                      className="w-4 h-4 mt-1 rounded cursor-pointer flex-shrink-0" style={{ accentColor:G }}/>
 
-                    {/* Image */}
-                    <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden"
-                      style={{ background:imgBg, border:`1px solid ${cardBdr}` }}>
-                      {item.img
-                        ? <img src={item.img} alt={item.name} className="w-full h-full object-cover"/>
-                        : <span className="text-xs text-center px-1" style={{ color:subC }}>{item.name?.slice(0,10)||"Item"}</span>
-                      }
+                    {/* Top row: checkbox + image + details + (desktop controls) + remove */}
+                    <div className="flex items-start gap-3 sm:gap-4">
+                      <input type="checkbox" checked={item.checked} onChange={() => toggleItem(item.id,item.group)}
+                        className="w-4 h-4 mt-1 rounded cursor-pointer flex-shrink-0" style={{ accentColor:G }}/>
+
+                      {/* Image */}
+                      <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden"
+                        style={{ background:imgBg, border:`1px solid ${cardBdr}` }}>
+                        {item.img
+                          ? <img src={item.img} alt={item.name} className="w-full h-full object-cover"/>
+                          : <span className="text-xs text-center px-1" style={{ color:subC }}>{item.name?.slice(0,10)||"Item"}</span>
+                        }
+                      </div>
+
+                      {/* Details */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold mb-0.5 truncate" style={{ color:labelC }}>{item.name}</p>
+                        <p className="text-xs leading-relaxed line-clamp-2" style={{ color:subC }}>{item.desc}</p>
+                      </div>
+
+                      {/* Controls — desktop only (stacked at right) */}
+                      <div className="hidden sm:flex flex-col items-end gap-2 flex-shrink-0">
+                        <QtyControl qty={item.qty||1} onDecrease={()=>handleQty(item.id,item.group,-1)} onIncrease={()=>handleQty(item.id,item.group,1)} isDark={isDark}/>
+                        <span className="text-sm font-bold" style={{ color:priceC }}>
+                          ₱{((item.price||0)*(item.qty||1)).toLocaleString()}
+                        </span>
+                      </div>
+
+                      {/* Remove */}
+                      <button onClick={() => handleRemove(item.id,item.group)}
+                        className="mt-0.5 flex-shrink-0 transition-colors"
+                        style={{ color:subC }}
+                        onMouseEnter={e => e.currentTarget.style.color=delHov}
+                        onMouseLeave={e => e.currentTarget.style.color=subC}>
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                      </button>
                     </div>
 
-                    {/* Details */}
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold mb-0.5 truncate" style={{ color:labelC }}>{item.name}</p>
-                      <p className="text-xs leading-relaxed line-clamp-2" style={{ color:subC }}>{item.desc}</p>
-                    </div>
-
-                    {/* Controls */}
-                    <div className="flex flex-col items-end gap-2 flex-shrink-0">
+                    {/* Controls — mobile only (full-width row below, so the name/desc keep the full width above) */}
+                    <div className="flex sm:hidden items-center justify-between gap-3 mt-3">
                       <QtyControl qty={item.qty||1} onDecrease={()=>handleQty(item.id,item.group,-1)} onIncrease={()=>handleQty(item.id,item.group,1)} isDark={isDark}/>
                       <span className="text-sm font-bold" style={{ color:priceC }}>
                         ₱{((item.price||0)*(item.qty||1)).toLocaleString()}
                       </span>
                     </div>
-
-                    <button onClick={() => handleRemove(item.id,item.group)}
-                      className="mt-0.5 flex-shrink-0 transition-colors"
-                      style={{ color:subC }}
-                      onMouseEnter={e => e.currentTarget.style.color=delHov}
-                      onMouseLeave={e => e.currentTarget.style.color=subC}>
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
-                      </svg>
-                    </button>
                   </div>
                 ))}
               </div>

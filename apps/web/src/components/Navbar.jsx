@@ -131,7 +131,7 @@ function BranchModal({ branch, onClose }) {
     <>
       <style>{`@keyframes bmIn { from { opacity:0; transform:scale(0.93) translateY(-16px); } to { opacity:1; transform:scale(1) translateY(0); } }`}</style>
       <div
-        className="fixed inset-0 z-[200] flex items-center justify-center px-3 sm:px-4"
+        className="fixed inset-0 z-[100000] flex items-center justify-center px-3 sm:px-4 py-6 sm:py-4 overflow-y-auto"
         style={{ backgroundColor: "rgba(0,0,0,0.50)", backdropFilter: "blur(5px)" }}
         onClick={onClose}
       >
@@ -160,7 +160,7 @@ function BranchModal({ branch, onClose }) {
           </button>
 
           <div className="flex flex-col sm:flex-row">
-            <div className="relative w-full sm:w-1/2 aspect-square flex-shrink-0 overflow-hidden bg-gray-100">
+            <div className="relative w-full sm:w-1/2 aspect-[16/10] sm:aspect-square flex-shrink-0 overflow-hidden bg-gray-100">
               {info.image && !imgError ? (
                 <img
                   src={info.image}
@@ -181,7 +181,7 @@ function BranchModal({ branch, onClose }) {
                 </div>
               )}
             </div>
-            <div className="flex-1 p-5 sm:p-6 flex flex-col min-w-0">
+            <div className="flex-1 p-4 sm:p-6 flex flex-col min-w-0">
               <div className="mb-4 sm:mb-5">
                 <p className="text-[10px] sm:text-xs font-bold tracking-widest uppercase mb-1"
                   style={{ color: isDark ? "#6b7280" : "#9ca3af" }}>
@@ -262,10 +262,12 @@ function MakeItPersonalPopout({ onNavigate, onClose, isCustomizationEnabled }) {
 
   return (
     <>
-      <style>{`@keyframes mipSlideIn { from { opacity:0; transform:translateX(-12px) scale(0.97); } to { opacity:1; transform:translateX(0) scale(1); } }`}</style>
-      <div className="absolute" style={{ top:0, right:"-12px", width:"16px", height:"100%", zIndex:49 }}/>
-      <div className="absolute z-50" style={{ top:"-8px", left:"calc(100% + 12px)", animation:"mipSlideIn 0.22s cubic-bezier(0.34,1.56,0.64,1) both", filter:"drop-shadow(0 16px 40px rgba(0,0,0,0.13))" }}>
-        <div className="absolute" style={{ left:"-7px", top:"28px", width:0, height:0, borderTop:"7px solid transparent", borderBottom:"7px solid transparent", borderRight:`7px solid ${bg}`, filter:"drop-shadow(-2px 0 2px rgba(0,0,0,0.06))" }}/>
+      <style>{`@keyframes mipSlideDown { from { opacity:0; transform:translateY(-8px) scale(0.98); } to { opacity:1; transform:translateY(0) scale(1); } }`}</style>
+      {/* hover bridge below the button, closes the vertical gap */}
+      <div className="absolute" style={{ top:"100%", left:0, right:0, height:"14px", zIndex:49 }}/>
+      <div className="absolute z-50" style={{ top:"calc(100% + 10px)", right:0, animation:"mipSlideDown 0.22s cubic-bezier(0.34,1.56,0.64,1) both", filter:"drop-shadow(0 16px 40px rgba(0,0,0,0.13))" }}>
+        {/* up-pointing arrow near the right, under the button */}
+        <div className="absolute" style={{ right:"20px", top:"-7px", width:0, height:0, borderLeft:"7px solid transparent", borderRight:"7px solid transparent", borderBottom:`7px solid ${bg}`, filter:"drop-shadow(0 -2px 2px rgba(0,0,0,0.05))" }}/>
         <div className="overflow-hidden" style={{ borderRadius:"16px", border:`1px solid ${bdr}`, width:"280px", backgroundColor:bg }}>
           <div className="px-4 pt-4 pb-3" style={{ borderBottom:`1px solid ${divBdr}` }}>
             <div className="flex items-center gap-2">
@@ -310,7 +312,7 @@ function MakeItPersonalPopout({ onNavigate, onClose, isCustomizationEnabled }) {
 }
 
 // ── Promo Carousel ────────────────────────────────────────────────────────────
-function PromoCarousel({ onNavigate }) {
+function PromoCarousel({ onNavigate, leftSlot }) {
   const [current, setCurrent] = useState(0);
   const [animating, setAnimating] = useState(false);
   const [direction, setDirection] = useState("next");
@@ -331,9 +333,11 @@ function PromoCarousel({ onNavigate }) {
     </button>
   );
   return (
-    <div style={{ backgroundColor:DARK_GREEN, minHeight:"52px", display:"flex", alignItems:"center", padding:"4px 10px" }}>
-      <div className="hidden sm:flex items-center gap-1.5" style={{ visibility:"hidden", flexShrink:0 }}>{SOCIAL_LINKS.map(s=><div key={s.name} style={{ width:"28px", height:"28px" }}/>)}</div>
-      <div style={{ flex:1, display:"flex", alignItems:"center", justifyContent:"center", gap:"4px", minWidth:0 }}>
+    <div className="px-4 sm:px-6 lg:px-8 pt-1.5 pb-3 lg:py-1 flex flex-col lg:flex-row lg:items-center gap-1.5 lg:gap-0"
+      style={{ backgroundColor:DARK_GREEN, minHeight:"52px" }}>
+
+      {/* Advertisement (promo carousel) — top row on mobile, center on desktop */}
+      <div className="order-1 lg:order-2 w-full lg:flex-1 flex items-center justify-center gap-1 min-w-0">
         {arrowBtn("prev")}
         <div style={{ overflow:"hidden", minWidth:0, flex:1, maxWidth:"560px", textAlign:"center" }}>
           <span className="font-medium text-white" style={{
@@ -354,7 +358,12 @@ function PromoCarousel({ onNavigate }) {
         </div>
         {arrowBtn("next")}
       </div>
-      <div className="hidden sm:flex items-center gap-1.5" style={{ flexShrink:0 }}>
+
+      {/* Store branch — second row on mobile (centered), left on desktop */}
+      <div className="order-2 lg:order-1 flex items-center justify-center lg:justify-start flex-shrink-0 min-w-0">{leftSlot}</div>
+
+      {/* Socials — desktop only, right */}
+      <div className="hidden lg:flex items-center gap-1.5 order-3 flex-shrink-0">
         {SOCIAL_LINKS.map(s => (
           <a key={s.name} href={s.href} title={s.name} target="_blank" rel="noopener noreferrer"
             className="w-7 h-7 rounded-full flex items-center justify-center text-white transition-all hover:scale-110"
@@ -373,10 +382,14 @@ const SEARCH_SUGGESTIONS = [
   "Sunflowers", "Mixed Tulips", "Same-day Delivery",
 ];
 
+// Words cycled through by the animated "typing" placeholder in the search box
+const SEARCH_TYPING = ["Red Roses", "Sunflowers", "Birthday Flowers", "Mixed Tulips", "Anniversary Bouquet"];
+
 // ── Search Overlay ────────────────────────────────────────────────────────────
 function SearchOverlay({ onClose, onNavigate }) {
   const { isDark } = useTheme();
   const [query, setQuery] = useState("");
+  const [typed, setTyped] = useState("");
   const inputRef = useRef(null);
 
   useEffect(() => {
@@ -386,14 +399,39 @@ function SearchOverlay({ onClose, onNavigate }) {
     return () => document.removeEventListener("keydown", h);
   }, []);
 
+  // Animated "typing" placeholder — types each example, pauses, deletes, next.
+  useEffect(() => {
+    let w = 0, c = 0, deleting = false, t;
+    const tick = () => {
+      const word = SEARCH_TYPING[w];
+      if (!deleting) {
+        c++;
+        setTyped(word.slice(0, c));
+        if (c === word.length) { deleting = true; t = setTimeout(tick, 1500); return; }
+        t = setTimeout(tick, 85);
+      } else {
+        c--;
+        setTyped(word.slice(0, c));
+        if (c === 0) { deleting = false; w = (w + 1) % SEARCH_TYPING.length; t = setTimeout(tick, 350); return; }
+        t = setTimeout(tick, 40);
+      }
+    };
+    t = setTimeout(tick, 500);
+    return () => clearTimeout(t);
+  }, []);
+
   const doSearch = (term) => {
-    if (term.trim()) { onNavigate?.("shop"); onClose(); }
+    if (term && term.trim()) { onNavigate?.("shop"); onClose(); }
+  };
+
+  const fillSearch = (term) => {
+    setQuery(term);
+    inputRef.current?.focus();
   };
 
   const surfaceBg = isDark ? "#1a2332" : "white";
   const textC     = isDark ? "#e5e7eb" : "#111827";
   const iconC     = isDark ? "#9ca3af" : "#9ca3af";
-  const suggBg    = isDark ? "#111827" : "#f3f4f6";
   const suggBdr   = isDark ? "#2d3748" : "#e5e7eb";
   const suggText  = isDark ? "#d1d5db" : "#374151";
 
@@ -422,6 +460,18 @@ function SearchOverlay({ onClose, onNavigate }) {
       `}</style>
       <div className="search-dialog w-full max-w-2xl" onClick={e => e.stopPropagation()}
         style={{ animation:"ssDown 0.22s cubic-bezier(0.34,1.56,0.64,1) both" }}>
+
+        {/* Title */}
+        <div className="text-center mb-4 px-2">
+          <h2 className="text-white font-bold tracking-tight leading-tight" style={{ fontSize:"clamp(20px,5vw,26px)" }}>
+            What are you looking for?
+          </h2>
+          <p className="text-white/55 text-xs sm:text-sm mt-1">
+            Search our flowers, bouquets, and gifts
+          </p>
+        </div>
+
+        {/* Search box */}
         <form onSubmit={e => { e.preventDefault(); doSearch(query); }}>
           <div className="flex items-center rounded-2xl overflow-hidden shadow-2xl"
             style={{ backgroundColor: surfaceBg, border:`2px solid ${SITE_GREEN}`, height:"52px" }}>
@@ -432,7 +482,7 @@ function SearchOverlay({ onClose, onNavigate }) {
             </div>
             <input
               ref={inputRef} type="text" value={query} onChange={e => setQuery(e.target.value)}
-              placeholder="Search flowers, bouquets..." className="search-input py-3 text-sm sm:text-base"
+              placeholder={`Search ${typed}`} className="search-input py-3 text-sm sm:text-base"
               style={{ color: textC, caretColor: SITE_GREEN, WebkitAppearance:"none" }}
             />
             {query && (
@@ -454,17 +504,41 @@ function SearchOverlay({ onClose, onNavigate }) {
             </button>
           </div>
         </form>
-        <div className="mt-3 flex flex-wrap gap-2 justify-center">
-          {SEARCH_SUGGESTIONS.map(s => (
-            <button key={s} onClick={(e) => { e.stopPropagation(); doSearch(s); }}
-              className="text-xs font-medium px-3 py-1.5 rounded-full transition-all hover:scale-105"
-              style={{ backgroundColor:suggBg, border:`1px solid ${suggBdr}`, color:suggText }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor=SITE_GREEN; e.currentTarget.style.color=isDark?"#4ade80":SITE_GREEN; }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor=suggBdr; e.currentTarget.style.color=suggText; }}>
-              {s}
-            </button>
-          ))}
+
+        {/* Suggestions — one per row. Tap label to search; tap arrow to fill the box. */}
+        <div className="mt-4">
+          <p className="text-white/50 text-[11px] font-semibold uppercase tracking-widest mb-2 px-1">Popular searches</p>
+          <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: surfaceBg, border:`1px solid ${suggBdr}` }}>
+            {SEARCH_SUGGESTIONS.map((s, i) => (
+              <div key={s} className="flex items-stretch"
+                style={{ borderBottom: i < SEARCH_SUGGESTIONS.length - 1 ? `1px solid ${suggBdr}` : "none" }}>
+                {/* Label → search immediately */}
+                <button type="button" onClick={(e) => { e.stopPropagation(); doSearch(s); }}
+                  className="flex-1 flex items-center gap-3 px-4 py-3 text-left transition-colors min-w-0"
+                  style={{ color: suggText, backgroundColor:"transparent" }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "rgba(255,255,255,0.04)" : "#f9fafb"}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+                  <svg className="w-4 h-4 flex-shrink-0" style={{ color:iconC }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
+                  </svg>
+                  <span className="text-sm font-medium truncate">{s}</span>
+                </button>
+                {/* Arrow → drop into the search box for editing */}
+                <button type="button" aria-label={`Use "${s}" in search box`}
+                  onClick={(e) => { e.stopPropagation(); fillSearch(s); }}
+                  className="flex items-center justify-center px-3.5 flex-shrink-0 transition-colors"
+                  style={{ color:iconC, borderLeft:`1px solid ${suggBdr}`, backgroundColor:"transparent" }}
+                  onMouseEnter={e => { e.currentTarget.style.color = isDark ? "#4ade80" : SITE_GREEN; e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4"; }}
+                  onMouseLeave={e => { e.currentTarget.style.color = iconC; e.currentTarget.style.backgroundColor = "transparent"; }}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 18 6 6m0 0h7m-7 0v7"/>
+                  </svg>
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
+
         <p className="text-center text-white/50 text-xs mt-3">
           Press <kbd className="px-1.5 py-0.5 rounded text-xs" style={{ backgroundColor:"rgba(255,255,255,0.15)", color:"rgba(255,255,255,0.8)" }}>Esc</kbd> to close
         </p>
@@ -669,7 +743,7 @@ function BranchShippingPopup({ branch, onDismiss, onChangeBranch }) {
         style={{
           top: "calc(100% + 10px)",
           left: 0,
-          width: "290px",
+          width: "min(290px, calc(100vw - 2rem))",
           backgroundColor: bg,
           border: `1px solid ${bdr}`,
           borderRadius: "14px",
@@ -791,7 +865,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
   const [showBranchPopup, setShowBranchPopup]   = useState(false);
   const [showLockTooltip, setShowLockTooltip]   = useState(false);
 
-  const navRef=useRef(null), cartRef=useRef(null), userRef=useRef(null), locationRef=useRef(null), mipRef=useRef(null);
+  const navRef=useRef(null), cartRef=useRef(null), userRef=useRef(null), locationRef=useRef(null), mipRef=useRef(null), notifRef=useRef(null);
   const menuTimer=useRef(null), cartTimer=useRef(null), userTimer=useRef(null), mipTimer=useRef(null);
 
   const openMenuD  = l => { clearTimeout(menuTimer.current); setOpenMenu(l); };
@@ -962,6 +1036,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
       if (userRef.current && !userRef.current.contains(e.target)) setUserOpen(false);
       if (locationRef.current && !locationRef.current.contains(e.target)) setLocationOpen(false);
       if (mipRef.current && !mipRef.current.contains(e.target)) setMipOpen(false);
+      if (notifRef.current && !notifRef.current.contains(e.target)) setNotifOpen(false);
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
@@ -982,7 +1057,35 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
         ref={navRef} 
         style={{ zIndex: 99999, pointerEvents: "auto", position: "sticky" }}
       >
-        <PromoCarousel onNavigate={onNavigate} />
+        <PromoCarousel onNavigate={onNavigate} leftSlot={
+          <div className="flex items-center gap-2 flex-shrink-0" ref={locationRef}>
+            {/* "STORE BRANCH" label — now shown at all sizes (own row on mobile) */}
+            <span className="text-[11px] uppercase tracking-wide font-semibold whitespace-nowrap" style={{ color: "rgba(255,255,255,0.65)" }}>Store Branch</span>
+            <div className="relative">
+              <button onClick={(e) => { e.stopPropagation(); setLocationOpen(p => !p); }}
+                className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs sm:text-sm font-medium transition-all"
+                style={{
+                  border: `1px solid ${locationOpen ? "rgba(255,255,255,0.55)" : "rgba(255,255,255,0.28)"}`,
+                  color: "#ffffff",
+                  backgroundColor: locationOpen ? "rgba(255,255,255,0.20)" : "rgba(255,255,255,0.10)",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.18)"; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = locationOpen ? "rgba(255,255,255,0.20)" : "rgba(255,255,255,0.10)"; }}>
+                <svg className="w-3 h-3 flex-shrink-0" style={{ color:"#4ade80" }} fill="currentColor" viewBox="0 0 24 24"><path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742ZM12 13.5a3 3 0 100-6 3 3 0 000 6Z" clipRule="evenodd"/></svg>
+                {selectedLocation}
+                <svg className="w-3 h-3 flex-shrink-0 transition-transform" style={{ color:"rgba(255,255,255,0.7)", transform:locationOpen?"rotate(180deg)":"rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
+              </button>
+              {locationOpen && <LocationDropdown selected={selectedLocation} onChange={handleBranchSelect} onClose={() => setLocationOpen(false)} />}
+              {showBranchPopup && !locationOpen && (
+                <BranchShippingPopup
+                  branch={selectedLocation}
+                  onDismiss={handleDismissBranchPopup}
+                  onChangeBranch={handleChangeBranch}
+                />
+              )}
+            </div>
+          </div>
+        } />
 
         <nav className="border-b px-4 sm:px-6 lg:px-8 py-3" style={{
           backgroundColor: isDark ? "#111827" : "white",
@@ -1006,33 +1109,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
             </div>
 
             {/* Desktop nav links */}
-            <div className="hidden lg:flex items-center gap-6 xl:gap-8 flex-1 justify-center">
-
-              {/* Branch selector */}
-              <div className="flex items-center gap-1.5" ref={locationRef}>
-                <span className="text-xs uppercase tracking-wide font-medium" style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>Store Branch</span>
-                <div className="relative">
-                  <button onClick={(e) => { e.stopPropagation(); setLocationOpen(p => !p); }}
-                    className="flex items-center gap-1.5 border rounded-lg px-3 py-1.5 text-sm hover:border-green-400 transition-all"
-                    style={{
-                      borderColor: locationOpen ? (isDark?"#4ade80":SITE_GREEN) : (isDark ? "#2d3748" : "#e5e7eb"),
-                      color: isDark ? "#d1d5db" : "#374151",
-                      backgroundColor: isDark ? "#1a2332" : "transparent",
-                    }}>
-                    <svg className="w-3 h-3" style={{color:SITE_GREEN}} fill="currentColor" viewBox="0 0 24 24"><path fillRule="evenodd" d="m11.54 22.351.07.04.028.016a.76.76 0 00.723 0l.028-.015.071-.041a16.975 16.975 0 001.144-.742 19.58 19.58 0 002.683-2.282c1.944-1.99 3.963-4.98 3.963-8.827a8.25 8.25 0 00-16.5 0c0 3.846 2.02 6.837 3.963 8.827a19.58 19.58 0 002.682 2.282 16.975 16.975 0 001.145.742ZM12 13.5a3 3 0 100-6 3 3 0 000 6Z" clipRule="evenodd"/></svg>
-                    {selectedLocation}
-                    <svg className="w-3 h-3 text-gray-400 transition-transform" style={{ transform:locationOpen?"rotate(180deg)":"rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
-                  </button>
-                  {locationOpen && <LocationDropdown selected={selectedLocation} onChange={handleBranchSelect} onClose={() => setLocationOpen(false)} />}
-                  {showBranchPopup && !locationOpen && (
-                    <BranchShippingPopup
-                      branch={selectedLocation}
-                      onDismiss={handleDismissBranchPopup}
-                      onChangeBranch={handleChangeBranch}
-                    />
-                  )}
-                </div>
-              </div>
+            <div className="hidden lg:flex items-center gap-5 xl:gap-8 flex-1 justify-center">
 
               {/* Nav links */}
               {FINAL_NAV_LINKS.map(link => (
@@ -1118,7 +1195,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
               </div>
 
               {/* Notifications */}
-              <div className="relative">
+              <div className="relative" ref={notifRef}>
                 <button
                   onClick={(e) => { e.stopPropagation(); setNotifOpen(p => !p); }}
                   className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative"
@@ -1143,7 +1220,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                     onMouseLeave={() => setNotifOpen(false)}
                     className="absolute top-full right-0 mt-2 z-50 overflow-hidden"
                     style={{
-                      width: "320px",
+                      width: "min(320px, calc(100vw - 6rem))",
                       backgroundColor: isDark ? "#1a2332" : "white",
                       border: `1px solid ${isDark ? "#2d3748" : "#e5e7eb"}`,
                       borderRadius: "14px",
@@ -1238,7 +1315,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                 onClick={(e) => { e.stopPropagation(); setMobileOpen(p => !p); }}
                 onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"}
                 onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                <svg className="w-5 h-5 transition-transform duration-300 ease-out" style={{ transform: mobileOpen ? "rotate(90deg)" : "rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
                   {mobileOpen
                     ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
                     : <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>}
@@ -1248,9 +1325,16 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
 
           </div>{/* end top row */}
 
-          {/* ── Mobile menu ── */}
-          {mobileOpen && (
-            <div className="lg:hidden mt-2" style={{ borderTop: `1px solid ${isDark ? "#2d3748" : "#f3f4f6"}` }}>
+          {/* ── Mobile menu (animated open/close) ── */}
+          <div
+            className="lg:hidden grid overflow-hidden transition-all duration-300 ease-out"
+            style={{ gridTemplateRows: mobileOpen ? "1fr" : "0fr", opacity: mobileOpen ? 1 : 0, pointerEvents: mobileOpen ? "auto" : "none" }}
+          >
+            <div className="min-h-0 overflow-hidden">
+              <div
+                className="mt-2 transition-transform duration-300 ease-out"
+                style={{ borderTop: `1px solid ${isDark ? "#2d3748" : "#f3f4f6"}`, transform: mobileOpen ? "translateY(0)" : "translateY(-6px)" }}
+              >
 
               {/* Make it Personal section */}
               <div className="px-2 py-3 border-b" style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6" }}>
@@ -1373,14 +1457,15 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                   </div>
                 ) : (
                   <div className="flex gap-2">
-                    <button onClick={(e) => { e.stopPropagation(); onNavigate?.("login"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold text-white rounded-lg" style={{ backgroundColor:SITE_GREEN }}>Login</button>
-                    <button onClick={(e) => { e.stopPropagation(); onNavigate?.("register"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold rounded-lg border" style={{ borderColor:SITE_GREEN, color:SITE_GREEN }}>Sign Up</button>
+                    <button onClick={(e) => { e.stopPropagation(); onNavigate?.("login"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90" style={{ backgroundColor:SITE_GREEN }}>Login</button>
+                    <button onClick={(e) => { e.stopPropagation(); onNavigate?.("register"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold rounded-lg border transition-all hover:opacity-80" style={{ borderColor:SITE_GREEN, color:SITE_GREEN }}>Sign Up</button>
                   </div>
                 )}
               </div>
 
-            </div>
-          )}{/* end mobile menu */}
+              </div>{/* end mobile menu content */}
+            </div>{/* end mobile menu clip */}
+          </div>{/* end mobile menu (animated) */}
 
         </nav>
       </div>

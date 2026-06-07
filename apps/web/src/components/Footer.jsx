@@ -360,20 +360,20 @@ export default function Footer({ onNavigate }) {
       <FlowerBorder />
 
       <footer style={{ backgroundColor: FOOTER_BG, color: "white" }}>
-        <div style={{ maxWidth: "1280px", margin: "0 auto", padding: "48px 40px 0" }}>
+        <div className="ft-inner" style={{ maxWidth: "1280px", margin: "0 auto", padding: "48px 40px 0" }}>
 
           {/* ROW 1 */}
-          <div style={{ display:"flex", alignItems:"center", gap:"20px", flexWrap:"wrap",
+          <div className="ft-row1" style={{ display:"flex", alignItems:"center", gap:"20px", flexWrap:"wrap",
             paddingBottom:"36px", borderBottom:`1px solid ${C.divider}`, marginBottom:"40px" }}>
             <div style={{ display:"flex", alignItems:"center", gap:"10px", flexShrink:0 }}>
               <img src="/src/assets/EstingsLogo.svg" alt=""
                 style={{ width:"40px", height:"40px", objectFit:"contain" }}
                 onError={e => e.target.style.display="none"} />
               <img src="/src/assets/Estings.svg" alt="Esting's"
-                style={{ height:"34px", objectFit:"contain", filter:"brightness(0) invert(1)" }}
+                style={{ height:"34px", maxWidth:"55vw", objectFit:"contain", filter:"brightness(0) invert(1)" }}
                 onError={e => e.target.style.display="none"} />
             </div>
-            <div style={{ width:"1px", height:"36px", background:"rgba(255,255,255,0.20)", flexShrink:0 }} />
+            <div className="ft-row1-sep" style={{ width:"1px", height:"36px", background:"rgba(255,255,255,0.20)", flexShrink:0 }} />
             <p style={{ fontSize:"12.5px", color:C.textMid, margin:0, lineHeight:"1.6", fontFamily:"var(--font-ui)", flexShrink:0 }}>
               Fresh flowers, handcrafted with care.<br />Serving Manila &amp; Pampanga since 1959.
             </p>
@@ -453,14 +453,24 @@ export default function Footer({ onNavigate }) {
 
           <style>{`
             @media (max-width: 1024px) { .ft-main-row { grid-template-columns: repeat(3, 1fr) !important; } }
-            @media (max-width: 640px)  { .ft-main-row { grid-template-columns: repeat(2, 1fr) !important; gap: 28px !important; } }
+            @media (max-width: 640px)  {
+              .ft-main-row { grid-template-columns: repeat(2, 1fr) !important; gap: 28px !important; }
+              .ft-inner    { padding-left: 22px !important; padding-right: 22px !important; }
+              .ft-copybar  { padding-left: 22px !important; padding-right: 22px !important; }
+              .ft-row1     { flex-direction: column !important; align-items: flex-start !important; gap: 18px !important; }
+              .ft-row1-sep { display: none !important; }
+            }
             @media (max-width: 400px)  { .ft-main-row { grid-template-columns: 1fr !important; } }
+            @media (max-width: 380px)  {
+              .ft-inner   { padding-left: 16px !important; padding-right: 16px !important; }
+              .ft-copybar { padding-left: 16px !important; padding-right: 16px !important; }
+            }
           `}</style>
         </div>
 
         {/* Copyright bar */}
         <div style={{ borderTop:`1px solid ${C.divider}`, background:"rgba(0,0,0,0.18)" }}>
-          <div style={{ maxWidth:"1280px", margin:"0 auto", padding:"14px 40px",
+          <div className="ft-copybar" style={{ maxWidth:"1280px", margin:"0 auto", padding:"14px 40px",
             display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:"12px" }}>
             <p style={{ fontSize:"12px", color:C.textDim, margin:0, fontFamily:"var(--font-ui)" }}>
               © {new Date().getFullYear()} Esting's Flower International Inc. All rights reserved.

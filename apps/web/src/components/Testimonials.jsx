@@ -6,6 +6,81 @@ const G   = "#2E8B34"
 const DG  = "#0C573E"
 const G_D = "#4ade80"
 
+// Animated rotating gradient borders for the two social CTAs.
+// Same "traveling beam" technique used on the hero / banner CTAs: a conic
+// gradient whose angle is animated through a registered @property, masked down
+// to a thin border via mask-composite. Browsers without @property support fall
+// back to a static ring. Namespaced per brand so they never collide with the
+// hero (hero-glow-border) or banner (bloom-glow-border) rings on the same page.
+//   - FB:  faint blue ring with a bright white beam sweeping around (4s).
+//   - IG:  the full Instagram gradient itself rotating as a ring (4s).
+// The brand colors read well on both light and dark surfaces, so the rings are
+// identical in both themes; only the button's ambient glow changes by mode.
+const SOCIAL_GLOW_CSS = `
+  @property --fb-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+  @property --ig-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+  @keyframes fbBorderSpin { to { --fb-angle: 360deg; } }
+  @keyframes igBorderSpin { to { --ig-angle: 360deg; } }
+
+  .fb-glow-border, .ig-glow-border { position: relative; z-index: 0; }
+
+  .fb-glow-border::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    padding: 2px;
+    background: conic-gradient(from var(--fb-angle),
+      rgba(24,119,242,0.15) 0deg,
+      rgba(24,119,242,0.15) 60deg,
+      rgba(24,119,242,0.70) 95deg,
+      #4293ff 120deg,
+      #ffffff 135deg,
+      #4293ff 150deg,
+      rgba(24,119,242,0.70) 175deg,
+      rgba(24,119,242,0.15) 210deg,
+      rgba(24,119,242,0.15) 360deg
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+            mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+    animation: fbBorderSpin 4s linear infinite;
+  }
+
+  .ig-glow-border::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    padding: 2px;
+    background: conic-gradient(from var(--ig-angle),
+      #feda75, #fa7e1e, #d62976, #962fbf, #4f5bd5, #962fbf, #d62976, #fa7e1e, #feda75
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+            mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+    animation: igBorderSpin 4s linear infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fb-glow-border::before, .ig-glow-border::before { animation: none; }
+  }
+`
+
 const REVIEWS = [
   { id:1, name:"Khaye Muñoz",              source:"Facebook", text:"They made very special flower always.", rating:5 },
   { id:2, name:"Dennis Rivera Logarta",    source:"Facebook", text:"True people and a perfect flower shop. Message from KANSAS USA.", rating:5 },
@@ -246,13 +321,21 @@ export default function Testimonials() {
   const bodyC      = isDark ? "#cbd5e1" : "#6b7280"
   const dotInact   = isDark ? "rgba(74,222,128,0.25)" : "#d1d5db"
 
-  // Social CTA button tokens — bright in dark mode for contrast on the overlay
-  const socialBtnBg   = isDark ? "#4ade80" : DG
-  const socialBtnHov  = isDark ? "#86efac" : G
-  const socialBtnText = isDark ? "#08120c" : "#ffffff"
+  // Social CTA tokens — real brand colors, kept identical in both themes so the
+  // buttons stay instantly recognizable (white text reads on both the FB blue
+  // and the IG gradient, and pops on the dark overlay). Only the ambient glow
+  // strength changes by mode: a soft halo in light, a brighter one in dark.
+  const fbGlow    = isDark ? "0 0 22px rgba(24,119,242,0.55)" : "0 8px 20px -6px rgba(24,119,242,0.45)"
+  const fbGlowHov = isDark ? "0 0 30px rgba(24,119,242,0.78)" : "0 10px 26px -7px rgba(24,119,242,0.62)"
+  const igGlow    = isDark ? "0 0 22px rgba(214,41,118,0.52)" : "0 8px 20px -6px rgba(214,41,118,0.45)"
+  const igGlowHov = isDark ? "0 0 30px rgba(214,41,118,0.72)" : "0 10px 26px -7px rgba(214,41,118,0.62)"
+  const igGradient = "linear-gradient(45deg, #feda75 0%, #fa7e1e 25%, #d62976 50%, #962fbf 75%, #4f5bd5 100%)"
 
   return (
     <section className="relative overflow-hidden py-[clamp(56px,7vw,100px)]">
+      {/* Animated social-button border styles (scoped class names) */}
+      <style>{SOCIAL_GLOW_CSS}</style>
+
       {/* Background image */}
       <div className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage:`url(${testimonialsBG})` }}/>
@@ -326,19 +409,19 @@ export default function Testimonials() {
           <div className="w-12 h-[3px] mx-auto rounded-full mb-9"
             style={{ backgroundColor:accentG, boxShadow:isDark?"0 0 10px rgba(74,222,128,0.5)":"none" }}/>
           <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-3">
-            <a href="https://facebook.com" target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2.5 rounded-full px-7 py-3 text-sm font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-95"
-              style={{ minWidth:160, backgroundColor:socialBtnBg, color:socialBtnText, boxShadow:isDark?"0 0 20px rgba(74,222,128,0.4)":"0 8px 20px -6px rgba(12,87,62,0.4)" }}
-              onMouseEnter={e => e.currentTarget.style.backgroundColor=socialBtnHov}
-              onMouseLeave={e => e.currentTarget.style.backgroundColor=socialBtnBg}>
+            <a href="https://www.facebook.com/profile.php?id=100063877087893" target="_blank" rel="noopener noreferrer"
+              className="fb-glow-border inline-flex items-center justify-center gap-2.5 rounded-full px-7 py-3 text-sm font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-95"
+              style={{ minWidth:160, backgroundColor:"#1877F2", color:"#ffffff", boxShadow:fbGlow }}
+              onMouseEnter={e => e.currentTarget.style.boxShadow=fbGlowHov}
+              onMouseLeave={e => e.currentTarget.style.boxShadow=fbGlow}>
               <FbIcon className="w-[18px] h-[18px]"/>
               Facebook
             </a>
-            <a href="https://instagram.com" target="_blank" rel="noopener noreferrer"
-              className="inline-flex items-center justify-center gap-2.5 rounded-full px-7 py-3 text-sm font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-95"
-              style={{ minWidth:160, backgroundColor:socialBtnBg, color:socialBtnText, boxShadow:isDark?"0 0 20px rgba(74,222,128,0.4)":"0 8px 20px -6px rgba(12,87,62,0.4)" }}
-              onMouseEnter={e => e.currentTarget.style.backgroundColor=socialBtnHov}
-              onMouseLeave={e => e.currentTarget.style.backgroundColor=socialBtnBg}>
+            <a href="https://www.instagram.com/estingsflowershop/" target="_blank" rel="noopener noreferrer"
+              className="ig-glow-border inline-flex items-center justify-center gap-2.5 rounded-full px-7 py-3 text-sm font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-95"
+              style={{ minWidth:160, background:igGradient, color:"#ffffff", boxShadow:igGlow }}
+              onMouseEnter={e => e.currentTarget.style.boxShadow=igGlowHov}
+              onMouseLeave={e => e.currentTarget.style.boxShadow=igGlow}>
               <IgIcon className="w-[18px] h-[18px]"/>
               Instagram
             </a>

@@ -13,6 +13,50 @@ const RIBBON_COLORS = {
   "Comfort": "#9d174d", "Sympathy": "#1d4ed8",
 }
 
+// Animated rotating gradient border ("traveling beam") for the banner CTA.
+// Defined once and reused via the .bloom-glow-border class. The conic gradient
+// angle is animated through a registered @property so the beam loops smoothly;
+// browsers without @property support simply show a static green ring.
+const GLOW_BORDER_CSS = `
+  @property --bloom-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
+  @keyframes bloomBorderSpin { to { --bloom-angle: 360deg; } }
+  .bloom-glow-border { position: relative; z-index: 0; }
+  .bloom-glow-border::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    padding: 2px;                /* border thickness */
+    background: conic-gradient(from var(--bloom-angle),
+      rgba(74,222,128,0.12) 0deg,
+      rgba(74,222,128,0.12) 55deg,
+      rgba(46,139,52,0.60) 85deg,
+      #2E8B34 105deg,
+      #4ade80 125deg,
+      #bbf7d0 135deg,
+      #4ade80 145deg,
+      #2E8B34 165deg,
+      rgba(46,139,52,0.60) 185deg,
+      rgba(74,222,128,0.12) 215deg,
+      rgba(74,222,128,0.12) 360deg
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+            mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+    animation: bloomBorderSpin 4s linear infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .bloom-glow-border::before { animation: none; }
+  }
+`
+
 // Scroll reveal — same pattern as OccasionsStrip / Testimonials.
 // Fades in and slides up the first time the element enters the viewport.
 function useScrollReveal(threshold = 0.08) {
@@ -78,7 +122,7 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
             </p>
             <div className="flex justify-center lg:justify-start">
               <button onClick={() => onNavigate(data.banner.ctaTarget)}
-                className="inline-flex items-center gap-2 text-white text-sm font-bold px-8 py-3.5 rounded-full hover:opacity-90 transition-all shadow-lg shadow-green-900/20"
+                className="bloom-glow-border inline-flex items-center gap-2 text-white text-sm font-bold px-8 py-3.5 rounded-full hover:opacity-90 transition-all shadow-lg shadow-green-900/20"
                 style={{ backgroundColor: DG }}>
                 {data.banner.ctaLabel}
                 <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
@@ -219,6 +263,9 @@ export default function DynamicFeaturedSections({ onNavigate, onPreview }) {
 
   return (
     <>
+      {/* Animated gradient-border styles (defined once for all sections) */}
+      <style>{GLOW_BORDER_CSS}</style>
+
       {/* 🚀 This loop is the magic! It creates a block for EVERY section the Admin created */}
       {sectionsData.map((section) => (
          <SectionBlock 

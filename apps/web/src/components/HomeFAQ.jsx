@@ -198,15 +198,15 @@ export default function HomeFAQ({ onNavigate }) {
           <div className="w-12 h-[3px] mx-auto rounded-full" style={{ backgroundColor:accentG, boxShadow:accentGlow }} />
         </div>
 
-        {/* Segmented tabs */}
+        {/* Segmented tabs — balanced 2x2 grid on mobile, single pill row on larger screens */}
         <div className="flex justify-center mb-10">
-          <div className="inline-flex p-1 rounded-full flex-wrap gap-1 justify-center"
+          <div className="grid grid-cols-2 sm:inline-flex w-full max-w-[320px] sm:w-auto sm:max-w-none gap-1 p-1 rounded-2xl sm:rounded-full justify-center"
             style={{ backgroundColor:tabTrayBg, border:`1px solid ${tabTrayBdr}` }}>
             {FAQS.map((c, i) => {
               const isActive = i === activeTab
               return (
                 <button key={c.category} onClick={() => setActiveTab(i)}
-                  className="px-5 sm:px-6 py-2 rounded-full text-[13px] font-semibold transition-all duration-300 border-none cursor-pointer"
+                  className="px-4 sm:px-6 py-2 rounded-full text-[13px] font-semibold transition-all duration-300 border-none cursor-pointer text-center"
                   style={{
                     backgroundColor: isActive ? tabActiveBg : "transparent",
                     color: isActive ? tabActiveColor : tabIdleColor,
