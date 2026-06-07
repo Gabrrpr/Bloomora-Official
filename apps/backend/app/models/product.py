@@ -42,10 +42,10 @@ class Product(Base):
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
     
     # Relationships (Unchanged)
-    inventory = relationship("Inventory", back_populates="product", uselist=False)
+    inventory = relationship("Inventory", back_populates="product", uselist=False, cascade="all, delete-orphan")
     reviews = relationship("Review", back_populates="product")
     order_items = relationship("Order", back_populates="product")
-    flower = relationship("Flower", back_populates="product", uselist=False)
+    flower = relationship("Flower", back_populates="product", uselist=False, cascade="all, delete-orphan")
     wrapping = relationship("Wrapping", back_populates="product", uselist=False)
     accessory = relationship("Accessory", back_populates="product", uselist=False)
     discounts = relationship("Discount", back_populates="product")

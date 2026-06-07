@@ -250,18 +250,20 @@ export default function Checkout({ onNavigate }) {
       })
 
       const orderIds = res.order_ids || []
-      for (const orderId of orderIds) {
-        try {
-          await api.confirmPayment(orderId)
-        } catch (payErr) {
-          console.error(`Failed to confirm payment for order ${orderId}:`, payErr)
-        }
+      
+      // Save data and clear cart BEFORE we leave the page
+      localStorage.setItem("bloomora_last_order", JSON.stringify(buildOrderData(orderIds)))
+      clearCart()
+
+      // 🚀 NEW PAYMONGO REDIRECT LOGIC
+      if (res.checkout_url) {
+        window.location.href = res.checkout_url
+      } else {
+        // Safe Fallback for QRPh / Manual Methods: 
+        // Do NOT auto-confirm. Leave it as "Pending" and just show the success page!
+        onNavigate("confirmation")
       }
 
-      localStorage.setItem("bloomora_last_order", JSON.stringify(buildOrderData(orderIds)))
-
-      clearCart()
-      onNavigate("confirmation")
     } catch (e) {
       setError(e.message || "Failed to place order. Please try again.")
     } finally {
@@ -324,19 +326,20 @@ export default function Checkout({ onNavigate }) {
       })
 
       const orderIds = res.order_ids || []
+      
+      // Save data and clear cart BEFORE we leave the page
+      localStorage.setItem("bloomora_last_order", JSON.stringify(buildOrderData(orderIds)))
+      clearCart()
 
-      for (const orderId of orderIds) {
-        try {
-          await api.confirmPayment(orderId)
-        } catch (payErr) {
-          console.error(`Failed to confirm payment for order ${orderId}:`, payErr)
-        }
+      // 🚀 NEW PAYMONGO REDIRECT LOGIC
+      if (res.checkout_url) {
+        window.location.href = res.checkout_url
+      } else {
+        // Safe Fallback for QRPh / Manual Methods: 
+        // Do NOT auto-confirm. Leave it as "Pending" and just show the success page!
+        onNavigate("confirmation")
       }
 
-      localStorage.setItem("bloomora_last_order", JSON.stringify(buildOrderData(orderIds)))
-
-      clearCart()
-      onNavigate("confirmation")
     } catch (e) {
       setError(e.message || "Failed to place order. Please try again.")
     } finally {
@@ -610,8 +613,8 @@ export default function Checkout({ onNavigate }) {
                   <svg className="w-4 h-4 text-[#2E8B34]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
                 </div>
                 <div className="flex-1">
-                  <p className="text-xs font-semibold text-gray-800">QR Ph</p>
-                  <p className="text-xs text-gray-400">Scan QR code &amp; pay</p>
+                  <p className="text-xs font-semibold text-gray-800">Online Payment</p>
+                  <p className="text-xs text-gray-400">GCash, Maya, or Card (via PayMongo)</p>
                 </div>
                 <div className="w-4 h-4 rounded-full border-2 border-[#2E8B34] flex items-center justify-center">
                   <div className="w-2 h-2 rounded-full bg-[#2E8B34]" />

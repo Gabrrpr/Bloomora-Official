@@ -1,16 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, object_session 
-from sqlalchemy import or_, func, String
+from sqlalchemy import or_, func, String, text
 from typing import List, Optional
 from decimal import Decimal
-from sqlalchemy import text
 from app.services.email_service import send_order_status_email
 import uuid
 import secrets
+import requests
 
 # 🚀 INJECTED SECURE DEPENDENCIES
 from app.core.dependencies import get_db, get_current_user, require_staff
-from app.models import User, RoleEnum, Order, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product
+from app.models import User, RoleEnum, Order, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -169,13 +169,14 @@ def create_orders(
     delivery_address = payload.get("delivery_address", "")
     delivery_notes = payload.get("delivery_notes", "")
     scheduled_at = payload.get("scheduled_at")
-    payment_method = payload.get("payment_method", "qrph")
+    payment_method = payload.get("payment_method", "qrph").lower()
     special_note = payload.get("special_note", None)
 
     if not cart_items:
         raise HTTPException(status_code=400, detail="Cart is empty.")
 
     created_orders = []
+    total_checkout_amount = Decimal("0.00") # 🚀 Tracks the grand total for PayMongo
 
     for item in cart_items:
         arrangement_id = None
@@ -186,37 +187,25 @@ def create_orders(
         qty = int(item.get("qty", 1))
 
         is_custom_request = "describe" in group or "mix" in group or "custom" in group or str(item_id).startswith("arr-")
-        
-        # 🚀 ZERO-DOLLAR EXPLOIT FIX: Force backend price calculation
         db_price = Decimal("0.00")
 
         if is_custom_request:
             try:
                 arr_uuid = uuid.UUID(str(item_id))
-                
-                # 1. Lock the arrangement
                 arrangement = db.query(Arrangement).filter(Arrangement.id == arr_uuid).with_for_update().first()
                 if not arrangement:
-                    raise HTTPException(status_code=404, detail="Custom arrangement session expired or invalid.")
+                    raise HTTPException(status_code=404, detail="Custom arrangement session expired.")
                 
-                # 🚀 2. DEDUCT RAW MATERIALS (The Mix & Match Recipe)
-                # We loop through whatever items make up this custom arrangement.
-                # NOTE: You will need to adjust `arrangement.items` to match whatever your DB relationship is called!
+                # 🚀 WAREHOUSE LOGIC: Deduct Raw Materials for Mix & Match
                 if hasattr(arrangement, 'items'):
                     for component in arrangement.items:
                         inv = db.query(Inventory).filter(Inventory.product_id == component.product_id).with_for_update().first()
                         
-                        # Check if we have enough raw materials to build this custom arrangement
                         if not inv or inv.current_stock < (component.quantity * qty):
-                            raise HTTPException(
-                                status_code=400, 
-                                detail=f"Insufficient raw materials: Not enough stock for component ID {component.product_id}"
-                            )
+                            raise HTTPException(status_code=400, detail=f"Insufficient raw materials for custom order.")
                         
-                        # Take the raw materials off the shelf
                         inv.current_stock -= (component.quantity * qty)
                         
-                        # Auto-hide the raw material if we just used the very last one!
                         if inv.current_stock <= 0:
                             prod = db.query(Product).filter(Product.id == component.product_id).first()
                             if prod: prod.is_available = False
@@ -231,24 +220,17 @@ def create_orders(
             try:
                 product_id = uuid.UUID(str(item_id))
                 
-                # 1. Lock the product and its inventory
                 product = db.query(Product).filter(Product.id == product_id).first()
                 inventory = db.query(Inventory).filter(Inventory.product_id == product_id).with_for_update().first()
                 
                 if not product or not product.is_available or not inventory:
                     raise HTTPException(status_code=404, detail=f"Product unavailable: {item_id}")
                 
-                # 🚀 2. DEDUCT STANDARD INVENTORY
+                # 🚀 WAREHOUSE LOGIC: Deduct Standard Product Stock
                 if inventory.current_stock < qty:
-                    raise HTTPException(
-                        status_code=400, 
-                        detail=f"Insufficient stock for {product.name}. Only {inventory.current_stock} left."
-                    )
+                    raise HTTPException(status_code=400, detail=f"Insufficient stock for {product.name}. Only {inventory.current_stock} left.")
                 
-                # Take it off the shelf
                 inventory.current_stock -= qty
-                
-                # Auto-hide if sold out
                 if inventory.current_stock <= 0:
                     product.is_available = False
                 
@@ -257,13 +239,16 @@ def create_orders(
             except ValueError:
                 raise HTTPException(status_code=400, detail=f"Invalid Product ID: {item_id}")
 
+        item_total = db_price * qty
+        total_checkout_amount += item_total
+
         order = Order(
             id=uuid.uuid4(),
             user_id=current_user.id,
             product_id=product_id,
             arrangement_id=arrangement_id,
             quantity=qty,
-            total_amount=db_price * qty, # 🚀 Uses secure backend price
+            total_amount=item_total,
             status=OrderStatusEnum.pending,
             delivery_address=delivery_address,
             delivery_notes=delivery_notes,
@@ -290,10 +275,57 @@ def create_orders(
 
         created_orders.append(str(order.id))
 
+    # 🚀 CASHIER LOGIC: Generate PayMongo Checkout Link for Online Payments
+    checkout_url = None
+    
+    # If the user chose an online payment method, create a PayMongo link
+    if payment_method in ["gcash", "paymaya", "card", "qrph"]:
+        PAYMONGO_SECRET_KEY = "sk_test_SCjLKPkxCYgqpKhXMuqhtdB2" # ⚠️ Replace with your actual PayMongo Secret Key!
+        
+        # PayMongo expects amounts in cents (₱500.00 = 50000)
+        amount_in_cents = int(total_checkout_amount * 100) 
+        
+        paymongo_payload = {
+            "data": {
+                "attributes": {
+                    "billing": {
+                        "name": f"{current_user.first_name} {current_user.last_name}",
+                        "email": current_user.email
+                    },
+                    "line_items": [{
+                        "name": "Bloomora Flowers", 
+                        "amount": amount_in_cents, 
+                        "currency": "PHP", 
+                        "quantity": 1
+                    }],
+                    "payment_method_types": ["gcash", "paymaya", "card","qrph"],
+                    "success_url": "http://localhost:5173/payment-success", # Where they go after paying
+                    "cancel_url": "http://localhost:5173/checkout",         # Where they go if they back out
+                    "description": f"Payment for {len(created_orders)} items"
+                }
+            }
+        }
+        
+        try:
+            response = requests.post(
+                "https://api.paymongo.com/v1/checkout_sessions", 
+                json=paymongo_payload, 
+                auth=(PAYMONGO_SECRET_KEY, '')
+            )
+            
+            if response.status_code == 200:
+                pm_data = response.json()
+                checkout_url = pm_data["data"]["attributes"]["checkout_url"]
+            else:
+                print("PayMongo Error:", response.text) # Logs to your terminal for debugging
+        except Exception as e:
+            print("Failed to reach PayMongo:", str(e))
+
     return {
         "status": "success",
         "message": f"{len(created_orders)} order(s) created.",
         "order_ids": created_orders,
+        "checkout_url": checkout_url # 🚀 React will use this to redirect the user!
     }
 
 def _notify_order(db: Session, order: Order, status: str):
