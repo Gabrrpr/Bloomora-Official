@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta, timezone
 import uuid
 import secrets
+import os # 🚀 IMPORT OS ADDED HERE
 
 from app.core.config import settings
 from app.core.database import get_db
@@ -23,9 +24,12 @@ from app.core.limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-GOOGLE_REDIRECT_URI  = "http://localhost:8000/api/v1/auth/google/callback"
-FACEBOOK_REDIRECT_URI = "http://localhost:8000/api/v1/auth/facebook/callback"
-FRONTEND_URL = "http://localhost:5173"
+# 🚀 DYNAMIC URL CONFIGURATION
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
+BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+
+GOOGLE_REDIRECT_URI  = f"{BACKEND_URL}/api/v1/auth/google/callback"
+FACEBOOK_REDIRECT_URI = f"{BACKEND_URL}/api/v1/auth/facebook/callback"
 
 # ── OAuth Setup ───────────────────────────────────────────────────────────────
 oauth = OAuth()

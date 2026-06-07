@@ -4,7 +4,7 @@ from sqlalchemy import or_, func, String, text
 from typing import List, Optional
 from decimal import Decimal
 from app.services.email_service import send_order_status_email
-import uuid
+import uuid, os
 import secrets
 import requests
 
@@ -280,7 +280,9 @@ def create_orders(
     
     # If the user chose an online payment method, create a PayMongo link
     if payment_method in ["gcash", "paymaya", "card", "qrph"]:
-        PAYMONGO_SECRET_KEY = "sk_test_YOUR_TEST_KEY_HERE" # ⚠️ Replace with your actual PayMongo Secret Key!
+        
+        # ✅ FIX: Use os.getenv to pull the real key from your .env file
+        PAYMONGO_SECRET_KEY = os.getenv("PAYMONGO_SECRET_KEY")
         
         # PayMongo expects amounts in cents (₱500.00 = 50000)
         amount_in_cents = int(total_checkout_amount * 100) 
@@ -298,9 +300,9 @@ def create_orders(
                         "currency": "PHP", 
                         "quantity": 1
                     }],
-                    "payment_method_types": ["gcash", "paymaya", "card","qrph"],
-                    "success_url": "http://localhost:5173/payment-success", # Where they go after paying
-                    "cancel_url": "http://localhost:5173/checkout",         # Where they go if they back out
+                    "payment_method_types": ["gcash", "paymaya", "card", "qrph"],
+                    "success_url": "http://localhost:5173/payment-success",
+                    "cancel_url": "http://localhost:5173/checkout",         
                     "description": f"Payment for {len(created_orders)} items"
                 }
             }
