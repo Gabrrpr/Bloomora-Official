@@ -97,7 +97,7 @@ uploads_dir = os.path.join(os.path.dirname(__file__), "uploads")
 if os.path.exists(uploads_dir):
     app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
 
-app.include_router(auth.router, prefix="/api/v1", tags=["auth"])
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(dashboard.router, prefix="/api/v1", tags=["Dashboard"])
 app.include_router(products.router, prefix="/api/v1/products", tags=["Products"])
 app.include_router(customization.router, prefix="/api/v1", tags=["customization"])
