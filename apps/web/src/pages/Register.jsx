@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react"
 import { useAuth } from "../context/AuthContext"
-import { sendOtp, verifyOtp } from "../services/auth"
+import { sendOtp, verifyOtp, registerUser } from "../services/auth"
 import { regions, getProvinces } from "../utils/philippines"
 import FlowerPanel from "../components/FlowerPanel"
 import TermsModal from "../components/TermsModal"
@@ -161,7 +161,7 @@ function loadDraft() {
 }
 
 export default function Register({ onNavigate }) {
-  const { register } = useAuth()
+  // const { register } = useAuth()
   const [step, setStep]   = useState("form")
   const [otp, setOtp]     = useState("")
   const [showTerms, setShowTerms] = useState(false)
@@ -367,11 +367,14 @@ export default function Register({ onNavigate }) {
       const addressStr = form.address.street
         ? `${form.address.street}, ${form.address.city}, ${form.address.provinceId || ""} ${form.address.zip_code || ""}`.trim()
         : undefined
-      const result = await register({
+        
+      // ✅ Change "register" to "registerUser" right here:
+      const result = await registerUser({
         first_name: form.firstName, last_name: form.lastName, email: form.email,
         phone_number: form.phone, username: form.username || undefined,
         password: form.password, address: addressStr
       })
+      
       if (result.success || result.status === "success") {
         // Clear the registration draft on success so next sign-up starts fresh
         sessionStorage.removeItem(STORAGE_KEY)

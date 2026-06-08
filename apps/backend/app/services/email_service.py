@@ -24,7 +24,7 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Bloomora Verification Code</title>
+            <title>Estings Verification Code</title>
         </head>
         <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6;">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
@@ -38,7 +38,7 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
                                     <div style="width: 64px; height: 64px; background: rgba(255,255,255,0.2); border-radius: 50%; margin: 0 auto 16px; display: inline-flex; align-items: center; justify-content: center; font-size: 32px;">
                                         🌸
                                     </div>
-                                    <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">Bloomora</h1>
+                                    <h1 style="color: #ffffff; margin: 0; font-size: 24px; font-weight: 700; letter-spacing: -0.5px;">Esting's Flowers International Inc</h1>
                                     <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0; font-size: 14px;">Beautiful Flowers, Delivered with Love</p>
                                 </td>
                             </tr>
@@ -48,7 +48,7 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
                                 <td style="padding: 40px;">
                                     <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 16px;">{greeting}</p>
                                     <p style="color: #6b7280; font-size: 15px; line-height: 1.6; margin: 0 0 32px;">
-                                        Thank you for choosing Bloomora! Use the verification code below to complete your request. For your security, this code will expire in <strong style="color: #15803d;">10 minutes</strong>.
+                                        Thank you for choosing Esting's! Use the verification code below to complete your request. For your security, this code will expire in <strong style="color: #15803d;">10 minutes</strong>.
                                     </p>
                                     
                                     <!-- OTP Box -->
@@ -83,7 +83,7 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
                             <!-- Footer -->
                             <tr>
                                 <td style="padding: 0 40px 40px; text-align: center;">
-                                    <p style="color: #15803d; font-size: 14px; font-weight: 600; margin: 0 0 8px;">Bloomora</p>
+                                    <p style="color: #15803d; font-size: 14px; font-weight: 600; margin: 0 0 8px;">Estings</p>
                                     <p style="color: #9ca3af; font-size: 12px; line-height: 1.5; margin: 0 0 16px;">
                                         Bringing nature's beauty to your doorstep.<br>
                                         Need help? Contact our support team anytime.
@@ -96,7 +96,7 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
                                         </tr>
                                     </table>
                                     <p style="color: #d1d5db; font-size: 11px; margin: 16px 0 0;">
-                                        © Bloomora. All rights reserved.
+                                        © Estings. All rights reserved.
                                     </p>
                                 </td>
                             </tr>
@@ -125,7 +125,7 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
 def send_staff_confirm_email(to_email: str, first_name: str, verify_url: str):
     try:
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Bloomora Staff Account Confirmation"
+        msg["Subject"] = "Esting's Staff Account Confirmation"
         msg["From"] = settings.MAIL_FROM
         msg["To"] = to_email
 
@@ -136,7 +136,7 @@ def send_staff_confirm_email(to_email: str, first_name: str, verify_url: str):
         <head>
             <meta charset="UTF-8">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
-            <title>Bloomora Staff Confirmation</title>
+            <title>Esting's Staff Confirmation</title>
         </head>
         <body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6;">
             <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
@@ -174,7 +174,7 @@ def send_staff_confirm_email(to_email: str, first_name: str, verify_url: str):
                                     
                                     <p style="color: #dc2626; font-size: 14px; line-height: 1.5; margin: 32px 0 0; font-weight: 500; text-align: center;">
                                         <strong>⚠️ Security Notice</strong><br>
-                                        If you didn&#39;t request to be staff of Bloomora, please ignore and delete this email immediately.
+                                        If you didn&#39;t request to be staff of Esting's, please ignore and delete this email immediately.
                                     </p>
                                 </td>
                             </tr>
@@ -191,12 +191,12 @@ def send_staff_confirm_email(to_email: str, first_name: str, verify_url: str):
                             
                             <tr>
                                 <td style="padding: 0 40px 40px; text-align: center;">
-                                    <p style="color: #15803d; font-size: 14px; font-weight: 600; margin: 0 0 8px;">Bloomora</p>
+                                    <p style="color: #15803d; font-size: 14px; font-weight: 600; margin: 0 0 8px;">Esting's Flowers International Inc</p>
                                     <p style="color: #9ca3af; font-size: 12px; line-height: 1.5; margin: 0 0 16px;">
                                         Bringing nature&#39;s beauty to your doorstep.
                                     </p>
                                     <p style="color: #d1d5db; font-size: 11px; margin: 16px 0 0;">
-                                        © Bloomora. All rights reserved.
+                                        © Esting's Flowers International Inc. All rights reserved.
                                     </p>
                                 </td>
                             </tr>
@@ -232,7 +232,7 @@ def send_order_status_email(to_email: str, first_name: str, order_number: str, s
         cfg = status_config.get(status, {"emoji": "📦", "color": "#6b7280", "label": status.title()})
 
         msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"Bloomora — {cfg['label']}: {order_number}"
+        msg["Subject"] = f"Esting's — {cfg['label']}: {order_number}"
         msg["From"] = settings.MAIL_FROM
         msg["To"] = to_email
 
@@ -249,7 +249,7 @@ def send_order_status_email(to_email: str, first_name: str, order_number: str, s
                             <tr>
                                 <td style="background:linear-gradient(135deg,#15803d 0%,#16a34a 50%,#86efac 100%);padding:48px 40px 40px;text-align:center;">
                                     <div style="font-size:48px;margin-bottom:12px;">{cfg['emoji']}</div>
-                                    <h1 style="color:#ffffff;margin:0;font-size:24px;font-weight:700;">Bloomora</h1>
+                                    <h1 style="color:#ffffff;margin:0;font-size:24px;font-weight:700;">Esting's Flowers International Inc</h1>
                                     <p style="color:rgba(255,255,255,0.9);margin:8px 0 0;font-size:14px;">Order Update</p>
                                 </td>
                             </tr>
@@ -274,15 +274,15 @@ def send_order_status_email(to_email: str, first_name: str, order_number: str, s
                                         {message}
                                     </p>
                                     <p style="color:#9ca3af;font-size:13px;line-height:1.5;margin:24px 0 0;text-align:center;">
-                                        You can track your order anytime in the Bloomora app.
+                                        You can track your order anytime in the Esting's app.
                                     </p>
                                 </td>
                             </tr>
                             <tr>
                                 <td style="padding:0 40px 40px;text-align:center;border-top:1px solid #e5e7eb;">
-                                    <p style="color:#15803d;font-size:14px;font-weight:600;margin:24px 0 8px;">Bloomora</p>
+                                    <p style="color:#15803d;font-size:14px;font-weight:600;margin:24px 0 8px;">Esting's</p>
                                     <p style="color:#9ca3af;font-size:12px;margin:0;">Bringing nature's beauty to your doorstep.</p>
-                                    <p style="color:#d1d5db;font-size:11px;margin:12px 0 0;">© Bloomora. All rights reserved.</p>
+                                    <p style="color:#d1d5db;font-size:11px;margin:12px 0 0;">© Esting's Flowers International Inc. All rights reserved.</p>
                                 </td>
                             </tr>
                         </table>
