@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     
     # Gemini
     GEMINI_API_KEY: str
+    
 
     # Lalamove
     LALAMOVE_API_KEY: str = ""
@@ -33,10 +34,11 @@ class Settings(BaseSettings):
     PAYMONGO_WEBHOOK_SECRET: str = ""
 
     # Email
-    MAIL_USERNAME: str = "johngbatac@gmail.com"
-    MAIL_PASSWORD: str = "avwp fsqs okgn qowy"
-    MAIL_FROM: str = "johngbatac@gmail.com"
-    MAIL_SERVER: str = "smtp.gmail.com"
+    MAIL_USERNAME="estingsflowerintl@gmail.com"
+    MAIL_PASSWORD="bniw btjn bdfu vvgu"
+    MAIL_FROM="estingsflowerintl@gmail.com"
+    MAIL_SERVER="smtp.gmail.com"
+    MAIL_PORT=587
     MAIL_PORT: int = 587
 
     # OAuth
