@@ -34,12 +34,7 @@ class Settings(BaseSettings):
     PAYMONGO_WEBHOOK_SECRET: str = ""
 
     # Email
-    MAIL_USERNAME="estingsflowerintl@gmail.com"
-    MAIL_PASSWORD="bniw btjn bdfu vvgu"
-    MAIL_FROM="estingsflowerintl@gmail.com"
-    MAIL_SERVER="smtp.gmail.com"
-    MAIL_PORT=587
-    MAIL_PORT: int = 587
+    RESEND_API_KEY: str | None = None
 
     # OAuth
     GOOGLE_CLIENT_ID: str = ""
