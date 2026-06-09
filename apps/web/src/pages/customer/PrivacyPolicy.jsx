@@ -1,40 +1,39 @@
 import { useState, useEffect } from "react"
-import { useTheme } from "../../context/ThemeContext"
-import { api } from "../../services/api"
-import estingsLogo from "../../assets/Estings.svg"
+import { useTheme } from "../context/ThemeContext"
+import { api } from "../services/api"
+import estingsLogo from "../assets/Estings.svg"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
 
-// Legal content is stored in the shared settings blob under this key. If nothing
-// is published yet (or the fetch fails), the FALLBACK below is shown — it is the
-// original hard-coded Terms, so the page is never blank.
+// Privacy content is stored in the shared settings blob under this key. If nothing
+// is published yet (or the fetch fails), the FALLBACK below is shown — a Data
+// Privacy Act (RA 10173) oriented default, so the page is never blank.
 const SETTINGS_PATH = "/products/admin/settings/homepage"
-const TERMS_KEY = "__terms__"
+const PRIVACY_KEY = "__privacy__"
 
 const FALLBACK = {
-  docTitle: "Terms & Conditions",
+  docTitle: "Privacy Policy",
   docSubtitle: "Bloomora Floral Management System",
   effectiveDate: "January 1, 2025",
   lastUpdated: "April 2025",
-  notice: "Please read these Terms carefully before using Bloomora's platform. By accessing or using our services, you agree to be bound by these terms.",
+  notice: "This Privacy Policy explains how Bloomora collects, uses, and protects your personal information in accordance with the Data Privacy Act of 2012 (Republic Act No. 10173).",
   sections: [
-    { title: "1. Acceptance of Terms", content: "By creating an account or accessing any part of the Bloomora Floral Management System, you confirm that you are at least 18 years of age and agree to comply with and be bound by these Terms and Conditions. If you do not agree, please do not use our platform." },
-    { title: "2. About Bloomora", content: "Bloomora, operating under Esting's Flower International Inc., is a digital platform providing floral arrangement management, ordering, and delivery coordination services. We connect customers with premium floral products and enable administrators to manage inventory, orders, and customer relationships." },
-    { title: "3. Account Registration", content: "To access certain features of the platform, you must register for an account. You agree to provide accurate and complete information during registration, maintain the security of your password, accept all risks of unauthorized access, and promptly notify us of any unauthorized use. Bloomora reserves the right to terminate accounts that violate these provisions." },
-    { title: "4. Products and Ordering", content: "All floral products displayed on our platform are subject to availability. We reserve the right to limit quantities or discontinue products at any time. Product colors, sizes, and arrangements may vary slightly from photographs shown. Pricing is subject to change without notice. All orders are subject to acceptance and availability confirmation." },
-    { title: "5. Payment Terms", content: "Payment is required at the time of order placement. We accept major credit and debit cards and other specified payment methods. All transactions are processed securely. Prices are listed in the applicable local currency and include applicable taxes unless stated otherwise." },
-    { title: "6. Delivery and Fulfillment", content: "Delivery times are estimates and not guaranteed. While we strive to deliver orders on time, factors such as weather, traffic, or other unforeseen circumstances may cause delays. For time-sensitive occasions, we recommend ordering well in advance." },
-    { title: "7. Cancellations and Refunds", content: "Orders may be cancelled within 2 hours of placement for a full refund. After this window, cancellation may not be possible as preparation may have already begun. Refunds for damaged or incorrect orders will be issued after review. The perishable nature of floral products means returns may not always be possible — instead, we may offer a replacement or store credit." },
-    { title: "8. Privacy Policy", content: "Your privacy is important to us. We collect and process personal information in accordance with our Privacy Policy. We use your information to process orders, improve our services, and communicate with you about your account and offerings. We do not sell your personal information to third parties." },
-    { title: "9. Intellectual Property", content: "All content on the Bloomora platform, including logos, images, text, and software, is the exclusive property of Bloomora or its content suppliers and is protected by applicable intellectual property laws. You may not reproduce, distribute, or create derivative works without our express written permission." },
-    { title: "10. Limitation of Liability", content: "To the maximum extent permitted by law, Bloomora shall not be liable for any indirect, incidental, special, or consequential damages resulting from your use of the platform. Our total liability shall not exceed the amount paid by you for the specific order giving rise to the claim." },
-    { title: "11. Modifications to Terms", content: "Bloomora reserves the right to modify these Terms at any time. We will notify registered users of significant changes via email or through the platform. Continued use of the platform after changes become effective constitutes your acceptance of the revised Terms." },
-    { title: "12. Contact Information", content: "If you have questions about these Terms and Conditions, please contact us at legal@bloomora.com or through our customer support portal. We are committed to addressing your concerns in a timely manner." },
+    { title: "1. Introduction", content: "Bloomora, operating under Esting's Flower International Inc., respects your right to privacy and is committed to protecting the personal information you share with us. This Privacy Policy describes how we collect, use, store, and disclose your personal data when you use our platform, in compliance with Republic Act No. 10173 (the Data Privacy Act of 2012) and its implementing rules and regulations." },
+    { title: "2. Information We Collect", content: "We collect information you provide directly, such as your name, email address, phone number, delivery address, and payment details when you register an account or place an order. We also automatically collect technical information such as your device type, browser, and usage data to improve our services." },
+    { title: "3. How We Use Your Information", content: "We use your personal information to process and fulfill your orders, coordinate delivery, communicate with you about your account and purchases, provide customer support, improve our platform, and comply with legal obligations. We process your data only for purposes that are legitimate and clearly stated." },
+    { title: "4. Legal Basis for Processing", content: "We process your personal information based on your consent, the necessity of fulfilling our contract with you, compliance with legal obligations, and our legitimate interests as a business, consistent with the Data Privacy Act of 2012." },
+    { title: "5. Disclosure of Information", content: "We do not sell your personal information. We may share your data with trusted service providers who assist us in operating our platform and delivering orders, such as payment processors and delivery partners. These parties are bound to protect your information and use it only for the purposes we specify." },
+    { title: "6. Data Storage and Security", content: "We implement appropriate organizational, physical, and technical security measures to protect your personal information against unauthorized access, alteration, disclosure, or destruction. We retain your data only for as long as necessary to fulfill the purposes outlined in this policy or as required by law." },
+    { title: "7. Your Rights as a Data Subject", content: "Under the Data Privacy Act of 2012, you have the right to be informed, to access your personal data, to object to processing, to request correction of inaccurate data, to request erasure or blocking, to data portability, and to file a complaint with the National Privacy Commission. You may exercise these rights by contacting us." },
+    { title: "8. Cookies and Tracking", content: "Our platform uses cookies and similar technologies to enhance your experience, remember your preferences, and analyze usage. You may control cookies through your browser settings, though disabling them may affect certain features of the platform." },
+    { title: "9. Children's Privacy", content: "Our platform is intended for users who are at least 18 years of age. We do not knowingly collect personal information from minors. If we become aware that we have collected data from a minor without proper consent, we will take steps to delete it." },
+    { title: "10. Changes to This Policy", content: "We may update this Privacy Policy from time to time to reflect changes in our practices or legal requirements. We will notify you of significant changes through the platform or by email. Continued use of our services after changes take effect constitutes acceptance of the updated policy." },
+    { title: "11. Contact Us", content: "If you have questions about this Privacy Policy or wish to exercise your data privacy rights, please contact our Data Protection Officer at privacy@bloomora.com or through our customer support portal." },
   ],
 }
 
-export default function TermsAndConditions({ onNavigate, onBack }) {
+export default function PrivacyPolicy({ onNavigate, onBack }) {
   const { isDark } = useTheme()
 
   // CMS content — starts as fallback, replaced if a saved version exists
@@ -45,7 +44,7 @@ export default function TermsAndConditions({ onNavigate, onBack }) {
     api.get(SETTINGS_PATH)
       .then(parsed => {
         if (cancelled) return
-        const saved = parsed?.[TERMS_KEY]
+        const saved = parsed?.[PRIVACY_KEY]
         if (saved && typeof saved === "object" && Array.isArray(saved.sections) && saved.sections.length > 0) {
           setDoc({
             docTitle:      saved.docTitle      || FALLBACK.docTitle,

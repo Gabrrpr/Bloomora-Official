@@ -19,6 +19,7 @@ import AdminCampaigns    from "./AdminCampaigns"
 import AdminFAQ            from "./AdminFAQ"
 import AdminFeaturedProducts from "./AdminFeaturedProducts"
 import AdminPromotions     from "./AdminPromotions"
+import AdminLegal          from "./AdminLegal"
 
 import { api } from "../../services/api.js"
 import { GreenCard, StatCard, WhiteCard, ComingSoon } from "./_adminShared"
@@ -56,6 +57,7 @@ const NAV_APPEARANCE = [
   { label: "Promotions",        d: "M7 7h.01M7 3h5a1.99 1.99 0 011.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.99 1.99 0 013 12V7a4 4 0 014-4z" },
   { label: "Featured Products", d: "M11.48 3.499a.562.562 0 0 1 1.04 0l2.125 5.111a.563.563 0 0 0 .475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 0 0-.182.557l1.285 5.385a.562.562 0 0 1-.84.61l-4.725-2.885a.562.562 0 0 0-.586 0L6.982 20.54a.562.562 0 0 1-.84-.61l1.285-5.386a.562.562 0 0 0-.182-.557l-4.204-3.602a.562.562 0 0 1 .321-.988l5.518-.442a.563.563 0 0 0 .475-.345L11.48 3.5Z" },
   { label: "FAQ",               d: "M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093M12 17h.01M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9 9 4.03 9 9z" },
+  { label: "Legal",             d: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
   { label: "Preview Site",      d: "M15 12a3 3 0 11-6 0 3 3 0 016 0z M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" },
   { label: "Campaigns", staff: true, d: "M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" },
 ]
@@ -1066,6 +1068,240 @@ function NavBtn({ item, active, setActive, collapsed, user }) {
   )
 }
 
+// ─── Appearance Flyout ────────────────────────────────────────────────────────
+// "Appearance" collapses the CMS pages into one trigger. On hover (or click to
+// pin) the sub-items fan out in a floating panel to the right of the sidebar,
+// each sliding in along a gentle outward arc with a staggered delay. A hover
+// bridge spans the gap so the panel doesn't snap shut while the mouse travels.
+const APPEARANCE_FLYOUT_CSS = `
+  @keyframes apNodeIn {
+    from { opacity: 0; transform: translateX(-8px) scale(0.85); }
+    to   { opacity: 1; transform: translateX(0) scale(1); }
+  }
+  .ap-node { animation: apNodeIn 0.34s cubic-bezier(0.34,1.56,0.64,1) both; transition: background-color .15s, border-color .15s, color .15s, transform .15s; transform-origin: left center; }
+  @media (prefers-reduced-motion: reduce) {
+    .ap-node { animation: none !important; }
+  }
+`
+
+function AppearanceFlyout({ items, active, setActive, collapsed, user, t, isDark }) {
+  const [open, setOpen] = useState(false)
+  const [pinned, setPinned] = useState(false)
+  const [coords, setCoords] = useState({ top: 0, left: 0 })
+  const [isMobile, setIsMobile] = useState(false)
+  const closeTimer = useRef(null)
+  const wrapRef = useRef(null)
+  const triggerRef = useRef(null)
+
+  // track viewport: on small screens we expand inline instead of floating
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener("resize", check)
+    return () => window.removeEventListener("resize", check)
+  }, [])
+
+  // measure the trigger's on-screen CENTER — the origin the fan radiates from
+  const measure = () => {
+    const el = triggerRef.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const cx = (r.left + r.right) / 2 || 130
+    const cy = (r.top + r.bottom) / 2 || 130
+    setCoords({ top: cy, left: cx })
+  }
+
+  const show = () => {
+    clearTimeout(closeTimer.current)
+    // measure after paint so the trigger ref is guaranteed populated
+    requestAnimationFrame(measure)
+    setOpen(true)
+  }
+  const scheduleHide = () => {
+    clearTimeout(closeTimer.current)
+    closeTimer.current = setTimeout(() => { if (!pinned) setOpen(false) }, 180)
+  }
+
+  // click the trigger to pin/unpin the panel open
+  const togglePin = () => {
+    measure()
+    setPinned(p => {
+      const next = !p
+      setOpen(next)
+      return next
+    })
+  }
+
+  // close the pinned panel when clicking elsewhere
+  useEffect(() => {
+    if (!pinned) return
+    const onDocClick = e => {
+      if (
+        wrapRef.current && !wrapRef.current.contains(e.target) &&
+        !e.target.closest?.("[data-ap-panel]")
+      ) {
+        setPinned(false); setOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", onDocClick)
+    return () => document.removeEventListener("mousedown", onDocClick)
+  }, [pinned])
+
+  // keep the panel glued to the trigger if the window resizes/scrolls while open
+  useEffect(() => {
+    if (!(open || pinned)) return
+    const reposition = () => measure()
+    window.addEventListener("resize", reposition)
+    window.addEventListener("scroll", reposition, true)
+    return () => {
+      window.removeEventListener("resize", reposition)
+      window.removeEventListener("scroll", reposition, true)
+    }
+  }, [open, pinned])
+
+  useEffect(() => () => clearTimeout(closeTimer.current), [])
+
+  const isOpen = open || pinned
+
+  // ── shared pink palette — solid surfaces in both themes (no transparency) ──
+  const pillBg      = isDark ? "#3b1f30" : "#fdf2f8"
+  const pillBgHover = isDark ? "#4d2840" : "#fce7f3"
+  const pillBorder  = isDark ? "#6d3a55" : "#f9cee4"
+  const pillBorderH = isDark ? "#9d4f78" : "#f4a9cf"
+  const pillText    = isDark ? "#fbcfe8" : "#9d2463"
+  const chipBg      = isDark ? "#522c43" : "#ffffff"
+  const pinkAccent  = isDark ? "#f472b6" : "#db2777"   // active fill / icon / hover text
+
+  // one pill button, shared by the floating fan (desktop) and inline list (mobile)
+  const renderItem = (item, i, { floating }) => {
+    const allowed = !user?.role || user.role !== "staff" || item.staff
+    const on = active === item.label
+    const delay = Math.abs(i - (items.length - 1) / 2) * 22 + i * 14
+    return (
+      <button
+        key={item.label}
+        onMouseEnter={floating ? (e => { if (allowed && !on) { e.currentTarget.style.backgroundColor = pillBgHover; e.currentTarget.style.borderColor = pillBorderH; e.currentTarget.style.color = pinkAccent } e.currentTarget.style.transform = "translateX(4px)" }) : undefined}
+        onMouseLeave={floating ? (e => { if (allowed && !on) { e.currentTarget.style.backgroundColor = pillBg; e.currentTarget.style.borderColor = pillBorder; e.currentTarget.style.color = pillText } e.currentTarget.style.transform = "translateX(0)" }) : undefined}
+        onClick={allowed ? () => { setActive(item.label); setPinned(false); setOpen(false) } : undefined}
+        disabled={!allowed}
+        title={item.label}
+        className={`ap-node ${allowed ? "" : "opacity-40 cursor-not-allowed"}`}
+        style={{
+          animationDelay: `${delay}ms`,
+          display: "flex",
+          alignItems: "center",
+          gap: 9,
+          whiteSpace: "nowrap",
+          padding: "7px 16px 7px 8px",
+          borderRadius: 9999,
+          backgroundColor: on ? pinkAccent : pillBg,
+          color: on ? "#ffffff" : pillText,
+          border: `1px solid ${on ? pinkAccent : pillBorder}`,
+          boxShadow: floating ? (isDark ? "0 8px 22px rgba(0,0,0,0.55)" : "0 8px 22px rgba(157,36,99,0.22)") : "none",
+          fontSize: 13,
+          fontWeight: 600,
+          alignSelf: floating ? "flex-start" : "stretch",
+          width: floating ? undefined : "100%",
+        }}
+      >
+        <span
+          className="flex items-center justify-center rounded-full flex-shrink-0 relative"
+          style={{
+            width: 30, height: 30,
+            backgroundColor: on ? "rgba(255,255,255,0.25)" : chipBg,
+            color: on ? "#ffffff" : pinkAccent,
+          }}
+        >
+          <NavIcon d={item.d} />
+          {item.badge && (
+            <span style={{ position: "absolute", top: -1, right: -1, width: 9, height: 9, borderRadius: 9999, backgroundColor: "#ef4444", border: `2px solid ${on ? pinkAccent : chipBg}` }} />
+          )}
+        </span>
+        <span>{item.label}</span>
+      </button>
+    )
+  }
+
+  return (
+    <div
+      ref={wrapRef}
+      className="relative"
+      onMouseEnter={isMobile ? undefined : show}
+      onMouseLeave={isMobile ? undefined : scheduleHide}
+    >
+      <style>{APPEARANCE_FLYOUT_CSS}</style>
+
+      {/* Trigger — a solid brand-green button */}
+      <button
+        ref={triggerRef}
+        onClick={togglePin}
+        title={collapsed ? "Appearance" : undefined}
+        className={`w-full flex items-center gap-2.5 py-2.5 rounded-xl text-sm font-semibold text-white transition-all duration-200 relative ${collapsed ? "justify-center px-2" : "px-3"}`}
+        style={{
+          background: `linear-gradient(135deg, ${DG}, ${G})`,
+          boxShadow: isOpen
+            ? (isDark ? "0 0 0 2px rgba(74,222,128,0.45), 0 8px 20px -6px rgba(12,87,62,0.6)" : "0 0 0 2px rgba(46,139,52,0.25), 0 8px 20px -6px rgba(12,87,62,0.5)")
+            : "0 2px 8px -2px rgba(12,87,62,0.45)",
+          transform: isOpen ? "translateY(-1px)" : "none",
+        }}
+        onMouseEnter={e => { e.currentTarget.style.filter = "brightness(1.06)"; e.currentTarget.style.transform = "translateY(-1px)" }}
+        onMouseLeave={e => { e.currentTarget.style.filter = "none"; if (!isOpen) e.currentTarget.style.transform = "none" }}
+      >
+        <span style={{ color: "#ffffff" }}>
+          <NavIcon d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+        </span>
+        {!collapsed && <span className="truncate">Appearance</span>}
+        {!collapsed && (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}
+            strokeLinecap="round" strokeLinejoin="round"
+            className="ml-auto transition-transform duration-200"
+            style={{ transform: isOpen ? "rotate(90deg)" : "rotate(0deg)", color: "rgba(255,255,255,0.9)" }}>
+            <path d="M9 5l7 7-7 7" />
+          </svg>
+        )}
+      </button>
+
+      {/* MOBILE: inline accordion — items expand within the sidebar list */}
+      {isMobile && isOpen && (
+        <div
+          className="mt-2 pl-3 flex flex-col gap-1.5"
+          style={{ borderLeft: `2px solid ${pillBorder}`, marginLeft: 8 }}
+        >
+          {items.map((item, i) => renderItem(item, i, { floating: false }))}
+        </div>
+      )}
+
+      {/* DESKTOP: floating pink fan to the right (position:fixed, escapes clip) */}
+      {!isMobile && isOpen && (
+        <>
+          <div
+            onMouseEnter={show}
+            onMouseLeave={scheduleHide}
+            style={{ position: "fixed", top: coords.top - 30, left: coords.left, width: 160, height: 60, zIndex: 1090 }}
+          />
+          <div
+            data-ap-panel
+            onMouseEnter={show}
+            onMouseLeave={scheduleHide}
+            style={{
+              position: "fixed",
+              top: coords.top,
+              left: coords.left + 150,
+              transform: "translateY(-50%)",
+              zIndex: 1100,
+              display: "flex",
+              flexDirection: "column",
+              gap: 8,
+            }}
+          >
+            {items.map((item, i) => renderItem(item, i, { floating: true }))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+}
+
 // ─── Sidebar Content ──────────────────────────────────────────────────────────
 function SidebarContent({ active, setActive, collapsed, onLogout, user }) {
   const { isDark } = useTheme()
@@ -1091,21 +1327,17 @@ function SidebarContent({ active, setActive, collapsed, onLogout, user }) {
         <div className="space-y-0.5">
           {NAV_MAIN.map(item => <NavBtn key={item.label} item={item} active={active} setActive={setActive} collapsed={collapsed} user={user} />)}
         </div>
-        {/* Appearance section separator */}
-        <div className="mt-4 mb-1">
-          {collapsed
-            ? <div style={{ height: "1px", backgroundColor: t.divider, margin: "4px 8px 6px" }} />
-            : (
-              <div className="flex items-center gap-2 px-3 py-1">
-                <div style={{ flex: 1, height: "1px", backgroundColor: t.divider }} />
-                <span style={{ fontSize: "9px", fontWeight: 700, letterSpacing: "0.15em", textTransform: "uppercase", color: t.textMuted, whiteSpace: "nowrap" }}>Appearance</span>
-                <div style={{ flex: 1, height: "1px", backgroundColor: t.divider }} />
-              </div>
-            )
-          }
-        </div>
-        <div className="space-y-0.5">
-          {NAV_APPEARANCE.map(item => <NavBtn key={item.label} item={item} active={active} setActive={setActive} collapsed={collapsed} user={user} />)}
+        {/* Appearance pages collapse into one fan-out trigger */}
+        <div className="space-y-0.5 mt-3">
+          <AppearanceFlyout
+            items={NAV_APPEARANCE}
+            active={active}
+            setActive={setActive}
+            collapsed={collapsed}
+            user={user}
+            t={t}
+            isDark={isDark}
+          />
         </div>
       </nav>
 
@@ -1258,6 +1490,7 @@ export default function AdminDashboard({ onNavigate }) {
       case "Promotions":        return <AdminPromotions />
       case "Featured Products": return <AdminFeaturedProducts />
       case "FAQ":               return <AdminFAQ />
+      case "Legal":             return <AdminLegal />
       case "Campaigns":         return <AdminCampaigns />
       case "Preview Site":      return <PreviewSitePanel onBack={()=>goTo("Dashboard")} />
       default:               return <ComingSoon label={active} />

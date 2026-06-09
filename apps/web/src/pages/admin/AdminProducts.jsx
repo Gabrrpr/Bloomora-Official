@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react"
+import { createPortal } from "react-dom"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
 import { DG, G, StatusBadge, TH, TD, ActionBtns, EmptyRow, TableWrap, ExportBtn } from "./_adminShared"
@@ -7,6 +8,43 @@ import FallbackImage from "../../components/FallbackImage.jsx"
 const PLACEHOLDER_IMAGE = new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href
 const AVAILABILITIES = ["Available", "Limited", "Out of Stock"]
 const STATUSES       = ["Active", "Inactive"]
+
+// ── Flower petal loader (same bloom animation as the login/register screen) ──
+function FlowerLoader({ message = "Loading products...", isDark = false }) {
+  const petals = [
+    { angle: 0,   color: "#f48fb1" },
+    { angle: 60,  color: "#ec407a" },
+    { angle: 120, color: "#e91e63" },
+    { angle: 180, color: "#f06292" },
+    { angle: 240, color: "#c2185b" },
+    { angle: 300, color: "#f48fb1" },
+  ]
+  return (
+    <>
+      <style>{`
+        @keyframes adminPetalBloom {
+          0%, 100% { opacity: 0.2; }
+          50%       { opacity: 1;   }
+        }
+      `}</style>
+      <div className="flex flex-col items-center justify-center rounded-xl"
+        style={{ minHeight: "60vh", backgroundColor: isDark ? "#0f172a" : "transparent" }}>
+        <svg width="120" height="120" viewBox="0 0 100 100">
+          {petals.map(({ angle, color }, i) => (
+            <g key={i} transform={`rotate(${angle} 50 50)`}>
+              <ellipse cx="50" cy="27" rx="9.5" ry="21" fill={color}
+                style={{ animation: `adminPetalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`, animationFillMode: "both" }} />
+            </g>
+          ))}
+          <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+          <circle cx="50" cy="50" r="7"  fill="#f9c6d0" />
+          <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+        </svg>
+        <p className="mt-4 text-sm font-medium tracking-wide" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{message}</p>
+      </div>
+    </>
+  )
+}
 
 // ── Dark token helper ─────────────────────────────────────────────────────────
 function useAdminTokens() {
@@ -279,9 +317,9 @@ function AddProductModal({ onClose, onSave, categories }) {
     }
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      style={{ backgroundColor:d.overlayBg, backdropFilter:"blur(4px)" }}
+      style={{ backgroundColor:d.overlayBg, backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)", zIndex:9999, top:0, left:0, width:"100vw", height:"100vh" }}
       onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
       <div className="rounded-xl w-full overflow-hidden"
         style={{ maxWidth:"640px", maxHeight:"90vh", boxShadow:"0 24px 64px rgba(0,0,0,0.5)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
@@ -298,13 +336,23 @@ function AddProductModal({ onClose, onSave, categories }) {
           </button>
         </div>
 
-        <div className="overflow-y-auto p-6 space-y-4" style={{ maxHeight:"calc(90vh - 130px)" }}>
+        <div className="overflow-y-auto p-6 space-y-4" style={{ maxHeight:"calc(90vh - 150px)" }}>
           <div>
             <MLabel d={d}>Product Image <span style={{ color:d.subC, fontWeight:400 }}>(optional)</span></MLabel>
-            <input type="file" accept="image/*" onChange={handleUpload} disabled={isUploading}
-              className="block w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold cursor-pointer disabled:opacity-50"
-              style={{ color:d.subC }}/>
-            {isUploading && <p className="text-xs mt-1 animate-pulse" style={{ color:"#4ade80" }}>Uploading...</p>}
+            {!form.image_url && (
+              <label className="flex flex-col items-center justify-center w-full rounded-lg cursor-pointer transition-all"
+                style={{ border:`2px dashed ${d.inputBdr}`, backgroundColor:d.inputBg, padding:"24px 16px" }}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor="#4ade80"; e.currentTarget.style.backgroundColor=d.isDark?"rgba(74,222,128,0.06)":"#f0fdf4"}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=d.inputBdr; e.currentTarget.style.backgroundColor=d.inputBg}}>
+                <svg className="w-8 h-8 mb-2" style={{ color:d.subC }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <span className="text-sm font-semibold" style={{ color:d.cellC }}>Upload an image</span>
+                <span className="text-xs mt-0.5" style={{ color:d.subC }}>PNG, JPG or WEBP. Click to browse.</span>
+                <input type="file" accept="image/*" onChange={handleUpload} disabled={isUploading} className="hidden"/>
+              </label>
+            )}
+            {isUploading && <p className="text-xs mt-2 animate-pulse" style={{ color:"#4ade80" }}>Uploading...</p>}
             {form.image_url && (
               <div className="mt-3 relative inline-block">
                 <button type="button" onClick={()=>setLightboxSrc(form.image_url)} className="block">
@@ -328,7 +376,10 @@ function AddProductModal({ onClose, onSave, categories }) {
           {/* 3-Tier Hierarchy Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <MLabel d={d}>Group</MLabel>
+              <div className="flex items-end justify-between mb-1.5">
+                <MLabel d={d}>Group</MLabel>
+                <span className="text-[10px] font-semibold" style={{ color: d.subC }}>Top level</span>
+              </div>
               <MSel value={form.group} onChange={set("group")} options={["floral", "non-floral"]} d={d}/>
             </div>
             
@@ -411,7 +462,7 @@ function AddProductModal({ onClose, onSave, categories }) {
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-6 py-4 flex-shrink-0"
+        <div className="flex items-center justify-end gap-2 px-6 py-5 flex-shrink-0"
           style={{ borderTop:`1px solid ${d.modalFtrBdr}`, backgroundColor:d.modalFtr }}>
           <button onClick={onClose} className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
             style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}>
@@ -425,7 +476,8 @@ function AddProductModal({ onClose, onSave, categories }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -518,9 +570,9 @@ function EditProductModal({ product, onClose, onSave, categories }) {
 
   const previewUrl=removeImage?"":(form.image_url||getProductImage(product))
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      style={{ backgroundColor:d.overlayBg, backdropFilter:"blur(4px)" }}
+      style={{ backgroundColor:d.overlayBg, backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)", zIndex:9999, top:0, left:0, width:"100vw", height:"100vh" }}
       onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
       <div className="rounded-xl w-full overflow-hidden"
         style={{ maxWidth:"640px", maxHeight:"90vh", boxShadow:"0 24px 64px rgba(0,0,0,0.5)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
@@ -537,12 +589,23 @@ function EditProductModal({ product, onClose, onSave, categories }) {
           </button>
         </div>
 
-        <div className="overflow-y-auto p-6 space-y-4" style={{ maxHeight:"calc(90vh - 130px)" }}>
+        <div className="overflow-y-auto p-6 space-y-4" style={{ maxHeight:"calc(90vh - 150px)" }}>
           <div>
             <MLabel d={d}>Product Image <span style={{ color:d.subC, fontWeight:400 }}>(optional)</span></MLabel>
-            <input type="file" accept="image/*" onChange={handleUpload} disabled={isUploading}
-              className="block w-full text-sm cursor-pointer disabled:opacity-50" style={{ color:d.subC }}/>
-            {isUploading && <p className="text-xs mt-1 animate-pulse" style={{ color:"#4ade80" }}>Uploading...</p>}
+            {(!previewUrl || previewUrl===PLACEHOLDER_IMAGE) && (
+              <label className="flex flex-col items-center justify-center w-full rounded-lg cursor-pointer transition-all"
+                style={{ border:`2px dashed ${d.inputBdr}`, backgroundColor:d.inputBg, padding:"24px 16px" }}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor="#4ade80"; e.currentTarget.style.backgroundColor=d.isDark?"rgba(74,222,128,0.06)":"#f0fdf4"}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=d.inputBdr; e.currentTarget.style.backgroundColor=d.inputBg}}>
+                <svg className="w-8 h-8 mb-2" style={{ color:d.subC }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <span className="text-sm font-semibold" style={{ color:d.cellC }}>Upload an image</span>
+                <span className="text-xs mt-0.5" style={{ color:d.subC }}>PNG, JPG or WEBP. Click to browse.</span>
+                <input type="file" accept="image/*" onChange={handleUpload} disabled={isUploading} className="hidden"/>
+              </label>
+            )}
+            {isUploading && <p className="text-xs mt-2 animate-pulse" style={{ color:"#4ade80" }}>Uploading...</p>}
             {previewUrl && previewUrl!==PLACEHOLDER_IMAGE && (
               <div className="mt-3 relative inline-block">
                 <button type="button" onClick={()=>setLightboxSrc(previewUrl)} className="block">
@@ -627,7 +690,7 @@ function EditProductModal({ product, onClose, onSave, categories }) {
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-2 px-6 py-4 flex-shrink-0"
+        <div className="flex items-center justify-end gap-2 px-6 py-5 flex-shrink-0"
           style={{ borderTop:`1px solid ${d.modalFtrBdr}`, backgroundColor:d.modalFtr }}>
           <button onClick={onClose} className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
             style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}
@@ -648,7 +711,8 @@ function EditProductModal({ product, onClose, onSave, categories }) {
           <FallbackImage src={lightboxSrc} alt="Enlarged" className="max-w-3xl w-full max-h-[78vh] object-contain rounded-xl" fallbackSrc={PLACEHOLDER_IMAGE}/>
         </div>
       )}
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -843,6 +907,16 @@ export default function AdminProducts() {
   const dynamicCategories  = Array.from(new Set([...baseCategories.map(c=>c.toLowerCase()),...products.map(p=>p.category?.toLowerCase()).filter(Boolean)])).map(c=>c.charAt(0).toUpperCase()+c.slice(1))
 
   const selStyle = { borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }
+
+  // Show the branded flower loader while the first product fetch is in flight
+  if (loading) {
+    return (
+      <div className="space-y-5">
+        <h1 className="text-xl font-bold" style={{ color:d.headC }}>Products</h1>
+        <FlowerLoader message="Loading products..." isDark={isDark}/>
+      </div>
+    )
+  }
 
 
   return (

@@ -1,18 +1,24 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { useTheme } from "../context/ThemeContext"
+import { api } from "../services/api"
 
 // ── Image loading ───────────────────────────────────────────────────────────
-// Drop the 10 PNGs into  src/assets/blooms/  with these exact names and they
-// load automatically. Using new URL() (same dynamic pattern as the ad/gallery
-// images) so Vite bundles them correctly without 10 static import lines.
+// The 10 PNGs in  src/assets/blooms/  are the built-in fallback set. They show
+// when the CMS has no carousel slides yet (fresh install, offline, or an API
+// error). Once an admin publishes slides from Admin > Featured Products >
+// Bouquet Carousel, those replace the fallback and images come from each
+// linked product's image URL.
 const bloomImg = (file) =>
   new URL(`../assets/blooms/${file}`, import.meta.url).href
 
 const G  = "#2E8B34"   // site green
 const DG = "#0C573E"   // dark green
 
-// label / price are placeholders — tweak freely. Prices in PHP.
-const BLOOMS = [
+const CAROUSEL_ID = "__carousel__"
+
+// Built-in fallback content — identical to the original hard-coded set.
+// label / price are placeholders. Prices in PHP.
+const FALLBACK_BLOOMS = [
   { file: "1_GreenCarnations.png",        name: "Green Carnations",        tag: "Fresh Cut",   price: "₱2,400" },
   { file: "2_PinkWrapperRoses.png",       name: "Pink Wrapper Roses",      tag: "Best Seller", price: "₱3,100" },
   { file: "3_BlueRoses.png",              name: "Blue Roses",              tag: "Limited",     price: "₱3,500" },
@@ -24,6 +30,14 @@ const BLOOMS = [
   { file: "9_CarnationsRoses.png",        name: "Carnations & Roses",      tag: "Romantic",    price: "₱3,000" },
   { file: "10_CarnationsBrownWrapper.png",name: "Rustic Carnations",       tag: "Earthy",      price: "₱2,500" },
 ]
+
+const FALLBACK_HEADER = {
+  eyebrow: "Handcrafted Daily",
+  heading: "Today's Fresh Picks",
+  subheading: "Browse the bouquets we're arranging right now.",
+  ctaLabel: "Shop all bouquets",
+  ctaTarget: "shop",
+}
 
 // ── Scroll-reveal hook (same behaviour as OccasionsStrip) ────────────────────
 function useReveal(ref, delay = 0) {
@@ -62,6 +76,72 @@ export default function ChooseYourBloom({ onNavigate }) {
   const btnIcon   = isDark ? "#0f172a" : "#ffffff"
   const haloC     = isDark ? "rgba(74,222,128,0.10)" : "rgba(46,139,52,0.06)"
 
+  // ── CMS-driven state ──
+  // header holds the eyebrow / heading / subheading / cta. blooms is the slide
+  // list, each normalized to { src, name, tag, price } so the render code below
+  // is identical whether the data came from the CMS or the fallback.
+  const [header, setHeader] = useState(FALLBACK_HEADER)
+  const [blooms, setBlooms] = useState(() =>
+    FALLBACK_BLOOMS.map(b => ({ src: bloomImg(b.file), name: b.name, tag: b.tag, price: b.price }))
+  )
+
+  useEffect(() => {
+    let cancelled = false
+
+    const loadCarousel = async () => {
+      try {
+        const [settings, productRows] = await Promise.all([
+          api.get("/products/admin/settings/homepage").catch(() => null),
+          api.get("/products/").catch(() => []),
+        ])
+        if (cancelled) return
+
+        // accept either the fixed key or any section flagged as a carousel
+        const carousel = settings?.[CAROUSEL_ID]
+          || (settings && Object.values(settings).find(s => s?.__type === "carousel"))
+
+        if (!carousel || !Array.isArray(carousel.slides) || carousel.slides.length === 0) {
+          return // nothing published — keep fallback content
+        }
+
+        const products = (Array.isArray(productRows) ? productRows : []).map(p => ({
+          id: p.id,
+          name: p.name,
+          price: Number(p.price) || 0,
+          image: p.image || p.image_url || null,
+        }))
+
+        const resolved = carousel.slides
+          .map(slide => {
+            const product = products.find(p => String(p.id) === String(slide.productId))
+            const src = product?.image || null
+            const name = slide.name || product?.name || ""
+            const tag = slide.tag || ""
+            const price = slide.price || (product ? `₱${Number(product.price || 0).toLocaleString()}` : "")
+            return { src, name, tag, price }
+          })
+          // skip slides with no resolvable image so the centerpiece is never blank
+          .filter(b => b.src)
+
+        if (resolved.length > 0 && !cancelled) {
+          setBlooms(resolved)
+          setHeader({
+            eyebrow:    carousel.eyebrow    || FALLBACK_HEADER.eyebrow,
+            heading:    carousel.heading    || FALLBACK_HEADER.heading,
+            subheading: carousel.subheading || FALLBACK_HEADER.subheading,
+            ctaLabel:   carousel.ctaLabel   || FALLBACK_HEADER.ctaLabel,
+            ctaTarget:  carousel.ctaTarget  || FALLBACK_HEADER.ctaTarget,
+          })
+        }
+      } catch {
+        // any failure — silently keep the fallback set
+      }
+    }
+
+    loadCarousel()
+    return () => { cancelled = true }
+  }, [])
+
   const headingRef = useRef(null)
   const stageRef   = useRef(null)
   useReveal(headingRef, 0)
@@ -72,14 +152,20 @@ export default function ChooseYourBloom({ onNavigate }) {
   const [anim, setAnim]   = useState(false)
   const lockRef = useRef(false)
 
+  // keep the active index valid if the slide count changes after a CMS load
+  useEffect(() => {
+    setIndex(i => (blooms.length ? mod(i, blooms.length) : 0))
+  }, [blooms.length])
+
   const go = useCallback((step) => {
     if (lockRef.current) return
+    if (blooms.length <= 1) return
     lockRef.current = true
     setDir(step)
     setAnim(true)
-    setIndex((i) => mod(i + step, BLOOMS.length))
+    setIndex((i) => mod(i + step, blooms.length))
     setTimeout(() => { setAnim(false); lockRef.current = false }, 480)
-  }, [])
+  }, [blooms.length])
 
   // Keyboard arrows
   useEffect(() => {
@@ -91,9 +177,13 @@ export default function ChooseYourBloom({ onNavigate }) {
     return () => window.removeEventListener("keydown", onKey)
   }, [go])
 
-  const center = BLOOMS[index]
-  const left   = BLOOMS[mod(index - 1, BLOOMS.length)]
-  const right  = BLOOMS[mod(index + 1, BLOOMS.length)]
+  // safety: never render against an empty list
+  if (blooms.length === 0) return null
+
+  const center = blooms[index]
+  const left   = blooms[mod(index - 1, blooms.length)]
+  const right  = blooms[mod(index + 1, blooms.length)]
+  const multi  = blooms.length > 1
 
   const animCss = `
     @keyframes bloomInRight { from { opacity:0; transform: translateX(48px) scale(0.92) } to { opacity:1; transform: translateX(0) scale(1) } }
@@ -154,16 +244,16 @@ export default function ChooseYourBloom({ onNavigate }) {
           style={{ opacity: 0, transform: "translateY(24px)", transition: "opacity 0.5s ease, transform 0.5s ease" }}
         >
           <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color: eyebrowC }}>
-            Handcrafted Daily
+            {header.eyebrow}
           </p>
           <h2
             className="text-3xl sm:text-4xl font-bold mb-3"
             style={{ color: headingC, fontFamily: "inherit" }}
           >
-            Today's Fresh Picks
+            {header.heading}
           </h2>
           <p className="text-sm mb-4" style={{ color: bodyC }}>
-            Browse the bouquets we're arranging right now.
+            {header.subheading}
           </p>
           <div
             className="mx-auto rounded-full"
@@ -189,42 +279,46 @@ export default function ChooseYourBloom({ onNavigate }) {
             className="relative mx-auto"
             style={{ maxWidth: 1180, height: "clamp(500px, 44vw, 500px)" }}
           >
-            <ArrowBtn onClick={() => go(-1)} side="left"  label="Previous bloom" />
-            <ArrowBtn onClick={() => go(1)}  side="right" label="Next bloom" />
+            {multi && <ArrowBtn onClick={() => go(-1)} side="left"  label="Previous bloom" />}
+            {multi && <ArrowBtn onClick={() => go(1)}  side="right" label="Next bloom" />}
 
             {/* LEFT peek */}
-            <button
-              onClick={() => go(-1)}
-              aria-hidden="true"
-              tabIndex={-1}
-              className="hidden sm:flex absolute top-1/2 -translate-y-1/2 items-center justify-center focus:outline-none transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
-              style={{ left: "3%", width: "30%", height: "80%" }}
-            >
-              <img
-                src={bloomImg(left.file)}
-                alt=""
-                className="max-w-full max-h-full object-contain transition-all duration-500"
-                style={{ opacity: isDark ? 0.42 : 0.58, filter: "saturate(0.85)" }}
-                onError={(e) => { e.currentTarget.style.visibility = "hidden" }}
-              />
-            </button>
+            {multi && (
+              <button
+                onClick={() => go(-1)}
+                aria-hidden="true"
+                tabIndex={-1}
+                className="hidden sm:flex absolute top-1/2 -translate-y-1/2 items-center justify-center focus:outline-none transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                style={{ left: "3%", width: "30%", height: "80%" }}
+              >
+                <img
+                  src={left.src}
+                  alt=""
+                  className="max-w-full max-h-full object-contain transition-all duration-500"
+                  style={{ opacity: isDark ? 0.42 : 0.58, filter: "saturate(0.85)" }}
+                  onError={(e) => { e.currentTarget.style.visibility = "hidden" }}
+                />
+              </button>
+            )}
 
             {/* RIGHT peek — identical box to the left one */}
-            <button
-              onClick={() => go(1)}
-              aria-hidden="true"
-              tabIndex={-1}
-              className="hidden sm:flex absolute top-1/2 -translate-y-1/2 items-center justify-center focus:outline-none transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
-              style={{ right: "3%", width: "30%", height: "80%" }}
-            >
-              <img
-                src={bloomImg(right.file)}
-                alt=""
-                className="max-w-full max-h-full object-contain transition-all duration-500"
-                style={{ opacity: isDark ? 0.42 : 0.58, filter: "saturate(0.85)" }}
-                onError={(e) => { e.currentTarget.style.visibility = "hidden" }}
-              />
-            </button>
+            {multi && (
+              <button
+                onClick={() => go(1)}
+                aria-hidden="true"
+                tabIndex={-1}
+                className="hidden sm:flex absolute top-1/2 -translate-y-1/2 items-center justify-center focus:outline-none transition-all duration-500 ease-[cubic-bezier(0.22,1,0.36,1)]"
+                style={{ right: "3%", width: "30%", height: "80%" }}
+              >
+                <img
+                  src={right.src}
+                  alt=""
+                  className="max-w-full max-h-full object-contain transition-all duration-500"
+                  style={{ opacity: isDark ? 0.42 : 0.58, filter: "saturate(0.85)" }}
+                  onError={(e) => { e.currentTarget.style.visibility = "hidden" }}
+                />
+              </button>
+            )}
 
             {/* CENTER piece */}
             <div
@@ -237,7 +331,7 @@ export default function ChooseYourBloom({ onNavigate }) {
                 style={{ animation: centerAnim }}
               >
                 <img
-                  src={bloomImg(center.file)}
+                  src={center.src}
                   alt={center.name}
                   className="max-w-full max-h-full object-contain drop-shadow-xl"
                   onError={(e) => { e.currentTarget.style.opacity = "0.15" }}
@@ -248,47 +342,53 @@ export default function ChooseYourBloom({ onNavigate }) {
 
           {/* ── Caption ── */}
           <div className="text-center mt-2" style={{ animation: textAnim }} key={`cap-${index}`}>
-            <p className="text-xs font-bold tracking-widest uppercase mb-1.5" style={{ color: tagC }}>
-              {center.tag}
-            </p>
+            {center.tag && (
+              <p className="text-xs font-bold tracking-widest uppercase mb-1.5" style={{ color: tagC }}>
+                {center.tag}
+              </p>
+            )}
             <h3 className="text-xl sm:text-2xl font-bold mb-1" style={{ color: nameC, fontFamily: "inherit" }}>
               {center.name}
             </h3>
-            <p className="text-sm font-medium" style={{ color: priceC }}>
-              {center.price}
-            </p>
+            {center.price && (
+              <p className="text-sm font-medium" style={{ color: priceC }}>
+                {center.price}
+              </p>
+            )}
           </div>
 
           {/* ── Dots ── */}
-          <div className="flex items-center justify-center gap-2 mt-4 flex-wrap">
-            {BLOOMS.map((_, i) => {
-              const active = i === index
-              return (
-                <button
-                  key={i}
-                  onClick={() => { if (i !== index) go(i > index ? 1 : -1) }}
-                  aria-label={`Go to bloom ${i + 1}`}
-                  className="rounded-full transition-all duration-300 focus:outline-none"
-                  style={{
-                    width: active ? 22 : 7,
-                    height: 7,
-                    backgroundColor: active ? accentG : (isDark ? "#374151" : "#d1d5db"),
-                  }}
-                />
-              )
-            })}
-          </div>
+          {multi && (
+            <div className="flex items-center justify-center gap-2 mt-4 flex-wrap">
+              {blooms.map((_, i) => {
+                const active = i === index
+                return (
+                  <button
+                    key={i}
+                    onClick={() => { if (i !== index) go(i > index ? 1 : -1) }}
+                    aria-label={`Go to bloom ${i + 1}`}
+                    className="rounded-full transition-all duration-300 focus:outline-none"
+                    style={{
+                      width: active ? 22 : 7,
+                      height: 7,
+                      backgroundColor: active ? accentG : (isDark ? "#374151" : "#d1d5db"),
+                    }}
+                  />
+                )
+              })}
+            </div>
+          )}
 
           {/* ── See all ── */}
           <div className="text-center mt-5">
             <button
-              onClick={() => onNavigate?.("shop")}
+              onClick={() => onNavigate?.(header.ctaTarget || "shop")}
               className="inline-flex items-center gap-1.5 text-sm font-semibold transition-colors"
               style={{ color: accentG }}
               onMouseEnter={(e) => (e.currentTarget.style.color = isDark ? "#86efac" : "#15803d")}
               onMouseLeave={(e) => (e.currentTarget.style.color = accentG)}
             >
-              Shop all bouquets
+              {header.ctaLabel}
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>

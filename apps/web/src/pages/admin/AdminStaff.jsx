@@ -191,6 +191,23 @@ function StaffPagination({ total=0, d }) {
   )
 }
 
+// ── Add Staff form section wrapper (module-scope so inputs don't lose focus) ──
+function Section({ icon, title, subtitle, children, d }) {
+  return (
+    <div className="px-5 py-5" style={{ borderBottom:`1px solid ${d.hdrBdr}` }}>
+      <div className="flex items-center gap-2.5 mb-4">
+        <span className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 text-white"
+          style={{ background:`linear-gradient(135deg,${DG},${G})` }}>{icon}</span>
+        <div>
+          <p className="text-sm font-bold leading-tight" style={{ color:d.headC }}>{title}</p>
+          {subtitle && <p className="text-xs mt-0.5" style={{ color:d.muted }}>{subtitle}</p>}
+        </div>
+      </div>
+      <div className="space-y-3">{children}</div>
+    </div>
+  )
+}
+
 // ── Add Staff Form ────────────────────────────────────────────────────────────
 function AddStaffForm({ onBack, onCreated }) {
   const d = useDark();
@@ -252,30 +269,24 @@ function AddStaffForm({ onBack, onCreated }) {
     }
   }
 
-  const mkCard = (label, val, accent) => (
-    <div key={label} className="rounded-xl p-4 relative overflow-hidden"
-      style={{ backgroundColor:d.cardBg, border:`1px solid ${d.cardBdr}`, boxShadow:d.cardShdw }}>
-      <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl" style={{ backgroundColor:accent }}/>
-      <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color:d.muted }}>{label}</p>
-      <p className="text-2xl font-bold" style={{ color:d.headC }}>{val}</p>
-    </div>
-  )
+  // ── derived preview values ──
+  const fullName = `${f.fn} ${f.mn} ${f.ln}`.replace(/\s+/g, " ").trim()
+  const initials = ((f.fn?.[0] || "") + (f.ln?.[0] || "")).toUpperCase() || "?"
+  const roleColors = {
+    admin:    { bg:d.isDark?"rgba(167,139,250,0.15)":"#f3e8ff", color:d.isDark?"#c4b5fd":"#7c3aed" },
+    staff:    { bg:d.isDark?"rgba(56,189,248,0.12)":"#e0f2fe",  color:d.isDark?"#7dd3fc":"#0891b2" },
+    delivery: { bg:d.isDark?"rgba(251,191,36,0.12)":"#fef3c7",  color:d.isDark?"#fcd34d":"#b45309" },
+  }
+  const rc = roleColors[f.role.toLowerCase()] || null
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="rounded-xl p-4 flex flex-col justify-between relative overflow-hidden"
-          style={{ background:"linear-gradient(135deg,#0a4a34 0%,#1a7040 60%,#2E8B34 100%)", boxShadow:"0 4px 16px rgba(12,87,62,0.25)" }}>
-          <p className="text-xs font-bold uppercase tracking-wider" style={{ color:"rgba(255,255,255,0.65)" }}>Total Staffs</p>
-          <p className="text-2xl font-bold text-white">0</p>
-        </div>
-        {mkCard("Admins", 0, "#a78bfa")}
-        {mkCard("Staffs", 0, "#38bdf8")}
-        {mkCard("Delivery Staffs", 0, "#fbbf24")}
-      </div>
-
+      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h2 className="text-lg font-bold" style={{ color:d.headC }}>Add New Staff</h2>
+        <div>
+          <h2 className="text-lg font-bold" style={{ color:d.headC }}>Add New Staff</h2>
+          <p className="text-xs mt-0.5" style={{ color:d.muted }}>Create an account and send an email invite to set up their password.</p>
+        </div>
         <button onClick={onBack}
           className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all"
           style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}>
@@ -290,60 +301,139 @@ function AddStaffForm({ onBack, onCreated }) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <StepCard n={1} title="Personal Information" d={d}>
-          <div><FL d={d}>First name <span style={{ color:"#f87171" }}>*</span></FL><FInput placeholder="Enter first name" value={f.fn} onChange={s("fn")} d={d}/></div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><FL d={d}>Middle name</FL><FInput placeholder="Middle name" value={f.mn} onChange={s("mn")} d={d}/></div>
-            <div><FL d={d}>Last name <span style={{ color:"#f87171" }}>*</span></FL><FInput placeholder="Last name" value={f.ln} onChange={s("ln")} d={d}/></div>
-          </div>
-        </StepCard>
+      {/* Two-column: form (left) + live preview (right) */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
 
-        <StepCard n={2} title="Account Information" d={d}>
-          <div>
-            <FL d={d}>Username</FL>
-            <FInput placeholder="e.g. j.delacruz" value={f.un} onChange={s("un")} hint="Format: first initial.last name (e.g. j.delacruz)" d={d}/>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div><FL d={d}>Role <span style={{ color:"#f87171" }}>*</span></FL><FSel options={["Admin","Staff","Delivery"]} value={f.role} onChange={s("role")} placeholder="Select role" d={d}/></div>
-            <div><FL d={d}>Branch</FL><FSel options={["Manila","Pampanga"]} value={f.branch} onChange={s("branch")} placeholder="Select branch" d={d}/></div>
-          </div>
-        </StepCard>
+        {/* ── Form card (spans 2 cols on desktop) ── */}
+        <div className="lg:col-span-2 rounded-xl overflow-hidden"
+          style={{ backgroundColor:d.cardBg, border:`1px solid ${d.cardBdr}`, boxShadow:d.cardShdw }}>
 
-        <StepCard n={3} title="Contact Details" d={d}>
-          <div><FL d={d}>Email address <span style={{ color:"#f87171" }}>*</span></FL><FInput type="email" placeholder="e.g. j.delacruz@gmail.com" value={f.email} onChange={s("email")} d={d}/></div>
-          <div>
-            <FL d={d}>Phone number</FL>
-            <div className="flex gap-2">
-              <select className="appearance-none px-2 py-2.5 text-sm border rounded-md outline-none"
-                style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt, width:"70px" }}>
-                <option>+63</option>
-              </select>
-              <FInput placeholder="Phone number" value={f.phone} onChange={s("phone")} d={d}/>
+          <Section
+            d={d}
+            icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>}
+            title="Personal Information"
+            subtitle="The staff member's legal name">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div><FL d={d}>First name <span style={{ color:"#f87171" }}>*</span></FL><FInput placeholder="First name" value={f.fn} onChange={s("fn")} error={errors.fn} d={d}/></div>
+              <div><FL d={d}>Middle name</FL><FInput placeholder="Middle name" value={f.mn} onChange={s("mn")} d={d}/></div>
+              <div><FL d={d}>Last name <span style={{ color:"#f87171" }}>*</span></FL><FInput placeholder="Last name" value={f.ln} onChange={s("ln")} error={errors.ln} d={d}/></div>
+            </div>
+          </Section>
+
+          <Section
+            d={d}
+            icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v10a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V4a2 2 0 014 0v2m-4 0h4"/></svg>}
+            title="Account Information"
+            subtitle="Login identity and access level">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <FL d={d}>Username</FL>
+                <FInput placeholder="e.g. j.delacruz" value={f.un} onChange={s("un")} hint="first initial.last name" d={d}/>
+              </div>
+              <div><FL d={d}>Role <span style={{ color:"#f87171" }}>*</span></FL><FSel options={["Admin","Staff","Delivery"]} value={f.role} onChange={s("role")} placeholder="Select role" d={d}/>{errors.role && <p className="text-[10px] font-bold mt-1 text-red-500">{errors.role}</p>}</div>
+              <div><FL d={d}>Branch</FL><FSel options={["Manila","Pampanga"]} value={f.branch} onChange={s("branch")} placeholder="Select branch" d={d}/></div>
+            </div>
+          </Section>
+
+          <Section
+            d={d}
+            icon={<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>}
+            title="Contact Details"
+            subtitle="Where the invite will be sent">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div><FL d={d}>Email address <span style={{ color:"#f87171" }}>*</span></FL><FInput type="email" placeholder="e.g. j.delacruz@gmail.com" value={f.email} onChange={s("email")} error={errors.email} d={d}/></div>
+              <div>
+                <FL d={d}>Phone number</FL>
+                <div className="flex gap-2">
+                  <select className="appearance-none px-2 py-2.5 text-sm border rounded-md outline-none flex-shrink-0"
+                    style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt, width:"70px" }}>
+                    <option>+63</option>
+                  </select>
+                  <div className="flex-1"><FInput placeholder="Phone number" value={f.phone} onChange={s("phone")} error={errors.phone} d={d}/></div>
+                </div>
+              </div>
+            </div>
+          </Section>
+
+          {/* last section: no bottom border */}
+          <div className="px-5 py-5">
+            <div className="flex items-start gap-3 p-4 rounded-lg border"
+              style={{ backgroundColor: d.isDark ? "rgba(56,189,248,0.1)" : "#f0f9ff", borderColor: d.isDark ? "rgba(56,189,248,0.2)" : "#bae6fd" }}>
+              <svg className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: d.isDark ? "#38bdf8" : "#0284c7" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+              </svg>
+              <p className="text-xs leading-relaxed" style={{ color: d.isDark ? "#bae6fd" : "#0369a1" }}>
+                An invitation link will be emailed to <strong className="font-bold">{f.email || "this address"}</strong>. The staff member will use this link to verify their account and securely set their own password.
+              </p>
             </div>
           </div>
-        </StepCard>
+        </div>
 
-        <StepCard n={4} title="Account Activation" d={d}>
-          <div className="flex items-start gap-3 p-4 rounded-lg border mt-2" 
-            style={{ backgroundColor: d.isDark ? "rgba(56,189,248,0.1)" : "#f0f9ff", borderColor: d.isDark ? "rgba(56,189,248,0.2)" : "#bae6fd" }}>
-            <svg className="w-5 h-5 flex-shrink-0 mt-0.5" style={{ color: d.isDark ? "#38bdf8" : "#0284c7" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-            </svg>
-            <p className="text-xs leading-relaxed" style={{ color: d.isDark ? "#bae6fd" : "#0369a1" }}>
-              An invitation link will be emailed to <strong className="font-bold">{f.email || "this address"}</strong>. The staff member will use this link to verify their account and securely set their own password.
+        {/* ── Live preview card (right column, sticky on desktop) ── */}
+        <div className="lg:sticky lg:top-4">
+          <div className="rounded-xl overflow-hidden"
+            style={{ backgroundColor:d.cardBg, border:`1px solid ${d.cardBdr}`, boxShadow:d.cardShdw }}>
+            <p className="px-5 pt-4 pb-3 text-[11px] font-bold uppercase tracking-wider" style={{ color:d.muted, borderBottom:`1px solid ${d.hdrBdr}` }}>
+              Preview
             </p>
-          </div>
-        </StepCard>
-      </div>
 
-      <div className="flex justify-end">
-        <button onClick={handleSubmit} disabled={submitting}
-          className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-60"
-          style={{ background:`linear-gradient(135deg,${DG},${G})` }}>
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4"/></svg>
-          {submitting?"Sending Invite...":"Send Invite"}
-        </button>
+            {/* avatar + name banner */}
+            <div className="px-5 py-6 flex flex-col items-center text-center"
+              style={{ background: d.isDark ? "linear-gradient(135deg,#0f3326,#16432f)" : "linear-gradient(135deg,#f0fdf4,#fafff8)" }}>
+              <div className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold text-white mb-3"
+                style={{ background:`linear-gradient(135deg,${DG},${G})`, boxShadow:"0 6px 18px rgba(12,87,62,0.3)" }}>
+                {initials}
+              </div>
+              <p className="text-base font-bold" style={{ color:d.headC }}>
+                {fullName || "New Staff Member"}
+              </p>
+              <p className="text-xs mt-0.5" style={{ color:d.muted }}>
+                {f.un ? `@${f.un}` : "username pending"}
+              </p>
+              <div className="mt-3 flex items-center gap-2">
+                {rc
+                  ? <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-bold capitalize" style={{ backgroundColor:rc.bg, color:rc.color }}>{f.role}</span>
+                  : <span className="inline-flex items-center px-2.5 py-0.5 rounded text-xs font-bold" style={{ backgroundColor:d.isDark?"#1e293b":"#f1f5f9", color:d.muted }}>No role yet</span>}
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-bold"
+                  style={{ backgroundColor:d.isDark?"rgba(251,191,36,0.12)":"#fef9c3", color:d.isDark?"#fcd34d":"#92400e" }}>
+                  <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor:d.isDark?"#fcd34d":"#92400e" }}/>
+                  Pending
+                </span>
+              </div>
+            </div>
+
+            {/* detail rows */}
+            <div className="px-5 py-4 space-y-3">
+              {[
+                { label:"Email",  value:f.email,  icon:"M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
+                { label:"Phone",  value:f.phone ? `+63 ${f.phone}` : "", icon:"M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" },
+                { label:"Branch", value:f.branch, icon:"M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" },
+              ].map(row => (
+                <div key={row.label} className="flex items-center gap-3">
+                  <svg className="w-4 h-4 flex-shrink-0" style={{ color:d.muted }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={row.icon}/>
+                  </svg>
+                  <div className="min-w-0">
+                    <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color:d.muted }}>{row.label}</p>
+                    <p className="text-sm font-medium truncate" style={{ color: row.value ? d.cellC : d.muted }}>
+                      {row.value || "Not set"}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* submit button lives in the preview footer so it feels like the final step */}
+            <div className="px-5 py-4" style={{ borderTop:`1px solid ${d.hdrBdr}`, backgroundColor:d.modalFtr }}>
+              <button onClick={handleSubmit} disabled={submitting}
+                className="w-full flex items-center justify-center gap-1.5 px-5 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-60"
+                style={{ background:`linear-gradient(135deg,${DG},${G})`, boxShadow:"0 2px 8px rgba(12,87,62,0.3)" }}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                {submitting?"Sending Invite...":"Send Invite"}
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -367,9 +457,9 @@ function ViewStaffModal({ staff, onClose }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ backgroundColor:d.overlay, backdropFilter:"blur(4px)" }}
       onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
-      <div className="rounded-xl w-full overflow-hidden"
-        style={{ maxWidth:"480px", boxShadow:"0 24px 64px rgba(0,0,0,0.55)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
-        <div className="flex items-center justify-between px-6 py-4"
+      <div className="rounded-xl w-full overflow-hidden flex flex-col"
+        style={{ maxWidth:"480px", maxHeight:"90vh", boxShadow:"0 24px 64px rgba(0,0,0,0.55)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
+        <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
           style={{ borderBottom:`1px solid ${d.hdrBdr}`, background:d.modalHdr }}>
           <p className="text-base font-bold" style={{ color:d.headC }}>Staff Details</p>
           <button onClick={onClose} className="p-2 rounded-lg transition-all" style={{ color:d.muted }}
@@ -378,7 +468,7 @@ function ViewStaffModal({ staff, onClose }) {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
-        <div className="p-6 space-y-3">
+        <div className="p-6 space-y-3 overflow-y-auto">
           {rows.map(row => (
             <div key={row.label} className="flex justify-between gap-4 text-sm">
               <span className="font-semibold flex-shrink-0" style={{ color:d.labelC }}>{row.label}</span>
@@ -388,7 +478,7 @@ function ViewStaffModal({ staff, onClose }) {
             </div>
           ))}
         </div>
-        <div className="flex items-center justify-end gap-2 px-6 py-4"
+        <div className="flex items-center justify-end gap-2 px-6 py-4 flex-shrink-0"
           style={{ borderTop:`1px solid ${d.hdrBdr}`, backgroundColor:d.modalFtr }}>
           <button onClick={onClose}
             className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
@@ -663,27 +753,29 @@ export default function AdminStaff() {
 
         {/* Toolbar */}
         <div className="p-3 sm:p-4" style={{ borderBottom:`1px solid ${d.hdrBdr}`, backgroundColor:d.hdrBg }}>
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Dropdowns */}
-            {[
-              { val:statusFilter, set:setStatus, opts:["All Status","Active","Inactive","Suspended","Pending Activation"], min:"140px" },
-              { val:branchFilter, set:setBranch, opts:["All Branches","Manila","Pampanga"], min:"130px" },
-              { val:roleFilter,   set:setRole,   opts:["All Roles","Admin","Staff","Delivery"], min:"120px" },
-            ].map(({ val, set: setVal, opts, min }, i) => (
-              <div key={i} className="relative">
-                <select value={val}
-                  onChange={e => setVal(e.target.value===opts[0]?"":e.target.value)}
-                  className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md cursor-pointer outline-none transition-all"
-                  style={{ ...sel, minWidth:min }}
-                  onFocus={e=>{e.target.style.borderColor="#4ade80";e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)"}}
-                  onBlur={e=>{e.target.style.borderColor=d.inputBdr;e.target.style.boxShadow="none"}}>
-                  {opts.map(o=><option key={o} value={o===opts[0]?"":o}>{o}</option>)}
-                </select>
-                <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color:d.muted }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
-                </svg>
-              </div>
-            ))}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:flex-wrap">
+            {/* Dropdowns — share a row on mobile, inline on desktop */}
+            <div className="grid grid-cols-2 sm:flex gap-2">
+              {[
+                { val:statusFilter, set:setStatus, opts:["All Status","Active","Inactive","Suspended","Pending Activation"], min:"140px" },
+                { val:branchFilter, set:setBranch, opts:["All Branches","Manila","Pampanga"], min:"130px" },
+                { val:roleFilter,   set:setRole,   opts:["All Roles","Admin","Staff","Delivery"], min:"120px" },
+              ].map(({ val, set: setVal, opts, min }, i) => (
+                <div key={i} className="relative">
+                  <select value={val}
+                    onChange={e => setVal(e.target.value===opts[0]?"":e.target.value)}
+                    className="w-full appearance-none pl-3 pr-8 py-2 text-sm border rounded-md cursor-pointer outline-none transition-all"
+                    style={{ ...sel, minWidth:min }}
+                    onFocus={e=>{e.target.style.borderColor="#4ade80";e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)"}}
+                    onBlur={e=>{e.target.style.borderColor=d.inputBdr;e.target.style.boxShadow="none"}}>
+                    {opts.map(o=><option key={o} value={o===opts[0]?"":o}>{o}</option>)}
+                  </select>
+                  <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color:d.muted }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
+                  </svg>
+                </div>
+              ))}
+            </div>
             {/* Search */}
             <div className="relative flex-1" style={{ minWidth:"180px" }}>
               <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color:d.muted }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -696,14 +788,16 @@ export default function AdminStaff() {
                 onFocus={e=>{e.target.style.borderColor="#4ade80";e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)"}}
                 onBlur={e=>{e.target.style.borderColor=d.inputBdr;e.target.style.boxShadow="none"}}/>
             </div>
-            {/* Refresh */}
-            <button onClick={fetchStaff} disabled={loading}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all active:scale-95 disabled:opacity-50"
-              style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-              Refresh
-            </button>
-            <ExportStaffBtn data={staff} d={d}/>
+            {/* Refresh + Export — share a row on mobile */}
+            <div className="flex gap-2">
+              <button onClick={fetchStaff} disabled={loading}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all active:scale-95 disabled:opacity-50"
+                style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                Refresh
+              </button>
+              <div className="flex-1 sm:flex-none"><ExportStaffBtn data={staff} d={d}/></div>
+            </div>
           </div>
         </div>
 
@@ -715,8 +809,8 @@ export default function AdminStaff() {
           </div>
         )}
 
-        {/* Table */}
-        <div className="overflow-x-auto">
+        {/* Table — desktop only */}
+        <div className="overflow-x-auto hidden sm:block">
           <table className="w-full" style={{ minWidth:"700px" }}>
             <thead style={{ borderBottom:`1px solid ${d.hdrBdr}`, backgroundColor:d.hdrBg }}>
               <tr>
@@ -786,6 +880,71 @@ export default function AdminStaff() {
               ))}
             </tbody>
           </table>
+        </div>
+
+        {/* Card list — mobile only (all details, no horizontal scroll) */}
+        <div className="sm:hidden">
+          {loading ? (
+            <p className="px-5 py-12 text-center text-sm" style={{ color:d.muted }}>Loading staff...</p>
+          ) : staff.length===0 ? (
+            <p className="px-5 py-12 text-center text-sm" style={{ color:d.muted }}>
+              {search||statusFilter||branchFilter||roleFilter
+                ? "No staff match your filters."
+                : "Click '+ Add Staff' to create your first staff account."}
+            </p>
+          ) : (
+            <div className="divide-y" style={{ borderColor:d.hdrBdr }}>
+              {staff.map(s => (
+                <div key={s.id} className="p-4" style={{ borderColor:d.hdrBdr }}>
+                  {/* top row: name + username, then status badge */}
+                  <div className="flex items-start justify-between gap-3 mb-3">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-sm truncate" style={{ color:d.cellC }}>{s.first_name} {s.last_name}</p>
+                      <p className="text-xs truncate" style={{ color:d.muted }}>@{s.username}</p>
+                    </div>
+                    <StatusBadge status={s.staff_status} isDark={isDark}/>
+                  </div>
+
+                  {/* detail chips */}
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 mb-3 text-xs" style={{ color:d.subC }}>
+                    <span className="flex items-center gap-1.5">
+                      <span className="font-bold uppercase tracking-wider" style={{ color:d.muted }}>Role</span>
+                      <RoleBadge role={s.role} isDark={isDark}/>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="font-bold uppercase tracking-wider" style={{ color:d.muted }}>Branch</span>
+                      <span style={{ color:d.cellC }}>{s.branch||"—"}</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="font-bold uppercase tracking-wider" style={{ color:d.muted }}>ID</span>
+                      <span className="font-mono" style={{ color:d.cellC }}>{s.id.slice(0,8)}</span>
+                    </span>
+                  </div>
+
+                  {/* actions — full width, easy to tap */}
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setEditing(s)}
+                      className="flex-1 px-3 py-2 text-xs font-bold text-white rounded-md transition-all active:scale-95"
+                      style={{ backgroundColor:DG }}>
+                      Edit
+                    </button>
+                    <button onClick={() => setViewing(s)}
+                      className="flex-1 px-3 py-2 text-xs font-bold rounded-md border transition-all active:scale-95"
+                      style={{ backgroundColor:isDark?"rgba(74,222,128,0.1)":"#f0fdf4", borderColor:isDark?"rgba(74,222,128,0.3)":"#bbf7d0", color:isDark?"#4ade80":DG }}>
+                      View
+                    </button>
+                    <button onClick={() => setDeactivating(s)}
+                      className="w-9 h-9 flex items-center justify-center rounded-md transition-all active:scale-95 flex-shrink-0"
+                      style={{ backgroundColor:isDark?"rgba(248,113,113,0.12)":"#fef2f2", border:`1px solid ${isDark?"rgba(248,113,113,0.25)":"#fecaca"}` }}>
+                      <svg className="w-4 h-4" style={{ color:"#f87171" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <StaffPagination total={total} d={d}/>

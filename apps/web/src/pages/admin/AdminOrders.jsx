@@ -8,6 +8,43 @@ const ORDER_STATUSES = ["All", "Pending", "Preparing", "Out for Delivery", "Deli
 const BRANCHES       = ["All Branches", "Manila", "Pampanga"]
 const DATE_RANGES    = ["All Time", "Today", "This Week", "This Month", "Last 30 Days"]
 
+// ── Flower petal loader (same bloom animation as the login/register screen) ──
+function FlowerLoader({ message = "Loading...", isDark = false }) {
+  const petals = [
+    { angle: 0,   color: "#f48fb1" },
+    { angle: 60,  color: "#ec407a" },
+    { angle: 120, color: "#e91e63" },
+    { angle: 180, color: "#f06292" },
+    { angle: 240, color: "#c2185b" },
+    { angle: 300, color: "#f48fb1" },
+  ]
+  return (
+    <>
+      <style>{`
+        @keyframes adminPetalBloom {
+          0%, 100% { opacity: 0.2; }
+          50%       { opacity: 1;   }
+        }
+      `}</style>
+      <div className="flex flex-col items-center justify-center rounded-xl"
+        style={{ minHeight: "60vh", backgroundColor: isDark ? "#0f172a" : "transparent" }}>
+        <svg width="120" height="120" viewBox="0 0 100 100">
+          {petals.map(({ angle, color }, i) => (
+            <g key={i} transform={`rotate(${angle} 50 50)`}>
+              <ellipse cx="50" cy="27" rx="9.5" ry="21" fill={color}
+                style={{ animation: `adminPetalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`, animationFillMode: "both" }} />
+            </g>
+          ))}
+          <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+          <circle cx="50" cy="50" r="7"  fill="#f9c6d0" />
+          <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+        </svg>
+        <p className="mt-4 text-sm font-medium tracking-wide" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{message}</p>
+      </div>
+    </>
+  )
+}
+
 function SelectFilter({ value, onChange, options, minWidth = "130px", isDark }) {
   const bg  = isDark ? "#1e293b" : "white"
   const bdr = isDark ? "#374151" : "#dde3ec"
@@ -75,7 +112,7 @@ export default function AdminOrders() {
   const [branch, setBranch]         = useState("All Branches")
   const [dateRange, setDateRange]   = useState("All Time")
   const [orders, setOrders]         = useState([])
-  const [loading, setLoading]       = useState(false)
+  const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState(null)
   const [viewingOrder, setViewingOrder] = useState(null)
   const [page, setPage] = useState(1);
@@ -158,6 +195,19 @@ export default function AdminOrders() {
       download: `orders_${new Date().toISOString().slice(0,10)}.csv`
     })
     a.click(); URL.revokeObjectURL(a.href)
+  }
+
+  // Show the branded flower loader while the first orders fetch is in flight
+  if (loading) {
+    return (
+      <div className="space-y-5">
+        <div>
+          <p className="text-sm font-medium" style={{ color: subTxt }}>Your total orders</p>
+          <span className="text-4xl font-bold" style={{ color: isDark ? "#4ade80" : DG }}>—</span>
+        </div>
+        <FlowerLoader message="Loading orders..." isDark={isDark} />
+      </div>
+    )
   }
 
   return (

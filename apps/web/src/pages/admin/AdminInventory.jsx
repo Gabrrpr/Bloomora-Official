@@ -1,7 +1,45 @@
 import { useState, useEffect, useCallback } from "react"
+import { createPortal } from "react-dom"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
 import { DG, G, ActionBtns } from "./_adminShared"
+
+// ── Flower petal loader (same bloom animation as the login/register screen) ──
+function FlowerLoader({ message = "Loading...", isDark = false }) {
+  const petals = [
+    { angle: 0,   color: "#f48fb1" },
+    { angle: 60,  color: "#ec407a" },
+    { angle: 120, color: "#e91e63" },
+    { angle: 180, color: "#f06292" },
+    { angle: 240, color: "#c2185b" },
+    { angle: 300, color: "#f48fb1" },
+  ]
+  return (
+    <>
+      <style>{`
+        @keyframes adminPetalBloom {
+          0%, 100% { opacity: 0.2; }
+          50%       { opacity: 1;   }
+        }
+      `}</style>
+      <div className="flex flex-col items-center justify-center rounded-xl"
+        style={{ minHeight: "60vh", backgroundColor: isDark ? "#0f172a" : "transparent" }}>
+        <svg width="120" height="120" viewBox="0 0 100 100">
+          {petals.map(({ angle, color }, i) => (
+            <g key={i} transform={`rotate(${angle} 50 50)`}>
+              <ellipse cx="50" cy="27" rx="9.5" ry="21" fill={color}
+                style={{ animation: `adminPetalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`, animationFillMode: "both" }} />
+            </g>
+          ))}
+          <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+          <circle cx="50" cy="50" r="7"  fill="#f9c6d0" />
+          <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+        </svg>
+        <p className="mt-4 text-sm font-medium tracking-wide" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{message}</p>
+      </div>
+    </>
+  )
+}
 
 function InvStatusBadge({ status, isDark }) {
   const styles = {
@@ -222,6 +260,296 @@ function DeleteInventoryModal({ item, onClose, onConfirm, isDeleting, isDark }) 
   )
 }
 
+// ── Receive Stock Modal (the "Invoice" / restock screen) ──────────────────────
+// Lets the admin pick several existing products at once and record how many units
+// arrived in a delivery. Quantities ADD to current stock (a delivery adds to what
+// you already have). Cost per unit is optional — update it only if the supplier's
+// price changed this delivery. Saves each line via the existing PUT endpoint.
+function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
+  const [search, setSearch] = useState("")
+  // selected lines: { [id]: { qty: "", cost: "" } }
+  const [lines, setLines] = useState({})
+  const [saving, setSaving] = useState(false)
+  const [result, setResult] = useState(null)   // { ok, failed } after save
+
+  const c = {
+    overlay:  "rgba(15,23,42,0.72)",
+    bg:       isDark ? "#1a2332" : "white",
+    bdr:      isDark ? "#2d3748" : "#e8edf2",
+    head:     isDark ? "#f1f5f9" : "#111827",
+    sub:      isDark ? "#94a3b8" : "#6b7280",
+    cell:     isDark ? "#e2e8f0" : "#1e293b",
+    inputBg:  isDark ? "#1e293b" : "white",
+    inputBdr: isDark ? "#374151" : "#dde3ec",
+    inputTxt: isDark ? "#e2e8f0" : "#0f172a",
+    rowBg:    isDark ? "#111827" : "#fafbfc",
+    chipBg:   isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4",
+  }
+
+  const selectedIds = Object.keys(lines)
+  const matches = !search ? [] : inventory.filter(it =>
+    !lines[it.id] && (
+      it.name.toLowerCase().includes(search.toLowerCase()) ||
+      String(it.id).toLowerCase().includes(search.toLowerCase())
+    )
+  ).slice(0, 6)
+
+  const addLine = (it) => { setLines(p => ({ ...p, [it.id]: { qty: "", cost: "" } })); setSearch("") }
+  const removeLine = (id) => setLines(p => { const n = { ...p }; delete n[id]; return n })
+  const setQty  = (id, v) => setLines(p => ({ ...p, [id]: { ...p[id], qty: v } }))
+  const setCost = (id, v) => setLines(p => ({ ...p, [id]: { ...p[id], cost: v } }))
+
+  const itemById = (id) => inventory.find(i => String(i.id) === String(id))
+  // lines that actually have a positive quantity entered
+  const validLines = selectedIds.filter(id => parseInt(lines[id].qty) > 0)
+
+  const handleSave = async () => {
+    if (validLines.length === 0) return
+    setSaving(true)
+    const ok = [], failed = []
+    for (const id of validLines) {
+      const item = itemById(id)
+      if (!item) { failed.push(id); continue }
+      const received = parseInt(lines[id].qty) || 0
+      const newStock = (parseInt(item.stock) || 0) + received
+      try {
+        const fd = new FormData()
+        fd.append("stock", newStock)
+        // the admin enters TOTAL paid for this delivery line; the DB stores
+        // cost PER UNIT, so divide the total by the quantity received
+        const totalPaid = parseFloat(lines[id].cost)
+        if (lines[id].cost !== "" && !isNaN(totalPaid) && received > 0) {
+          const perUnit = totalPaid / received
+          fd.append("cost_per_unit", perUnit.toFixed(2))
+        }
+        await api.put(`/products/admin/${id}`, fd)
+        ok.push(item.name)
+      } catch (e) {
+        console.error("Restock failed for", id, e)
+        failed.push(item.name)
+      }
+    }
+    setSaving(false)
+    setResult({ ok, failed })
+    if (failed.length === 0) {
+      // all good — let parent refresh + show banner, then close
+      onSaved(ok.length)
+    }
+  }
+
+  const totalUnits = validLines.reduce((s, id) => s + (parseInt(lines[id].qty) || 0), 0)
+
+  return createPortal(
+    <div className="fixed inset-0 flex items-center justify-center p-3 sm:p-4 no-print"
+      style={{ backgroundColor: c.overlay, backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: 9999, position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh" }}
+      onClick={e => { if (e.target === e.currentTarget && !saving) onClose() }}>
+      <div className="rounded-xl w-full overflow-hidden flex flex-col relative"
+        style={{ maxWidth: "640px", height: "min(88vh, 720px)", maxHeight: "88vh", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${c.bdr}`, backgroundColor: c.bg }}>
+
+        {/* saving overlay — dims the modal and shows a real spinner */}
+        {saving && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3"
+            style={{ backgroundColor: isDark ? "rgba(10,15,25,0.78)" : "rgba(255,255,255,0.82)", backdropFilter: "blur(2px)", zIndex: 20 }}>
+            <span style={{
+              width: 40, height: 40, borderRadius: "9999px",
+              border: `3px solid ${isDark ? "rgba(74,222,128,0.25)" : "#d1fae5"}`,
+              borderTopColor: G, display: "inline-block",
+              animation: "invSpin 0.7s linear infinite",
+            }} />
+            <p className="text-sm font-semibold" style={{ color: isDark ? "#e2e8f0" : "#374151" }}>Updating stock...</p>
+            <style>{`@keyframes invSpin { to { transform: rotate(360deg); } }`}</style>
+          </div>
+        )}
+
+        {/* Header */}
+        <div className="px-6 py-4 flex items-start justify-between" style={{ borderBottom: `1px solid ${c.bdr}` }}>
+          <div className="flex items-center gap-3">
+            <span className="w-10 h-10 rounded-lg flex items-center justify-center text-white flex-shrink-0"
+              style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+              </svg>
+            </span>
+            <div>
+              <h3 className="text-lg font-bold" style={{ color: c.head }}>Receive Stock</h3>
+              <p className="text-xs" style={{ color: c.sub }}>Record a delivery. Quantities are added to current stock.</p>
+            </div>
+          </div>
+          <button onClick={onClose} disabled={saving} className="p-1.5 rounded-md transition-colors" style={{ color: c.sub }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = c.rowBg}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-4 overflow-y-auto" style={{ flex: 1 }}>
+          {/* Product search */}
+          <div className="relative mb-4">
+            <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
+            </svg>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search a product to add to this delivery"
+              className="w-full pl-9 pr-4 py-2.5 text-sm border rounded-md outline-none transition-all"
+              style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }}
+              onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
+              onBlur={e => { e.target.style.borderColor = c.inputBdr; e.target.style.boxShadow = "none" }} />
+            {/* search results dropdown */}
+            {matches.length > 0 && (
+              <div className="absolute left-0 right-0 mt-1 rounded-md overflow-hidden z-10"
+                style={{ backgroundColor: c.bg, border: `1px solid ${c.bdr}`, boxShadow: "0 12px 32px rgba(0,0,0,0.18)" }}>
+                {matches.map(it => (
+                  <button key={it.id} onClick={() => addLine(it)}
+                    className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors"
+                    style={{ color: c.cell }}
+                    onMouseEnter={e => e.currentTarget.style.backgroundColor = c.rowBg}
+                    onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+                    <span className="text-sm font-medium truncate">{it.name}</span>
+                    <span className="text-xs flex-shrink-0" style={{ color: c.sub }}>In stock: {it.stock ?? 0}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Selected lines */}
+          {selectedIds.length === 0 ? (
+            <div className="text-center py-10 rounded-lg" style={{ backgroundColor: c.rowBg, border: `1px dashed ${c.bdr}` }}>
+              <p className="text-sm font-medium" style={{ color: c.sub }}>No products added yet.</p>
+              <p className="text-xs mt-1" style={{ color: c.sub }}>Search above to add the items that arrived in this delivery.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {/* column hints — widths + gap mirror the data rows below */}
+              <div className="hidden sm:flex items-center gap-2 px-3 text-[11px] font-bold uppercase tracking-wider" style={{ color: c.sub }}>
+                <span className="flex-1 min-w-0">Product</span>
+                <span style={{ width: 96, textAlign: "center", flexShrink: 0 }}>Qty Received</span>
+                <span style={{ width: 130, textAlign: "center", flexShrink: 0 }}>Total Paid (₱)</span>
+                <span style={{ width: 120, textAlign: "right", flexShrink: 0 }}>New Total</span>
+                <span style={{ width: 32, flexShrink: 0 }} />
+              </div>
+              {selectedIds.map(id => {
+                const item = itemById(id)
+                if (!item) return null
+                const received = parseInt(lines[id].qty) || 0
+                const newTotal = (parseInt(item.stock) || 0) + received
+                return (
+                  <div key={id} className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-2 p-3 sm:pb-6 rounded-lg"
+                    style={{ backgroundColor: c.rowBg, border: `1px solid ${c.bdr}` }}>
+                    {/* product name + remove (remove shows top-right on mobile) */}
+                    <div className="flex items-start justify-between gap-2 flex-1 min-w-0">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate" style={{ color: c.cell }}>{item.name}</p>
+                        <p className="text-xs" style={{ color: c.sub }}>Current: {item.stock ?? 0} {item.unit_type || "piece"}</p>
+                      </div>
+                      <button onClick={() => removeLine(id)} className="sm:hidden p-1.5 rounded-md flex-shrink-0 transition-colors" style={{ color: c.sub }}
+                        onMouseEnter={e => { e.currentTarget.style.backgroundColor = isDark ? "rgba(239,68,68,0.12)" : "#fee2e2"; e.currentTarget.style.color = "#ef4444" }}
+                        onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = c.sub }}>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                      </button>
+                    </div>
+
+                    {/* inputs: stacked w/ labels on mobile, fixed columns on desktop */}
+                    <div className="flex gap-3 sm:contents">
+                      <div className="flex-1 sm:flex-none" style={{ minWidth: 0 }}>
+                        <label className="sm:hidden block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: c.sub }}>Qty Received</label>
+                        <input type="number" min="0" value={lines[id].qty} onChange={e => setQty(id, e.target.value)} placeholder="0"
+                          className="w-full sm:w-24 px-2.5 py-2 text-sm border rounded-md outline-none text-center"
+                          style={{ flexShrink: 0, borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }}
+                          onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
+                          onBlur={e => { e.target.style.borderColor = c.inputBdr; e.target.style.boxShadow = "none" }} />
+                      </div>
+                      <div className="flex-1 sm:flex-none" style={{ position: "relative", minWidth: 0 }}>
+                        <label className="sm:hidden block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: c.sub }}>Total Paid (₱)</label>
+                        <input type="number" min="0" step="0.01" value={lines[id].cost} onChange={e => setCost(id, e.target.value)} placeholder="0.00"
+                          className="w-full sm:w-32 px-2.5 py-2 text-sm border rounded-md outline-none text-center"
+                          style={{ flexShrink: 0, borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }}
+                          onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
+                          onBlur={e => { e.target.style.borderColor = c.inputBdr; e.target.style.boxShadow = "none" }} />
+                        {/* per-unit hint — absolute on desktop (no shift), inline on mobile */}
+                        {parseFloat(lines[id].cost) > 0 && received > 0 && (
+                          <p className="text-[10px] text-center px-1 sm:absolute" style={{ color: c.sub, top: "calc(100% + 4px)", left: 0, right: 0, marginTop: 4, whiteSpace: "nowrap" }}>
+                            ≈ ₱{(parseFloat(lines[id].cost) / received).toFixed(2)} each
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* new total */}
+                    <div className="flex items-center justify-between sm:block sm:w-auto" style={{ minWidth: 0 }}>
+                      <span className="sm:hidden text-[10px] font-bold uppercase tracking-wider" style={{ color: c.sub }}>New Total</span>
+                      <div className="sm:w-[120px]" style={{ textAlign: "right" }}>
+                        <span className="text-sm font-bold" style={{ color: received > 0 ? (isDark ? "#4ade80" : "#16a34a") : c.sub }}>
+                          {item.stock ?? 0}{received > 0 ? ` → ${newTotal}` : ""}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* remove button — desktop only (mobile has it up top) */}
+                    <button onClick={() => removeLine(id)} className="hidden sm:block p-1.5 rounded-md transition-colors" style={{ color: c.sub, flexShrink: 0 }}
+                      onMouseEnter={e => { e.currentTarget.style.backgroundColor = isDark ? "rgba(239,68,68,0.12)" : "#fee2e2"; e.currentTarget.style.color = "#ef4444" }}
+                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = c.sub }}>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {/* partial-failure report */}
+          {result && result.failed.length > 0 && (
+            <div className="mt-4 px-4 py-3 rounded-lg text-sm"
+              style={{ backgroundColor: isDark ? "rgba(239,68,68,0.1)" : "#fef2f2", color: isDark ? "#f87171" : "#dc2626", border: `1px solid ${isDark ? "rgba(239,68,68,0.25)" : "#fecaca"}` }}>
+              <p className="font-semibold">Some items didn't save.</p>
+              <p className="text-xs mt-1">Updated: {result.ok.length}. Failed: {result.failed.join(", ")}. You can retry. Already-updated items keep their new stock.</p>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 flex items-center justify-between gap-3" style={{ borderTop: `1px solid ${c.bdr}`, backgroundColor: c.rowBg }}>
+          <p className="text-sm" style={{ color: c.sub }}>
+            {validLines.length > 0
+              ? <span><strong style={{ color: c.cell }}>{validLines.length}</strong> item{validLines.length > 1 ? "s" : ""}, <strong style={{ color: c.cell }}>{totalUnits}</strong> units</span>
+              : "Add items and enter quantities"}
+          </p>
+          <div className="flex gap-2">
+            <button onClick={onClose} disabled={saving}
+              className="px-4 py-2.5 text-sm font-semibold border rounded-md transition-all"
+              style={{ borderColor: c.inputBdr, color: c.sub, backgroundColor: c.bg }}>
+              Cancel
+            </button>
+            <button onClick={handleSave} disabled={saving || validLines.length === 0}
+              className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+              {saving ? "Saving..." : `Save${validLines.length > 0 ? ` (${validLines.length})` : ""}`}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+// ── Invoice / Receive Stock trigger button ───────────────────────────────────
+function InvoiceBtn({ onClick, isDark }) {
+  return (
+    <button onClick={onClick}
+      className="no-print flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all active:scale-95"
+      style={{ borderColor: isDark ? "#374151" : "#dde3ec", color: isDark ? "#94a3b8" : "#374151", backgroundColor: isDark ? "#1e293b" : "white" }}
+      onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#2d3f55" : "#f9fafb"}
+      onMouseLeave={e => e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "white"}>
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      Invoice
+    </button>
+  )
+}
+
 function ExportInventoryBtn({ data = [], isDark }) {
   const handleExport = () => {
     const headers = ["Item Name", "Category", "Unit Type", "Current Stock", "Cost per Unit", "Status"]
@@ -259,13 +587,13 @@ function ExportCSVBtn({ onClick, isDark }) {
   )
 }
 
-function PrintBtn({ onClick }) {
+function PrintBtn({ onClick, isDark }) {
   return (
     <button onClick={onClick}
       className="no-print flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all active:scale-95"
-      style={{ borderColor: "#dde3ec", color: "#374151", backgroundColor: "white" }}
-      onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f9fafb"}
-      onMouseLeave={e => e.currentTarget.style.backgroundColor = "white"}>
+      style={{ borderColor: isDark ? "#374151" : "#dde3ec", color: isDark ? "#94a3b8" : "#374151", backgroundColor: isDark ? "#1e293b" : "white" }}
+      onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#2d3f55" : "#f9fafb"}
+      onMouseLeave={e => e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "white"}>
       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
           d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -310,6 +638,7 @@ export default function AdminInventory() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [category, setCategory] = useState("")
   const [stockSort, setStockSort] = useState("")
+  const [showInvoice, setShowInvoice] = useState(false)
 
   
   const handleConfirmDelete = async (id) => {
@@ -440,6 +769,16 @@ export default function AdminInventory() {
     />
   )
 
+  // Show the branded flower loader while the first inventory fetch is in flight
+  if (loading) {
+    return (
+      <div className="space-y-5">
+        <h1 className="text-xl font-bold" style={{ color: d.headingC }}>Inventory Management</h1>
+        <FlowerLoader message="Loading inventory..." isDark={isDark} />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
 
@@ -495,11 +834,27 @@ export default function AdminInventory() {
         />
       )}
 
+      {/* Receive Stock (Invoice) modal */}
+      {showInvoice && (
+        <ReceiveStockModal
+          inventory={inventory}
+          isDark={isDark}
+          onClose={() => setShowInvoice(false)}
+          onSaved={async (count) => {
+            setShowInvoice(false)
+            setSuccessMsg(`Stock received: ${count} item${count > 1 ? "s" : ""} updated.`)
+            await fetchInventory()
+            setTimeout(() => setSuccessMsg(""), 3500)
+          }}
+        />
+      )}
+
       <div className="no-print flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold" style={{ color: d.headingC }}>Inventory Management</h1>
         <div className="flex items-center gap-2">
+          <InvoiceBtn onClick={() => setShowInvoice(true)} isDark={isDark} />
           <ExportCSVBtn onClick={handleCSV} isDark={isDark} />
-          <PrintBtn onClick={handlePrint} />
+          <PrintBtn onClick={handlePrint} isDark={isDark} />
         </div>
       </div>
 
@@ -509,7 +864,7 @@ export default function AdminInventory() {
           style={{ background: "linear-gradient(135deg,#0a4a34 0%,#1a7040 60%,#2E8B34 100%)", boxShadow: "0 4px 16px rgba(12,87,62,0.25)" }}>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.65)" }}>Total Items</p>
-            <p className="text-3xl font-bold text-white mt-2">{totalItems}</p>
+            <p className="text-2xl sm:text-3xl font-bold text-white mt-2 leading-tight break-words">{totalItems}</p>
           </div>
           <button onClick={() => setShowForm(true)}
             className="mt-3 self-start text-xs font-bold px-3 py-1.5 rounded-md transition-all hover:scale-105"
@@ -522,12 +877,12 @@ export default function AdminInventory() {
           { label: "Low Stock Items",      val: lowStockCount,    accent: "#f59e0b", action: () => setStatus("Low Stock"),    actionLabel: "Review Needs" },
           { label: "Out of Stock Items",   val: outOfStockCount,  accent: "#ef4444", action: () => setStatus("Out of Stock"), actionLabel: "Action Required", red: true },
         ].map(({ label, val, accent, action, actionLabel, red }) => (
-          <div key={label} className="rounded-xl p-4 sm:p-5 flex flex-col justify-between relative"
+          <div key={label} className="rounded-xl p-4 sm:p-5 flex flex-col justify-between relative overflow-hidden"
             style={{ backgroundColor: d.cardBg, border: `1px solid ${d.cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
             <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl" style={{ backgroundColor: accent, opacity: 0.7 }} />
-            <div>
+            <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: d.subC }}>{label}</p>
-              <p className="text-3xl font-bold mt-2" style={{ color: red ? (isDark ? "#f87171" : "#ef4444") : (isDark ? "#4ade80" : d.headingC) }}>{val}</p>
+              <p className="text-2xl sm:text-3xl font-bold mt-2 leading-tight break-words" style={{ color: red ? (isDark ? "#f87171" : "#ef4444") : (isDark ? "#4ade80" : d.headingC) }}>{val}</p>
             </div>
             {action && (
               <button onClick={action} className="mt-3 self-start text-xs font-semibold"

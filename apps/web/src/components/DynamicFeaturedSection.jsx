@@ -96,9 +96,16 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
   const [bannerRef, bannerVisible] = useScrollReveal(0.08)
   const [gridRef, gridVisible]     = useScrollReveal(0.06)
 
-  // Safely map products to slots based on Admin selections
-  const slotProducts = (data.featured || []).map(slot => products.find(p => String(p.id) === String(slot.productId)))
-  const tileProducts = (data.categories || []).map(cat => products.find(p => String(p.id) === String(cat.productId)))
+  // Safely resolve every shape this section needs. Defaulting here means a
+  // section saved without a banner / categories / featured array (for example
+  // the built-in carousel section, which has none of these) can never crash
+  // the render — it simply shows nothing for the missing parts.
+  const banner     = data.banner || {}
+  const categories = Array.isArray(data.categories) ? data.categories : []
+  const featured   = Array.isArray(data.featured) ? data.featured : []
+
+  const slotProducts = featured.map(slot => products.find(p => String(p.id) === String(slot.productId)))
+  const tileProducts = categories.map(cat => products.find(p => String(p.id) === String(cat.productId)))
 
   return (
     <div className="w-full">
@@ -111,20 +118,20 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
         >
           <div className="text-center lg:text-left">
             <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: accentG }}>
-              {data.banner.eyebrow}
+              {banner.eyebrow}
             </p>
             <h2 className="text-3xl md:text-4xl font-bold mb-4 leading-tight" style={{ color: headingC }}>
-              {data.banner.heading}
+              {banner.heading}
             </h2>
             <div className="w-16 h-[3px] rounded-sm mx-auto lg:mx-0 mb-5" style={{ backgroundColor: accentG, boxShadow: lineGlow }} />
             <p className="text-base mb-8 leading-relaxed max-w-lg mx-auto lg:mx-0" style={{ color: subC }}>
-              {data.banner.description}
+              {banner.description}
             </p>
             <div className="flex justify-center lg:justify-start">
-              <button onClick={() => onNavigate(data.banner.ctaTarget)}
+              <button onClick={() => onNavigate(banner.ctaTarget)}
                 className="bloom-glow-border inline-flex items-center gap-2 text-white text-sm font-bold px-8 py-3.5 rounded-full hover:opacity-90 transition-all shadow-lg shadow-green-900/20"
                 style={{ backgroundColor: DG }}>
-                {data.banner.ctaLabel}
+                {banner.ctaLabel}
                 <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
                 </svg>
@@ -133,7 +140,7 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
           </div>
 
           <div className="grid grid-cols-3 gap-3 md:gap-4">
-            {data.categories.map((cat, i) => {
+            {categories.map((cat, i) => {
               const linked = tileProducts[i]
               return (
                 <button key={i} onClick={() => onNavigate(cat.nav || "shop")}
@@ -173,7 +180,7 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             {slotProducts.map((p, i) => {
               if (!p) return null;
-              const ribbon = data.featured[i].ribbonOverride ?? p.ribbon
+              const ribbon = featured[i].ribbonOverride ?? p.ribbon
               const ribbonColor = RIBBON_COLORS[ribbon]
               return (
                 // 🚀 CHANGED THIS LINE to trigger onPreview
@@ -234,12 +241,18 @@ export default function DynamicFeaturedSections({ onNavigate, onPreview }) {
         
         setAllProducts(normalizedProducts);
 
-        // Convert the database object of sections into an ordered Array so we can map() it
+        // Convert the database object of sections into an ordered Array so we can map() it.
+        // Only real featured sections are rendered here: any entry without a `banner`
+        // (such as the built-in "__carousel__" section, which ChooseYourBloom owns) is
+        // skipped so it can never break this layout.
         if (settingsData && Object.keys(settingsData).length > 0) {
-           const sectionsArray = Object.keys(settingsData).map(key => ({
-              id: key, // Keep the key (e.g. 'bouquets', 'funeral', 'section_173000') for React key prop
-              ...settingsData[key]
-           }));
+           const sectionsArray = Object.keys(settingsData)
+              .filter(key => key !== "__carousel__")
+              .map(key => ({
+                id: key, // Keep the key (e.g. 'bouquets', 'funeral', 'section_173000') for React key prop
+                ...settingsData[key]
+              }))
+              .filter(section => section && section.banner && section.__type !== "carousel");
            setSectionsData(sectionsArray);
         }
       } catch (err) {

@@ -7,6 +7,9 @@ const DG = "#0C573E"
 
 const STORAGE_KEY = "bloomora:admin:featured"
 
+// fixed id for the Choose Your Bloom carousel section (pinned, non-deletable)
+const CAROUSEL_ID = "__carousel__"
+
 const RIBBON_OPTIONS = [
   { value: "",            label: "(none)" },
   { value: "Best Seller", label: "Best Seller" },
@@ -48,10 +51,67 @@ const generateBlankSection = (label = "New Section") => ({
   sectionEyebrow: "Featured",
 })
 
+// ─── Carousel (Choose Your Bloom) section ────────────────────────────────────
+const blankSlide = () => ({
+  productId: null,
+  name: "",
+  tag: "",
+  price: "",
+})
+
+const generateCarouselSection = () => ({
+  __type: "carousel",
+  tabLabel: "Bouquet Carousel",
+  // header copy shown above the carousel on the homepage
+  eyebrow: "Handcrafted Daily",
+  heading: "Today's Fresh Picks",
+  subheading: "Browse the bouquets we're arranging right now.",
+  ctaLabel: "Shop all bouquets",
+  ctaTarget: "shop",
+  // the rotating slides
+  slides: [blankSlide(), blankSlide(), blankSlide()],
+})
+
 const DEFAULT_DATA = {
+  [CAROUSEL_ID]: generateCarouselSection(),
   bouquets: generateBlankSection("Featured Bouquets"),
   nonFloral: generateBlankSection("Featured Non-Floral"),
   funeral: generateBlankSection("Featured Funeral"),
+}
+
+// Deep-merge a saved featured section onto a fresh blank one. A plain spread
+// (`{ ...blank, ...saved }`) replaces whole keys, so a section saved with only
+// 2 categories or a banner missing `description` would lose the 3rd tile / show
+// a blank field. This fills every nested gap instead: banner fields backfill
+// from defaults, and the categories / featured arrays are padded back up to
+// their full slot count (3 tiles, 4 featured) while preserving saved entries.
+function mergeSection(saved, label) {
+  const blank = generateBlankSection(label)
+  if (!saved || typeof saved !== "object") return blank
+
+  const padArray = (savedArr, blankArr) => {
+    const out = blankArr.map((blankItem, i) => {
+      const s = Array.isArray(savedArr) ? savedArr[i] : undefined
+      return s && typeof s === "object" ? { ...blankItem, ...s } : { ...blankItem }
+    })
+    // keep any extra saved entries beyond the default slot count
+    if (Array.isArray(savedArr) && savedArr.length > blankArr.length) {
+      for (let i = blankArr.length; i < savedArr.length; i++) {
+        if (savedArr[i] && typeof savedArr[i] === "object") out.push(savedArr[i])
+      }
+    }
+    return out
+  }
+
+  return {
+    ...blank,
+    ...saved,
+    banner:     { ...blank.banner, ...(saved.banner || {}) },
+    categories: padArray(saved.categories, blank.categories),
+    featured:   padArray(saved.featured, blank.featured),
+    sectionHeading: saved.sectionHeading ?? blank.sectionHeading,
+    sectionEyebrow: saved.sectionEyebrow ?? blank.sectionEyebrow,
+  }
 }
 
 // ─── tokens ──────────────────────────────────────────────────────────────────
@@ -409,7 +469,456 @@ function CategoryEditor({ tile, idx, products, onUpdate, t, isDark, onPickClick 
   )
 }
 
-// ─── Live Preview ────────────────────────────────────────────────────────────
+// ─── Carousel Slide Editor ───────────────────────────────────────────────────
+// One row per rotating bloom. Image is pulled from a linked product (same
+// pattern as category tiles), while name / tag / price are free-text overrides
+// so copy can differ from the catalog entry.
+function CarouselSlideEditor({ slide, idx, total, product, onUpdate, onPickClick, onClear, onMove, t, isDark }) {
+  return (
+    <div className="rounded-lg p-3"
+      style={{ backgroundColor: t.surfaceAlt, border: `1px solid ${t.cardBorder}` }}>
+      <div className="flex items-center justify-between mb-2.5">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center justify-center w-5 h-5 rounded text-[10px] font-bold text-white"
+            style={{ backgroundColor: isDark ? "rgba(74,222,128,0.85)" : G, color: isDark ? "#0f172a" : "#fff" }}>
+            {idx + 1}
+          </span>
+          <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: t.textMuted }}>
+            Bloom Slide
+          </p>
+        </div>
+        <div className="flex items-center gap-1">
+          <button onClick={() => onMove(idx, -1)} disabled={idx === 0}
+            aria-label="Move slide up"
+            className="w-6 h-6 rounded flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            style={{ color: t.textSecondary, border: `1px solid ${t.cardBorder}` }}
+            onMouseEnter={e => { if (idx !== 0) e.currentTarget.style.backgroundColor = t.hoverBg }}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+            <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2.4} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7"/>
+            </svg>
+          </button>
+          <button onClick={() => onMove(idx, 1)} disabled={idx === total - 1}
+            aria-label="Move slide down"
+            className="w-6 h-6 rounded flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed"
+            style={{ color: t.textSecondary, border: `1px solid ${t.cardBorder}` }}
+            onMouseEnter={e => { if (idx !== total - 1) e.currentTarget.style.backgroundColor = t.hoverBg }}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+            <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2.4} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </button>
+          <button onClick={onClear}
+            aria-label="Remove slide"
+            className="w-6 h-6 rounded flex items-center justify-center transition-all"
+            style={{ color: t.dangerColor }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = t.dangerBg}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+            <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        {/* image picker */}
+        <div className="flex-shrink-0">
+          {product ? (
+            <button onClick={onPickClick}
+              className="relative w-20 h-20 rounded-md overflow-hidden group"
+              style={{ backgroundColor: t.placeholderBg, border: `1px solid ${t.cardBorder}` }}>
+              {product.image
+                ? <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
+                : <div className="w-full h-full flex items-center justify-center">
+                    <svg width="22" height="22" fill="none" stroke={t.textMuted} strokeWidth={1.5} viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                  </div>}
+              <span className="absolute inset-0 flex items-center justify-center text-[9px] font-bold text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                style={{ backgroundColor: "rgba(0,0,0,0.5)" }}>
+                Change
+              </span>
+            </button>
+          ) : (
+            <button onClick={onPickClick}
+              className="w-20 h-20 rounded-md flex flex-col items-center justify-center gap-1 transition-all"
+              style={{ backgroundColor: t.cardBg, border: `1px dashed ${t.cardBorder}`, color: t.textMuted }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = isDark ? "rgba(74,222,128,0.4)" : "#86efac"
+                e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.05)" : "#f0fdf4"
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = t.cardBorder
+                e.currentTarget.style.backgroundColor = t.cardBg
+              }}>
+              <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m6-6H6"/>
+              </svg>
+              <span className="text-[9px] font-semibold text-center leading-tight">Pick image</span>
+            </button>
+          )}
+        </div>
+
+        {/* copy fields */}
+        <div className="flex-1 min-w-0 space-y-2">
+          <Field label="Name" value={slide.name}
+            onChange={v => onUpdate({ ...slide, name: v })}
+            placeholder={product?.name || "e.g. Pink Wrapper Roses"} t={t} maxLength={40} />
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Tag" value={slide.tag}
+              onChange={v => onUpdate({ ...slide, tag: v })}
+              placeholder="e.g. Best Seller" t={t} maxLength={20} />
+            <Field label="Price" value={slide.price}
+              onChange={v => onUpdate({ ...slide, price: v })}
+              placeholder={product ? `₱${Number(product.price || 0).toLocaleString()}` : "e.g. ₱3,100"} t={t} maxLength={14} />
+          </div>
+        </div>
+      </div>
+
+      {product && (
+        <p className="text-[10px] mt-2 flex items-center gap-1" style={{ color: t.textMuted }}>
+          <svg width="10" height="10" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+          </svg>
+          Image linked to <span className="font-semibold" style={{ color: t.textSecondary }}>{product.name}</span>. Leave fields blank to use catalog values.
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ─── Carousel Tab Editor ─────────────────────────────────────────────────────
+function CarouselEditor({ data, onChange, products, loading, t, isDark }) {
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [pickerIdx, setPickerIdx]   = useState(null)
+
+  const slides = data.slides || []
+
+  const openPicker = idx => { setPickerIdx(idx); setPickerOpen(true) }
+
+  const handlePick = product => {
+    if (pickerIdx == null) return
+    onChange({
+      ...data,
+      slides: slides.map((s, i) => i === pickerIdx ? { ...s, productId: product.id } : s),
+    })
+    setPickerIdx(null)
+  }
+
+  const updateSlide = (idx, next) =>
+    onChange({ ...data, slides: slides.map((s, i) => i === idx ? next : s) })
+
+  const clearSlide = idx => {
+    if (slides.length <= 1) {
+      onChange({ ...data, slides: [blankSlide()] })
+      return
+    }
+    onChange({ ...data, slides: slides.filter((_, i) => i !== idx) })
+  }
+
+  const addSlide = () =>
+    onChange({ ...data, slides: [...slides, blankSlide()] })
+
+  const moveSlide = (idx, dir) => {
+    const target = idx + dir
+    if (target < 0 || target >= slides.length) return
+    const next = [...slides]
+    const [item] = next.splice(idx, 1)
+    next.splice(target, 0, item)
+    onChange({ ...data, slides: next })
+  }
+
+  const currentPickId = pickerIdx != null ? slides[pickerIdx]?.productId : null
+
+  return (
+    <>
+      <div className="space-y-4">
+        {/* Header copy */}
+        <div className="rounded-xl p-4" style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
+          <div className="flex items-center gap-2 mb-3">
+            <svg width="14" height="14" fill="none" stroke={isDark ? "#4ade80" : G} strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M7 4v16M17 4v16M3 8h4m10 0h4M5 12h14M3 16h4m10 0h4"/>
+            </svg>
+            <p className="text-sm font-bold" style={{ color: t.textPrimary }}>Carousel Header</p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Eyebrow Text" value={data.eyebrow}
+              onChange={v => onChange({ ...data, eyebrow: v })}
+              placeholder="e.g. Handcrafted Daily" t={t} maxLength={40} />
+            <Field label="Heading" value={data.heading}
+              onChange={v => onChange({ ...data, heading: v })}
+              placeholder="e.g. Today's Fresh Picks" t={t} maxLength={50} />
+          </div>
+          <div className="mt-3">
+            <Field label="Subheading" value={data.subheading}
+              onChange={v => onChange({ ...data, subheading: v })}
+              placeholder="e.g. Browse the bouquets we're arranging right now." t={t} maxLength={90} />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+            <Field label="Link Label" value={data.ctaLabel}
+              onChange={v => onChange({ ...data, ctaLabel: v })}
+              placeholder="e.g. Shop all bouquets" t={t} maxLength={28} />
+            <Field label="Link Target Page" value={data.ctaTarget}
+              onChange={v => onChange({ ...data, ctaTarget: v })}
+              placeholder="e.g. shop, vases, addons" t={t} maxLength={32} />
+          </div>
+        </div>
+
+        {/* Slides */}
+        <div className="rounded-xl p-4" style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
+          <div className="flex items-center gap-2 mb-3">
+            <svg width="14" height="14" fill="none" stroke={isDark ? "#4ade80" : G} strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z M8 9l3 3-3 3 M16 9l-3 3 3 3"/>
+            </svg>
+            <p className="text-sm font-bold" style={{ color: t.textPrimary }}>Bloom Slides</p>
+            <span className="text-[10px] ml-auto" style={{ color: t.textMuted }}>
+              {slides.length} slide{slides.length === 1 ? "" : "s"} in rotation
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {slides.map((slide, i) => {
+              const product = products.find(p => String(p.id) === String(slide.productId))
+              return (
+                <CarouselSlideEditor
+                  key={i}
+                  slide={slide}
+                  idx={i}
+                  total={slides.length}
+                  product={product}
+                  onUpdate={next => updateSlide(i, next)}
+                  onPickClick={() => openPicker(i)}
+                  onClear={() => clearSlide(i)}
+                  onMove={moveSlide}
+                  t={t}
+                  isDark={isDark}
+                />
+              )
+            })}
+          </div>
+
+          <button onClick={addSlide}
+            className="w-full mt-3 py-2.5 rounded-md flex items-center justify-center gap-1.5 transition-all text-sm font-semibold"
+            style={{ backgroundColor: t.surfaceAlt, border: `1px dashed ${t.cardBorder}`, color: isDark ? "#4ade80" : G }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = isDark ? "rgba(74,222,128,0.4)" : "#86efac"
+              e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.05)" : "#f0fdf4"
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = t.cardBorder
+              e.currentTarget.style.backgroundColor = t.surfaceAlt
+            }}>
+            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v12m6-6H6"/>
+            </svg>
+            Add Bloom Slide
+          </button>
+        </div>
+      </div>
+
+      <ProductPicker
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onPick={handlePick}
+        products={products}
+        loading={loading}
+        currentId={currentPickId}
+        t={t}
+        isDark={isDark}
+      />
+    </>
+  )
+}
+
+// ─── Carousel Live Preview ───────────────────────────────────────────────────
+// Mirrors ChooseYourBloom: left/center/right peek layout, caption, dots. A mini
+// prev/next stepper lets the admin scrub through slides to verify each one.
+function CarouselPreview({ data, products, isDark }) {
+  const slides = (data.slides || [])
+
+  const accentG   = isDark ? "#4ade80" : G
+  const sectionBg = isDark ? "#0f172a" : "#fcfcfb"
+  const headingC  = isDark ? "#f3f4f6" : "#1f2937"
+  const bodyC     = isDark ? "#9ca3af" : "#6b7280"
+  const tagC      = isDark ? "#4ade80" : G
+  const nameC     = isDark ? "#f3f4f6" : "#1f2937"
+  const priceC    = isDark ? "#9ca3af" : "#6b7280"
+  const btnBg     = isDark ? "#4ade80" : DG
+  const btnIcon   = isDark ? "#0f172a" : "#ffffff"
+  const haloC     = isDark ? "rgba(74,222,128,0.10)" : "rgba(46,139,52,0.06)"
+  const peekBg    = isDark ? "#0f1a14" : "#f4f8f4"
+
+  // resolve image + display copy for a slide (overrides fall back to product)
+  const resolve = slide => {
+    if (!slide) return null
+    const product = products.find(p => String(p.id) === String(slide.productId))
+    return {
+      image: product?.image || null,
+      name: slide.name || product?.name || "(unnamed bloom)",
+      tag: slide.tag || "",
+      price: slide.price || (product ? `₱${Number(product.price || 0).toLocaleString()}` : ""),
+    }
+  }
+
+  const [idx, setIdx] = useState(0)
+  // keep index valid as slides are added/removed
+  useEffect(() => {
+    if (idx > slides.length - 1) setIdx(Math.max(0, slides.length - 1))
+  }, [slides.length, idx])
+
+  const mod = (n, m) => m === 0 ? 0 : ((n % m) + m) % m
+  const safeIdx = mod(idx, slides.length || 1)
+
+  const center = resolve(slides[safeIdx])
+  const left   = slides.length > 1 ? resolve(slides[mod(safeIdx - 1, slides.length)]) : null
+  const right  = slides.length > 1 ? resolve(slides[mod(safeIdx + 1, slides.length)]) : null
+
+  const PeekImg = ({ data: d }) => {
+    if (!d) return null
+    return d.image
+      ? <img src={d.image} alt="" className="max-w-full max-h-full object-contain"
+          style={{ opacity: isDark ? 0.42 : 0.58, filter: "saturate(0.85)" }} />
+      : <div className="w-3/4 h-3/4 rounded-lg flex items-center justify-center" style={{ backgroundColor: peekBg }}>
+          <svg width="22" height="22" fill="none" stroke={bodyC} strokeWidth={1.4} viewBox="0 0 24 24" style={{ opacity: 0.5 }}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+          </svg>
+        </div>
+  }
+
+  if (slides.length === 0) {
+    return (
+      <div className="rounded-xl overflow-hidden flex items-center justify-center py-16"
+        style={{ border: `1px solid ${isDark ? "#2d3748" : "#e5e7eb"}`, backgroundColor: sectionBg }}>
+        <p className="text-sm" style={{ color: bodyC }}>Add a slide to preview the carousel.</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${isDark ? "#2d3748" : "#e5e7eb"}` }}>
+      <section className="relative overflow-hidden px-4 py-6" style={{ backgroundColor: sectionBg }}>
+        {/* ambient halo */}
+        <div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+          style={{ width: 420, height: 420, background: `radial-gradient(circle, ${haloC} 0%, transparent 70%)` }} />
+
+        {/* heading */}
+        <div className="text-center mb-4 relative">
+          <p className="text-[10px] font-bold tracking-widest uppercase mb-1.5" style={{ color: accentG }}>
+            {data.eyebrow || "(eyebrow)"}
+          </p>
+          <h2 className="text-xl font-bold mb-1.5" style={{ color: headingC }}>
+            {data.heading || "(heading)"}
+          </h2>
+          <p className="text-[11px] mb-2.5" style={{ color: bodyC }}>
+            {data.subheading || "(subheading)"}
+          </p>
+          <div className="mx-auto rounded-full"
+            style={{ width: 40, height: 3, backgroundColor: accentG, boxShadow: isDark ? "0 0 10px rgba(74,222,128,0.5)" : "none" }} />
+        </div>
+
+        {/* stage */}
+        <div className="relative mx-auto" style={{ maxWidth: 460, height: 230 }}>
+          {/* prev / next */}
+          <button onClick={() => setIdx(i => mod(i - 1, slides.length))}
+            aria-label="Previous slide"
+            className="absolute left-0 top-1/2 -translate-y-1/2 z-30 rounded-full flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
+            style={{ width: 32, height: 32, backgroundColor: btnBg,
+              boxShadow: isDark ? "0 0 12px rgba(74,222,128,0.45)" : "0 6px 16px -6px rgba(12,87,62,0.45)" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={btnIcon} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+          <button onClick={() => setIdx(i => mod(i + 1, slides.length))}
+            aria-label="Next slide"
+            className="absolute right-0 top-1/2 -translate-y-1/2 z-30 rounded-full flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
+            style={{ width: 32, height: 32, backgroundColor: btnBg,
+              boxShadow: isDark ? "0 0 12px rgba(74,222,128,0.45)" : "0 6px 16px -6px rgba(12,87,62,0.45)" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={btnIcon} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+
+          {/* left peek */}
+          {left && (
+            <div className="hidden sm:flex absolute top-1/2 -translate-y-1/2 items-center justify-center"
+              style={{ left: "3%", width: "30%", height: "78%" }}>
+              <PeekImg data={left} />
+            </div>
+          )}
+          {/* right peek */}
+          {right && (
+            <div className="hidden sm:flex absolute top-1/2 -translate-y-1/2 items-center justify-center"
+              style={{ right: "3%", width: "30%", height: "78%" }}>
+              <PeekImg data={right} />
+            </div>
+          )}
+
+          {/* center */}
+          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center w-[80%] sm:w-[58%]"
+            style={{ height: "100%" }}>
+            <div key={safeIdx} className="flex items-center justify-center w-full h-full"
+              style={{ animation: "cybPreviewIn 0.4s cubic-bezier(0.22,1,0.36,1)" }}>
+              {center?.image ? (
+                <img src={center.image} alt={center.name} className="max-w-full max-h-full object-contain drop-shadow-xl" />
+              ) : (
+                <div className="w-4/5 h-4/5 rounded-xl flex flex-col items-center justify-center gap-1.5"
+                  style={{ backgroundColor: peekBg, border: `1px dashed ${isDark ? "#1e3a28" : "#d4e4d4"}` }}>
+                  <svg width="30" height="30" fill="none" stroke={bodyC} strokeWidth={1.4} viewBox="0 0 24 24" style={{ opacity: 0.55 }}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                  </svg>
+                  <p className="text-[9px]" style={{ color: bodyC }}>No image</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* caption */}
+        <div className="text-center mt-2 relative" key={`cap-${safeIdx}`} style={{ animation: "cybTextIn 0.45s ease 0.05s both" }}>
+          <p className="text-[10px] font-bold tracking-widest uppercase mb-1" style={{ color: tagC }}>
+            {center?.tag || "\u00A0"}
+          </p>
+          <h3 className="text-base font-bold mb-0.5" style={{ color: nameC }}>
+            {center?.name}
+          </h3>
+          <p className="text-xs font-medium" style={{ color: priceC }}>
+            {center?.price || "\u00A0"}
+          </p>
+        </div>
+
+        {/* dots */}
+        <div className="flex items-center justify-center gap-1.5 mt-3 flex-wrap relative">
+          {slides.map((_, i) => {
+            const active = i === safeIdx
+            return (
+              <button key={i} onClick={() => setIdx(i)} aria-label={`Go to slide ${i + 1}`}
+                className="rounded-full transition-all duration-300"
+                style={{ width: active ? 18 : 6, height: 6, backgroundColor: active ? accentG : (isDark ? "#374151" : "#d1d5db") }} />
+            )
+          })}
+        </div>
+
+        {/* see all */}
+        <div className="text-center mt-3 relative">
+          <span className="inline-flex items-center gap-1 text-xs font-semibold" style={{ color: accentG }}>
+            {data.ctaLabel || "Shop all bouquets"}
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </span>
+        </div>
+
+        <style>{`
+          @keyframes cybPreviewIn { from { opacity:0; transform: scale(0.94) } to { opacity:1; transform: scale(1) } }
+          @keyframes cybTextIn { from { opacity:0; transform: translateY(8px) } to { opacity:1; transform: translateY(0) } }
+        `}</style>
+      </section>
+    </div>
+  )
+}
+
+// ─── Live Preview (Featured sections) ────────────────────────────────────────
 function FeaturedPreview({ data, products, isDark }) {
   const accentG  = isDark ? "#4ade80" : G
   const headingC = isDark ? "#f3f4f6" : "#1f2937"
@@ -729,18 +1238,30 @@ export default function AdminFeaturedProducts() {
   // Modal State
   const [modal, setModal] = useState({ isOpen: false, type: null, input: '', error: '' })
 
+  const isCarousel = id => id === CAROUSEL_ID || data[id]?.__type === "carousel"
+
   useEffect(() => {
     api.get("/products/admin/settings/homepage")
       .then(parsed => {
         if (parsed && Object.keys(parsed).length > 0) {
           const upgradedData = {}
+
+          // Carousel always leads — build it first so its tab sits at the front,
+          // regardless of what order the keys were saved in the database.
+          const savedCarousel = parsed[CAROUSEL_ID]
+            || Object.values(parsed).find(s => s?.__type === "carousel")
+          upgradedData[CAROUSEL_ID] = { ...generateCarouselSection(), ...(savedCarousel || {}) }
+
           Object.keys(parsed).forEach(k => {
-            upgradedData[k] = {
-              ...generateBlankSection(k), 
-              ...parsed[k],
-              tabLabel: parsed[k].tabLabel || (k === 'bouquets' ? "Featured Bouquets" : (k === 'nonFloral' ? "Featured Non-Floral" : (k === 'funeral' ? "Featured Funeral" : k)))
+            if (k === CAROUSEL_ID || parsed[k]?.__type === "carousel") {
+              // already placed above — skip so it isn't duplicated / reordered
+              return
             }
+            const label = parsed[k].tabLabel
+              || (k === 'bouquets' ? "Featured Bouquets" : (k === 'nonFloral' ? "Featured Non-Floral" : (k === 'funeral' ? "Featured Funeral" : k)))
+            upgradedData[k] = { ...mergeSection(parsed[k], label), tabLabel: label }
           })
+
           setData(upgradedData)
           setTabIds(Object.keys(upgradedData))
           
@@ -880,6 +1401,8 @@ export default function AdminFeaturedProducts() {
     )
   }
 
+  const activeIsCarousel = isCarousel(activeTab)
+
   return (
     <div className="space-y-5">
       {/* header */}
@@ -920,15 +1443,21 @@ export default function AdminFeaturedProducts() {
         <div className="inline-flex p-1 rounded-lg flex-wrap gap-1" style={{ backgroundColor: t.badgeBg, border: `1px solid ${t.cardBorder}` }}>
           {tabIds.map(id => {
             const on = activeTab === id
+            const carousel = isCarousel(id)
             return (
               <button key={id}
                 onClick={() => setActiveTab(id)}
-                className="px-4 py-1.5 rounded-md text-xs font-semibold transition-all"
+                className="px-4 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5"
                 style={{
                   backgroundColor: on ? t.surfaceBg : "transparent",
                   color: on ? (isDark ? "#4ade80" : DG) : t.textSecondary,
                   boxShadow: on ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
                 }}>
+                {carousel && (
+                  <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 9l-4 3 4 3M16 9l4 3-4 3"/>
+                  </svg>
+                )}
                 {data[id]?.tabLabel || id}
               </button>
             )
@@ -940,37 +1469,59 @@ export default function AdminFeaturedProducts() {
           </button>
         </div>
 
-        {/* Section Modifiers */}
-        <div className="flex items-center gap-2">
-          <button onClick={() => openModal('rename')}
-            className="text-xs font-semibold px-3 py-1.5 rounded-md border transition-all"
-            style={{ borderColor: t.cardBorder, color: t.textSecondary, backgroundColor: t.surfaceBg }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = t.hoverBg}
-            onMouseLeave={e => e.currentTarget.style.backgroundColor = t.surfaceBg}>
-            Rename Tab
-          </button>
-          <button onClick={() => openModal('delete')}
-            className="text-xs font-semibold px-3 py-1.5 rounded-md transition-all"
-            style={{ color: t.dangerColor, backgroundColor: t.dangerBg }}
-            onMouseEnter={e => e.currentTarget.style.opacity = 0.8}
-            onMouseLeave={e => e.currentTarget.style.opacity = 1}>
-            Delete Section
-          </button>
-        </div>
+        {/* Section Modifiers — hidden for the pinned carousel section */}
+        {!activeIsCarousel && (
+          <div className="flex items-center gap-2">
+            <button onClick={() => openModal('rename')}
+              className="text-xs font-semibold px-3 py-1.5 rounded-md border transition-all"
+              style={{ borderColor: t.cardBorder, color: t.textSecondary, backgroundColor: t.surfaceBg }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = t.hoverBg}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = t.surfaceBg}>
+              Rename Tab
+            </button>
+            <button onClick={() => openModal('delete')}
+              className="text-xs font-semibold px-3 py-1.5 rounded-md transition-all"
+              style={{ color: t.dangerColor, backgroundColor: t.dangerBg }}
+              onMouseEnter={e => e.currentTarget.style.opacity = 0.8}
+              onMouseLeave={e => e.currentTarget.style.opacity = 1}>
+              Delete Section
+            </button>
+          </div>
+        )}
+        {activeIsCarousel && (
+          <span className="text-[11px] font-medium px-3 py-1.5 rounded-md inline-flex items-center gap-1.5"
+            style={{ backgroundColor: t.badgeBg, color: t.textMuted, border: `1px solid ${t.cardBorder}` }}>
+            <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+            </svg>
+            Built-in section
+          </span>
+        )}
       </div>
 
       {/* split layout */}
       <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_1fr] gap-5">
         {/* editor */}
         <div>
-          <TabEditor
-            data={currentData}
-            onChange={setCurrentData}
-            products={products}
-            loading={loading}
-            t={t}
-            isDark={isDark}
-          />
+          {activeIsCarousel ? (
+            <CarouselEditor
+              data={currentData}
+              onChange={setCurrentData}
+              products={products}
+              loading={loading}
+              t={t}
+              isDark={isDark}
+            />
+          ) : (
+            <TabEditor
+              data={currentData}
+              onChange={setCurrentData}
+              products={products}
+              loading={loading}
+              t={t}
+              isDark={isDark}
+            />
+          )}
         </div>
 
         {/* preview */}
@@ -982,7 +1533,11 @@ export default function AdminFeaturedProducts() {
             <p className="text-xs font-bold uppercase tracking-wider" style={{ color: t.textMuted }}>Live Preview</p>
           </div>
           <div className="xl:sticky xl:top-4">
-            <FeaturedPreview data={currentData} products={products} isDark={isDark} />
+            {activeIsCarousel ? (
+              <CarouselPreview data={currentData} products={products} isDark={isDark} />
+            ) : (
+              <FeaturedPreview data={currentData} products={products} isDark={isDark} />
+            )}
           </div>
         </div>
       </div>
