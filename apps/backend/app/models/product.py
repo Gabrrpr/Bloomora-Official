@@ -1,7 +1,7 @@
 import uuid
 import enum
 from sqlalchemy import Column, String, Text, Numeric, Enum, Boolean, Integer, DateTime, ForeignKey
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from .base import Base, now_utc
 
@@ -40,8 +40,10 @@ class Product(Base):
     status = Column(Enum(ProductStatusEnum), default=ProductStatusEnum.active)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+    is_visible = Column(Boolean, default=True)
     
     # Relationships (Unchanged)
+    composition = Column(JSONB, default=[])
     inventory = relationship("Inventory", back_populates="product", uselist=False, cascade="all, delete-orphan")
     reviews = relationship("Review", back_populates="product")
     order_items = relationship("Order", back_populates="product")

@@ -56,16 +56,29 @@ function InvStatusBadge({ status, isDark }) {
   )
 }
 
-function FInput({ placeholder, value, onChange, type = "text", isDark }) {
+function FInput({ placeholder, value, onChange, type = "text", isDark, disabled = false }) {
   const bg  = isDark ? "#1e293b" : "white"
   const bdr = isDark ? "#374151" : "#dde3ec"
   const tc  = isDark ? "#e2e8f0" : "#0f172a"
+  
   return (
-    <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+    <input 
+      type={type} 
+      value={value} 
+      disabled={disabled}
+      onChange={disabled ? undefined : e => onChange(e.target.value)}
+      placeholder={placeholder}
       className="w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all"
-      style={{ borderColor: bdr, backgroundColor: bg, color: tc }}
-      onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
-      onBlur={e => { e.target.style.borderColor = bdr; e.target.style.boxShadow = "none" }} />
+      style={{ 
+        borderColor: bdr, 
+        backgroundColor: disabled ? (isDark ? "#0f172a" : "#f9fafb") : bg,
+        color: tc,
+        cursor: disabled ? "not-allowed" : "text",
+        opacity: disabled ? 0.7 : 1
+      }}
+      onFocus={e => { if(!disabled) { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` } }}
+      onBlur={e => { e.target.style.borderColor = bdr; e.target.style.boxShadow = "none" }} 
+    />
   )
 }
 
@@ -187,7 +200,22 @@ function AddItemForm({ onBack, onSaveSuccess, isDark, initialData }) {
         </StepCard>
         <StepCard n={2} title="Stock Details" isDark={isDark}>
           <div className="grid grid-cols-2 gap-3">
-            <div><FL isDark={isDark}>Current Stock</FL><FInput type="number" placeholder="0" value={f.stock} onChange={s("stock")} isDark={isDark} /></div>
+            <div>
+              <FL isDark={isDark}>Current Stock</FL>
+              <FInput 
+                type="number" 
+                placeholder="0" 
+                value={f.stock} 
+                onChange={s("stock")} 
+                disabled={isEditing} // 🚀 Disables if we are editing an existing item
+                isDark={isDark} 
+              />
+              {isEditing && (
+                <p className="text-[10px] mt-1 text-amber-600 italic">
+                  To update stock, use the "Invoice" button on the main inventory page.
+                </p>
+              )}
+            </div>
             <div><FL isDark={isDark}>Reorder Level</FL><FInput type="number" placeholder="10" value={f.reorderLevel} onChange={s("reorderLevel")} isDark={isDark} /></div>
           </div>
           <div><FL isDark={isDark}>Cost per Unit (₱)</FL><FInput type="number" placeholder="0.00" value={f.costPerUnit} onChange={s("costPerUnit")} isDark={isDark} /></div>
@@ -261,81 +289,91 @@ function DeleteInventoryModal({ item, onClose, onConfirm, isDeleting, isDark }) 
 }
 
 // ── Receive Stock Modal (the "Invoice" / restock screen) ──────────────────────
-// Lets the admin pick several existing products at once and record how many units
-// arrived in a delivery. Quantities ADD to current stock (a delivery adds to what
-// you already have). Cost per unit is optional — update it only if the supplier's
-// price changed this delivery. Saves each line via the existing PUT endpoint.
 function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
-  const [search, setSearch] = useState("")
-  // selected lines: { [id]: { qty: "", cost: "" } }
-  const [lines, setLines] = useState({})
-  const [saving, setSaving] = useState(false)
-  const [result, setResult] = useState(null)   // { ok, failed } after save
+  const [search, setSearch] = useState("");
+  const [lines, setLines] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [result, setResult] = useState(null);
+
+  // 1. Ensure 'today' is defined
+  const today = new Date().toISOString().split('T')[0];
 
   const c = {
-    overlay:  "rgba(15,23,42,0.72)",
-    bg:       isDark ? "#1a2332" : "white",
-    bdr:      isDark ? "#2d3748" : "#e8edf2",
-    head:     isDark ? "#f1f5f9" : "#111827",
-    sub:      isDark ? "#94a3b8" : "#6b7280",
-    cell:     isDark ? "#e2e8f0" : "#1e293b",
-    inputBg:  isDark ? "#1e293b" : "white",
+    overlay: "rgba(15,23,42,0.72)",
+    bg: isDark ? "#1a2332" : "white",
+    bdr: isDark ? "#2d3748" : "#e8edf2",
+    head: isDark ? "#f1f5f9" : "#111827",
+    sub: isDark ? "#94a3b8" : "#6b7280",
+    cell: isDark ? "#e2e8f0" : "#1e293b",
+    inputBg: isDark ? "#1e293b" : "white",
     inputBdr: isDark ? "#374151" : "#dde3ec",
     inputTxt: isDark ? "#e2e8f0" : "#0f172a",
-    rowBg:    isDark ? "#111827" : "#fafbfc",
-    chipBg:   isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4",
-  }
+    rowBg: isDark ? "#111827" : "#fafbfc",
+  };
 
-  const selectedIds = Object.keys(lines)
+  // 2. Define 'matches' here (inside the function)
+  const selectedIds = Object.keys(lines);
   const matches = !search ? [] : inventory.filter(it =>
     !lines[it.id] && (
       it.name.toLowerCase().includes(search.toLowerCase()) ||
       String(it.id).toLowerCase().includes(search.toLowerCase())
     )
-  ).slice(0, 6)
+  ).slice(0, 6);
 
-  const addLine = (it) => { setLines(p => ({ ...p, [it.id]: { qty: "", cost: "" } })); setSearch("") }
-  const removeLine = (id) => setLines(p => { const n = { ...p }; delete n[id]; return n })
-  const setQty  = (id, v) => setLines(p => ({ ...p, [id]: { ...p[id], qty: v } }))
-  const setCost = (id, v) => setLines(p => ({ ...p, [id]: { ...p[id], cost: v } }))
+  // 3. Define helper handlers
+  const addLine = (it) => { 
+    setLines(p => ({ ...p, [it.id]: { qty: "", cost: "", date: today } })); 
+    setSearch(""); 
+  };
+  const removeLine = (id) => setLines(p => { const n = { ...p }; delete n[id]; return n });
+  const setQty = (id, v) => setLines(p => ({ ...p, [id]: { ...p[id], qty: v } }));
+  const setCost = (id, v) => setLines(p => ({ ...p, [id]: { ...p[id], cost: v } }));
+  const setDate = (id, v) => setLines(p => ({ ...p, [id]: { ...p[id], date: v } }));
 
-  const itemById = (id) => inventory.find(i => String(i.id) === String(id))
-  // lines that actually have a positive quantity entered
-  const validLines = selectedIds.filter(id => parseInt(lines[id].qty) > 0)
+  const itemById = (id) => inventory.find(i => String(i.id) === String(id));
+  const validLines = Object.keys(lines).filter(id => parseInt(lines[id].qty) > 0);
 
   const handleSave = async () => {
-    if (validLines.length === 0) return
-    setSaving(true)
-    const ok = [], failed = []
+    if (validLines.length === 0) return;
+    setSaving(true);
+    const ok = [], failed = [];
+
     for (const id of validLines) {
-      const item = itemById(id)
-      if (!item) { failed.push(id); continue }
-      const received = parseInt(lines[id].qty) || 0
-      const newStock = (parseInt(item.stock) || 0) + received
+      const item = itemById(id);
+      if (!item) { failed.push(id); continue; }
+
+      const received = parseInt(lines[id].qty) || 0;
+      const totalCost = parseFloat(lines[id].cost) || 0;
+      const newStock = (parseInt(item.stock) || 0) + received;
+
       try {
-        const fd = new FormData()
-        fd.append("stock", newStock)
-        // the admin enters TOTAL paid for this delivery line; the DB stores
-        // cost PER UNIT, so divide the total by the quantity received
-        const totalPaid = parseFloat(lines[id].cost)
-        if (lines[id].cost !== "" && !isNaN(totalPaid) && received > 0) {
-          const perUnit = totalPaid / received
-          fd.append("cost_per_unit", perUnit.toFixed(2))
+        // 1. Update Product Stock
+        const fd = new FormData();
+        fd.append("stock", newStock);
+        if (totalCost > 0 && received > 0) {
+          fd.append("cost_per_unit", (totalCost / received).toFixed(2));
         }
-        await api.put(`/products/admin/${id}`, fd)
-        ok.push(item.name)
+        await api.put(`/products/admin/${id}`, fd);
+
+        // 2. Create Audit Log
+        await api.post(`/products/admin/stock-logs`, {
+          product_id: id,
+          qty_change: received,
+          purchasing_price: totalCost,
+          date_of_issuance: lines[id].date,
+          notes: "Manual Restock"
+        });
+
+        ok.push(item.name);
       } catch (e) {
-        console.error("Restock failed for", id, e)
-        failed.push(item.name)
+        console.error("Restock failed for", id, e);
+        failed.push(item.name);
       }
     }
-    setSaving(false)
-    setResult({ ok, failed })
-    if (failed.length === 0) {
-      // all good — let parent refresh + show banner, then close
-      onSaved(ok.length)
-    }
-  }
+    setSaving(false);
+    setResult({ ok, failed });
+    if (failed.length === 0) onSaved(ok.length);
+  };
 
   const totalUnits = validLines.reduce((s, id) => s + (parseInt(lines[id].qty) || 0), 0)
 
@@ -432,7 +470,7 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                 const item = itemById(id)
                 if (!item) return null
                 const received = parseInt(lines[id].qty) || 0
-                const newTotal = (parseInt(item.stock) || 0) + received
+                const newTotal = (parseInt(item .stock) || 0) + received
                 return (
                   <div key={id} className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-2 p-3 sm:pb-6 rounded-lg"
                     style={{ backgroundColor: c.rowBg, border: `1px solid ${c.bdr}` }}>
@@ -449,29 +487,29 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                       </button>
                     </div>
 
-                    {/* inputs: stacked w/ labels on mobile, fixed columns on desktop */}
                     <div className="flex gap-3 sm:contents">
-                      <div className="flex-1 sm:flex-none" style={{ minWidth: 0 }}>
-                        <label className="sm:hidden block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: c.sub }}>Qty Received</label>
+                      {/* Quantity Input */}
+                      <div className="w-24">
+                        <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1">Qty</label>
                         <input type="number" min="0" value={lines[id].qty} onChange={e => setQty(id, e.target.value)} placeholder="0"
-                          className="w-full sm:w-24 px-2.5 py-2 text-sm border rounded-md outline-none text-center"
-                          style={{ flexShrink: 0, borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }}
-                          onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
-                          onBlur={e => { e.target.style.borderColor = c.inputBdr; e.target.style.boxShadow = "none" }} />
+                          className="w-full px-2 py-2 text-sm border rounded-md text-center" 
+                          style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg }} />
                       </div>
-                      <div className="flex-1 sm:flex-none" style={{ position: "relative", minWidth: 0 }}>
-                        <label className="sm:hidden block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: c.sub }}>Total Paid (₱)</label>
-                        <input type="number" min="0" step="0.01" value={lines[id].cost} onChange={e => setCost(id, e.target.value)} placeholder="0.00"
-                          className="w-full sm:w-32 px-2.5 py-2 text-sm border rounded-md outline-none text-center"
-                          style={{ flexShrink: 0, borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }}
-                          onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
-                          onBlur={e => { e.target.style.borderColor = c.inputBdr; e.target.style.boxShadow = "none" }} />
-                        {/* per-unit hint — absolute on desktop (no shift), inline on mobile */}
-                        {parseFloat(lines[id].cost) > 0 && received > 0 && (
-                          <p className="text-[10px] text-center px-1 sm:absolute" style={{ color: c.sub, top: "calc(100% + 4px)", left: 0, right: 0, marginTop: 4, whiteSpace: "nowrap" }}>
-                            ≈ ₱{(parseFloat(lines[id].cost) / received).toFixed(2)} each
-                          </p>
-                        )}
+
+                      {/* Purchasing Price Input */}
+                      <div className="w-32">
+                        <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1">Total Paid (₱)</label>
+                        <input type="number" min="0" value={lines[id].cost} onChange={e => setCost(id, e.target.value)} placeholder="0.00"
+                          className="w-full px-2 py-2 text-sm border rounded-md text-center" 
+                          style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg }} />
+                      </div>
+
+                      {/* Date of Issuance Input */}
+                      <div className="w-36">
+                        <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1">Date Issued</label>
+                        <input type="date" value={lines[id].date} onChange={e => setDate(id, e.target.value)}
+                          className="w-full px-2 py-2 text-sm border rounded-md"
+                          style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }} />
                       </div>
                     </div>
 

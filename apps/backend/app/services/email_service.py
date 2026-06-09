@@ -6,6 +6,13 @@ import string
 # Pulls the key directly from your Render environment variables
 resend.api_key = os.getenv("RESEND_API_KEY")
 
+# Add this diagnostic:
+if resend.api_key:
+    # Only prints the prefix (e.g., "re_x") and the length.
+    print(f"DEBUG: Key loaded. Prefix: {resend.api_key[:4]} | Length: {len(resend.api_key)}")
+else:
+    print("DEBUG: RESEND_API_KEY is NULL. Check Render dashboard.")
+
 # Hardcoded sandbox email until your Hostinger domain is verified
 SENDER_EMAIL = "Estings Flowers <onboarding@resend.dev>"
 

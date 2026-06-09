@@ -234,14 +234,27 @@ function ProductPagination({ showing, page, totalPages, onPageChange, d }) {
 }
 
 // ── Add Product Modal ─────────────────────────────────────────────────────────
-function AddProductModal({ onClose, onSave, categories }) {
+// 1. ADDED the `products = []` prop here!
+// ── Add Product Modal ─────────────────────────────────────────────────────────
+// ── Add Product Modal ─────────────────────────────────────────────────────────
+// ── Add Product Modal ─────────────────────────────────────────────────────────
+function AddProductModal({ onClose, onSave, categories, products = [] }) {
   const d = useAdminTokens()
+  
   const [form, setForm] = useState({ 
     name:"", group:"floral", category:"", productType:"", 
-    price:"", originalPrice:"", availability:"Available", 
+    price:"", availability:"Available", 
     status:"Active", description:"", image_url:"", 
-    season_key:"", limited_start_at:"", limited_end_at:"" 
+    season_key:"", limited_start_at:"", limited_end_at:"",
+    stock: 0,          
+    is_visible: true,
+    composition: [] 
   })
+
+  const [compSelection, setCompSelection] = useState("");
+  const [compQty, setCompQty] = useState(1);
+  const [isMaterialDropdownOpen, setIsMaterialDropdownOpen] = useState(false);
+
   const [errors, setErrors] = useState({})
   const [isUploading, setUploading] = useState(false)
   const [lightboxSrc, setLightboxSrc] = useState(null)
@@ -249,14 +262,78 @@ function AddProductModal({ onClose, onSave, categories }) {
   const [isCustomCategory, setIsCustomCategory] = useState(false)
   const set = key => val => setForm(f => ({...f,[key]:val}))
 
+  // 🔒 LOCK BACKGROUND SCROLLING
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
+
+  // 🧠 DYNAMIC FEASIBILITY CALCULATOR (Replaces the old forceful useEffect)
+  let maxFeasibleStock = null;
+  if (form.composition.length > 0) {
+    maxFeasibleStock = Infinity;
+    form.composition.forEach(item => {
+      const invProduct = products.find(p => p.id === item.product_id);
+      const availableStock = invProduct ? invProduct.stock : 0;
+      const possibleArrangements = Math.floor(availableStock / item.quantity);
+      if (possibleArrangements < maxFeasibleStock) {
+        maxFeasibleStock = possibleArrangements;
+      }
+    });
+    if (maxFeasibleStock === Infinity) maxFeasibleStock = 0;
+  }
+
   const validate = () => {
     const err = {}
     if (!form.name.trim()) err.name = "Product name is required"
     if (!form.category.trim()) err.category = "Category is required"
     if (!form.price || isNaN(form.price) || +form.price <= 0) err.price = "Enter a valid price"
-    if (form.originalPrice && +form.originalPrice < +form.price) err.originalPrice = "Original price must be greater than or equal to selling price"
+    
+    // 🔥 NEW: Check if the inputted stock is actually possible!
+    if (maxFeasibleStock !== null && Number(form.stock) > maxFeasibleStock) {
+      err.stock = `Insufficient raw materials. Max possible: ${maxFeasibleStock}`
+    }
+    
     return err
   }
+
+  const handleAddCompositionItem = () => {
+    if (!compSelection || compQty <= 0) return;
+    
+    const material = products.find(p => p.id === compSelection);
+    if (!material) return;
+
+    // 🔥 PREVENT ADDING MORE THAN WAREHOUSE CAPACITY
+    if (compQty > material.stock) {
+      alert(`Inventory limit reached! You only have ${material.stock} pieces of "${material.name}" in the warehouse.`);
+      return;
+    }
+
+    if (form.composition.some(item => item.product_id === material.id)) {
+      alert("This material is already in the recipe!");
+      return;
+    }
+
+    setForm(prev => ({
+      ...prev,
+      composition: [
+        ...prev.composition, 
+        { product_id: material.id, name: material.name, quantity: compQty }
+      ]
+    }));
+    
+    setCompSelection("");
+    setCompQty(1);
+  };
+
+  const handleRemoveCompositionItem = (idToRemove) => {
+    setForm(prev => ({
+      ...prev,
+      composition: prev.composition.filter(item => item.product_id !== idToRemove)
+    }));
+  };
 
   const handleUpload = async (e) => {
     const file = e.target.files[0]; if (!file) return
@@ -269,14 +346,15 @@ function AddProductModal({ onClose, onSave, categories }) {
     } catch (err) { alert("Upload failed: "+(err.message||"Unknown error")) }
     finally { setUploading(false) }
   }
+
   const handleSave = async () => {
     const err = validate(); 
     if (Object.keys(err).length) { setErrors(err); return; }
     
+    setIsSaving(true);
     try {
       const fd = new FormData();
 
-      // 1. Core Fields (Ensure these match your FastAPI route)
       fd.append("name", form.name.trim());
       fd.append("group", form.group.toLowerCase().trim());
       fd.append("category", form.category.toLowerCase().trim());
@@ -285,25 +363,20 @@ function AddProductModal({ onClose, onSave, categories }) {
       fd.append("status", form.status.toLowerCase());
       fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false");
       
-      // 2. Optional Fields
       if (form.description) fd.append("description", form.description.trim());
       if (form.image_url) fd.append("image_url", form.image_url);
-      if (form.originalPrice) fd.append("original_price", String(form.originalPrice));
       
-      // 3. Inventory Logic
-      const stockVal = form.availability === "Out of Stock" ? 0 : (form.availability === "Limited" ? 5 : 50);
-      fd.append("stock", String(stockVal));
+      fd.append("stock", String(form.stock));
+      fd.append("is_visible", form.is_visible ? "true" : "false");
 
-      // 4. Seasonal Fields
       if (form.season_key?.trim()) {
         fd.append("season_key", form.season_key.toLowerCase().trim());
         if (form.limited_start_at) fd.append("limited_start_at", form.limited_start_at);
         if (form.limited_end_at) fd.append("limited_end_at", form.limited_end_at);
       }
 
-      // 🚀 DEBUG: Check exactly what is being sent before the request
-      for (let [key, value] of fd.entries()) {
-        console.log(`Sending to API: ${key} = ${value}`);
+      if (form.composition.length > 0) {
+        fd.append("composition", JSON.stringify(form.composition));
       }
 
       const res = await api.createProduct(fd);
@@ -317,11 +390,44 @@ function AddProductModal({ onClose, onSave, categories }) {
     }
   }
 
+  // 🚀 CUSTOM DROPDOWN HELPERS
+  const floralMaterials = products.filter(p => p.group?.toLowerCase() === 'floral' || p.category?.toLowerCase() === 'flower');
+  const nonFloralMaterials = products.filter(p => p.group?.toLowerCase() !== 'floral' && p.category?.toLowerCase() !== 'flower');
+  const selectedMaterial = products.find(p => p.id === compSelection);
+
+  // Reusable row component for the dropdown
+  const MaterialDropdownRow = ({ p }) => {
+    const isOut = p.stock === 0;
+    const isLow = p.stock > 0 && p.stock <= 5;
+    
+    return (
+      <div 
+        onClick={() => {
+          if (isOut) return;
+          setCompSelection(p.id);
+          setIsMaterialDropdownOpen(false);
+        }}
+        className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${isOut ? "opacity-50" : ""}`}
+        style={{ borderBottom: `1px solid ${d.divider}`, backgroundColor: isOut ? (d.isDark ? "#0f172a" : "#f9fafb") : "transparent" }}
+        onMouseEnter={e => !isOut && (e.currentTarget.style.backgroundColor = d.rowHov)}
+        onMouseLeave={e => !isOut && (e.currentTarget.style.backgroundColor = "transparent")}
+      >
+        <FallbackImage src={getProductImage(p)} fallbackSrc={PLACEHOLDER_IMAGE} className="w-8 h-8 rounded object-cover shadow-sm" style={{ border: `1px solid ${d.cardBdr}` }} />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold truncate" style={{ color: d.cellC }}>{p.name}</p>
+          <p className="text-[10px] uppercase font-bold mt-0.5 truncate" style={{ color: isOut ? "#ef4444" : isLow ? "#d97706" : "#16a34a" }}>
+            {isOut ? "Out of Stock" : isLow ? `Low Stock (${p.stock})` : `${p.stock} Available`}
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ backgroundColor:d.overlayBg, backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)", zIndex:9999, top:0, left:0, width:"100vw", height:"100vh" }}
       onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
-      <div className="rounded-xl w-full overflow-hidden"
+      <div className="rounded-xl w-full overflow-hidden flex flex-col"
         style={{ maxWidth:"640px", maxHeight:"90vh", boxShadow:"0 24px 64px rgba(0,0,0,0.5)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
 
         <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
@@ -336,7 +442,8 @@ function AddProductModal({ onClose, onSave, categories }) {
           </button>
         </div>
 
-        <div className="overflow-y-auto p-6 space-y-4" style={{ maxHeight:"calc(90vh - 150px)" }}>
+        <div className="overflow-y-auto p-6 space-y-4 flex-1 relative">
+          
           <div>
             <MLabel d={d}>Product Image <span style={{ color:d.subC, fontWeight:400 }}>(optional)</span></MLabel>
             {!form.image_url && (
@@ -373,9 +480,8 @@ function AddProductModal({ onClose, onSave, categories }) {
             {errors.name && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.name}</p>}
           </div>
 
-          {/* 3-Tier Hierarchy Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div>
+            <div> 
               <div className="flex items-end justify-between mb-1.5">
                 <MLabel d={d}>Group</MLabel>
                 <span className="text-[10px] font-semibold" style={{ color: d.subC }}>Top level</span>
@@ -383,7 +489,6 @@ function AddProductModal({ onClose, onSave, categories }) {
               <MSel value={form.group} onChange={set("group")} options={["floral", "non-floral"]} d={d}/>
             </div>
             
-            {/* 🚀 FIXED CATEGORY FIELD: Now a strict dropdown */}
             <div>
               <div className="flex items-end justify-between mb-1.5">
                 <MLabel d={d}>Category <span style={{ color:"#f87171" }}>*</span></MLabel>
@@ -396,29 +501,15 @@ function AddProductModal({ onClose, onSave, categories }) {
                   <span className="text-[10px] font-semibold" style={{ color: d.subC }}>Main Navigation</span>
                 )}
               </div>
-              
               {isCustomCategory ? (
-                <MInput 
-                  value={form.category} 
-                  onChange={set("category")} 
-                  placeholder="Type new category..." 
-                  error={errors.category} 
-                  d={d}
-                />
+                <MInput value={form.category} onChange={set("category")} placeholder="Type new category..." error={errors.category} d={d}/>
               ) : (
-                <MSel 
-                  value={form.category} 
+                <MSel value={form.category} 
                   onChange={(val) => {
-                    if (val === "+ Add New Category") {
-                      setIsCustomCategory(true);
-                      set("category")("");
-                    } else {
-                      set("category")(val);
-                    }
+                    if (val === "+ Add New Category") { setIsCustomCategory(true); set("category")(""); } 
+                    else { set("category")(val); }
                   }} 
-                  options={["", ...categories, "+ Add New Category"]} 
-                  d={d}
-                />
+                  options={["", ...categories, "+ Add New Category"]} d={d} />
               )}
               {errors.category && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.category}</p>}
             </div>
@@ -432,83 +523,292 @@ function AddProductModal({ onClose, onSave, categories }) {
             </div>
           </div>
 
+          <div>
+            <MLabel d={d}>Base Selling Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
+            <MInput type="number" value={form.price} onChange={set("price")} placeholder="999" error={errors.price} d={d}/>
+            {errors.price && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.price}</p>}
+          </div>
+
+          {/* 🔓 UNLOCKED DYNAMIC STOCK & AVAILABILITY GRID */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <MLabel d={d}>Selling Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
-              <MInput type="number" value={form.price} onChange={set("price")} placeholder="999" error={errors.price} d={d}/>
+              <MLabel d={d}>Stock Quantity <span style={{ color:"#f87171" }}>*</span></MLabel>
+              <MInput type="number" value={form.stock} onChange={set("stock")} placeholder="0" error={errors.stock} d={d}/>
+              
+              {/* 📊 REAL-TIME FEASIBILITY TRACKER */}
+              {maxFeasibleStock !== null && (
+                <div className="mt-1.5 flex items-start gap-1.5">
+                  <span className="text-[10px] mt-0.5">
+                    {Number(form.stock) > maxFeasibleStock ? '❌' : '✅'}
+                  </span>
+                  <span className="text-[10px] leading-tight" style={{ color: Number(form.stock) > maxFeasibleStock ? "#ef4444" : d.subC }}>
+                    Max feasible based on recipe: <strong>{maxFeasibleStock}</strong>
+                  </span>
+                </div>
+              )}
+              {errors.stock && <p className="text-[11px] mt-1 font-bold" style={{ color:"#f87171" }}>{errors.stock}</p>}
             </div>
+
             <div>
-              <MLabel d={d}>Original Price (₱)</MLabel>
-              <MInput type="number" value={form.originalPrice} onChange={set("originalPrice")} placeholder="1299" error={errors.originalPrice} d={d}/>
+              <MLabel d={d}>Availability</MLabel>
+              <div className="flex gap-1">
+                {AVAILABILITIES.map(a => (
+                  <button key={a} type="button" onClick={()=>set("availability")(a)}
+                    className="flex-1 py-2 text-[10px] font-bold rounded-md border transition-all"
+                    style={{ backgroundColor:form.availability===a?DG:d.inputBg, color:form.availability===a?"white":d.subC, borderColor:form.availability===a?DG:d.inputBdr }}>
+                    {a}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
-          <div>
-            <MLabel d={d}>Availability</MLabel>
-            <div className="flex gap-2">
-              {AVAILABILITIES.map(a => (
-                <button key={a} onClick={()=>set("availability")(a)}
-                  className="flex-1 py-2 text-xs font-bold rounded-md border transition-all"
-                  style={{ backgroundColor:form.availability===a?DG:d.inputBg, color:form.availability===a?"white":d.subC, borderColor:form.availability===a?DG:d.inputBdr }}>
-                  {a}
-                </button>
-              ))}
+          <div className="flex items-start space-x-3 mt-4 p-3 rounded-lg" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f9fafb", border: `1px solid ${d.inputBdr}` }}>
+            <input type="checkbox" id="is_visible" checked={form.is_visible} onChange={(e) => set("is_visible")(e.target.checked)} className="mt-0.5 h-4 w-4 text-green-600 rounded cursor-pointer" />
+            <div className="flex flex-col">
+              <label htmlFor="is_visible" className="text-sm font-semibold cursor-pointer" style={{ color: d.headC }}>Show on Customer Storefront</label>
+              <span className="text-xs mt-0.5" style={{ color: d.subC }}>Uncheck this if the item is a raw material (like single stems or vases) used only for custom AI arrangements or for composing a product.</span>
             </div>
           </div>
 
+          {/* ================= UI-ENHANCED COMPOSITION BUILDER ================= */}
+          <div className="mt-6 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
+            <MLabel d={d}>Arrangement Recipe (Optional)</MLabel>
+            <p className="text-xs mb-4" style={{ color: d.subC }}>
+              If this product is made of other items (like stems and vases), add them here so inventory updates automatically when purchased.
+            </p>
+
+            <div className="flex items-start gap-2 mb-4">
+              
+              <div className="flex-1 relative">
+                <span className="text-[10px] font-bold uppercase tracking-wider mb-1 block" style={{ color: d.labelC }}>Material</span>
+                
+                <div onClick={() => setIsMaterialDropdownOpen(!isMaterialDropdownOpen)}
+                  className="w-full px-3 py-2 text-sm border rounded-md outline-none flex items-center justify-between cursor-pointer transition-all h-[42px]"
+                  style={{ 
+                    borderColor: isMaterialDropdownOpen ? "#4ade80" : d.inputBdr, 
+                    backgroundColor: d.inputBg, 
+                    boxShadow: isMaterialDropdownOpen ? "0 0 0 2px rgba(74,222,128,0.18)" : "none" 
+                  }}>
+                  {selectedMaterial ? (
+                    <div className="flex items-center gap-2">
+                      <FallbackImage src={getProductImage(selectedMaterial)} fallbackSrc={PLACEHOLDER_IMAGE} className="w-6 h-6 rounded object-cover shadow-sm" style={{ border: `1px solid ${d.cardBdr}` }}/>
+                      <span className="font-semibold truncate" style={{ color: d.cellC }}>{selectedMaterial.name}</span>
+                    </div>
+                  ) : (
+                    <span style={{ color: d.subC }}>Select a material...</span>
+                  )}
+                  <svg className={`w-4 h-4 transition-transform ${isMaterialDropdownOpen ? "rotate-180" : ""}`} style={{ color: d.subC }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
+                  </svg>
+                </div>
+
+                {isMaterialDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setIsMaterialDropdownOpen(false)} />
+                    
+                    <div className="absolute left-0 right-0 top-[65px] z-50 rounded-lg border shadow-xl overflow-y-auto"
+                      style={{ maxHeight: "260px", backgroundColor: d.modalBg, borderColor: d.inputBdr }}>
+                      
+                      <div className="sticky top-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider z-10"
+                        style={{ backgroundColor: d.hdrBg, color: d.subC, borderBottom: `1px solid ${d.divider}` }}>
+                        🌸 Floral Materials
+                      </div>
+                      {floralMaterials.map(p => <MaterialDropdownRow key={p.id} p={p} />)}
+                      {floralMaterials.length === 0 && <p className="px-3 py-2 text-xs" style={{ color: d.subC }}>No floral items found.</p>}
+
+                      <div className="sticky top-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider z-10"
+                        style={{ backgroundColor: d.hdrBg, color: d.subC, borderTop: `1px solid ${d.divider}`, borderBottom: `1px solid ${d.divider}` }}>
+                        🎀 Non-Floral / Accessories
+                      </div>
+                      {nonFloralMaterials.map(p => <MaterialDropdownRow key={p.id} p={p} />)}
+                      {nonFloralMaterials.length === 0 && <p className="px-3 py-2 text-xs" style={{ color: d.subC }}>No accessories found.</p>}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="w-20">
+                <span className="text-[10px] font-bold uppercase tracking-wider mb-1 block" style={{ color: d.labelC }}>Qty</span>
+                <input 
+                  type="number" 
+                  min="1" 
+                  max={selectedMaterial ? selectedMaterial.stock : 1} 
+                  value={compQty} 
+                  onChange={e => {
+                    const val = Number(e.target.value);
+                    const maxAvailable = selectedMaterial ? selectedMaterial.stock : 1;
+                    setCompQty(val > maxAvailable ? maxAvailable : val);
+                  }}
+                  className="w-full px-3 py-2 text-sm border rounded-md outline-none text-center h-[42px]"
+                  style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }} 
+                />
+              </div>
+              
+              <button type="button" onClick={handleAddCompositionItem}
+                disabled={!compSelection || selectedMaterial?.stock === 0}
+                className="px-4 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed mt-[18px]"
+                style={{ background:`linear-gradient(135deg,${DG},${G})`, height: "42px" }}>
+                Add
+              </button>
+            </div>
+
+            {form.composition.length > 0 && (
+              <div className="space-y-2 mt-4 pt-4" style={{ borderTop: `1px solid ${d.divider}` }}>
+                {form.composition.map((item) => (
+                  <div key={item.product_id} className="flex items-center justify-between p-2 rounded-lg border" style={{ backgroundColor: d.cardBg, borderColor: d.cardBdr }}>
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center justify-center w-7 h-7 rounded-md text-xs font-bold" style={{ backgroundColor: `${G}15`, color: G }}>
+                        {item.quantity}x
+                      </span>
+                      <span className="text-sm font-semibold" style={{ color: d.cellC }}>{item.name}</span>
+                    </div>
+                    <button type="button" onClick={() => handleRemoveCompositionItem(item.product_id)} className="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* ======================================================= */}
+
           <div>
-            <MLabel d={d}>Description</MLabel>
+            <MLabel d={d}>Description <span style={{ color:d.subC, fontWeight:400 }}>(optional)</span></MLabel>
             <MTextarea value={form.description} onChange={set("description")} placeholder="Brief description..." d={d}/>
           </div>
         </div>
 
         <div className="flex items-center justify-end gap-2 px-6 py-5 flex-shrink-0"
           style={{ borderTop:`1px solid ${d.modalFtrBdr}`, backgroundColor:d.modalFtr }}>
-          <button onClick={onClose} className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
             style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}>
             Cancel
           </button>
-          <button onClick={handleSave} disabled={isUploading || isSaving}
+          <button type="button" onClick={handleSave} disabled={isUploading || isSaving}
             className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background:`linear-gradient(135deg,${DG},${G})` }}>
-            {/* 🚀 4. Show "Saving..." text while locked */}
             {isSaving ? "Adding..." : "Add Product"}
           </button>
         </div>
       </div>
+      
+      {lightboxSrc && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center px-4"
+          style={{ backgroundColor:"rgba(0,0,0,0.85)" }} onClick={()=>setLightboxSrc(null)}>
+          <FallbackImage src={lightboxSrc} alt="Enlarged" className="max-w-3xl w-full max-h-[78vh] object-contain rounded-xl" fallbackSrc={PLACEHOLDER_IMAGE}/>
+        </div>
+      )}
     </div>,
     document.body
   )
 }
-
 // ── Edit Product Modal ────────────────────────────────────────────────────────
-function EditProductModal({ product, onClose, onSave, categories }) {
+// ── Edit Product Modal ────────────────────────────────────────────────────────
+function EditProductModal({ product, onClose, onSave, categories, products = [] }) {
   const d = useAdminTokens()
+  
+  // 1. STATE: Initialize with existing product data (including the composition recipe!)
   const [form, setForm] = useState({
-    name:product.name||"", category:product.category||"",
-    price:product.price?String(product.price):"",
-    originalPrice:product.original_price?String(product.original_price):"",
-    availability:!product.is_available?"Out of Stock":product.stock<=(product.reorder_point||10)?"Limited":"Available",
-    status:product.status==="active"||product.status==="Active"?"Active":"Inactive",
-    description:product.description||"", image_url:product.image_url||"",
-    season_key:product.season_key||"", limited_start_at:product.limited_start_at||"", limited_end_at:product.limited_end_at||"",
+    name: product.name || "",
+    group: product.product_group || "floral",
+    category: product.category || "",
+    productType: product.product_type || "",
+    price: product.price ? String(product.price) : "",
+    availability: !product.is_available ? "Out of Stock" : product.stock <= (product.reorder_point || 10) ? "Limited" : "Available",
+    status: product.status === "active" || product.status === "Active" ? "Active" : "Inactive",
+    description: product.description || "", 
+    image_url: product.image_url || "",
+    season_key: product.season_key || "", 
+    limited_start_at: product.limited_start_at || "", 
+    limited_end_at: product.limited_end_at || "",
+    stock: product.stock ?? 0,
+    is_visible: product.is_visible ?? true,
+    composition: product.composition || [] // 👈 Crucial: Load existing recipe
   })
-  const [errors,setErrors]=useState({})
-  const [isUploading,setUploading]=useState(false)
-  const [removeImage,setRemoveImage]=useState(false)
-  const [lightboxSrc,setLightboxSrc]=useState(null)
+
+  // Composition Builder Tools
+  const [compSelection, setCompSelection] = useState("");
+  const [compQty, setCompQty] = useState(1);
+  const [isMaterialDropdownOpen, setIsMaterialDropdownOpen] = useState(false);
+
+  // General State
+  const [errors, setErrors] = useState({})
+  const [isUploading, setUploading] = useState(false)
+  const [removeImage, setRemoveImage] = useState(false)
+  const [lightboxSrc, setLightboxSrc] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isCustomCategory, setIsCustomCategory] = useState(false)
   const set = key => val => setForm(f=>({...f,[key]:val}))
+
+  // 🔒 LOCK BACKGROUND SCROLLING
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, []);
+
+  // 🧠 DYNAMIC FEASIBILITY CALCULATOR
+  let maxFeasibleStock = null;
+  if (form.composition.length > 0) {
+    maxFeasibleStock = Infinity;
+    form.composition.forEach(item => {
+      const invProduct = products.find(p => p.id === item.product_id);
+      const availableStock = invProduct ? invProduct.stock : 0;
+      const possibleArrangements = Math.floor(availableStock / item.quantity);
+      if (possibleArrangements < maxFeasibleStock) {
+        maxFeasibleStock = possibleArrangements;
+      }
+    });
+    if (maxFeasibleStock === Infinity) maxFeasibleStock = 0;
+  }
 
   const validate = () => {
     const err={}
     if (!form.name.trim()) err.name="Product name is required"
     if (!form.category.trim()) err.category="Category is required"
     if (!form.price||isNaN(form.price)||+form.price<=0) err.price="Enter a valid price"
-    if (form.originalPrice&&+form.originalPrice<+form.price) err.originalPrice="Original price must be greater than or equal to selling price"
+    
+    // 🔥 Check if the inputted stock is actually possible!
+    if (maxFeasibleStock !== null && Number(form.stock) > maxFeasibleStock) {
+      err.stock = `Insufficient raw materials. Max possible: ${maxFeasibleStock}`
+    }
     return err
   }
+
+  // ── Composition Handlers ──
+  const handleAddCompositionItem = () => {
+    if (!compSelection || compQty <= 0) return;
+    const material = products.find(p => p.id === compSelection);
+    if (!material) return;
+
+    if (compQty > material.stock) {
+      alert(`Inventory limit reached! You only have ${material.stock} pieces of "${material.name}" in the warehouse.`);
+      return;
+    }
+    if (form.composition.some(item => item.product_id === material.id)) {
+      alert("This material is already in the recipe!");
+      return;
+    }
+
+    setForm(prev => ({
+      ...prev,
+      composition: [
+        ...prev.composition, 
+        { product_id: material.id, name: material.name, quantity: compQty }
+      ]
+    }));
+    setCompSelection("");
+    setCompQty(1);
+  };
+
+  const handleRemoveCompositionItem = (idToRemove) => {
+    setForm(prev => ({
+      ...prev,
+      composition: prev.composition.filter(item => item.product_id !== idToRemove)
+    }));
+  };
 
   const handleUpload = async (e) => {
     const file=e.target.files[0]; if (!file) return
@@ -523,16 +823,13 @@ function EditProductModal({ product, onClose, onSave, categories }) {
 
   const handleSave = async () => {
     if (isSaving) return;
-
     const err = validate(); 
     if (Object.keys(err).length) { setErrors(err); return; }
 
     setIsSaving(true);
-    
     try {
       const fd = new FormData();
 
-      // 🛡️ THE FIX: (form.field || "") prevents the 'undefined' crash
       fd.append("name", (form.name || "").trim());
       fd.append("group", (form.group || "floral").toLowerCase().trim());
       fd.append("category", (form.category || "").toLowerCase().trim());
@@ -541,21 +838,20 @@ function EditProductModal({ product, onClose, onSave, categories }) {
       fd.append("status", (form.status || "active").toLowerCase());
       fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false");
       
-      // Optional Fields
       if (form.description) fd.append("description", form.description.trim());
       if (form.image_url) fd.append("image_url", form.image_url);
-      if (form.originalPrice) fd.append("original_price", String(form.originalPrice));
       
-      // Inventory Logic
-      const stockVal = form.availability === "Out of Stock" ? 0 : (form.availability === "Limited" ? 5 : 50);
-      fd.append("stock", String(stockVal));
+      fd.append("stock", String(form.stock));
+      fd.append("is_visible", form.is_visible ? "true" : "false");
 
-      // Seasonal Fields
       if (form.season_key?.trim()) {
         fd.append("season_key", form.season_key.toLowerCase().trim());
         if (form.limited_start_at) fd.append("limited_start_at", form.limited_start_at);
         if (form.limited_end_at) fd.append("limited_end_at", form.limited_end_at);
       }
+
+      // 👈 Always send the composition back so we can track edits/removals
+      fd.append("composition", JSON.stringify(form.composition));
 
       const res = await api.updateProduct(product.id, fd);
       onSave(res.product); 
@@ -568,13 +864,45 @@ function EditProductModal({ product, onClose, onSave, categories }) {
     }
   }
 
-  const previewUrl=removeImage?"":(form.image_url||getProductImage(product))
+  const previewUrl = removeImage ? "" : (form.image_url || getProductImage(product))
+
+  // 🚀 CUSTOM DROPDOWN HELPERS
+  const floralMaterials = products.filter(p => p.group?.toLowerCase() === 'floral' || p.category?.toLowerCase() === 'flower');
+  const nonFloralMaterials = products.filter(p => p.group?.toLowerCase() !== 'floral' && p.category?.toLowerCase() !== 'flower');
+  const selectedMaterial = products.find(p => p.id === compSelection);
+
+  const MaterialDropdownRow = ({ p }) => {
+    const isOut = p.stock === 0;
+    const isLow = p.stock > 0 && p.stock <= 5;
+    
+    return (
+      <div 
+        onClick={() => {
+          if (isOut) return;
+          setCompSelection(p.id);
+          setIsMaterialDropdownOpen(false);
+        }}
+        className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer transition-colors ${isOut ? "opacity-50" : ""}`}
+        style={{ borderBottom: `1px solid ${d.divider}`, backgroundColor: isOut ? (d.isDark ? "#0f172a" : "#f9fafb") : "transparent" }}
+        onMouseEnter={e => !isOut && (e.currentTarget.style.backgroundColor = d.rowHov)}
+        onMouseLeave={e => !isOut && (e.currentTarget.style.backgroundColor = "transparent")}
+      >
+        <FallbackImage src={getProductImage(p)} fallbackSrc={PLACEHOLDER_IMAGE} className="w-8 h-8 rounded object-cover shadow-sm" style={{ border: `1px solid ${d.cardBdr}` }} />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold truncate" style={{ color: d.cellC }}>{p.name}</p>
+          <p className="text-[10px] uppercase font-bold mt-0.5 truncate" style={{ color: isOut ? "#ef4444" : isLow ? "#d97706" : "#16a34a" }}>
+            {isOut ? "Out of Stock" : isLow ? `Low Stock (${p.stock})` : `${p.stock} Available`}
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ backgroundColor:d.overlayBg, backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)", zIndex:9999, top:0, left:0, width:"100vw", height:"100vh" }}
       onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
-      <div className="rounded-xl w-full overflow-hidden"
+      <div className="rounded-xl w-full overflow-hidden flex flex-col"
         style={{ maxWidth:"640px", maxHeight:"90vh", boxShadow:"0 24px 64px rgba(0,0,0,0.5)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
 
         <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
@@ -589,7 +917,7 @@ function EditProductModal({ product, onClose, onSave, categories }) {
           </button>
         </div>
 
-        <div className="overflow-y-auto p-6 space-y-4" style={{ maxHeight:"calc(90vh - 150px)" }}>
+        <div className="overflow-y-auto p-6 space-y-4 flex-1 relative">
           <div>
             <MLabel d={d}>Product Image <span style={{ color:d.subC, fontWeight:400 }}>(optional)</span></MLabel>
             {(!previewUrl || previewUrl===PLACEHOLDER_IMAGE) && (
@@ -626,63 +954,197 @@ function EditProductModal({ product, onClose, onSave, categories }) {
             {errors.name && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.name}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            {/* 🚀 FIXED CATEGORY FIELD: Now a strict dropdown */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <div className="flex items-end justify-between mb-1.5">
+                <MLabel d={d}>Group</MLabel>
+                <span className="text-[10px] font-semibold" style={{ color: d.subC }}>Top level</span>
+              </div>
+              <MSel value={form.group} onChange={set("group")} options={["floral", "non-floral"]} d={d}/>
+            </div>
+            
             <div>
               <div className="flex items-end justify-between mb-1.5">
                 <MLabel d={d}>Category <span style={{ color:"#f87171" }}>*</span></MLabel>
                 <span className="text-[10px] font-semibold" style={{ color: d.subC }}>Main Navigation</span>
               </div>
-              <MSel 
-                value={form.category} 
-                onChange={set("category")} 
-                options={["", ...categories]} 
-                d={d}
-              />
+              <MSel value={form.category} onChange={set("category")} options={["", ...categories]} d={d}/>
               {errors.category && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.category}</p>}
             </div>
 
-            {/* 2. Type Field */}
             <div>
               <div className="flex items-end justify-between mb-1.5">
-                <MLabel d={d}>Type <span style={{ color:d.subC, fontWeight:400 }}>(optional)</span></MLabel>
-                <span className="text-[10px] font-semibold" style={{ color:"#4ade80" }}>e.g. Rose, Vase</span>
+                <MLabel d={d}>Type</MLabel>
+                <span className="text-[10px] font-semibold" style={{ color:"#4ade80" }}>Sub-tag (e.g. Rose)</span>
               </div>
               <MInput value={form.productType} onChange={set("productType")} placeholder="e.g. Rose" d={d}/>
             </div>
           </div>
 
-          {/* 3. Status Field (Moved to its own full-width line below the grid to fix the layout) */}
+          {/* Moved Status up to group basic info logically */}
           <div>
             <MLabel d={d}>Status</MLabel>
             <MSel value={form.status} onChange={set("status")} options={STATUSES} d={d}/>
           </div>
 
+          <div>
+            <MLabel d={d}>Base Selling Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
+            <MInput type="number" value={form.price} onChange={set("price")} placeholder="999" error={errors.price} d={d}/>
+            {errors.price && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.price}</p>}
+          </div>
+
+          {/* 🔓 UNLOCKED DYNAMIC STOCK & AVAILABILITY GRID */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <MLabel d={d}>Selling Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
-              <MInput type="number" value={form.price} onChange={set("price")} placeholder="999" error={errors.price} d={d}/>
-              {errors.price && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.price}</p>}
+              <MLabel d={d}>Stock Quantity <span style={{ color:"#f87171" }}>*</span></MLabel>
+              <MInput type="number" value={form.stock} onChange={set("stock")} placeholder="0" error={errors.stock} d={d}/>
+              
+              {/* 📊 REAL-TIME FEASIBILITY TRACKER */}
+              {maxFeasibleStock !== null && (
+                <div className="mt-1.5 flex items-start gap-1.5">
+                  <span className="text-[10px] mt-0.5">
+                    {Number(form.stock) > maxFeasibleStock ? '❌' : '✅'}
+                  </span>
+                  <span className="text-[10px] leading-tight" style={{ color: Number(form.stock) > maxFeasibleStock ? "#ef4444" : d.subC }}>
+                    Max feasible based on recipe: <strong>{maxFeasibleStock}</strong>
+                  </span>
+                </div>
+              )}
+              {errors.stock && <p className="text-[11px] mt-1 font-bold" style={{ color:"#f87171" }}>{errors.stock}</p>}
             </div>
+
             <div>
-              <MLabel d={d}>Original Price (₱)</MLabel>
-              <MInput type="number" value={form.originalPrice} onChange={set("originalPrice")} placeholder="1299" error={errors.originalPrice} d={d}/>
-              {errors.originalPrice && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.originalPrice}</p>}
+              <MLabel d={d}>Availability</MLabel>
+              <div className="flex gap-1">
+                {AVAILABILITIES.map(a => (
+                  <button key={a} type="button" onClick={()=>set("availability")(a)}
+                    className="flex-1 py-2 text-[10px] font-bold rounded-md border transition-all"
+                    style={{ backgroundColor:form.availability===a?DG:d.inputBg, color:form.availability===a?"white":d.subC, borderColor:form.availability===a?DG:d.inputBdr }}>
+                    {a}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
           <div>
-            <MLabel d={d}>Availability</MLabel>
-            <div className="flex gap-2">
-              {AVAILABILITIES.map(a=>(
-                <button key={a} onClick={()=>set("availability")(a)}
-                  className="flex-1 py-2 text-xs font-bold rounded-md border transition-all"
-                  style={{ backgroundColor:form.availability===a?DG:d.inputBg, color:form.availability===a?"white":d.subC, borderColor:form.availability===a?DG:d.inputBdr }}>
-                  {a}
-                </button>
-              ))}
+            <MLabel d={d}>Visibility</MLabel>
+            <div className="flex items-start space-x-3 mt-2 p-3 rounded-lg" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f9fafb", border: `1px solid ${d.inputBdr}` }}>
+              <input 
+                type="checkbox" 
+                id="edit_is_visible" 
+                checked={form.is_visible} 
+                onChange={(e) => set("is_visible")(e.target.checked)} 
+                className="mt-0.5 h-4 w-4 text-green-600 rounded cursor-pointer" 
+              />
+              <div className="flex flex-col">
+                <label htmlFor="edit_is_visible" className="text-sm font-semibold cursor-pointer" style={{ color: d.headC }}>Show on Customer Storefront</label>
+                <span className="text-xs mt-0.5" style={{ color: d.subC }}>Uncheck this if the item is a raw material used only for custom AI arrangements.</span>
+              </div>
             </div>
           </div>
+
+          {/* ================= UI-ENHANCED COMPOSITION BUILDER ================= */}
+          <div className="mt-6 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
+            <MLabel d={d}>Arrangement Recipe (Optional)</MLabel>
+            <p className="text-xs mb-4" style={{ color: d.subC }}>
+              If this product is made of other items (like stems and vases), add them here so inventory updates automatically when purchased.
+            </p>
+
+            <div className="flex items-start gap-2 mb-4">
+              
+              <div className="flex-1 relative">
+                <span className="text-[10px] font-bold uppercase tracking-wider mb-1 block" style={{ color: d.labelC }}>Material</span>
+                
+                <div onClick={() => setIsMaterialDropdownOpen(!isMaterialDropdownOpen)}
+                  className="w-full px-3 py-2 text-sm border rounded-md outline-none flex items-center justify-between cursor-pointer transition-all h-[42px]"
+                  style={{ 
+                    borderColor: isMaterialDropdownOpen ? "#4ade80" : d.inputBdr, 
+                    backgroundColor: d.inputBg, 
+                    boxShadow: isMaterialDropdownOpen ? "0 0 0 2px rgba(74,222,128,0.18)" : "none" 
+                  }}>
+                  {selectedMaterial ? (
+                    <div className="flex items-center gap-2">
+                      <FallbackImage src={getProductImage(selectedMaterial)} fallbackSrc={PLACEHOLDER_IMAGE} className="w-6 h-6 rounded object-cover shadow-sm" style={{ border: `1px solid ${d.cardBdr}` }}/>
+                      <span className="font-semibold truncate" style={{ color: d.cellC }}>{selectedMaterial.name}</span>
+                    </div>
+                  ) : (
+                    <span style={{ color: d.subC }}>Select a material...</span>
+                  )}
+                  <svg className={`w-4 h-4 transition-transform ${isMaterialDropdownOpen ? "rotate-180" : ""}`} style={{ color: d.subC }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
+                  </svg>
+                </div>
+
+                {isMaterialDropdownOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setIsMaterialDropdownOpen(false)} />
+                    
+                    <div className="absolute left-0 right-0 top-[65px] z-50 rounded-lg border shadow-xl overflow-y-auto"
+                      style={{ maxHeight: "260px", backgroundColor: d.modalBg, borderColor: d.inputBdr }}>
+                      
+                      <div className="sticky top-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider z-10"
+                        style={{ backgroundColor: d.hdrBg, color: d.subC, borderBottom: `1px solid ${d.divider}` }}>
+                        🌸 Floral Materials
+                      </div>
+                      {floralMaterials.map(p => <MaterialDropdownRow key={p.id} p={p} />)}
+                      {floralMaterials.length === 0 && <p className="px-3 py-2 text-xs" style={{ color: d.subC }}>No floral items found.</p>}
+
+                      <div className="sticky top-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider z-10"
+                        style={{ backgroundColor: d.hdrBg, color: d.subC, borderTop: `1px solid ${d.divider}`, borderBottom: `1px solid ${d.divider}` }}>
+                        🎀 Non-Floral / Accessories
+                      </div>
+                      {nonFloralMaterials.map(p => <MaterialDropdownRow key={p.id} p={p} />)}
+                      {nonFloralMaterials.length === 0 && <p className="px-3 py-2 text-xs" style={{ color: d.subC }}>No accessories found.</p>}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              <div className="w-20">
+                <span className="text-[10px] font-bold uppercase tracking-wider mb-1 block" style={{ color: d.labelC }}>Qty</span>
+                <input 
+                  type="number" 
+                  min="1" 
+                  max={selectedMaterial ? selectedMaterial.stock : 1} 
+                  value={compQty} 
+                  onChange={e => {
+                    const val = Number(e.target.value);
+                    const maxAvailable = selectedMaterial ? selectedMaterial.stock : 1;
+                    setCompQty(val > maxAvailable ? maxAvailable : val);
+                  }}
+                  className="w-full px-3 py-2 text-sm border rounded-md outline-none text-center h-[42px]"
+                  style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }} 
+                />
+              </div>
+              
+              <button type="button" onClick={handleAddCompositionItem}
+                disabled={!compSelection || selectedMaterial?.stock === 0}
+                className="px-4 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed mt-[18px]"
+                style={{ background:`linear-gradient(135deg,${DG},${G})`, height: "42px" }}>
+                Add
+              </button>
+            </div>
+
+            {form.composition.length > 0 && (
+              <div className="space-y-2 mt-4 pt-4" style={{ borderTop: `1px solid ${d.divider}` }}>
+                {form.composition.map((item) => (
+                  <div key={item.product_id} className="flex items-center justify-between p-2 rounded-lg border" style={{ backgroundColor: d.cardBg, borderColor: d.cardBdr }}>
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center justify-center w-7 h-7 rounded-md text-xs font-bold" style={{ backgroundColor: `${G}15`, color: G }}>
+                        {item.quantity}x
+                      </span>
+                      <span className="text-sm font-semibold" style={{ color: d.cellC }}>{item.name}</span>
+                    </div>
+                    <button type="button" onClick={() => handleRemoveCompositionItem(item.product_id)} className="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          {/* ======================================================= */}
 
           <div>
             <MLabel d={d}>Description <span style={{ color:d.subC, fontWeight:400 }}>(optional)</span></MLabel>
@@ -692,12 +1154,12 @@ function EditProductModal({ product, onClose, onSave, categories }) {
 
         <div className="flex items-center justify-end gap-2 px-6 py-5 flex-shrink-0"
           style={{ borderTop:`1px solid ${d.modalFtrBdr}`, backgroundColor:d.modalFtr }}>
-          <button onClick={onClose} className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
+          <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
             style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}
             onMouseEnter={e=>e.currentTarget.style.backgroundColor=d.hdrBg} onMouseLeave={e=>e.currentTarget.style.backgroundColor=d.inputBg}>
             Cancel
           </button>
-          <button onClick={handleSave} disabled={isUploading || isSaving}
+          <button type="button" onClick={handleSave} disabled={isUploading || isSaving}
             className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
             style={{ background:`linear-gradient(135deg,${DG},${G})`, boxShadow:"0 2px 8px rgba(12,87,62,0.3)" }}>
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
@@ -848,6 +1310,8 @@ export default function AdminProducts() {
       const prods = productsRes.data || productsRes
       setProducts(prods);
       setLowCount(prods.filter(p => p.stock<=(p.reorder_point||10)).length);
+      // Reflect total products count (unfiltered dataset)
+      setTotalCount(prods.length);
     } catch (e) { 
       console.error("Failed to fetch products",e);
     } finally { 
@@ -921,7 +1385,7 @@ export default function AdminProducts() {
 
   return (
     <div className="space-y-5">
-      {showModal      && <AddProductModal  onClose={()=>setShowModal(false)}      onSave={handleSave}     categories={dynamicCategories}/>}
+      {showModal && <AddProductModal onClose={()=>setShowModal(false)} onSave={handleSave} categories={dynamicCategories} products={products}/>}
       {editingProduct && <EditProductModal product={editingProduct} onClose={()=>setEditingProduct(null)} onSave={handleEditSave} categories={dynamicCategories}/>}
       {viewingProduct && <ViewProductModal product={viewingProduct} onClose={()=>setViewingProduct(null)}/>}
       {deletingProduct && <DeleteProductModal product={deletingProduct} onClose={()=>setDeletingProduct(null)} onConfirm={handleConfirmDelete} isDeleting={isDeleting}/>}

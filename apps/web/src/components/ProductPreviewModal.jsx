@@ -153,16 +153,17 @@ function AIPanel({ onUse, onBack }) {
   const [err,          setErr]          = useState("")
 
   const generate = async () => {
-  if (!relationship || !occasion) { setErr("Please select a relationship and occasion."); return }
-  setErr(""); setLoading(true); setGenerated("")
-  try {
-    const text = await generateCardMessage({ relationship, occasion, tone, extra })
-    setGenerated(text)
-  } catch (e) {
-    setErr("Could not generate message. Please try again.")
+    if (!relationship || !occasion) { setErr("Please select a relationship and occasion."); return }
+    setErr(""); setLoading(true); setGenerated("")
+    try {
+      const text = await generateCardMessage({ relationship, occasion, tone, extra })
+      setGenerated(text)
+    } catch (e) {
+      setErr("Could not generate message. Please try again.")
+    }
+    setLoading(false)
   }
-  setLoading(false)
-}
+
 
   return (
     <div className="pms-scroll flex-1 overflow-y-auto px-7 py-6 flex flex-col gap-4">
@@ -934,7 +935,7 @@ function ReviewSummary({ reviews, isDark }) {
 
 
 /* ── Main Export ── */
-export default function ProductPreviewModal({ product, onClose, onNavigate }) {
+export default function ProductPreviewModal({ product, products = [], onClose, onNavigate }) {
   const [color,      setColor]      = useState(null)
   const [qty,        setQty]        = useState(null)
   const [addOns,     setAddOns]     = useState([])
@@ -960,6 +961,9 @@ export default function ProductPreviewModal({ product, onClose, onNavigate }) {
   const cardBg   = isDark ? "#1e293b" : "white"
   const cardBdr  = isDark ? "rgba(0,255,136,0.08)" : "rgba(0,0,0,0.08)"
   const colors   = CATEGORY_COLORS[product.category] || CATEGORY_COLORS.Roses
+  const suggestions = products
+  .filter(p => p.category?.toLowerCase() === product.category?.toLowerCase() && p.id !== product.id)
+  .slice(0, 4);
 
   /* Fetch reviews */
   useEffect(() => {
@@ -1195,17 +1199,24 @@ export default function ProductPreviewModal({ product, onClose, onNavigate }) {
                       </div>
                     </div>
 
-                    {/* Stars */}
-                    <div className="flex items-center gap-1.5 mb-3">
+                    {/* Stars + Sold + Stock */}
+                    <div className="flex items-center gap-1.5 mb-3 flex-wrap">
                       {[1,2,3,4,5].map(i => (
                         <svg key={i} width="13" height="13" fill={i<=Math.floor(product.rating)?"#f59e0b":isDark?"#334155":"#e5e7eb"} viewBox="0 0 20 20">
                           <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
                         </svg>
                       ))}
                       <span className="text-sm font-medium" style={{ color: isDark?"#cbd5e1":"#374151" }}>{product.rating}</span>
-                      <span className="text-sm" style={{ color: isDark?"#64748b":"#9ca3af" }}>({product.reviews} reviews)</span>
+                      
                       <span style={{ color: isDark?"#334155":"#e5e7eb", margin:"0 2px" }}>·</span>
                       <span className="text-sm" style={{ color: isDark?"#64748b":"#9ca3af" }}>{(product.reviews*2).toLocaleString()} sold</span>
+                      
+                      <span style={{ color: isDark?"#334155":"#e5e7eb", margin:"0 2px" }}>·</span>
+                      
+                      {/* 🚀 NEW: Stock Indicator */}
+                      <span className="text-sm font-semibold" style={{ color: product.stock > 0 ? (isDark ? "#4ade80" : G) : "#ef4444" }}>
+                        {product.stock > 0 ? `${product.stock} left in stock` : "Out of stock"}
+                      </span>
                     </div>
 
                     {/* Price */}
@@ -1252,6 +1263,14 @@ export default function ProductPreviewModal({ product, onClose, onNavigate }) {
                     {tab === "details" && (
                       <div className="pb-4 space-y-5">
 
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-widest mb-2" 
+                            style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Description</p>
+                          <p className="text-sm leading-relaxed" 
+                            style={{ color: isDark ? "#cbd5e1" : "#374151" }}>
+                            {product.description || "No description provided for this arrangement."}
+                          </p>
+                        </div>
                         {/* Color */}
                         <div>
                           <p className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1"
@@ -1276,6 +1295,24 @@ export default function ProductPreviewModal({ product, onClose, onNavigate }) {
                             ))}
                           </div>
                         </div>
+                        {suggestions.length > 0 && (
+                          <div className="pt-6" style={{ borderTop: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
+                            <p className="text-xs font-semibold uppercase tracking-widest mb-4" 
+                              style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>You might also like</p>
+                            <div className="flex gap-3 overflow-x-auto pb-2 -mr-4 pr-4">
+                              {suggestions.map(s => (
+                                <div key={s.id} className="flex-shrink-0 w-28 rounded-lg overflow-hidden border"
+                                  style={{ borderColor: isDark ? "#334155" : "#e5e7eb" }}>
+                                  <img src={s.image_url || s.image} className="w-full h-20 object-cover" alt={s.name} />
+                                  <div className="p-2">
+                                    <p className="text-[10px] font-bold truncate" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>{s.name}</p>
+                                    <p className="text-[10px]" style={{ color: G }}>₱{(+s.price).toLocaleString()}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
                         {/* Size / Qty */}
                         <div>
@@ -1455,6 +1492,7 @@ export default function ProductPreviewModal({ product, onClose, onNavigate }) {
                         </p>
                       </div>
                     )}
+
 
                     {/* ── Care tab ── */}
                     {tab === "care" && (

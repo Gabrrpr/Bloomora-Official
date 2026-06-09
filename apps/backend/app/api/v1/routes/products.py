@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Body
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import and_, text
+from sqlalchemy import and_, or_, text
 from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime, timezone
-import uuid
+import uuid, json
 import io
 from PIL import Image
 
@@ -38,6 +38,7 @@ def serialize_product(p: Product) -> dict:
         "reorder_point": inv.reorder_point if inv else 10,
         "unit_type": inv.unit_type if (inv and inv.unit_type) else "piece",
         "cost_per_unit": float(inv.cost_per_unit) if (inv and inv.cost_per_unit is not None) else None,
+        "composition": getattr(p, "composition", []),
     }
 
 # ── Public endpoints ──────────────────────────────────────────────────────────
@@ -68,7 +69,14 @@ def get_products(db: Session = Depends(get_db)):
     products = (
         db.query(Product)
         .outerjoin(Inventory, Product.id == Inventory.product_id)
-        .filter(Product.is_available == True)
+        
+        .filter(
+            and_(
+                Product.is_available == True, 
+                # 🔥 THE FIX: Allow visible items OR items explicitly marked as 'advertisement'
+                or_(Product.is_visible == True, Product.category == 'advertisement')
+            )
+        )
         .options(joinedload(Product.inventory))
         .all()
     )
@@ -93,7 +101,7 @@ def get_customization_products(db: Session = Depends(get_db)):
     """Get all available products with customization attributes for Mix & Match."""
     products = (
         db.query(Product)
-        .filter(Product.is_available == True)
+        .filter(Product.is_available == True, Product.is_visible == True)
         .options(
             joinedload(Product.inventory),
             joinedload(Product.flower),
@@ -340,6 +348,7 @@ def create_product(
     season_key: Optional[str] = Form(None),
     limited_start_at: Optional[str] = Form(None),
     limited_end_at: Optional[str] = Form(None),
+    composition: Optional[str] = Form(None), # 👈 NEW: Catch the recipe
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff), # 🚀 SECURED
 ):
@@ -353,6 +362,14 @@ def create_product(
         price_val = Decimal(price)
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid price value.")
+
+    # 🚀 PARSE THE COMPOSITION JSON
+    parsed_comp = []
+    if composition:
+        try:
+            parsed_comp = json.loads(composition)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid composition JSON format.")
 
     new_product = Product(
         id=uuid.uuid4(),
@@ -368,6 +385,7 @@ def create_product(
         season_key=season_key or None,
         limited_start_at=(limited_start_at or None),
         limited_end_at=(limited_end_at or None),
+        composition=parsed_comp, # 👈 NEW: Save to database
     )
     db.add(new_product)
     db.commit()
@@ -394,6 +412,7 @@ def update_product(
     product_type: Optional[str] = Form(None),
     status: Optional[str] = Form(None),
     is_available: Optional[bool] = Form(None),
+    is_visible: Optional[bool] = Form(None),
     image_url: Optional[str] = Form(None),
     stock: Optional[int] = Form(None),
     unit_type: Optional[str] = Form(None),
@@ -402,8 +421,9 @@ def update_product(
     season_key: Optional[str] = Form(None),
     limited_start_at: Optional[str] = Form(None),
     limited_end_at: Optional[str] = Form(None),
+    composition: Optional[str] = Form(None), 
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff), # 🚀 SECURED
+    current_user: User = Depends(require_staff),
 ):
     """Update an existing product. Admin/Staff only."""
     product = db.query(Product).filter(Product.id == product_id).first()
@@ -440,6 +460,14 @@ def update_product(
         product.limited_start_at = limited_start_at or None
     if limited_end_at is not None:
         product.limited_end_at = limited_end_at or None
+    if composition is not None: 
+        try:
+            product.composition = json.loads(composition)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid composition JSON format.")
+
+    if is_visible is not None:
+        product.is_visible = is_visible
 
     db.commit()
     db.refresh(product)

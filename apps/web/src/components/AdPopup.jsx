@@ -1,23 +1,30 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 
-// Accept the adId and onClose props passed down from App.jsx!
-export default function AdPopup({ adId = "1", onClose }) {
-  const [hiding, setHiding]   = useState(false)
+export default function AdPopup({ onClose }) {
+  const [hiding, setHiding] = useState(false)
+  const [imageSrc, setImageSrc] = useState(null)
+
+  useEffect(() => {
+    // 1. Check if the Admin Panel has saved a custom or overridden ad source
+    const customSrc = localStorage.getItem("bloomora_active_ad_src")
+    
+    if (customSrc) {
+      setImageSrc(customSrc)
+    } else {
+      // 2. Fallback to default if no override exists
+      const defaultSrc = new URL(`../assets/ads/advertisement1.png`, import.meta.url).href
+      setImageSrc(defaultSrc)
+    }
+  }, [])
 
   const dismiss = () => {
-    // 1. Trigger the fade-out CSS animation
     setHiding(true)
-    
-    // 2. Wait exactly 350ms for the animation to finish, then tell App.jsx to completely remove the popup
     setTimeout(() => {
       if (onClose) onClose();
     }, 350)
   }
 
-  // 🚀 Dynamically load the image based on the Admin's selection!
-  // Note: Ensure this path matches exactly where your ad images live. 
-  // Based on your admin file, they might be in an 'ads' folder like: `../assets/ads/advertisement${adId}.png`
-  const imageSrc = new URL(`../assets/ads/advertisement${adId}.png`, import.meta.url).href;
+  if (!imageSrc) return null // Don't render until we know what image to show
 
   return (
     <div
@@ -31,7 +38,7 @@ export default function AdPopup({ adId = "1", onClose }) {
     >
       <style>{`
         @keyframes adFadeIn  { from { opacity:0; transform:scale(0.92) translateY(20px); } to { opacity:1; transform:scale(1) translateY(0); } }
-        @keyframes adFadeOut { from { opacity:1; transform:scale(1); }                    to { opacity:0; transform:scale(0.94); } }
+        @keyframes adFadeOut { from { opacity:1; transform:scale(1); } to { opacity:0; transform:scale(0.94); } }
       `}</style>
 
       <div
@@ -54,15 +61,13 @@ export default function AdPopup({ adId = "1", onClose }) {
         <div className="rounded-2xl overflow-hidden shadow-2xl">
           <img 
             src={imageSrc} 
-            alt="Esting's Flowers Promotion"
+            alt="Advertisement"
             className="w-full h-auto block bg-white"
             style={{ maxHeight: "85vh", objectFit: "contain" }} 
           />
         </div>
-
         <p className="text-center text-white/60 text-xs mt-3">Click anywhere outside to close</p>
       </div>
     </div>
   )
 }
-
