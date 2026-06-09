@@ -16,6 +16,7 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
     
     print(f"🔔 [DEVELOPER LOG] OTP for {to_email} is: {otp}")
     if to_email != "estingsflowerintl@gmail.com":
+        
         print("Skipping Resend (Sandbox Mode). Returning fake success to frontend.")
         return True, None
     
