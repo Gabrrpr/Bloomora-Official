@@ -1,21 +1,19 @@
-import smtplib
+import os
+import resend
 import random
 import string
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from datetime import datetime, timedelta, timezone
-from app.core.config import settings
+
+# Pulls the key directly from your Render environment variables
+resend.api_key = os.getenv("RESEND_API_KEY")
+
+# Hardcoded sandbox email until your Hostinger domain is verified
+SENDER_EMAIL = "Estings Flowers <onboarding@resend.dev>"
 
 def generate_otp() -> str:
     return ''.join(random.choices(string.digits, k=6))
 
 def send_otp_email(to_email: str, otp: str, first_name: str = None):
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Your Bloomora Verification Code"
-        msg["From"] = settings.MAIL_FROM
-        msg["To"] = to_email
-
         greeting = f"Hi {first_name}," if first_name else "Hi there,"
 
         html = f"""
@@ -32,7 +30,6 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
                     <td align="center" style="padding: 40px 20px;">
                         <table role="presentation" width="100%" max-width="560" cellspacing="0" cellpadding="0" border="0" style="max-width: 560px; width: 100%; background: #ffffff; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.08);">
                             
-                            <!-- Header with Gradient -->
                             <tr>
                                 <td style="background: linear-gradient(135deg, #15803d 0%, #16a34a 50%, #86efac 100%); padding: 48px 40px 40px; text-align: center;">
                                     <div style="width: 64px; height: 64px; background: rgba(255,255,255,0.2); border-radius: 50%; margin: 0 auto 16px; display: inline-flex; align-items: center; justify-content: center; font-size: 32px;">
@@ -43,7 +40,6 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
                                 </td>
                             </tr>
                             
-                            <!-- Content -->
                             <tr>
                                 <td style="padding: 40px;">
                                     <p style="color: #374151; font-size: 16px; line-height: 1.6; margin: 0 0 16px;">{greeting}</p>
@@ -51,7 +47,6 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
                                         Thank you for choosing Esting's! Use the verification code below to complete your request. For your security, this code will expire in <strong style="color: #15803d;">10 minutes</strong>.
                                     </p>
                                     
-                                    <!-- OTP Box -->
                                     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                                         <tr>
                                             <td style="background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%); border: 2px dashed #86efac; border-radius: 16px; padding: 32px; text-align: center;">
@@ -69,7 +64,6 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
                                 </td>
                             </tr>
                             
-                            <!-- Decorative Divider -->
                             <tr>
                                 <td style="padding: 0 40px;">
                                     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
@@ -80,7 +74,6 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
                                 </td>
                             </tr>
                             
-                            <!-- Footer -->
                             <tr>
                                 <td style="padding: 0 40px 40px; text-align: center;">
                                     <p style="color: #15803d; font-size: 14px; font-weight: 600; margin: 0 0 8px;">Estings</p>
@@ -109,26 +102,23 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
         </html>
         """
 
-        msg.attach(MIMEText(html, "html"))
+        params = {
+            "from": SENDER_EMAIL,
+            "to": [to_email],
+            "subject": "Your Bloomora Verification Code",
+            "html": html
+        }
 
-        with smtplib.SMTP(settings.MAIL_SERVER, settings.MAIL_PORT) as server:
-            server.starttls()
-            server.login(settings.MAIL_USERNAME, settings.MAIL_PASSWORD)
-            server.sendmail(settings.MAIL_FROM, to_email, msg.as_string())
-
+        resend.Emails.send(params)
         return True, None
+        
     except Exception as e:
-        print(f"[EMAIL ERROR] {e}")
+        print(f"[OTP EMAIL ERROR] {e}")
         return False, str(e)
 
 
 def send_staff_confirm_email(to_email: str, first_name: str, verify_url: str):
     try:
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = "Esting's Staff Account Confirmation"
-        msg["From"] = settings.MAIL_FROM
-        msg["To"] = to_email
-
         greeting = f"Hi {first_name},"
         html = f"""
         <!DOCTYPE html>
@@ -208,17 +198,21 @@ def send_staff_confirm_email(to_email: str, first_name: str, verify_url: str):
         </body>
         </html>
         """
-        msg.attach(MIMEText(html, "html"))
+        
+        params = {
+            "from": SENDER_EMAIL,
+            "to": [to_email],
+            "subject": "Esting's Staff Account Confirmation",
+            "html": html
+        }
 
-        with smtplib.SMTP(settings.MAIL_SERVER, settings.MAIL_PORT) as server:
-            server.starttls()
-            server.login(settings.MAIL_USERNAME, settings.MAIL_PASSWORD)
-            server.sendmail(settings.MAIL_FROM, to_email, msg.as_string())
-
+        resend.Emails.send(params)
         return True, None
+        
     except Exception as e:
         print(f"[STAFF EMAIL ERROR] {e}")
         return False, str(e)
+
 
 def send_order_status_email(to_email: str, first_name: str, order_number: str, status: str, message: str):
     try:
@@ -230,11 +224,6 @@ def send_order_status_email(to_email: str, first_name: str, order_number: str, s
             "cancelled":        {"emoji": "❌", "color": "#dc2626", "label": "Order Cancelled"},
         }
         cfg = status_config.get(status, {"emoji": "📦", "color": "#6b7280", "label": status.title()})
-
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"Esting's — {cfg['label']}: {order_number}"
-        msg["From"] = settings.MAIL_FROM
-        msg["To"] = to_email
 
         html = f"""
         <!DOCTYPE html>
@@ -292,13 +281,17 @@ def send_order_status_email(to_email: str, first_name: str, order_number: str, s
         </body>
         </html>
         """
+        
+        params = {
+            "from": SENDER_EMAIL,
+            "to": [to_email],
+            "subject": f"Esting's — {cfg['label']}: {order_number}",
+            "html": html
+        }
 
-        msg.attach(MIMEText(html, "html"))
-        with smtplib.SMTP(settings.MAIL_SERVER, settings.MAIL_PORT) as server:
-            server.starttls()
-            server.login(settings.MAIL_USERNAME, settings.MAIL_PASSWORD)
-            server.sendmail(settings.MAIL_FROM, to_email, msg.as_string())
+        resend.Emails.send(params)
         return True, None
+        
     except Exception as e:
         print(f"[ORDER EMAIL ERROR] {e}")
         return False, str(e)
