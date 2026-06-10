@@ -147,6 +147,11 @@ export default function MeScreen() {
         ))}
       </View>
 
+      <SectionHeader title="Orders" />
+      <View style={styles.menuGroup}>
+        <AccountRow icon={PackageCheck} title="My orders" detail="Payment, preparation, and delivery status" onPress={() => router.push('/(tabs)/orders')} />
+      </View>
+
       <SectionHeader title="Support" />
       <View style={styles.menuGroup}>
         <AccountRow icon={MessageCircle} title="Live chat" detail="Ask about flowers or deliveries" onPress={() => router.push('/live-chat')} />

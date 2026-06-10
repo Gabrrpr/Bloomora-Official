@@ -1,41 +1,135 @@
-import { router } from 'expo-router';
-import { CheckCircle2, ReceiptText } from 'lucide-react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import { CheckCircle2, Clock3, ReceiptText } from 'lucide-react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts, theme } from '@/constants/theme';
+import { getAuthSession } from '@/services/auth-session';
+import { getPayMongoPaymentStatus, type PayMongoPaymentStatusResponse } from '@/services/payments-api';
+
+type ConfirmationState = 'checking' | 'confirmed' | 'pending' | 'unavailable';
 
 export default function PaymentSuccessScreen() {
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ orderIds?: string }>();
+  const orderIds = useMemo(
+    () => (params.orderIds ?? '').split(',').map((id) => id.trim()).filter(Boolean),
+    [params.orderIds],
+  );
+  const [confirmationState, setConfirmationState] = useState<ConfirmationState>(orderIds.length > 0 ? 'checking' : 'pending');
+  const [statusResult, setStatusResult] = useState<PayMongoPaymentStatusResponse | null>(null);
+  const isConfirmed = confirmationState === 'confirmed';
+
+  const checkPaymentStatus = useCallback(async () => {
+    if (orderIds.length === 0) {
+      setConfirmationState('pending');
+      return false;
+    }
+
+    const session = await getAuthSession();
+    if (!session) {
+      setConfirmationState('unavailable');
+      return false;
+    }
+
+    const statuses = await Promise.all(
+      orderIds.map((orderId) =>
+        getPayMongoPaymentStatus({
+          orderId,
+          session,
+        }),
+      ),
+    );
+    const firstStatus = statuses[0] ?? null;
+    setStatusResult(firstStatus);
+
+    const allPaid = statuses.every((status) => status.payment_status === 'paid' || status.order?.payment_status === 'paid');
+    setConfirmationState(allPaid ? 'confirmed' : 'pending');
+
+    return allPaid;
+  }, [orderIds]);
+
+  useEffect(() => {
+    let isActive = true;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let attempts = 0;
+
+    const poll = async () => {
+      attempts += 1;
+
+      try {
+        const isPaid = await checkPaymentStatus();
+        if (!isActive || isPaid || attempts >= 8) {
+          return;
+        }
+      } catch {
+        if (isActive) {
+          setConfirmationState('unavailable');
+        }
+        return;
+      }
+
+      timeoutId = setTimeout(poll, 2500);
+    };
+
+    void poll();
+
+    return () => {
+      isActive = false;
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+      }
+    };
+  }, [checkPaymentStatus]);
 
   return (
     <ScrollView
       contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + theme.spacing.xxl }]}
       style={styles.screen}>
       <View style={styles.panel}>
-        <View style={styles.iconRing}>
-          <CheckCircle2 color={theme.colors.primary} size={42} strokeWidth={2.1} />
+        <View style={[styles.iconRing, !isConfirmed && styles.iconRingPending]}>
+          {isConfirmed ? (
+            <CheckCircle2 color={theme.colors.primary} size={42} strokeWidth={2.1} />
+          ) : (
+            <Clock3 color={theme.colors.primary} size={42} strokeWidth={2.1} />
+          )}
         </View>
-        <Text style={styles.title}>Payment processing</Text>
-        <Text style={styles.body}>
-          PayMongo received your checkout result. We will confirm the order once the payment webhook reaches Bloomora.
-        </Text>
+        <Text style={styles.title}>{isConfirmed ? 'Payment confirmed' : 'Payment pending confirmation'}</Text>
+        <Text style={styles.body}>{getStatusMessage(confirmationState)}</Text>
+        {statusResult?.order?.order_number ? <Text style={styles.referenceText}>{statusResult.order.order_number}</Text> : null}
         <Pressable
           accessibilityRole="button"
-          onPress={() => router.replace('/(tabs)/me')}
+          onPress={() => void checkPaymentStatus()}
+          style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}>
+          <Text style={styles.secondaryButtonText}>Check status</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => router.replace('/(tabs)/orders')}
           style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}>
           <ReceiptText color={theme.colors.white} size={18} strokeWidth={2.2} />
           <Text style={styles.primaryButtonText}>View orders</Text>
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          onPress={() => router.replace('/(tabs)')}
-          style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}>
-          <Text style={styles.secondaryButtonText}>Back to shop</Text>
-        </Pressable>
       </View>
     </ScrollView>
   );
+}
+
+function getStatusMessage(state: ConfirmationState) {
+  if (state === 'confirmed') {
+    return "Esting's confirmed the payment in the database. Your order is now queued for processing.";
+  }
+
+  if (state === 'checking') {
+    return "PayMongo returned you to the app. We're checking the database for the paid transaction.";
+  }
+
+  if (state === 'unavailable') {
+    return 'We could not check the payment status right now. Open your orders or try checking again.';
+  }
+
+  return 'PayMongo returned you to the app, but the database has not marked the transaction as paid yet.';
 }
 
 const styles = StyleSheet.create({
@@ -65,6 +159,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 86,
   },
+  iconRingPending: {
+    backgroundColor: theme.colors.surfaceAlt,
+  },
   title: {
     color: theme.colors.text,
     fontFamily: Fonts.sansBold,
@@ -78,6 +175,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
     textAlign: 'center',
+  },
+  referenceText: {
+    color: theme.colors.primary,
+    fontFamily: Fonts.sansBold,
+    fontSize: 13,
+    lineHeight: 18,
   },
   primaryButton: {
     alignItems: 'center',

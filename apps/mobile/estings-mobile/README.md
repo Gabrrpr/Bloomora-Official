@@ -16,6 +16,34 @@ This is an [Expo](https://expo.dev) project created with [`create-expo-app`](htt
    npx expo start
    ```
 
+## API target
+
+By default, a clean checkout points to the Render backend:
+
+```text
+https://bloomora-api.onrender.com/api/v1
+```
+
+For local backend testing, keep your machine-specific LAN URL in `.env.local`:
+
+```text
+EXPO_PUBLIC_API_URL=http://YOUR_COMPUTER_LAN_IP:8000/api/v1
+```
+
+Then start normally:
+
+```bash
+npm run start:local
+```
+
+To force the Render backend for a session on Windows:
+
+```bash
+npm run start:render
+```
+
+You can also change the API URL from the in-app developer settings screen while testing.
+
 In the output, you'll find options to open the app in a
 
 - [development build](https://docs.expo.dev/develop/development-builds/introduction/)

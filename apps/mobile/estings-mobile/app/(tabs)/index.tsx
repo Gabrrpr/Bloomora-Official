@@ -21,6 +21,7 @@ import {
   View,
   type ImageSourcePropType,
   type LayoutChangeEvent,
+  type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
@@ -70,6 +71,15 @@ const feedSections: { label: string; value: FeedSection }[] = [
 const feedLoopCopies = 9;
 const feedLoopMiddleCopy = Math.floor(feedLoopCopies / 2);
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList) as unknown as typeof FlatList;
+const webHorizontalSnapStyle = Platform.OS === 'web'
+  ? ({ scrollSnapType: 'x mandatory' } as ViewStyle)
+  : null;
+const webVerticalSnapStyle = Platform.OS === 'web'
+  ? ({ scrollSnapType: 'y mandatory' } as ViewStyle)
+  : null;
+const webSnapItemStyle = Platform.OS === 'web'
+  ? ({ scrollSnapAlign: 'start', scrollSnapStop: 'always' } as ViewStyle)
+  : null;
 
 const productFeedData: ProductFeedItem[] = [
   {
@@ -643,27 +653,29 @@ function HorizontalSectionPager({
       nestedScrollEnabled
       overScrollMode="never"
       renderItem={({ item: section }) => (
-        <VerticalProductFeed
-          addedProductId={addedProductId}
-          getItemLayout={getItemLayout}
-          layout={layout}
-          likedProductIds={likedProductIds}
-          onAddToCart={onAddToCart}
-          onCtaPress={onCtaPress}
-          onLike={onLike}
-          onShare={onShare}
-          products={sectionProducts[section]}
-          scrollY={sectionScrollYs[section]}
-          section={section}
-          verticalFeedRefs={verticalFeedRefs}
-        />
+        <View style={[{ width: layout.screenWidth }, webSnapItemStyle]}>
+          <VerticalProductFeed
+            addedProductId={addedProductId}
+            getItemLayout={getItemLayout}
+            layout={layout}
+            likedProductIds={likedProductIds}
+            onAddToCart={onAddToCart}
+            onCtaPress={onCtaPress}
+            onLike={onLike}
+            onShare={onShare}
+            products={sectionProducts[section]}
+            scrollY={sectionScrollYs[section]}
+            section={section}
+            verticalFeedRefs={verticalFeedRefs}
+          />
+        </View>
       )}
       showsHorizontalScrollIndicator={false}
       snapToAlignment="start"
       snapToEnd={false}
       snapToInterval={layout.screenWidth}
       scrollEventThrottle={16}
-      style={styles.feedList}
+      style={[styles.feedList, webHorizontalSnapStyle]}
     />
   );
 }
@@ -789,7 +801,11 @@ function VerticalProductFeed({
       snapToEnd={false}
       snapToInterval={layout.feedItemHeight}
       scrollEventThrottle={16}
-      style={[styles.sectionFeedList, { height: layout.feedItemHeight, width: layout.screenWidth }]}
+      style={[
+        styles.sectionFeedList,
+        { height: layout.feedItemHeight, width: layout.screenWidth },
+        webVerticalSnapStyle,
+      ]}
       showsVerticalScrollIndicator={false}
       updateCellsBatchingPeriod={Platform.OS === 'android' ? 80 : 50}
       windowSize={Platform.OS === 'android' ? 5 : 7}
@@ -821,7 +837,7 @@ function ProductFeedImageCard({
   scrollY: Animated.Value;
 }) {
   return (
-    <View style={[styles.feedItem, { height: layout.feedItemHeight, width: layout.screenWidth }]}>
+    <View style={[styles.feedItem, { height: layout.feedItemHeight, width: layout.screenWidth }, webSnapItemStyle]}>
       <View style={styles.productImageContainer}>
         {item.image ? (
           <Image source={item.image} style={styles.productImage} resizeMode="cover" />

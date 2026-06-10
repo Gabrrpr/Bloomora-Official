@@ -10,7 +10,7 @@ import {
   type StyleProp,
   type TextStyle,
 } from 'react-native';
-import { ChevronRight, Flower2, Plus } from 'lucide-react-native';
+import { ChevronRight, PackageSearch, Plus } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { formatPhp, type Product } from '@/constants/shop';
@@ -139,7 +139,7 @@ export function EmptyState({ title, description }: { title: string; description:
   return (
     <View style={styles.emptyState}>
       <View style={styles.emptyIcon}>
-        <Flower2 size={theme.icon.lg} color={theme.colors.primary} />
+        <PackageSearch size={theme.icon.lg} color={theme.colors.primary} />
       </View>
       <Text style={styles.emptyTitle}>{title}</Text>
       <Text style={styles.emptyDescription}>{description}</Text>

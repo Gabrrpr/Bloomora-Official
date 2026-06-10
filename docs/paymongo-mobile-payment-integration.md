@@ -2,7 +2,7 @@
 
 ## Scope
 
-This work prepares the Bloomora customer mobile app for PayMongo Hosted Checkout in test mode.
+This work prepares the Esting's Flower Shop customer mobile app for PayMongo Hosted Checkout in test mode.
 
 The intended flow is:
 
@@ -59,8 +59,25 @@ The intended flow is:
 - `apps/mobile/estings-mobile/app/payment/cancel.tsx`
   - Added PayMongo cancel return screen.
 
+- `apps/mobile/estings-mobile/app/payment/failed.tsx`
+  - Added simple failed payment return screen for future failed-return or status handling.
+
+- `apps/mobile/estings-mobile/app/payment/expired.tsx`
+  - Added simple expired payment return screen for future expired-return or status handling.
+
 - `apps/mobile/estings-mobile/app/_layout.tsx`
   - Registered the payment route group.
+
+## Failed and Expired Payments
+
+PayMongo Hosted Checkout session creation accepts `success_url` and `cancel_url`. The Checkout Session itself can be `active` or `expired`; PayMongo notes that sessions do not expire automatically and must be explicitly expired or archived. Payment attempts inside a Checkout Session can fail and customers can retry with another method. QR Ph and other action-based payment methods can also expire if the customer does not complete the action in time.
+
+For now, the app has simple prepared views:
+
+- `/payment/failed`
+- `/payment/expired`
+
+These are not the source of truth for fulfillment. The database/payment webhook remains the source of truth.
 
 ## Local Configuration
 
@@ -126,7 +143,7 @@ The webhook handles `checkout_session.payment.paid` and updates the matching tra
 
 PayMongo Hosted Checkout supports `pass_on_fees`.
 
-If enabled, PayMongo processing fees are added to the customer's payable total. If disabled, the customer pays the exact order total and Bloomora absorbs the fee.
+If enabled, PayMongo processing fees are added to the customer's payable total. If disabled, the customer pays the exact order total and Esting's absorbs the fee.
 
 Current recommendation for testing: keep disabled until the base checkout and webhook flow are proven.
 

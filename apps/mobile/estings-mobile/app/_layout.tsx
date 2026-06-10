@@ -21,6 +21,7 @@ import { useEffect } from 'react';
 import { Platform, View } from 'react-native';
 import 'react-native-reanimated';
 
+import { ChatFloatingBubble } from '@/components/chat-floating-bubble';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import '@/utils/register-svg-layout-event';
 
@@ -74,12 +75,14 @@ export default function RootLayout() {
           <Stack.Screen name="(support)" options={{ headerShown: false }} />
           <Stack.Screen name="(legal)" options={{ headerShown: false }} />
           <Stack.Screen name="(settings)" options={{ headerShown: false }} />
+          <Stack.Screen name="checkout" options={{ headerShown: false }} />
           <Stack.Screen name="create" options={{ headerShown: false }} />
           <Stack.Screen name="payment" options={{ headerShown: false }} />
           <Stack.Screen name="product-details" options={{ headerShown: false }} />
           <Stack.Screen name="search-results" options={{ headerShown: false }} />
           <Stack.Screen name="(modals)/modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
+        <ChatFloatingBubble />
         <StatusBar backgroundColor="#FFFFFF" style="dark" translucent={false} />
       </View>
     </ThemeProvider>

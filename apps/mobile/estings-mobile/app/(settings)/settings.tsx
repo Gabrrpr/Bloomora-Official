@@ -37,7 +37,6 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -1139,15 +1138,30 @@ function ToggleRow({
         <Text style={styles.rowTitle}>{title}</Text>
         <Text style={styles.rowDescription}>{description}</Text>
       </View>
-      <Switch
-        disabled={disabled}
-        ios_backgroundColor="#E6E8EA"
-        thumbColor={value ? theme.colors.primary : theme.colors.white}
-        trackColor={{ false: '#E6E8EA', true: theme.colors.greenSoft }}
-        value={value}
-        onValueChange={onValueChange}
-      />
+      <LightToggle disabled={disabled} value={value} onValueChange={onValueChange} />
     </View>
+  );
+}
+
+function LightToggle({
+  disabled = false,
+  value,
+  onValueChange,
+}: {
+  disabled?: boolean;
+  value: boolean;
+  onValueChange: (value: boolean) => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value, disabled }}
+      disabled={disabled}
+      hitSlop={8}
+      style={[styles.lightToggleTrack, value && styles.lightToggleTrackOn, disabled && styles.lightToggleDisabled]}
+      onPress={() => onValueChange(!value)}>
+      <View style={[styles.lightToggleThumb, value && styles.lightToggleThumbOn]} />
+    </Pressable>
   );
 }
 
@@ -1360,6 +1374,37 @@ const styles = StyleSheet.create({
   },
   disabledRow: {
     opacity: 0.58,
+  },
+  lightToggleTrack: {
+    alignItems: 'center',
+    backgroundColor: '#EEF1F0',
+    borderColor: '#DDE4E0',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    height: 30,
+    paddingHorizontal: 3,
+    width: 52,
+  },
+  lightToggleTrackOn: {
+    backgroundColor: '#E8F4ED',
+    borderColor: '#C9E1D0',
+  },
+  lightToggleDisabled: {
+    opacity: 0.48,
+  },
+  lightToggleThumb: {
+    backgroundColor: theme.colors.white,
+    borderColor: '#D2DAD6',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 24,
+    width: 24,
+  },
+  lightToggleThumbOn: {
+    backgroundColor: '#8CC89A',
+    borderColor: '#7DBB8B',
+    transform: [{ translateX: 20 }],
   },
   rowIcon: {
     alignItems: 'center',

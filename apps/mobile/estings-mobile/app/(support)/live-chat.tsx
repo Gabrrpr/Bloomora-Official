@@ -8,6 +8,7 @@ import {
   Camera,
   ChevronLeft,
   CircleHelp,
+  Copy,
   FileText,
   Flag,
   Image as ImageIcon,
@@ -17,9 +18,11 @@ import {
   Paperclip,
   ReceiptText,
   RefreshCcw,
+  Reply,
   Send,
   ShieldCheck,
   ShoppingCart,
+  Trash2,
   X,
 } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -40,15 +43,30 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { theme } from '@/constants/theme';
+import {
+  createChatSession,
+  deleteChatMessage,
+  getChatHistory,
+  getChatWebSocketUrl,
+  sendChatMessage,
+  uploadChatImage,
+  type BackendChatMessage,
+} from '@/services/chat-api';
+import { getAuthSession, type AuthSession } from '@/services/auth-session';
 
 const supportAvatarImage = require('../../assets/images/estings-logo.svg');
 const chatOutlineColor = 'rgba(31, 42, 36, 0.09)';
 const chatDividerColor = 'rgba(31, 42, 36, 0.08)';
 const chatOutlineWidth = 1;
+const inputLineHeight = 20;
+const inputMaxLines = 5;
+const inputMaxHeight = inputLineHeight * inputMaxLines + 16;
+let hasAcceptedChatAgreementThisSession = false;
 
-type SupportStatus = 'Active' | 'Inactive';
+type SupportStatus = 'Active' | 'Inactive' | 'Connecting' | 'Sign in required';
 type MessageSender = 'support' | 'customer';
 type AttachmentKind = 'image' | 'file';
 type EmptySheetType = 'products' | 'orders' | 'cart';
@@ -59,10 +77,12 @@ type ChatAttachment = {
   id: string;
   kind: AttachmentKind;
   name: string;
+  type?: string;
   uri?: string;
 };
 
 type ChatMessage = {
+  createdAt?: string;
   id: string;
   sender: MessageSender;
   text: string;
@@ -75,13 +95,10 @@ type AttachmentOption = {
   icon: typeof Paperclip;
 };
 
-const supportStatus: SupportStatus = 'Active';
 const mockLatestCustomerStatus = 'Sent';
 const chatPopFileName = 'esting-chat-pop-soft.wav';
 const maxMessageLength = 4096;
 const maxAttachmentCount = 4;
-const firstSupportReply =
-  'Thanks for reaching out. We received your message. Please wait a moment and our support team will get in touch as soon as possible.';
 const chatPopSoundBase64 =
   'UklGRoQEAABXQVZFZm10IBAAAAABAAEAgD4AAAB9AAACABAAZGF0YWAEAAAAAJARgSCkKoQulStMIgkU5gJo8RriOddW0iPUVdy26Uv6pgs9G8smpCzzK9gkYRhoCET3dudN24vUKNQt2rLlA/XfBdAVgiIeKowrnSYPHHMN7/zt7MTfXdft1MrYXeI68FYAVhDjHQYnbSqeJwof9hFQAmTyhOS22mTWKdi93wDsIvvpCgkZciOkKOEnTSHjFVIHwfdz6X7eethC2NfdY+hW9qMFDRR7H0QmbyfYIi8Z4wvq/HTunuIf2wrZqNxq5QXymwALDzobYSNVJq0j0xvxD8oBcPP75jvec9or3BzjPO7o+xwKxxYQIKAk0yPLHXITTQZO+H3ruuFu3FnceOEH65n3VgU8EmkcZSJUIxkfWhZiCvb8J38Pwl4FKUcmiDIH1MaDhFYBev4le3/5GXgbuAS5Z7tzfj5BFwQTRmAHjkfYxuSE/IIEv2w8XTotOJC4U/kYutt9fUASQzCFQEcIh7aG4UVFQzvALj1D+xe5ZniIuS56YnyQ/1SCBsSMhmRHMAb5Ba4DnMEmPm8707oYOSA5KPoJ/Dx+YwEbg4mFpcaIBu0F9cQkAc//WTzb+uH5l7lGehM7gv3CQHQCvUSSBgIGvkXbhI9CpoA8/as7vroreYW6PnsmvTY/VUHsg+2FYUYvBd/E3EMnwNW+vDxputf6I/oK+yk8gT7DgRyDPYSqhYJFwwUKA4/Bnz9J/V27mDqeenc6yvxmfgMAUkJGxCIFO0VHhRjD3QIVgA9+FXxnuzE6gXsLvCc9lz+SAY7DTISdxS8EyMQNwraAiT7MvQH72DsnOyq7xP1CPyBA2cKuw+4EvQSbRCHC/0Eyv349ofxPu6S7Zjv/fMX+v8Asgc3DcEQ0xFJEGMMugYjAJj5C/RJ8Nvu8O9Y85D40P4sBbcKpQ5nEMEP0QwLCCYCAfyB9nHyZfCl8CDzdPf7/OICTwh2DMIO4Q7WDPIIzAMo/tj4o/Qh8qvxTfPD9ob74gANBkYK9Qy4DXoMbwkPBQAAAfvM9vzz8/LU83j2dfo0/wAEJwgRC1UMyQuJCe4FggHv/N745PVt9Kv0jfbI+d79NAIoBigJyArRCkcJagaqApb+x/rJ9wn2w/X69nz55vy0AFgESwciCZ4JsgiHBnMD7v96/Jr5tfcM97T3jPlM/If/wwKKBXUHQQjXB0sG3wPvAO39R/tg+Xj4rfjx+Q78sv51AfMD0AXKBsIGwAXvA5gBFf/E/Pr69vnY+aD6Kfw2/nUAlAJFBEoFhAXwBKoD5wHs/wP+c/x0+yb7jfuW/BP+yv94AeAC0QMsBOkDGAPeAWwA+/6//eT8hfys/Ev9Rv51/6YAsQFvAskCtwJCAoIBlgCk/8/+Nf7n/ez9Pv7J/nb/JgDCADMBbAFrATYB2gBqAPr/mv9Z/zv/QP9h/5T/zP/8/x0AKgAmABUA';
 
@@ -92,6 +109,7 @@ const chatPopSoundPayload =
 
 const initialMessages: ChatMessage[] = [
   {
+    createdAt: new Date().toISOString(),
     id: 'support-welcome',
     sender: 'support',
     text: "Hi there! \u{1F44B} Welcome to Esting's Flowers. How can we help you today? Our team is here to assist you.",
@@ -148,27 +166,42 @@ export default function LiveChatScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const chatPopSoundRef = useRef<Audio.Sound | null>(null);
   const chatPopUriRef = useRef<string | null>(null);
-  const hasAutoReplyBeenSentRef = useRef(false);
+  const wsRef = useRef<WebSocket | null>(null);
   const sendButtonAnim = useRef(new Animated.Value(0)).current;
   const sendIconSpinAnim = useRef(new Animated.Value(0)).current;
+  const composerModeAnim = useRef(new Animated.Value(0)).current;
   const [messages, setMessages] = useState<ChatMessage[]>(initialMessages);
   const [input, setInput] = useState('');
+  const [inputHeight, setInputHeight] = useState(36);
   const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [chatSessionId, setChatSessionId] = useState<string | null>(null);
+  const [isSending, setIsSending] = useState(false);
+  const [supportStatus, setSupportStatus] = useState<SupportStatus>('Connecting');
   const [showQuickReplies, setShowQuickReplies] = useState(true);
   const [quickReplySetIndex, setQuickReplySetIndex] = useState(0);
   const [activeFloatingMenu, setActiveFloatingMenu] = useState<FloatingMenuType | null>(null);
   const [composerHeight, setComposerHeight] = useState(64);
-  const [isChatAgreementVisible, setIsChatAgreementVisible] = useState(true);
+  const [isChatAgreementVisible, setIsChatAgreementVisible] = useState(!hasAcceptedChatAgreementThisSession);
   const [emptySheetType, setEmptySheetType] = useState<EmptySheetType | null>(null);
+  const [deleteTargetMessage, setDeleteTargetMessage] = useState<ChatMessage | null>(null);
+  const [previewImageUri, setPreviewImageUri] = useState<string | null>(null);
+  const [previewScale, setPreviewScale] = useState(1);
+  const [visibleDetailsMessageId, setVisibleDetailsMessageId] = useState<string | null>(null);
   const [validationMessage, setValidationMessage] = useState('');
 
+  const isSignedIn = Boolean(session);
   const canSend = useMemo(
     () =>
+      isSignedIn &&
+      !isSending &&
       (input.trim().length > 0 || pendingAttachments.length > 0) &&
       input.length <= maxMessageLength,
-    [input, pendingAttachments.length]
+    [input, isSending, isSignedIn, pendingAttachments.length]
   );
-  const hasComposerContent = input.trim().length > 0 || pendingAttachments.length > 0;
+  const hasComposerContent = isSignedIn && (input.trim().length > 0 || pendingAttachments.length > 0);
+  const hasTypedMessage = input.trim().length > 0;
+  const canScrollInput = inputHeight >= inputMaxHeight;
   const isActive = supportStatus === 'Active';
   const emptySheet = emptySheetType ? emptySheetContent[emptySheetType] : null;
   const quickReplies = quickReplySets[quickReplySetIndex];
@@ -182,6 +215,111 @@ export default function LiveChatScreen() {
   useEffect(() => {
     scrollToLatest();
   }, [messages.length]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getAuthSession()
+      .then(async (nextSession) => {
+        if (!isMounted) {
+          return;
+        }
+
+        setSession(nextSession);
+
+        if (!nextSession) {
+          setChatSessionId(null);
+          setMessages(initialMessages);
+          setSupportStatus('Sign in required');
+          return;
+        }
+
+        setSupportStatus('Connecting');
+        const nextChatSession = await createChatSession({ session: nextSession });
+
+        if (!isMounted) {
+          return;
+        }
+
+        setChatSessionId(nextChatSession.id);
+        const history = await getChatHistory({ session: nextSession, userId: nextChatSession.id });
+
+        if (!isMounted) {
+          return;
+        }
+
+        setMessages(history.length > 0 ? [initialMessages[0], ...history.map(mapBackendChatMessage)] : initialMessages);
+        setShowQuickReplies(history.length === 0);
+
+        const websocket = new WebSocket(getChatWebSocketUrl({ session: nextSession, userId: nextChatSession.id }));
+        wsRef.current = websocket;
+
+        websocket.onopen = () => {
+          setSupportStatus('Active');
+        };
+
+        websocket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data) as Partial<BackendChatMessage> & {
+              image_url?: string | null;
+              message?: string;
+              sender?: string;
+            };
+
+            if (data.sender === 'customer') {
+              return;
+            }
+
+            setMessages((currentMessages) => {
+              if (data.id && currentMessages.some((message) => message.id === data.id)) {
+                return currentMessages;
+              }
+
+              return [
+                ...currentMessages,
+                mapBackendChatMessage({
+                  created_at: data.created_at ?? new Date().toISOString(),
+                  id: data.id ?? createId('support-ws'),
+                  image_url: data.image_url,
+                  is_read: data.is_read ?? 0,
+                  message: data.message ?? '',
+                  sender: data.sender ?? 'staff',
+                  user_id: data.user_id ?? nextChatSession.id,
+                }),
+              ];
+            });
+            void playChatPop();
+          } catch {
+            // Ignore malformed websocket payloads.
+          }
+        };
+
+        websocket.onclose = () => {
+          if (wsRef.current === websocket) {
+            wsRef.current = null;
+          }
+          setSupportStatus((currentStatus) => (currentStatus === 'Sign in required' ? currentStatus : 'Inactive'));
+        };
+
+        websocket.onerror = () => {
+          setSupportStatus('Inactive');
+        };
+      })
+      .catch((error) => {
+        if (isMounted) {
+          setSupportStatus('Inactive');
+          setValidationMessage(error instanceof Error ? error.message : 'Chat is unavailable.');
+        }
+      });
+
+    return () => {
+      isMounted = false;
+      wsRef.current?.close();
+      wsRef.current = null;
+    };
+    // This bootstraps chat once when the screen mounts; helper functions are stable for this screen lifetime.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     Animated.timing(sendButtonAnim, {
@@ -201,6 +339,15 @@ export default function LiveChatScreen() {
       }).start();
     }
   }, [hasComposerContent, sendButtonAnim, sendIconSpinAnim]);
+
+  useEffect(() => {
+    Animated.timing(composerModeAnim, {
+      duration: 170,
+      easing: Easing.out(Easing.cubic),
+      toValue: hasTypedMessage ? 1 : 0,
+      useNativeDriver: false,
+    }).start();
+  }, [composerModeAnim, hasTypedMessage]);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -297,6 +444,7 @@ export default function LiveChatScreen() {
         id: createId('image'),
         kind: 'image',
         name: asset.fileName ?? `${source} image`,
+        type: asset.mimeType ?? 'image/jpeg',
         uri: asset.uri,
       },
     ]);
@@ -350,13 +498,22 @@ export default function LiveChatScreen() {
   function handleInputChange(value: string) {
     setInput(value);
 
+    if (!value) {
+      setInputHeight(36);
+    }
+
     if (value.length <= maxMessageLength && validationMessage) {
       setValidationMessage('');
     }
   }
 
-  function sendMessage(text: string) {
+  async function sendMessage(text: string) {
     const trimmedText = text.trim();
+
+    if (!session || !chatSessionId) {
+      setValidationMessage('Please sign in to chat with Esting\'s support.');
+      return;
+    }
 
     if (!trimmedText && pendingAttachments.length === 0) {
       return;
@@ -367,46 +524,49 @@ export default function LiveChatScreen() {
       return;
     }
 
-    const shouldSendAutoReply =
-      !hasAutoReplyBeenSentRef.current &&
-      messages.every((message) => message.sender !== 'customer');
-
-    if (shouldSendAutoReply) {
-      hasAutoReplyBeenSentRef.current = true;
-    }
-
-    setMessages((currentMessages) => [
-      ...currentMessages,
-      {
-        id: createId('customer'),
-        sender: 'customer',
-        text: trimmedText,
-        attachments: pendingAttachments.length ? pendingAttachments : undefined,
-      },
-    ]);
-    setShowQuickReplies(false);
-    setInput('');
-    setPendingAttachments([]);
+    setIsSending(true);
     setValidationMessage('');
-    void playChatPop();
 
-    if (shouldSendAutoReply) {
-      setTimeout(() => {
-        setMessages((currentMessages) => [
-          ...currentMessages,
-          {
-            id: createId('support-auto-reply'),
-            sender: 'support',
-            text: firstSupportReply,
-          },
-        ]);
-        void playChatPop();
-      }, 650);
+    try {
+      const firstImageAttachment = pendingAttachments.find((attachment) => attachment.kind === 'image' && attachment.uri);
+      const uploadedImage = firstImageAttachment
+        ? await uploadChatImage({
+            image: {
+              name: firstImageAttachment.name,
+              type: firstImageAttachment.type,
+              uri: firstImageAttachment.uri as string,
+            },
+            session,
+          })
+        : null;
+      const savedMessage = await sendChatMessage({
+        imageUrl: uploadedImage?.image_url,
+        session,
+        text: trimmedText,
+        userId: chatSessionId,
+      });
+
+      setMessages((currentMessages) => {
+        if (currentMessages.some((message) => message.id === savedMessage.id)) {
+          return currentMessages;
+        }
+
+        return [...currentMessages, mapBackendChatMessage(savedMessage)];
+      });
+      setShowQuickReplies(false);
+      setInput('');
+      setInputHeight(36);
+      setPendingAttachments([]);
+      void playChatPop();
+    } catch (error) {
+      setValidationMessage(error instanceof Error ? error.message : 'Message could not be sent.');
+    } finally {
+      setIsSending(false);
     }
   }
 
   function handleQuickReply(reply: string) {
-    sendMessage(reply);
+    void sendMessage(reply);
   }
 
   function handleChangeQuestions() {
@@ -415,6 +575,11 @@ export default function LiveChatScreen() {
 
   async function handleAttachmentOption(option: AttachmentOption) {
     setActiveFloatingMenu(null);
+
+    if (!session) {
+      setValidationMessage('Please sign in to attach files.');
+      return;
+    }
 
     if (option.id === 'gallery') {
       await pickGalleryImage();
@@ -431,12 +596,12 @@ export default function LiveChatScreen() {
 
   function handleNeedHelp() {
     setActiveFloatingMenu(null);
-    sendMessage('I need help with this chat.');
+    void sendMessage('I need help with this chat.');
   }
 
   function handleReportChat() {
     setActiveFloatingMenu(null);
-    sendMessage('I want to report this chat.');
+    void sendMessage('I want to report this chat.');
   }
 
   function handleShopNow() {
@@ -444,18 +609,95 @@ export default function LiveChatScreen() {
     router.push('/categories');
   }
 
+  function openImagePreview(uri: string) {
+    setPreviewScale(1);
+    setPreviewImageUri(uri);
+  }
+
+  function closeImagePreview() {
+    setPreviewImageUri(null);
+    setPreviewScale(1);
+  }
+
+  function handleDeleteForMe() {
+    if (!deleteTargetMessage) {
+      return;
+    }
+
+    const messageId = deleteTargetMessage.id;
+    setMessages((currentMessages) => currentMessages.filter((message) => message.id !== messageId));
+    setDeleteTargetMessage(null);
+  }
+
+  async function handleCopyMessage() {
+    if (!deleteTargetMessage) {
+      return;
+    }
+
+    const copyText = getMessageActionText(deleteTargetMessage);
+    setDeleteTargetMessage(null);
+
+    if (!copyText) {
+      setValidationMessage('There is no message text to copy.');
+      return;
+    }
+
+    try {
+      if (Platform.OS === 'web' && globalThis.navigator?.clipboard) {
+        await globalThis.navigator.clipboard.writeText(copyText);
+        setValidationMessage('Message copied.');
+        return;
+      }
+
+      setValidationMessage('Copy is not available on this device yet.');
+    } catch {
+      setValidationMessage('Message could not be copied.');
+    }
+  }
+
+  function handleReplyToMessage() {
+    if (!deleteTargetMessage) {
+      return;
+    }
+
+    const quoteText = getMessageActionText(deleteTargetMessage) || 'Image';
+    const senderLabel = deleteTargetMessage.sender === 'customer' ? 'You' : "Esting's";
+    setInput((currentInput) => {
+      const replyPrefix = `Replying to ${senderLabel}: "${quoteText.slice(0, 120)}"\n`;
+      return currentInput ? `${replyPrefix}${currentInput}` : replyPrefix;
+    });
+    setDeleteTargetMessage(null);
+  }
+
+  async function handleDeleteForEveryone() {
+    if (!deleteTargetMessage || !session) {
+      return;
+    }
+
+    const messageId = deleteTargetMessage.id;
+    setDeleteTargetMessage(null);
+
+    try {
+      await deleteChatMessage({ messageId, session });
+      setMessages((currentMessages) => currentMessages.filter((message) => message.id !== messageId));
+    } catch (error) {
+      setValidationMessage(error instanceof Error ? error.message : 'Message could not be deleted.');
+    }
+  }
+
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={0}
       style={styles.screen}>
       <View style={[styles.header, { paddingTop: headerTopPadding }]}>
+        <HeaderGradient />
         <Pressable
           accessibilityLabel="Go back"
           hitSlop={10}
           style={styles.backButton}
           onPress={() => router.back()}>
-          <ChevronLeft size={theme.icon.md} color={theme.colors.primary} />
+          <ChevronLeft size={theme.icon.md} color={theme.colors.white} />
         </Pressable>
 
         <SupportAvatar />
@@ -465,7 +707,7 @@ export default function LiveChatScreen() {
             {"Esting's Chat Support"}
           </Text>
           <View style={styles.statusRow}>
-            {isActive ? <View style={styles.onlineDot} /> : null}
+            <View style={[styles.statusDot, getSupportStatusDotStyle(supportStatus)]} />
             <Text style={[styles.statusText, !isActive && styles.statusTextInactive]}>
               {supportStatus}
             </Text>
@@ -477,7 +719,7 @@ export default function LiveChatScreen() {
           hitSlop={10}
           style={styles.moreButton}
           onPress={() => setActiveFloatingMenu('chat-options')}>
-          <MoreVertical size={theme.icon.md} color={theme.colors.textMuted} />
+          <MoreVertical size={theme.icon.md} color={theme.colors.white} />
         </Pressable>
       </View>
 
@@ -513,7 +755,13 @@ export default function LiveChatScreen() {
               <ChatBubble
                 groupPosition={groupPosition}
                 isLatestCustomerMessage={message.id === latestCustomerMessageId}
+                isDetailsVisible={visibleDetailsMessageId === message.id}
                 message={message}
+                onImagePress={openImagePreview}
+                onPress={() =>
+                  setVisibleDetailsMessageId((currentId) => (currentId === message.id ? null : message.id))
+                }
+                onLongPress={() => setDeleteTargetMessage(message)}
               />
               {showQuickReplies && message.id === 'support-welcome' ? (
                 <SuggestedQuestionsCard
@@ -527,7 +775,7 @@ export default function LiveChatScreen() {
         })}
       </ScrollView>
 
-      {activeFloatingMenu ? (
+      {activeFloatingMenu && isSignedIn ? (
         <FloatingMenu
           bottom={floatingMenuBottom}
           top={chatOptionsTop}
@@ -547,6 +795,23 @@ export default function LiveChatScreen() {
           },
         ]}
         onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}>
+        {!isSignedIn ? (
+          <View style={styles.lockedComposer}>
+            <View style={styles.lockedComposerIcon}>
+              <ShieldCheck size={theme.icon.md} color={theme.colors.primary} />
+            </View>
+            <View style={styles.lockedComposerCopy}>
+              <Text style={styles.lockedComposerTitle}>Sign in to chat</Text>
+              <Text style={styles.lockedComposerText}>{"Log in to message Esting's support and view your chat history."}</Text>
+            </View>
+            <Pressable style={styles.lockedComposerButton} onPress={() => router.push('/(auth)/login')}>
+              <Text style={styles.lockedComposerButtonText}>Sign in</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
+        {isSignedIn ? (
+          <>
         {pendingAttachments.length ? (
           <ScrollView
             horizontal
@@ -564,31 +829,94 @@ export default function LiveChatScreen() {
         ) : null}
 
         <View style={styles.composer}>
-          <Pressable
-            accessibilityLabel="Open attachment options"
-            style={styles.composerAction}
-            onPress={() => setActiveFloatingMenu('attachments')}>
-            <Paperclip size={theme.icon.md} color={theme.colors.primary} />
-          </Pressable>
+          <Animated.View
+            pointerEvents={hasTypedMessage ? 'none' : 'auto'}
+            style={[
+              styles.composerActionsGroup,
+              {
+                opacity: composerModeAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [1, 0],
+                }),
+                transform: [
+                  {
+                    scale: composerModeAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1, 0.92],
+                    }),
+                  },
+                ],
+                width: composerModeAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [92, 0],
+                }),
+              },
+            ]}>
+            <Pressable
+              accessibilityLabel="Open attachment options"
+              style={({ pressed }) => [styles.composerAction, pressed && styles.buttonPressed]}
+              onPress={() => setActiveFloatingMenu('attachments')}>
+              <Paperclip size={theme.icon.md} color={theme.colors.primary} />
+            </Pressable>
 
-          <Pressable
-            accessibilityLabel="Select ordered product"
-            style={styles.composerAction}
-            onPress={() => {
-              setActiveFloatingMenu(null);
-              setEmptySheetType('cart');
-            }}>
-            <ShoppingCart size={theme.icon.md} color={theme.colors.primary} />
-          </Pressable>
+            <Pressable
+              accessibilityLabel="Select ordered product"
+              style={({ pressed }) => [styles.composerAction, pressed && styles.buttonPressed]}
+              onPress={() => {
+                setActiveFloatingMenu(null);
+                setEmptySheetType('cart');
+              }}>
+              <ShoppingCart size={theme.icon.md} color={theme.colors.primary} />
+            </Pressable>
+          </Animated.View>
+
+          <Animated.View
+            pointerEvents={hasTypedMessage ? 'auto' : 'none'}
+            style={[
+              styles.collapseButtonSlot,
+              {
+                opacity: composerModeAnim,
+                transform: [
+                  {
+                    scale: composerModeAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.86, 1],
+                    }),
+                  },
+                ],
+                width: composerModeAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 42],
+                }),
+              },
+            ]}>
+            <Pressable
+              accessibilityLabel="Collapse message input"
+              style={({ pressed }) => [styles.composerAction, pressed && styles.buttonPressed]}
+              onPress={() => {
+                setInput('');
+                Keyboard.dismiss();
+              }}>
+              <ChevronLeft size={theme.icon.md} color={theme.colors.primary} />
+            </Pressable>
+          </Animated.View>
 
           <View style={styles.inputWrap}>
             <TextInput
               multiline
               placeholder={"Message Esting's..."}
               placeholderTextColor={theme.colors.textMuted}
-              style={styles.input}
+              scrollEnabled={canScrollInput}
+              style={[styles.input, { height: Math.min(Math.max(36, inputHeight), inputMaxHeight) }]}
               value={input}
               maxLength={maxMessageLength}
+              onContentSizeChange={(event) => {
+                const nextHeight = Math.min(
+                  inputMaxHeight,
+                  Math.max(36, event.nativeEvent.contentSize.height)
+                );
+                setInputHeight(nextHeight);
+              }}
               onChangeText={handleInputChange}
               onFocus={() => {
                 setActiveFloatingMenu(null);
@@ -620,8 +948,12 @@ export default function LiveChatScreen() {
             <Pressable
               accessibilityLabel="Send message"
               disabled={!canSend}
-              style={styles.sendButton}
-              onPress={() => sendMessage(input)}>
+              style={({ pressed }) => [
+                styles.sendButton,
+                pressed && canSend && styles.buttonPressed,
+                !canSend && styles.sendButtonDisabled,
+              ]}
+              onPress={() => void sendMessage(input)}>
               <Animated.View
                 style={{
                   transform: [
@@ -638,6 +970,8 @@ export default function LiveChatScreen() {
             </Pressable>
           </Animated.View>
         </View>
+          </>
+        ) : null}
 
         {validationMessage ? <Text style={styles.validationText}>{validationMessage}</Text> : null}
         <Text style={styles.termsNote}>
@@ -660,6 +994,72 @@ export default function LiveChatScreen() {
         {emptySheet ? <EmptyInquiryState message={emptySheet.message} onShopNow={handleShopNow} /> : null}
       </OptionsSheet>
 
+      <OptionsSheet
+        title="Message options"
+        visible={Boolean(deleteTargetMessage)}
+        onClose={() => setDeleteTargetMessage(null)}>
+        <View style={styles.messageOptions}>
+          <Pressable style={styles.messageOptionButton} onPress={() => void handleCopyMessage()}>
+            <Copy size={theme.icon.sm} color={theme.colors.textMuted} />
+            <Text style={styles.messageOptionText}>Copy</Text>
+          </Pressable>
+          <Pressable style={styles.messageOptionButton} onPress={handleReplyToMessage}>
+            <Reply size={theme.icon.sm} color={theme.colors.textMuted} />
+            <Text style={styles.messageOptionText}>Reply</Text>
+          </Pressable>
+          <Pressable style={styles.messageOptionButton} onPress={handleDeleteForMe}>
+            <Trash2 size={theme.icon.sm} color={theme.colors.textMuted} />
+            <Text style={styles.messageOptionText}>Delete for you</Text>
+          </Pressable>
+          {deleteTargetMessage?.sender === 'customer' ? (
+            <Pressable style={styles.messageOptionButton} onPress={() => void handleDeleteForEveryone()}>
+              <Trash2 size={theme.icon.sm} color={theme.colors.danger} />
+              <Text style={[styles.messageOptionText, styles.messageOptionDangerText]}>Delete for everyone</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </OptionsSheet>
+
+      <Modal animationType="fade" transparent visible={Boolean(previewImageUri)} onRequestClose={closeImagePreview}>
+        <View style={styles.imagePreviewOverlay}>
+          <View style={styles.imagePreviewTopBar}>
+            <Pressable accessibilityLabel="Close image preview" style={styles.imagePreviewButton} onPress={closeImagePreview}>
+              <X size={theme.icon.md} color={theme.colors.white} />
+            </Pressable>
+            <View style={styles.imagePreviewZoomControls}>
+              <Pressable
+                accessibilityLabel="Zoom out"
+                style={styles.imagePreviewButton}
+                onPress={() => setPreviewScale((current) => Math.max(1, Number((current - 0.25).toFixed(2))))}>
+                <Text style={styles.imagePreviewButtonText}>-</Text>
+              </Pressable>
+              <Pressable
+                accessibilityLabel="Zoom in"
+                style={styles.imagePreviewButton}
+                onPress={() => setPreviewScale((current) => Math.min(3, Number((current + 0.25).toFixed(2))))}>
+                <Text style={styles.imagePreviewButtonText}>+</Text>
+              </Pressable>
+            </View>
+          </View>
+          <ScrollView
+            centerContent
+            maximumZoomScale={3}
+            minimumZoomScale={1}
+            showsHorizontalScrollIndicator={false}
+            showsVerticalScrollIndicator={false}
+            style={styles.imagePreviewScroll}
+            contentContainerStyle={styles.imagePreviewContent}>
+            {previewImageUri ? (
+              <Image
+                resizeMode="contain"
+                source={{ uri: previewImageUri }}
+                style={[styles.imagePreviewImage, { transform: [{ scale: previewScale }] }]}
+              />
+            ) : null}
+          </ScrollView>
+        </View>
+      </Modal>
+
       <Modal
         animationType="fade"
         transparent
@@ -679,10 +1079,15 @@ export default function LiveChatScreen() {
               {"By continuing, you agree to use Esting's chat for support-related concerns only."}
             </Text>
             <View style={styles.agreementActions}>
-              <Pressable style={styles.agreementSecondaryButton} onPress={() => router.back()}>
+              <Pressable style={({ pressed }) => [styles.agreementSecondaryButton, pressed && styles.buttonPressed]} onPress={() => router.back()}>
                 <Text style={styles.agreementSecondaryText}>Back</Text>
               </Pressable>
-              <Pressable style={styles.agreementPrimaryButton} onPress={() => setIsChatAgreementVisible(false)}>
+              <Pressable
+                style={({ pressed }) => [styles.agreementPrimaryButton, pressed && styles.buttonPressed]}
+                onPress={() => {
+                  hasAcceptedChatAgreementThisSession = true;
+                  setIsChatAgreementVisible(false);
+                }}>
                 <Text style={styles.agreementPrimaryText}>I agree</Text>
               </Pressable>
             </View>
@@ -858,21 +1263,111 @@ function SuggestedQuestionsCard({
   );
 }
 
+function HeaderGradient() {
+  return (
+    <Svg
+      height="100%"
+      pointerEvents="none"
+      preserveAspectRatio="none"
+      style={StyleSheet.absoluteFill}
+      viewBox="0 0 100 100"
+      width="100%">
+      <Defs>
+        <LinearGradient id="chatHeaderGradient" x1="0" x2="100" y1="0" y2="100">
+          <Stop offset="0" stopColor="#126F3A" />
+          <Stop offset="0.58" stopColor="#1C7E3F" />
+          <Stop offset="1" stopColor="#3B9B4A" />
+        </LinearGradient>
+      </Defs>
+      <Rect fill="url(#chatHeaderGradient)" height="100" width="100" />
+    </Svg>
+  );
+}
+
+function mapBackendChatMessage(message: BackendChatMessage): ChatMessage {
+  const imageUrl = message.image_url?.trim();
+
+  return {
+    attachments: imageUrl
+      ? [
+          {
+            id: `${message.id}-image`,
+            kind: 'image',
+            name: 'Chat image',
+            uri: imageUrl,
+          },
+        ]
+      : undefined,
+    id: message.id,
+    createdAt: message.created_at,
+    sender: message.sender === 'customer' ? 'customer' : 'support',
+    text: message.message,
+  };
+}
+
+function getMessageActionText(message: ChatMessage) {
+  return message.text.trim() || (message.attachments?.some((attachment) => attachment.kind === 'image') ? 'Image' : '');
+}
+
+function formatMessageTime(createdAt?: string) {
+  if (!createdAt) {
+    return '';
+  }
+
+  const date = new Date(createdAt);
+
+  if (Number.isNaN(date.getTime())) {
+    return '';
+  }
+
+  return new Intl.DateTimeFormat('en-PH', {
+    hour: 'numeric',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function getSupportStatusDotStyle(status: SupportStatus) {
+  if (status === 'Active') {
+    return styles.statusDotActive;
+  }
+
+  if (status === 'Connecting') {
+    return styles.statusDotConnecting;
+  }
+
+  return styles.statusDotInactive;
+}
+
 function ChatBubble({
   groupPosition,
   isLatestCustomerMessage,
+  isDetailsVisible,
   message,
+  onImagePress,
+  onPress,
+  onLongPress,
 }: {
   groupPosition: MessageGroupPosition;
   isLatestCustomerMessage: boolean;
+  isDetailsVisible: boolean;
   message: ChatMessage;
+  onImagePress: (uri: string) => void;
+  onPress: () => void;
+  onLongPress?: () => void;
 }) {
   const isCustomer = message.sender === 'customer';
+  const isImageOnlyMessage =
+    !message.text &&
+    message.attachments?.length === 1 &&
+    message.attachments[0].kind === 'image';
   const shouldShowSupportAvatar =
     !isCustomer && (groupPosition === 'single' || groupPosition === 'last');
 
   return (
     <View style={[styles.messageUnit, isCustomer && styles.messageUnitCustomer]}>
+      {isDetailsVisible ? (
+        <Text style={styles.messageTime}>{formatMessageTime(message.createdAt)}</Text>
+      ) : null}
       <View style={[styles.bubbleRow, isCustomer && styles.bubbleRowCustomer]}>
         {!isCustomer ? (
           shouldShowSupportAvatar ? (
@@ -881,23 +1376,30 @@ function ChatBubble({
             <View style={styles.supportAvatarSpacer} />
           )
         ) : null}
-        <View
+        <Pressable
+          disabled={!onLongPress}
+          onPress={onPress}
+          onLongPress={onLongPress}
           style={[
             styles.bubble,
             isCustomer ? styles.customerBubble : styles.supportBubble,
+            isImageOnlyMessage && isCustomer && styles.customerImageOnlyBubble,
+            isImageOnlyMessage && styles.imageOnlyBubble,
             getGroupedBubbleStyle(message.sender, groupPosition),
           ]}>
           {message.attachments?.length ? (
-            <MessageAttachmentList attachments={message.attachments} isCustomer={isCustomer} />
+            <MessageAttachmentList attachments={message.attachments} isCustomer={isCustomer} onImagePress={onImagePress} />
           ) : null}
           {message.text ? (
             <Text style={[styles.bubbleText, isCustomer && styles.customerBubbleText]}>
               {message.text}
             </Text>
           ) : null}
-        </View>
+        </Pressable>
       </View>
-      {isLatestCustomerMessage ? <Text style={styles.messageStatus}>{mockLatestCustomerStatus}</Text> : null}
+      {isDetailsVisible && isCustomer ? (
+        <Text style={styles.messageStatus}>{isLatestCustomerMessage ? mockLatestCustomerStatus : 'Sent'}</Text>
+      ) : null}
     </View>
   );
 }
@@ -905,9 +1407,11 @@ function ChatBubble({
 function MessageAttachmentList({
   attachments,
   isCustomer,
+  onImagePress,
 }: {
   attachments: ChatAttachment[];
   isCustomer: boolean;
+  onImagePress: (uri: string) => void;
 }) {
   return (
     <View style={styles.messageAttachmentList}>
@@ -918,10 +1422,13 @@ function MessageAttachmentList({
             styles.messageAttachment,
             isCustomer && styles.customerMessageAttachment,
             attachment.kind === 'image' && styles.messageImageAttachment,
+            attachment.kind === 'image' && styles.imageOnlyMessageAttachment,
           ]}>
           {attachment.kind === 'image' ? (
             attachment.uri ? (
-              <Image source={{ uri: attachment.uri }} style={styles.messageImage} />
+              <Pressable accessibilityRole="button" onPress={() => attachment.uri && onImagePress(attachment.uri)}>
+                <Image source={{ uri: attachment.uri }} style={styles.messageImage} />
+              </Pressable>
             ) : (
               <ImageIcon
                 size={theme.icon.md}
@@ -934,11 +1441,13 @@ function MessageAttachmentList({
               color={isCustomer ? theme.colors.white : theme.colors.primary}
             />
           )}
-          <Text
-            numberOfLines={1}
-            style={[styles.messageAttachmentText, isCustomer && styles.customerBubbleText]}>
-            {attachment.name}
-          </Text>
+          {attachment.kind !== 'image' ? (
+            <Text
+              numberOfLines={1}
+              style={[styles.messageAttachmentText, isCustomer && styles.customerBubbleText]}>
+              {attachment.name}
+            </Text>
+          ) : null}
         </View>
       ))}
     </View>
@@ -969,9 +1478,11 @@ function AttachmentPreview({
           <FileText size={theme.icon.sm} color={theme.colors.primary} />
         </View>
       )}
-      <Text numberOfLines={1} style={styles.previewName}>
-        {attachment.name}
-      </Text>
+      {!isImage ? (
+        <Text numberOfLines={1} style={styles.previewName}>
+          {attachment.name}
+        </Text>
+      ) : null}
       <Pressable accessibilityLabel="Remove attachment" style={styles.previewRemoveButton} onPress={onRemove}>
         <X size={13} color={theme.colors.white} strokeWidth={3} />
       </Pressable>
@@ -1034,11 +1545,10 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderBottomColor: chatOutlineColor,
-    borderBottomWidth: chatOutlineWidth,
+    backgroundColor: '#1B7B3E',
     flexDirection: 'row',
     gap: theme.spacing.sm,
+    overflow: 'hidden',
     paddingBottom: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
   },
@@ -1051,8 +1561,8 @@ const styles = StyleSheet.create({
   },
   moreButton: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surfaceAlt,
-    borderColor: chatOutlineColor,
+    backgroundColor: 'rgba(255, 255, 255, 0.14)',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
     borderRadius: theme.radius.pill,
     borderWidth: chatOutlineWidth,
     height: 38,
@@ -1062,7 +1572,7 @@ const styles = StyleSheet.create({
   supportAvatar: {
     alignItems: 'center',
     backgroundColor: theme.colors.surface,
-    borderColor: chatOutlineColor,
+    borderColor: 'rgba(255, 255, 255, 0.36)',
     borderRadius: theme.radius.pill,
     borderWidth: chatOutlineWidth,
     height: 44,
@@ -1089,7 +1599,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   title: {
-    color: theme.colors.text,
+    color: theme.colors.white,
     fontSize: 17,
     fontWeight: '700',
     lineHeight: 22,
@@ -1099,19 +1609,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.xs,
   },
-  onlineDot: {
-    backgroundColor: theme.colors.success,
+  statusDot: {
     borderRadius: theme.radius.pill,
     height: 8,
     width: 8,
   },
+  statusDotActive: {
+    backgroundColor: theme.colors.success,
+  },
+  statusDotConnecting: {
+    backgroundColor: '#D69E2E',
+  },
+  statusDotInactive: {
+    backgroundColor: theme.colors.textMuted,
+  },
   statusText: {
-    color: theme.colors.primary,
+    color: 'rgba(255, 255, 255, 0.9)',
     fontSize: 12,
     fontWeight: '600',
   },
   statusTextInactive: {
-    color: theme.colors.textMuted,
+    color: 'rgba(255, 255, 255, 0.76)',
   },
   messages: {
     backgroundColor: '#F7F9F7',
@@ -1131,28 +1649,28 @@ const styles = StyleSheet.create({
   },
   safetyTip: {
     alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: 'rgba(242, 185, 80, 0.13)',
-    borderColor: chatOutlineColor,
-    borderRadius: theme.radius.lg,
+    alignSelf: 'stretch',
+    backgroundColor: 'rgba(242, 185, 80, 0.1)',
+    borderColor: 'rgba(183, 121, 31, 0.14)',
+    borderRadius: theme.radius.md,
     borderWidth: chatOutlineWidth,
     flexDirection: 'row',
     gap: theme.spacing.xs,
     marginBottom: theme.spacing.lg,
-    maxWidth: '92%',
+    marginHorizontal: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: 9,
+    paddingVertical: 8,
   },
   safetyTipLead: {
     color: 'rgba(107, 78, 0, 0.76)',
     fontWeight: '600',
   },
   safetyTipText: {
-    color: 'rgba(107, 78, 0, 0.72)',
+    color: 'rgba(107, 78, 0, 0.68)',
     flexShrink: 1,
     fontSize: 11,
-    fontWeight: '500',
-    lineHeight: 15,
+    fontWeight: '400',
+    lineHeight: 16,
   },
   messageBlock: {
     gap: theme.spacing.sm,
@@ -1166,6 +1684,13 @@ const styles = StyleSheet.create({
   },
   messageUnitCustomer: {
     alignItems: 'flex-end',
+  },
+  messageTime: {
+    alignSelf: 'center',
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: '500',
+    marginBottom: theme.spacing.xs,
   },
   bubbleRow: {
     alignItems: 'flex-end',
@@ -1182,6 +1707,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.lg,
     paddingVertical: theme.spacing.md,
   },
+  imageOnlyBubble: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  customerImageOnlyBubble: {
+    alignItems: 'flex-end',
+    maxWidth: '82%',
+  },
   supportBubble: {
     backgroundColor: theme.colors.surface,
     borderColor: chatOutlineColor,
@@ -1189,6 +1724,10 @@ const styles = StyleSheet.create({
   },
   customerBubble: {
     backgroundColor: theme.colors.primary,
+  },
+  customerBubbleText: {
+    color: theme.colors.white,
+    fontWeight: '500',
   },
   supportBubbleFirst: {
     borderBottomLeftRadius: 7,
@@ -1213,16 +1752,13 @@ const styles = StyleSheet.create({
   bubbleText: {
     color: theme.colors.text,
     fontSize: 14,
-    fontWeight: '500',
-    lineHeight: 20,
-  },
-  customerBubbleText: {
-    color: theme.colors.white,
+    fontWeight: '400',
+    lineHeight: 21,
   },
   messageStatus: {
     color: theme.colors.textMuted,
     fontSize: 11,
-    fontWeight: '500',
+    fontWeight: '400',
     marginRight: theme.spacing.xs,
     marginTop: theme.spacing.xs,
   },
@@ -1246,12 +1782,17 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(255, 255, 255, 0.34)',
   },
   messageImageAttachment: {
-    minHeight: 58,
+    minHeight: 0,
+  },
+  imageOnlyMessageAttachment: {
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+    paddingHorizontal: 0,
   },
   messageImage: {
-    borderRadius: theme.radius.sm,
-    height: 46,
-    width: 46,
+    borderRadius: 18,
+    height: 176,
+    width: 176,
   },
   messageAttachmentText: {
     color: theme.colors.text,
@@ -1298,7 +1839,7 @@ const styles = StyleSheet.create({
   suggestedQuestionText: {
     color: '#2F80D9',
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '400',
     lineHeight: 19,
   },
   changeQuestionsButton: {
@@ -1322,6 +1863,50 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingTop: theme.spacing.md,
   },
+  lockedComposer: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+  },
+  lockedComposerIcon: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.greenSoft,
+    borderColor: chatOutlineColor,
+    borderRadius: theme.radius.pill,
+    borderWidth: chatOutlineWidth,
+    height: 42,
+    justifyContent: 'flex-start',
+    width: 42,
+  },
+  lockedComposerCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  lockedComposerTitle: {
+    color: theme.colors.text,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  lockedComposerText: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 16,
+  },
+  lockedComposerButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    minHeight: 38,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  lockedComposerButtonText: {
+    color: theme.colors.white,
+    fontSize: 13,
+    fontWeight: '800',
+  },
   previewList: {
     gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.xs,
@@ -1342,6 +1927,73 @@ const styles = StyleSheet.create({
     height: 44,
     paddingHorizontal: theme.spacing.sm,
     width: 168,
+  },
+  messageOptions: {
+    gap: theme.spacing.sm,
+  },
+  messageOptionButton: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: theme.spacing.md,
+  },
+  messageOptionText: {
+    color: theme.colors.text,
+    fontSize: 15,
+    fontWeight: '400',
+  },
+  messageOptionDangerText: {
+    color: theme.colors.danger,
+  },
+  imagePreviewOverlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.94)',
+    flex: 1,
+  },
+  imagePreviewTopBar: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: Platform.OS === 'ios' ? theme.spacing.xxl : theme.spacing.lg,
+    position: 'absolute',
+    top: 0,
+    width: '100%',
+    zIndex: 2,
+  },
+  imagePreviewZoomControls: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  imagePreviewButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderColor: 'rgba(255, 255, 255, 0.18)',
+    borderRadius: theme.radius.pill,
+    borderWidth: chatOutlineWidth,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  imagePreviewButtonText: {
+    color: theme.colors.white,
+    fontSize: 24,
+    fontWeight: '300',
+    lineHeight: 28,
+  },
+  imagePreviewScroll: {
+    flex: 1,
+  },
+  imagePreviewContent: {
+    alignItems: 'center',
+    flexGrow: 1,
+    justifyContent: 'center',
+    padding: theme.spacing.lg,
+  },
+  imagePreviewImage: {
+    height: '82%',
+    width: '100%',
   },
   previewImage: {
     height: '100%',
@@ -1387,6 +2039,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.sm,
   },
+  composerActionsGroup: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    overflow: 'hidden',
+  },
   composerAction: {
     alignItems: 'center',
     backgroundColor: theme.colors.surfaceAlt,
@@ -1396,6 +2053,14 @@ const styles = StyleSheet.create({
     height: 42,
     justifyContent: 'center',
     width: 42,
+  },
+  collapseButtonSlot: {
+    height: 42,
+    overflow: 'hidden',
+  },
+  buttonPressed: {
+    opacity: 0.74,
+    transform: [{ scale: 0.96 }],
   },
   inputWrap: {
     alignItems: 'center',
@@ -1413,12 +2078,13 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     flex: 1,
     fontSize: 15,
-    fontWeight: '500',
-    maxHeight: 112,
+    fontWeight: '400',
+    lineHeight: inputLineHeight,
+    maxHeight: inputMaxHeight,
     minHeight: 24,
-    paddingBottom: 0,
-    paddingTop: 0,
-    textAlignVertical: 'center',
+    paddingBottom: 8,
+    paddingTop: 8,
+    textAlignVertical: 'top',
   },
   sendButton: {
     alignItems: 'center',
@@ -1427,6 +2093,9 @@ const styles = StyleSheet.create({
     height: 42,
     justifyContent: 'center',
     width: 42,
+  },
+  sendButtonDisabled: {
+    opacity: 0.46,
   },
   sendButtonSlot: {
     height: 42,

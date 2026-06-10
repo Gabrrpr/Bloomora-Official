@@ -1,219 +1,42 @@
-import { router } from 'expo-router';
-import { useEffect, useRef } from 'react';
-import { Animated, Easing, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronRight, Layers3, Sparkles, WandSparkles } from 'lucide-react-native';
 
 import { AppBrandHeader } from '@/components/app-brand-header';
-import { AiDisclaimer } from '@/components/make-personal-ui';
+import { GenerateComingSoon } from '@/components/generate-coming-soon';
 import { theme } from '@/constants/theme';
 
-type PersonalPath = {
-  description: string;
-  href: '/create/describe' | '/create/mix-and-match' | '/create/examples';
-  icon: 'describe' | 'mix';
-  gradient: 'purple' | 'pink';
-  action: string;
-  tint: string;
-  title: string;
-};
-
-const personalPaths: PersonalPath[] = [
-  {
-    description: 'Pick your flowers and build your own bouquet your way.',
-    href: '/create/mix-and-match',
-    icon: 'mix',
-    gradient: 'purple',
-    action: 'Start building',
-    tint: '#7C3AED',
-    title: 'Mix & Match',
-  },
-  {
-    description: 'Tell us the occasion, colors, and style. AI will shape the bouquet concept.',
-    href: '/create/describe',
-    icon: 'describe',
-    gradient: 'pink',
-    action: 'Describe it',
-    tint: '#EC4899',
-    title: 'Describe Your Arrangement',
-  },
-];
+// ─── Feature flag ──────────────────────────────────────────────────────────────
+// Toggle this to `true` when the admin enables the "Make It Personal" feature.
+// In production this value should come from your remote config / feature-flag
+// service (e.g. Firebase Remote Config, LaunchDarkly, or your own API).
+const IS_GENERATE_ENABLED = false;
 
 export default function GenerateScreen() {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
-  const layout = getCreateChoiceLayout(width);
 
   return (
     <ScrollView
       showsVerticalScrollIndicator={false}
       style={styles.screen}
-      contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 96 }]}>
+      contentContainerStyle={[
+        styles.content,
+        { paddingBottom: insets.bottom + 96 },
+        !IS_GENERATE_ENABLED && styles.contentDisabled,
+      ]}>
       <AppBrandHeader />
 
-      <View style={[styles.body, { paddingHorizontal: layout.sidePadding }]}>
-        <View style={styles.pageIntro}>
-          <View style={styles.kickerRow}>
-            <Sparkles size={theme.icon.sm} color={theme.colors.primary} />
-            <Text style={styles.kicker}>Make it personal</Text>
-          </View>
-          <Text style={styles.title}>Create your perfect bouquet</Text>
-          <Text style={styles.subtitle}>Choose how you would like to build your arrangement.</Text>
-        </View>
-
-        <View style={[styles.cardGrid, layout.compactRows ? styles.cardRows : styles.cardColumns]}>
-          {personalPaths.map((path) => (
-            <SelectionCard
-              compactRows={layout.compactRows}
-              key={path.href}
-              path={path}
-              tileWidth={layout.compactRows ? undefined : layout.tileWidth}
-            />
-          ))}
-        </View>
-
-        <AiDisclaimer />
+      <View style={styles.header}>
+        <Text style={styles.title}>Make It Personal</Text>
       </View>
+
+      {IS_GENERATE_ENABLED ? (
+        // The actual customization UI goes here when the feature is enabled.
+        // Replace this placeholder with the real <MakePersonalUI /> component.
+        <View />
+      ) : (
+        <GenerateComingSoon />
+      )}
     </ScrollView>
-  );
-}
-
-function SelectionCard({
-  compactRows,
-  path,
-  tileWidth,
-}: {
-  compactRows: boolean;
-  path: PersonalPath;
-  tileWidth?: number;
-}) {
-  const Icon = path.icon === 'describe' ? WandSparkles : Layers3;
-
-  return (
-    <Pressable
-      accessibilityRole="button"
-      style={({ pressed }) => [
-        styles.selectionCard,
-        compactRows ? styles.selectionCardRow : { width: tileWidth },
-        pressed && styles.pressed,
-      ]}
-      onPress={() => router.push(path.href)}>
-      <View style={compactRows ? styles.cardImageThumb : styles.cardImageFrame}>
-        <AnimatedGradientPreview variant={path.gradient} />
-        <View style={[styles.cardIcon, { backgroundColor: `${path.tint}18` }]}>
-          <Icon size={compactRows ? theme.icon.sm : theme.icon.md} color={path.tint} />
-        </View>
-      </View>
-      <View style={[styles.cardBody, compactRows && styles.cardBodyRow]}>
-        <Text style={styles.cardTitle}>{path.title}</Text>
-        <Text style={styles.cardDescription} numberOfLines={compactRows ? 2 : 3}>
-          {path.description}
-        </Text>
-        <View style={styles.cardActionRow}>
-          <Text style={[styles.cardActionText, { color: path.tint }]}>{path.action}</Text>
-          <ChevronRight size={theme.icon.sm} color={path.tint} />
-        </View>
-      </View>
-    </Pressable>
-  );
-}
-
-function getCreateChoiceLayout(width: number) {
-  const sidePadding = Math.min(Math.max(width * 0.048, 16), 24);
-  const compactRows = width < 360;
-  const columnGap = theme.spacing.md;
-  const availableWidth = width - sidePadding * 2;
-
-  return {
-    compactRows,
-    sidePadding,
-    tileWidth: (availableWidth - columnGap) / 2,
-  };
-}
-
-function AnimatedGradientPreview({ variant }: { variant: PersonalPath['gradient'] }) {
-  const progress = useRef(new Animated.Value(0)).current;
-  const palette =
-    variant === 'purple'
-      ? {
-          base: '#7357F2',
-          glowA: '#A855F7',
-          glowB: '#5B6FF7',
-          glowC: '#C084FC',
-        }
-      : {
-          base: '#F47B9D',
-          glowA: '#FDB4C7',
-          glowB: '#EC4899',
-          glowC: '#FB7185',
-        };
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.timing(progress, {
-        duration: 5200,
-        easing: Easing.inOut(Easing.sin),
-        toValue: 1,
-        useNativeDriver: true,
-      }),
-    );
-
-    animation.start();
-
-    return () => animation.stop();
-  }, [progress]);
-
-  const driftForward = progress.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [-18, 20, -18],
-  });
-  const driftBack = progress.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [20, -22, 20],
-  });
-  const pulse = progress.interpolate({
-    inputRange: [0, 0.5, 1],
-    outputRange: [0.5, 0.82, 0.5],
-  });
-
-  return (
-    <View style={[styles.gradientPreview, { backgroundColor: palette.base }]}>
-      <Animated.View
-        style={[
-          styles.gradientGlow,
-          styles.gradientGlowTop,
-          {
-            backgroundColor: palette.glowA,
-            opacity: pulse,
-            transform: [{ translateX: driftForward }, { translateY: driftBack }, { rotate: '8deg' }],
-          },
-        ]}
-      />
-      <Animated.View
-        style={[
-          styles.gradientGlow,
-          styles.gradientGlowBottom,
-          {
-            backgroundColor: palette.glowB,
-            opacity: 0.58,
-            transform: [{ translateX: driftBack }, { translateY: driftForward }, { rotate: '-10deg' }],
-          },
-        ]}
-      />
-      <Animated.View
-        style={[
-          styles.gradientSheen,
-          {
-            backgroundColor: palette.glowC,
-            opacity: progress.interpolate({
-              inputRange: [0, 0.5, 1],
-              outputRange: [0.16, 0.34, 0.16],
-            }),
-            transform: [{ translateX: driftForward }, { rotate: '-26deg' }],
-          },
-        ]}
-      />
-    </View>
   );
 }
 
@@ -225,26 +48,13 @@ const styles = StyleSheet.create({
   content: {
     gap: theme.spacing.md,
   },
-  body: {
-    gap: theme.spacing.lg,
+  contentDisabled: {
+    flexGrow: 1,
   },
-  pageIntro: {
+  header: {
     alignItems: 'center',
-    gap: 7,
-    paddingTop: theme.spacing.xs,
-  },
-  kickerRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'center',
-  },
-  kicker: {
-    color: theme.colors.primary,
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 1.8,
-    textTransform: 'uppercase',
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.sm,
   },
   title: {
     color: theme.colors.text,
@@ -252,116 +62,5 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 31,
     textAlign: 'center',
-  },
-  subtitle: {
-    color: theme.colors.textMuted,
-    fontSize: 14,
-    lineHeight: 21,
-    maxWidth: 310,
-    textAlign: 'center',
-  },
-  cardGrid: {
-    gap: theme.spacing.md,
-  },
-  cardColumns: {
-    alignItems: 'stretch',
-    flexDirection: 'row',
-  },
-  cardRows: {
-    flexDirection: 'column',
-  },
-  selectionCard: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    borderWidth: theme.borderWidth,
-    overflow: 'hidden',
-  },
-  selectionCardRow: {
-    flexDirection: 'row',
-    minHeight: 132,
-    width: '100%',
-  },
-  cardImageFrame: {
-    backgroundColor: theme.colors.surfaceAlt,
-    height: 142,
-    overflow: 'hidden',
-    position: 'relative',
-    width: '100%',
-  },
-  cardImageThumb: {
-    backgroundColor: theme.colors.surfaceAlt,
-    minHeight: 132,
-    overflow: 'hidden',
-    position: 'relative',
-    width: 112,
-  },
-  gradientPreview: {
-    ...StyleSheet.absoluteFillObject,
-  },
-  gradientGlow: {
-    borderRadius: 999,
-    height: 210,
-    position: 'absolute',
-    width: 260,
-  },
-  gradientGlowTop: {
-    left: -56,
-    top: -88,
-  },
-  gradientGlowBottom: {
-    bottom: -96,
-    right: -64,
-  },
-  gradientSheen: {
-    height: 320,
-    left: 18,
-    position: 'absolute',
-    top: -70,
-    width: 90,
-  },
-  cardIcon: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    bottom: theme.spacing.sm,
-    height: 38,
-    justifyContent: 'center',
-    position: 'absolute',
-    right: theme.spacing.sm,
-    width: 38,
-  },
-  cardBody: {
-    gap: theme.spacing.sm,
-    minHeight: 148,
-    padding: theme.spacing.md,
-  },
-  cardBodyRow: {
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 0,
-  },
-  cardTitle: {
-    color: theme.colors.text,
-    fontSize: 16,
-    fontWeight: '800',
-    lineHeight: 20,
-  },
-  cardDescription: {
-    color: theme.colors.textMuted,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  cardActionRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.xs,
-    marginTop: 'auto',
-  },
-  cardActionText: {
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  pressed: {
-    opacity: 0.84,
   },
 });

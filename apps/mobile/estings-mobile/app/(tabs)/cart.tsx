@@ -11,13 +11,14 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppBrandHeader } from '@/components/app-brand-header';
+import { AppBrandHeader, getAppBrandHeaderLayout } from '@/components/app-brand-header';
 import { formatPhp, getCartSummary, type CartItem, type Product } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { ApiError } from '@/services/api-client';
@@ -34,6 +35,9 @@ const paymentSuccessRoute = '/payment/success' as Href;
 
 export default function CartScreen() {
   const insets = useSafeAreaInsets();
+  const { height, width } = useWindowDimensions();
+  const brandHeaderLayout = getAppBrandHeaderLayout(width, height, insets.top);
+  const headerHeight = brandHeaderLayout.top + brandHeaderLayout.height;
   const lastRecommendationBatchAt = useRef(0);
   const recommendationBatchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
@@ -237,10 +241,17 @@ export default function CartScreen() {
   if (isLoading) {
     return (
       <View style={styles.screen}>
+        <AppBrandHeader absolute={true} style={styles.stickyBrandHeader} />
         <ScrollView
           showsVerticalScrollIndicator={false}
           style={styles.scroll}
-          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 104 }]}>
+          contentContainerStyle={[
+            styles.content,
+            {
+              paddingTop: headerHeight + theme.spacing.md,
+              paddingBottom: insets.bottom + 104,
+            },
+          ]}>
           <CartScreenSkeleton />
         </ScrollView>
       </View>
@@ -249,13 +260,19 @@ export default function CartScreen() {
 
   return (
     <View style={styles.screen}>
+      <AppBrandHeader absolute={true} style={styles.stickyBrandHeader} />
       <ScrollView
         onScroll={handleCartScroll}
         scrollEventThrottle={160}
         showsVerticalScrollIndicator={false}
         style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + (cartItems.length > 0 && isSignedIn ? 264 : 104) }]}>
-        <AppBrandHeader />
+        contentContainerStyle={[
+          styles.content,
+          {
+            paddingTop: headerHeight + theme.spacing.md,
+            paddingBottom: insets.bottom + (cartItems.length > 0 && isSignedIn ? 264 : 104),
+          },
+        ]}>
 
         <View style={styles.body}>
           <View>
@@ -770,6 +787,13 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: theme.colors.background,
     flex: 1,
+  },
+  stickyBrandHeader: {
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    borderBottomColor: hairlineColor,
+    borderBottomWidth: 1,
+    paddingBottom: theme.spacing.sm,
+    zIndex: 40,
   },
   scroll: {
     backgroundColor: theme.colors.background,

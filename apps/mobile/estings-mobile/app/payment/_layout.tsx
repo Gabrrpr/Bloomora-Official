@@ -5,6 +5,8 @@ export default function PaymentLayout() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="success" />
       <Stack.Screen name="cancel" />
+      <Stack.Screen name="failed" />
+      <Stack.Screen name="expired" />
     </Stack>
   );
 }
