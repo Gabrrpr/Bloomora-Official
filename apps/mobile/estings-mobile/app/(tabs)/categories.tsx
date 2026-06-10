@@ -10,30 +10,96 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import { Flower2, Search, X } from 'lucide-react-native';
+import { ChevronDown, ImageOff, MapPin, Search, WifiOff, X } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppBrandHeader } from '@/components/app-brand-header';
 import { EmptyState } from '@/components/bloom-ui';
+import { ProductCard } from '@/components/product-card';
 import { formatPhp, type Product } from '@/constants/shop';
 import { theme } from '@/constants/theme';
-import { shopApi } from '@/services/shop-api';
+import { shopApi, type ShopHeroSlide } from '@/services/shop-api';
 
 const pageBackground = '#F5F5F5';
 const softText = '#2F3A34';
+type ShopBranch = 'all' | 'manila' | 'pampanga';
+
+const shopBranches: { label: string; value: ShopBranch }[] = [
+  { label: 'All', value: 'all' },
+  { label: 'Manila', value: 'manila' },
+  { label: 'Pampanga', value: 'pampanga' },
+];
+
+const defaultShopHero: ShopHeroSlide = {
+  accent: theme.colors.primary,
+  cta: 'Shop Flowers',
+  ctaSecondary: 'Make It Personal',
+  ctaSecondaryNav: 'create',
+  description:
+    'Since 1959, Esting\'s has been part of countless moments big and small. Every arrangement is made by hand with fresh flowers and genuine care.',
+  headline: 'Fresh Blooms,\nSince 1959',
+  id: 'mobile-shop-default',
+  tag: 'Esting\'s Flower International Inc.',
+};
+
+const defaultShopHeroes: ShopHeroSlide[] = [
+  defaultShopHero,
+  {
+    accent: '#e11d48',
+    cta: 'Shop Flowers',
+    ctaSecondary: 'Explore Collection',
+    ctaSecondaryNav: 'shop',
+    description:
+      'Whether it is an apology, a misunderstanding, or a way to say you care, flowers can say it simply.',
+    headline: 'Let flowers\ndo the talking',
+    id: 'mobile-shop-apology',
+    tag: 'Made a mistake?',
+  },
+  {
+    accent: '#7c3aed',
+    cta: 'Try It Now',
+    ctaSecondary: 'See Examples',
+    ctaSecondaryNav: 'create',
+    description:
+      'Describe your ideal bouquet or build your own arrangement through Mix and Match.',
+    headline: 'Flowers,\nMade Your Way',
+    id: 'mobile-shop-personal',
+    tag: 'Make It Personal',
+  },
+  {
+    accent: '#d97706',
+    cta: 'Shop Flowers',
+    ctaSecondary: 'View Occasions',
+    ctaSecondaryNav: 'occasions',
+    description:
+      'From everyday surprises to big moments, fresh arrangements help express what you feel.',
+    headline: 'Simple Ways\nto Show You Care',
+    id: 'mobile-shop-moments',
+    tag: 'Fresh Flowers, For Any Moment',
+  },
+];
 
 export default function CategoriesScreen() {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isAppendingProducts, setIsAppendingProducts] = useState(false);
+  const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
   const [query, setQuery] = useState('');
-  const [visibleProductCount, setVisibleProductCount] = useState(8);
+  const [selectedBranch, setSelectedBranch] = useState<ShopBranch>('all');
+  const [activeHeroIndex, setActiveHeroIndex] = useState(0);
+  const [shopHeroes, setShopHeroes] = useState<ShopHeroSlide[]>(defaultShopHeroes);
+  const [visibleProductCount, setVisibleProductCount] = useState(4);
+  const lastProductBatchAt = useRef(0);
+  const productBatchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const loadCatalog = useCallback(async (showRefresh = false) => {
     if (showRefresh) {
@@ -44,6 +110,7 @@ export default function CategoriesScreen() {
 
     try {
       const { products: nextProducts } = await shopApi.getCatalog({
+        branch: selectedBranch,
         forceRefresh: showRefresh,
       });
 
@@ -55,20 +122,45 @@ export default function CategoriesScreen() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, []);
+  }, [selectedBranch]);
 
   useEffect(() => {
     loadCatalog();
   }, [loadCatalog]);
 
+  useEffect(() => {
+    let isActive = true;
+
+    shopApi
+      .getHeroSlides()
+      .then((data) => {
+        if (isActive && data.slides.length > 0) {
+          setShopHeroes(data.slides);
+          setActiveHeroIndex(0);
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
   const filteredProducts = useMemo(() => {
-    return products;
-  }, [products]);
+    if (selectedBranch === 'all') {
+      return products;
+    }
 
-  const visibleProducts = filteredProducts.slice(0, 8);
+    return products.filter((product) => {
+      const branch = normalizeProductBranch(product.branch);
+
+      return branch === selectedBranch;
+    });
+  }, [products, selectedBranch]);
+
   const lazyVisibleProducts = filteredProducts.slice(0, visibleProductCount);
-
-  const heroProduct = products.find((product) => product.imageUrl) ?? products[0];
+  const canAppendProducts = visibleProductCount < filteredProducts.length;
+  const selectedBranchLabel = shopBranches.find((branch) => branch.value === selectedBranch)?.label ?? 'All';
 
   const handleSubmitSearch = useCallback(() => {
     const nextQuery = query.trim();
@@ -81,16 +173,38 @@ export default function CategoriesScreen() {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
       const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
 
-      if (distanceFromBottom < 420) {
-        setVisibleProductCount((current) => Math.min(current + 4, filteredProducts.length));
+      if (distanceFromBottom < 420 && canAppendProducts && Date.now() - lastProductBatchAt.current > 700 && !isAppendingProducts) {
+        lastProductBatchAt.current = Date.now();
+        setIsAppendingProducts(true);
+
+        productBatchTimer.current = setTimeout(() => {
+          setVisibleProductCount((current) => Math.min(current + 4, filteredProducts.length));
+          setIsAppendingProducts(false);
+          productBatchTimer.current = null;
+        }, 260);
       }
     },
-    [filteredProducts.length],
+    [canAppendProducts, filteredProducts.length, isAppendingProducts],
   );
 
   useEffect(() => {
-    setVisibleProductCount(8);
-  }, [products.length]);
+    setVisibleProductCount(4);
+    lastProductBatchAt.current = 0;
+    setIsAppendingProducts(false);
+
+    if (productBatchTimer.current) {
+      clearTimeout(productBatchTimer.current);
+      productBatchTimer.current = null;
+    }
+  }, [filteredProducts.length, selectedBranch]);
+
+  useEffect(() => {
+    return () => {
+      if (productBatchTimer.current) {
+        clearTimeout(productBatchTimer.current);
+      }
+    };
+  }, []);
 
   return (
     <View style={styles.screen}>
@@ -123,8 +237,16 @@ export default function CategoriesScreen() {
               </Pressable>
             ) : null}
           </View>
+          <BranchSelector
+            isOpen={isBranchMenuOpen}
+            selectedBranch={selectedBranch}
+            onSelect={(branch) => {
+              setSelectedBranch(branch);
+              setIsBranchMenuOpen(false);
+            }}
+            onToggle={() => setIsBranchMenuOpen((current) => !current)}
+          />
         </View>
-
       </View>
 
       <ScrollView
@@ -136,94 +258,275 @@ export default function CategoriesScreen() {
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 104 }]}>
         {isLoading ? (
           <CatalogSkeleton />
+        ) : errorMessage ? (
+          <CatalogUnavailableState message={errorMessage} onRetry={() => loadCatalog(true)} />
         ) : (
-          <View style={styles.hero}>
-            {heroProduct?.imageUrl ? (
-              <Image cachePolicy="memory-disk" contentFit="cover" recyclingKey={heroProduct.id} source={{ uri: heroProduct.imageUrl }} style={styles.heroImage} />
-            ) : (
-              <View style={styles.heroFallback}>
-                <Flower2 size={theme.icon.lg} color={theme.colors.primary} />
-              </View>
-            )}
-            <View style={styles.heroOverlay} />
-            <View style={styles.heroCopy}>
-              <Text style={styles.eyebrow}>Fresh blooms</Text>
-              <Text style={styles.title}>Find flowers for every moment</Text>
-              <Text style={styles.subtitle}>Browse bouquets, arrangements, and thoughtful add-ons from Estings.</Text>
-            </View>
-          </View>
+          <ShopCmsHeroCarousel
+            activeIndex={activeHeroIndex}
+            heroes={shopHeroes}
+            onActiveIndexChange={setActiveHeroIndex}
+            width={width}
+          />
         )}
 
-      {isLoading ? null : (
+      {isLoading || errorMessage ? null : (
         <SectionTitle
           title="Products"
-          subtitle={`${visibleProducts.length} ${visibleProducts.length === 1 ? 'favorite' : 'favorites'}`}
         />
       )}
 
-      {isLoading ? null : errorMessage ? (
-        <EmptyState title="Catalog unavailable" description={errorMessage} />
-      ) : lazyVisibleProducts.length > 0 ? (
+      {isLoading || errorMessage ? null : lazyVisibleProducts.length > 0 ? (
         <View style={styles.productGrid}>
           {lazyVisibleProducts.map((product) => (
-            <ProductTile
+            <ProductCard
               key={product.id}
               product={product}
             />
           ))}
+          {isAppendingProducts ? <ProductAppendLoader /> : null}
+          {!isAppendingProducts && canAppendProducts ? <View style={styles.productScrollBuffer} /> : null}
         </View>
       ) : (
-        <EmptyState title="No products found" description="Try another category or search term." />
+        <EmptyState
+          title="No products found"
+          description={
+            selectedBranch === 'all'
+              ? 'Try another category or search term.'
+              : `No products are listed for ${selectedBranchLabel} yet. Try All branches.`
+          }
+        />
       )}
       </ScrollView>
     </View>
   );
 }
 
-function SectionTitle({ subtitle, title }: { subtitle: string; title: string }) {
+function ShopCmsHeroCarousel({
+  activeIndex,
+  heroes,
+  onActiveIndexChange,
+  width,
+}: {
+  activeIndex: number;
+  heroes: ShopHeroSlide[];
+  onActiveIndexChange: (index: number) => void;
+  width: number;
+}) {
+  const handleMomentumEnd = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const nextIndex = Math.round(event.nativeEvent.contentOffset.x / width);
+      onActiveIndexChange(Math.min(Math.max(nextIndex, 0), heroes.length - 1));
+    },
+    [heroes.length, onActiveIndexChange, width],
+  );
+
   return (
-    <View style={styles.sectionHeader}>
-      <View>
-        <Text style={styles.sectionTitle}>{title}</Text>
-        <Text style={styles.sectionSubtitle}>{subtitle}</Text>
+    <View style={styles.heroCarousel}>
+      <ScrollView
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        onMomentumScrollEnd={handleMomentumEnd}
+        scrollEventThrottle={16}>
+        {heroes.map((hero) => (
+          <ShopCmsHero hero={hero} key={String(hero.id)} width={width} />
+        ))}
+      </ScrollView>
+      <View style={styles.heroDots}>
+        {heroes.map((hero, index) => (
+          <View
+            key={`dot-${hero.id}`}
+            style={[
+              styles.heroDot,
+              index === activeIndex && styles.heroDotActive,
+              index === activeIndex && { backgroundColor: hero.accent || theme.colors.primary },
+            ]}
+          />
+        ))}
       </View>
     </View>
   );
 }
 
-function ProductTile({
-  product,
-}: {
-  product: Product;
-}) {
-  const isSoldOut = (product.stock ?? 0) <= 0;
+function ShopCmsHero({ hero, width }: { hero: ShopHeroSlide; width: number }) {
+  const accent = hero.accent || theme.colors.primary;
+  const imageUrl = resolveCmsImage(hero.image);
 
   return (
-    <Pressable
-      accessibilityLabel={`View ${product.name} details`}
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.productTile, pressed && styles.productTilePressed]}
-      onPress={() => router.push(`/product-details?id=${encodeURIComponent(product.id)}`)}>
-      {product.imageUrl ? (
-        <Image cachePolicy="memory-disk" contentFit="contain" recyclingKey={product.id} source={{ uri: product.imageUrl }} style={styles.productImage} />
+    <View style={[styles.hero, { backgroundColor: accent, width }]}>
+      {imageUrl ? (
+        <Image cachePolicy="memory-disk" contentFit="cover" source={{ uri: imageUrl }} style={styles.heroImage} />
       ) : (
-        <View style={styles.productImageFallback}>
-          <Flower2 size={theme.icon.lg} color={theme.colors.primary} />
+        <View style={styles.heroTexture}>
+          <View style={[styles.heroAccentCircle, { borderColor: 'rgba(255, 255, 255, 0.24)' }]} />
+          <View style={[styles.heroAccentLine, { backgroundColor: 'rgba(255, 255, 255, 0.18)' }]} />
         </View>
       )}
-      {isSoldOut ? (
-        <View style={styles.soldOutBadge}>
-          <Text style={styles.soldOutText}>Sold out</Text>
+      <View style={styles.heroOverlay} />
+      <View style={styles.heroCopy}>
+        <Text numberOfLines={1} style={[styles.eyebrow, { backgroundColor: `${accent}88` }]}>
+          {hero.tag}
+        </Text>
+        <Text numberOfLines={2} style={styles.title}>
+          {hero.headline.split('\n').slice(0, 2).map((line, index, lines) => (
+            <Text key={`${line}-${index}`}>
+              {line}
+              {index < lines.length - 1 ? '\n' : ''}
+            </Text>
+          ))}
+        </Text>
+        <Text numberOfLines={2} style={styles.subtitle}>
+          {hero.description}
+        </Text>
+        <View style={styles.heroActions}>
+          <Pressable accessibilityRole="button" onPress={() => {}} style={({ pressed }) => [styles.heroPrimaryButton, pressed && styles.productTilePressed]}>
+            <Text style={styles.heroPrimaryButtonText}>{hero.cta || 'Shop Flowers'}</Text>
+          </Pressable>
+          {hero.ctaSecondary ? (
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => {
+                if (hero.ctaSecondaryNav === 'create') {
+                  router.push('/create/describe');
+                }
+              }}
+              style={({ pressed }) => [styles.heroSecondaryButton, pressed && styles.productTilePressed]}>
+              <Text style={styles.heroSecondaryButtonText}>{hero.ctaSecondary}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function resolveCmsImage(image?: string | null) {
+  const trimmedImage = image?.trim();
+
+  if (!trimmedImage) {
+    return undefined;
+  }
+
+  return /^https?:\/\//i.test(trimmedImage) ? trimmedImage : undefined;
+}
+
+function CatalogUnavailableState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <View style={styles.unavailablePanel}>
+      <View style={styles.unavailableIcon}>
+        <WifiOff size={34} color={theme.colors.primary} strokeWidth={2.1} />
+      </View>
+      <Text style={styles.unavailableTitle}>Catalog unavailable</Text>
+      <Text style={styles.unavailableText}>{message}</Text>
+      <Pressable accessibilityRole="button" onPress={onRetry} style={({ pressed }) => [styles.retryButton, pressed && styles.retryButtonPressed]}>
+        <Text style={styles.retryButtonText}>Try again</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function ProductAppendLoader() {
+  return (
+    <>
+      {[0, 1, 2, 3].map((item) => (
+        <View key={`append-${item}`} style={styles.productTile}>
+          <SkeletonBlock style={styles.productImage} />
+          <View style={styles.productBody}>
+            <SkeletonBlock style={styles.skeletonLineWide} />
+            <SkeletonBlock style={styles.skeletonLineShort} />
+          </View>
+        </View>
+      ))}
+    </>
+  );
+}
+
+function SectionTitle({ title }: { title: string }) {
+  return (
+    <View style={styles.sectionHeader}>
+      <View>
+        <Text style={styles.sectionTitle}>{title}</Text>
+      </View>
+    </View>
+  );
+}
+
+function BranchSelector({
+  isOpen,
+  onSelect,
+  onToggle,
+  selectedBranch,
+}: {
+  isOpen: boolean;
+  onSelect: (branch: ShopBranch) => void;
+  onToggle: () => void;
+  selectedBranch: ShopBranch;
+}) {
+  const selectedLabel = shopBranches.find((branch) => branch.value === selectedBranch)?.label ?? 'All';
+
+  return (
+    <View style={styles.branchSelectorWrap}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: isOpen }}
+        onPress={onToggle}
+        style={({ pressed }) => [styles.branchTrigger, pressed && styles.branchButtonPressed]}>
+        <MapPin size={14} color={theme.colors.primary} strokeWidth={2.2} />
+        <View style={styles.branchTriggerCopy}>
+          <Text style={styles.branchTriggerLabel}>Branch</Text>
+          <Text numberOfLines={1} style={styles.branchTriggerText}>{selectedLabel}</Text>
+        </View>
+        <ChevronDown size={14} color={theme.colors.textMuted} strokeWidth={2.2} />
+      </Pressable>
+      {isOpen ? (
+        <View style={styles.branchMenu}>
+        {shopBranches.map((branch) => {
+          const isSelected = branch.value === selectedBranch;
+
+          return (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
+              key={branch.value}
+              onPress={() => onSelect(branch.value)}
+              style={({ pressed }) => [
+                styles.branchButton,
+                isSelected && styles.branchButtonActive,
+                pressed && styles.branchButtonPressed,
+              ]}>
+              <Text style={[styles.branchButtonText, isSelected && styles.branchButtonTextActive]}>
+                {branch.label}
+              </Text>
+            </Pressable>
+          );
+        })}
         </View>
       ) : null}
-      <View style={styles.productBody}>
-        <Text style={styles.productName} numberOfLines={2}>
-          {product.name}
-        </Text>
-        <Text style={styles.productPrice}>{formatPhp(product.priceCents)}</Text>
-      </View>
-    </Pressable>
+    </View>
   );
+}
+
+
+function normalizeProductBranch(branch?: string) {
+  const normalizedBranch = branch?.trim().toLowerCase();
+
+  if (!normalizedBranch) {
+    return undefined;
+  }
+
+  if (normalizedBranch.includes('manila')) {
+    return 'manila';
+  }
+
+  if (normalizedBranch.includes('pampanga')) {
+    return 'pampanga';
+  }
+
+  if (normalizedBranch === 'all') {
+    return 'all';
+  }
+
+  return normalizedBranch;
 }
 
 function CatalogSkeleton() {
@@ -306,15 +609,19 @@ const styles = StyleSheet.create({
   },
   content: {
     gap: theme.spacing.lg,
-    paddingTop: theme.spacing.lg,
+    paddingTop: 0,
+  },
+  heroCarousel: {
+    backgroundColor: theme.colors.white,
+    overflow: 'hidden',
+    position: 'relative',
   },
   hero: {
-    borderRadius: theme.radius.lg,
-    height: 248,
-    justifyContent: 'flex-end',
-    marginHorizontal: theme.spacing.lg,
+    height: 218,
+    justifyContent: 'center',
     overflow: 'hidden',
-    padding: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.md,
     position: 'relative',
   },
   heroImage: {
@@ -329,33 +636,166 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.greenSoft,
     justifyContent: 'center',
   },
+  heroTexture: {
+    ...StyleSheet.absoluteFillObject,
+    overflow: 'hidden',
+  },
+  heroAccentCircle: {
+    borderRadius: 140,
+    borderWidth: 1,
+    height: 230,
+    position: 'absolute',
+    right: -78,
+    top: -66,
+    width: 230,
+  },
+  heroAccentLine: {
+    borderRadius: theme.radius.pill,
+    height: 3,
+    left: theme.spacing.lg,
+    position: 'absolute',
+    right: theme.spacing.lg,
+    top: theme.spacing.lg,
+  },
+  unavailablePanel: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: 'rgba(31, 42, 36, 0.10)',
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    marginHorizontal: theme.spacing.lg,
+    minHeight: 300,
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.xxl,
+  },
+  unavailableIcon: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.greenSoft,
+    borderColor: 'rgba(46, 139, 52, 0.12)',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 76,
+    justifyContent: 'center',
+    width: 76,
+  },
+  unavailableTitle: {
+    color: softText,
+    fontSize: 20,
+    fontWeight: '600',
+    lineHeight: 26,
+    textAlign: 'center',
+  },
+  unavailableText: {
+    color: theme.colors.textMuted,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  retryButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    marginTop: theme.spacing.md,
+    minHeight: 46,
+    paddingHorizontal: theme.spacing.xl,
+  },
+  retryButtonPressed: {
+    opacity: 0.78,
+    transform: [{ scale: 0.98 }],
+  },
+  retryButtonText: {
+    color: theme.colors.white,
+    fontSize: 14,
+    fontWeight: '600',
+  },
   heroOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(20, 35, 25, 0.42)',
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
   },
   heroCopy: {
-    gap: theme.spacing.xs,
-    maxWidth: 300,
+    gap: 7,
+    maxWidth: 288,
   },
   eyebrow: {
     color: theme.colors.white,
-    fontSize: 12,
-    fontWeight: '600',
+    alignSelf: 'flex-start',
+    borderColor: 'rgba(255, 255, 255, 0.22)',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    fontSize: 9,
+    fontWeight: '700',
     letterSpacing: 0,
+    overflow: 'hidden',
+    paddingHorizontal: 9,
+    paddingVertical: 4,
     textTransform: 'uppercase',
   },
   title: {
     color: theme.colors.white,
-    fontSize: 30,
-    fontWeight: '600',
+    fontSize: 26,
+    fontWeight: '700',
     letterSpacing: 0,
-    lineHeight: 36,
+    lineHeight: 31,
   },
   subtitle: {
     color: theme.colors.white,
-    fontSize: 14,
-    lineHeight: 20,
-    opacity: 0.92,
+    fontSize: 12,
+    lineHeight: 17,
+    opacity: 0.9,
+  },
+  heroActions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    paddingTop: 5,
+  },
+  heroPrimaryButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.white,
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    minHeight: 35,
+    paddingHorizontal: theme.spacing.md,
+  },
+  heroPrimaryButtonText: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  heroSecondaryButton: {
+    alignItems: 'center',
+    borderColor: 'rgba(255, 255, 255, 0.46)',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 35,
+    paddingHorizontal: theme.spacing.md,
+  },
+  heroSecondaryButtonText: {
+    color: theme.colors.white,
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  heroDots: {
+    alignItems: 'center',
+    bottom: 10,
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+  },
+  heroDot: {
+    backgroundColor: 'rgba(255, 255, 255, 0.58)',
+    borderRadius: theme.radius.pill,
+    height: 5,
+    width: 5,
+  },
+  heroDotActive: {
+    width: 18,
   },
   searchRow: {
     alignItems: 'center',
@@ -381,6 +821,76 @@ const styles = StyleSheet.create({
     fontSize: 15,
     minWidth: 0,
     paddingVertical: theme.spacing.sm,
+  },
+  branchSelectorWrap: {
+    position: 'relative',
+    width: 132,
+    zIndex: 30,
+  },
+  branchTrigger: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.white,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borderWidth,
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: theme.spacing.xs,
+  },
+  branchTriggerCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  branchTriggerLabel: {
+    color: theme.colors.textMuted,
+    fontSize: 9,
+    fontWeight: '600',
+    lineHeight: 11,
+  },
+  branchTriggerText: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 15,
+  },
+  branchMenu: {
+    backgroundColor: theme.colors.white,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borderWidth,
+    overflow: 'hidden',
+    position: 'absolute',
+    right: 0,
+    top: 54,
+    width: 128,
+    zIndex: 40,
+  },
+  branchButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.white,
+    borderBottomColor: theme.colors.subtleBorder,
+    borderBottomWidth: 1,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: theme.spacing.md,
+  },
+  branchButtonActive: {
+    backgroundColor: theme.colors.greenSoft,
+  },
+  branchButtonPressed: {
+    opacity: 0.78,
+  },
+  branchButtonText: {
+    color: theme.colors.textMuted,
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 17,
+  },
+  branchButtonTextActive: {
+    color: theme.colors.primary,
+    fontWeight: '600',
   },
   categoryCardSection: {
     gap: theme.spacing.md,
@@ -438,11 +948,6 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '600',
   },
-  sectionSubtitle: {
-    color: theme.colors.textMuted,
-    fontSize: 13,
-    marginTop: 2,
-  },
   skeletonWrap: {
     gap: theme.spacing.lg,
   },
@@ -474,6 +979,10 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
   },
+  productScrollBuffer: {
+    height: 32,
+    width: '100%',
+  },
   productTile: {
     backgroundColor: theme.colors.surface,
     borderColor: theme.colors.border,
@@ -488,46 +997,12 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.98 }],
   },
   productImage: {
+    aspectRatio: 1,
     backgroundColor: theme.colors.white,
-    height: 158,
     width: '100%',
-  },
-  productImageFallback: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.greenSoft,
-    height: 158,
-    justifyContent: 'center',
-    width: '100%',
-  },
-  soldOutBadge: {
-    backgroundColor: 'rgba(31, 42, 36, 0.78)',
-    borderRadius: theme.radius.pill,
-    left: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
-    position: 'absolute',
-    top: theme.spacing.sm,
-  },
-  soldOutText: {
-    color: theme.colors.white,
-    fontSize: 11,
-    fontWeight: '600',
   },
   productBody: {
     gap: theme.spacing.xs,
     padding: theme.spacing.sm,
-  },
-  productName: {
-    color: softText,
-    fontSize: 13,
-    fontWeight: '500',
-    lineHeight: 18,
-    minHeight: 36,
-  },
-  productPrice: {
-    color: theme.colors.primary,
-    fontSize: 14,
-    fontVariant: ['tabular-nums'],
-    fontWeight: '600',
   },
 });

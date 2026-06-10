@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useTheme } from "../context/ThemeContext"
 import { api } from "../services/api"
-import { useCurrency } from "../context/CuurencyContext"
+import { useCurrency } from "../context/CurrencyContext" // <-- Fixed typo here!
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -100,7 +100,6 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
 
   return (
     <div className="w-full">
-      {/* ── Banner Area ── */}
       <section style={{ backgroundColor: bannerBg, borderBottom: `1px solid ${bannerBdr}` }}>
         <div
           ref={bannerRef}
@@ -154,7 +153,6 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
         </div>
       </section>
 
-      {/* ── Featured Grid Area ── */}
       <section style={{ backgroundColor: sectionBg }} className="py-12 lg:py-16">
         <div
           ref={gridRef}
@@ -205,7 +203,6 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
   )
 }
 
-// ─── 2. Master Loop Component ────────────────────────────────────────────────
 export default function DynamicFeaturedSections({ onNavigate, onPreview }) {
   const { isDark } = useTheme()
   const [sectionsData, setSectionsData] = useState([])
@@ -224,7 +221,6 @@ export default function DynamicFeaturedSections({ onNavigate, onPreview }) {
 
         if (!isMounted) return;
 
-        // Normalize products
         const rawProducts = Array.isArray(productsData) ? productsData : (productsData?.products || productsData?.items || productsData?.data || []);
         const normalizedProducts = rawProducts.map(p => ({
           ...p,

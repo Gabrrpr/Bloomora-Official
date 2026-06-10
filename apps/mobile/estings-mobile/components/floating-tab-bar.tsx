@@ -20,7 +20,7 @@ import { Fonts, theme } from '@/constants/theme';
 type FloatingTabRoute = 'index' | 'categories' | 'generate' | 'cart' | 'me';
 
 const tabConfig: Record<FloatingTabRoute, { icon: LucideIcon; label: string }> = {
-  cart: { icon: ShoppingBag, label: 'Orders' },
+  cart: { icon: ShoppingBag, label: 'Cart' },
   categories: { icon: Search, label: 'Shop' },
   generate: { icon: Sparkles, label: 'Create' },
   index: { icon: Home, label: 'Home' },
@@ -30,17 +30,24 @@ const tabConfig: Record<FloatingTabRoute, { icon: LucideIcon; label: string }> =
 export function FloatingTabBar({ descriptors, navigation, state }: BottomTabBarProps) {
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const layout = getFloatingTabLayout(width, height, insets.bottom);
-  const activeIndex = useSharedValue(state.index);
+  const visibleRoutes = state.routes.filter(
+    (route): route is typeof route & { name: FloatingTabRoute } => isFloatingTabRoute(route.name),
+  );
+  const visibleActiveIndex = Math.max(
+    0,
+    visibleRoutes.findIndex((route) => route.key === state.routes[state.index]?.key),
+  );
+  const layout = getFloatingTabLayout(width, height, insets.bottom, visibleRoutes.length);
+  const activeIndex = useSharedValue(visibleActiveIndex);
   const isHomeTab = state.routes[state.index]?.name === 'index';
 
   useEffect(() => {
-    activeIndex.value = withSpring(state.index, {
+    activeIndex.value = withSpring(visibleActiveIndex, {
       damping: 22,
       mass: 0.82,
       stiffness: 260,
     });
-  }, [activeIndex, state.index]);
+  }, [activeIndex, visibleActiveIndex]);
 
   const activePlateStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: activeIndex.value * layout.itemWidth }],
@@ -72,16 +79,12 @@ export function FloatingTabBar({ descriptors, navigation, state }: BottomTabBarP
             activePlateStyle,
           ]}
         />
-        {state.routes.map((route, index) => {
-          const routeName = route.name as FloatingTabRoute;
+        {visibleRoutes.map((route, index) => {
+          const routeName = route.name;
           const item = tabConfig[routeName];
 
-          if (!item) {
-            return null;
-          }
-
           const options = descriptors[route.key]?.options;
-          const isFocused = state.index === index;
+          const isFocused = state.routes[state.index]?.key === route.key;
           const onPress = () => {
             const event = navigation.emit({
               canPreventDefault: true,
@@ -182,7 +185,11 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
-function getFloatingTabLayout(width: number, height: number, bottomInset: number) {
+function isFloatingTabRoute(name: string): name is FloatingTabRoute {
+  return name in tabConfig;
+}
+
+function getFloatingTabLayout(width: number, height: number, bottomInset: number, itemCount: number) {
   const sidePadding = clamp(width * 0.048, 16, 24);
   const navWidth = clamp(width - sidePadding * 2, 326, 390);
   const containerPadding = clamp(Math.min(width, height) * 0.017, 6, 8);
@@ -190,7 +197,7 @@ function getFloatingTabLayout(width: number, height: number, bottomInset: number
   const navHeight = clamp(height * 0.076, 64, 74);
   const icon = clamp(Math.min(width, height) * 0.056, 20, 23);
   const fontSize = clamp((height / 844) * 11, 10, 11.5);
-  const itemWidth = innerWidth / 5;
+  const itemWidth = innerWidth / Math.max(itemCount, 1);
   const plateHeight = navHeight - containerPadding * 2;
 
   return {

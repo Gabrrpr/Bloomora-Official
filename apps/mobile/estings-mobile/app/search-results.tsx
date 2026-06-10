@@ -12,13 +12,14 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import { ChevronDown, ChevronLeft, Flower2, Search, X } from 'lucide-react-native';
+import { ArrowLeft, ChevronDown, Search, X } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppBrandHeader } from '@/components/app-brand-header';
 import { EmptyState } from '@/components/bloom-ui';
-import { formatPhp, type Product } from '@/constants/shop';
+import { ProductCard } from '@/components/product-card';
+import { type Product } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { shopApi } from '@/services/shop-api';
 
@@ -138,7 +139,7 @@ export default function SearchResultsScreen() {
             accessibilityRole="button"
             style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}
             onPress={() => router.back()}>
-            <ChevronLeft size={24} color={theme.colors.primary} strokeWidth={2.4} />
+            <ArrowLeft size={24} color={theme.colors.primary} strokeWidth={2.4} />
           </Pressable>
           <View style={styles.searchBox}>
             <Search size={theme.icon.sm} color={theme.colors.textMuted} />
@@ -211,7 +212,7 @@ export default function SearchResultsScreen() {
         ) : visibleSearchResults.length > 0 ? (
           <View style={styles.productGrid}>
             {visibleSearchResults.map((product) => (
-              <ProductTile
+              <ProductCard
                 key={product.id}
                 product={product}
               />
@@ -300,40 +301,6 @@ function sortProducts(products: Product[], sort: SortOption) {
   return sortedProducts;
 }
 
-function ProductTile({
-  product,
-}: {
-  product: Product;
-}) {
-  const isSoldOut = (product.stock ?? 0) <= 0;
-
-  return (
-    <Pressable
-      accessibilityLabel={`View ${product.name} details`}
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.productTile, pressed && styles.productTilePressed]}
-      onPress={() => router.push(`/product-details?id=${encodeURIComponent(product.id)}`)}>
-      {product.imageUrl ? (
-        <Image cachePolicy="memory-disk" contentFit="contain" recyclingKey={product.id} source={{ uri: product.imageUrl }} style={styles.productImage} />
-      ) : (
-        <View style={styles.productImageFallback}>
-          <Flower2 size={theme.icon.lg} color={theme.colors.primary} />
-        </View>
-      )}
-      {isSoldOut ? (
-        <View style={styles.soldOutBadge}>
-          <Text style={styles.soldOutText}>Sold out</Text>
-        </View>
-      ) : null}
-      <View style={styles.productBody}>
-        <Text style={styles.productName} numberOfLines={2}>
-          {product.name}
-        </Text>
-        <Text style={styles.productPrice}>{formatPhp(product.priceCents)}</Text>
-      </View>
-    </Pressable>
-  );
-}
 
 function SearchSkeleton() {
   return (
@@ -560,52 +527,14 @@ const styles = StyleSheet.create({
     position: 'relative',
     width: '47.8%',
   },
-  productTilePressed: {
-    opacity: 0.82,
-    transform: [{ scale: 0.98 }],
-  },
   productImage: {
     backgroundColor: theme.colors.white,
     height: 194,
     width: '100%',
   },
-  productImageFallback: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.greenSoft,
-    height: 194,
-    justifyContent: 'center',
-    width: '100%',
-  },
-  soldOutBadge: {
-    backgroundColor: 'rgba(31, 42, 36, 0.78)',
-    borderRadius: theme.radius.pill,
-    left: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 4,
-    position: 'absolute',
-    top: theme.spacing.sm,
-  },
-  soldOutText: {
-    color: theme.colors.white,
-    fontSize: 11,
-    fontWeight: '600',
-  },
   productBody: {
     gap: theme.spacing.xs,
     padding: theme.spacing.md,
-  },
-  productName: {
-    color: softText,
-    fontSize: 15,
-    fontWeight: '600',
-    lineHeight: 20,
-    minHeight: 39,
-  },
-  productPrice: {
-    color: theme.colors.primary,
-    fontSize: 15,
-    fontVariant: ['tabular-nums'],
-    fontWeight: '600',
   },
   pressed: {
     opacity: 0.76,

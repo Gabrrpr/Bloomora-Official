@@ -1,5 +1,6 @@
 export type Product = {
   id: string;
+  colors?: ProductColor[];
   description?: string;
   name: string;
   priceCents: number;
@@ -7,9 +8,17 @@ export type Product = {
   imageUrl?: string;
   categoryId: string;
   categoryName?: string;
+  branch?: 'all' | 'manila' | 'pampanga' | string;
+  createdAt?: string;
   productGroup?: string;
   productType?: string;
   stock?: number;
+};
+
+export type ProductColor = {
+  hex: string;
+  id: string;
+  name: string;
 };
 
 export type Category = {

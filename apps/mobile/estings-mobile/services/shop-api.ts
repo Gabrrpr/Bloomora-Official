@@ -2,6 +2,7 @@ import {
   type Category,
   getCartSummary,
   type Product,
+  type ProductColor,
   sampleCategories,
   sampleCreateOptions,
   sampleNotifications,
@@ -10,11 +11,14 @@ import {
   sampleProducts,
   samplePromos,
 } from '@/constants/shop';
-import { apiFetch } from '@/services/api-client';
+import { ApiError, apiFetch } from '@/services/api-client';
 import { getGuestCartItems } from '@/services/guest-cart';
 
 type BackendProduct = {
+  branch?: string | null;
+  branch_name?: string | null;
   category?: string | null;
+  created_at?: string | null;
   description?: string | null;
   id: string;
   image_url?: string | null;
@@ -26,7 +30,55 @@ type BackendProduct = {
   stock?: number | null;
 };
 
+type BackendProductColor = {
+  hex?: string | null;
+  id: string;
+  name?: string | null;
+};
+
+type BackendProductReview = {
+  comment?: string | null;
+  created_at?: string | null;
+  id: string;
+  image_url?: string | null;
+  star_rating?: number | null;
+  user_id?: string | null;
+  user_name?: string | null;
+};
+
+type BackendProductRating = {
+  average_rating?: number | null;
+  review_count?: number | null;
+};
+
+export type ProductReview = {
+  comment?: string;
+  createdAt?: string;
+  id: string;
+  imageUrl?: string;
+  rating: number;
+  userName?: string;
+};
+
+export type ProductRatingSummary = {
+  averageRating: number;
+  reviewCount: number;
+};
+
+export type ShopHeroSlide = {
+  accent?: string;
+  cta?: string;
+  ctaSecondary?: string;
+  ctaSecondaryNav?: string;
+  description: string;
+  headline: string;
+  id: number | string;
+  image?: string | null;
+  tag: string;
+};
+
 type CatalogRequestOptions = {
+  branch?: 'all' | 'manila' | 'pampanga';
   forceRefresh?: boolean;
 };
 
@@ -60,13 +112,67 @@ function normalizeImageUrl(imageUrl?: string | null) {
   return undefined;
 }
 
+function normalizeBranch(branch?: string | null) {
+  const normalizedBranch = branch?.trim().toLowerCase();
+
+  if (!normalizedBranch) {
+    return undefined;
+  }
+
+  if (normalizedBranch.includes('manila')) {
+    return 'manila';
+  }
+
+  if (normalizedBranch.includes('pampanga')) {
+    return 'pampanga';
+  }
+
+  if (normalizedBranch === 'all') {
+    return 'all';
+  }
+
+  return normalizedBranch;
+}
+
+function normalizeHexColor(hex?: string | null) {
+  const trimmedHex = hex?.trim();
+
+  if (!trimmedHex) {
+    return '#E5E7EB';
+  }
+
+  return trimmedHex.startsWith('#') ? trimmedHex : `#${trimmedHex}`;
+}
+
+function mapBackendProductColor(color: BackendProductColor): ProductColor {
+  return {
+    hex: normalizeHexColor(color.hex),
+    id: color.id,
+    name: color.name?.trim() || 'Color',
+  };
+}
+
+function mapBackendProductReview(review: BackendProductReview): ProductReview {
+  return {
+    comment: review.comment?.trim() || undefined,
+    createdAt: review.created_at || undefined,
+    id: review.id,
+    imageUrl: normalizeImageUrl(review.image_url),
+    rating: Number(review.star_rating ?? 0),
+    userName: review.user_name?.trim() || undefined,
+  };
+}
+
 function mapBackendProduct(product: BackendProduct): Product {
   const category = product.category || 'Flowers';
   const productGroup = product.product_group || undefined;
+  const branch = normalizeBranch(product.branch_name ?? product.branch);
 
   return {
+    branch,
     categoryId: toCategoryId(category),
     categoryName: toTitleCase(category),
+    createdAt: product.created_at || undefined,
     description: product.description || undefined,
     id: product.id,
     imageUrl: normalizeImageUrl(product.image_url),
@@ -101,8 +207,20 @@ function getCategoriesFromProducts(products: Product[]): Category[] {
   })).sort((a, b) => a.name.localeCompare(b.name));
 }
 
-async function fetchBackendProducts() {
-  const products = await apiFetch<BackendProduct[]>('/products/');
+function buildCatalogPath(options: CatalogRequestOptions = {}) {
+  const params = new URLSearchParams();
+
+  if (options.branch && options.branch !== 'all') {
+    params.set('branch', options.branch);
+  }
+
+  const query = params.toString();
+
+  return query ? `/products/?${query}` : '/products/';
+}
+
+async function fetchBackendProducts(options: CatalogRequestOptions = {}) {
+  const products = await apiFetch<BackendProduct[]>(buildCatalogPath(options));
   return products
     .map(mapBackendProduct)
     .sort((first, second) => {
@@ -118,21 +236,24 @@ async function fetchBackendProducts() {
 
 async function getBackendProducts(options: CatalogRequestOptions = {}) {
   const now = Date.now();
+  const canUseCache = !options.forceRefresh && (!options.branch || options.branch === 'all');
 
-  if (!options.forceRefresh && productCache && now - productCache.storedAt < productCacheDurationMs) {
+  if (canUseCache && productCache && now - productCache.storedAt < productCacheDurationMs) {
     return productCache.products;
   }
 
-  if (!options.forceRefresh && productRequest) {
+  if (canUseCache && productRequest) {
     return productRequest;
   }
 
-  productRequest = fetchBackendProducts()
+  const request = fetchBackendProducts(options)
     .then((products) => {
-      productCache = {
-        products,
-        storedAt: Date.now(),
-      };
+      if (!options.branch || options.branch === 'all') {
+        productCache = {
+          products,
+          storedAt: Date.now(),
+        };
+      }
 
       return products;
     })
@@ -140,7 +261,19 @@ async function getBackendProducts(options: CatalogRequestOptions = {}) {
       productRequest = null;
     });
 
-  return productRequest;
+  if (canUseCache) {
+    productRequest = request;
+  }
+
+  return request;
+}
+
+function toCatalogError(error: unknown) {
+  if (error instanceof ApiError && error.status === 0) {
+    return error;
+  }
+
+  return new Error('Unable to reach catalog (E-CATALOG-001). Check your connection and try again.');
 }
 
 export const shopSnapshot = {
@@ -160,7 +293,34 @@ export const shopApi = {
     try {
       return await getBackendProducts(options);
     } catch (error) {
-      console.warn('Failed to load backend products.', error);
+      console.warn('Failed to load catalog products.', error);
+      throw toCatalogError(error);
+    }
+  },
+  async getProductColors(productId: string) {
+    try {
+      const colors = await apiFetch<BackendProductColor[]>(`/products/${encodeURIComponent(productId)}/colors`);
+      return colors.map(mapBackendProductColor);
+    } catch {
+      return [];
+    }
+  },
+  async getProductRating(productId: string): Promise<ProductRatingSummary> {
+    try {
+      const rating = await apiFetch<BackendProductRating>(`/product/${encodeURIComponent(productId)}/rating`);
+      return {
+        averageRating: Number(rating.average_rating ?? 0),
+        reviewCount: Number(rating.review_count ?? 0),
+      };
+    } catch {
+      return { averageRating: 0, reviewCount: 0 };
+    }
+  },
+  async getProductReviews(productId: string) {
+    try {
+      const reviews = await apiFetch<BackendProductReview[]>(`/product/${encodeURIComponent(productId)}`);
+      return reviews.map(mapBackendProductReview);
+    } catch {
       return [];
     }
   },
@@ -168,8 +328,8 @@ export const shopApi = {
     try {
       return await getBackendProducts(options);
     } catch (error) {
-      console.warn('Failed to load backend products.', error);
-      return [];
+      console.warn('Failed to load featured products.', error);
+      throw toCatalogError(error);
     }
   },
   async getCategories(options?: CatalogRequestOptions) {
@@ -177,8 +337,8 @@ export const shopApi = {
       const products = await getBackendProducts(options);
       return getCategoriesFromProducts(products);
     } catch (error) {
-      console.warn('Failed to load backend categories.', error);
-      return [];
+      console.warn('Failed to load catalog categories.', error);
+      throw toCatalogError(error);
     }
   },
   async getCatalog(options?: CatalogRequestOptions) {
@@ -190,12 +350,8 @@ export const shopApi = {
         products,
       };
     } catch (error) {
-      console.warn('Failed to load backend catalog.', error);
-
-      return {
-        categories: [],
-        products: [],
-      };
+      console.warn('Failed to load catalog.', error);
+      throw toCatalogError(error);
     }
   },
   async getCart() {
@@ -217,5 +373,8 @@ export const shopApi = {
   },
   async getCreateOptions() {
     return sampleCreateOptions;
+  },
+  async getHeroSlides() {
+    return apiFetch<{ slides: ShopHeroSlide[] }>('/site-customization/hero');
   },
 };

@@ -11,17 +11,26 @@
     },
     "preview": {
       "channel": "preview",
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://bloomora-api.onrender.com/api/v1"
+      }
     },
     "apk": {
       "channel": "apk",
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://bloomora-api.onrender.com/api/v1"
+      },
       "android": {
         "buildType": "apk"
       }
     },
     "production": {
       "channel": "production",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://bloomora-api.onrender.com/api/v1"
+      }
     }
   },
   "submit": {
