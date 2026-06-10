@@ -7,6 +7,17 @@ import TermsModal from "../components/TermsModal"
 import estingsLogo from "../assets/Estings.svg"
 import bgImg from "../assets/BG_LoginRegister.png"
 
+// ── Supported Currencies ────────────────────────────────────────────────────
+const SUPPORTED_REGIONS = [
+  { code: "PH", country: "Philippines", currency: "PHP", symbol: "₱" },
+  { code: "US", country: "United States", currency: "USD", symbol: "$" },
+  { code: "GB", country: "United Kingdom", currency: "GBP", symbol: "£" },
+  { code: "EU", country: "European Union", currency: "EUR", symbol: "€" },
+  { code: "AU", country: "Australia", currency: "AUD", symbol: "A$" },
+  { code: "CA", country: "Canada", currency: "CAD", symbol: "C$" },
+  { code: "SG", country: "Singapore", currency: "SGD", symbol: "S$" },
+]
+
 // ── Validation helpers ──────────────────────────────────────────────────────
 
 /** Strict email: local@domain.tld — TLD must be 2+ alpha chars, no consecutive dots, etc. */
@@ -161,7 +172,6 @@ function loadDraft() {
 }
 
 export default function Register({ onNavigate }) {
-  // const { register } = useAuth()
   const [step, setStep]   = useState("form")
   const [otp, setOtp]     = useState("")
   const [showTerms, setShowTerms] = useState(false)
@@ -174,9 +184,10 @@ export default function Register({ onNavigate }) {
     return p === 1 || p === 2 || p === 3 || p === 4 ? p : 1
   })
 
+  // 🚀 ADDED preferred_currency with a default of "PHP"
   const [form, setForm] = useState(() => initial?.form ?? {
     firstName: "", lastName: "", email: "", phone: "", username: "",
-    password: "", confirmPassword: "",
+    password: "", confirmPassword: "", preferred_currency: "PHP",
     address: { regionId: "", provinceId: "", city: "", street: "", zip_code: "" }
   })
 
@@ -253,9 +264,6 @@ export default function Register({ onNavigate }) {
   const [loadingMsg, setLoadingMsg]       = useState("Please wait...")
   const [passwordStrength, setPasswordStrength] = useState("empty")
 
-  // Persist BOTH the form data AND the current step so the user resumes
-  // exactly where they left off (e.g. after opening Terms or accidentally
-  // navigating away and back).
   useEffect(() => {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ form, formPhase }))
   }, [form, formPhase])
@@ -266,38 +274,31 @@ export default function Register({ onNavigate }) {
     return () => window.removeEventListener("beforeunload", clean)
   }, [])
 
-  // ── Phone handler ─────────────────────────────────────────────────────────
   const handlePhoneChange = useCallback((e) => {
     let val = e.target.value.replace(/[^\d+]/g, "")
-    // Auto-convert 09xx → +639xx
     if (val.startsWith("0")) val = "+63" + val.slice(1)
-    // Ensure +63 prefix
     if (!val.startsWith("+63")) val = "+63" + val.replace(/^\+?63?/, "")
-    val = val.slice(0, 13) // +63 + 10 digits = 13 chars max
+    val = val.slice(0, 13)
     setForm(f => ({ ...f, phone: val }))
     if (touched.phone) validateField("phone", val, null)
   }, [touched.phone, validateField])
 
-  // ── Password strength ─────────────────────────────────────────────────────
   useEffect(() => {
     const p = form.password; let s = 0
     if (p.length >= 8) s++; if (/[A-Z]/.test(p)) s++; if (/[0-9]/.test(p)) s++; if (/[^A-Za-z0-9]/.test(p)) s++
     setPasswordStrength(s === 0 ? "empty" : s < 2 ? "weak" : s < 3 ? "fair" : s < 4 ? "good" : "strong")
   }, [form.password])
 
-  // ── Address helper ────────────────────────────────────────────────────────
   const updateAddr = (field, value) => {
     setForm(f => ({ ...f, address: { ...f.address, [field]: value } }))
     if (touched[field]) validateField(field, value, null)
   }
 
-  // ── ZIP: block non-numeric keystrokes ─────────────────────────────────────
   const handleZipChange = (e) => {
     const val = e.target.value.replace(/\D/g, "").slice(0, 4)
     updateAddr("zip_code", val)
   }
 
-  // ── Phase-level can-proceed ────────────────────────────────────────────────
   const canProceed = {
     1: isValidName(form.firstName) && isValidName(form.lastName),
     2: isValidEmail(form.email) && isValidPHPhone(form.phone),
@@ -306,7 +307,6 @@ export default function Register({ onNavigate }) {
        isValidStreet(form.address.street) && form.address.regionId && form.address.provinceId && agreeTerms,
   }
 
-  // ── Phase validation with error messages ──────────────────────────────────
   const validatePhase = (phase) => {
     setError("")
     if (phase === 1) {
@@ -368,15 +368,15 @@ export default function Register({ onNavigate }) {
         ? `${form.address.street}, ${form.address.city}, ${form.address.provinceId || ""} ${form.address.zip_code || ""}`.trim()
         : undefined
         
-      // ✅ Change "register" to "registerUser" right here:
+      // 🚀 Pass preferred_currency to the backend registration call
       const result = await registerUser({
         first_name: form.firstName, last_name: form.lastName, email: form.email,
         phone_number: form.phone, username: form.username || undefined,
-        password: form.password, address: addressStr
+        password: form.password, address: addressStr,
+        preferred_currency: form.preferred_currency
       })
       
       if (result.success || result.status === "success") {
-        // Clear the registration draft on success so next sign-up starts fresh
         sessionStorage.removeItem(STORAGE_KEY)
         sessionStorage.setItem("registerEmail", form.email)
         sessionStorage.setItem("registerPassword", form.password)
@@ -397,8 +397,6 @@ export default function Register({ onNavigate }) {
     <div className="min-h-screen flex">
       {loading && <FlowerLoader message={loadingMsg} />}
 
-      {/* Terms & Conditions popup — replaces the old onNavigate("terms") so
-          the user keeps their place in the registration flow. */}
       <TermsModal
         open={showTerms}
         onClose={() => setShowTerms(false)}
@@ -545,7 +543,6 @@ export default function Register({ onNavigate }) {
                         onChange={e => {
                           setForm(f => ({ ...f, password: e.target.value }))
                           if (touched.password) validateField("password", e.target.value, null)
-                          // Re-validate confirm when password changes
                           if (touched.confirmPassword) validateField("confirmPassword", form.confirmPassword, { password: e.target.value })
                         }}
                         onBlur={() => { touch("password"); validateField("password", form.password, null) }}
@@ -595,11 +592,27 @@ export default function Register({ onNavigate }) {
                   </div>
                 </>}
 
-                {/* ── Phase 4: Address ──────────────────────────────────── */}
+                {/* ── Phase 4: Address & Currency ───────────────────────────── */}
                 {formPhase === 4 && <>
-                  <div className="grid grid-cols-2 gap-3">
+                  {/* 🚀 New Billing Currency Selector placed natively into the grid */}
+                  <div className="mb-3">
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Billing Currency / Region</label>
+                    <select
+                      value={form.preferred_currency}
+                      onChange={e => setForm(f => ({ ...f, preferred_currency: e.target.value }))}
+                      className={iSel}
+                    >
+                      {SUPPORTED_REGIONS.map(r => (
+                        <option key={r.code} value={r.currency}>{r.country} ({r.currency})</option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-400 mt-1">Product prices will be displayed in this currency worldwide.</p>
+                  </div>
+
+                  {/* Philippine Delivery details specifically kept for local fulfillment */}
+                  <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-100">
                     <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Region</label>
+                      <label className="block text-xs font-medium text-gray-700 mb-1">Delivery Region (PH)</label>
                       <select value={form.address.regionId}
                         onChange={e => { updateAddr("regionId", e.target.value); updateAddr("provinceId", "") }}
                         className={iSel}>
@@ -631,7 +644,6 @@ export default function Register({ onNavigate }) {
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-gray-700 mb-1">ZIP Code</label>
-                      {/* Numbers only — enforced by replace + inputMode */}
                       <input
                         type="text"
                         inputMode="numeric"
@@ -657,10 +669,9 @@ export default function Register({ onNavigate }) {
                     <p className="text-xs text-gray-400 mt-1">Must include a house/unit number and be at least 10 characters.</p>
                   </div>
 
-                  <label className="flex items-start gap-2 cursor-pointer">
+                  <label className="flex items-start gap-2 cursor-pointer mt-4">
                     <input type="checkbox" checked={agreeTerms} onChange={e => setAgreeTerms(e.target.checked)} className="w-4 h-4 rounded accent-green-600 mt-0.5" />
                     <span className="text-sm text-gray-600">I agree to the{" "}
-                      {/* Opens the popup instead of navigating away — preserves step 4 state. */}
                       <button type="button" onClick={() => setShowTerms(true)} className="text-green-700 hover:underline font-medium">Terms &amp; Conditions</button>
                     </span>
                   </label>

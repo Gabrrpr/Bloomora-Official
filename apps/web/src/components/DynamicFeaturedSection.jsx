@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useTheme } from "../context/ThemeContext"
 import { api } from "../services/api"
+import { useCurrency } from "../context/CuurencyContext"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -13,10 +14,6 @@ const RIBBON_COLORS = {
   "Comfort": "#9d174d", "Sympathy": "#1d4ed8",
 }
 
-// Animated rotating gradient border ("traveling beam") for the banner CTA.
-// Defined once and reused via the .bloom-glow-border class. The conic gradient
-// angle is animated through a registered @property so the beam loops smoothly;
-// browsers without @property support simply show a static green ring.
 const GLOW_BORDER_CSS = `
   @property --bloom-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
   @keyframes bloomBorderSpin { to { --bloom-angle: 360deg; } }
@@ -27,7 +24,7 @@ const GLOW_BORDER_CSS = `
     inset: 0;
     z-index: -1;
     border-radius: inherit;
-    padding: 2px;                /* border thickness */
+    padding: 2px;
     background: conic-gradient(from var(--bloom-angle),
       rgba(74,222,128,0.12) 0deg,
       rgba(74,222,128,0.12) 55deg,
@@ -57,8 +54,6 @@ const GLOW_BORDER_CSS = `
   }
 `
 
-// Scroll reveal — same pattern as OccasionsStrip / Testimonials.
-// Fades in and slides up the first time the element enters the viewport.
 function useScrollReveal(threshold = 0.08) {
   const ref = useRef(null)
   const [visible, setVisible] = useState(false)
@@ -75,8 +70,10 @@ function useScrollReveal(threshold = 0.08) {
 
 
 // ─── 1. Your Beautiful Single Section Layout ─────────────────────────────────
-// 🚀 ADDED 'onPreview' to the props list here
 function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
+  // 🚀 Call the currency hook here so this block knows how to format prices
+  const { formatPrice } = useCurrency() || { formatPrice: (price) => `₱${Number(price).toLocaleString()}` };
+
   if (!data) return null;
 
   const accentG  = isDark ? "#4ade80" : G
@@ -89,20 +86,14 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
   const sectionBg= isDark ? "#111827" : "#fafafa"
   const secHdrC  = isDark ? "#f3f4f6" : "#1f2937"
 
-  // Glowing green line in dark mode; solid brand green in light mode.
   const lineGlow = isDark ? "0 0 10px rgba(74,222,128,0.6)" : "none"
 
-  // Scroll-reveal refs for the two areas of this section.
   const [bannerRef, bannerVisible] = useScrollReveal(0.08)
   const [gridRef, gridVisible]     = useScrollReveal(0.06)
 
-  // Safely resolve every shape this section needs. Defaulting here means a
-  // section saved without a banner / categories / featured array (for example
-  // the built-in carousel section, which has none of these) can never crash
-  // the render — it simply shows nothing for the missing parts.
-  const banner     = data.banner || {}
-  const categories = Array.isArray(data.categories) ? data.categories : []
-  const featured   = Array.isArray(data.featured) ? data.featured : []
+  const banner     = data?.banner || {}
+  const categories = Array.isArray(data?.categories) ? data.categories : []
+  const featured   = Array.isArray(data?.featured) ? data.featured : []
 
   const slotProducts = featured.map(slot => products.find(p => String(p.id) === String(slot.productId)))
   const tileProducts = categories.map(cat => products.find(p => String(p.id) === String(cat.productId)))
@@ -118,20 +109,20 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
         >
           <div className="text-center lg:text-left">
             <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: accentG }}>
-              {banner.eyebrow}
+              {banner?.eyebrow}
             </p>
             <h2 className="text-3xl md:text-4xl font-bold mb-4 leading-tight" style={{ color: headingC }}>
-              {banner.heading}
+              {banner?.heading}
             </h2>
             <div className="w-16 h-[3px] rounded-sm mx-auto lg:mx-0 mb-5" style={{ backgroundColor: accentG, boxShadow: lineGlow }} />
             <p className="text-base mb-8 leading-relaxed max-w-lg mx-auto lg:mx-0" style={{ color: subC }}>
-              {banner.description}
+              {banner?.description}
             </p>
             <div className="flex justify-center lg:justify-start">
-              <button onClick={() => onNavigate(banner.ctaTarget)}
+              <button onClick={() => onNavigate(banner?.ctaTarget)}
                 className="bloom-glow-border inline-flex items-center gap-2 text-white text-sm font-bold px-8 py-3.5 rounded-full hover:opacity-90 transition-all shadow-lg shadow-green-900/20"
                 style={{ backgroundColor: DG }}>
-                {banner.ctaLabel}
+                {banner?.ctaLabel}
                 <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 8l4 4m0 0l-4 4m4-4H3"/>
                 </svg>
@@ -173,17 +164,16 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
           <div className="flex items-center gap-3 mb-8">
             <div className="w-[3px] h-12 rounded-sm shrink-0" style={{ backgroundColor: accentG, boxShadow: lineGlow }} />
             <div>
-              <p className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: accentG }}>{data.sectionEyebrow}</p>
-              <h3 className="text-2xl md:text-3xl font-bold" style={{ color: secHdrC }}>{data.sectionHeading}</h3>
+              <p className="text-xs font-bold tracking-widest uppercase mb-1" style={{ color: accentG }}>{data?.sectionEyebrow}</p>
+              <h3 className="text-2xl md:text-3xl font-bold" style={{ color: secHdrC }}>{data?.sectionHeading}</h3>
             </div>
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             {slotProducts.map((p, i) => {
               if (!p) return null;
-              const ribbon = featured[i].ribbonOverride ?? p.ribbon
+              const ribbon = featured[i]?.ribbonOverride ?? p.ribbon
               const ribbonColor = RIBBON_COLORS[ribbon]
               return (
-                // 🚀 CHANGED THIS LINE to trigger onPreview
                 <button key={i} onClick={() => onPreview(p)}
                   className="group flex flex-col text-left rounded-xl overflow-hidden transition-all hover:shadow-xl"
                   style={{ backgroundColor: isDark ? "#1a2332" : "#ffffff", border: `1px solid ${isDark ? "#2d3748" : "#f3f4f6"}` }}>
@@ -198,7 +188,12 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
                   <div className="p-4 flex flex-col flex-1">
                     <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: subC }}>{p.category}</p>
                     <p className="text-sm md:text-base font-bold leading-tight mb-2 line-clamp-2" style={{ color: headingC }}>{p.name}</p>
-                    <p className="text-sm md:text-base font-extrabold mt-auto" style={{ color: accentG }}>₱{Number(p.price || 0).toLocaleString()}</p>
+                    
+                    {/* 🚀 CHANGED THIS LINE to use formatPrice() */}
+                    <p className="text-sm md:text-base font-extrabold mt-auto" style={{ color: accentG }}>
+                      {formatPrice(p.price || 0)}
+                    </p>
+                    
                   </div>
                 </button>
               )
@@ -241,15 +236,11 @@ export default function DynamicFeaturedSections({ onNavigate, onPreview }) {
         
         setAllProducts(normalizedProducts);
 
-        // Convert the database object of sections into an ordered Array so we can map() it.
-        // Only real featured sections are rendered here: any entry without a `banner`
-        // (such as the built-in "__carousel__" section, which ChooseYourBloom owns) is
-        // skipped so it can never break this layout.
         if (settingsData && Object.keys(settingsData).length > 0) {
            const sectionsArray = Object.keys(settingsData)
               .filter(key => key !== "__carousel__")
               .map(key => ({
-                id: key, // Keep the key (e.g. 'bouquets', 'funeral', 'section_173000') for React key prop
+                id: key, 
                 ...settingsData[key]
               }))
               .filter(section => section && section.banner && section.__type !== "carousel");
@@ -276,10 +267,8 @@ export default function DynamicFeaturedSections({ onNavigate, onPreview }) {
 
   return (
     <>
-      {/* Animated gradient-border styles (defined once for all sections) */}
       <style>{GLOW_BORDER_CSS}</style>
 
-      {/* 🚀 This loop is the magic! It creates a block for EVERY section the Admin created */}
       {sectionsData.map((section) => (
          <SectionBlock 
             key={section.id} 
@@ -287,7 +276,7 @@ export default function DynamicFeaturedSections({ onNavigate, onPreview }) {
             products={allProducts}  
             isDark={isDark} 
             onNavigate={onNavigate} 
-            onPreview={onPreview} // 🚀 Pass onPreview down into the SectionBlock
+            onPreview={onPreview}
          />
       ))}
     </>

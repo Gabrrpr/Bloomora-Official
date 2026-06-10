@@ -9,9 +9,10 @@ from slowapi.errors import RateLimitExceeded
 
 import os
 import traceback
+from app.services.currencyService import get_latest_rates
 
 from app.api.v1.routes import (
-    addresses,
+    addresses,  
     auth,
     campaigns,
     chats,
@@ -110,6 +111,13 @@ app.include_router(addresses.router, prefix="/api/v1", tags=["addresses"])
 app.include_router(reviews.router, prefix="/api/v1", tags=["Reviews"])
 app.include_router(vases.router, prefix="/api/v1/vases", tags=["Vases"])
 app.include_router(campaigns.router, prefix="/api/v1", tags=["campaigns"])
+
+
+# 🚀 2. NEW LIVE EXCHANGE RATE ENDPOINT ADDED HERE
+@app.get("/api/v1/config/exchange-rates", tags=["Configuration"])
+async def exchange_rates():
+    rates = await get_latest_rates()
+    return {"success": True, "rates": rates}
 
 
 @app.get("/", tags=["Health"])
