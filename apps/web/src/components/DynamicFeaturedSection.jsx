@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useTheme } from "../context/ThemeContext"
 import { api } from "../services/api"
-import { useCurrency } from "../context/CurrencyContext" // <-- Fixed typo here!
+import { useCurrency } from "../context/CuurencyContext" // matches existing filename\r\n
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
