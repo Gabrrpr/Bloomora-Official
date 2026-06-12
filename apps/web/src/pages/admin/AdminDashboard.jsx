@@ -762,72 +762,381 @@ function DashboardPanel({ user }) {
 
   const branchLabel = branch === "all" ? "All Branches" : branch.charAt(0).toUpperCase() + branch.slice(1);
 
+  // ── Print: derived metrics for the printed Dashboard Report ──
+  // The screen UI stays untouched; everything below feeds the print only.
+  const handlePrint = () => window.print()
+  const printDate   = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
+  const printTime   = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })
+
+  const outCount     = lowStock.filter(i => (parseInt(i.stock ?? 0) || 0) <= 0).length
+  const lowOnlyCount = Math.max(0, lowStock.length - outCount)
+  const pct = n => (lowStock.length ? (n / lowStock.length) * 100 : 0)
+
+  // Full low-stock list, most depleted first (screen card shows only 8)
+  const printLowStock = [...lowStock].sort(
+    (a, b) => (parseInt(a.stock ?? 0) || 0) - (parseInt(b.stock ?? 0) || 0)
+  )
+
+  // Report scope line shown under the printed title.
+  // Note: /products/low-stock is not branch-filtered, so that section is company-wide.
+  const printScope = [
+    `Branch: ${branchLabel}`,
+    "Daily operations snapshot",
+    `${lowStock.length} low-stock item${lowStock.length === 1 ? "" : "s"}`,
+  ].join("   ·   ")
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold" style={{ color: t.textPrimary }}>Dashboard Overview</h1>
-          <p className="text-sm mt-1" style={{ color: t.textSecondary }}>
-            Welcome back, {user?.firstName || "Admin"}. Here's what's happening today.
+    <div>
+
+      {/* ── Print styles ──
+          The printed report is fully separate from the screen UI:
+          everything in .print-only renders ONLY on paper, and the
+          screen dashboard is no-print. Print sections in order:
+          1 letterhead band  2 title + scope  3 summary cards
+          4 restock urgency bar  5 low-stock detail table  6 footer/signatures */}
+      <style>{`
+        .print-only { display: none; }
+
+        @media print {
+          @page { margin: 12mm 10mm; }
+          body * { visibility: hidden !important; }
+          #dashboard-print-area, #dashboard-print-area * { visibility: visible !important; }
+          #dashboard-print-area {
+            position: absolute; top: 0; left: 0; width: 100%;
+            font-family: "Helvetica Neue", Arial, sans-serif; color: #1f2937;
+          }
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+          .print-letterhead, .print-doc-title, .print-summary, .print-health { break-inside: avoid; page-break-inside: avoid; }
+
+          /* ── 1. Letterhead: brand band ── */
+          .print-letterhead {
+            display: flex !important; align-items: center; justify-content: space-between; gap: 16px;
+            padding: 13px 18px; border-radius: 12px;
+            background: linear-gradient(135deg,#0C573E 0%,#15724B 55%,#2E8B34 100%) !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-logo-word {
+            height: 34px; width: auto; max-width: 240px; display: block;
+            object-fit: contain; filter: brightness(0) invert(1);
+          }
+          .print-tagline {
+            margin: 5px 0 0; font-size: 8px; font-weight: 700;
+            letter-spacing: 0.3em; text-transform: uppercase; color: rgba(255,255,255,0.82) !important;
+          }
+          .print-meta { text-align: right; flex-shrink: 0; }
+          .print-meta .ref {
+            display: inline-block; margin: 0; padding: 3px 10px; border-radius: 9999px;
+            border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.12) !important;
+            color: #ffffff !important; font-size: 8.5px; font-weight: 700;
+            letter-spacing: 0.12em; text-transform: uppercase;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-meta .gen { margin: 6px 0 0; font-size: 9px; color: rgba(255,255,255,0.85) !important; }
+          .print-meta .gen strong { color: #ffffff !important; font-weight: 700; }
+
+          /* ── 2. Document title + report scope ── */
+          .print-doc-title { display: flex !important; flex-direction: column; align-items: center; margin: 16px 0 2px; }
+          .print-doc-title .t {
+            margin: 0; font-size: 15px; font-weight: 800;
+            letter-spacing: 0.3em; text-transform: uppercase; color: #0C573E !important;
+          }
+          .print-doc-title .rule {
+            width: 54px; height: 3px; border-radius: 9999px; margin: 7px 0 6px;
+            background: linear-gradient(90deg,#0C573E,#2E8B34) !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-doc-title .scope { margin: 0; font-size: 9px; color: #6b7280 !important; letter-spacing: 0.02em; text-align: center; }
+
+          /* ── 3. Summary cards ── */
+          .print-summary { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 0; }
+          .print-summary-card {
+            border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px;
+            background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-summary-card.c-total { border-top-color: #0C573E !important; }
+          .print-summary-card.c-value { border-top-color: #2E8B34 !important; }
+          .print-summary-card.c-low   { border-top-color: #d97706 !important; }
+          .print-summary-card.c-out   { border-top-color: #dc2626 !important; }
+          .print-summary-card .label { margin: 0; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9ca3af !important; }
+          .print-summary-card .value { margin: 3px 0 0; font-size: 19px; font-weight: 800; color: #111827 !important; }
+          .print-summary-card .value.green { color: #16a34a !important; }
+          .print-summary-card .value.amber { color: #d97706 !important; }
+          .print-summary-card .value.red   { color: #dc2626 !important; }
+          .print-summary-card .cap { margin: 3px 0 0; font-size: 8px; color: #9ca3af !important; }
+
+          /* ── 4. Restock urgency ── */
+          .print-health {
+            margin: 10px 0 0; border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 12px 11px;
+            background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-health .head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; }
+          .print-health .hk { margin: 0; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9ca3af !important; }
+          .print-health .hv { margin: 0; font-size: 8.5px; color: #6b7280 !important; }
+          .print-health .bar {
+            display: flex; height: 10px; border-radius: 9999px; overflow: hidden;
+            background: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-health .seg { display: block; height: 100%; }
+          .print-health .s-low { background: #f59e0b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .s-out { background: #ef4444 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 7px 0 0; }
+          .print-health .li { display: flex; align-items: center; gap: 5px; font-size: 8.5px; color: #374151 !important; }
+          .print-health .dot { width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; }
+
+          /* ── 5. Low-stock detail table ── */
+          .print-detail { display: block !important; margin-top: 14px; }
+          .print-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; padding: 0 2px; }
+          .print-section-title { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #0C573E !important; }
+          .print-section-sub { margin: 0; font-size: 8.5px; color: #9ca3af !important; }
+          .print-detail .twrap { border: 1px solid #dbe3df; border-radius: 10px; overflow: hidden; }
+          .print-detail table { width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; }
+          .print-detail thead { display: table-header-group; }
+          .print-detail tr { page-break-inside: avoid; }
+          .print-detail th {
+            background: #0C573E !important; color: #ffffff !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            border: none; padding: 7px; text-align: left;
+            font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; line-height: 1.25;
+          }
+          .print-detail th.col-idx    { width: 5%; }
+          .print-detail th.col-name   { width: 37%; }
+          .print-detail th.col-cat    { width: 22%; }
+          .print-detail th.col-reo    { width: 12%; }
+          .print-detail th.col-stock  { width: 12%; }
+          .print-detail th.col-status { width: 12%; }
+          .print-detail td {
+            border-bottom: 1px solid #eef1f4; padding: 6.5px 7px;
+            font-size: 9.5px; color: #1f2937 !important; vertical-align: top;
+            word-break: break-word; overflow-wrap: anywhere;
+          }
+          .print-detail .num { text-align: right; }
+          .print-detail .center { text-align: center; }
+          .print-detail .nowrap { white-space: nowrap !important; }
+          .print-detail .muted { color: #6b7280 !important; }
+          .print-detail .item-name { font-weight: 600; color: #0f172a !important; line-height: 1.3; }
+          .print-detail tr.alt td { background: #f7faf8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-detail tbody tr:last-child td { border-bottom: none; }
+
+          /* stock numbers tinted by urgency */
+          .print-detail .stk { font-weight: 700; }
+          .print-detail .stk.low { color: #b45309 !important; }
+          .print-detail .stk.out { color: #b91c1c !important; }
+
+          /* status pill on paper */
+          .print-pill {
+            display: inline-block !important; padding: 2px 8px; border-radius: 9999px;
+            font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+            white-space: nowrap; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-pill.low { background: #fef3c7 !important; color: #b45309 !important; }
+          .print-pill.out { background: #fee2e2 !important; color: #b91c1c !important; }
+
+          /* ── 6. Footer + signatures ── */
+          .print-footer {
+            display: flex !important; align-items: flex-end; justify-content: space-between; gap: 24px;
+            margin-top: 20px; padding-top: 11px; border-top: 2px solid #e5e7eb;
+          }
+          .print-footer .note { margin: 0; font-size: 8.5px; color: #9ca3af !important; max-width: 46%; line-height: 1.55; }
+          .print-footer .note strong { color: #6b7280 !important; }
+          .print-signs { display: flex; gap: 34px; }
+          .print-sign { text-align: center; }
+          .print-sign .line { width: 170px; border-top: 1px solid #6b7280; margin: 20px 0 5px; }
+          .print-sign .cap { margin: 0; font-size: 8.5px; color: #6b7280 !important; text-transform: uppercase; letter-spacing: 0.1em; }
+        }
+      `}</style>
+
+      {/* ── Screen dashboard (never printed) ── */}
+      <div className="no-print space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-bold" style={{ color: t.textPrimary }}>Dashboard Overview</h1>
+            <p className="text-sm mt-1" style={{ color: t.textSecondary }}>
+              Welcome back, {user?.firstName || "Admin"}. Here's what's happening today.
+            </p>
+          </div>
+          <div className="flex items-center gap-3">
+            <select
+              value={branch}
+              onChange={(e) => setBranch(e.target.value)}
+              className="text-sm rounded-lg px-3 py-2 outline-none cursor-pointer transition-all"
+              style={{ backgroundColor: t.surfaceBg, color: t.textPrimary, border: `1px solid ${t.cardBorder}` }}
+            >
+              <option value="all">All Branches</option>
+              <option value="manila">Manila Branch</option>
+              <option value="pampanga">Pampanga Branch</option>
+            </select>
+            <button onClick={handlePrint} title="Print or save as PDF"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all shadow-sm"
+              style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              Export Report
+            </button>
+          </div>
+        </div>
+
+        {/* Top Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <GreenCard 
+            label="Total Revenue Today" 
+            value={`₱${revenueToday.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`} 
+            sub={`Live · ${branchLabel}`} 
+          />
+          <StatCard 
+            label="Orders Today" 
+            value={ordersToday} 
+            sub={`Live · ${branchLabel}`} 
+            trend="up" 
+            trendValue="12%" 
+          />
+          <StatCard 
+            label="Pending Orders" 
+            value={pendingOrders} 
+            sub="Requires attention" 
+            alert={pendingOrders > 0} 
+          />
+          <StatCard 
+            label="Low Stock Items" 
+            value={lowStockCount} 
+            sub="Below threshold" 
+            alert={lowStockCount > 0} 
+          />
+        </div>
+
+        {/* Main Content Area */}
+        <div className="space-y-6">
+          {/* Revenue Chart takes full width or adjusts to your layout */}
+          <RevenueChart branch={branch} />
+          
+          {/* Here are your missing Recent Orders and Low Stock cards! */}
+          <DraggablePanelRow branch={branch} lowStock={lowStock} />
+        </div>
+      </div>
+
+      {/* ── Printable area (print-only Dashboard Report) ── */}
+      <div id="dashboard-print-area">
+
+        {/* ── Print 1: letterhead brand band ── */}
+        <div className="print-only print-letterhead">
+          <div>
+            <img className="print-logo-word" src={estingsText} alt="Esting's Flower International Inc." />
+            <p className="print-tagline">Flower International Inc.</p>
+          </div>
+          <div className="print-meta">
+            <p className="ref">Ref: DSH-{new Date().toISOString().slice(0,10).replace(/-/g,"")}</p>
+            <p className="gen">Generated <strong>{printDate}</strong> at <strong>{printTime}</strong></p>
+          </div>
+        </div>
+
+        {/* ── Print 2: document title + report scope ── */}
+        <div className="print-only print-doc-title">
+          <p className="t">Dashboard Report</p>
+          <span className="rule" />
+          <p className="scope">{printScope}</p>
+        </div>
+
+        {/* ── Print 3: summary cards (today's snapshot) ── */}
+        <div className="print-only print-summary">
+          <div className="print-summary-card c-value">
+            <p className="label">Total Revenue Today</p>
+            <p className="value green">₱{revenueToday.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</p>
+            <p className="cap">{branchLabel}</p>
+          </div>
+          <div className="print-summary-card c-total">
+            <p className="label">Orders Today</p>
+            <p className="value">{ordersToday}</p>
+            <p className="cap">Placed today · {branchLabel}</p>
+          </div>
+          <div className="print-summary-card c-low">
+            <p className="label">Pending Orders</p>
+            <p className="value amber">{pendingOrders}</p>
+            <p className="cap">Requires attention</p>
+          </div>
+          <div className="print-summary-card c-out">
+            <p className="label">Low Stock Items</p>
+            <p className="value red">{lowStockCount}</p>
+            <p className="cap">Company-wide · at or below reorder point</p>
+          </div>
+        </div>
+
+        {/* ── Print 4: restock urgency ── */}
+        {lowStock.length > 0 && (
+          <div className="print-only print-health">
+            <div className="head">
+              <p className="hk">Restock Urgency</p>
+              <p className="hv">{outCount} out of stock · {lowOnlyCount} running low</p>
+            </div>
+            <div className="bar">
+              {outCount > 0 && <span className="seg s-out" style={{ width: `${pct(outCount)}%` }} />}
+              {lowOnlyCount > 0 && <span className="seg s-low" style={{ width: `${pct(lowOnlyCount)}%` }} />}
+            </div>
+            <div className="legend">
+              <span className="li"><span className="dot s-out" />Out of Stock · {outCount} ({pct(outCount).toFixed(0)}%)</span>
+              <span className="li"><span className="dot s-low" />Low Stock · {lowOnlyCount} ({pct(lowOnlyCount).toFixed(0)}%)</span>
+            </div>
+          </div>
+        )}
+
+        {/* ── Print 5: low-stock detail table ──
+            Prints the FULL low-stock list (the screen card shows only 8),
+            sorted most depleted first. */}
+        <div className="print-only print-detail">
+          <div className="print-section-head">
+            <p className="print-section-title">Low Stock Detail</p>
+            <p className="print-section-sub">Company-wide · sorted by urgency, most depleted first</p>
+          </div>
+          <div className="twrap">
+            <table>
+              <thead>
+                <tr>
+                  <th className="col-idx num">#</th>
+                  <th className="col-name">Product</th>
+                  <th className="col-cat">Category</th>
+                  <th className="col-reo num">Reorder Pt</th>
+                  <th className="col-stock num">Current Stock</th>
+                  <th className="col-status center">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {printLowStock.length === 0 ? (
+                  <tr><td colSpan={6} style={{ textAlign: "center", padding: "18px 8px" }}>No low-stock items. All products are above their reorder points.</td></tr>
+                ) : printLowStock.map((item, i) => {
+                  const isOut = (parseInt(item.stock ?? 0) || 0) <= 0
+                  return (
+                    <tr key={item.id || i} className={i % 2 === 1 ? "alt" : ""}>
+                      <td className="num nowrap muted">{i + 1}</td>
+                      <td><span className="item-name">{item.name}</span></td>
+                      <td className="muted">{item.category || "—"}</td>
+                      <td className="num nowrap muted">{item.reorder_point ?? "—"}</td>
+                      <td className="num nowrap"><span className={`stk ${isOut ? "out" : "low"}`}>{item.stock ?? 0}</span></td>
+                      <td className="center"><span className={`print-pill ${isOut ? "out" : "low"}`}>{isOut ? "Out of Stock" : "Low Stock"}</span></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* ── Print 6: footer + signature lines ── */}
+        <div className="print-only print-footer">
+          <p className="note">
+            <strong>Esting's Flower International Inc.</strong> Confidential. This report is generated for internal use only and reflects live dashboard figures as of the date and time indicated above. The low-stock section is company-wide and is not affected by the branch selector.
           </p>
+          <div className="print-signs">
+            <div className="print-sign">
+              <div className="line" />
+              <p className="cap">Prepared by</p>
+            </div>
+            <div className="print-sign">
+              <div className="line" />
+              <p className="cap">Approved by</p>
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-3">
-          <select
-            value={branch}
-            onChange={(e) => setBranch(e.target.value)}
-            className="text-sm rounded-lg px-3 py-2 outline-none cursor-pointer transition-all"
-            style={{ backgroundColor: t.surfaceBg, color: t.textPrimary, border: `1px solid ${t.cardBorder}` }}
-          >
-            <option value="all">All Branches</option>
-            <option value="manila">Manila Branch</option>
-            <option value="pampanga">Pampanga Branch</option>
-          </select>
-          <button className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all shadow-sm"
-            style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            Export Report
-          </button>
-        </div>
-      </div>
-
-      {/* Top Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <GreenCard 
-          label="Total Revenue Today" 
-          value={`₱${revenueToday.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`} 
-          sub={`Live · ${branchLabel}`} 
-        />
-        <StatCard 
-          label="Orders Today" 
-          value={ordersToday} 
-          sub={`Live · ${branchLabel}`} 
-          trend="up" 
-          trendValue="12%" 
-        />
-        <StatCard 
-          label="Pending Orders" 
-          value={pendingOrders} 
-          sub="Requires attention" 
-          alert={pendingOrders > 0} 
-        />
-        <StatCard 
-          label="Low Stock Items" 
-          value={lowStockCount} 
-          sub="Below threshold" 
-          alert={lowStockCount > 0} 
-        />
-      </div>
-
-      {/* Main Content Area */}
-      <div className="space-y-6">
-        {/* Revenue Chart takes full width or adjusts to your layout */}
-        <RevenueChart branch={branch} />
-        
-        {/* Here are your missing Recent Orders and Low Stock cards! */}
-        <DraggablePanelRow branch={branch} lowStock={lowStock} />
       </div>
     </div>
   );

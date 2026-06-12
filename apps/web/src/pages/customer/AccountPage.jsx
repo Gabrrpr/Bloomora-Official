@@ -5,6 +5,7 @@ import Footer from "../../components/Footer"
 
 import { api } from "../../services/api.js"
 import { API_BASE } from "../../config/api.js"
+import { regions, getProvinces } from "../../utils/philippines"
 
 const G   = "#2E8B34"
 const DG  = "#0C573E"
@@ -56,9 +57,9 @@ function PrimaryBtn({ children, onClick, type="button", disabled }) {
   )
 }
 
-function GhostBtn({ children, onClick, isDark }) {
+function GhostBtn({ children, onClick, isDark, type="button" }) {
   return (
-    <button onClick={onClick}
+    <button type={type} onClick={onClick}
       className="px-6 py-2.5 text-sm font-semibold rounded-lg border transition-all"
       style={{ borderColor:isDark?"#334155":"#e5e7eb", color:isDark?"#94a3b8":"#6b7280", backgroundColor:"transparent" }}
       onMouseEnter={e => e.currentTarget.style.backgroundColor=isDark?"#1e293b":"#f9fafb"}
@@ -108,8 +109,8 @@ function OverviewPanel({ user, setPanel, isDark }) {
       {/* User info */}
       <div className="flex items-center gap-4 sm:gap-5 p-4 sm:p-5 rounded-xl"
         style={{ backgroundColor:infoBg, border:`1px solid ${infoBdr}` }}>
-        
-        {/* 🚀 THE FIX: Check for the profile picture before showing initials */}
+
+        {/* Check for the profile picture before showing initials */}
         <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center text-xl font-bold text-white flex-shrink-0 overflow-hidden border border-gray-200"
           style={{ background: (user?.profilePictureUrl || user?.profile_picture_url) ? "transparent" : `linear-gradient(135deg,${G},${DG})` }}>
           {(user?.profilePictureUrl || user?.profile_picture_url) ? (
@@ -197,14 +198,35 @@ function WishlistPanel({ onNavigate, isDark }) {
 }
 
 // ── DetailsPanel ──────────────────────────────────────────────────────────────
-// ── DetailsPanel ──────────────────────────────────────────────────────────────
+// Sensitive fields (email) require the user to re-enter their current password
+// before the change is saved. Non-sensitive fields (name, phone) save directly.
 function DetailsPanel({ user, showToast, isDark }) {
-  // 🚀 WE DESTRUCTURE updateUserContext HERE
-  const { refreshUser, updateUserContext } = useAuth() 
+  const { refreshUser, updateUserContext } = useAuth()
+
+  // Fields whose change forces password re-verification. Only email is present
+  // in this panel (username/password live in the Change Password panel).
+  const SENSITIVE_KEYS = ["email"]
+
+  const initialForm = {
+    firstName: user?.firstName || "",
+    lastName:  user?.lastName  || "",
+    email:     user?.email     || "",
+    phone:     user?.phoneNumber || "",
+  }
+
   const [editing, setEditing] = useState(false)
-  const [form, setForm] = useState({ firstName:user?.firstName||"", lastName:user?.lastName||"", email:user?.email||"", phone:user?.phoneNumber||"" })
+  const [form, setForm] = useState(initialForm)
+  // Snapshot of the last saved values, used to detect sensitive changes.
+  const [savedForm, setSavedForm] = useState(initialForm)
+  const [savingDetails, setSavingDetails] = useState(false)
   const fileRef = useRef(null)
-  
+
+  // Verification modal state
+  const [showVerify, setShowVerify] = useState(false)
+  const [verifyPassword, setVerifyPassword] = useState("")
+  const [verifyError, setVerifyError] = useState("")
+  const [verifying, setVerifying] = useState(false)
+
   const [avatar, setAvatar] = useState(user?.profilePictureUrl || user?.profile_picture_url || null)
   const [selectedFile, setSelectedFile] = useState(null)
   const [uploadingPic, setUploadingPic] = useState(false)
@@ -213,9 +235,27 @@ function DetailsPanel({ user, showToast, isDark }) {
     setAvatar(user?.profilePictureUrl || user?.profile_picture_url || null)
   }, [user?.profilePictureUrl, user?.profile_picture_url])
 
+  // Keep form in sync if the user object changes (e.g. after refreshUser).
+  useEffect(() => {
+    const next = {
+      firstName: user?.firstName || "",
+      lastName:  user?.lastName  || "",
+      email:     user?.email     || "",
+      phone:     user?.phoneNumber || "",
+    }
+    setForm(next)
+    setSavedForm(next)
+  }, [user?.firstName, user?.lastName, user?.email, user?.phoneNumber])
+
   const divC = isDark ? "#1e293b" : "#f0f0f0"
   const nameC = isDark ? "#f1f5f9" : "#111827"
   const linkC = isDark ? "#4ade80" : G
+
+  const modalCardBg  = isDark ? "#1a2332" : "#ffffff"
+  const modalBdr     = isDark ? "#334155" : "#e5e7eb"
+  const modalLabelC  = isDark ? "#94a3b8" : "#6b7280"
+  const modalInputBg = isDark ? "#0f172a" : "white"
+  const modalTextC   = isDark ? "#f1f5f9" : "#111827"
 
   const handleFileSelect = (e) => {
     const f = e.target.files?.[0]
@@ -233,12 +273,12 @@ function DetailsPanel({ user, showToast, isDark }) {
       formData.append("file", selectedFile)
 
       const res = await api.uploadProfilePicture(formData)
-      
-      // 🚀 THE FIX: Instantly sync the new image to the Navbar!
+
+      // Instantly sync the new image to the Navbar
       if (updateUserContext) {
         updateUserContext({ profilePictureUrl: res.url });
       }
-      
+
       showToast("Profile photo updated!")
       setSelectedFile(null)
       if (refreshUser) await refreshUser()
@@ -258,18 +298,83 @@ function DetailsPanel({ user, showToast, isDark }) {
     if (!window.confirm("Are you sure you want to remove your profile photo?")) return;
     try {
       await api.removeProfilePicture();
-      
-      // 🚀 THE FIX: Instantly remove image from the Navbar!
+
+      // Instantly remove image from the Navbar
       if (updateUserContext) {
         updateUserContext({ profilePictureUrl: null });
       }
-      
+
       setAvatar(null);
       showToast("Profile photo removed.");
       if (refreshUser) await refreshUser();
     } catch (err) {
       showToast("Failed to remove photo.");
     }
+  }
+
+  // True when any sensitive field differs from the last saved value.
+  const sensitiveChanged = () =>
+    SENSITIVE_KEYS.some(k => (form[k] || "") !== (savedForm[k] || ""))
+
+  // Actual save. Passes the re-entered current password when verifying a
+  // sensitive change so the backend can confirm identity before applying it.
+  const performSave = async (currentPassword) => {
+    await api.updateProfile({
+      first_name:  form.firstName,
+      last_name:   form.lastName,
+      email:       form.email,
+      phone_number: form.phone,
+      // NOTE FOR BACKEND: when current_password is present, verify it against
+      // the stored hash before applying the email change.
+      current_password: currentPassword || undefined,
+    })
+    setSavedForm({ ...form })
+    setEditing(false)
+    if (refreshUser) await refreshUser()
+    showToast("Details updated successfully")
+  }
+
+  const handleSaveClick = async () => {
+    // Sensitive field touched → require password confirmation first.
+    if (sensitiveChanged()) {
+      setVerifyPassword("")
+      setVerifyError("")
+      setShowVerify(true)
+      return
+    }
+    // Only non-sensitive fields changed → save directly.
+    setSavingDetails(true)
+    try {
+      await performSave()
+    } catch (err) {
+      showToast(err.message || "Failed to save details.")
+    } finally {
+      setSavingDetails(false)
+    }
+  }
+
+  const handleConfirmVerify = async (e) => {
+    e.preventDefault()
+    if (!verifyPassword) {
+      setVerifyError("Please enter your current password.")
+      return
+    }
+    setVerifying(true)
+    setVerifyError("")
+    try {
+      await performSave(verifyPassword)
+      setShowVerify(false)
+      setVerifyPassword("")
+    } catch (err) {
+      setVerifyError(err.message || "Incorrect password or save failed.")
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  const handleCancelEdit = () => {
+    setForm({ ...savedForm })
+    setEditing(false)
   }
 
   return (
@@ -316,7 +421,7 @@ function DetailsPanel({ user, showToast, isDark }) {
                 style={{ backgroundColor: DG }}>
                 {uploadingPic ? "Saving..." : "Save Photo"}
               </button>
-              <button 
+              <button
                 onClick={handleCancelPicture} disabled={uploadingPic}
                 className="text-xs font-bold transition-all hover:opacity-70 disabled:opacity-50"
                 style={{ color: "#f87171" }}>
@@ -340,15 +445,72 @@ function DetailsPanel({ user, showToast, isDark }) {
       <div className="grid sm:grid-cols-2 gap-4 mb-6">
         <Field label="First Name"    value={form.firstName} onChange={e=>setForm({...form,firstName:e.target.value})} readOnly={!editing} isDark={isDark}/>
         <Field label="Last Name"     value={form.lastName}  onChange={e=>setForm({...form,lastName:e.target.value})}  readOnly={!editing} isDark={isDark}/>
-        <Field label="Email Address" value={form.email}     onChange={e=>setForm({...form,email:e.target.value})}     readOnly={!editing} type="email" isDark={isDark}/>
+        <div>
+          <Field label="Email Address" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} readOnly={!editing} type="email" isDark={isDark}/>
+          {editing && (
+            <p className="text-[11px] mt-1.5 flex items-center gap-1" style={{ color: isDark ? "#94a3b8" : "#9ca3af" }}>
+              <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+              Changing your email requires your password.
+            </p>
+          )}
+        </div>
         <Field label="Phone Number"  value={form.phone}     onChange={e=>setForm({...form,phone:e.target.value})}     readOnly={!editing} placeholder="+63 900 000 0000" isDark={isDark}/>
       </div>
+
+      {editing && sensitiveChanged() && (
+        <div className="mb-5 flex items-start gap-2 px-4 py-3 rounded-lg text-xs"
+          style={{ backgroundColor: isDark ? "rgba(251,191,36,0.1)" : "#fffbeb", border: `1px solid ${isDark ? "rgba(251,191,36,0.3)" : "#fde68a"}`, color: isDark ? "#fbbf24" : "#b45309" }}>
+          <svg className="w-4 h-4 flex-shrink-0 mt-px" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5.07 19h13.86a2 2 0 001.74-2.992l-6.93-12a2 2 0 00-3.48 0l-6.93 12A2 2 0 005.07 19z" /></svg>
+          You changed your email address. We'll ask for your current password to confirm it's you.
+        </div>
+      )}
+
       <div className="flex items-center gap-3 flex-wrap">
         {editing
-          ? <><PrimaryBtn onClick={() => { setEditing(false); showToast("Details updated successfully") }}>Save Changes</PrimaryBtn><GhostBtn onClick={() => setEditing(false)} isDark={isDark}>Cancel</GhostBtn></>
+          ? <><PrimaryBtn onClick={handleSaveClick} disabled={savingDetails}>{savingDetails ? "Saving..." : "Save Changes"}</PrimaryBtn><GhostBtn onClick={handleCancelEdit} isDark={isDark}>Cancel</GhostBtn></>
           : <PrimaryBtn onClick={() => setEditing(true)}>Edit Details</PrimaryBtn>
         }
       </div>
+
+      {/* ── Verify password modal (sensitive change) ── */}
+      {showVerify && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ backgroundColor:"rgba(0,0,0,0.45)" }}>
+          <div className="rounded-2xl shadow-2xl w-full max-w-sm" style={{ backgroundColor: modalCardBg }}>
+            <div className="flex items-center justify-between px-5 sm:px-6 pt-6 pb-4 border-b" style={{ borderColor: modalBdr }}>
+              <h3 className="text-base font-bold" style={{ color: nameC }}>Confirm it's you</h3>
+              <button onClick={() => setShowVerify(false)} className="text-gray-400 hover:text-gray-600 transition">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <form onSubmit={handleConfirmVerify} className="px-5 sm:px-6 py-5 space-y-4">
+              <p className="text-sm" style={{ color: modalLabelC }}>
+                You're changing your email address. Enter your current password to save this change.
+              </p>
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: modalLabelC }}>Current Password</label>
+                <input
+                  type="password"
+                  autoFocus
+                  value={verifyPassword}
+                  onChange={(e) => { setVerifyPassword(e.target.value); setVerifyError("") }}
+                  placeholder="Enter your current password"
+                  className="w-full px-4 py-2.5 text-sm rounded-lg border outline-none transition-all"
+                  style={{ borderColor: modalBdr, backgroundColor: modalInputBg, color: modalTextC }}
+                  onFocus={e => { e.target.style.borderColor="#4ade80"; e.target.style.boxShadow="0 0 0 3px rgba(74,222,128,0.2)" }}
+                  onBlur={e => { e.target.style.borderColor=modalBdr; e.target.style.boxShadow="none" }}
+                />
+                {verifyError && <p className="text-xs font-medium text-red-500 mt-1.5">{verifyError}</p>}
+              </div>
+              <div className="flex gap-3 pt-1">
+                <PrimaryBtn type="submit" disabled={verifying}>{verifying ? "Verifying..." : "Confirm & Save"}</PrimaryBtn>
+                <GhostBtn type="button" onClick={() => setShowVerify(false)} isDark={isDark}>Cancel</GhostBtn>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -383,7 +545,7 @@ function PasswordPanel({ user, showToast, isDark }) {
     if (!otp) return setError("Please enter the confirmation code.");
     if (newPassword.length < 8) return setError("New password must be at least 8 characters.");
     if (newPassword !== confirmPassword) return setError("Passwords do not match.");
-    
+
     setLoading(true);
     try {
       await api.post("/auth/forgot-password/reset", {
@@ -406,7 +568,7 @@ function PasswordPanel({ user, showToast, isDark }) {
   return (
     <div>
       <SectionHeader title="Change Password" description="Secure your account with an OTP confirmation." isDark={isDark}/>
-      
+
       <div className="max-w-md">
         {step === 1 ? (
           <div className="space-y-4">
@@ -427,9 +589,9 @@ function PasswordPanel({ user, showToast, isDark }) {
             <Field label="6-Digit OTP Code" type="text" value={otp} onChange={e=>setOtp(e.target.value)} placeholder="123456" isDark={isDark}/>
             <Field label="New Password" type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="At least 8 characters" isDark={isDark}/>
             <Field label="Confirm New Password" type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Repeat new password" isDark={isDark}/>
-            
+
             {error && <p className="text-xs font-medium text-red-500">{error}</p>}
-            
+
             <div className="flex gap-3 pt-2">
               <PrimaryBtn type="submit" disabled={loading}>
                 {loading ? "Updating..." : "Verify & Update"}
@@ -487,9 +649,15 @@ function AddressPanel({ showToast, isDark }) {
   const [saving, setSaving]       = useState(false)
   const [showForm, setShowForm]   = useState(false)
   const [editingId, setEditingId] = useState(null)
-  const emptyForm = { label:"", recipient_name:"", phone:"", street:"", barangay:"", city:"", province:"", zip_code:"", is_default:false }
+  // regionId / provinceId drive the cascading dropdowns (like the register page);
+  // province (text) is kept so the current backend payload keeps working.
+  const emptyForm = { label:"", recipient_name:"", phone:"", regionId:"", provinceId:"", street:"", barangay:"", city:"", province:"", zip_code:"", is_default:false }
   const [form, setForm] = useState(emptyForm)
   const hdr = { "Content-Type":"application/json", Authorization:`Bearer ${token}` }
+
+  // Resolve readable names from the selected IDs.
+  const regionName   = (rid) => regions.find(r => String(r.id) === String(rid))?.name || ""
+  const provinceName = (rid, pid) => getProvinces(rid).find(p => String(p.id) === String(pid))?.name || ""
 
   useEffect(() => {
     if (!token) { setLoading(false); return }
@@ -499,12 +667,34 @@ function AddressPanel({ showToast, isDark }) {
   }, [token])
 
   const reset = () => { setForm(emptyForm); setEditingId(null); setShowForm(false) }
+
   const handleSave = async () => {
-    if (!form.recipient_name||!form.street||!form.city||!form.province) { showToast("Please fill in all required fields"); return }
+    if (!form.recipient_name || !form.street || !form.city || !form.regionId || !form.provinceId) {
+      showToast("Please fill in all required fields"); return
+    }
     setSaving(true)
     try {
+      const rName = regionName(form.regionId)
+      const pName = provinceName(form.regionId, form.provinceId)
+      // Send the text payload the backend currently expects, PLUS the IDs and
+      // resolved names so it can be wired either way later.
+      // NOTE FOR BACKEND: pick region/province as IDs or names as needed.
+      const payload = {
+        label: form.label,
+        recipient_name: form.recipient_name,
+        phone: form.phone,
+        street: form.street,
+        barangay: form.barangay,
+        city: form.city,
+        province: pName || form.province,
+        region: rName,
+        region_id: form.regionId,
+        province_id: form.provinceId,
+        zip_code: form.zip_code,
+        is_default: form.is_default,
+      }
       const url  = editingId?`${API_BASE}/addresses/${editingId}`:`${API_BASE}/addresses/`
-      const res  = await fetch(url, { method:editingId?"PATCH":"POST", headers:hdr, body:JSON.stringify(form) })
+      const res  = await fetch(url, { method:editingId?"PATCH":"POST", headers:hdr, body:JSON.stringify(payload) })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail||"Failed to save")
       if (editingId) setAddresses(p=>p.map(a=>a.id===editingId?data.address:a))
@@ -512,8 +702,22 @@ function AddressPanel({ showToast, isDark }) {
       showToast(editingId?"Address updated":"Address saved"); reset()
     } catch (e) { showToast(e.message) } finally { setSaving(false) }
   }
+
   const handleEdit = addr => {
-    setForm({ label:addr.label||"", recipient_name:addr.recipient_name||"", phone:addr.phone||"", street:addr.street||"", barangay:addr.barangay||"", city:addr.city||"", province:addr.province||"", zip_code:addr.zip_code||"", is_default:addr.is_default||false })
+    // Map saved region/province (whether stored as id or name) back to IDs so
+    // the dropdowns pre-select correctly.
+    const rid = addr.region_id
+      ? String(addr.region_id)
+      : (regions.find(r => r.name === addr.region)?.id ?? "")
+    const pid = addr.province_id
+      ? String(addr.province_id)
+      : (rid ? (getProvinces(rid).find(p => p.name === addr.province)?.id ?? "") : "")
+    setForm({
+      label:addr.label||"", recipient_name:addr.recipient_name||"", phone:addr.phone||"",
+      regionId: rid ? String(rid) : "", provinceId: pid ? String(pid) : "",
+      street:addr.street||"", barangay:addr.barangay||"", city:addr.city||"",
+      province:addr.province||"", zip_code:addr.zip_code||"", is_default:addr.is_default||false
+    })
     setEditingId(addr.id); setShowForm(true)
   }
   const handleRemove  = async id => { try { await fetch(`${API_BASE}/addresses/${id}`,{method:"DELETE",headers:hdr}); setAddresses(p=>p.filter(a=>a.id!==id)); showToast("Address removed") } catch { showToast("Failed to remove") } }
@@ -529,6 +733,28 @@ function AddressPanel({ showToast, isDark }) {
   const nameC  = isDark ? "#f1f5f9" : "#1f2937"
   const linkG  = isDark ? "#4ade80" : G
   const cbC    = isDark ? "#94a3b8" : "#6b7280"
+
+  // Select styled to match Field (same border / bg / label / focus ring).
+  const selLblC = isDark ? "#94a3b8" : "#6b7280"
+  const selBdr  = isDark ? "#334155" : "#e5e7eb"
+  const selBg   = isDark ? "#1e293b" : "white"
+  const selTxt  = isDark ? "#f1f5f9" : "#1e293b"
+  function SelectField({ label, value, onChange, disabled, children, required }) {
+    return (
+      <div>
+        <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color:selLblC }}>
+          {label}{required && " *"}
+        </label>
+        <select value={value} onChange={onChange} disabled={disabled}
+          className="w-full pl-3 pr-8 py-2.5 text-sm rounded-lg border outline-none transition-all appearance-auto disabled:opacity-50"
+          style={{ borderColor:selBdr, backgroundColor:selBg, color:selTxt }}
+          onFocus={e => { if(!disabled){ e.target.style.borderColor="#4ade80"; e.target.style.boxShadow="0 0 0 3px rgba(74,222,128,0.2)" }}}
+          onBlur={e => { e.target.style.borderColor=selBdr; e.target.style.boxShadow="none" }}>
+          {children}
+        </select>
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -550,16 +776,43 @@ function AddressPanel({ showToast, isDark }) {
       {showForm && (
         <div className="mb-6 p-4 sm:p-5 rounded-xl" style={{ border:`1px solid ${formBdr}`, backgroundColor:formBg }}>
           <p className="text-sm font-bold mb-4" style={{ color:nameC }}>{editingId?"Edit Address":"New Address"}</p>
-          <div className="grid sm:grid-cols-2 gap-3 mb-4">
-            {[
-              ["Label","label","Home"], ["Recipient Name *","recipient_name","Juan dela Cruz"],
-              ["Phone *","phone","+63 900 000 0000"], ["Street Address *","street","123 Rizal St."],
-              ["Barangay","barangay","Barangay 1"], ["City *","city","Manila"],
-              ["Province *","province","Metro Manila"], ["ZIP Code","zip_code","1000"],
-            ].map(([label,key,ph]) => (
-              <Field key={key} label={label} value={form[key]} onChange={e=>setForm({...form,[key]:e.target.value})} placeholder={ph} isDark={isDark}/>
-            ))}
+
+          {/* Label + Recipient + Phone */}
+          <div className="grid sm:grid-cols-2 gap-3 mb-3">
+            <Field label="Label" value={form.label} onChange={e=>setForm({...form,label:e.target.value})} placeholder="Home" isDark={isDark}/>
+            <Field label="Recipient Name *" value={form.recipient_name} onChange={e=>setForm({...form,recipient_name:e.target.value})} placeholder="Juan dela Cruz" isDark={isDark}/>
+            <Field label="Phone *" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="+63 900 000 0000" isDark={isDark}/>
+            <Field label="Barangay" value={form.barangay} onChange={e=>setForm({...form,barangay:e.target.value})} placeholder="Barangay 1" isDark={isDark}/>
           </div>
+
+          {/* Cascading Region -> Province (same as register) */}
+          <div className="grid sm:grid-cols-2 gap-3 mb-3">
+            <SelectField label="Region" required
+              value={form.regionId}
+              onChange={e => setForm(f => ({ ...f, regionId: e.target.value, provinceId: "" }))}>
+              <option value="">Select Region</option>
+              {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+            </SelectField>
+            <SelectField label="Province" required
+              value={form.provinceId}
+              disabled={!form.regionId}
+              onChange={e => setForm(f => ({ ...f, provinceId: e.target.value }))}>
+              <option value="">Select Province</option>
+              {getProvinces(form.regionId).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </SelectField>
+          </div>
+
+          {/* City + ZIP */}
+          <div className="grid sm:grid-cols-2 gap-3 mb-3">
+            <Field label="City / Municipality *" value={form.city} onChange={e=>setForm({...form,city:e.target.value})} placeholder="Manila" isDark={isDark}/>
+            <Field label="ZIP Code" value={form.zip_code} onChange={e=>setForm({...form,zip_code:e.target.value.replace(/\D/g,"").slice(0,4)})} placeholder="1000" isDark={isDark}/>
+          </div>
+
+          {/* Street */}
+          <div className="mb-4">
+            <Field label="Street Address *" value={form.street} onChange={e=>setForm({...form,street:e.target.value})} placeholder="123 Rizal St., Subdivision" isDark={isDark}/>
+          </div>
+
           <label className="flex items-center gap-2 text-sm mb-4 cursor-pointer select-none" style={{ color:cbC }}>
             <input type="checkbox" checked={form.is_default} onChange={e=>setForm({...form,is_default:e.target.checked})} className="rounded" style={{ accentColor:G }}/>
             Set as default address
@@ -637,7 +890,8 @@ export default function AccountPage({ onNavigate }) {
       case "address":  return <AddressPanel {...props}/>
       case "password": return <PasswordPanel {...props}/>
       case "settings": return <SettingsPanel {...props}/>
-      default:         return <OverviewPanel {...props}/>
+      default:
+        return <OverviewPanel {...props}/>
     }
   }
 

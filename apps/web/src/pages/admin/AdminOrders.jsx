@@ -1,12 +1,23 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, Fragment } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
 import { DG, G, StatusBadge } from "./_adminShared"
 import { Pagination } from "./_adminShared"
+import estingsWordmark from "../../assets/Estings.svg"
 
 const ORDER_STATUSES = ["All", "Pending", "Preparing", "Out for Delivery", "Delivered", "Cancelled"]
 const BRANCHES       = ["All Branches", "Manila", "Pampanga"]
 const DATE_RANGES    = ["All Time", "Today", "This Week", "This Month", "Last 30 Days"]
+
+// Fixed order + colors for the printed status sections and distribution bar
+const PRINT_STATUS_META = [
+  { key: "Pending",          label: "Pending",          cls: "s-pending"   },
+  { key: "Confirmed",        label: "Confirmed",        cls: "s-confirmed" },
+  { key: "Preparing",        label: "Preparing",        cls: "s-preparing" },
+  { key: "Out For Delivery", label: "Out for Delivery", cls: "s-ofd"       },
+  { key: "Delivered",        label: "Delivered",        cls: "s-delivered" },
+  { key: "Cancelled",        label: "Cancelled",        cls: "s-cancelled" },
+]
 
 // ── Flower petal loader (same bloom animation as the login/register screen) ──
 function FlowerLoader({ message = "Loading...", isDark = false }) {
@@ -82,13 +93,13 @@ function ExportCSVBtn({ onClick, isDark }) {
   )
 }
 
-function PrintBtn({ onClick }) {
+function PrintBtn({ onClick, isDark }) {
   return (
     <button onClick={onClick}
       className="no-print flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all active:scale-95"
-      style={{ borderColor: "#dde3ec", color: "#374151", backgroundColor: "white" }}
-      onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f9fafb"}
-      onMouseLeave={e => e.currentTarget.style.backgroundColor = "white"}>
+      style={{ borderColor: isDark ? "#374151" : "#dde3ec", color: isDark ? "#94a3b8" : "#374151", backgroundColor: isDark ? "#1e293b" : "white" }}
+      onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#2d3f55" : "#f9fafb"}
+      onMouseLeave={e => e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "white"}>
       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
           d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -179,6 +190,64 @@ export default function AdminOrders() {
 
   const handlePrint = () => window.print()
   const printDate   = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
+  const printTime   = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })
+
+  // ── Print: derived metrics over the filtered set ──
+  // The screen UI stays untouched; everything below feeds the printed report only.
+  const statusCounts = filtered.reduce((m, o) => {
+    const k = formatStatus(o.status)
+    m[k] = (m[k] || 0) + 1
+    return m
+  }, {})
+  const knownTotal  = PRINT_STATUS_META.reduce((s, d) => s + (statusCounts[d.key] || 0), 0)
+  const otherCount  = Math.max(0, filtered.length - knownTotal)
+  const pct = n => (filtered.length ? (n / filtered.length) * 100 : 0)
+
+  const deliveredCount  = statusCounts["Delivered"] || 0
+  const cancelledCount  = statusCounts["Cancelled"] || 0
+  const openOrders      = (statusCounts["Pending"] || 0) + (statusCounts["Confirmed"] || 0) + (statusCounts["Preparing"] || 0) + (statusCounts["Out For Delivery"] || 0)
+  const filteredValue   = filtered.reduce((s, o) => s + (parseFloat(o.total_amount || 0) || 0), 0)
+  const salesValue      = filtered.filter(o => formatStatus(o.status) !== "Cancelled")
+    .reduce((s, o) => s + (parseFloat(o.total_amount || 0) || 0), 0)
+
+  // Full filtered dataset grouped by status, in operational order, with subtotals
+  const printGroups = (() => {
+    const map = new Map()
+    filtered.forEach(o => {
+      const k = formatStatus(o.status)
+      if (!map.has(k)) map.set(k, [])
+      map.get(k).push(o)
+    })
+    const orderOf = k => {
+      const i = PRINT_STATUS_META.findIndex(d => d.key === k)
+      return i === -1 ? 99 : i
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => orderOf(a[0]) - orderOf(b[0]) || a[0].localeCompare(b[0]))
+      .map(([key, items]) => ({
+        label: PRINT_STATUS_META.find(d => d.key === key)?.label || key,
+        items,
+        value: items.reduce((s, o) => s + (parseFloat(o.total_amount || 0) || 0), 0),
+      }))
+  })()
+
+  // Report scope line shown under the printed title
+  const printScope = [
+    statusFilter !== "All" ? `Status: ${statusFilter}` : "All Statuses",
+    branch !== "All Branches" ? `Branch: ${branch}` : "All Branches",
+    dateRange !== "All Time" ? `Period: ${dateRange}` : "All Time",
+    search ? `Search: "${search}"` : null,
+    `${filtered.length} order${filtered.length === 1 ? "" : "s"}`,
+  ].filter(Boolean).join("   ·   ")
+
+  // Payment status pill class for the printed table
+  const payPill = p => {
+    const v = (p || "pending").toLowerCase()
+    if (["paid", "completed", "success", "successful"].includes(v)) return "active"
+    if (["pending", "processing", "unpaid"].includes(v)) return "low"
+    if (["failed", "refunded", "declined", "cancelled"].includes(v)) return "out"
+    return "neutral"
+  }
 
   const handleCSV = () => {
     const headers = ["Order ID", "Customer", "Email", "Payment Status", "Status", "Total (₱)", "Date", "Branch"]
@@ -213,30 +282,189 @@ export default function AdminOrders() {
   return (
     <div className="space-y-5">
 
-      {/* ── Print styles ── */}
+      {/* ── Print styles ──
+          The printed report is fully separate from the screen UI:
+          everything in .print-only renders ONLY on paper, and the
+          interactive table card is no-print. Print sections in order:
+          1 letterhead band  2 title + scope  3 summary cards
+          4 status distribution bar  5 grouped detail table  6 footer/signatures */}
       <style>{`
+        .print-only { display: none; }
+
         @media print {
+          @page { margin: 12mm 10mm; }
           body * { visibility: hidden !important; }
           #orders-print-area, #orders-print-area * { visibility: visible !important; }
           #orders-print-area {
             position: absolute; top: 0; left: 0; width: 100%;
-            padding: 24px; font-family: sans-serif;
+            font-family: "Helvetica Neue", Arial, sans-serif; color: #1f2937;
           }
           .no-print { display: none !important; }
           .print-only { display: block !important; }
-          #orders-print-area table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-          #orders-print-area th {
-            background: #f0fdf4 !important; color: #0C573E !important;
-            border: 1px solid #d1d5db; padding: 8px 10px;
-            text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+          .print-letterhead, .print-doc-title, .print-summary, .print-health { break-inside: avoid; page-break-inside: avoid; }
+
+          /* ── 1. Letterhead: brand band ── */
+          .print-letterhead {
+            display: flex !important; align-items: center; justify-content: space-between; gap: 16px;
+            padding: 13px 18px; border-radius: 12px;
+            background: linear-gradient(135deg,#0C573E 0%,#15724B 55%,#2E8B34 100%) !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
           }
-          #orders-print-area td {
-            border: 1px solid #e5e7eb; padding: 8px 10px; font-size: 12px; color: #111827;
+          .print-logo-word {
+            height: 34px; width: auto; max-width: 240px; display: block;
+            object-fit: contain; filter: brightness(0) invert(1);
           }
-          #orders-print-area tr:nth-child(even) td { background: #f9fafb !important; }
-          .print-footer { margin-top: 20px; font-size: 11px; color: #6b7280; border-top: 1px solid #e5e7eb; padding-top: 10px; }
+          .print-tagline {
+            margin: 5px 0 0; font-size: 8px; font-weight: 700;
+            letter-spacing: 0.3em; text-transform: uppercase; color: rgba(255,255,255,0.82) !important;
+          }
+          .print-meta { text-align: right; flex-shrink: 0; }
+          .print-meta .ref {
+            display: inline-block; margin: 0; padding: 3px 10px; border-radius: 9999px;
+            border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.12) !important;
+            color: #ffffff !important; font-size: 8.5px; font-weight: 700;
+            letter-spacing: 0.12em; text-transform: uppercase;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-meta .gen { margin: 6px 0 0; font-size: 9px; color: rgba(255,255,255,0.85) !important; }
+          .print-meta .gen strong { color: #ffffff !important; font-weight: 700; }
+
+          /* ── 2. Document title + report scope ── */
+          .print-doc-title { display: flex !important; flex-direction: column; align-items: center; margin: 16px 0 2px; }
+          .print-doc-title .t {
+            margin: 0; font-size: 15px; font-weight: 800;
+            letter-spacing: 0.3em; text-transform: uppercase; color: #0C573E !important;
+          }
+          .print-doc-title .rule {
+            width: 54px; height: 3px; border-radius: 9999px; margin: 7px 0 6px;
+            background: linear-gradient(90deg,#0C573E,#2E8B34) !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-doc-title .scope { margin: 0; font-size: 9px; color: #6b7280 !important; letter-spacing: 0.02em; text-align: center; }
+
+          /* ── 3. Summary cards ── */
+          .print-summary { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 0; }
+          .print-summary-card {
+            border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px;
+            background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-summary-card.c-total { border-top-color: #0C573E !important; }
+          .print-summary-card.c-value { border-top-color: #2E8B34 !important; }
+          .print-summary-card.c-low   { border-top-color: #d97706 !important; }
+          .print-summary-card.c-out   { border-top-color: #dc2626 !important; }
+          .print-summary-card .label { margin: 0; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9ca3af !important; }
+          .print-summary-card .value { margin: 3px 0 0; font-size: 19px; font-weight: 800; color: #111827 !important; }
+          .print-summary-card .value.green { color: #16a34a !important; }
+          .print-summary-card .value.amber { color: #d97706 !important; }
+          .print-summary-card .value.red   { color: #dc2626 !important; }
+          .print-summary-card .cap { margin: 3px 0 0; font-size: 8px; color: #9ca3af !important; }
+
+          /* ── 4. Status distribution ── */
+          .print-health {
+            margin: 10px 0 0; border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 12px 11px;
+            background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-health .head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; }
+          .print-health .hk { margin: 0; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9ca3af !important; }
+          .print-health .hv { margin: 0; font-size: 8.5px; color: #6b7280 !important; }
+          .print-health .bar {
+            display: flex; height: 10px; border-radius: 9999px; overflow: hidden;
+            background: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-health .seg { display: block; height: 100%; }
+          .print-health .s-pending   { background: #f59e0b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .s-confirmed { background: #06b6d4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .s-preparing { background: #3b82f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .s-ofd       { background: #8b5cf6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .s-delivered { background: #2E8B34 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .s-cancelled { background: #ef4444 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .s-other     { background: #94a3b8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .legend { display: flex; flex-wrap: wrap; gap: 12px 16px; margin: 7px 0 0; }
+          .print-health .li { display: flex; align-items: center; gap: 5px; font-size: 8.5px; color: #374151 !important; }
+          .print-health .dot { width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; }
+
+          /* ── 5. Detail table (grouped by status) ── */
+          .print-detail { display: block !important; margin-top: 14px; }
+          .print-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; padding: 0 2px; }
+          .print-section-title { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #0C573E !important; }
+          .print-section-sub { margin: 0; font-size: 8.5px; color: #9ca3af !important; }
+          .print-detail .twrap { border: 1px solid #dbe3df; border-radius: 10px; overflow: hidden; }
+          .print-detail table { width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; }
+          .print-detail thead { display: table-header-group; }
+          .print-detail tr { page-break-inside: avoid; }
+          .print-detail th {
+            background: #0C573E !important; color: #ffffff !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            border: none; padding: 7px; text-align: left;
+            font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; line-height: 1.25;
+          }
+          .print-detail th.col-idx    { width: 4%; }
+          .print-detail th.col-id     { width: 12%; }
+          .print-detail th.col-cust   { width: 23%; }
+          .print-detail th.col-item   { width: 17%; }
+          .print-detail th.col-branch { width: 9%; }
+          .print-detail th.col-pay    { width: 11%; }
+          .print-detail th.col-date   { width: 12%; }
+          .print-detail th.col-total  { width: 12%; }
+          .print-detail td {
+            border-bottom: 1px solid #eef1f4; padding: 6.5px 7px;
+            font-size: 9.5px; color: #1f2937 !important; vertical-align: top;
+            word-break: break-word; overflow-wrap: anywhere;
+          }
+          .print-detail .num { text-align: right; }
+          .print-detail .center { text-align: center; }
+          .print-detail .nowrap { white-space: nowrap !important; }
+          .print-detail .muted { color: #6b7280 !important; }
+          .print-detail .item-name { font-weight: 600; color: #0f172a !important; line-height: 1.3; }
+          .print-detail .cust-mail { display: block; font-size: 8px; color: #9ca3af !important; margin-top: 1px; }
+          .print-detail .mono { font-family: "Courier New", Courier, monospace; font-size: 8.5px; }
+          .print-detail tr.alt td { background: #f7faf8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-detail tbody tr:last-child td { border-bottom: none; }
+
+          /* status section rows */
+          .print-detail tr.cat-row { page-break-after: avoid; break-after: avoid; }
+          .print-detail tr.cat-row td {
+            background: #eaf5ee !important; color: #0C573E !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            border-top: 1px solid #d8ebdd; border-bottom: 1px solid #d8ebdd;
+            padding: 6px 8px; font-size: 8.5px; font-weight: 800;
+            letter-spacing: 0.08em; text-transform: uppercase;
+          }
+          .print-detail tr.cat-row .cat-meta {
+            float: right; font-weight: 600; letter-spacing: 0;
+            text-transform: none; color: #15724B !important;
+          }
+
+          /* report total row */
+          .print-detail tr.grand td {
+            background: #0C573E !important; color: #ffffff !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            border: none; padding: 8px 7px; font-size: 9.5px; font-weight: 800;
+          }
+
+          /* payment pill on paper */
+          .print-pill {
+            display: inline-block !important; padding: 2px 8px; border-radius: 9999px;
+            font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+            white-space: nowrap; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-pill.active  { background: #dcfce7 !important; color: #15803d !important; }
+          .print-pill.low     { background: #fef3c7 !important; color: #b45309 !important; }
+          .print-pill.out     { background: #fee2e2 !important; color: #b91c1c !important; }
+          .print-pill.neutral { background: #e2e8f0 !important; color: #475569 !important; }
+
+          /* ── 6. Footer + signatures ── */
+          .print-footer {
+            display: flex !important; align-items: flex-end; justify-content: space-between; gap: 24px;
+            margin-top: 20px; padding-top: 11px; border-top: 2px solid #e5e7eb;
+          }
+          .print-footer .note { margin: 0; font-size: 8.5px; color: #9ca3af !important; max-width: 46%; line-height: 1.55; }
+          .print-footer .note strong { color: #6b7280 !important; }
+          .print-signs { display: flex; gap: 34px; }
+          .print-sign { text-align: center; }
+          .print-sign .line { width: 170px; border-top: 1px solid #6b7280; margin: 20px 0 5px; }
+          .print-sign .cap { margin: 0; font-size: 8.5px; color: #6b7280 !important; text-transform: uppercase; letter-spacing: 0.1em; }
         }
-        .print-only { display: none; }
       `}</style>
 
       {/* ── Order detail modal ── */}
@@ -386,7 +614,7 @@ export default function AdminOrders() {
         </div>
         <div className="flex items-center gap-2">
           <ExportCSVBtn onClick={handleCSV} isDark={isDark} />
-          <PrintBtn onClick={handlePrint} />
+          <PrintBtn onClick={handlePrint} isDark={isDark} />
         </div>
       </div>
 
@@ -442,30 +670,83 @@ export default function AdminOrders() {
       {/* ── Printable area ── */}
       <div id="orders-print-area">
 
-        {/* Print-only header */}
-        <div className="print-only" style={{ marginBottom: "16px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <h1 style={{ fontSize: "18px", fontWeight: 700, color: "#0C573E", margin: 0 }}>Esting's Flower International Inc.</h1>
-              <h2 style={{ fontSize: "14px", fontWeight: 600, color: "#374151", margin: "4px 0 0" }}>Orders Report</h2>
-            </div>
-            <div style={{ textAlign: "right", fontSize: "11px", color: "#6b7280" }}>
-              <p style={{ margin: 0 }}>Generated: {printDate}</p>
-              <p style={{ margin: "2px 0 0" }}>
-                Status: {statusFilter} | Branch: {branch} | Period: {dateRange}
-              </p>
-              <p style={{ margin: "2px 0 0" }}>Total orders: {filtered.length}</p>
-            </div>
+        {/* ── Print 1: letterhead brand band ── */}
+        <div className="print-only print-letterhead">
+          <div>
+            <img className="print-logo-word" src={estingsWordmark} alt="Esting's Flower International Inc." />
+            <p className="print-tagline">Flower International Inc.</p>
           </div>
-          <div style={{ height: "2px", background: "linear-gradient(90deg,#0C573E,#2E8B34)", marginTop: "12px", borderRadius: "2px" }} />
+          <div className="print-meta">
+            <p className="ref">Ref: ORD-{new Date().toISOString().slice(0,10).replace(/-/g,"")}</p>
+            <p className="gen">Generated <strong>{printDate}</strong> at <strong>{printTime}</strong></p>
+          </div>
         </div>
 
-        {/* Table card — screen */}
-        <div className="rounded-xl overflow-hidden"
+        {/* ── Print 2: document title + report scope ── */}
+        <div className="print-only print-doc-title">
+          <p className="t">Orders Report</p>
+          <span className="rule" />
+          <p className="scope">{printScope}</p>
+        </div>
+
+        {/* ── Print 3: summary cards (current view) ── */}
+        <div className="print-only print-summary">
+          <div className="print-summary-card c-total">
+            <p className="label">Total Orders</p>
+            <p className="value">{filtered.length}</p>
+            <p className="cap">Across {dateRange === "All Time" ? "all time" : dateRange.toLowerCase()}</p>
+          </div>
+          <div className="print-summary-card c-value">
+            <p className="label">Sales Value</p>
+            <p className="value green">₱{salesValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+            <p className="cap">Cancelled orders excluded</p>
+          </div>
+          <div className="print-summary-card c-low">
+            <p className="label">Open Orders</p>
+            <p className="value amber">{openOrders}</p>
+            <p className="cap">Pending, preparing, or in transit</p>
+          </div>
+          <div className="print-summary-card c-out">
+            <p className="label">Cancelled</p>
+            <p className="value red">{cancelledCount}</p>
+            <p className="cap">Excluded from sales value</p>
+          </div>
+        </div>
+
+        {/* ── Print 4: status distribution ── */}
+        {filtered.length > 0 && (
+          <div className="print-only print-health">
+            <div className="head">
+              <p className="hk">Status Distribution</p>
+              <p className="hv">{deliveredCount} delivered · {openOrders} open</p>
+            </div>
+            <div className="bar">
+              {PRINT_STATUS_META.map(d => {
+                const n = statusCounts[d.key] || 0
+                return n > 0 ? <span key={d.key} className={`seg ${d.cls}`} style={{ width: `${pct(n)}%` }} /> : null
+              })}
+              {otherCount > 0 && <span className="seg s-other" style={{ width: `${pct(otherCount)}%` }} />}
+            </div>
+            <div className="legend">
+              {PRINT_STATUS_META.map(d => {
+                const n = statusCounts[d.key] || 0
+                return n > 0 ? (
+                  <span key={d.key} className="li"><span className={`dot ${d.cls}`} />{d.label} · {n} ({pct(n).toFixed(0)}%)</span>
+                ) : null
+              })}
+              {otherCount > 0 && (
+                <span className="li"><span className="dot s-other" />Other · {otherCount} ({pct(otherCount).toFixed(0)}%)</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Screen table card (interactive; never printed) ── */}
+        <div className="no-print rounded-xl overflow-hidden"
           style={{ border: `1px solid ${isDark ? "#1e293b" : "#e8edf2"}`, backgroundColor: isDark ? "#1a2332" : "white", boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
 
           {/* Toolbar */}
-          <div className="p-3 sm:p-4 no-print" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
+          <div className="p-3 sm:p-4" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
             <div className="flex items-center gap-2 flex-wrap">
               <SelectFilter value={statusFilter} onChange={setStatus} options={ORDER_STATUSES} minWidth="140px" isDark={isDark} />
               <SelectFilter value={branch}       onChange={setBranch}  options={BRANCHES}       minWidth="130px" isDark={isDark} />
@@ -542,7 +823,7 @@ export default function AdminOrders() {
           </div>
 
           {/* Pagination */}
-          <div className="flex items-center justify-between px-4 sm:px-5 py-3 no-print"
+          <div className="flex items-center justify-between px-4 sm:px-5 py-3"
             style={{ borderTop: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
             <span className="text-sm" style={{ color: subTxt }}>Showing {filtered.length} of {orders.length} entries</span>
             <div className="flex items-center gap-1">
@@ -554,9 +835,88 @@ export default function AdminOrders() {
           </div>
         </div>
 
-        {/* Print footer */}
+        {/* ── Print 5: full detail table, grouped by status ──
+            Prints EVERY filtered order, organized into status sections
+            with per-status subtotals and a report total row. */}
+        <div className="print-only print-detail">
+          <div className="print-section-head">
+            <p className="print-section-title">Order Detail</p>
+            <p className="print-section-sub">Grouped by order status · totals include all listed orders</p>
+          </div>
+          <div className="twrap">
+            <table>
+              <thead>
+                <tr>
+                  <th className="col-idx num">#</th>
+                  <th className="col-id">Order ID</th>
+                  <th className="col-cust">Customer</th>
+                  <th className="col-item">Item</th>
+                  <th className="col-branch">Branch</th>
+                  <th className="col-pay center">Payment</th>
+                  <th className="col-date">Order Date</th>
+                  <th className="col-total num">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={8} style={{ textAlign: "center", padding: "18px 8px" }}>No orders match the current filters.</td></tr>
+                ) : (() => {
+                  let n = 0
+                  return printGroups.map(g => (
+                    <Fragment key={g.label}>
+                      <tr className="cat-row">
+                        <td colSpan={8}>
+                          <span>{g.label} ({g.items.length})</span>
+                          <span className="cat-meta">₱{g.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </td>
+                      </tr>
+                      {g.items.map((o, i) => {
+                        n += 1
+                        return (
+                          <tr key={o.id} className={i % 2 === 1 ? "alt" : ""}>
+                            <td className="num nowrap muted">{n}</td>
+                            <td className="mono">{o.order_number || "—"}</td>
+                            <td>
+                              <span className="item-name">{o.customer_name || "—"}</span>
+                              {o.customer_email && <span className="cust-mail">{o.customer_email}</span>}
+                            </td>
+                            <td className="muted">{o.product_name || "Custom Arrangement"} ×{o.quantity || 1}</td>
+                            <td className="muted">{o.branch || "—"}</td>
+                            <td className="center"><span className={`print-pill ${payPill(o.payment_status)}`}>{formatStatus(o.payment_status || "pending")}</span></td>
+                            <td className="muted nowrap">{o.created_at ? new Date(o.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}</td>
+                            <td className="num nowrap">₱{(parseFloat(o.total_amount || 0) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                          </tr>
+                        )
+                      })}
+                    </Fragment>
+                  ))
+                })()}
+                {filtered.length > 0 && (
+                  <tr className="grand">
+                    <td colSpan={7}>Report Total · {filtered.length} order{filtered.length === 1 ? "" : "s"} (all statuses)</td>
+                    <td className="num nowrap">₱{filteredValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* ── Print 6: footer + signature lines ── */}
         <div className="print-only print-footer">
-          <p>Esting's Flower International Inc. — Confidential. For internal use only.</p>
+          <p className="note">
+            <strong>Esting's Flower International Inc.</strong> Confidential. This report is generated for internal use only and reflects order records as of the date and time indicated above. Figures are based on the filters applied at the time of printing.
+          </p>
+          <div className="print-signs">
+            <div className="print-sign">
+              <div className="line" />
+              <p className="cap">Prepared by</p>
+            </div>
+            <div className="print-sign">
+              <div className="line" />
+              <p className="cap">Approved by</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

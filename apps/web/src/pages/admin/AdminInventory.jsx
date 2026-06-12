@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, Fragment } from "react"
 import { createPortal } from "react-dom"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
 import { DG, G, ActionBtns } from "./_adminShared"
+import estingsWordmark from "../../assets/Estings.svg"
 
 // ── Flower petal loader (same bloom animation as the login/register screen) ──
 function FlowerLoader({ message = "Loading...", isDark = false }) {
@@ -49,7 +50,7 @@ function InvStatusBadge({ status, isDark }) {
   }
   const s = styles[status] || styles["Active"]
   return (
-    <span className="px-2.5 py-1 text-xs uppercase tracking-wider font-bold rounded-md"
+    <span className="inline-block px-2.5 py-1 text-xs uppercase tracking-wider font-bold rounded-md whitespace-nowrap"
       style={{ backgroundColor: s.bg, color: s.text }}>
       {status}
     </span>
@@ -747,6 +748,51 @@ export default function AdminInventory() {
   const stock = parseInt(i.stock || 0); return s + (cost * stock); }, 0);
   const lowStockCount = inventory.filter(i => i.stock > 0 && i.stock <= (i.reorder_point || 10)).length
   const outOfStockCount = inventory.filter(i => i.stock <= 0).length
+
+  // ── Extra metrics for the printed report (derived; no new data needed) ──
+  const totalUnits = inventory.reduce((s, i) => s + (parseInt(i.stock || 0) || 0), 0)
+  const reorderNeeded = lowStockCount + outOfStockCount
+  const categoryCount = new Set(inventory.map(i => (i.category || "").toLowerCase()).filter(Boolean)).size
+  const avgCost = inventory.length
+    ? inventory.reduce((s, i) => s + (parseFloat(i.cost_per_unit || 0) || 0), 0) / inventory.length
+    : 0
+  const activeCount = Math.max(0, totalItems - lowStockCount - outOfStockCount)
+  const pct = n => (totalItems ? (n / totalItems) * 100 : 0)
+
+  // Shared status derivation (screen badge + print pill)
+  const statusOf = it => it.stock <= 0 ? "Out of Stock" : it.stock <= (it.reorder_point || 10) ? "Low Stock" : "Active"
+
+  // ── Print: full filtered dataset grouped by category, with subtotals ──
+  // The screen table stays paginated; the printed report covers everything
+  // that matches the active filters, organized into category sections.
+  const printGroups = (() => {
+    const map = new Map()
+    filtered.forEach(item => {
+      const key = (item.category || "Uncategorized").toLowerCase()
+      if (!map.has(key)) map.set(key, [])
+      map.get(key).push(item)
+    })
+    return Array.from(map.entries())
+      .sort((a, b) => a[0].localeCompare(b[0]))
+      .map(([key, items]) => ({
+        label: key.charAt(0).toUpperCase() + key.slice(1),
+        items,
+        units: items.reduce((s, i) => s + (parseInt(i.stock || 0) || 0), 0),
+        value: items.reduce((s, i) => s + (parseFloat(i.cost_per_unit || 0) || 0) * (parseInt(i.stock || 0) || 0), 0),
+      }))
+  })()
+  const filteredUnits = filtered.reduce((s, i) => s + (parseInt(i.stock || 0) || 0), 0)
+  const filteredValue = filtered.reduce((s, i) => s + (parseFloat(i.cost_per_unit || 0) || 0) * (parseInt(i.stock || 0) || 0), 0)
+
+  // Report scope line shown under the printed title
+  const printScope = [
+    category ? `Category: ${category}` : "All Categories",
+    statusFilter ? `Status: ${statusFilter}` : "All Statuses",
+    search ? `Search: "${search}"` : null,
+    stockSort === "asc" ? "Sorted by Stock (Low to High)" : stockSort === "desc" ? "Sorted by Stock (High to Low)" : null,
+    `${filtered.length} of ${totalItems} items`,
+  ].filter(Boolean).join("   ·   ")
+
   console.log("Current Inventory Count:", inventory.length);
   console.log("Calculated Total Value:", totalValue);
 
@@ -771,6 +817,7 @@ export default function AdminInventory() {
 
   const handlePrint = () => window.print()
   const printDate   = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
+  const printTime   = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })
 
   const handleCSV = () => {
     const headers = ["Item Name", "Category", "Unit", "Current Stock", "Reorder Point", "Cost per Unit (₱)", "Status"]
@@ -820,31 +867,188 @@ export default function AdminInventory() {
   return (
     <div className="space-y-5">
 
-      {/* ── Print styles ── */}
+      {/* ── Print styles ──
+          The printed report is fully separate from the screen UI:
+          everything in .print-only renders ONLY on paper, and the
+          interactive table card is no-print. Print sections in order:
+          1 letterhead band  2 title + scope  3 summary cards
+          4 stock health bar  5 grouped detail table  6 footer/signatures */}
       <style>{`
+        .print-only { display: none; }
+
         @media print {
+          @page { margin: 12mm 10mm; }
           body * { visibility: hidden !important; }
           #inventory-print-area, #inventory-print-area * { visibility: visible !important; }
           #inventory-print-area {
-            position: absolute; top: 0; left: 0; width: 100%; padding: 24px; font-family: sans-serif;
+            position: absolute; top: 0; left: 0; width: 100%;
+            font-family: "Helvetica Neue", Arial, sans-serif; color: #1f2937;
           }
           .no-print { display: none !important; }
           .print-only { display: block !important; }
-          #inventory-print-area table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-          #inventory-print-area th {
-            background: #f0fdf4 !important; color: #0C573E !important;
-            border: 1px solid #d1d5db; padding: 8px 10px;
-            text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+          .print-letterhead, .print-doc-title, .print-summary, .print-health { break-inside: avoid; page-break-inside: avoid; }
+
+          /* ── 1. Letterhead: brand band ── */
+          .print-letterhead {
+            display: flex !important; align-items: center; justify-content: space-between; gap: 16px;
+            padding: 13px 18px; border-radius: 12px;
+            background: linear-gradient(135deg,#0C573E 0%,#15724B 55%,#2E8B34 100%) !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
           }
-          #inventory-print-area td { border: 1px solid #e5e7eb; padding: 8px 10px; font-size: 12px; color: #111827; }
-          #inventory-print-area tr:nth-child(even) td { background: #f9fafb !important; }
-          .print-summary { display: flex !important; gap: 24px; margin-bottom: 12px; }
-          .print-summary-item { font-size: 12px; color: #374151; }
-          .print-summary-item strong { color: #0C573E; }
-          .print-footer { margin-top: 20px; font-size: 11px; color: #6b7280; border-top: 1px solid #e5e7eb; padding-top: 10px; }
+          .print-logo-word {
+            height: 34px; width: auto; max-width: 240px; display: block;
+            object-fit: contain; filter: brightness(0) invert(1);
+          }
+          .print-tagline {
+            margin: 5px 0 0; font-size: 8px; font-weight: 700;
+            letter-spacing: 0.3em; text-transform: uppercase; color: rgba(255,255,255,0.82) !important;
+          }
+          .print-meta { text-align: right; flex-shrink: 0; }
+          .print-meta .ref {
+            display: inline-block; margin: 0; padding: 3px 10px; border-radius: 9999px;
+            border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.12) !important;
+            color: #ffffff !important; font-size: 8.5px; font-weight: 700;
+            letter-spacing: 0.12em; text-transform: uppercase;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-meta .gen { margin: 6px 0 0; font-size: 9px; color: rgba(255,255,255,0.85) !important; }
+          .print-meta .gen strong { color: #ffffff !important; font-weight: 700; }
+
+          /* ── 2. Document title + report scope ── */
+          .print-doc-title { display: flex !important; flex-direction: column; align-items: center; margin: 16px 0 2px; }
+          .print-doc-title .t {
+            margin: 0; font-size: 15px; font-weight: 800;
+            letter-spacing: 0.3em; text-transform: uppercase; color: #0C573E !important;
+          }
+          .print-doc-title .rule {
+            width: 54px; height: 3px; border-radius: 9999px; margin: 7px 0 6px;
+            background: linear-gradient(90deg,#0C573E,#2E8B34) !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-doc-title .scope { margin: 0; font-size: 9px; color: #6b7280 !important; letter-spacing: 0.02em; text-align: center; }
+
+          /* ── 3. Summary cards ── */
+          .print-summary { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 0; }
+          .print-summary-card {
+            border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px;
+            background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-summary-card.c-total { border-top-color: #0C573E !important; }
+          .print-summary-card.c-value { border-top-color: #2E8B34 !important; }
+          .print-summary-card.c-low   { border-top-color: #d97706 !important; }
+          .print-summary-card.c-out   { border-top-color: #dc2626 !important; }
+          .print-summary-card .label { margin: 0; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9ca3af !important; }
+          .print-summary-card .value { margin: 3px 0 0; font-size: 19px; font-weight: 800; color: #111827 !important; }
+          .print-summary-card .value.green { color: #16a34a !important; }
+          .print-summary-card .value.amber { color: #d97706 !important; }
+          .print-summary-card .value.red   { color: #dc2626 !important; }
+          .print-summary-card .cap { margin: 3px 0 0; font-size: 8px; color: #9ca3af !important; }
+
+          /* ── 4. Stock health distribution ── */
+          .print-health {
+            margin: 10px 0 0; border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 12px 11px;
+            background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-health .head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; }
+          .print-health .hk { margin: 0; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9ca3af !important; }
+          .print-health .hv { margin: 0; font-size: 8.5px; color: #6b7280 !important; }
+          .print-health .bar {
+            display: flex; height: 10px; border-radius: 9999px; overflow: hidden;
+            background: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-health .seg { display: block; height: 100%; }
+          .print-health .s-active { background: #2E8B34 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .s-low    { background: #f59e0b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .s-out    { background: #ef4444 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 7px 0 0; }
+          .print-health .li { display: flex; align-items: center; gap: 5px; font-size: 8.5px; color: #374151 !important; }
+          .print-health .dot { width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; }
+
+          /* ── 5. Detail table (grouped by category) ── */
+          .print-detail { display: block !important; margin-top: 14px; }
+          .print-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; padding: 0 2px; }
+          .print-section-title { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #0C573E !important; }
+          .print-section-sub { margin: 0; font-size: 8.5px; color: #9ca3af !important; }
+          .print-detail .twrap { border: 1px solid #dbe3df; border-radius: 10px; overflow: hidden; }
+          .print-detail table { width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; }
+          .print-detail thead { display: table-header-group; }
+          .print-detail tr { page-break-inside: avoid; }
+          .print-detail th {
+            background: #0C573E !important; color: #ffffff !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            border: none; padding: 7px; text-align: left;
+            font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; line-height: 1.25;
+          }
+          .print-detail th.col-idx    { width: 4.5%; }
+          .print-detail th.col-name   { width: 30%; }
+          .print-detail th.col-unit   { width: 8.5%; }
+          .print-detail th.col-stock  { width: 9%; }
+          .print-detail th.col-reo    { width: 9.5%; }
+          .print-detail th.col-cost   { width: 12.5%; }
+          .print-detail th.col-val    { width: 13.5%; }
+          .print-detail th.col-status { width: 12.5%; }
+          .print-detail td {
+            border-bottom: 1px solid #eef1f4; padding: 6.5px 7px;
+            font-size: 9.5px; color: #1f2937 !important; vertical-align: top;
+            word-break: break-word; overflow-wrap: anywhere;
+          }
+          .print-detail .num { text-align: right; }
+          .print-detail .center { text-align: center; }
+          .print-detail .nowrap { white-space: nowrap !important; }
+          .print-detail .muted { color: #6b7280 !important; }
+          .print-detail .item-name { font-weight: 600; color: #0f172a !important; line-height: 1.3; }
+          .print-detail tr.alt td { background: #f7faf8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-detail tbody tr:last-child td { border-bottom: none; }
+
+          /* stock numbers tinted by status */
+          .print-detail .stk { font-weight: 700; }
+          .print-detail .stk.active { color: #15803d !important; }
+          .print-detail .stk.low    { color: #b45309 !important; }
+          .print-detail .stk.out    { color: #b91c1c !important; }
+
+          /* category section rows */
+          .print-detail tr.cat-row { page-break-after: avoid; break-after: avoid; }
+          .print-detail tr.cat-row td {
+            background: #eaf5ee !important; color: #0C573E !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            border-top: 1px solid #d8ebdd; border-bottom: 1px solid #d8ebdd;
+            padding: 6px 8px; font-size: 8.5px; font-weight: 800;
+            letter-spacing: 0.08em; text-transform: uppercase;
+          }
+          .print-detail tr.cat-row .cat-meta {
+            float: right; font-weight: 600; letter-spacing: 0;
+            text-transform: none; color: #15724B !important;
+          }
+
+          /* report total row */
+          .print-detail tr.grand td {
+            background: #0C573E !important; color: #ffffff !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            border: none; padding: 8px 7px; font-size: 9.5px; font-weight: 800;
+          }
+
+          /* status pill on paper */
+          .print-pill {
+            display: inline-block !important; padding: 2px 8px; border-radius: 9999px;
+            font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+            white-space: nowrap; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-pill.active { background: #dcfce7 !important; color: #15803d !important; }
+          .print-pill.low    { background: #fef3c7 !important; color: #b45309 !important; }
+          .print-pill.out    { background: #fee2e2 !important; color: #b91c1c !important; }
+
+          /* ── 6. Footer + signatures ── */
+          .print-footer {
+            display: flex !important; align-items: flex-end; justify-content: space-between; gap: 24px;
+            margin-top: 20px; padding-top: 11px; border-top: 2px solid #e5e7eb;
+          }
+          .print-footer .note { margin: 0; font-size: 8.5px; color: #9ca3af !important; max-width: 46%; line-height: 1.55; }
+          .print-footer .note strong { color: #6b7280 !important; }
+          .print-signs { display: flex; gap: 34px; }
+          .print-sign { text-align: center; }
+          .print-sign .line { width: 170px; border-top: 1px solid #6b7280; margin: 20px 0 5px; }
+          .print-sign .cap { margin: 0; font-size: 8.5px; color: #6b7280 !important; text-transform: uppercase; letter-spacing: 0.1em; }
         }
-        .print-only { display: none; }
-        .print-summary { display: none; }
       `}</style>
 
       {successMsg && (
@@ -935,106 +1139,153 @@ export default function AdminInventory() {
       {/* ── Printable area ── */}
       <div id="inventory-print-area">
 
-        {/* Print-only header */}
-        <div className="print-only" style={{ marginBottom: "12px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <h1 style={{ fontSize: "18px", fontWeight: 700, color: "#0C573E", margin: 0 }}>Esting's Flower International Inc.</h1>
-              <h2 style={{ fontSize: "14px", fontWeight: 600, color: "#374151", margin: "4px 0 0" }}>Inventory Report</h2>
+        {/* ── Print 1: letterhead brand band ── */}
+        <div className="print-only print-letterhead">
+          <div>
+            <img className="print-logo-word" src={estingsWordmark} alt="Esting's Flower International Inc." />
+            <p className="print-tagline">Flower International Inc.</p>
+          </div>
+          <div className="print-meta">
+            <p className="ref">Ref: INV-{new Date().toISOString().slice(0,10).replace(/-/g,"")}</p>
+            <p className="gen">Generated <strong>{printDate}</strong> at <strong>{printTime}</strong></p>
+          </div>
+        </div>
+
+        {/* ── Print 2: document title + report scope ── */}
+        <div className="print-only print-doc-title">
+          <p className="t">Inventory Report</p>
+          <span className="rule" />
+          <p className="scope">{printScope}</p>
+        </div>
+
+        {/* ── Print 3: summary cards (company-wide snapshot) ── */}
+        <div className="print-only print-summary">
+          <div className="print-summary-card c-total">
+            <p className="label">Total Items</p>
+            <p className="value">{totalItems}</p>
+            <p className="cap">{categoryCount} categor{categoryCount === 1 ? "y" : "ies"} · {totalUnits.toLocaleString()} units</p>
+          </div>
+          <div className="print-summary-card c-value">
+            <p className="label">Est. Inventory Value</p>
+            <p className="value green">₱{totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+            <p className="cap">Avg ₱{avgCost.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} per unit</p>
+          </div>
+          <div className="print-summary-card c-low">
+            <p className="label">Low Stock</p>
+            <p className="value amber">{lowStockCount}</p>
+            <p className="cap">At or below reorder point</p>
+          </div>
+          <div className="print-summary-card c-out">
+            <p className="label">Out of Stock</p>
+            <p className="value red">{outOfStockCount}</p>
+            <p className="cap">Zero units remaining</p>
+          </div>
+        </div>
+
+        {/* ── Print 4: stock health distribution ── */}
+        {totalItems > 0 && (
+          <div className="print-only print-health">
+            <div className="head">
+              <p className="hk">Stock Health</p>
+              <p className="hv">{reorderNeeded} of {totalItems} item{totalItems === 1 ? "" : "s"} need attention</p>
             </div>
-            <div style={{ textAlign: "right", fontSize: "11px", color: "#6b7280" }}>
-              <p style={{ margin: 0 }}>Generated: {printDate}</p>
-              <p style={{ margin: "2px 0 0" }}>Filter: {statusFilter || "All"} | Showing {filtered.length} of {totalItems} items</p>
+            <div className="bar">
+              {activeCount > 0 && <span className="seg s-active" style={{ width: `${pct(activeCount)}%` }} />}
+              {lowStockCount > 0 && <span className="seg s-low" style={{ width: `${pct(lowStockCount)}%` }} />}
+              {outOfStockCount > 0 && <span className="seg s-out" style={{ width: `${pct(outOfStockCount)}%` }} />}
+            </div>
+            <div className="legend">
+              <span className="li"><span className="dot s-active" />Active · {activeCount} ({pct(activeCount).toFixed(0)}%)</span>
+              <span className="li"><span className="dot s-low" />Low Stock · {lowStockCount} ({pct(lowStockCount).toFixed(0)}%)</span>
+              <span className="li"><span className="dot s-out" />Out of Stock · {outOfStockCount} ({pct(outOfStockCount).toFixed(0)}%)</span>
             </div>
           </div>
-          <div style={{ height: "2px", background: "linear-gradient(90deg,#0C573E,#2E8B34)", marginTop: "12px", borderRadius: "2px" }} />
-        </div>
+        )}
 
-        {/* Print summary row */}
-        <div className="print-summary">
-          <div className="print-summary-item">Total Items: <strong>{totalItems}</strong></div>
-          <div className="print-summary-item">Est. Value: <strong>₱{totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</strong></div>
-          <div className="print-summary-item">Low Stock: <strong>{lowStockCount}</strong></div>
-          <div className="print-summary-item">Out of Stock: <strong>{outOfStockCount}</strong></div>
-        </div>
-
-        {/* Table card */}
-        <div className="rounded-xl overflow-hidden"
+        {/* ── Screen table card (interactive; never printed) ── */}
+        <div className="no-print rounded-xl overflow-hidden"
           style={{ border: `1px solid ${d.cardBdr}`, backgroundColor: d.cardBg, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
 
           {/* Toolbar */}
-          <div className="flex items-center gap-2 flex-wrap">
-            {[
-              { val: category,     set: setCategory,   opts: ["All Categories", ...dynamicCategories], min: "130px" },
-              { val: statusFilter, set: setStatus,     opts: ["Status: All", "Active", "Low Stock", "Out of Stock"], min: "120px",
-                map: { "Status: All": "", "Active": "Active", "Low Stock": "Low Stock", "Out of Stock": "Out of Stock" },
-                unmap: { "": "Status: All", "Active": "Active", "Low Stock": "Low Stock", "Out of Stock": "Out of Stock" } },
-              { val: stockSort,    set: setStockSort,  opts: ["Sort: Default", "Stock: Low to High", "Stock: High to Low"], min: "160px",
-                map: { "Sort: Default": "", "Stock: Low to High": "asc", "Stock: High to Low": "desc" },
-                unmap: { "": "Sort: Default", "asc": "Stock: Low to High", "desc": "Stock: High to Low" } },
-            ].map((f, i) => (
-              <div key={i} className="relative">
-                <select value={f.unmap ? f.unmap[f.val] || f.opts[0] : f.val}
-                  onChange={e => f.set(f.map ? f.map[e.target.value] || "" : e.target.value === "All Categories" ? "" : e.target.value)}
-                  className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md cursor-pointer outline-none transition-all"
-                  style={{ borderColor: d.inputBdr, minWidth: f.min, backgroundColor: d.inputBg, color: d.inputTxt }}
-                  onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
-                  onBlur={e => { e.target.style.borderColor = d.inputBdr; e.target.style.boxShadow = "none" }}>
-                  {f.opts.map(o => <option key={o} value={o}>{o}</option>)}
-                </select>
-                <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-                </svg>
-              </div>
-            ))}
+          <div className="p-3 sm:p-4" style={{ borderBottom: `1px solid ${d.toolbarBdr}`, backgroundColor: d.toolbarBg }}>
+            <div className="flex items-center gap-2 flex-wrap">
+              {[
+                { val: category,     set: setCategory,   opts: ["All Categories", ...dynamicCategories], min: "150px" },
+                { val: statusFilter, set: setStatus,     opts: ["Status: All", "Active", "Low Stock", "Out of Stock"], min: "140px",
+                  map: { "Status: All": "", "Active": "Active", "Low Stock": "Low Stock", "Out of Stock": "Out of Stock" },
+                  unmap: { "": "Status: All", "Active": "Active", "Low Stock": "Low Stock", "Out of Stock": "Out of Stock" } },
+                { val: stockSort,    set: setStockSort,  opts: ["Sort: Default", "Stock: Low to High", "Stock: High to Low"], min: "170px",
+                  map: { "Sort: Default": "", "Stock: Low to High": "asc", "Stock: High to Low": "desc" },
+                  unmap: { "": "Sort: Default", "asc": "Stock: Low to High", "desc": "Stock: High to Low" } },
+              ].map((f, i) => (
+                <div key={i} className="relative">
+                  <select value={f.unmap ? f.unmap[f.val] || f.opts[0] : f.val}
+                    onChange={e => f.set(f.map ? f.map[e.target.value] || "" : e.target.value === "All Categories" ? "" : e.target.value)}
+                    className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md cursor-pointer outline-none transition-all"
+                    style={{ borderColor: d.inputBdr, minWidth: f.min, backgroundColor: d.inputBg, color: d.inputTxt }}
+                    onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
+                    onBlur={e => { e.target.style.borderColor = d.inputBdr; e.target.style.boxShadow = "none" }}>
+                    {f.opts.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                  <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+                  </svg>
+                </div>
+              ))}
 
-            <div className="relative flex-1" style={{ minWidth: "180px" }}>
-              <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
-              </svg>
-              <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search item name or ID"
-                className="w-full pl-9 pr-4 py-2 text-sm border rounded-md outline-none transition-all"
-                style={{ borderColor: d.inputBdr, backgroundColor: d.inputBg, color: d.inputTxt }}
-                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
-                onBlur={e => { e.target.style.borderColor = d.inputBdr; e.target.style.boxShadow = "none" }} />
+              <div className="relative flex-1" style={{ minWidth: "200px" }}>
+                <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
+                </svg>
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search item name or ID"
+                  className="w-full pl-9 pr-4 py-2 text-sm border rounded-md outline-none transition-all"
+                  style={{ borderColor: d.inputBdr, backgroundColor: d.inputBg, color: d.inputTxt }}
+                  onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
+                  onBlur={e => { e.target.style.borderColor = d.inputBdr; e.target.style.boxShadow = "none" }} />
+              </div>
             </div>
           </div>
 
           {/* Table */}
           <div className="overflow-x-auto">
-            <table className="w-full" style={{ minWidth: "620px" }}>
+            <table className="w-full" style={{ minWidth: "760px" }}>
               <thead style={{ borderBottom: `1px solid ${d.toolbarBdr}`, backgroundColor: d.toolbarBg }}>
                 <tr>
-                  {["Item Name", "Category", "Unit", "Current Stock", "Cost per Unit", "Status", "Action"].map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider"
-                      style={{ color: isDark ? "#64748b" : "#94a3b8" }}>{h}</th>
-                  ))}
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8", width: "34%" }}>Item Name</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Category</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Unit</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Current Stock</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Cost per Unit</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr><td colSpan={7} className="px-5 py-12 text-center text-sm" style={{ color: d.subC }}>Loading inventory...</td></tr>
                 ) : paginated.length > 0 ? paginated.map((item, idx) => {
-                  const invStatus = item.stock <= 0 ? "Out of Stock" : item.stock <= (item.reorder_point || 10) ? "Low Stock" : "Active"
+                  const invStatus = statusOf(item)
                   return (
                     <tr key={item.id}
                       style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#f8fafc"}`, backgroundColor: isDark ? (idx % 2 === 0 ? "#1a2332" : "#111827") : "white" }}
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.04)" : "#f8fffe"}
                       onMouseLeave={e => e.currentTarget.style.backgroundColor = isDark ? (idx % 2 === 0 ? "#1a2332" : "#111827") : "white"}>
-                      <td className="px-4 py-3"><span className="font-medium" style={{ color: d.cellTxt }}>{item.name}</span></td>
-                      <td className="px-4 py-3"><span className="capitalize" style={{ color: d.subC }}>{item.category}</span></td>
-                      <td className="px-4 py-3"><span style={{ color: d.subC }}>{item.unit_type || "piece"}</span></td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 align-top">
+                        <span className="font-medium block leading-snug break-words" style={{ color: d.cellTxt }}>{item.name}</span>
+                      </td>
+                      <td className="px-4 py-3 align-top"><span className="capitalize break-words" style={{ color: d.subC }}>{item.category || "—"}</span></td>
+                      <td className="px-4 py-3 align-top"><span style={{ color: d.subC }}>{item.unit_type || "piece"}</span></td>
+                      <td className="px-4 py-3 align-top whitespace-nowrap">
                         <span className="font-semibold"
                           style={{ color: item.stock <= 0 ? (isDark ? "#f87171" : "#dc2626") : item.stock <= (item.reorder_point || 10) ? (isDark ? "#fbbf24" : "#d97706") : (isDark ? "#4ade80" : "#16a34a") }}>
                           {item.stock}
                         </span>
                       </td>
-                      <td className="px-4 py-3" style={{ color: d.subC }}>₱{item.cost_per_unit || "0.00"}</td>
-                      <td className="px-4 py-3"><InvStatusBadge status={invStatus} isDark={isDark} /></td>
-  
-                      {/* 🚀 WRAP THE BUTTONS IN A TD TAG */}
-                      <td className="px-4 py-3 no-print">
+                      <td className="px-4 py-3 align-top whitespace-nowrap" style={{ color: d.subC }}>₱{item.cost_per_unit || "0.00"}</td>
+                      <td className="px-4 py-3 align-top">
+                        <InvStatusBadge status={invStatus} isDark={isDark} />
+                      </td>
+                      <td className="px-4 py-3 align-top">
                         <ActionBtns 
                           onDelete={() => setDeletingItem(item)} 
                           onEdit={() => { setEditingItem(item); setShowForm(true); }} 
@@ -1055,9 +1306,92 @@ export default function AdminInventory() {
           />
         </div>
 
-        {/* Print footer */}
+        {/* ── Print 5: full detail table, grouped by category ──
+            Prints EVERY filtered item (not just the current page),
+            with per-category subtotals and a report total row. */}
+        <div className="print-only print-detail">
+          <div className="print-section-head">
+            <p className="print-section-title">Inventory Detail</p>
+            <p className="print-section-sub">Grouped by category · row order follows the on-screen sort</p>
+          </div>
+          <div className="twrap">
+            <table>
+              <thead>
+                <tr>
+                  <th className="col-idx num">#</th>
+                  <th className="col-name">Item Name</th>
+                  <th className="col-unit">Unit</th>
+                  <th className="col-stock num">Stock</th>
+                  <th className="col-reo num">Reorder Pt</th>
+                  <th className="col-cost num">Cost / Unit</th>
+                  <th className="col-val num">Stock Value</th>
+                  <th className="col-status center">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={8} style={{ textAlign: "center", padding: "18px 8px" }}>No items match the current filters.</td></tr>
+                ) : (() => {
+                  let n = 0
+                  return printGroups.map(g => (
+                    <Fragment key={g.label}>
+                      <tr className="cat-row">
+                        <td colSpan={8}>
+                          <span>{g.label} ({g.items.length})</span>
+                          <span className="cat-meta">{g.units.toLocaleString()} units · ₱{g.value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                        </td>
+                      </tr>
+                      {g.items.map((item, i) => {
+                        n += 1
+                        const st = statusOf(item)
+                        const pillCls = st === "Out of Stock" ? "out" : st === "Low Stock" ? "low" : "active"
+                        const stockValue = (parseFloat(item.cost_per_unit || 0) || 0) * (parseInt(item.stock || 0) || 0)
+                        return (
+                          <tr key={item.id} className={i % 2 === 1 ? "alt" : ""}>
+                            <td className="num nowrap muted">{n}</td>
+                            <td><span className="item-name">{item.name}</span></td>
+                            <td className="muted">{item.unit_type || "piece"}</td>
+                            <td className="num nowrap"><span className={`stk ${pillCls}`}>{item.stock}</span></td>
+                            <td className="num nowrap muted">{item.reorder_point || 10}</td>
+                            <td className="num nowrap muted">₱{(parseFloat(item.cost_per_unit || 0) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td className="num nowrap">₱{stockValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            <td className="center"><span className={`print-pill ${pillCls}`}>{st}</span></td>
+                          </tr>
+                        )
+                      })}
+                    </Fragment>
+                  ))
+                })()}
+                {filtered.length > 0 && (
+                  <tr className="grand">
+                    <td colSpan={3}>Report Total · {filtered.length} item{filtered.length === 1 ? "" : "s"}</td>
+                    <td className="num nowrap">{filteredUnits.toLocaleString()}</td>
+                    <td />
+                    <td />
+                    <td className="num nowrap">₱{filteredValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    <td />
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* ── Print 6: footer + signature lines ── */}
         <div className="print-only print-footer">
-          <p>Esting's Flower International Inc. — Confidential. For internal use only.</p>
+          <p className="note">
+            <strong>Esting's Flower International Inc.</strong> Confidential. This report is generated for internal use only and reflects recorded stock levels as of the date and time indicated above. Figures are based on the filters applied at the time of printing.
+          </p>
+          <div className="print-signs">
+            <div className="print-sign">
+              <div className="line" />
+              <p className="cap">Prepared by</p>
+            </div>
+            <div className="print-sign">
+              <div className="line" />
+              <p className="cap">Approved by</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

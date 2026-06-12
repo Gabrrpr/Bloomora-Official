@@ -20,7 +20,7 @@ const SUPPORTED_REGIONS = [
 
 // ── Validation helpers ──────────────────────────────────────────────────────
 
-/** Strict email: local@domain.tld — TLD must be 2+ alpha chars, no consecutive dots, etc. */
+/** Strict email: local@domain.tld, TLD must be 2+ alpha chars, no consecutive dots, etc. */
 function isValidEmail(v) {
   return /^[^\s@]+@[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(v.trim())
 }
@@ -30,7 +30,7 @@ function isValidPHPhone(v) {
   return /^\+639\d{9}$/.test(v)
 }
 
-/** Name: letters, spaces, hyphens, apostrophes only — no digits or symbols */
+/** Name: letters, spaces, hyphens, apostrophes only, no digits or symbols */
 function isValidName(v) {
   return /^[a-zA-ZÀ-ÖØ-öø-ÿ\s'\-]+$/.test(v.trim()) && v.trim().length >= 2
 }
@@ -40,7 +40,7 @@ function isValidZip(v) {
   return /^\d{4}$/.test(v)
 }
 
-/** City / Municipality: letters, spaces, hyphens, periods — min 2 chars */
+/** City / Municipality: letters, spaces, hyphens, periods, min 2 chars */
 function isValidCity(v) {
   return /^[a-zA-ZÀ-ÖØ-öø-ÿ\s'.\-]+$/.test(v.trim()) && v.trim().length >= 2
 }
@@ -50,7 +50,7 @@ function isValidStreet(v) {
   return v.trim().length >= 10 && /\d/.test(v)
 }
 
-/** Username: alphanumeric, underscores, dots — 3–30 chars */
+/** Username: alphanumeric, underscores, dots, 3 to 30 chars */
 function isValidUsername(v) {
   if (!v) return true // optional
   return /^[a-zA-Z0-9_.]{3,30}$/.test(v)
@@ -144,6 +144,16 @@ function FieldError({ msg }) {
   return <p className="text-xs text-red-500 mt-1 flex items-center gap-1"><span>⚠</span>{msg}</p>
 }
 
+// ── Section header (replaces the old phase steps) ───────────────────────────
+function SectionHeader({ label }) {
+  return (
+    <div className="flex items-center gap-3 pt-2">
+      <span className="text-[11px] font-semibold tracking-[0.16em] uppercase text-green-700">{label}</span>
+      <div className="flex-1 h-px bg-gray-100" />
+    </div>
+  )
+}
+
 // ── Input class constants ───────────────────────────────────────────────────
 const iBase  = "w-full py-3 border rounded-xl text-sm focus:outline-none focus:ring-2 focus:border-transparent transition bg-white"
 const iOk    = "border-gray-200 focus:ring-green-500"
@@ -151,17 +161,11 @@ const iErr   = "border-red-400 focus:ring-red-400"
 const iPlain = (err) => `px-4 ${iBase} ${err ? iErr : iOk}`
 const iIcon  = (err) => `pl-10 pr-4 ${iBase} ${err ? iErr : iOk}`
 const iIconR = (err) => `pl-10 pr-10 ${iBase} ${err ? iErr : iOk}`
-const iSel   = "w-full pl-3 pr-8 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition bg-white appearance-auto"
+const iSel   = "w-full pl-3 pr-8 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition bg-white appearance-auto"
 
 const STORAGE_KEY = "register_form_draft"
-const PHASES = [
-  { title: "Nice to meet you!",    sub: "Let's start with your name."               },
-  { title: "Stay in touch",        sub: "How can we reach you?"                     },
-  { title: "Secure your account",  sub: "Pick a strong password."                   },
-  { title: "Where do we deliver?", sub: "Fill in your delivery address to continue." },
-]
 
-// ── Load persisted draft (form + step) ─────────────────────────────────────
+// ── Load persisted draft ────────────────────────────────────────────────────
 function loadDraft() {
   try {
     const saved = sessionStorage.getItem(STORAGE_KEY)
@@ -176,15 +180,9 @@ export default function Register({ onNavigate }) {
   const [otp, setOtp]     = useState("")
   const [showTerms, setShowTerms] = useState(false)
 
-  // ── Init form + formPhase from sessionStorage (single source of truth) ──
+  // ── Init form from sessionStorage (single source of truth) ──────────────
   const initial = loadDraft()
 
-  const [formPhase, setFormPhase] = useState(() => {
-    const p = initial?.formPhase
-    return p === 1 || p === 2 || p === 3 || p === 4 ? p : 1
-  })
-
-  // 🚀 ADDED preferred_currency with a default of "PHP"
   const [form, setForm] = useState(() => initial?.form ?? {
     firstName: "", lastName: "", email: "", phone: "", username: "",
     password: "", confirmPassword: "", preferred_currency: "PHP",
@@ -265,8 +263,8 @@ export default function Register({ onNavigate }) {
   const [passwordStrength, setPasswordStrength] = useState("empty")
 
   useEffect(() => {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ form, formPhase }))
-  }, [form, formPhase])
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify({ form }))
+  }, [form])
 
   useEffect(() => {
     const clean = () => sessionStorage.removeItem(STORAGE_KEY)
@@ -299,57 +297,47 @@ export default function Register({ onNavigate }) {
     updateAddr("zip_code", val)
   }
 
-  const canProceed = {
-    1: isValidName(form.firstName) && isValidName(form.lastName),
-    2: isValidEmail(form.email) && isValidPHPhone(form.phone),
-    3: passwordStrength === "strong" && form.password === form.confirmPassword && isValidUsername(form.username),
-    4: isValidZip(form.address.zip_code) && isValidCity(form.address.city) &&
-       isValidStreet(form.address.street) && form.address.regionId && form.address.provinceId && agreeTerms,
-  }
+  // ── Single-page submit gate (was canProceed per phase) ──────────────────
+  const canSubmit =
+    isValidName(form.firstName) && isValidName(form.lastName) &&
+    isValidEmail(form.email) && isValidPHPhone(form.phone) &&
+    isValidUsername(form.username) &&
+    passwordStrength === "strong" && form.password === form.confirmPassword &&
+    form.address.regionId && form.address.provinceId &&
+    isValidCity(form.address.city) && isValidZip(form.address.zip_code) &&
+    isValidStreet(form.address.street) && agreeTerms
 
-  const validatePhase = (phase) => {
+  // ── Full-form validation (was validatePhase 1-4) ─────────────────────────
+  const validateAll = () => {
     setError("")
-    if (phase === 1) {
-      touch("firstName"); touch("lastName")
-      validateField("firstName", form.firstName, null)
-      validateField("lastName", form.lastName, null)
-      if (!canProceed[1]) { setError("Please enter a valid first and last name."); return false }
-    }
-    if (phase === 2) {
-      touch("email"); touch("phone")
-      validateField("email", form.email, null)
-      validateField("phone", form.phone, null)
-      if (!isValidEmail(form.email)) { setError("Please enter a valid email address (e.g. juan@gmail.com)."); return false }
-      if (!isValidPHPhone(form.phone)) { setError("Please enter a valid PH mobile number (+639XXXXXXXXX)."); return false }
-    }
-    if (phase === 3) {
-      touch("username"); touch("password"); touch("confirmPassword")
-      validateField("username", form.username, null)
-      validateField("password", form.password, null)
-      validateField("confirmPassword", form.confirmPassword, null)
-      if (form.username && !isValidUsername(form.username)) { setError("Username must be 3–30 characters (letters, numbers, _ or .)."); return false }
-      if (passwordStrength !== "strong") { setError("Password must be strong (8+ chars, uppercase, number, special)."); return false }
-      if (form.password !== form.confirmPassword) { setError("Passwords do not match."); return false }
-    }
-    if (phase === 4) {
-      touch("city"); touch("street"); touch("zip_code")
-      validateField("city", form.address.city, null)
-      validateField("street", form.address.street, null)
-      validateField("zip_code", form.address.zip_code, null)
-      if (!form.address.regionId || !form.address.provinceId) { setError("Please select your region and province."); return false }
-      if (!isValidCity(form.address.city)) { setError("Please enter a valid city name."); return false }
-      if (!isValidZip(form.address.zip_code)) { setError("ZIP code must be exactly 4 digits."); return false }
-      if (!isValidStreet(form.address.street)) { setError("Please enter your full street address including a house/unit number (min. 10 characters)."); return false }
-      if (!agreeTerms) { setError("Please agree to the Terms & Conditions."); return false }
-    }
+    ;["firstName","lastName","email","phone","username","password","confirmPassword","city","street","zip_code"].forEach(touch)
+    validateField("firstName", form.firstName, null)
+    validateField("lastName", form.lastName, null)
+    validateField("email", form.email, null)
+    validateField("phone", form.phone, null)
+    validateField("username", form.username, null)
+    validateField("password", form.password, null)
+    validateField("confirmPassword", form.confirmPassword, null)
+    validateField("city", form.address.city, null)
+    validateField("street", form.address.street, null)
+    validateField("zip_code", form.address.zip_code, null)
+
+    if (!isValidName(form.firstName) || !isValidName(form.lastName)) { setError("Please enter a valid first and last name."); return false }
+    if (!isValidEmail(form.email)) { setError("Please enter a valid email address (e.g. juan@gmail.com)."); return false }
+    if (!isValidPHPhone(form.phone)) { setError("Please enter a valid PH mobile number (+639XXXXXXXXX)."); return false }
+    if (form.username && !isValidUsername(form.username)) { setError("Username must be 3–30 characters (letters, numbers, _ or .)."); return false }
+    if (passwordStrength !== "strong") { setError("Password must be strong (8+ chars, uppercase, number, special)."); return false }
+    if (form.password !== form.confirmPassword) { setError("Passwords do not match."); return false }
+    if (!form.address.regionId || !form.address.provinceId) { setError("Please select your region and province."); return false }
+    if (!isValidCity(form.address.city)) { setError("Please enter a valid city name."); return false }
+    if (!isValidZip(form.address.zip_code)) { setError("ZIP code must be exactly 4 digits."); return false }
+    if (!isValidStreet(form.address.street)) { setError("Please enter your full street address including a house/unit number (min. 10 characters)."); return false }
+    if (!agreeTerms) { setError("Please agree to the Terms & Conditions."); return false }
     return true
   }
 
-  const handleNext = () => { if (validatePhase(formPhase)) setFormPhase(p => p + 1) }
-
   const handleSendOtp = async () => {
-    setError("")
-    if (!validatePhase(4)) return
+    if (!validateAll()) return
     setLoadingMsg("Sending verification code...")
     setLoading(true)
     try { await sendOtp(form.email); setStep("otp") }
@@ -367,15 +355,14 @@ export default function Register({ onNavigate }) {
       const addressStr = form.address.street
         ? `${form.address.street}, ${form.address.city}, ${form.address.provinceId || ""} ${form.address.zip_code || ""}`.trim()
         : undefined
-        
-      // 🚀 Pass preferred_currency to the backend registration call
+
       const result = await registerUser({
         first_name: form.firstName, last_name: form.lastName, email: form.email,
         phone_number: form.phone, username: form.username || undefined,
         password: form.password, address: addressStr,
         preferred_currency: form.preferred_currency
       })
-      
+
       if (result.success || result.status === "success") {
         sessionStorage.removeItem(STORAGE_KEY)
         sessionStorage.setItem("registerEmail", form.email)
@@ -391,8 +378,8 @@ export default function Register({ onNavigate }) {
   const strengthWidth  = { empty: 0, weak: 25, fair: 50, good: 75, strong: 100 }
   const strengthLabel  = { empty: "", weak: "Weak", fair: "Fair", good: "Good", strong: "Strong" }
 
-  const currentTitle = step === "otp" ? "Verify your email" : PHASES[formPhase - 1].title
-  const currentSub   = step === "otp" ? `Enter the OTP sent to ${form.email}` : PHASES[formPhase - 1].sub
+  const currentTitle = step === "otp" ? "Verify your email" : "Create your account"
+  const currentSub   = step === "otp" ? `Enter the OTP sent to ${form.email}` : "Fill in your details below. It only takes a minute."
 
   return (
     <div className="min-h-screen flex">
@@ -412,7 +399,7 @@ export default function Register({ onNavigate }) {
         <MobileFlowerBanner />
 
         <div className="flex-1 flex items-center justify-center px-6 py-12">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-md border border-gray-100 px-8 py-10">
+          <div className="w-full max-w-xl bg-white rounded-2xl shadow-md border border-gray-100 px-8 py-10">
 
             {/* Header */}
             <div className="text-center mb-6">
@@ -428,66 +415,48 @@ export default function Register({ onNavigate }) {
               <p className="text-gray-500 text-sm mt-1">{currentSub}</p>
             </div>
 
-            {/* Progress bar */}
-            {step === "form" && (
-              <div className="mb-6">
-                <div className="flex gap-1.5">
-                  {[1,2,3,4].map(i => (
-                    <div key={i} className={`flex-1 h-1 rounded-full transition-colors duration-500 ${
-                      i < formPhase ? "bg-green-600" : i === formPhase ? "bg-green-400" : "bg-gray-200"
-                    }`} />
-                  ))}
-                </div>
-                <p className="text-xs text-gray-400 mt-1.5 text-right">Step {formPhase} of 4</p>
-              </div>
-            )}
-
             {error && (
               <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-100 text-red-600 text-sm text-center">{error}</div>
             )}
 
-            {/* ══ FORM PHASES ════════════════════════════════════════════ */}
+            {/* ══ SINGLE-PAGE FORM ═══════════════════════════════════════ */}
             {step === "form" && (
               <div className="space-y-4">
 
-                {/* ── Phase 1: Name ─────────────────────────────────────── */}
-                {formPhase === 1 && <>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">First Name</label>
-                      <input type="text" value={form.firstName} autoFocus
-                        onChange={e => { setForm(f => ({ ...f, firstName: e.target.value })); if (touched.firstName) validateField("firstName", e.target.value, null) }}
-                        onBlur={() => { touch("firstName"); validateField("firstName", form.firstName, null) }}
-                        placeholder="Juan"
-                        className={iPlain(touched.firstName && fieldErr.firstName)} />
-                      <FieldError msg={touched.firstName && fieldErr.firstName} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">Last Name</label>
-                      <input type="text" value={form.lastName}
-                        onChange={e => { setForm(f => ({ ...f, lastName: e.target.value })); if (touched.lastName) validateField("lastName", e.target.value, null) }}
-                        onBlur={() => { touch("lastName"); validateField("lastName", form.lastName, null) }}
-                        placeholder="Dela Cruz"
-                        className={iPlain(touched.lastName && fieldErr.lastName)} />
-                      <FieldError msg={touched.lastName && fieldErr.lastName} />
-                    </div>
+                {/* ── Personal details ──────────────────────────────────── */}
+                <SectionHeader label="Personal Details" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">First Name</label>
+                    <input type="text" value={form.firstName} autoFocus
+                      onChange={e => { setForm(f => ({ ...f, firstName: e.target.value })); if (touched.firstName) validateField("firstName", e.target.value, null) }}
+                      onBlur={() => { touch("firstName"); validateField("firstName", form.firstName, null) }}
+                      placeholder="Juan"
+                      className={iPlain(touched.firstName && fieldErr.firstName)} />
+                    <FieldError msg={touched.firstName && fieldErr.firstName} />
                   </div>
-                  <p className="text-xs text-gray-400">Letters, spaces, hyphens, and apostrophes only.</p>
-                  <button onClick={handleNext} disabled={!canProceed[1]}
-                    className="w-full py-3 bg-green-700 hover:bg-green-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition">
-                    Next →
-                  </button>
-                </>}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Last Name</label>
+                    <input type="text" value={form.lastName}
+                      onChange={e => { setForm(f => ({ ...f, lastName: e.target.value })); if (touched.lastName) validateField("lastName", e.target.value, null) }}
+                      onBlur={() => { touch("lastName"); validateField("lastName", form.lastName, null) }}
+                      placeholder="Dela Cruz"
+                      className={iPlain(touched.lastName && fieldErr.lastName)} />
+                    <FieldError msg={touched.lastName && fieldErr.lastName} />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">Letters, spaces, hyphens, and apostrophes only.</p>
 
-                {/* ── Phase 2: Contact ──────────────────────────────────── */}
-                {formPhase === 2 && <>
+                {/* ── Contact ───────────────────────────────────────────── */}
+                <SectionHeader label="Contact" />
+                <div className="grid sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
                       </span>
-                      <input type="email" value={form.email} autoFocus
+                      <input type="email" value={form.email}
                         onChange={e => { setForm(f => ({ ...f, email: e.target.value })); if (touched.email) validateField("email", e.target.value, null) }}
                         onBlur={() => { touch("email"); validateField("email", form.email, null) }}
                         placeholder="juan@gmail.com"
@@ -510,30 +479,27 @@ export default function Register({ onNavigate }) {
                     <FieldError msg={touched.phone && fieldErr.phone} />
                     <p className="text-xs text-gray-400 mt-1">Tip: typing 09xx auto-converts to +639xx.</p>
                   </div>
-                  <div className="flex gap-3">
-                    <button onClick={() => { setFormPhase(1); setError("") }} className="flex-1 py-3 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition">← Back</button>
-                    <button onClick={handleNext} disabled={!canProceed[2]} className="flex-1 py-3 bg-green-700 hover:bg-green-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition">Next →</button>
-                  </div>
-                </>}
+                </div>
 
-                {/* ── Phase 3: Account ──────────────────────────────────── */}
-                {formPhase === 3 && <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Username <span className="text-gray-400 font-normal">(optional)</span></label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                      </span>
-                      <input type="text" value={form.username} autoFocus
-                        onChange={e => { setForm(f => ({ ...f, username: e.target.value })); if (touched.username) validateField("username", e.target.value, null) }}
-                        onBlur={() => { touch("username"); validateField("username", form.username, null) }}
-                        placeholder="juandelacruz"
-                        className={iIcon(touched.username && fieldErr.username)} />
-                    </div>
-                    <FieldError msg={touched.username && fieldErr.username} />
-                    <p className="text-xs text-gray-400 mt-1">3–30 chars. Letters, numbers, underscores, or dots. Auto-generated if blank.</p>
+                {/* ── Account security ──────────────────────────────────── */}
+                <SectionHeader label="Account Security" />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Username <span className="text-gray-400 font-normal">(optional)</span></label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                    </span>
+                    <input type="text" value={form.username}
+                      onChange={e => { setForm(f => ({ ...f, username: e.target.value })); if (touched.username) validateField("username", e.target.value, null) }}
+                      onBlur={() => { touch("username"); validateField("username", form.username, null) }}
+                      placeholder="juandelacruz"
+                      className={iIcon(touched.username && fieldErr.username)} />
                   </div>
+                  <FieldError msg={touched.username && fieldErr.username} />
+                  <p className="text-xs text-gray-400 mt-1">3–30 chars. Letters, numbers, underscores, or dots. Auto-generated if blank.</p>
+                </div>
 
+                <div className="grid sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
                     <div className="relative">
@@ -553,22 +519,8 @@ export default function Register({ onNavigate }) {
                         {showPassword ? <EyeOpen /> : <EyeSlash />}
                       </button>
                     </div>
-                    {/* Strength bar */}
-                    <div className="mt-2">
-                      <div className="flex h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div className="h-full transition-all duration-300 rounded-full"
-                          style={{ width: `${strengthWidth[passwordStrength]}%`, backgroundColor: strengthColors[passwordStrength] }} />
-                      </div>
-                      <div className="flex justify-between items-center mt-1">
-                        <span className="text-xs font-medium" style={{ color: strengthColors[passwordStrength] || "#9ca3af" }}>
-                          {strengthLabel[passwordStrength]}
-                        </span>
-                        <span className="text-xs text-gray-400">8+ chars, 1 upper, 1 number, 1 special</span>
-                      </div>
-                    </div>
                     <FieldError msg={touched.password && fieldErr.password} />
                   </div>
-
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">Confirm Password</label>
                     <div className="relative">
@@ -586,105 +538,108 @@ export default function Register({ onNavigate }) {
                     </div>
                     <FieldError msg={touched.confirmPassword && fieldErr.confirmPassword} />
                   </div>
+                </div>
 
-                  <div className="flex gap-3">
-                    <button onClick={() => { setFormPhase(2); setError("") }} className="flex-1 py-3 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition">← Back</button>
-                    <button onClick={handleNext} disabled={!canProceed[3]} className="flex-1 py-3 bg-green-700 hover:bg-green-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition">Next →</button>
+                {/* Strength bar */}
+                <div>
+                  <div className="flex h-2 bg-gray-200 rounded-full overflow-hidden">
+                    <div className="h-full transition-all duration-300 rounded-full"
+                      style={{ width: `${strengthWidth[passwordStrength]}%`, backgroundColor: strengthColors[passwordStrength] }} />
                   </div>
-                </>}
-
-                {/* ── Phase 4: Address & Currency ───────────────────────────── */}
-                {formPhase === 4 && <>
-                  {/* 🚀 New Billing Currency Selector placed natively into the grid */}
-                  <div className="mb-3">
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Billing Currency / Region</label>
-                    <select
-                      value={form.preferred_currency}
-                      onChange={e => setForm(f => ({ ...f, preferred_currency: e.target.value }))}
-                      className={iSel}
-                    >
-                      {SUPPORTED_REGIONS.map(r => (
-                        <option key={r.code} value={r.currency}>{r.country} ({r.currency})</option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-400 mt-1">Product prices will be displayed in this currency worldwide.</p>
-                  </div>
-
-                  {/* Philippine Delivery details specifically kept for local fulfillment */}
-                  <div className="grid grid-cols-2 gap-3 mt-4 pt-4 border-t border-gray-100">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Delivery Region (PH)</label>
-                      <select value={form.address.regionId}
-                        onChange={e => { updateAddr("regionId", e.target.value); updateAddr("provinceId", "") }}
-                        className={iSel}>
-                        <option value="">Select Region</option>
-                        {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">Province</label>
-                      <select value={form.address.provinceId}
-                        onChange={e => updateAddr("provinceId", e.target.value)}
-                        disabled={!form.address.regionId}
-                        className={`${iSel} disabled:opacity-50`}>
-                        <option value="">Select Province</option>
-                        {getProvinces(form.address.regionId).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">City / Municipality</label>
-                      <input type="text" value={form.address.city}
-                        onChange={e => updateAddr("city", e.target.value)}
-                        onBlur={() => { touch("city"); validateField("city", form.address.city, null) }}
-                        placeholder="City"
-                        className={`${iSel} ${touched.city && fieldErr.city ? "border-red-400 focus:ring-red-400" : ""}`} />
-                      <FieldError msg={touched.city && fieldErr.city} />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-700 mb-1">ZIP Code</label>
-                      <input
-                        type="text"
-                        inputMode="numeric"
-                        value={form.address.zip_code}
-                        onChange={handleZipChange}
-                        onBlur={() => { touch("zip_code"); validateField("zip_code", form.address.zip_code, null) }}
-                        placeholder="4 digits"
-                        maxLength={4}
-                        className={`${iSel} ${touched.zip_code && fieldErr.zip_code ? "border-red-400 focus:ring-red-400" : ""}`} />
-                      <FieldError msg={touched.zip_code && fieldErr.zip_code} />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Street Address</label>
-                    <textarea rows="2" value={form.address.street}
-                      onChange={e => updateAddr("street", e.target.value)}
-                      onBlur={() => { touch("street"); validateField("street", form.address.street, null) }}
-                      placeholder="House/Bldg No, Street, Subdivision/Village (e.g. 123 Rizal St, Barangay)"
-                      style={{ maxHeight: "6rem" }}
-                      className={`w-full px-3 py-2 border rounded-xl text-sm resize-y focus:outline-none focus:ring-2 focus:border-transparent transition bg-white ${touched.street && fieldErr.street ? "border-red-400 focus:ring-red-400" : "border-gray-200 focus:ring-green-500"}`} />
-                    <FieldError msg={touched.street && fieldErr.street} />
-                    <p className="text-xs text-gray-400 mt-1">Must include a house/unit number and be at least 10 characters.</p>
-                  </div>
-
-                  <label className="flex items-start gap-2 cursor-pointer mt-4">
-                    <input type="checkbox" checked={agreeTerms} onChange={e => setAgreeTerms(e.target.checked)} className="w-4 h-4 rounded accent-green-600 mt-0.5" />
-                    <span className="text-sm text-gray-600">I agree to the{" "}
-                      <button type="button" onClick={() => setShowTerms(true)} className="text-green-700 hover:underline font-medium">Terms &amp; Conditions</button>
+                  <div className="flex justify-between items-center mt-1">
+                    <span className="text-xs font-medium" style={{ color: strengthColors[passwordStrength] || "#9ca3af" }}>
+                      {strengthLabel[passwordStrength]}
                     </span>
-                  </label>
-
-                  <div className="flex gap-3">
-                    <button onClick={() => { setFormPhase(3); setError("") }} className="flex-1 py-3 border border-gray-200 text-gray-600 font-semibold rounded-xl hover:bg-gray-50 transition">← Back</button>
-                    <button onClick={handleSendOtp} disabled={!canProceed[4]}
-                      className="flex-1 py-3 bg-green-700 hover:bg-green-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition">
-                      Create Account
-                    </button>
+                    <span className="text-xs text-gray-400">8+ chars, 1 upper, 1 number, 1 special</span>
                   </div>
-                </>}
+                </div>
+
+                {/* ── Delivery & billing ────────────────────────────────── */}
+                <SectionHeader label="Delivery & Billing" />
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Billing Currency / Region</label>
+                  <select
+                    value={form.preferred_currency}
+                    onChange={e => setForm(f => ({ ...f, preferred_currency: e.target.value }))}
+                    className={iSel}
+                  >
+                    {SUPPORTED_REGIONS.map(r => (
+                      <option key={r.code} value={r.currency}>{r.country} ({r.currency})</option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">Product prices will be displayed in this currency worldwide.</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Delivery Region (PH)</label>
+                    <select value={form.address.regionId}
+                      onChange={e => { updateAddr("regionId", e.target.value); updateAddr("provinceId", "") }}
+                      className={iSel}>
+                      <option value="">Select Region</option>
+                      {regions.map(r => <option key={r.id} value={r.id}>{r.name}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">Province</label>
+                    <select value={form.address.provinceId}
+                      onChange={e => updateAddr("provinceId", e.target.value)}
+                      disabled={!form.address.regionId}
+                      className={`${iSel} disabled:opacity-50`}>
+                      <option value="">Select Province</option>
+                      {getProvinces(form.address.regionId).map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">City / Municipality</label>
+                    <input type="text" value={form.address.city}
+                      onChange={e => updateAddr("city", e.target.value)}
+                      onBlur={() => { touch("city"); validateField("city", form.address.city, null) }}
+                      placeholder="City"
+                      className={iPlain(touched.city && fieldErr.city)} />
+                    <FieldError msg={touched.city && fieldErr.city} />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">ZIP Code</label>
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={form.address.zip_code}
+                      onChange={handleZipChange}
+                      onBlur={() => { touch("zip_code"); validateField("zip_code", form.address.zip_code, null) }}
+                      placeholder="4 digits"
+                      maxLength={4}
+                      className={iPlain(touched.zip_code && fieldErr.zip_code)} />
+                    <FieldError msg={touched.zip_code && fieldErr.zip_code} />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Street Address</label>
+                  <textarea rows="2" value={form.address.street}
+                    onChange={e => updateAddr("street", e.target.value)}
+                    onBlur={() => { touch("street"); validateField("street", form.address.street, null) }}
+                    placeholder="House/Bldg No, Street, Subdivision/Village (e.g. 123 Rizal St, Barangay)"
+                    style={{ maxHeight: "6rem" }}
+                    className={`w-full px-4 py-3 border rounded-xl text-sm resize-y focus:outline-none focus:ring-2 focus:border-transparent transition bg-white ${touched.street && fieldErr.street ? iErr : iOk}`} />
+                  <FieldError msg={touched.street && fieldErr.street} />
+                  <p className="text-xs text-gray-400 mt-1">Must include a house/unit number and be at least 10 characters.</p>
+                </div>
+
+                <label className="flex items-start gap-2 cursor-pointer mt-4">
+                  <input type="checkbox" checked={agreeTerms} onChange={e => setAgreeTerms(e.target.checked)} className="w-4 h-4 rounded accent-green-600 mt-0.5" />
+                  <span className="text-sm text-gray-600">I agree to the{" "}
+                    <button type="button" onClick={() => setShowTerms(true)} className="text-green-700 hover:underline font-medium">Terms &amp; Conditions</button>
+                  </span>
+                </label>
+
+                <button onClick={handleSendOtp} disabled={!canSubmit}
+                  className="w-full py-3 bg-green-700 hover:bg-green-800 disabled:bg-gray-300 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition">
+                  Create Account
+                </button>
               </div>
             )}
 
@@ -720,7 +675,7 @@ export default function Register({ onNavigate }) {
                 </div>
                 <button type="submit" disabled={loading || otp.length < 6}
                   className="w-full py-3 bg-green-700 hover:bg-green-800 text-white font-semibold rounded-xl transition disabled:opacity-60">
-                  Verify & Create Account
+                  Verify &amp; Create Account
                 </button>
                 <button type="button" onClick={() => { setStep("form"); setOtp(""); setError("") }}
                   className="w-full py-2 text-sm text-gray-500 hover:text-gray-700 transition">← Back to registration</button>
