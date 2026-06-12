@@ -2,6 +2,9 @@ import os
 import resend
 import random
 import string
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Pulls the key directly from your Render environment variables
 resend.api_key = os.getenv("RESEND_API_KEY")

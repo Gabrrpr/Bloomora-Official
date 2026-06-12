@@ -39,6 +39,8 @@ def serialize_product(p: Product) -> dict:
         "unit_type": inv.unit_type if (inv and inv.unit_type) else "piece",
         "cost_per_unit": float(inv.cost_per_unit) if (inv and inv.cost_per_unit is not None) else None,
         "composition": getattr(p, "composition", []),
+        "occasions": getattr(p, "occasions", []),   
+        "branches": getattr(p, "branches", []),
     }
 
 # ── Public endpoints ──────────────────────────────────────────────────────────
@@ -94,6 +96,8 @@ def get_products(db: Session = Depends(get_db)):
         "season_key": p.season_key,
         "limited_start_at": p.limited_start_at.isoformat() if p.limited_start_at else None,
         "limited_end_at": p.limited_end_at.isoformat() if p.limited_end_at else None,
+        "occasions": getattr(p, "occasions", []),
+        
     } for p in products]
 
 @router.get("/customization/all", response_model=List[dict])
@@ -348,7 +352,8 @@ def create_product(
     season_key: Optional[str] = Form(None),
     limited_start_at: Optional[str] = Form(None),
     limited_end_at: Optional[str] = Form(None),
-    composition: Optional[str] = Form(None), # 👈 NEW: Catch the recipe
+    composition: Optional[str] = Form(None),
+    occasions: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff), # 🚀 SECURED
 ):
@@ -370,6 +375,19 @@ def create_product(
             parsed_comp = json.loads(composition)
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid composition JSON format.")
+        
+    parsed_occasions = []
+    if occasions:
+        try:
+            parsed_occasions = json.loads(occasions)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid occasions JSON format.")
+    parsed_branches = []
+    if branches:
+        try:
+            parsed_branches = json.loads(branches)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid branches JSON.")
 
     new_product = Product(
         id=uuid.uuid4(),
@@ -422,6 +440,8 @@ def update_product(
     limited_start_at: Optional[str] = Form(None),
     limited_end_at: Optional[str] = Form(None),
     composition: Optional[str] = Form(None), 
+    occasions: Optional[str] = Form(None),
+    branches: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
@@ -465,6 +485,11 @@ def update_product(
             product.composition = json.loads(composition)
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid composition JSON format.")
+    if occasions is not None:
+        try:
+            product.occasions = json.loads(occasions)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid occasions JSON format.")
 
     if is_visible is not None:
         product.is_visible = is_visible

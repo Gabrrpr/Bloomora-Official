@@ -12,7 +12,6 @@ const RIBBON_COLORS = {
   "Popular":"#f59e0b", "Premium":"#7c3aed", "Rare Find":"#ec4899",
 }
 
-const PRICE_RANGES = [[0,500],[500,1000],[1000,1500],[1500,2500]]
 const SORT_OPTIONS = [
   { value:"best-selling", label:"Best Selling" },
   { value:"price-asc",    label:"Price: Low to High" },
@@ -167,7 +166,7 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
             <span style={{ fontSize:"11px", color:"#9ca3af" }}>({product.reviews})</span>
           </div>
         </div>
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:"6px", marginTop:"8px" }}>
+        <div style={{ display:"flex", alignItems:"center", justifycontent:"space-between", gap:"6px", marginTop:"8px" }}>
           <div style={{ display:"flex", alignItems:"baseline", gap:"4px" }}>
             <span style={{ fontSize:"15px", fontWeight:800, color:G, lineHeight:1 }}>₱{product.price.toLocaleString()}</span>
             <span style={{ fontSize:"11px", color:"#9ca3af", textDecoration:"line-through" }}>₱{product.original.toLocaleString()}</span>
@@ -184,7 +183,7 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
               View
             </button>
             <button onClick={e => { e.stopPropagation(); toggleWishlist(product.id) }}
-              style={{ width:"30px", height:"30px", borderRadius:"8px", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center", backgroundColor:wishlisted?"#fef2f2":"#f3f4f6", border:wishlisted?"1px solid #fecaca":"1px solid #e5e7eb", cursor:"pointer" }}>
+              style={{ width:"30px", height:"30px", borderRadius:"8px", flexShrink:0, display:"flex", alignItems:"center", justifycontent:"center", backgroundColor:wishlisted?"#fef2f2":"#f3f4f6", border:wishlisted?"1px solid #fecaca":"1px solid #e5e7eb", cursor:"pointer" }}>
               <svg width="13" height="13" fill={wishlisted?"#e11d48":"none"} stroke={wishlisted?"#e11d48":"#9ca3af"} strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
               </svg>
@@ -250,7 +249,7 @@ function GridCard({ product, wishlist, toggleWishlist, onPreview }) {
 }
 
 function SidebarContent({ 
-  products, // 👈 Changed from 'hierarchy' to 'products' to build groups dynamically
+  products, 
   activeCategory, 
   setActiveCategory, 
   activeTypes,
@@ -258,23 +257,24 @@ function SidebarContent({
   priceRange, 
   setPriceRange,
   selectedLocations,
-  setSelectedLocations
+  setSelectedLocations,
+  selectedOccasions,      // 🚀 Pass down dynamic occasions states
+  setSelectedOccasions
 }) {
   const [minInput, setMinInput] = useState("");
   const [maxInput, setMaxInput] = useState("");
 
-  // Handle Location Checkboxes
   const toggleLocation = (loc) => {
-    setSelectedLocations(prev => 
-      prev.includes(loc) ? prev.filter(l => l !== loc) : [...prev, loc]
-    );
+    setSelectedLocations(prev => prev.includes(loc) ? prev.filter(l => l !== loc) : [...prev, loc]);
   };
 
-  // Handle Type Checkboxes (e.g., Rose, Sunflower)
   const toggleType = (type) => {
-    setActiveTypes(prev => 
-      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
-    );
+    setActiveTypes(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]);
+  };
+
+  // 🚀 Occasions selection toggle handler
+  const toggleOccasion = (occ) => {
+    setSelectedOccasions(prev => prev.includes(occ) ? prev.filter(o => o !== occ) : [...prev, occ]);
   };
 
   const applyPrice = () => {
@@ -287,27 +287,31 @@ function SidebarContent({
     setActiveCategory("All");
     setActiveTypes([]);
     setSelectedLocations([]);
-    setPriceRange([0, 99999]);
+    setSelectedOccasions([]); // 🚀 Clear out dynamic selections
+    setPriceRange([0, 999999]);
     setMinInput("");
     setMaxInput("");
   };
 
-  // 🚀 DYNAMIC GROUPING: Floral vs Non-Floral (and hide add-ons)
   const groupedHierarchy = { floral: {}, 'non-floral': {} };
   
   (products || []).forEach(p => {
     const catNorm = (p.category || "").toLowerCase().trim();
-    if (catNorm === 'add-on' || catNorm === 'addon') return; // Hide add-ons entirely
+    if (catNorm === 'add-on' || catNorm === 'addon') return;
 
     const group = (p.product_group || 'floral').toLowerCase().trim();
     const cat = p.category || "Uncategorized";
     const type = p.product_type;
     
-    // Safety check just in case a weird group name gets in
     if (!groupedHierarchy[group]) groupedHierarchy[group] = {};
     if (!groupedHierarchy[group][cat]) groupedHierarchy[group][cat] = new Set();
     if (type) groupedHierarchy[group][cat].add(type);
   });
+
+  // 🚀 Compute absolute unique list of active occasions across your live dataset
+  const uniqueOccasions = Array.from(
+    new Set((products || []).flatMap(p => p.occasions || []))
+  ).filter(Boolean).sort();
 
   return (
     <div className="w-full text-[13px] text-gray-700 font-sans pr-4">
@@ -342,7 +346,7 @@ function SidebarContent({
                       <button 
                         onClick={() => {
                           setActiveCategory(cat);
-                          setActiveTypes([]); // Reset types when switching categories
+                          setActiveTypes([]); 
                         }}
                         className="w-full text-left flex items-center gap-1.5 transition-colors hover:text-[#2E8B34] capitalize"
                         style={{ 
@@ -355,7 +359,6 @@ function SidebarContent({
                         {cat}
                       </button>
 
-                      {/* Collapsible Sub-types (e.g., Rose, Sunflower) */}
                       {activeCategory === cat && groupedHierarchy[groupName][cat].size > 0 && (
                         <ul className="mt-2 ml-4 space-y-2 border-l-2 pl-3" style={{ borderColor: "#e5e7eb" }}>
                           {Array.from(groupedHierarchy[groupName][cat]).map(type => (
@@ -392,6 +395,31 @@ function SidebarContent({
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z"/></svg>
           Search Filter
         </h3>
+
+        {/* 🚀 DYNAMIC LIVE OCCASIONS LIST IN SIDEBAR */}
+        {uniqueOccasions.length > 0 && (
+          <div className="mb-6">
+            <h4 className="font-medium mb-3 text-gray-800">Shop By Occasion</h4>
+            <ul className="space-y-2.5 max-h-48 overflow-y-auto pr-1">
+              {uniqueOccasions.map(occ => (
+                <li key={occ} className="flex items-center gap-2">
+                  <input 
+                    type="checkbox" 
+                    id={`sidebar-occ-${occ}`}
+                    checked={selectedOccasions.includes(occ)}
+                    onChange={() => toggleOccasion(occ)}
+                    className="w-3.5 h-3.5 rounded-sm border-gray-300 cursor-pointer focus:ring-0"
+                    style={{ accentColor: G }}
+                  />
+                  <label htmlFor={`sidebar-occ-${occ}`} className="cursor-pointer hover:text-gray-900 text-xs capitalize">
+                    {occ}
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <hr className="my-4 border-gray-100" />
+          </div>
+        )}
 
         {/* Shipped From */}
         <div className="mb-6">
@@ -457,7 +485,7 @@ function SidebarContent({
   )
 }
 
-function MobileFilterDrawer({ open, onClose, categories, activeCategory, setActiveCategory, priceRange, setPriceRange }) {
+function MobileFilterDrawer({ open, onClose, products, activeCategory, setActiveCategory, priceRange, setPriceRange, activeTypes, setActiveTypes, selectedLocations, setSelectedLocations, selectedOccasions, setSelectedOccasions }) {
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden"
     else document.body.style.overflow = ""
@@ -476,11 +504,17 @@ function MobileFilterDrawer({ open, onClose, categories, activeCategory, setActi
           <div className="flex justify-center pt-3 pb-1"><div className="w-10 h-1 rounded-full bg-gray-300"/></div>
           <div style={{ padding:"12px 24px 32px" }}>
             <SidebarContent
-              categories={categories}
+              products={products}
               activeCategory={activeCategory}
               setActiveCategory={setActiveCategory}
+              activeTypes={activeTypes}
+              setActiveTypes={setActiveTypes}
               priceRange={priceRange}
               setPriceRange={setPriceRange}
+              selectedLocations={selectedLocations}
+              setSelectedLocations={setSelectedLocations}
+              selectedOccasions={selectedOccasions}
+              setSelectedOccasions={setSelectedOccasions}
               onClose={onClose}
             />
           </div>
@@ -506,8 +540,12 @@ export default function Shop({ onNavigate, initialCategory }) {
   const [sortBy, setSortBy]                   = useState("best-selling")
   const [activeCategory, setActiveCategory]   = useState("All")
   const [categoryHierarchy, setCategoryHierarchy] = useState([])
-  const [activeTypes, setActiveTypes] = useState([]) 
-  const [selectedLocations, setSelectedLocations] = useState([])
+  const [activeTypes, setActiveTypes]         = useState([]) 
+  const [selectedLocations, setSelectedLocations] = useState(() => {
+    const saved = localStorage.getItem("bloomora_active_branch");
+    return saved ? [saved] : ["Manila"];
+  });
+  const [selectedOccasions, setSelectedOccasions] = useState([]) // 🚀 NEW OCCASIONS STATE
   
   const [priceRange, setPriceRange]           = useState([0, 999999])
   const [wishlist, setWishlist]               = useState([])
@@ -516,37 +554,44 @@ export default function Shop({ onNavigate, initialCategory }) {
   const [previewProduct, setPreviewProduct]   = useState(null)
   const sortRef = useRef(null)
 
+
   useEffect(() => {
-    // 1. If a category was passed directly from App.jsx, use it!
+    const handleBranchUpdate = () => {
+      const saved = localStorage.getItem("bloomora_active_branch");
+      if (saved) setSelectedLocations([saved]); // Instantly updates the shop grid
+    };
+    window.addEventListener("bloomora:branch-updated", handleBranchUpdate);
+    return () => window.removeEventListener("bloomora:branch-updated", handleBranchUpdate);
+  }, []);
+
+  useEffect(() => {
     if (initialCategory && initialCategory !== "All") {
       setActiveCategory(initialCategory);
     } 
-    // 2. If no direct prop was passed, check if the Navbar left a sticky note in localStorage
     else {
       const storedCategory = localStorage.getItem("bloomora_active_category");
       if (storedCategory) {
-        // Convert something like "funerals" to "Funeral" to match your UI
         const formattedCat = storedCategory.charAt(0).toUpperCase() + storedCategory.slice(1);
         setActiveCategory(formattedCat);
-        
-        // Remove the sticky note so it doesn't get stuck forever
         localStorage.removeItem("bloomora_active_category"); 
       } else {
-        // 3. Default state if nothing else is active
         setActiveCategory("All");
       }
+    }
+
+    // 🚀 READ INTER-PAGE ROUTING REDIRECT FOR AN OCCASION
+    const redirectedOccasion = localStorage.getItem("bloomora_active_occasion");
+    if (redirectedOccasion) {
+      setSelectedOccasions([redirectedOccasion]);
+      localStorage.removeItem("bloomora_active_occasion"); // Clean up state memory
     }
   }, [initialCategory]);
 
   useEffect(() => {
-    // 1. Fetch Hierarchy (Navbar & Sidebar data)
     api.get("/products/categories/hierarchy") 
-      .then(data => {
-        if (data) setCategoryHierarchy(data);
-      })
+      .then(data => { if (data) setCategoryHierarchy(data); })
       .catch(err => console.error("Failed to load hierarchy", err));
 
-    // 2. Fetch Products safely without crashing if empty
     api.get("/products/")
       .then(data => {
         if (data && data.length > 0) {
@@ -559,9 +604,7 @@ export default function Shop({ onNavigate, initialCategory }) {
             ribbon: p.ribbon || null,
           }));
           setProducts(mapped);
-        } else {
-          setProducts([]);
-        }
+        } else { setProducts([]); }
       })
       .catch(err => {
         console.error("Failed to load products", err);
@@ -580,88 +623,60 @@ export default function Shop({ onNavigate, initialCategory }) {
   }, [])
 
   const toggleWishlist = id => setWishlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
-
   const normalizeCat = (s) => (s || "").toString().trim().toLowerCase();
 
-  // 🚀 SMART SIDEBAR LOGIC
   const getSidebarCategories = () => {
     const activeNorm = normalizeCat(activeCategory);
-
     if (!activeNorm || activeNorm === "all") {
-      if (categoryHierarchy.length > 0) {
-        return ["All", ...categoryHierarchy.map(g => g.title)];
-      }
+      if (categoryHierarchy.length > 0) return ["All", ...categoryHierarchy.map(g => g.title)];
       return ["All"];
     }
-
     const parentGroup = categoryHierarchy.find(g => normalizeCat(g.title) === activeNorm);
-    if (parentGroup && parentGroup.items) {
-      return ["All", ...parentGroup.items];
-    }
-
-    const parentOfSub = categoryHierarchy.find(g => 
-      g.items && g.items.map(normalizeCat).includes(activeNorm)
-    );
-    if (parentOfSub && parentOfSub.items) {
-      return ["All", ...parentOfSub.items];
-    }
-
+    if (parentGroup && parentGroup.items) return ["All", ...parentGroup.items];
+    const parentOfSub = categoryHierarchy.find(g => g.items && g.items.map(normalizeCat).includes(activeNorm));
+    if (parentOfSub && parentOfSub.items) return ["All", ...parentOfSub.items];
     return ["All", activeCategory];
   };
 
   const dynamicCategories = getSidebarCategories();
 
-  // 🚀 SMART FILTER LOGIC
+  // 🚀 LIVE MULTI-LAYER FILTER COMBINATIONS
   const filtered = products
-    // 1. Exclude Add-ons
     .filter(p => normalizeCat(p.category) !== 'add-on' && normalizeCat(p.category) !== 'addon')
-
-    // 2. Main Category Filter (Your existing logic)
     .filter(p => {
       const activeNorm = normalizeCat(activeCategory);
       const pcNorm = normalizeCat(p.category);
-
       if (!activeNorm || activeNorm === "all") return true;
-
       const parentGroup = categoryHierarchy.find(g => normalizeCat(g.title) === activeNorm);
       if (parentGroup && parentGroup.items) {
-        const subItemsNorm = parentGroup.items.map(normalizeCat);
-        return subItemsNorm.includes(pcNorm) || pcNorm === activeNorm;
+        return parentGroup.items.map(normalizeCat).includes(pcNorm) || pcNorm === activeNorm;
       }
-
       return pcNorm === activeNorm;
     })
-
-    // 3. 🚀 NEW: Checkbox Types Filter (e.g., Only show "Rose" if checked)
     .filter(p => {
-      if (!activeTypes || activeTypes.length === 0) return true; // Show all if no checkboxes are ticked
-      const ptNorm = normalizeCat(p.product_type || "");
-      const activeTypesNorm = activeTypes.map(normalizeCat);
-      return activeTypesNorm.includes(ptNorm);
+      if (!activeTypes || activeTypes.length === 0) return true;
+      return activeTypes.map(normalizeCat).includes(normalizeCat(p.product_type || ""));
     })
-
-    // 4. 🚀 NEW: Location Filter (Shipped From)
+    // 🚀 FILTER LAYER: Match selection against the database JSONB array
     .filter(p => {
       if (!selectedLocations || selectedLocations.length === 0) return true;
-      // Note: Assuming your API returns a 'shipped_from' or 'branch' field. 
-      // If it doesn't yet, this safely bypasses the filter until you add it to the backend.
-      const locNorm = normalizeCat(p.shipped_from || ""); 
+      // Convert the product's branches array to lowercase for safe checking
+      const productBranchesNorm = (p.branches || []).map(normalizeCat);
       const selectedLocsNorm = selectedLocations.map(normalizeCat);
-      return selectedLocsNorm.includes(locNorm);
+      
+      // Keep product if ANY of its branches match ANY of the selected locations
+      return selectedLocsNorm.some(loc => productBranchesNorm.includes(loc));
     })
-
-    // 5. Price Filter
+    .filter(p => {
+      if (!selectedLocations || selectedLocations.length === 0) return true;
+      return selectedLocations.map(normalizeCat).includes(normalizeCat(p.shipped_from || ""));
+    })
     .filter(p => p.price >= priceRange[0] && p.price <= priceRange[1])
-
-    // 6. 🚀 FIXED: Sorting (UUIDs cannot be subtracted, so we sort by date)
     .sort((a, b) => {
       if (sortBy === "price-asc")  return a.price - b.price;
       if (sortBy === "price-desc") return b.price - a.price;
       if (sortBy === "rating")     return (b.rating || 0) - (a.rating || 0);
-      if (sortBy === "newest") {
-        // Fallback to checking timestamps since IDs are now UUID strings
-        return new Date(b.created_at || 0) - new Date(a.created_at || 0);
-      }
+      if (sortBy === "newest") return new Date(b.created_at || 0) - new Date(a.created_at || 0);
       return (b.reviews || 0) - (a.reviews || 0);
     });
 
@@ -674,7 +689,7 @@ export default function Shop({ onNavigate, initialCategory }) {
   }
 
   const currentSortLabel    = SORT_OPTIONS.find(o => o.value === sortBy)?.label || "Best Selling"
-  const activeFiltersCount  = (activeCategory !== "All" ? 1 : 0) + (priceRange[0] !== 0 || priceRange[1] !== 2500 ? 1 : 0)
+  const activeFiltersCount  = (activeCategory !== "All" ? 1 : 0) + (selectedOccasions.length) + (selectedLocations.length)
   const visibleViews        = VIEW_ALL.filter(v => !isMobile || v.mobileVisible)
 
   return (
@@ -682,33 +697,39 @@ export default function Shop({ onNavigate, initialCategory }) {
       <MobileFilterDrawer
         open={filterOpen}
         onClose={() => setFilterOpen(false)}
-        categories={dynamicCategories}
+        products={products}
         activeCategory={activeCategory}
         setActiveCategory={setActiveCategory}
+        activeTypes={activeTypes}
+        setActiveTypes={setActiveTypes}
         priceRange={priceRange}
         setPriceRange={setPriceRange}
+        selectedLocations={selectedLocations}
+        setSelectedLocations={setSelectedLocations}
+        selectedOccasions={selectedOccasions}
+        setSelectedOccasions={setSelectedOccasions}
       />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
         <div className="flex gap-6 lg:gap-8">
 
           <aside className="w-48 hidden lg:block flex-shrink-0">
-          <SidebarContent 
-            products={products} // 👈 Change this from hierarchy to products
-            activeCategory={activeCategory} 
-            setActiveCategory={setActiveCategory}
-            activeTypes={activeTypes}
-            setActiveTypes={setActiveTypes}
-            priceRange={priceRange}
-            setPriceRange={setPriceRange}
-            selectedLocations={selectedLocations}
-            setSelectedLocations={setSelectedLocations}
-          />
-        </aside>
+            <SidebarContent 
+              products={products} 
+              activeCategory={activeCategory} 
+              setActiveCategory={setActiveCategory}
+              activeTypes={activeTypes}
+              setActiveTypes={setActiveTypes}
+              priceRange={priceRange}
+              setPriceRange={setPriceRange}
+              selectedLocations={selectedLocations}
+              setSelectedLocations={setSelectedLocations}
+              selectedOccasions={selectedOccasions}
+              setSelectedOccasions={setSelectedOccasions}
+            />
+          </aside>
 
           <div className="flex-1 min-w-0">
-
-            {/* Toolbar */}
             <div className="flex items-center justify-between gap-2 mb-4 pb-4" style={{ borderBottom:"1px solid #f0f0f0" }}>
               <div className="flex items-center gap-2">
                 <button onClick={() => setFilterOpen(true)}
@@ -728,19 +749,18 @@ export default function Shop({ onNavigate, initialCategory }) {
                 <div className="flex items-center border rounded-lg overflow-hidden" style={{ borderColor:"#e5e7eb" }}>
                   {visibleViews.map(({ key, icon }, idx) => (
                     <button key={key} onClick={() => setViewAs(key)}
-                      style={{ width:"32px", height:"32px", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, backgroundColor:viewAs===key?G:"white", color:viewAs===key?"white":"#6b7280", borderRight:idx<visibleViews.length-1?"1px solid #e5e7eb":"none", cursor:"pointer", outline:"none", border:"none", transition:"background 0.15s" }}>
+                      style={{ width:"32px", height:"32px", display:"flex", alignItems:"center", justifycontent:"center", flexShrink:0, backgroundColor:viewAs===key?G:"white", color:viewAs===key?"white":"#6b7280", borderRight:idx<visibleViews.length-1?"1px solid #e5e7eb":"none", cursor:"pointer", outline:"none", border:"none", transition:"background 0.15s" }}>
                       {icon}
                     </button>
                   ))}
                 </div>
-
                 <span className="text-xs text-gray-400">{filtered.length} items</span>
               </div>
 
               <div className="relative" ref={sortRef}>
                 <button onClick={() => setSortOpen(p => !p)}
                   className="flex items-center gap-2 border rounded-lg text-sm text-gray-700 transition-all hover:border-green-400"
-                  style={{ borderColor:sortOpen?G:"#e5e7eb", padding:"6px 10px", height:"32px", minWidth:isMobile?"120px":"140px", justifyContent:"space-between" }}>
+                  style={{ borderColor:sortOpen?G:"#e5e7eb", padding:"6px 10px", height:"32px", minWidth:isMobile?"120px":"140px", justifycontent:"space-between" }}>
                   <span className="text-xs sm:text-sm truncate">{currentSortLabel}</span>
                   <svg className="w-3 h-3 text-gray-400 flex-shrink-0 transition-transform" style={{ transform:sortOpen?"rotate(180deg)":"rotate(0)" }}
                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -749,74 +769,51 @@ export default function Shop({ onNavigate, initialCategory }) {
                 </button>
 
                 {sortOpen && (
-                  isMobile ? (
-                    <div className="fixed bg-white z-[100] shadow-2xl overflow-hidden"
-                      style={{ top: sortRef.current ? sortRef.current.getBoundingClientRect().bottom + 4 : 80, right: 16, width:"200px", border:"1px solid #e5e7eb", borderRadius:"12px" }}>
-                      {SORT_OPTIONS.map(opt => (
-                        <button key={opt.value} onClick={() => { setSortBy(opt.value); setSortOpen(false) }}
-                          className="w-full text-left px-4 py-3 text-sm transition-all"
-                          style={{ color:sortBy===opt.value?G:"#4b5563", fontWeight:sortBy===opt.value?600:400, backgroundColor:sortBy===opt.value?"#f0fdf4":"white" }}
-                          onMouseEnter={e => { if (sortBy!==opt.value) e.currentTarget.style.backgroundColor="#f9fafb" }}
-                          onMouseLeave={e => { e.currentTarget.style.backgroundColor=sortBy===opt.value?"#f0fdf4":"white" }}>
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="absolute top-full right-0 mt-1 bg-white z-30 w-48 overflow-hidden shadow-lg"
-                      style={{ border:"1px solid #e5e7eb", borderRadius:"10px" }}>
-                      {SORT_OPTIONS.map(opt => (
-                        <button key={opt.value} onClick={() => { setSortBy(opt.value); setSortOpen(false) }}
-                          className="w-full text-left px-4 py-2.5 text-sm transition-all"
-                          style={{ color:sortBy===opt.value?G:"#4b5563", fontWeight:sortBy===opt.value?600:400, backgroundColor:sortBy===opt.value?"#f0fdf4":"white" }}
-                          onMouseEnter={e => { if (sortBy!==opt.value) e.currentTarget.style.backgroundColor="#f9fafb" }}
-                          onMouseLeave={e => { e.currentTarget.style.backgroundColor=sortBy===opt.value?"#f0fdf4":"white" }}>
-                          {opt.label}
-                        </button>
-                      ))}
-                    </div>
-                  )
+                  <div className={isMobile ? "fixed bg-white z-[100] shadow-2xl overflow-hidden" : "absolute top-full right-0 mt-1 bg-white z-30 w-48 overflow-hidden shadow-lg"}
+                    style={isMobile ? { top: sortRef.current ? sortRef.current.getBoundingClientRect().bottom + 4 : 80, right: 16, width:"200px", border:"1px solid #e5e7eb", borderRadius:"12px" } : { border:"1px solid #e5e7eb", borderRadius:"10px" }}>
+                    {SORT_OPTIONS.map(opt => (
+                      <button key={opt.value} onClick={() => { setSortBy(opt.value); setSortOpen(false) }}
+                        className="w-full text-left px-4 py-2.5 text-sm transition-all"
+                        style={{ color:sortBy===opt.value?G:"#4b5563", fontWeight:sortBy===opt.value?600:400, backgroundColor:sortBy===opt.value?"#f0fdf4":"white" }}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>
 
             {/* Active filter chips */}
-            {isMobile && activeFiltersCount > 0 && (
+            {activeFiltersCount > 0 && (
               <div className="flex flex-wrap gap-2 mb-4">
                 {activeCategory !== "All" && (
-                  <span className="flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full capitalize"
-                    style={{ backgroundColor:"#f0fdf4", color:G, border:`1px solid ${G}33` }}>
-                    {activeCategory}
-                    <button onClick={() => setActiveCategory("All")} className="ml-0.5 text-green-600 hover:text-green-800">×</button>
+                  <span className="flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full capitalize" style={{ backgroundColor:"#f0fdf4", color:G, border:`1px solid ${G}33` }}>
+                    Category: {activeCategory}
+                    <button onClick={() => setActiveCategory("All")} className="ml-0.5 text-green-600 font-bold">×</button>
                   </span>
                 )}
-                {(priceRange[0] !== 0 || priceRange[1] !== 2500) && (
-                  <span className="flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full"
-                    style={{ backgroundColor:"#f0fdf4", color:G, border:`1px solid ${G}33` }}>
-                    ₱{priceRange[0].toLocaleString()}–₱{priceRange[1].toLocaleString()}
-                    <button onClick={() => setPriceRange([0, 2500])} className="ml-0.5 text-green-600 hover:text-green-800">×</button>
+                {selectedOccasions.map(occ => (
+                  <span key={occ} className="flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full capitalize" style={{ backgroundColor:"#f0fdf4", color:G, border:`1px solid ${G}33` }}>
+                    Occasion: {occ}
+                    <button onClick={() => setSelectedOccasions(prev => prev.filter(o => o !== occ))} className="ml-0.5 text-green-600 font-bold">×</button>
                   </span>
-                )}
+                ))}
               </div>
             )}
 
-            {/* Products */}
             {filtered.length === 0 ? (
               <div className="text-center py-20">
                 <p className="text-gray-400 text-sm mb-3">No products match your filters.</p>
-                <button onClick={() => { setActiveCategory("All"); setPriceRange([0, 2500]) }}
+                <button onClick={() => { setActiveCategory("All"); setSelectedOccasions([]); setPriceRange([0, 999999]); }}
                   className="text-sm font-semibold hover:underline" style={{ color:G }}>Clear filters</button>
               </div>
             ) : (
               <div style={getGridStyle()}>
-                {filtered.map(product => {
-                  if (viewAs === "list") {
-                    return isMobile
-                      ? <ListCardMobile key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/>
-                      : <ListCardDesktop key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/>
-                  }
-                  return <GridCard key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/>
-                })}
+                {filtered.map(product => (
+                  viewAs === "list" 
+                    ? (isMobile ? <ListCardMobile key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/> : <ListCardDesktop key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/>)
+                    : <GridCard key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/>
+                ))}
               </div>
             )}
           </div>
@@ -824,14 +821,7 @@ export default function Shop({ onNavigate, initialCategory }) {
       </div>
 
       <Footer onNavigate={onNavigate}/>
-
-      {previewProduct && (
-        <ProductPreviewModal
-          product={{ ...previewProduct, _ribbonColor: RIBBON_COLORS[previewProduct.ribbon] }}
-          onClose={() => setPreviewProduct(null)}
-          onNavigate={onNavigate}
-        />
-      )}
+      {previewProduct && <ProductPreviewModal product={{ ...previewProduct, _ribbonColor: RIBBON_COLORS[previewProduct.ribbon] }} onClose={() => setPreviewProduct(null)} onNavigate={onNavigate}/>}
     </div>
   )
 }

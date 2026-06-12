@@ -3,9 +3,12 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta, timezone
+from dotenv import load_dotenv
 import uuid
 import secrets
 import os
+
+load_dotenv()
 
 from app.core.config import settings
 from app.core.database import get_db

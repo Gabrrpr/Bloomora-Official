@@ -41,6 +41,8 @@ class Product(Base):
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
     is_visible = Column(Boolean, default=True)
+    occasions = Column(JSONB, default=[])
+
     
     # Relationships (Unchanged)
     composition = Column(JSONB, default=[])

@@ -830,7 +830,9 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
 
   const [active, setActive]                     = useState("Home");
   const [locationOpen, setLocationOpen]         = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState("Manila");
+  const [selectedLocation, setSelectedLocation] = useState(() => {
+    return localStorage.getItem("bloomora_active_branch") || "Manila";
+  });
   const [branchModal, setBranchModal]           = useState(null);
   const [openMenu, setOpenMenu]                 = useState(null);
   const [mobileOpen, setMobileOpen]             = useState(false);
@@ -877,7 +879,14 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
   const openMipD   = ()  => { clearTimeout(mipTimer.current); setMipOpen(true); };
   const closeMipD  = ()  => { mipTimer.current = setTimeout(() => setMipOpen(false), 220); };
 
-  const handleBranchSelect = loc => { setSelectedLocation(loc); setLocationOpen(false); setBranchModal(loc); };
+  const handleBranchSelect = loc => { 
+    setSelectedLocation(loc); 
+    setLocationOpen(false); 
+    setBranchModal(loc);
+
+    localStorage.setItem("bloomora_active_branch", loc);
+    window.dispatchEvent(new Event("bloomora:branch-updated"));
+  };
   const handleLogout       = ()  => { logout(); setUserOpen(false); onNavigate?.("login"); };
 
   const handleDismissBranchPopup = () => {
@@ -1471,4 +1480,4 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
       </div>
     </>
   );
-}
+};

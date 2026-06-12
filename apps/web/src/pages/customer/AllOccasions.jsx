@@ -61,7 +61,6 @@ export default function AllOccasions({ onNavigate }) {
 
   return (
     <div className={`min-h-screen ${isDark ? "bg-gray-900" : "bg-white"}`}>
-
       {/* Hero */}
       <div className="relative overflow-hidden" style={{ minHeight: "280px" }}>
         <img src={pageBg5} alt="" className="absolute inset-0 w-full h-full object-cover" />
@@ -102,6 +101,12 @@ export default function AllOccasions({ onNavigate }) {
 }
 
 function OccasionCard({ occ, isDark, onNavigate }) {
+  // 🚀 INTER-PAGE STATE DISPATCH ROUTER
+  const handleOccasionClick = () => {
+    localStorage.setItem("bloomora_active_occasion", occ.label);
+    onNavigate?.("shop");
+  };
+
   return (
     <div
       className={`
@@ -144,7 +149,7 @@ function OccasionCard({ occ, isDark, onNavigate }) {
 
       {/* Shop Now */}
       <button
-        onClick={() => onNavigate?.("shop")}
+        onClick={handleOccasionClick}
         className="mt-5 px-7 py-2 rounded-full text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 active:scale-95"
         style={{ backgroundColor: G }}
       >

@@ -9,6 +9,13 @@ const PLACEHOLDER_IMAGE = new URL("../../assets/default-img/ImageNotFound.webp",
 const AVAILABILITIES = ["Available", "Limited", "Out of Stock"]
 const STATUSES       = ["Active", "Inactive"]
 
+// 🚀 OCCASIONS LIST
+const OCCASIONS_LIST = [
+  "Anniversary", "Birthday", "Congratulation", "Get Well", 
+  "Graduation", "I am Sorry", "Love & Romance", "Mother's Day", 
+  "New Baby", "Sympathy", "Thank You", "Valentine's Day", "Wedding"
+]
+
 // ── Flower petal loader (same bloom animation as the login/register screen) ──
 function FlowerLoader({ message = "Loading products...", isDark = false }) {
   const petals = [
@@ -234,10 +241,6 @@ function ProductPagination({ showing, page, totalPages, onPageChange, d }) {
 }
 
 // ── Add Product Modal ─────────────────────────────────────────────────────────
-// 1. ADDED the `products = []` prop here!
-// ── Add Product Modal ─────────────────────────────────────────────────────────
-// ── Add Product Modal ─────────────────────────────────────────────────────────
-// ── Add Product Modal ─────────────────────────────────────────────────────────
 function AddProductModal({ onClose, onSave, categories, products = [] }) {
   const d = useAdminTokens()
   
@@ -248,7 +251,9 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     season_key:"", limited_start_at:"", limited_end_at:"",
     stock: 0,          
     is_visible: true,
-    composition: [] 
+    composition: [],
+    occasions: [],
+    branches: [] // 🚀 ADDED BRANCHES INITIAL STATE
   })
 
   const [compSelection, setCompSelection] = useState("");
@@ -262,15 +267,11 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
   const [isCustomCategory, setIsCustomCategory] = useState(false)
   const set = key => val => setForm(f => ({...f,[key]:val}))
 
-  // 🔒 LOCK BACKGROUND SCROLLING
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
+    return () => { document.body.style.overflow = 'unset'; };
   }, []);
 
-  // 🧠 DYNAMIC FEASIBILITY CALCULATOR (Replaces the old forceful useEffect)
   let maxFeasibleStock = null;
   if (form.composition.length > 0) {
     maxFeasibleStock = Infinity;
@@ -290,32 +291,45 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     if (!form.name.trim()) err.name = "Product name is required"
     if (!form.category.trim()) err.category = "Category is required"
     if (!form.price || isNaN(form.price) || +form.price <= 0) err.price = "Enter a valid price"
-    
-    // 🔥 NEW: Check if the inputted stock is actually possible!
     if (maxFeasibleStock !== null && Number(form.stock) > maxFeasibleStock) {
       err.stock = `Insufficient raw materials. Max possible: ${maxFeasibleStock}`
     }
-    
     return err
   }
 
+  // 🚀 Added Toggle Branch handler
+  const toggleBranch = (branch) => {
+    setForm(prev => ({
+      ...prev,
+      branches: prev.branches.includes(branch) 
+        ? prev.branches.filter(b => b !== branch) 
+        : [...prev.branches, branch]
+    }));
+  };
+
+  const toggleOccasion = (occasion) => {
+    setForm(prev => {
+      const isSelected = prev.occasions.includes(occasion);
+      if (isSelected) {
+        return { ...prev, occasions: prev.occasions.filter(o => o !== occasion) };
+      } else {
+        return { ...prev, occasions: [...prev.occasions, occasion] };
+      }
+    });
+  };
+
   const handleAddCompositionItem = () => {
     if (!compSelection || compQty <= 0) return;
-    
     const material = products.find(p => p.id === compSelection);
     if (!material) return;
-
-    // 🔥 PREVENT ADDING MORE THAN WAREHOUSE CAPACITY
     if (compQty > material.stock) {
       alert(`Inventory limit reached! You only have ${material.stock} pieces of "${material.name}" in the warehouse.`);
       return;
     }
-
     if (form.composition.some(item => item.product_id === material.id)) {
       alert("This material is already in the recipe!");
       return;
     }
-
     setForm(prev => ({
       ...prev,
       composition: [
@@ -323,7 +337,6 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
         { product_id: material.id, name: material.name, quantity: compQty }
       ]
     }));
-    
     setCompSelection("");
     setCompQty(1);
   };
@@ -354,7 +367,6 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     setIsSaving(true);
     try {
       const fd = new FormData();
-
       fd.append("name", form.name.trim());
       fd.append("group", form.group.toLowerCase().trim());
       fd.append("category", form.category.toLowerCase().trim());
@@ -362,22 +374,19 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
       fd.append("price", String(form.price));
       fd.append("status", form.status.toLowerCase());
       fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false");
-      
       if (form.description) fd.append("description", form.description.trim());
       if (form.image_url) fd.append("image_url", form.image_url);
-      
       fd.append("stock", String(form.stock));
       fd.append("is_visible", form.is_visible ? "true" : "false");
-
       if (form.season_key?.trim()) {
         fd.append("season_key", form.season_key.toLowerCase().trim());
         if (form.limited_start_at) fd.append("limited_start_at", form.limited_start_at);
         if (form.limited_end_at) fd.append("limited_end_at", form.limited_end_at);
       }
-
-      if (form.composition.length > 0) {
-        fd.append("composition", JSON.stringify(form.composition));
-      }
+      if (form.composition.length > 0) fd.append("composition", JSON.stringify(form.composition));
+      
+      if (form.occasions.length > 0) fd.append("occasions", JSON.stringify(form.occasions));
+      if (form.branches.length > 0) fd.append("branches", JSON.stringify(form.branches)); // 🚀 Appends branches
 
       const res = await api.createProduct(fd);
       onSave(res.product); 
@@ -390,16 +399,13 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     }
   }
 
-  // 🚀 CUSTOM DROPDOWN HELPERS
   const floralMaterials = products.filter(p => p.group?.toLowerCase() === 'floral' || p.category?.toLowerCase() === 'flower');
   const nonFloralMaterials = products.filter(p => p.group?.toLowerCase() !== 'floral' && p.category?.toLowerCase() !== 'flower');
   const selectedMaterial = products.find(p => p.id === compSelection);
 
-  // Reusable row component for the dropdown
   const MaterialDropdownRow = ({ p }) => {
     const isOut = p.stock === 0;
     const isLow = p.stock > 0 && p.stock <= 5;
-    
     return (
       <div 
         onClick={() => {
@@ -529,13 +535,11 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             {errors.price && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.price}</p>}
           </div>
 
-          {/* 🔓 UNLOCKED DYNAMIC STOCK & AVAILABILITY GRID */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <MLabel d={d}>Stock Quantity <span style={{ color:"#f87171" }}>*</span></MLabel>
               <MInput type="number" value={form.stock} onChange={set("stock")} placeholder="0" error={errors.stock} d={d}/>
               
-              {/* 📊 REAL-TIME FEASIBILITY TRACKER */}
               {maxFeasibleStock !== null && (
                 <div className="mt-1.5 flex items-start gap-1.5">
                   <span className="text-[10px] mt-0.5">
@@ -571,7 +575,48 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             </div>
           </div>
 
-          {/* ================= UI-ENHANCED COMPOSITION BUILDER ================= */}
+          {/* 🚀 OCCASIONS SELECTION GRID */}
+          <div className="mt-4 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
+            <MLabel d={d}>Occasions (Optional)</MLabel>
+            <p className="text-xs mb-3" style={{ color: d.subC }}>
+              Select all occasions this product is suitable for.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {OCCASIONS_LIST.map((occ) => (
+                <label key={occ} className="flex items-center space-x-2 cursor-pointer p-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                  <input 
+                    type="checkbox" 
+                    checked={form.occasions.includes(occ)}
+                    onChange={() => toggleOccasion(occ)}
+                    className="rounded text-green-600 focus:ring-green-500 bg-white border-gray-300"
+                  />
+                  <span className="text-xs font-medium" style={{ color: d.cellC }}>{occ}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* 🚀 BRANCHES SELECTION GRID */}
+          <div className="mt-4 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
+            <MLabel d={d}>Available Branches <span style={{ color:"#f87171" }}>*</span></MLabel>
+            <p className="text-xs mb-3" style={{ color: d.subC }}>
+              Select which fulfillment centers carry this product.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {["Manila", "Pampanga"].map((branch) => (
+                <label key={branch} className="flex items-center space-x-2 cursor-pointer p-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                  <input 
+                    type="checkbox" 
+                    checked={form.branches.includes(branch)}
+                    onChange={() => toggleBranch(branch)}
+                    className="rounded text-green-600 focus:ring-green-500 bg-white border-gray-300"
+                  />
+                  <span className="text-xs font-medium" style={{ color: d.cellC }}>{branch}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div className="mt-6 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
             <MLabel d={d}>Arrangement Recipe (Optional)</MLabel>
             <p className="text-xs mb-4" style={{ color: d.subC }}>
@@ -671,7 +716,6 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
               </div>
             )}
           </div>
-          {/* ======================================================= */}
 
           <div>
             <MLabel d={d}>Description <span style={{ color:d.subC, fontWeight:400 }}>(optional)</span></MLabel>
@@ -682,7 +726,8 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
         <div className="flex items-center justify-end gap-2 px-6 py-5 flex-shrink-0"
           style={{ borderTop:`1px solid ${d.modalFtrBdr}`, backgroundColor:d.modalFtr }}>
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
-            style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}>
+            style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}
+            onMouseEnter={e=>e.currentTarget.style.backgroundColor=d.hdrBg} onMouseLeave={e=>e.currentTarget.style.backgroundColor=d.inputBg}>
             Cancel
           </button>
           <button type="button" onClick={handleSave} disabled={isUploading || isSaving}
@@ -703,12 +748,11 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     document.body
   )
 }
-// ── Edit Product Modal ────────────────────────────────────────────────────────
+
 // ── Edit Product Modal ────────────────────────────────────────────────────────
 function EditProductModal({ product, onClose, onSave, categories, products = [] }) {
   const d = useAdminTokens()
   
-  // 1. STATE: Initialize with existing product data (including the composition recipe!)
   const [form, setForm] = useState({
     name: product.name || "",
     group: product.product_group || "floral",
@@ -724,15 +768,15 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     limited_end_at: product.limited_end_at || "",
     stock: product.stock ?? 0,
     is_visible: product.is_visible ?? true,
-    composition: product.composition || [] // 👈 Crucial: Load existing recipe
+    composition: product.composition || [],
+    occasions: product.occasions || [],
+    branches: product.branches || []
   })
 
-  // Composition Builder Tools
   const [compSelection, setCompSelection] = useState("");
   const [compQty, setCompQty] = useState(1);
   const [isMaterialDropdownOpen, setIsMaterialDropdownOpen] = useState(false);
 
-  // General State
   const [errors, setErrors] = useState({})
   const [isUploading, setUploading] = useState(false)
   const [removeImage, setRemoveImage] = useState(false)
@@ -741,15 +785,11 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
   const [isCustomCategory, setIsCustomCategory] = useState(false)
   const set = key => val => setForm(f=>({...f,[key]:val}))
 
-  // 🔒 LOCK BACKGROUND SCROLLING
   useEffect(() => {
     document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = 'unset';
-    };
+    return () => { document.body.style.overflow = 'unset'; };
   }, []);
 
-  // 🧠 DYNAMIC FEASIBILITY CALCULATOR
   let maxFeasibleStock = null;
   if (form.composition.length > 0) {
     maxFeasibleStock = Infinity;
@@ -769,20 +809,36 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     if (!form.name.trim()) err.name="Product name is required"
     if (!form.category.trim()) err.category="Category is required"
     if (!form.price||isNaN(form.price)||+form.price<=0) err.price="Enter a valid price"
-    
-    // 🔥 Check if the inputted stock is actually possible!
     if (maxFeasibleStock !== null && Number(form.stock) > maxFeasibleStock) {
       err.stock = `Insufficient raw materials. Max possible: ${maxFeasibleStock}`
     }
     return err
   }
 
-  // ── Composition Handlers ──
+  const toggleBranch = (branch) => {
+    setForm(prev => ({
+      ...prev,
+      branches: prev.branches.includes(branch) 
+        ? prev.branches.filter(b => b !== branch) 
+        : [...prev.branches, branch]
+    }));
+  };
+
+  const toggleOccasion = (occasion) => {
+    setForm(prev => {
+      const isSelected = prev.occasions.includes(occasion);
+      if (isSelected) {
+        return { ...prev, occasions: prev.occasions.filter(o => o !== occasion) };
+      } else {
+        return { ...prev, occasions: [...prev.occasions, occasion] };
+      }
+    });
+  };
+
   const handleAddCompositionItem = () => {
     if (!compSelection || compQty <= 0) return;
     const material = products.find(p => p.id === compSelection);
     if (!material) return;
-
     if (compQty > material.stock) {
       alert(`Inventory limit reached! You only have ${material.stock} pieces of "${material.name}" in the warehouse.`);
       return;
@@ -791,7 +847,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
       alert("This material is already in the recipe!");
       return;
     }
-
     setForm(prev => ({
       ...prev,
       composition: [
@@ -829,7 +884,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     setIsSaving(true);
     try {
       const fd = new FormData();
-
       fd.append("name", (form.name || "").trim());
       fd.append("group", (form.group || "floral").toLowerCase().trim());
       fd.append("category", (form.category || "").toLowerCase().trim());
@@ -837,21 +891,21 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
       fd.append("price", String(form.price));
       fd.append("status", (form.status || "active").toLowerCase());
       fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false");
-      
       if (form.description) fd.append("description", form.description.trim());
       if (form.image_url) fd.append("image_url", form.image_url);
-      
       fd.append("stock", String(form.stock));
       fd.append("is_visible", form.is_visible ? "true" : "false");
-
       if (form.season_key?.trim()) {
         fd.append("season_key", form.season_key.toLowerCase().trim());
         if (form.limited_start_at) fd.append("limited_start_at", form.limited_start_at);
         if (form.limited_end_at) fd.append("limited_end_at", form.limited_end_at);
       }
-
-      // 👈 Always send the composition back so we can track edits/removals
       fd.append("composition", JSON.stringify(form.composition));
+      
+      if (form.occasions.length > 0) fd.append("occasions", JSON.stringify(form.occasions));
+      
+      // 🚀 APPPEND BRANCHES TO THE PUT REQUEST
+      if (form.branches.length > 0) fd.append("branches", JSON.stringify(form.branches));
 
       const res = await api.updateProduct(product.id, fd);
       onSave(res.product); 
@@ -865,8 +919,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
   }
 
   const previewUrl = removeImage ? "" : (form.image_url || getProductImage(product))
-
-  // 🚀 CUSTOM DROPDOWN HELPERS
   const floralMaterials = products.filter(p => p.group?.toLowerCase() === 'floral' || p.category?.toLowerCase() === 'flower');
   const nonFloralMaterials = products.filter(p => p.group?.toLowerCase() !== 'floral' && p.category?.toLowerCase() !== 'flower');
   const selectedMaterial = products.find(p => p.id === compSelection);
@@ -874,7 +926,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
   const MaterialDropdownRow = ({ p }) => {
     const isOut = p.stock === 0;
     const isLow = p.stock > 0 && p.stock <= 5;
-    
     return (
       <div 
         onClick={() => {
@@ -981,7 +1032,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             </div>
           </div>
 
-          {/* Moved Status up to group basic info logically */}
           <div>
             <MLabel d={d}>Status</MLabel>
             <MSel value={form.status} onChange={set("status")} options={STATUSES} d={d}/>
@@ -993,13 +1043,11 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             {errors.price && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.price}</p>}
           </div>
 
-          {/* 🔓 UNLOCKED DYNAMIC STOCK & AVAILABILITY GRID */}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <MLabel d={d}>Stock Quantity <span style={{ color:"#f87171" }}>*</span></MLabel>
               <MInput type="number" value={form.stock} onChange={set("stock")} placeholder="0" error={errors.stock} d={d}/>
               
-              {/* 📊 REAL-TIME FEASIBILITY TRACKER */}
               {maxFeasibleStock !== null && (
                 <div className="mt-1.5 flex items-start gap-1.5">
                   <span className="text-[10px] mt-0.5">
@@ -1044,7 +1092,48 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             </div>
           </div>
 
-          {/* ================= UI-ENHANCED COMPOSITION BUILDER ================= */}
+          {/* 🚀 OCCASIONS SELECTION GRID */}
+          <div className="mt-4 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
+            <MLabel d={d}>Occasions (Optional)</MLabel>
+            <p className="text-xs mb-3" style={{ color: d.subC }}>
+              Select all occasions this product is suitable for.
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              {OCCASIONS_LIST.map((occ) => (
+                <label key={occ} className="flex items-center space-x-2 cursor-pointer p-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                  <input 
+                    type="checkbox" 
+                    checked={form.occasions.includes(occ)}
+                    onChange={() => toggleOccasion(occ)}
+                    className="rounded text-green-600 focus:ring-green-500 bg-white border-gray-300"
+                  />
+                  <span className="text-xs font-medium" style={{ color: d.cellC }}>{occ}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
+          {/* 🚀 BRANCHES SELECTION GRID */}
+          <div className="mt-4 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
+            <MLabel d={d}>Available Branches <span style={{ color:"#f87171" }}>*</span></MLabel>
+            <p className="text-xs mb-3" style={{ color: d.subC }}>
+              Select which fulfillment centers carry this product.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {["Manila", "Pampanga"].map((branch) => (
+                <label key={branch} className="flex items-center space-x-2 cursor-pointer p-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                  <input 
+                    type="checkbox" 
+                    checked={form.branches.includes(branch)}
+                    onChange={() => toggleBranch(branch)}
+                    className="rounded text-green-600 focus:ring-green-500 bg-white border-gray-300"
+                  />
+                  <span className="text-xs font-medium" style={{ color: d.cellC }}>{branch}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+
           <div className="mt-6 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
             <MLabel d={d}>Arrangement Recipe (Optional)</MLabel>
             <p className="text-xs mb-4" style={{ color: d.subC }}>
@@ -1144,7 +1233,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
               </div>
             )}
           </div>
-          {/* ======================================================= */}
 
           <div>
             <MLabel d={d}>Description <span style={{ color:d.subC, fontWeight:400 }}>(optional)</span></MLabel>
@@ -1188,6 +1276,8 @@ function ViewProductModal({ product, onClose }) {
     { label:"Price",        value:`₱${(+product.price).toLocaleString()}` },
     { label:"Stock",        value:product.stock },
     { label:"Description",  value:product.description || "—" },
+    { label:"Occasions",    value:product.occasions?.length > 0 ? product.occasions.join(", ") : "—" }, 
+    { label:"Branches",     value:product.branches?.length > 0 ? product.branches.join(", ") : "—" }, // 🚀 ADDED TO VIEW
   ]
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
@@ -1210,7 +1300,7 @@ function ViewProductModal({ product, onClose }) {
           {rows.map(row => (
             <div key={row.label}>
               <p className="text-xs font-bold uppercase tracking-wider mb-0.5" style={{ color:d.labelC }}>{row.label}</p>
-              <p className="text-sm font-semibold" style={{ color:d.cellC }}>{row.value}</p>
+              <p className="text-sm font-semibold" style={{ color:d.cellC, textTransform: row.capitalize ? 'capitalize' : 'none' }}>{row.value}</p>
             </div>
           ))}
         </div>
@@ -1292,17 +1382,6 @@ export default function AdminProducts() {
   const [lowCount, setLowCount]           = useState(0)
   const [loading, setLoading]             = useState(true)
 
-
-  const handAddProduct = (newProduct) => {
-    setProducts(prev => [newProduct, ...prev]);
-    setShowAddModal(false);
-  };
-
-  const handEditProduct = (updatedProduct) => {
-    setProducts(products.map(p => p.id === updatedProduct.id ? updatedProduct : p));
-    setEditingProduct(null);
-  };
-
   const fetchProducts = useCallback(async () => {
     setLoading(true)
     try {
@@ -1310,7 +1389,6 @@ export default function AdminProducts() {
       const prods = productsRes.data || productsRes
       setProducts(prods);
       setLowCount(prods.filter(p => p.stock<=(p.reorder_point||10)).length);
-      // Reflect total products count (unfiltered dataset)
       setTotalCount(prods.length);
     } catch (e) { 
       console.error("Failed to fetch products",e);
@@ -1322,28 +1400,21 @@ export default function AdminProducts() {
   useEffect(() => { fetchProducts() }, [fetchProducts])
   useEffect(() => { setPage(1) }, [search,category,status,priceSort])
 
-
   const handleSave     = p => { setProducts(prev=>[p,...prev]); setTotalCount(c=>c+1) }
   const handleEditSave = p => { setProducts(prev=>prev.map(x=>x.id===p.id?p:x)); setEditingProduct(null) }
 
   const handleConfirmDelete = async (id) => {
     setIsDeleting(true);
     try {
-      // 1. Send the delete request
       const response = await api.delete(`/products/admin/${id}`); 
-      
-      // 2. Check what the backend did
       if (response.delete_type === "hard") {
-        // It was permanently deleted from the DB. Remove it from the table entirely!
         setProducts(prev => prev.filter(p => p.id !== id));
-        setTotalCount(c => c - 1); // Adjust your total count stat block
+        setTotalCount(c => c - 1); 
       } else {
-        // It was soft-deleted to protect receipts. Just update the UI badges.
         setProducts(prev => prev.map(p => 
           p.id === id ? { ...p, status: "inactive", is_available: false } : p
         ));
       }
-
       setDeletingProduct(null);
     }
     catch (e) {
@@ -1372,7 +1443,6 @@ export default function AdminProducts() {
 
   const selStyle = { borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }
 
-  // Show the branded flower loader while the first product fetch is in flight
   if (loading) {
     return (
       <div className="space-y-5">
@@ -1382,11 +1452,10 @@ export default function AdminProducts() {
     )
   }
 
-
   return (
     <div className="space-y-5">
       {showModal && <AddProductModal onClose={()=>setShowModal(false)} onSave={handleSave} categories={dynamicCategories} products={products}/>}
-      {editingProduct && <EditProductModal product={editingProduct} onClose={()=>setEditingProduct(null)} onSave={handleEditSave} categories={dynamicCategories}/>}
+      {editingProduct && <EditProductModal product={editingProduct} onClose={()=>setEditingProduct(null)} onSave={handleEditSave} categories={dynamicCategories} products={products}/>}
       {viewingProduct && <ViewProductModal product={viewingProduct} onClose={()=>setViewingProduct(null)}/>}
       {deletingProduct && <DeleteProductModal product={deletingProduct} onClose={()=>setDeletingProduct(null)} onConfirm={handleConfirmDelete} isDeleting={isDeleting}/>}
       <h1 className="text-xl font-bold" style={{ color:d.headC }}>Products</h1>

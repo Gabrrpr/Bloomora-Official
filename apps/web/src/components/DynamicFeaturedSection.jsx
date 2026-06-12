@@ -222,13 +222,20 @@ export default function DynamicFeaturedSections({ onNavigate, onPreview }) {
         if (!isMounted) return;
 
         const rawProducts = Array.isArray(productsData) ? productsData : (productsData?.products || productsData?.items || productsData?.data || []);
-        const normalizedProducts = rawProducts.map(p => ({
-          ...p,
-          id: p.id,
-          name: p.name || "Unnamed",
-          price: Number(p.price) || 0,
-          image: p.image || p.image_url || null,
-        }));
+        const normalizedProducts = rawProducts
+          // Filter out products that don't belong to this branch
+          .filter(p => {
+             const branches = p.branches || [];
+             if (branches.length === 0) return true; // Show if unassigned
+             return branches.some(b => b.toLowerCase() === currentBranch.toLowerCase());
+          })
+          .map(p => ({
+            ...p,
+            id: p.id,
+            name: p.name || "Unnamed",
+            price: Number(p.price) || 0,
+            image: p.image || p.image_url || null,
+          }));
         
         setAllProducts(normalizedProducts);
 
