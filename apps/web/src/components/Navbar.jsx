@@ -13,15 +13,14 @@ import pampangaBranchImg from "../assets/homepage/PampangaBranch.png";
 const SITE_GREEN = "#2E8B34";
 const NAVY_GREEN = "#35530A";
 const DARK_GREEN = "#0C573E";
-const VIBRANT_GREEN = "#16a34a"; // more vibrant hover green for light mode
+const VIBRANT_GREEN = "#16a34a";
 
 const STANDARD_CATEGORIES = ["flower", "vase", "wrapping", "accessory", "arrangement", "add-on"];
 
-// ── Admin announcements (created on the admin Promotions page, stored in localStorage) ──
+// ── Admin announcements ──
 const ANNOUNCE_KEY = "bloomora_announcements";
-const ANNOUNCE_READ_KEY = "bloomora_announcements_read"; // ids the user has read
+const ANNOUNCE_READ_KEY = "bloomora_announcements_read";
 
-// Map stored announcements -> notification objects the bell can render.
 function readAnnouncementNotifs() {
   try {
     const raw = localStorage.getItem(ANNOUNCE_KEY);
@@ -54,14 +53,13 @@ function markAnnouncementsRead(notifs) {
   } catch { /* ignore */ }
 }
 
+// ── Shortened promo text for mobile responsiveness ──
 const PROMOTIONS = [
-  { text: "Get", highlight: "3% off your first order", cta: "SHOP NOW", page: "shop" },
-  { text: "Free delivery on orders over", highlight: "₱2,000", cta: "ORDER NOW", page: "shop" },
-  { text: "Custom bouquets made just for you!", highlight: "Make it Personal", cta: "TRY IT", page: "make-it-personal" },
-  { text: "Visit us in", highlight: "Manila & Pampanga", cta: "GET DIRECTIONS", page: "contact" },
+  { text: "Flowers for Every", highlight: "Occasion", cta: "EXPLORE", page: "occasions" },
+  { text: "Build Your", highlight: "Bouquet", cta: "CREATE", page: "make-it-personal" },
+  { text: "Fresh Flowers", highlight: "Daily", cta: "SHOP", page: "shop" },
+  { text: "Manila & Pampanga", highlight: "Stores", cta: "VISIT", page: "contact" },
 ];
-
-
 
 const SOCIAL_LINKS = [
   { name: "Facebook",  href: "https://www.facebook.com/profile.php?id=100063877087893", icon: <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg> },
@@ -113,7 +111,7 @@ function FloatingHearts() {
   );
 }
 
-// ── Branch Modal — clean image left, all text right ──────────────────────────
+// ── Branch Modal ──────────────────────────────────────────────
 function BranchModal({ branch, onClose }) {
   const { isDark } = useTheme();
   const info = BRANCHES[branch];
@@ -263,10 +261,8 @@ function MakeItPersonalPopout({ onNavigate, onClose, isCustomizationEnabled }) {
   return (
     <>
       <style>{`@keyframes mipSlideDown { from { opacity:0; transform:translateY(-8px) scale(0.98); } to { opacity:1; transform:translateY(0) scale(1); } }`}</style>
-      {/* hover bridge below the button, closes the vertical gap */}
       <div className="absolute" style={{ top:"100%", left:0, right:0, height:"14px", zIndex:49 }}/>
       <div className="absolute z-50" style={{ top:"calc(100% + 10px)", right:0, animation:"mipSlideDown 0.22s cubic-bezier(0.34,1.56,0.64,1) both", filter:"drop-shadow(0 16px 40px rgba(0,0,0,0.13))" }}>
-        {/* up-pointing arrow near the right, under the button */}
         <div className="absolute" style={{ right:"20px", top:"-7px", width:0, height:0, borderLeft:"7px solid transparent", borderRight:"7px solid transparent", borderBottom:`7px solid ${bg}`, filter:"drop-shadow(0 -2px 2px rgba(0,0,0,0.05))" }}/>
         <div className="overflow-hidden" style={{ borderRadius:"16px", border:`1px solid ${bdr}`, width:"280px", backgroundColor:bg }}>
           <div className="px-4 pt-4 pb-3" style={{ borderBottom:`1px solid ${divBdr}` }}>
@@ -382,7 +378,6 @@ const SEARCH_SUGGESTIONS = [
   "Sunflowers", "Mixed Tulips", "Same-day Delivery",
 ];
 
-// Words cycled through by the animated "typing" placeholder in the search box
 const SEARCH_TYPING = ["Red Roses", "Sunflowers", "Birthday Flowers", "Mixed Tulips", "Anniversary Bouquet"];
 
 // ── Search Overlay ────────────────────────────────────────────────────────────
@@ -399,7 +394,6 @@ function SearchOverlay({ onClose, onNavigate }) {
     return () => document.removeEventListener("keydown", h);
   }, []);
 
-  // Animated "typing" placeholder — types each example, pauses, deletes, next.
   useEffect(() => {
     let w = 0, c = 0, deleting = false, t;
     const tick = () => {
@@ -461,7 +455,6 @@ function SearchOverlay({ onClose, onNavigate }) {
       <div className="search-dialog w-full max-w-2xl" onClick={e => e.stopPropagation()}
         style={{ animation:"ssDown 0.22s cubic-bezier(0.34,1.56,0.64,1) both" }}>
 
-        {/* Title */}
         <div className="text-center mb-4 px-2">
           <h2 className="text-white font-bold tracking-tight leading-tight" style={{ fontSize:"clamp(20px,5vw,26px)" }}>
             What are you looking for?
@@ -471,7 +464,6 @@ function SearchOverlay({ onClose, onNavigate }) {
           </p>
         </div>
 
-        {/* Search box */}
         <form onSubmit={e => { e.preventDefault(); doSearch(query); }}>
           <div className="flex items-center rounded-2xl overflow-hidden shadow-2xl"
             style={{ backgroundColor: surfaceBg, border:`2px solid ${SITE_GREEN}`, height:"52px" }}>
@@ -505,14 +497,12 @@ function SearchOverlay({ onClose, onNavigate }) {
           </div>
         </form>
 
-        {/* Suggestions — one per row. Tap label to search; tap arrow to fill the box. */}
         <div className="mt-4">
           <p className="text-white/50 text-[11px] font-semibold uppercase tracking-widest mb-2 px-1">Popular searches</p>
           <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: surfaceBg, border:`1px solid ${suggBdr}` }}>
             {SEARCH_SUGGESTIONS.map((s, i) => (
               <div key={s} className="flex items-stretch"
                 style={{ borderBottom: i < SEARCH_SUGGESTIONS.length - 1 ? `1px solid ${suggBdr}` : "none" }}>
-                {/* Label → search immediately */}
                 <button type="button" onClick={(e) => { e.stopPropagation(); doSearch(s); }}
                   className="flex-1 flex items-center gap-3 px-4 py-3 text-left transition-colors min-w-0"
                   style={{ color: suggText, backgroundColor:"transparent" }}
@@ -523,7 +513,6 @@ function SearchOverlay({ onClose, onNavigate }) {
                   </svg>
                   <span className="text-sm font-medium truncate">{s}</span>
                 </button>
-                {/* Arrow → drop into the search box for editing */}
                 <button type="button" aria-label={`Use "${s}" in search box`}
                   onClick={(e) => { e.stopPropagation(); fillSearch(s); }}
                   className="flex items-center justify-center px-3.5 flex-shrink-0 transition-colors"
@@ -601,7 +590,7 @@ function DropdownMenu({ items, categories, onNavigate, onClose }) {
   );
 }
 
-function CartDropdown({ cartCount, onNavigate }) {
+function CartDropdown({ cartCount, onNavigate, navBottom }) {
   const { isDark } = useTheme();
   const cartItems = getCart();
   const subtotal = cartItems.reduce((s, i) => s + (i.price||0)*(i.qty||1), 0);
@@ -611,8 +600,32 @@ function CartDropdown({ cartCount, onNavigate }) {
   const textSecondary = isDark ? "#9ca3af" : "#6b7280";
   const footerBg = isDark ? "#0f172a" : "#f9fafb";
   return (
-    <div className="absolute top-full right-0 mt-2 z-50 w-72 overflow-hidden"
-      style={{ backgroundColor:bg, border:`1px solid ${bdr}`, borderRadius:"14px", boxShadow: isDark?"0 12px 32px rgba(0,0,0,0.4)":"0 12px 32px rgba(0,0,0,0.12)", animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards" }}>
+    <div className="cart-dropdown z-[100001] overflow-hidden"
+      style={{ "--nav-bottom": `${navBottom}px`, backgroundColor:bg, border:`1px solid ${bdr}`, borderRadius:"14px", boxShadow: isDark?"0 12px 32px rgba(0,0,0,0.4)":"0 12px 32px rgba(0,0,0,0.12)", animation:"dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards" }}>
+      <style>{`
+        /* Mobile: fixed overlay with a 1rem gutter each side, pinned below the
+           measured navbar bottom so it never clips off-screen. Desktop: normal
+           dropdown anchored under the cart icon. */
+        .cart-dropdown {
+          position: fixed;
+          top: calc(var(--nav-bottom) + 8px);
+          left: 1rem;
+          right: 1rem;
+          width: auto;
+          max-width: 360px;
+          margin-left: auto;
+        }
+        @media (min-width: 640px) {
+          .cart-dropdown {
+            position: absolute;
+            top: 100%;
+            margin-top: 0.5rem;
+            left: auto;
+            right: 0;
+            width: 18rem;
+          }
+        }
+      `}</style>
       <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom:`1px solid ${bdr}` }}>
         <span className="text-sm font-semibold" style={{ color:textPrimary }}>Your Cart</span>
         <span className="text-xs font-bold px-2 py-0.5 rounded-full text-white" style={{ backgroundColor:cartCount>0?"#e11d48":"#9ca3af" }}>{cartCount}</span>
@@ -634,7 +647,7 @@ function CartDropdown({ cartCount, onNavigate }) {
                 <p className="text-xs font-medium truncate" style={{ color:textPrimary }}>{item.name}</p>
                 <p className="text-[11px]" style={{ color:textSecondary }}>Qty: {item.qty||1}</p>
               </div>
-              <span className="text-xs font-semibold" style={{ color:textPrimary }}>₱{((item.price||0)*(item.qty||1)).toLocaleString()}</span>
+              <span className="text-xs font-semibold flex-shrink-0" style={{ color:textPrimary }}>₱{((item.price||0)*(item.qty||1)).toLocaleString()}</span>
             </div>
           ))}
           {cartItems.length>4&&<p className="px-4 py-2 text-[11px] text-center" style={{ color:textSecondary }}>+{cartItems.length-4} more item(s)</p>}
@@ -722,8 +735,8 @@ function LocationDropdown({ selected, onChange, onClose }) {
   );
 }
 
-// ── Branch Shipping Popup ─────────────────────────────────────────────────────
-function BranchShippingPopup({ branch, onDismiss, onChangeBranch }) {
+// ── Branch Shipping Popup — mobile responsive ─────────────────────────────────
+function BranchShippingPopup({ branch, onDismiss, onChangeBranch, navBottom }) {
   const { isDark } = useTheme();
   const bg  = isDark ? "#1a2332" : "white";
   const bdr = isDark ? "#2d3748" : "#e5e7eb";
@@ -737,32 +750,63 @@ function BranchShippingPopup({ branch, onDismiss, onChangeBranch }) {
           from { opacity:0; transform:translateY(-10px) scale(0.96); }
           to   { opacity:1; transform:translateY(0)    scale(1);    }
         }
+        @keyframes bspInCentered {
+          from { opacity:0; transform:translateX(-50%) translateY(-10px) scale(0.96); }
+          to   { opacity:1; transform:translateX(-50%) translateY(0)    scale(1);    }
+        }
       `}</style>
       <div
-        className="absolute z-50"
+        className="z-[100001] branch-popup"
         style={{
-          top: "calc(100% + 10px)",
-          left: 0,
-          width: "min(290px, calc(100vw - 2rem))",
+          "--nav-bottom": `${navBottom}px`,
           backgroundColor: bg,
           border: `1px solid ${bdr}`,
           borderRadius: "14px",
           boxShadow: isDark
             ? "0 16px 40px rgba(0,0,0,0.55)"
             : "0 16px 40px rgba(0,0,0,0.14)",
-          animation: "bspIn 0.24s cubic-bezier(0.34,1.56,0.64,1) both",
           padding: "16px",
         }}
       >
-        <div style={{
-          position:"absolute", top:"-7px", left:"18px",
+        <style>{`
+          /* Mobile: fixed and horizontally centered below the measured navbar
+             bottom. Fixed positioning removes it from document flow, so it can
+             never push the page wider than the screen. Desktop: anchored 290px
+             popup under the branch button. */
+          .branch-popup {
+            position: fixed;
+            top: calc(var(--nav-bottom) + 8px);
+            left: 50%;
+            transform: translateX(-50%);
+            width: calc(100vw - 2rem);
+            max-width: 340px;
+            animation: bspInCentered 0.24s cubic-bezier(0.34,1.56,0.64,1) both;
+          }
+          .branch-popup .branch-popup-arrow { display: none; }
+          @media (min-width: 640px) {
+            .branch-popup {
+              position: absolute;
+              top: calc(100% + 10px);
+              left: 0;
+              transform: none;
+              right: auto;
+              width: 290px;
+              max-width: 290px;
+              animation: bspIn 0.24s cubic-bezier(0.34,1.56,0.64,1) both;
+            }
+            .branch-popup .branch-popup-arrow { display: block; }
+          }
+        `}</style>
+        {/* Arrow pointing up — desktop only (hidden on mobile fixed overlay) */}
+        <div className="branch-popup-arrow" style={{
+          position:"absolute", top:"-7px", left:"24px",
           width:0, height:0,
           borderLeft:"7px solid transparent",
           borderRight:"7px solid transparent",
           borderBottom:`7px solid ${bdr}`,
         }}/>
-        <div style={{
-          position:"absolute", top:"-5.5px", left:"19px",
+        <div className="branch-popup-arrow" style={{
+          position:"absolute", top:"-5.5px", left:"25px",
           width:0, height:0,
           borderLeft:"6px solid transparent",
           borderRight:"6px solid transparent",
@@ -779,7 +823,7 @@ function BranchShippingPopup({ branch, onDismiss, onChangeBranch }) {
           <p className="text-xs leading-relaxed" style={{ color: tp }}>
             We're showing you items available at our{" "}
             <strong style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>{branch} branch</strong>.
-            To see items from a different branch, change your store location.
+            Change your store location to see items from a different branch.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -790,7 +834,7 @@ function BranchShippingPopup({ branch, onDismiss, onChangeBranch }) {
             onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "#f9fafb"}
             onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
           >
-            Dismiss
+            Got it
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onChangeBranch(); }}
@@ -799,7 +843,7 @@ function BranchShippingPopup({ branch, onDismiss, onChangeBranch }) {
             onMouseEnter={e => e.currentTarget.style.opacity = "0.88"}
             onMouseLeave={e => e.currentTarget.style.opacity = "1"}
           >
-            Change Branch
+            Change
           </button>
         </div>
       </div>
@@ -1051,6 +1095,25 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
     return () => document.removeEventListener("mousedown", h);
   }, []);
 
+  // Measure the navbar's bottom edge so mobile dropdowns that break out to
+  // fixed positioning sit flush beneath it regardless of the promo bar height
+  // (which stacks taller on mobile).
+  const [navBottom, setNavBottom] = useState(0);
+  useEffect(() => {
+    const measure = () => {
+      if (navRef.current) {
+        setNavBottom(navRef.current.getBoundingClientRect().bottom);
+      }
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, { passive: true });
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure);
+    };
+  }, [notifOpen, cartOpen, mobileOpen, showBranchPopup, locationOpen]);
+
   return (
     <>
       <style>{`
@@ -1060,7 +1123,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
       {branchModal && <BranchModal branch={branchModal} onClose={() => setBranchModal(null)} />}
       {searchOpen && <SearchOverlay onClose={() => setSearchOpen(false)} onNavigate={onNavigate} />}
 
-      {/* 🚀 THE FIX: Forced z-index and pointer-events */}
       <div 
         className="w-full sticky top-0" 
         ref={navRef} 
@@ -1085,11 +1147,12 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                 <svg className="w-3 h-3 flex-shrink-0 transition-transform" style={{ color:"rgba(255,255,255,0.7)", transform:locationOpen?"rotate(180deg)":"rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
               </button>
               {locationOpen && <LocationDropdown selected={selectedLocation} onChange={handleBranchSelect} onClose={() => setLocationOpen(false)} />}
-              {showBranchPopup && !locationOpen && (
+              {showBranchPopup && !locationOpen && navBottom > 0 && (
                 <BranchShippingPopup
                   branch={selectedLocation}
                   onDismiss={handleDismissBranchPopup}
                   onChangeBranch={handleChangeBranch}
+                  navBottom={navBottom}
                 />
               )}
             </div>
@@ -1100,7 +1163,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
           backgroundColor: isDark ? "#111827" : "white",
           borderColor: isDark ? "#2d3748" : "#DAEDD5",
         }}>
-          {/* ── Top row: logo + desktop nav + icons ── */}
           <div className="flex items-center justify-between gap-4">
 
             {/* Logo */}
@@ -1120,7 +1182,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
             {/* Desktop nav links */}
             <div className="hidden lg:flex items-center gap-5 xl:gap-8 flex-1 justify-center">
 
-              {/* Nav links */}
               {FINAL_NAV_LINKS.map(link => (
                 <div key={link.label} className="relative"
                   onMouseEnter={() => (link.dropdown||link.categories) && openMenuD(link.label)}
@@ -1177,11 +1238,10 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                   </div>
                 )}
               </div>
-            </div>{/* end desktop nav links */}
+            </div>
 
             {/* Right side icons */}
             <div className="flex items-center gap-1 sm:gap-2">
-              {/* Search */}
               <button onClick={(e) => { e.stopPropagation(); setSearchOpen(true); }}
                 className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors"
                 style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
@@ -1190,7 +1250,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                 <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/></svg>
               </button>
 
-              {/* Cart */}
               <div className="relative" ref={cartRef}>
                 <button onClick={(e) => { e.stopPropagation(); onNavigate?.("cart"); }}
                   className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative"
@@ -1200,10 +1259,9 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0Zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0Z"/></svg>
                   <span className="absolute -top-1 -right-1 flex items-center justify-center text-white font-bold rounded-full" style={{ backgroundColor:cartCount>0?"#e11d48":"#9ca3af", fontSize:"9px", width:"16px", height:"16px" }}>{cartCount}</span>
                 </button>
-                {cartOpen && <div onMouseEnter={openCartD} onMouseLeave={closeCartD}><CartDropdown cartCount={cartCount} onNavigate={onNavigate} /></div>}
+                {cartOpen && <div onMouseEnter={openCartD} onMouseLeave={closeCartD}><CartDropdown cartCount={cartCount} onNavigate={onNavigate} navBottom={navBottom} /></div>}
               </div>
 
-              {/* Notifications */}
               <div className="relative" ref={notifRef}>
                 <button
                   onClick={(e) => { e.stopPropagation(); setNotifOpen(p => !p); }}
@@ -1227,9 +1285,9 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                 {notifOpen && (
                   <div
                     onMouseLeave={() => setNotifOpen(false)}
-                    className="absolute top-full right-0 mt-2 z-50 overflow-hidden"
+                    className="notif-dropdown z-[100001] overflow-hidden"
                     style={{
-                      width: "min(320px, calc(100vw - 6rem))",
+                      "--nav-bottom": `${navBottom}px`,
                       backgroundColor: isDark ? "#1a2332" : "white",
                       border: `1px solid ${isDark ? "#2d3748" : "#e5e7eb"}`,
                       borderRadius: "14px",
@@ -1237,6 +1295,30 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                       animation: "dropIn 0.18s cubic-bezier(0.4,0,0.2,1) forwards",
                     }}
                   >
+                    <style>{`
+                      /* Mobile: fixed overlay spanning the viewport with a 1rem
+                         gutter each side, pinned just below the measured navbar
+                         bottom. This guarantees it never clips off either edge,
+                         no matter where the bell icon sits. Desktop: normal
+                         dropdown anchored under the bell. */
+                      .notif-dropdown {
+                        position: fixed;
+                        top: calc(var(--nav-bottom) + 8px);
+                        left: 1rem;
+                        right: 1rem;
+                        width: auto;
+                      }
+                      @media (min-width: 640px) {
+                        .notif-dropdown {
+                          position: absolute;
+                          top: 100%;
+                          margin-top: 0.5rem;
+                          left: auto;
+                          right: 0;
+                          width: 320px;
+                        }
+                      }
+                    `}</style>
                     <div className="flex items-center justify-between px-4 py-3"
                       style={{ borderBottom: `1px solid ${isDark ? "#2d3748" : "#f3f4f6"}` }}>
                       <span className="text-sm font-semibold" style={{ color: isDark ? "#e5e7eb" : "#111827" }}>Notifications</span>
@@ -1295,7 +1377,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                 )}
               </div>
 
-              {/* User */}
               <div className="relative" ref={userRef} onMouseEnter={openUserD} onMouseLeave={closeUserD}>
                 <button onClick={handleAccountClick}
                   className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative overflow-hidden border"
@@ -1318,7 +1399,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                 {userOpen && <UserHoverDropdown user={user} onNavigate={onNavigate} onLogout={handleLogout} />}
               </div>
 
-              {/* Mobile hamburger */}
               <button className="lg:hidden w-8 h-8 flex items-center justify-center rounded-full transition-colors"
                 style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
                 onClick={(e) => { e.stopPropagation(); setMobileOpen(p => !p); }}
@@ -1330,11 +1410,11 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                     : <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>}
                 </svg>
               </button>
-            </div>{/* end right icons */}
+            </div>
 
-          </div>{/* end top row */}
+          </div>
 
-          {/* ── Mobile menu (animated open/close) ── */}
+          {/* Mobile menu */}
           <div
             className="lg:hidden grid overflow-hidden transition-all duration-300 ease-out"
             style={{ gridTemplateRows: mobileOpen ? "1fr" : "0fr", opacity: mobileOpen ? 1 : 0, pointerEvents: mobileOpen ? "auto" : "none" }}
@@ -1345,7 +1425,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                 style={{ borderTop: `1px solid ${isDark ? "#2d3748" : "#f3f4f6"}`, transform: mobileOpen ? "translateY(0)" : "translateY(-6px)" }}
               >
 
-              {/* Make it Personal section */}
               <div className="px-2 py-3 border-b" style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6" }}>
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-xs font-bold uppercase tracking-widest" style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>Make it Personal</p>
@@ -1353,7 +1432,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                 </div>
                 {!isCustomizationEnabled && (
                   <p className="text-[11px] leading-relaxed px-1 text-amber-600 font-medium mb-3">
-                    ⚠️ Custom bouquet ordering pipelines are temporarily paused to secure on-time deliveries during peak seasonal rush blocks. Please pick an elegant arrangement from our standard storefront options!
+                    ⚠️ Custom bouquet ordering is temporarily paused. Please pick from our standard options!
                   </p>
                 )}
                 <div className="space-y-1">
@@ -1380,7 +1459,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                 </div>
               </div>
 
-              {/* Nav links */}
               {FINAL_NAV_LINKS.map(link => (
                 <div key={link.label}>
                   <button onClick={(e) => { e.stopPropagation(); handleNavClick(link); }}
@@ -1432,7 +1510,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                 </div>
               ))}
 
-              {/* Auth section */}
               <div className="px-2 py-3 border-t" style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6" }}>
                 {user ? (
                   <div className="space-y-1">
@@ -1472,12 +1549,12 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                 )}
               </div>
 
-              </div>{/* end mobile menu content */}
-            </div>{/* end mobile menu clip */}
-          </div>{/* end mobile menu (animated) */}
+              </div>
+            </div>
+          </div>
 
         </nav>
       </div>
     </>
   );
-};
+}

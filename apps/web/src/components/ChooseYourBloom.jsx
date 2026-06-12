@@ -189,6 +189,20 @@ export default function ChooseYourBloom({ onNavigate }) {
     @keyframes bloomInRight { from { opacity:0; transform: translateX(48px) scale(0.92) } to { opacity:1; transform: translateX(0) scale(1) } }
     @keyframes bloomInLeft  { from { opacity:0; transform: translateX(-48px) scale(0.92) } to { opacity:1; transform: translateX(0) scale(1) } }
     @keyframes bloomTextIn  { from { opacity:0; transform: translateY(10px) } to { opacity:1; transform: translateY(0) } }
+
+    /* Continuous diagonal sheen that enters from the TOP-LEFT and travels to
+       the bottom-right. The masked layer holds a diagonal light band; we slide
+       its background-position from above-left (-100% -100%) down through to
+       below-right (200% 200%). A long idle tail after the pass makes the shine
+       read as an occasional slow glint rather than a constant sweep. */
+    @keyframes bloomSheen {
+      0%   { background-position: -100% -100%; }
+      70%  { background-position: 200% 200%; }
+      100% { background-position: 200% 200%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .bloom-sheen { animation: none !important; }
+    }
   `
 
   const centerAnim = anim
@@ -196,11 +210,14 @@ export default function ChooseYourBloom({ onNavigate }) {
     : "none"
   const textAnim = anim ? "bloomTextIn 0.5s ease 0.05s both" : "none"
 
+  // Desktop arrows — pinned to the stage edges (over the side peeks, not the
+  // center). Hidden on mobile where they would overlap the centerpiece; the
+  // mobile arrows render as a separate row below the image instead.
   const ArrowBtn = ({ onClick, side, label }) => (
     <button
       onClick={onClick}
       aria-label={label}
-      className="absolute top-1/2 -translate-y-1/2 z-30 rounded-full flex items-center justify-center transition-transform duration-200 hover:scale-110 active:scale-95 focus:outline-none"
+      className="hidden sm:flex absolute top-1/2 -translate-y-1/2 z-30 rounded-full items-center justify-center transition-transform duration-200 hover:scale-110 active:scale-95 focus:outline-none"
       style={{
         [side]: 0,
         width: 46,
@@ -212,6 +229,30 @@ export default function ChooseYourBloom({ onNavigate }) {
       }}
     >
       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={btnIcon} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+        {side === "left"
+          ? <path d="M15 19l-7-7 7-7" />
+          : <path d="M9 5l7 7-7 7" />}
+      </svg>
+    </button>
+  )
+
+  // Mobile arrows — a compact row beneath the image so they never sit on top
+  // of the centerpiece.
+  const MobileArrowBtn = ({ onClick, side, label }) => (
+    <button
+      onClick={onClick}
+      aria-label={label}
+      className="rounded-full flex items-center justify-center transition-transform duration-200 active:scale-95 focus:outline-none"
+      style={{
+        width: 42,
+        height: 42,
+        backgroundColor: btnBg,
+        boxShadow: isDark
+          ? "0 0 14px rgba(74,222,128,0.4)"
+          : "0 6px 16px -6px rgba(12,87,62,0.45)",
+      }}
+    >
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke={btnIcon} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
         {side === "left"
           ? <path d="M15 19l-7-7 7-7" />
           : <path d="M9 5l7 7-7 7" />}
@@ -267,18 +308,25 @@ export default function ChooseYourBloom({ onNavigate }) {
         </div>
 
         {/* ── Carousel stage ──
-            One fixed-height relative track. Three slots are absolutely
-            positioned: left + right are IDENTICAL size and mirrored to each
-            edge; center is larger and pinned dead-center. */}
+            One relative track. Three slots are absolutely positioned: left +
+            right are IDENTICAL size and mirrored to each edge; center is larger
+            and pinned dead-center. Height is responsive: shorter on mobile (the
+            image is square and would otherwise leave large empty gaps) and the
+            original 500px from sm and up. */}
         <div
           ref={stageRef}
           className="relative"
           style={{ opacity: 0, transform: "translateY(28px)", transition: "opacity 0.55s ease, transform 0.55s ease" }}
         >
           <div
-            className="relative mx-auto"
-            style={{ maxWidth: 1180, height: "clamp(500px, 44vw, 500px)" }}
+            className="relative mx-auto stage-track"
+            style={{ maxWidth: 1180 }}
           >
+            <style>{`
+              .stage-track { height: clamp(320px, 90vw, 380px); }
+              @media (min-width: 640px) { .stage-track { height: 500px; } }
+            `}</style>
+
             {multi && <ArrowBtn onClick={() => go(-1)} side="left"  label="Previous bloom" />}
             {multi && <ArrowBtn onClick={() => go(1)}  side="right" label="Next bloom" />}
 
@@ -322,7 +370,7 @@ export default function ChooseYourBloom({ onNavigate }) {
 
             {/* CENTER piece */}
             <div
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center w-[94%] sm:w-[62%]"
+              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center w-[88%] sm:w-[62%]"
               style={{ maxWidth: 640, height: "100%" }}
             >
               <div
@@ -330,18 +378,52 @@ export default function ChooseYourBloom({ onNavigate }) {
                 className="flex items-center justify-center w-full h-full"
                 style={{ animation: centerAnim }}
               >
-                <img
-                  src={center.src}
-                  alt={center.name}
-                  className="max-w-full max-h-full object-contain drop-shadow-xl"
-                  onError={(e) => { e.currentTarget.style.opacity = "0.15" }}
-                />
+                {/* relative wrapper sizes to the image; the sheen layer is
+                    absolutely positioned over it and masked to the same PNG */}
+                <div className="relative inline-flex max-w-full max-h-full">
+                  <img
+                    src={center.src}
+                    alt={center.name}
+                    className="max-w-full max-h-full object-contain drop-shadow-xl block"
+                    onError={(e) => { e.currentTarget.style.opacity = "0.15" }}
+                  />
+                  {/* Diagonal shine — masked by the bloom image so it only
+                      lights the flower. mix-blend screen so it adds light
+                      rather than painting a flat white streak. */}
+                  <div
+                    className="bloom-sheen pointer-events-none absolute inset-0"
+                    style={{
+                      backgroundImage:
+                        "linear-gradient(135deg, transparent 35%, rgba(255,255,255,0.0) 42%, rgba(255,255,255,0.6) 50%, rgba(255,255,255,0.0) 58%, transparent 65%)",
+                      backgroundSize: "250% 250%",
+                      backgroundRepeat: "no-repeat",
+                      WebkitMaskImage: `url(${center.src})`,
+                      maskImage: `url(${center.src})`,
+                      WebkitMaskSize: "contain",
+                      maskSize: "contain",
+                      WebkitMaskRepeat: "no-repeat",
+                      maskRepeat: "no-repeat",
+                      WebkitMaskPosition: "center",
+                      maskPosition: "center",
+                      mixBlendMode: "screen",
+                      animation: "bloomSheen 7s ease-in-out infinite",
+                    }}
+                  />
+                </div>
               </div>
             </div>
           </div>
 
+          {/* ── Mobile arrow row — below the image, sm:hidden ── */}
+          {multi && (
+            <div className="flex sm:hidden items-center justify-center gap-8 mt-4">
+              <MobileArrowBtn onClick={() => go(-1)} side="left"  label="Previous bloom" />
+              <MobileArrowBtn onClick={() => go(1)}  side="right" label="Next bloom" />
+            </div>
+          )}
+
           {/* ── Caption ── */}
-          <div className="text-center mt-2" style={{ animation: textAnim }} key={`cap-${index}`}>
+          <div className="text-center mt-6 sm:mt-8" style={{ animation: textAnim }} key={`cap-${index}`}>
             {center.tag && (
               <p className="text-xs font-bold tracking-widest uppercase mb-1.5" style={{ color: tagC }}>
                 {center.tag}

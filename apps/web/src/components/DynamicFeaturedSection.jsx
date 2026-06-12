@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { useTheme } from "../context/ThemeContext"
 import { api } from "../services/api"
-import { useCurrency } from "../context/CuurencyContext" // matches existing filename\r\n
+import { useCurrency } from "../context/CuurencyContext" // matches existing filename
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -52,7 +52,48 @@ const GLOW_BORDER_CSS = `
   @media (prefers-reduced-motion: reduce) {
     .bloom-glow-border::before { animation: none; }
   }
+
+  @keyframes dfspetalBloom {
+    0%, 100% { opacity: 0.2; }
+    50%       { opacity: 1;   }
+  }
 `
+
+// ── Inline flower petal loader (namespaced: dfs) ────────────────────────────
+function DFSLoader() {
+  const petals = [
+    { angle: 0,   color: "#f48fb1" },
+    { angle: 60,  color: "#ec407a" },
+    { angle: 120, color: "#e91e63" },
+    { angle: 180, color: "#f06292" },
+    { angle: 240, color: "#c2185b" },
+    { angle: 300, color: "#f48fb1" },
+  ]
+  return (
+    <div className="w-full py-24 flex flex-col items-center justify-center gap-4">
+      <svg width="100" height="100" viewBox="0 0 100 100">
+        {petals.map(({ angle, color }, i) => (
+          <g key={i} transform={`rotate(${angle} 50 50)`}>
+            <ellipse
+              cx="50" cy="27" rx="9.5" ry="21"
+              fill={color}
+              style={{
+                animation: `dfspetalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`,
+                animationFillMode: "both",
+              }}
+            />
+          </g>
+        ))}
+        <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+        <circle cx="50" cy="50" r="7" fill="#f9c6d0" />
+        <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+      </svg>
+      <p className="text-sm font-medium tracking-wide" style={{ color: "#6b7280" }}>
+        Loading featured collections...
+      </p>
+    </div>
+  )
+}
 
 function useScrollReveal(threshold = 0.08) {
   const ref = useRef(null)
@@ -71,10 +112,9 @@ function useScrollReveal(threshold = 0.08) {
 
 // ─── 1. Your Beautiful Single Section Layout ─────────────────────────────────
 function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
-  // 🚀 Call the currency hook here so this block knows how to format prices
-  const { formatPrice } = useCurrency() || { formatPrice: (price) => `₱${Number(price).toLocaleString()}` };
+  const { formatPrice } = useCurrency() || { formatPrice: (price) => `₱${Number(price).toLocaleString()}` }
 
-  if (!data) return null;
+  if (!data) return null
 
   const accentG  = isDark ? "#4ade80" : G
   const headingC = isDark ? "#f3f4f6" : "#1f2937"
@@ -168,7 +208,7 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             {slotProducts.map((p, i) => {
-              if (!p) return null;
+              if (!p) return null
               const ribbon = featured[i]?.ribbonOverride ?? p.ribbon
               const ribbonColor = RIBBON_COLORS[ribbon]
               return (
@@ -186,12 +226,9 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
                   <div className="p-4 flex flex-col flex-1">
                     <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: subC }}>{p.category}</p>
                     <p className="text-sm md:text-base font-bold leading-tight mb-2 line-clamp-2" style={{ color: headingC }}>{p.name}</p>
-                    
-                    {/* 🚀 CHANGED THIS LINE to use formatPrice() */}
                     <p className="text-sm md:text-base font-extrabold mt-auto" style={{ color: accentG }}>
                       {formatPrice(p.price || 0)}
                     </p>
-                    
                   </div>
                 </button>
               )
@@ -210,78 +247,64 @@ export default function DynamicFeaturedSections({ onNavigate, onPreview }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    let isMounted = true;
-    
+    let isMounted = true
+
     const loadAllData = async () => {
       try {
         const [settingsData, productsData] = await Promise.all([
           api.get("/products/admin/settings/homepage").catch(() => null),
           api.get("/products/").catch(() => [])
-        ]);
+        ])
 
-        if (!isMounted) return;
+        if (!isMounted) return
 
-        const rawProducts = Array.isArray(productsData) ? productsData : (productsData?.products || productsData?.items || productsData?.data || []);
-        const normalizedProducts = rawProducts
-          // Filter out products that don't belong to this branch
-          .filter(p => {
-             const branches = p.branches || [];
-             if (branches.length === 0) return true; // Show if unassigned
-             return branches.some(b => b.toLowerCase() === currentBranch.toLowerCase());
-          })
-          .map(p => ({
-            ...p,
-            id: p.id,
-            name: p.name || "Unnamed",
-            price: Number(p.price) || 0,
-            image: p.image || p.image_url || null,
-          }));
-        
-        setAllProducts(normalizedProducts);
+        const rawProducts = Array.isArray(productsData) ? productsData : (productsData?.products || productsData?.items || productsData?.data || [])
+        const normalizedProducts = rawProducts.map(p => ({
+          ...p,
+          id: p.id,
+          name: p.name || "Unnamed",
+          price: Number(p.price) || 0,
+          image: p.image || p.image_url || null,
+        }))
+
+        setAllProducts(normalizedProducts)
 
         if (settingsData && Object.keys(settingsData).length > 0) {
-           const sectionsArray = Object.keys(settingsData)
-              .filter(key => key !== "__carousel__")
-              .map(key => ({
-                id: key, 
-                ...settingsData[key]
-              }))
-              .filter(section => section && section.banner && section.__type !== "carousel");
-           setSectionsData(sectionsArray);
+          const sectionsArray = Object.keys(settingsData)
+            .filter(key => key !== "__carousel__")
+            .map(key => ({ id: key, ...settingsData[key] }))
+            .filter(section => section && section.banner && section.__type !== "carousel")
+          setSectionsData(sectionsArray)
         }
       } catch (err) {
-        console.error("Failed to load sections data.", err);
+        console.error("Failed to load sections data.", err)
       } finally {
-        if (isMounted) setLoading(false);
+        if (isMounted) setLoading(false)
       }
-    };
+    }
 
-    loadAllData();
-    return () => { isMounted = false };
-  }, []);
-
-  if (loading) {
-     return (
-       <div className="py-24 text-center text-gray-500 animate-pulse">
-         Loading Featured Collections...
-       </div>
-     )
-  }
+    loadAllData()
+    return () => { isMounted = false }
+  }, [])
 
   return (
     <>
       <style>{GLOW_BORDER_CSS}</style>
 
-      {sectionsData.map((section) => (
-         <SectionBlock 
-            key={section.id} 
-            data={section} 
-            products={allProducts}  
-            isDark={isDark} 
-            onNavigate={onNavigate} 
+      {loading ? (
+        <DFSLoader />
+      ) : (
+        sectionsData.map((section) => (
+          <SectionBlock
+            key={section.id}
+            data={section}
+            products={allProducts}
+            isDark={isDark}
+            onNavigate={onNavigate}
             onPreview={onPreview}
-         />
-      ))}
+          />
+        ))
+      )}
     </>
   )
 }

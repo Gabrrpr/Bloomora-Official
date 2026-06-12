@@ -21,6 +21,7 @@ const DEFAULT_HEROES = [
     headline: "Fresh Blooms,\nSince 1959",
     description: "Since 1959, we've been part of countless moments big and small. Every arrangement is made by hand with fresh flowers and genuine care.",
     cta: "Shop Flowers",
+    ctaNav: "shop",
     ctaSecondary: "View Occasions",
     ctaSecondaryNav: "occasions",
     accent: "#2E8B34",
@@ -32,8 +33,9 @@ const DEFAULT_HEROES = [
     headline: "Let flowers\ndo the talking",
     description: "Whether it's an apology, a misunderstanding, or just a way to say \"I care,\" sending flowers is sometimes the simplest way to fix things without saying too much.",
     cta: "Shop Flowers",
+    ctaNav: "shop",
     ctaSecondary: "Explore Collection",
-    ctaSecondaryNav: "shop",
+    ctaSecondaryNav: "occasions",
     accent: "#e11d48",
     image: heroBg2,
   },
@@ -43,6 +45,7 @@ const DEFAULT_HEROES = [
     headline: "Flowers,\nMade Your Way",
     description: "Use our \"Make it Personal\" feature to describe your ideal bouquet, or build your own arrangement through our Mix and Match option. We'll turn your idea into something fresh and beautifully made.",
     cta: "Try It Now",
+    ctaNav: "make-it-personal",
     ctaSecondary: "See Examples",
     ctaSecondaryNav: "ai-gallery",
     accent: "#7c3aed",
@@ -54,6 +57,7 @@ const DEFAULT_HEROES = [
     headline: "Simple Ways\nto Show You Care",
     description: "From everyday surprises to life's biggest moments, we create fresh arrangements that help you express what you feel in a simple and meaningful way.",
     cta: "Shop Flowers",
+    ctaNav: "shop",
     ctaSecondary: "View Occasions",
     ctaSecondaryNav: "occasions",
     accent: "#d97706",
@@ -119,6 +123,11 @@ export default function HeroCarousel({ onNavigate }) {
     setTimeout(() => { setPrev(null); setAnimating(false) }, 600)
   }
 
+  // Resolve a slide's nav target with sensible fallbacks so older CMS payloads
+  // (which may only carry ctaSecondaryNav) still route correctly.
+  const primaryNav   = (h) => h.ctaNav || "shop"
+  const secondaryNav = (h) => h.ctaSecondaryNav || "occasions"
+
   const hero     = heroes[current]
   const prevHero = prev !== null ? heroes[prev] : null
 
@@ -130,7 +139,7 @@ export default function HeroCarousel({ onNavigate }) {
   return (
     <div
       className="relative w-full overflow-hidden"
-      style={{ height: "clamp(480px, 70vh, 720px)" }}
+      style={{ height: "clamp(560px, 70vh, 720px)" }}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
     >
@@ -143,62 +152,64 @@ export default function HeroCarousel({ onNavigate }) {
       {/* Overlay — deeper in dark mode */}
       <div className="absolute inset-0 z-10" style={{ background: overlayGradient }} />
 
-      {/* Prev arrow */}
+      {/* Prev arrow — smaller and tucked tighter to the edge on mobile so it
+          doesn't crowd the text column on narrow devices like iPhone SE */}
       <button onClick={() => goTo((current - 1 + heroes.length) % heroes.length, "prev")}
-        className="absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 z-30 w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white border border-white/30 bg-black/20 hover:bg-black/40 backdrop-blur-sm transition-all duration-200 hover:scale-110"
+        className="absolute left-1.5 sm:left-4 top-1/2 -translate-y-1/2 z-30 w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white border border-white/30 bg-black/25 hover:bg-black/40 backdrop-blur-sm transition-all duration-200 hover:scale-110"
         aria-label="Previous slide">
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
         </svg>
       </button>
 
       {/* Next arrow */}
       <button onClick={() => goTo((current + 1) % heroes.length, "next")}
-        className="absolute right-3 sm:right-4 top-1/2 -translate-y-1/2 z-30 w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white border border-white/30 bg-black/20 hover:bg-black/40 backdrop-blur-sm transition-all duration-200 hover:scale-110"
+        className="absolute right-1.5 sm:right-4 top-1/2 -translate-y-1/2 z-30 w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center text-white border border-white/30 bg-black/25 hover:bg-black/40 backdrop-blur-sm transition-all duration-200 hover:scale-110"
         aria-label="Next slide">
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
         </svg>
       </button>
 
-      {/* Content — vertically centered; top/bottom padding guarantees breathing room even when text is long */}
-      <div className="relative z-20 h-full flex items-center py-14 sm:py-16">
-        <div className="w-full max-w-7xl mx-auto px-14 sm:px-24 lg:px-28">
+      {/* Content — vertically centered; reduced side padding on mobile gives the
+          text real room between the arrows. Bottom padding leaves space for dots. */}
+      <div className="relative z-20 h-full flex items-center py-12 pb-20 sm:py-16">
+        <div className="w-full max-w-7xl mx-auto px-12 sm:px-24 lg:px-28">
           <div className="w-full max-w-xl">
             {animating && prevHero && (
               <div key={`prev-${prev}`} className="absolute"
                 style={{ animation: "slideOutLeft 0.55s cubic-bezier(0.4,0,0.2,1) forwards" }}>
-                <span className="inline-flex items-center self-start max-w-[calc(100vw-7rem)] sm:max-w-max text-[10px] sm:text-xs font-bold tracking-[0.1em] sm:tracking-[0.2em] uppercase px-2.5 sm:px-3 py-1 rounded-full mb-4 text-white truncate"
+                <span className="inline-flex items-center self-start max-w-[calc(100vw-6rem)] sm:max-w-max text-[10px] sm:text-xs font-bold tracking-[0.08em] sm:tracking-[0.2em] uppercase px-2.5 sm:px-3 py-1 rounded-full mb-3 sm:mb-4 text-white truncate"
                   style={{ backgroundColor: prevHero.accent + "55", border: `1px solid ${prevHero.accent}99` }}>
                   {prevHero.tag}
                 </span>
-                <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-4" style={{ textShadow: "0 2px 20px rgba(0,0,0,0.4)" }}>
+                <h1 className="text-3xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-3 sm:mb-4" style={{ textShadow: "0 2px 20px rgba(0,0,0,0.4)" }}>
                   {prevHero.headline.split("\n").map((line, i) => <span key={i} className="block">{line}</span>)}
                 </h1>
-                <p className="text-white/80 text-base sm:text-lg leading-relaxed mb-8">{prevHero.description}</p>
+                <p className="text-white/80 text-sm sm:text-lg leading-relaxed mb-6 sm:mb-8">{prevHero.description}</p>
               </div>
             )}
 
             <div key={`curr-${current}`}
               style={{ animation: animating ? "slideInRight 0.6s cubic-bezier(0.4,0,0.2,1) forwards" : "none", opacity: animating ? 0 : 1 }}>
-              <span className="inline-flex items-center self-start max-w-[calc(100vw-7rem)] sm:max-w-max text-[10px] sm:text-xs font-bold tracking-[0.1em] sm:tracking-[0.2em] uppercase px-2.5 sm:px-3 py-1 rounded-full mb-4 sm:mb-5 text-white truncate"
+              <span className="inline-flex items-center self-start max-w-[calc(100vw-6rem)] sm:max-w-max text-[10px] sm:text-xs font-bold tracking-[0.08em] sm:tracking-[0.2em] uppercase px-2.5 sm:px-3 py-1 rounded-full mb-3 sm:mb-5 text-white truncate"
                 style={{ backgroundColor: hero.accent + "55", border: `1px solid ${hero.accent}99` }}>
                 {hero.tag}
               </span>
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-4 sm:mb-5" style={{ textShadow: "0 2px 20px rgba(0,0,0,0.5)" }}>
+              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-bold text-white leading-tight mb-3 sm:mb-5" style={{ textShadow: "0 2px 20px rgba(0,0,0,0.5)" }}>
                 {hero.headline.split("\n").map((line, i) => <span key={i} className="block">{line}</span>)}
               </h1>
-              <p className="text-white/90 text-base sm:text-lg leading-relaxed mb-6 sm:mb-8 max-w-md">{hero.description}</p>
-              <div className="grid grid-cols-[max-content] justify-start gap-3 sm:flex sm:flex-row sm:flex-wrap sm:items-center">
+              <p className="text-white/90 text-sm sm:text-lg leading-relaxed mb-5 sm:mb-8 max-w-md">{hero.description}</p>
+              <div className="grid grid-cols-[max-content] justify-start gap-2.5 sm:gap-3 sm:flex sm:flex-row sm:flex-wrap sm:items-center">
                 <button
-                  onClick={() => onNavigate && onNavigate("shop")}
-                  className="hero-glow-border w-full sm:w-auto px-7 py-3.5 text-sm font-bold text-white rounded-full shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl text-center whitespace-nowrap"
+                  onClick={() => onNavigate && onNavigate(primaryNav(hero))}
+                  className="hero-glow-border w-full sm:w-auto px-6 sm:px-7 py-3 sm:py-3.5 text-sm font-bold text-white rounded-full shadow-lg transition-all duration-200 hover:scale-105 hover:shadow-xl text-center whitespace-nowrap"
                   style={{ backgroundColor: hero.accent, "--hero-accent": hero.accent }}>
                   {hero.cta}
                 </button>
                 <button
-                  onClick={() => onNavigate && hero.ctaSecondaryNav && onNavigate(hero.ctaSecondaryNav)}
-                  className="hero-glow-border w-full sm:w-auto px-7 py-3.5 text-sm font-semibold text-white rounded-full border border-white/40 backdrop-blur-sm hover:bg-white/10 transition-all duration-200 text-center whitespace-nowrap"
+                  onClick={() => onNavigate && onNavigate(secondaryNav(hero))}
+                  className="hero-glow-border w-full sm:w-auto px-6 sm:px-7 py-3 sm:py-3.5 text-sm font-semibold text-white rounded-full border border-white/40 backdrop-blur-sm hover:bg-white/10 transition-all duration-200 text-center whitespace-nowrap"
                   style={{ backgroundColor: "transparent", "--hero-accent": hero.accent }}>
                   {hero.ctaSecondary}
                 </button>

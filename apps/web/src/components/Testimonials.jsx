@@ -6,81 +6,6 @@ const G   = "#2E8B34"
 const DG  = "#0C573E"
 const G_D = "#4ade80"
 
-// Animated rotating gradient borders for the two social CTAs.
-// Same "traveling beam" technique used on the hero / banner CTAs: a conic
-// gradient whose angle is animated through a registered @property, masked down
-// to a thin border via mask-composite. Browsers without @property support fall
-// back to a static ring. Namespaced per brand so they never collide with the
-// hero (hero-glow-border) or banner (bloom-glow-border) rings on the same page.
-//   - FB:  faint blue ring with a bright white beam sweeping around (4s).
-//   - IG:  the full Instagram gradient itself rotating as a ring (4s).
-// The brand colors read well on both light and dark surfaces, so the rings are
-// identical in both themes; only the button's ambient glow changes by mode.
-const SOCIAL_GLOW_CSS = `
-  @property --fb-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
-  @property --ig-angle { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
-  @keyframes fbBorderSpin { to { --fb-angle: 360deg; } }
-  @keyframes igBorderSpin { to { --ig-angle: 360deg; } }
-
-  .fb-glow-border, .ig-glow-border { position: relative; z-index: 0; }
-
-  .fb-glow-border::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    padding: 2px;
-    background: conic-gradient(from var(--fb-angle),
-      rgba(24,119,242,0.15) 0deg,
-      rgba(24,119,242,0.15) 60deg,
-      rgba(24,119,242,0.70) 95deg,
-      #4293ff 120deg,
-      #ffffff 135deg,
-      #4293ff 150deg,
-      rgba(24,119,242,0.70) 175deg,
-      rgba(24,119,242,0.15) 210deg,
-      rgba(24,119,242,0.15) 360deg
-    );
-    -webkit-mask:
-      linear-gradient(#fff 0 0) content-box,
-      linear-gradient(#fff 0 0);
-            mask:
-      linear-gradient(#fff 0 0) content-box,
-      linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-            mask-composite: exclude;
-    pointer-events: none;
-    animation: fbBorderSpin 4s linear infinite;
-  }
-
-  .ig-glow-border::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    padding: 2px;
-    background: conic-gradient(from var(--ig-angle),
-      #feda75, #fa7e1e, #d62976, #962fbf, #4f5bd5, #962fbf, #d62976, #fa7e1e, #feda75
-    );
-    -webkit-mask:
-      linear-gradient(#fff 0 0) content-box,
-      linear-gradient(#fff 0 0);
-            mask:
-      linear-gradient(#fff 0 0) content-box,
-      linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-            mask-composite: exclude;
-    pointer-events: none;
-    animation: igBorderSpin 4s linear infinite;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .fb-glow-border::before, .ig-glow-border::before { animation: none; }
-  }
-`
-
 const REVIEWS = [
   { id:1, name:"Khaye Muñoz",              source:"Facebook", text:"They made very special flower always.", rating:5 },
   { id:2, name:"Dennis Rivera Logarta",    source:"Facebook", text:"True people and a perfect flower shop. Message from KANSAS USA.", rating:5 },
@@ -150,7 +75,7 @@ function SourceBadge({ source, isDark }) {
   const bdr   = isFB ? (isDark ? "rgba(24,119,242,0.35)" : "#c8d8f8") : (isDark ? "rgba(66,133,244,0.32)" : "#ccd8f6")
   const color = isFB ? "#1877F2" : "#4285F4"
   return (
-    <span className="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2.5 py-[3px]"
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold rounded-full px-2.5 py-[3px] whitespace-nowrap"
       style={{ backgroundColor:bg, border:`1px solid ${bdr}`, color, letterSpacing:"0.02em" }}>
       {isFB ? (
         <svg width="10" height="10" fill="#1877F2" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg>
@@ -184,13 +109,6 @@ function OutlineAvatar({ isDark }) {
 }
 
 /* ── Quote mark ────────────────────────────────────────────────── */
-/*
-  With lineHeight:0, the span has 0 layout height.
-  Flexbox places it at the circle's vertical midpoint.
-  The Georgia " glyph renders above the baseline.
-  translateY(20px) nudges the 0-height box just enough below centre
-  so the glyph ink sits visually centred in the circle.
-*/
 function QuoteMark({ isDark }) {
   const bg    = isDark ? "#16352a" : "rgba(12,87,62,0.08)"
   const color = isDark ? G_D : DG
@@ -230,8 +148,6 @@ function VerifiedBadge({ isDark }) {
 
 /* ── Review card ───────────────────────────────────────────────── */
 function ReviewCard({ review, isDark }) {
-  // Dark mode: solid panel — fully opaque green-tinted dark bg, no backdrop
-  // blur, so cards read as solid elements rather than frosted glass.
   const cardBg      = isDark ? "#0f1f17" : "rgba(255,255,255,0.93)"
   const cardBdr     = isDark ? "#4ade80" : "#b8d8b8"
   const cardShdw    = isDark ? "0 0 0 1px rgba(74,222,128,0.2), 0 8px 32px rgba(0,0,0,0.5)" : "0 4px 24px rgba(12,87,62,0.1)"
@@ -240,12 +156,11 @@ function ReviewCard({ review, isDark }) {
   const nameC  = isDark ? "#f0fdf4" : "#111827"
   const divC   = isDark ? "rgba(74,222,128,0.15)" : "#f0f0f0"
 
-  // Only apply the frosted-glass blur in light mode.
   const blur = isDark ? "none" : "blur(12px)"
 
   return (
     <div
-      className="relative flex flex-col items-center text-center rounded-[18px] p-9 pt-9 h-full box-border"
+      className="relative flex flex-col items-center text-center rounded-[18px] p-7 sm:p-9 pt-7 sm:pt-9 h-full box-border"
       style={{
         backdropFilter:blur, WebkitBackdropFilter:blur,
         backgroundColor:cardBg, border:`1.5px solid ${cardBdr}`,
@@ -260,10 +175,13 @@ function ReviewCard({ review, isDark }) {
       <Stars count={review.rating} isDark={isDark}/>
       <p className="text-[15px] leading-[1.85] flex-1 mt-[18px] mb-[22px]" style={{ color:textC }}>{review.text}</p>
       <div className="w-full h-px mb-5" style={{ backgroundColor:divC }}/>
+      {/* Footer: avatar + identity. The identity column is min-w-0 so a long
+          name wraps cleanly within it instead of shoving the badge around, and
+          the name + badge stack vertically with their own spacing. */}
       <div className="flex items-center gap-3.5 w-full text-left">
         <OutlineAvatar isDark={isDark}/>
-        <div>
-          <p className="text-[15px] font-bold mb-[5px] leading-tight" style={{ color:nameC }}>{review.name}</p>
+        <div className="min-w-0 flex-1">
+          <p className="text-[15px] font-bold mb-1.5 leading-snug break-words" style={{ color:nameC }}>{review.name}</p>
           <SourceBadge source={review.source} isDark={isDark}/>
         </div>
       </div>
@@ -272,10 +190,10 @@ function ReviewCard({ review, isDark }) {
 }
 
 /* ── Arrow button ──────────────────────────────────────────────── */
-function ArrowBtn({ dir, onClick, isDark }) {
+function ArrowBtn({ dir, onClick, isDark, disabled }) {
   const accentG = isDark ? G_D : G
   return (
-    <button onClick={onClick} aria-label={dir==="left"?"Previous":"Next"}
+    <button onClick={onClick} aria-label={dir==="left"?"Previous":"Next"} disabled={disabled}
       className="shrink-0 w-[46px] h-[46px] rounded-full flex items-center justify-center cursor-pointer transition-all duration-200"
       style={{ border:`1.5px solid ${isDark?"rgba(74,222,128,0.3)":"#d1d5db"}`, backgroundColor:isDark?"rgba(22,34,46,0.85)":"rgba(255,255,255,0.85)", backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", color:isDark?"#6b7280":"#9ca3af" }}
       onMouseEnter={e => { e.currentTarget.style.borderColor=accentG; e.currentTarget.style.color=accentG; e.currentTarget.style.boxShadow=isDark?"0 0 14px rgba(74,222,128,0.35)":"none" }}
@@ -295,12 +213,41 @@ export default function Testimonials() {
   const [cardsRef,  cardsVisible]  = useScrollReveal(0.06)
   const [socialRef, socialVisible] = useScrollReveal(0.1)
   const [current, setCurrent]      = useState(0)
+  // direction the deck just moved (1 = next, -1 = prev) drives the slide+fade
+  const [dir, setDir]              = useState(1)
+  const [anim, setAnim]            = useState(false)
+  const lockRef = useRef(false)
   const total = REVIEWS.length
 
   const isDesk      = w >= 1024
   const isMid       = w >= 640
   const isLandscape = typeof window !== "undefined" && window.innerHeight < 520 && w >= 600
   const visibleCount = (w < 640 || isLandscape) ? 1 : !isDesk ? 2 : 3
+
+  // Animated step: lock briefly so the transition can play, set the direction,
+  // then advance. The visible cards re-key on `current`, replaying the CSS
+  // slide-in animation each time.
+  const step = useCallback((delta) => {
+    if (lockRef.current) return
+    lockRef.current = true
+    setDir(delta)
+    setAnim(true)
+    setCurrent(c => (c + delta + total) % total)
+    setTimeout(() => { setAnim(false); lockRef.current = false }, 420)
+  }, [total])
+
+  const prev = useCallback(() => step(-1), [step])
+  const next = useCallback(() => step(1), [step])
+
+  // Jump straight to an index (dots). Picks the shorter visual direction.
+  const goTo = useCallback((i) => {
+    if (lockRef.current || i === current) return
+    lockRef.current = true
+    setDir(i > current ? 1 : -1)
+    setAnim(true)
+    setCurrent(i)
+    setTimeout(() => { setAnim(false); lockRef.current = false }, 420)
+  }, [current])
 
   const touchStart = useRef(null)
   const onTouchStart = e => { touchStart.current = e.touches[0].clientX }
@@ -310,39 +257,43 @@ export default function Testimonials() {
     if (Math.abs(diff) > 40) diff > 0 ? next() : prev()
     touchStart.current = null
   }
-  const prev = useCallback(() => setCurrent(c => (c-1+total)%total), [total])
-  const next = useCallback(() => setCurrent(c => (c+1)%total), [total])
+
   const getVisible = () => Array.from({length:visibleCount}, (_,i) => REVIEWS[(current+i)%total])
 
-  // Dynamic color tokens (can't be Tailwind — depend on isDark JS var)
   const accentG    = isDark ? G_D : G
   const accentDG   = isDark ? G_D : DG
   const headingC   = isDark ? "#f0fdf4" : "#1f2937"
   const bodyC      = isDark ? "#cbd5e1" : "#6b7280"
   const dotInact   = isDark ? "rgba(74,222,128,0.25)" : "#d1d5db"
 
-  // Social CTA tokens — real brand colors, kept identical in both themes so the
-  // buttons stay instantly recognizable (white text reads on both the FB blue
-  // and the IG gradient, and pops on the dark overlay). Only the ambient glow
-  // strength changes by mode: a soft halo in light, a brighter one in dark.
   const fbGlow    = isDark ? "0 0 22px rgba(24,119,242,0.55)" : "0 8px 20px -6px rgba(24,119,242,0.45)"
   const fbGlowHov = isDark ? "0 0 30px rgba(24,119,242,0.78)" : "0 10px 26px -7px rgba(24,119,242,0.62)"
   const igGlow    = isDark ? "0 0 22px rgba(214,41,118,0.52)" : "0 8px 20px -6px rgba(214,41,118,0.45)"
   const igGlowHov = isDark ? "0 0 30px rgba(214,41,118,0.72)" : "0 10px 26px -7px rgba(214,41,118,0.62)"
   const igGradient = "linear-gradient(45deg, #feda75 0%, #fa7e1e 25%, #d62976 50%, #962fbf 75%, #4f5bd5 100%)"
 
+  // Slide+fade keyframes for the carousel deck.
+  const carouselCss = `
+    @keyframes revInRight { from { opacity:0; transform:translateX(36px) } to { opacity:1; transform:translateX(0) } }
+    @keyframes revInLeft  { from { opacity:0; transform:translateX(-36px) } to { opacity:1; transform:translateX(0) } }
+    @media (prefers-reduced-motion: reduce) {
+      .rev-deck { animation: none !important; }
+    }
+  `
+  const deckAnim = anim
+    ? `${dir === 1 ? "revInRight" : "revInLeft"} 0.4s cubic-bezier(0.22,1,0.36,1)`
+    : "none"
+
   return (
     <section className="relative overflow-hidden py-[clamp(56px,7vw,100px)]">
-      {/* Animated social-button border styles (scoped class names) */}
-      <style>{SOCIAL_GLOW_CSS}</style>
+      <style>{carouselCss}</style>
 
       {/* Background image */}
       <div className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage:`url(${testimonialsBG})` }}/>
-      {/* Overlay — light veil on all sizes so the bg image stays clearly visible */}
+      {/* Overlay */}
       <div className="absolute inset-0 z-[1]"
         style={{ backgroundColor: isDark ? "rgba(8,15,10,0.7)" : "rgba(255,255,255,0.45)" }}/>
-      {/* Dark mode neon radial hint */}
       {isDark && (
         <div className="absolute inset-0 z-[1] pointer-events-none"
           style={{ background:"radial-gradient(ellipse at 50% 50%, rgba(74,222,128,0.04) 0%, transparent 70%)" }}/>
@@ -350,7 +301,7 @@ export default function Testimonials() {
 
       <div className="relative z-[2] max-w-[1160px] mx-auto px-4 sm:px-6 lg:px-[52px]">
 
-        {/* Header — OccasionsStrip pattern */}
+        {/* Header */}
         <div ref={headerRef} className="text-center mb-12 transition-all duration-500"
           style={{ opacity:headerVisible?1:0, transform:headerVisible?"none":"translateY(24px)" }}>
           <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color:accentG }}>
@@ -373,11 +324,22 @@ export default function Testimonials() {
 
           <div className="flex items-center gap-3.5">
             <ArrowBtn dir="left" onClick={prev} isDark={isDark}/>
-            <div className={`flex-1 grid gap-4 items-stretch`}
-              style={{ gridTemplateColumns:`repeat(${visibleCount},minmax(0,1fr))`, gap: isDesk?"24px":isMid?"16px":"12px" }}>
-              {getVisible().map((review,i) => (
-                <ReviewCard key={`${review.id}-${i}-${current}`} review={review} isDark={isDark}/>
-              ))}
+            {/* overflow-hidden clips the sliding cards so they animate in/out
+                cleanly without spilling past the arrows */}
+            <div className="flex-1 overflow-hidden">
+              <div
+                key={current}
+                className="rev-deck grid gap-4 items-stretch"
+                style={{
+                  gridTemplateColumns:`repeat(${visibleCount},minmax(0,1fr))`,
+                  gap: isDesk?"24px":isMid?"16px":"12px",
+                  animation: deckAnim,
+                }}
+              >
+                {getVisible().map((review,i) => (
+                  <ReviewCard key={`${review.id}-${i}-${current}`} review={review} isDark={isDark}/>
+                ))}
+              </div>
             </div>
             <ArrowBtn dir="right" onClick={next} isDark={isDark}/>
           </div>
@@ -385,7 +347,7 @@ export default function Testimonials() {
           {/* Dots */}
           <div className="flex justify-center gap-1.5 mt-8">
             {REVIEWS.map((_,i) => (
-              <button key={i} onClick={() => setCurrent(i)} aria-label={`Go to review ${i+1}`}
+              <button key={i} onClick={() => goTo(i)} aria-label={`Go to review ${i+1}`}
                 className="p-0 border-none cursor-pointer rounded-full transition-all duration-300"
                 style={{ width:i===current?22:8, height:8, backgroundColor:i===current?accentDG:dotInact, boxShadow:i===current&&isDark?"0 0 8px rgba(74,222,128,0.5)":"none" }}/>
             ))}
@@ -410,7 +372,7 @@ export default function Testimonials() {
             style={{ backgroundColor:accentG, boxShadow:isDark?"0 0 10px rgba(74,222,128,0.5)":"none" }}/>
           <div className="flex flex-col sm:flex-row flex-wrap items-center justify-center gap-3">
             <a href="https://www.facebook.com/profile.php?id=100063877087893" target="_blank" rel="noopener noreferrer"
-              className="fb-glow-border inline-flex items-center justify-center gap-2.5 rounded-full px-7 py-3 text-sm font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-95"
+              className="inline-flex items-center justify-center gap-2.5 rounded-full px-7 py-3 text-sm font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-95"
               style={{ minWidth:160, backgroundColor:"#1877F2", color:"#ffffff", boxShadow:fbGlow }}
               onMouseEnter={e => e.currentTarget.style.boxShadow=fbGlowHov}
               onMouseLeave={e => e.currentTarget.style.boxShadow=fbGlow}>
@@ -418,7 +380,7 @@ export default function Testimonials() {
               Facebook
             </a>
             <a href="https://www.instagram.com/estingsflowershop/" target="_blank" rel="noopener noreferrer"
-              className="ig-glow-border inline-flex items-center justify-center gap-2.5 rounded-full px-7 py-3 text-sm font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-95"
+              className="inline-flex items-center justify-center gap-2.5 rounded-full px-7 py-3 text-sm font-semibold transition-all duration-200 hover:scale-[1.04] active:scale-95"
               style={{ minWidth:160, background:igGradient, color:"#ffffff", boxShadow:igGlow }}
               onMouseEnter={e => e.currentTarget.style.boxShadow=igGlowHov}
               onMouseLeave={e => e.currentTarget.style.boxShadow=igGlow}>
