@@ -70,6 +70,20 @@ export default function Profile({ onNavigate }) {
   const [recentOrders, setRecentOrders] = useState([]);
   const [loadingOrders, setLoadingOrders] = useState(true);
 
+  // Notification preferences (fixes runtime ReferenceError: loadingPrefs is not defined)
+  const [loadingPrefs, setLoadingPrefs] = useState(true);
+  const [prefs, setPrefs] = useState({
+    order_updates: false,
+    promotions: false,
+    chat_messages: false,
+  });
+
+  const handleTogglePref = async (key) => {
+    // Optimistic UI update; backend integration can be added later.
+    setPrefs((prev) => ({ ...prev, [key]: !prev[key] }));
+  };
+
+
   useEffect(() => {
     async function loadRecentOrders() {
       if (!user) return;

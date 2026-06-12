@@ -57,6 +57,7 @@ class Order(Base):
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
     branch_name = Column(String(50), nullable=False, default="Manila")
+    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
 
     # Relationships
     user = relationship("User", back_populates="orders", foreign_keys=[user_id])
@@ -71,9 +72,9 @@ class Transaction(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False, unique=True)
-    payment_method = Column(String(50), nullable=False)
+    payment_method = Column(Enum(PaymentMethodEnum), nullable=False)
     total_amount = Column(Numeric(10, 2), nullable=False)
-    status = Column(String(20), default="pending")
+    status = Column(Enum(PaymentStatusEnum), default=PaymentStatusEnum.pending)
     reference_number = Column(String(255), nullable=True)
     provider = Column(String(50), nullable=False, default="manual")
     provider_checkout_session_id = Column(String(255), nullable=True)

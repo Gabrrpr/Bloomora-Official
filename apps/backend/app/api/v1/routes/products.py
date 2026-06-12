@@ -118,6 +118,7 @@ def get_customization_products(db: Session = Depends(get_db)):
 
     result = []
     for p in products:
+        pid = str(p.id)
         inv = p.inventory
         stock = inv.current_stock if inv else 0
         reorder = inv.reorder_point if inv else 10
@@ -260,6 +261,8 @@ def get_admin_products(
                 "reorder_point": int(inv.get("reorder_point") or 10) if inv else 10,
                 "unit_type": inv.get("unit_type") if inv and inv.get("unit_type") else "piece",
                 "cost_per_unit": float(inv.get("cost_per_unit")) if inv and inv.get("cost_per_unit") is not None else None,
+                "occasions": getattr(p, "occasions", []),
+                "branches": getattr(p, "branches", []),
             })
 
         return result
@@ -354,6 +357,7 @@ def create_product(
     limited_end_at: Optional[str] = Form(None),
     composition: Optional[str] = Form(None),
     occasions: Optional[str] = Form(None),
+    branches: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff), # 🚀 SECURED
 ):
@@ -490,6 +494,11 @@ def update_product(
             product.occasions = json.loads(occasions)
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid occasions JSON format.")
+    if branches is not None:
+        try:
+            product.branches = json.loads(branches)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid branches JSON format.")
 
     if is_visible is not None:
         product.is_visible = is_visible
