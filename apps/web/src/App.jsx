@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { CurrencyProvider } from "./context/CurrencyContext";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import { api } from "./services/api";
 import Navbar from "./components/Navbar";

@@ -3,32 +3,40 @@ import { api } from "../services/api";
 
 const CurrencyContext = createContext(null);
 
-export function CurrencyProvider({ children, userProfile }) {
+export function CurrencyProvider({ children }) {
   const [rates, setRates] = useState({ PHP: 1 });
-  const [currency, setCurrency] = useState("PHP");
+  
+  // 1. Check local storage for their preferred currency, default to PHP
+  const [currency, setCurrency] = useState(() => {
+    return localStorage.getItem("preferred_currency") || "PHP";
+  });
 
-  // Sync state with logged-in user preference
-  useEffect(() => {
-    if (userProfile?.preferred_currency) {
-      setCurrency(userProfile.preferred_currency);
-    }
-  }, [userProfile]);
-
-  // Load live rates from your new FastAPI endpoint on boot
+  // 2. Fetch live exchange rates from your new Python backend when app loads
   useEffect(() => {
     api.get("/config/exchange-rates")
       .then(res => {
-        if (res.success && res.rates) setRates(res.rates);
+        // Handle both raw axios responses or unpacked responses
+        const data = res.data || res;
+        if (data.success && data.rates) {
+          setRates(data.rates);
+        }
       })
       .catch(err => console.error("Failed to load exchange rates:", err));
   }, []);
 
-  // Simple global conversion formatter
+  // 3. Whenever they change currency, remember it in their browser
+  useEffect(() => {
+    localStorage.setItem("preferred_currency", currency);
+  }, [currency]);
+
+  // 4. The global function that converts and formats the price
   const formatPrice = (priceInPHP) => {
+    // If the API hasn't loaded yet, or rate is missing, default to 1
     const rate = rates[currency] || 1;
     const converted = priceInPHP * rate;
 
-    return new Intl.NumberFormat(currency === "PHP" ? "en-PH" : "en-US", {
+    // Automatically format with the correct symbol ($, £, ₱)
+    return new Intl.NumberFormat(undefined, {
       style: "currency",
       currency: currency,
     }).format(converted);
@@ -42,6 +50,3 @@ export function CurrencyProvider({ children, userProfile }) {
 }
 
 export const useCurrency = () => useContext(CurrencyContext);
-
-// Backward-compatible alias for components that import the correct spelling
-export const CurrencyContextAlias = CurrencyContext;
