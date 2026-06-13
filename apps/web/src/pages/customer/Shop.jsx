@@ -564,6 +564,8 @@ export default function Shop({ onNavigate, initialCategory }) {
     return () => window.removeEventListener("bloomora:branch-updated", handleBranchUpdate);
   }, []);
 
+
+
   useEffect(() => {
     if (initialCategory && initialCategory !== "All") {
       setActiveCategory(initialCategory);
@@ -657,19 +659,26 @@ export default function Shop({ onNavigate, initialCategory }) {
       if (!activeTypes || activeTypes.length === 0) return true;
       return activeTypes.map(normalizeCat).includes(normalizeCat(p.product_type || ""));
     })
-    // 🚀 FILTER LAYER: Match selection against the database JSONB array
+    
     .filter(p => {
       if (!selectedLocations || selectedLocations.length === 0) return true;
-      // Convert the product's branches array to lowercase for safe checking
-      const productBranchesNorm = (p.branches || []).map(normalizeCat);
+      
       const selectedLocsNorm = selectedLocations.map(normalizeCat);
       
-      // Keep product if ANY of its branches match ANY of the selected locations
-      return selectedLocsNorm.some(loc => productBranchesNorm.includes(loc));
-    })
-    .filter(p => {
-      if (!selectedLocations || selectedLocations.length === 0) return true;
-      return selectedLocations.map(normalizeCat).includes(normalizeCat(p.shipped_from || ""));
+      // 1. Get branches (ensure it's an array) 
+      const branches = Array.isArray(p.branches) ? p.branches : [];
+      
+      // 2. Get shipped_from (handle null/undefined)
+      const shippedFrom = p.shipped_from || "";
+
+      // 3. Create a unified list of all location sources for this product
+      const productLocations = [...branches, shippedFrom].map(normalizeCat);
+
+      // DEBUG: Uncomment the line below to see what the system "sees" for each product
+      // console.log(`Checking ${p.name}: locations found =`, productLocations);
+
+      // 4. Return true if ANY of the selected locations match ANY of the product's locations
+      return selectedLocsNorm.some(loc => productLocations.includes(loc));
     })
     .filter(p => p.price >= priceRange[0] && p.price <= priceRange[1])
     .sort((a, b) => {

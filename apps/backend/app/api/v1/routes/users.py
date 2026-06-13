@@ -146,6 +146,10 @@ def create_staff(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
+    # 🚀 FIX: Use dot notation with the exact schema property names
+    phone_input = payload.phone_number
+    email_input = payload.email
+    
     """Create a new staff/admin/delivery account. Generates an invite link."""
 
     try: role_enum = RoleEnum(payload.role.lower())
@@ -153,7 +157,16 @@ def create_staff(
 
     if role_enum == RoleEnum.customer:
         raise HTTPException(status_code=400, detail="Use customer registration for customer accounts.")
-
+    
+    # 🚀 This duplicate check will now work perfectly
+    if phone_input:
+        existing_phone = db.query(User).filter(User.phone_number == phone_input).first()
+        if existing_phone:
+            raise HTTPException(
+                status_code=400, 
+                detail="This phone number is already registered to another account."
+            )
+            
     branch_enum = None
     if payload.branch:
         try: branch_enum = BranchEnum(payload.branch.lower())
@@ -188,15 +201,21 @@ def create_staff(
         staff_token_expires_at=expires_at,
     )
 
+    # 1. Add the user to the session (but DON'T commit yet)
     db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
-
+    
+    # 2. Try to send the email FIRST
     verify_url = f"http://localhost:5173/activate-staff?token={token}"
     sent, error = send_staff_confirm_email(payload.email, payload.first_name, verify_url)
     
     if not sent:
-        raise HTTPException(status_code=500, detail=f"Failed to send confirmation email: {error}")
+        # 🚀 THE FIX: If the email fails, rollback the database so no duplicate is left behind!
+        db.rollback() 
+        raise HTTPException(status_code=400, detail=f"Failed to send invite email. Please check if the email address is valid.")
+
+    # 3. Only if the email was sent successfully, permanently save to the database
+    db.commit()
+    db.refresh(new_user)
 
     return {"status": "success", "user_id": str(new_user.id), "message": "Staff invited successfully."}
 

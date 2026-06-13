@@ -575,46 +575,44 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             </div>
           </div>
 
-          {/* 🚀 OCCASIONS SELECTION GRID */}
-          <div className="mt-4 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
-            <MLabel d={d}>Occasions (Optional)</MLabel>
-            <p className="text-xs mb-3" style={{ color: d.subC }}>
-              Select all occasions this product is suitable for.
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {OCCASIONS_LIST.map((occ) => (
-                <label key={occ} className="flex items-center space-x-2 cursor-pointer p-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                  <input 
-                    type="checkbox" 
-                    checked={form.occasions.includes(occ)}
-                    onChange={() => toggleOccasion(occ)}
-                    className="rounded text-green-600 focus:ring-green-500 bg-white border-gray-300"
-                  />
-                  <span className="text-xs font-medium" style={{ color: d.cellC }}>{occ}</span>
-                </label>
-              ))}
-            </div>
+          {/* OCCASIONS SELECTION GRID */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {OCCASIONS_LIST.map((occ) => (
+              <label 
+                key={occ} 
+                className="flex items-center space-x-2 cursor-pointer p-1.5 rounded transition-colors"
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = d.rowHov}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+              >
+                <input 
+                  type="checkbox" 
+                  checked={form.occasions.includes(occ)}
+                  onChange={() => toggleOccasion(occ)}
+                  className="rounded text-green-600 focus:ring-green-500 bg-white border-gray-300"
+                />
+                <span className="text-xs font-medium" style={{ color: d.cellC }}>{occ}</span>
+              </label>
+            ))}
           </div>
 
-          {/* 🚀 BRANCHES SELECTION GRID */}
-          <div className="mt-4 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
-            <MLabel d={d}>Available Branches <span style={{ color:"#f87171" }}>*</span></MLabel>
-            <p className="text-xs mb-3" style={{ color: d.subC }}>
-              Select which fulfillment centers carry this product.
-            </p>
-            <div className="grid grid-cols-2 gap-2">
-              {["Manila", "Pampanga"].map((branch) => (
-                <label key={branch} className="flex items-center space-x-2 cursor-pointer p-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                  <input 
-                    type="checkbox" 
-                    checked={form.branches.includes(branch)}
-                    onChange={() => toggleBranch(branch)}
-                    className="rounded text-green-600 focus:ring-green-500 bg-white border-gray-300"
-                  />
-                  <span className="text-xs font-medium" style={{ color: d.cellC }}>{branch}</span>
-                </label>
-              ))}
-            </div>
+          {/* BRANCHES SELECTION GRID */}
+          <div className="grid grid-cols-2 gap-2">
+            {["Manila", "Pampanga"].map((branch) => (
+              <label 
+                key={branch} 
+                className="flex items-center space-x-2 cursor-pointer p-1.5 rounded transition-colors"
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = d.rowHov}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+              >
+                <input 
+                  type="checkbox" 
+                  checked={form.branches.includes(branch)}
+                  onChange={() => toggleBranch(branch)}
+                  className="rounded text-green-600 focus:ring-green-500 bg-white border-gray-300"
+                />
+                <span className="text-xs font-medium" style={{ color: d.cellC }}>{branch}</span>
+              </label>
+            ))}
           </div>
 
           <div className="mt-6 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
@@ -891,6 +889,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
       fd.append("price", String(form.price));
       fd.append("status", (form.status || "active").toLowerCase());
       fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false");
+      fd.append("branches", JSON.stringify(form.branches));
       if (form.description) fd.append("description", form.description.trim());
       if (form.image_url) fd.append("image_url", form.image_url);
       fd.append("stock", String(form.stock));
@@ -905,7 +904,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
       if (form.occasions.length > 0) fd.append("occasions", JSON.stringify(form.occasions));
       
       // 🚀 APPPEND BRANCHES TO THE PUT REQUEST
-      if (form.branches.length > 0) fd.append("branches", JSON.stringify(form.branches));
+      if (form.branches.length >= 0) fd.append("branches", JSON.stringify(form.branches));
 
       const res = await api.updateProduct(product.id, fd);
       onSave(res.product); 
@@ -1092,25 +1091,24 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             </div>
           </div>
 
-          {/* 🚀 OCCASIONS SELECTION GRID */}
-          <div className="mt-4 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
-            <MLabel d={d}>Occasions (Optional)</MLabel>
-            <p className="text-xs mb-3" style={{ color: d.subC }}>
-              Select all occasions this product is suitable for.
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              {OCCASIONS_LIST.map((occ) => (
-                <label key={occ} className="flex items-center space-x-2 cursor-pointer p-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
-                  <input 
-                    type="checkbox" 
-                    checked={form.occasions.includes(occ)}
-                    onChange={() => toggleOccasion(occ)}
-                    className="rounded text-green-600 focus:ring-green-500 bg-white border-gray-300"
-                  />
-                  <span className="text-xs font-medium" style={{ color: d.cellC }}>{occ}</span>
-                </label>
-              ))}
-            </div>
+          {/* OCCASIONS SELECTION GRID */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            {OCCASIONS_LIST.map((occ) => (
+              <label 
+                key={occ} 
+                className="flex items-center space-x-2 cursor-pointer p-1.5 rounded transition-colors"
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = d.rowHov}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+              >
+                <input 
+                  type="checkbox" 
+                  checked={form.occasions.includes(occ)}
+                  onChange={() => toggleOccasion(occ)}
+                  className="rounded text-green-600 focus:ring-green-500 bg-white border-gray-300"
+                />
+                <span className="text-xs font-medium" style={{ color: d.cellC }}>{occ}</span>
+              </label>
+            ))}
           </div>
 
           {/* 🚀 BRANCHES SELECTION GRID */}
@@ -1121,7 +1119,13 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             </p>
             <div className="grid grid-cols-2 gap-2">
               {["Manila", "Pampanga"].map((branch) => (
-                <label key={branch} className="flex items-center space-x-2 cursor-pointer p-1.5 rounded hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors">
+                <label 
+                  key={branch} 
+                  className="flex items-center space-x-2 cursor-pointer p-1.5 rounded transition-colors"
+                  // 🚀 Use the theme token for consistent, visible hover states
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = d.rowHov}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                >
                   <input 
                     type="checkbox" 
                     checked={form.branches.includes(branch)}

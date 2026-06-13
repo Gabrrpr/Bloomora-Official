@@ -11,7 +11,7 @@ from PIL import Image
 from supabase import create_client, Client
 from app.core.config import settings
 from app.core.dependencies import get_db, get_current_user, require_staff
-from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum, Review, Order
+from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum, Review, Order, ProductRecipe
 
 router = APIRouter()
 
@@ -27,7 +27,6 @@ def serialize_product(p: Product) -> dict:
         "name": p.name,
         "description": p.description,
         "price": float(p.price) if p.price else 0,
-        "original_price": float(p.price) * 1.2 if p.price else 0,
         "product_group": p.product_group, 
         "product_type": p.product_type,  
         "category": p.category, 
@@ -97,8 +96,9 @@ def get_products(db: Session = Depends(get_db)):
         "limited_start_at": p.limited_start_at.isoformat() if p.limited_start_at else None,
         "limited_end_at": p.limited_end_at.isoformat() if p.limited_end_at else None,
         "occasions": getattr(p, "occasions", []),
-        
+        "branches": getattr(p, "branches", []),
     } for p in products]
+
 
 @router.get("/customization/all", response_model=List[dict])
 def get_customization_products(db: Session = Depends(get_db)):
@@ -171,7 +171,7 @@ def get_category_hierarchy(db: Session = Depends(get_db)):
     """Get dynamic category hierarchy grouped by Floral/Non-Floral for Navbars."""
     products = db.query(Product).filter(Product.is_available == True).all()
     hierarchy_dict = {}
-    NON_FLORAL_CATS = ["wrapping", "accessory", "vase", "tools"]
+    NON_FLORAL_CATS = ["wrapping", "accessory", "vase", "tools", "pot", "pot fillers", "candles"]
 
     for p in products:
         cat = (p.category or "").lower().strip()
@@ -183,7 +183,7 @@ def get_category_hierarchy(db: Session = Depends(get_db)):
             if cat in NON_FLORAL_CATS:
                 group = "non-floral"
             else:
-                group = "floral"
+                group = (p.product_group or "uncategorized").lower().strip()
 
         if group not in hierarchy_dict:
             hierarchy_dict[group] = set()
@@ -250,7 +250,6 @@ def get_admin_products(
                 "name": p.name,
                 "description": p.description,
                 "price": float(p.price) if p.price else 0,
-                "original_price": float(p.price) * 1.2 if p.price else 0,
                 "category": p.category.value if hasattr(p.category, "value") else p.category,
                 "image_url": p.image_url,
                 "is_available": p.is_available,
@@ -391,7 +390,21 @@ def create_product(
         try:
             parsed_branches = json.loads(branches)
         except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid branches JSON.")
+              raise HTTPException(status_code=400, detail="Invalid branches JSON.")
+    
+    if parsed_comp:
+        for item in parsed_comp:
+            comp_id = item.get("id")
+            # Support both 'qty' and 'quantity' depending on your React frontend
+            qty = item.get("qty") or item.get("quantity") or 1 
+            
+            if comp_id:
+                new_recipe_link = ProductRecipe(
+                    parent_product_id=new_product.id,
+                    component_product_id=comp_id,
+                    quantity_required=qty
+                )
+                db.add(new_recipe_link)
 
     new_product = Product(
         id=uuid.uuid4(),
@@ -407,19 +420,20 @@ def create_product(
         season_key=season_key or None,
         limited_start_at=(limited_start_at or None),
         limited_end_at=(limited_end_at or None),
-        composition=parsed_comp, # 👈 NEW: Save to database
+        composition=parsed_comp, # Keeping the "sticky note" for fast UI display
+        branches=parsed_branches,
     )
     db.add(new_product)
-    db.commit()
-    db.refresh(new_product)
+    db.flush()
 
     inventory = Inventory(
         product_id=new_product.id,
-        current_stock=stock,
+        current_stock=0,
         reorder_point=10,
     )
     db.add(inventory)
     db.commit()
+    db.refresh(new_product)
 
     return {"status": "success", "product": serialize_product(new_product)}
 
@@ -486,9 +500,26 @@ def update_product(
         product.limited_end_at = limited_end_at or None
     if composition is not None: 
         try:
-            product.composition = json.loads(composition)
+            parsed_comp = json.loads(composition)
+            product.composition = parsed_comp # Update the sticky note
+            
+            # 🚀 UPDATE THE ENGINE: Clear the old recipe and insert the new one
+            db.query(ProductRecipe).filter(ProductRecipe.parent_product_id == product.id).delete()
+            
+            for item in parsed_comp:
+                comp_id = item.get("id")
+                qty = item.get("qty") or item.get("quantity") or 1
+                
+                if comp_id:
+                    new_recipe_link = ProductRecipe(
+                        parent_product_id=product.id,
+                        component_product_id=comp_id,
+                        quantity_required=qty
+                    )
+                    db.add(new_recipe_link)
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid composition JSON format.")
+        
     if occasions is not None:
         try:
             product.occasions = json.loads(occasions)
@@ -496,7 +527,13 @@ def update_product(
             raise HTTPException(status_code=400, detail="Invalid occasions JSON format.")
     if branches is not None:
         try:
-            product.branches = json.loads(branches)
+            # 1. Parse the JSON string sent from the frontend
+            parsed_branches = json.loads(branches) 
+            
+            # 2. Assign it to the product object
+            product.branches = parsed_branches 
+            
+            print(f"DEBUG: Saving branches for {product.name}: {parsed_branches}")
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid branches JSON format.")
 

@@ -136,6 +136,12 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
 
 
 def send_staff_confirm_email(to_email: str, first_name: str, verify_url: str):
+    # 🚀 THE FIX: Print the link directly to your terminal for easy clicking!
+    print(f"\n{'='*60}")
+    print(f"🔔 [DEV MODE] STAFF ACTIVATION LINK FOR: {to_email}")
+    print(f"👉 CLICK HERE: {verify_url}")
+    print(f"{'='*60}\n")
+
     try:
         greeting = f"Hi {first_name},"
         html = f"""

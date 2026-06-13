@@ -349,7 +349,19 @@ function AddStaffForm({ onBack, onCreated }) {
                     style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt, width:"70px" }}>
                     <option>+63</option>
                   </select>
-                  <div className="flex-1"><FInput placeholder="Phone number" value={f.phone} onChange={s("phone")} error={errors.phone} d={d}/></div>
+                  <div className="flex-1">
+                    {/* 🚀 FIXED: Instantly strips letters, preventing them from being typed */}
+                    <FInput 
+                      placeholder="Phone number" 
+                      value={f.phone} 
+                      onChange={val => {
+                        const onlyNums = val.replace(/[^0-9]/g, '');
+                        s("phone")(onlyNums);
+                      }} 
+                      error={errors.phone} 
+                      d={d}
+                    />
+                  </div>
                 </div>
               </div>
             </div>
@@ -550,7 +562,18 @@ function EditStaffModal({ staff, onClose, onSaved }) {
           </div>
           <div><FL d={d}>Middle name</FL><FInput placeholder="Middle name" value={form.middle_name} onChange={set("middle_name")} d={d}/></div>
           <div><FL d={d}>Email</FL><FInput type="email" placeholder="Email" value={form.email} onChange={set("email")} d={d}/></div>
-          <div><FL d={d}>Phone</FL><FInput placeholder="Phone number" value={form.phone_number} onChange={set("phone_number")} d={d}/></div>
+          <div>
+            <FL d={d}>Phone</FL>
+            <FInput 
+              placeholder="Phone number" 
+              value={form.phone_number} 
+              onChange={val => {
+                const onlyNums = val.replace(/[^0-9]/g, '');
+                set("phone_number")(onlyNums);
+              }} 
+              d={d}
+            />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <div><FL d={d}>Role</FL><FSel options={["Admin","Staff","Delivery"]} value={form.role} onChange={set("role")} placeholder="Select role" d={d}/></div>
             <div><FL d={d}>Branch</FL><FSel options={["Manila","Pampanga"]} value={form.branch} onChange={set("branch")} placeholder="Select branch" d={d}/></div>

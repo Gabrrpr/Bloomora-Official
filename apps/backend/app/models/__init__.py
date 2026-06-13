@@ -1,7 +1,7 @@
 from .base import Base
 from .user import User, RoleEnum, BranchEnum
 from .address import Address
-from .product import Product, Inventory, Discount, ProductStatusEnum
+from .product import Product, Inventory, Discount, ProductStatusEnum, ProductRecipe, PromoCode
 from .order import Order, Transaction, Delivery, OrderStatusEnum, PaymentMethodEnum, PaymentStatusEnum, DeliveryStatusEnum
 from .arrangement import Arrangement, Flower, Vase, Wrapping, Accessory
 from .campaigns import Campaign, product_campaigns

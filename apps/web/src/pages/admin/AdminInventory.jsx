@@ -132,8 +132,9 @@ function AddItemForm({ onBack, onSaveSuccess, isDark, initialData }) {
     sku: initialData?.sku || initialData?.id?.slice(0, 8) || "", 
     category: initialData?.category || "", 
     unit: initialData?.unit_type || "", 
+    stock: initialData?.stock || "",
     branch: "", // Add to your DB if needed
-    stock: initialData?.stock ?? "", 
+    stock: initialData?.stock ?? "0", 
     reorderLevel: initialData?.reorder_point ?? "", 
     costPerUnit: initialData?.cost_per_unit ?? "", 
     status: "" 
@@ -154,6 +155,9 @@ function AddItemForm({ onBack, onSaveSuccess, isDark, initialData }) {
       if (f.stock !== "") formData.append("stock", parseInt(f.stock) || 0);
       if (f.reorderLevel !== "") formData.append("reorder_point", parseInt(f.reorderLevel) || 10);
       if (f.costPerUnit !== "") formData.append("cost_per_unit", parseFloat(f.costPerUnit) || 0.00);
+      if (!isEditing){
+        formData.append("stock", 0)
+      }
       
       // Map the frontend status to the backend's expected "active"/"inactive"
       const statusMap = { "Active": "active", "Low Stock": "active", "Out of Stock": "active", "Discontinued": "inactive" };
@@ -207,15 +211,15 @@ function AddItemForm({ onBack, onSaveSuccess, isDark, initialData }) {
                 type="number" 
                 placeholder="0" 
                 value={f.stock} 
-                onChange={s("stock")} 
-                disabled={isEditing} // 🚀 Disables if we are editing an existing item
+                onChange={() => {}}
+                disabled={true} // 🚀 Disables if we are editing an existing item
                 isDark={isDark} 
               />
-              {isEditing && (
-                <p className="text-[10px] mt-1 text-amber-600 italic">
-                  To update stock, use the "Invoice" button on the main inventory page.
-                </p>
-              )}
+              <p className="text-[10px] mt-1 text-amber-600 italic">
+                {isEditing 
+                  ? 'To update stock, use the "Invoice" button on the main page.'
+                  : 'New items start at 0 stock. Use "Invoice" to log deliveries.'}
+              </p>
             </div>
             <div><FL isDark={isDark}>Reorder Level</FL><FInput type="number" placeholder="10" value={f.reorderLevel} onChange={s("reorderLevel")} isDark={isDark} /></div>
           </div>
@@ -732,8 +736,28 @@ export default function AdminInventory() {
     setLoading(true)
     try { 
       const data = await api.get("/products/admin/all"); 
-      // 🚀 ONLY keep items that are not 'inactive'
-      const activeItems = (data || []).filter(item => item.status !== 'inactive');
+      
+      const activeItems = (data || []).filter(item => {
+        // 1. Hide inactive items
+        if (item.status === 'inactive') return false;
+        
+        // 2. 🚀 THE FIX: Bulletproof string matching
+        const cat = (item.category || "").toLowerCase();
+        const type = (item.product_type || "").toLowerCase();
+        const group = (item.product_group || "").toLowerCase();
+        
+        // If ANY of these fields contain the word "bouquet" or "arrangement", hide it!
+        if (
+          cat.includes("bouquet") || cat.includes("arrangement") ||
+          type.includes("bouquet") || type.includes("arrangement") ||
+          group.includes("bouquet") || group.includes("arrangement")
+        ) {
+          return false;
+        }
+        
+        return true; // Keep the raw materials (roses, vases, ribbons)
+      });
+      
       setInventory(activeItems); 
     }
     catch (err) { console.error("Failed to load inventory:", err) }

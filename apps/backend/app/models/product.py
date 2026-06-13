@@ -24,6 +24,7 @@ class Product(Base):
     product_group = Column(String(50), nullable=False)
     category = Column(String(100), nullable=False, index=True)
     product_type = Column(String(100), nullable=True, index=True)
+    branches = Column(JSONB, default=[])
     
     # ─── ✨ NEW SEASONAL FIELDS ✨ ───
     # The name of the season (e.g., "valentines", "mothers_day")
@@ -42,10 +43,10 @@ class Product(Base):
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
     is_visible = Column(Boolean, default=True)
     occasions = Column(JSONB, default=[])
+    composition = Column(JSONB, default=[])
 
     
     # Relationships (Unchanged)
-    composition = Column(JSONB, default=[])
     inventory = relationship("Inventory", back_populates="product", uselist=False, cascade="all, delete-orphan")
     reviews = relationship("Review", back_populates="product")
     order_items = relationship("Order", back_populates="product")
@@ -55,6 +56,7 @@ class Product(Base):
     discounts = relationship("Discount", back_populates="product")
     campaigns = relationship("Campaign", secondary="product_campaigns", back_populates="products")
     order_items = relationship("OrderItem", back_populates="product", cascade="all, delete-orphan")
+    components = relationship("ProductRecipe", foreign_keys="[ProductRecipe.parent_product_id]", cascade="all, delete-orphan")
     
 
 
@@ -88,3 +90,42 @@ class Discount(Base):
 
     # Relationships
     product = relationship("Product", back_populates="discounts")
+    
+    
+# Paste this at the bottom of the file where your Product class is:
+
+class ProductRecipe(Base):
+    __tablename__ = "product_recipes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    parent_product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    component_product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    
+    quantity_required = Column(Numeric(10, 2), nullable=False)
+    
+    # 🚀 FIXED: Changed from server_default=func.now() to match your project's pattern
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    # Relationships
+    parent_product = relationship("Product", foreign_keys=[parent_product_id], backref="recipe_items")
+    component_product = relationship("Product", foreign_keys=[component_product_id])
+    
+class PromoCode(Base):
+    __tablename__ = "promo_codes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # The actual string they type at checkout (e.g., "SUMMER20")
+    code = Column(String(50), unique=True, nullable=False, index=True) 
+    
+    # 'percent' or 'fixed'
+    discount_type = Column(String(20), nullable=False) 
+    discount_value = Column(Numeric(10, 2), nullable=False)
+    
+    # Optional threshold to trigger the discount
+    min_spend = Column(Numeric(10, 2), default=0) 
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)

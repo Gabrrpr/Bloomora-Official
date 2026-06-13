@@ -708,7 +708,13 @@ function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading }) {
       {/* Desktop: draggable split */}
       <div ref={containerRef} className="hidden xl:flex items-stretch gap-0" style={{ position: "relative" }}>
         <div style={{ width: `${leftPct}%`, minWidth: 0, flexShrink: 0 }}>
-          <RecentOrdersCard branch={branch} t={t} />
+          {/* 🚀 FIXED: Added orders and loading props */}
+          <RecentOrdersCard 
+            branch={branch} 
+            t={t} 
+            orders={recentOrders} 
+            loading={recentLoading} 
+          />
         </div>
         <div
           onMouseDown={onMouseDown}
@@ -739,6 +745,8 @@ function DashboardPanel({ user }) {
   const [ordersToday, setOrdersToday] = useState(0);
   const [pendingOrders, setPendingOrders] = useState(0);
   const [revenueToday, setRevenueToday] = useState(0);
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [recentLoading, setRecentLoading] = useState(true);
 
   // 3. Fetch Live Data
   useEffect(() => {
@@ -758,6 +766,19 @@ function DashboardPanel({ user }) {
         setPendingOrders(d?.pending_orders || 0);
       })
       .catch(err => console.error("Summary Fetch Error:", err));
+
+
+      setRecentLoading(true);
+    // Format branch exactly how your AdminOrders page formats it
+    const branchParam = branch === "all" ? "All Branches" : branch; 
+    
+    api.getAdminOrders({ branch: branchParam, limit: 5 })
+      .then(data => {
+        // Grab just the first 5 orders so we don't overload the dashboard
+        setRecentOrders(Array.isArray(data) ? data.slice(0, 5) : []);
+      })
+      .catch(err => console.error("Recent Orders Fetch Error:", err))
+      .finally(() => setRecentLoading(false));
   }, [branch]);
 
   const branchLabel = branch === "all" ? "All Branches" : branch.charAt(0).toUpperCase() + branch.slice(1);
@@ -1012,7 +1033,12 @@ function DashboardPanel({ user }) {
           <RevenueChart branch={branch} />
           
           {/* Here are your missing Recent Orders and Low Stock cards! */}
-          <DraggablePanelRow branch={branch} lowStock={lowStock} />
+          <DraggablePanelRow 
+            branch={branch} 
+            lowStock={lowStock} 
+            recentOrders={recentOrders}    
+            recentLoading={recentLoading}  
+          />
         </div>
       </div>
 
@@ -1634,12 +1660,17 @@ function SidebarContent({ active, setActive, collapsed, onLogout, user }) {
 
       <nav className="flex-1 py-2 px-2 overflow-y-auto">
         <div className="space-y-0.5">
-          {NAV_MAIN.map(item => <NavBtn key={item.label} item={item} active={active} setActive={setActive} collapsed={collapsed} user={user} />)}
+          {/* 🚀 ADDED FILTER: Only show items the user is allowed to see */}
+          {NAV_MAIN
+            .filter(item => !user?.role || user.role !== "staff" || item.staff)
+            .map(item => (
+              <NavBtn key={item.label} item={item} active={active} setActive={setActive} collapsed={collapsed} user={user} />
+          ))}
         </div>
         {/* Appearance pages collapse into one fan-out trigger */}
         <div className="space-y-0.5 mt-3">
           <AppearanceFlyout
-            items={NAV_APPEARANCE}
+            items={NAV_APPEARANCE.filter(item => !user?.role || user.role !== "staff" || item.staff !== false)}
             active={active}
             setActive={setActive}
             collapsed={collapsed}
