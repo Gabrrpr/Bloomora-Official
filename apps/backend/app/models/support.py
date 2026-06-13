@@ -38,6 +38,8 @@ class Chat(Base):
     image_url = Column(Text, nullable=True)             # URL to attached image
     is_read = Column(Integer, default=0)                # 0 = unread, 1 = read
     created_at = Column(DateTime(timezone=True), default=now_utc)
+    context_id = Column(String(255), nullable=True)
+    
 
     # Relationships
     user = relationship("User", back_populates="chats")

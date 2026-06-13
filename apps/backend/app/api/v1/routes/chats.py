@@ -32,6 +32,8 @@ def serialize_chat(msg: Chat) -> dict:
         "image_url": msg.image_url,
         "is_read": msg.is_read,
         "created_at": msg.created_at,
+        # 🚀 ADDED CONTEXT SUPPORT
+        "context_id": getattr(msg, "context_id", None) 
     }
 
 
@@ -65,7 +67,7 @@ async def upload_chat_image(
         # Read file bytes
         file_bytes = await file.read()
         
-        # 🚀 Upload directly to Supabase cloud storage
+        # Upload directly to Supabase cloud storage
         supabase_admin.storage.from_("chat_images").upload(
             path=filename,
             file=file_bytes,
@@ -75,7 +77,6 @@ async def upload_chat_image(
         # Get the permanent public https://... URL
         public_url = supabase_admin.storage.from_("chat_images").get_public_url(filename)
         
-        # Return the actual cloud URL instead of a local folder path
         return {"image_url": public_url}
         
     except Exception as e:
@@ -91,7 +92,6 @@ def delete_chat_message(
     """Delete a specific chat message."""
     from app.models import Chat 
     
-    # 🛡️ SECURITY FIX: Safely parse UUID to prevent 500 Server Crashes
     import uuid
     try:
         valid_msg_id = uuid.UUID(message_id)
@@ -102,7 +102,6 @@ def delete_chat_message(
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
         
-    # Security Check: Staff can delete anything, Customers can only delete their own
     is_staff = current_user.role in [RoleEnum.admin, RoleEnum.staff]
     if not is_staff and str(msg.user_id) != str(current_user.id):
         raise HTTPException(status_code=403, detail="You can only delete your own messages.")
@@ -130,7 +129,9 @@ async def create_message(
         message=message.text,
         sender=sender,
         image_url=message.image_url,
-        is_read=0
+        is_read=0,
+        # 🚀 SAVES THE ORDER/PRODUCT CONTEXT IF PASSED
+        context_id=getattr(message, "context_id", None)
     )
     db.add(new_message)
     db.commit()
@@ -144,23 +145,21 @@ async def create_message(
         "image_url": new_message.image_url,
         "sender": sender,
         "created_at": new_message.created_at.isoformat(),
-        "is_read": new_message.is_read
+        "is_read": new_message.is_read,
+        "context_id": getattr(new_message, "context_id", None)
     }
 
     if sender == 'customer':
-        # Echo back to the customer
         try:
             await manager.send_to_user(str(message.user_id), payload)
         except Exception as e:
             print(f"❌ HTTP-WS Customer Echo Error: {e}")
 
-        # Notify all connected staff
         try:
             await manager.broadcast_to_staff(payload)
         except Exception as e:
             print(f"❌ HTTP-WS Staff Broadcast Error: {e}")
     else:
-        # Staff replied — notify only the customer
         try:
             await manager.send_to_user(str(message.user_id), payload)
         except Exception as e:
@@ -211,22 +210,20 @@ def get_all_conversations(
             recent_orders = db.query(Order).filter(Order.user_id == customer_id)\
                 .order_by(desc(Order.created_at)).limit(3).all()
 
-            # Build recent_orders safely with defensive checks
             orders_list = []
             for o in recent_orders:
                 try:
-                    # Safely get product/arrangement names with defensive checks
                     product_name = "Custom"
                     if o.product_id and o.product:
                         try:
                             product_name = o.product.name
                         except Exception:
-                            product_name = "Custom"
+                            pass
                     elif o.arrangement_id and o.arrangement:
                         try:
                             product_name = o.arrangement.name
                         except Exception:
-                            product_name = "Custom"
+                            pass
                     
                     orders_list.append({
                         "order_number": f"ORD-{o.id.hex[:8].upper()}",
@@ -235,19 +232,20 @@ def get_all_conversations(
                         "total_amount": float(o.total_amount)
                     })
                 except Exception as e:
-                    # Skip this order but don't break the entire conversation list
                     print(f"Error processing order {o.id}: {e}")
                     continue
 
+            # 🚀 ADDED: user_avatar fetch
             conversations.append(ConversationOut(
                 customer_id=UUID(customer_id),
                 user_name=f"{customer.first_name or ''} {customer.last_name or ''}".strip() or customer.username,
+                user_avatar=getattr(customer, "avatars", None),
                 unread_count=unread_count,
                 last_message=recent_message.message if recent_message else "",
-                recent_orders=orders_list
+                recent_orders=orders_list,
+                last_message_time=recent_message.created_at if recent_message else None
             ))
         except Exception as e:
-            # Log the error but continue processing other conversations
             print(f"Error building conversation for user {u_id[0]}: {e}")
             continue
 
@@ -280,7 +278,6 @@ async def websocket_endpoint(
 ):
     print(f"\n--- 🔌 NEW WS CONNECTION ATTEMPT --- ID: {user_id}")
     
-    # 🛡️ USE YOUR ACTUAL DECODE FUNCTION
     payload = decode_token(token, expected_type="access")
     
     if not payload:
@@ -291,7 +288,6 @@ async def websocket_endpoint(
     try:
         token_user_id = payload.get("sub")
         
-        # Prevent users from listening to other people's sockets
         if token_user_id != user_id and payload.get("role") not in ["admin", "staff"]:
             print("❌ WebSocket Auth Failed: ID mismatch (IDOR attempt)")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
@@ -299,9 +295,10 @@ async def websocket_endpoint(
             
     except Exception as e:
         print(f"❌ WebSocket Auth Failed: {e}")
-        await websock
+        # 🚀 FIXED: Completed the broken syntax line here!
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
 
-    # Safely convert the string to a UUID object
     try:
         from uuid import UUID
         valid_uuid = UUID(user_id)
@@ -310,14 +307,12 @@ async def websocket_endpoint(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    # Check the role
     is_staff = False
     if user:
         role_val = user.role.value if hasattr(user.role, 'value') else str(user.role)
         if role_val.lower() in ['admin', 'staff', 'roleenum.admin', 'roleenum.staff']:
             is_staff = True
 
-    # Connect to the manager
     await manager.connect(websocket, user_id, is_staff=is_staff)
 
     try:
@@ -335,4 +330,3 @@ async def websocket_endpoint(
                 
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)
-
