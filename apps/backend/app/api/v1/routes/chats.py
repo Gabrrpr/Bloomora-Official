@@ -239,7 +239,7 @@ def get_all_conversations(
             conversations.append(ConversationOut(
                 customer_id=UUID(customer_id),
                 user_name=f"{customer.first_name or ''} {customer.last_name or ''}".strip() or customer.username,
-                user_avatar=getattr(customer, "avatars", None),
+                user_avatar=getattr(customer, "profile_picture_url", None),
                 unread_count=unread_count,
                 last_message=recent_message.message if recent_message else "",
                 recent_orders=orders_list,

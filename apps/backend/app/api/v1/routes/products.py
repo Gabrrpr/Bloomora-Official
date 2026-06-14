@@ -646,3 +646,26 @@ def get_product(product_id: str, db: Session = Depends(get_db)):
         "is_available": product.is_available,
         "status": product.status.value if hasattr(product.status, "value") else product.status,
     }
+    
+    
+@router.get("/search")
+def search_products(q: str = "", db: Session = Depends(get_db)):
+    """Smart Content-Based Search Algorithm"""
+    if not q:
+        return []
+
+    # Make the search query lowercase for matching
+    search_term = f"%{q.lower()}%"
+
+    # The Algorithm: Look for the word in the Name, Category, Description, or Tags
+    results = db.query(Product).filter(
+        or_(
+            func.lower(Product.name).ilike(search_term),
+            func.lower(Product.category).ilike(search_term),
+            func.lower(Product.description).ilike(search_term),
+            # Cast JSONB tags to text to search inside it easily
+            func.cast(Product.tags, sqlalchemy.String).ilike(search_term) 
+        )
+    ).all()
+    
+    return results

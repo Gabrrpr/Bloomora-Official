@@ -20,18 +20,15 @@ class Product(Base):
     description = Column(Text, nullable=True)
     price = Column(Numeric(10, 2), nullable=False)
     
-    # 👇 CHANGED: Now a String to support any custom or seasonal categories
+    
     product_group = Column(String(50), nullable=False)
     category = Column(String(100), nullable=False, index=True)
     product_type = Column(String(100), nullable=True, index=True)
     branches = Column(JSONB, default=[])
     
-    # ─── ✨ NEW SEASONAL FIELDS ✨ ───
-    # The name of the season (e.g., "valentines", "mothers_day")
-    # This will be used to generate the Navbar button text.
     season_key = Column(String(100), nullable=True, index=True)
     
-    # The time window for the seasonal button to be visible
+ 
     limited_start_at = Column(DateTime(timezone=True), nullable=True)
     limited_end_at = Column(DateTime(timezone=True), nullable=True)
     # ──────────────────────────────────
@@ -57,6 +54,7 @@ class Product(Base):
     campaigns = relationship("Campaign", secondary="product_campaigns", back_populates="products")
     order_items = relationship("OrderItem", back_populates="product", cascade="all, delete-orphan")
     components = relationship("ProductRecipe", foreign_keys="[ProductRecipe.parent_product_id]", cascade="all, delete-orphan")
+    tags = Column(JSONB, default=[])
     
 
 
