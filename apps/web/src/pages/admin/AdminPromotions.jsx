@@ -1,15 +1,15 @@
 import { useState, useEffect, useMemo, useRef } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { loadVouchers, saveVouchers } from "../../utils/vouchers.js"
+import { api } from "../../services/api.js"
 
 const DG = "#0C573E"
 const G  = "#2E8B34"
 
 // Customer notifications live here (read by the navbar bell).
 const ANNOUNCE_KEY = "bloomora_announcements"
-const ANNOUNCE_KEY_LEGACY = "bloomora_announcement" // old single-object key, migrated on load
+const ANNOUNCE_KEY_LEGACY = "bloomora_announcement" 
 
-// Returns an array of { id, emoji, image, text, active }
 function loadAnnouncements() {
   try {
     const raw = localStorage.getItem(ANNOUNCE_KEY)
@@ -17,7 +17,6 @@ function loadAnnouncements() {
       const arr = JSON.parse(raw)
       if (Array.isArray(arr)) return arr.map(a => ({ id: a.id ?? Date.now() + Math.random(), emoji: a.emoji || "", image: a.image || "", text: a.text || "", active: a.active !== false }))
     }
-    // Migrate the old single-announcement object if present
     const legacy = localStorage.getItem(ANNOUNCE_KEY_LEGACY)
     if (legacy) {
       const a = JSON.parse(legacy)
@@ -27,7 +26,6 @@ function loadAnnouncements() {
   return []
 }
 
-// Downscale + compress an uploaded image so several fit inside localStorage.
 function compressImage(file, maxDim = 400, quality = 0.8) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader()
@@ -57,14 +55,11 @@ function compressImage(file, maxDim = 400, quality = 0.8) {
 
 const blankForm = { code: "", type: "percent", value: "", minSpend: "", expires: "", active: true }
 const blankAnnForm = { emoji: "", image: "", text: "", active: true }
-
-// A few quick emoji choices the admin can tap (still free to type any).
 const EMOJI_CHOICES = ["🌸", "🌷", "💐", "🎁", "❤️", "🎉", "✨", "🚚", "⏰", "🏷️"]
 
 export default function AdminPromotions() {
   const { isDark } = useTheme()
 
-  // ── tokens (match AdminAdvertisements palette) ──
   const cardBg    = isDark ? "#1e293b" : "white"
   const cardBdr   = isDark ? "#334155" : "#e8edf2"
   const headerBg  = isDark ? "#162032" : "#fafbfc"
@@ -82,7 +77,7 @@ export default function AdminPromotions() {
 
   const [vouchers, setVouchers]   = useState(() => loadVouchers())
   const [form, setForm]           = useState(blankForm)
-  const [editingCode, setEditing] = useState(null) // original code when editing, else null
+  const [editingCode, setEditing] = useState(null) 
   const [formError, setFormError] = useState("")
   const [savedFlash, setSaved]    = useState(false)
 
@@ -95,12 +90,39 @@ export default function AdminPromotions() {
   const annIsEditing = annEditingId !== null
   const annFileRef = useRef(null)
 
+  // 🚀 ── Flash Sales State (Upgraded for Multi-Select) ──
+  const [products, setProducts] = useState([])
+  const [promoCategory, setPromoCategory] = useState("All")
+  const [selectedPromoIds, setSelectedPromoIds] = useState([])
+  const [flashDiscount, setFlashDiscount] = useState("")
+  
+  const [flashSaleLoading, setFlashSaleLoading] = useState(false)
+  const [flashSaleError, setFlashSaleError] = useState("")
+  const [flashSaleSuccess, setFlashSaleSuccess] = useState("")
+
+  useEffect(() => {
+    api.getAdminProducts()
+       .then(data => setProducts(data.data || data))
+       .catch(err => console.error("Failed to load products for flash sale", err))
+  }, [])
+
+  // 🚀 Derived Data for the Filter
+  const promoCategories = ["All", ...Array.from(new Set(products.map(p => {
+    const c = p.category?.trim().toLowerCase();
+    return c ? c.charAt(0).toUpperCase() + c.slice(1) : "";
+  }).filter(Boolean)))];
+
+  const filteredPromoProducts = products.filter(p => {
+    if (promoCategory === "All") return true;
+    const c = p.category?.trim().toLowerCase();
+    return c === promoCategory.toLowerCase();
+  });
+
   const isEditing = editingCode !== null
   const set = (k) => (v) => { setForm(p => ({ ...p, [k]: v })); if (formError) setFormError("") }
 
   const persist = (list) => { setVouchers(list); saveVouchers(list) }
 
-  // Persist announcements + notify the storefront banner (same-tab + other tabs).
   const persistAnnouncements = (list) => {
     setAnnouncements(list)
     try {
@@ -121,7 +143,6 @@ export default function AdminPromotions() {
     const num = Number(form.value)
     if (!form.value || isNaN(num) || num <= 0) return setFormError("Enter a discount value greater than 0.")
     if (form.type === "percent" && num > 100) return setFormError("A percentage discount can't exceed 100%.")
-    // Duplicate check (allow keeping the same code while editing)
     const clash = vouchers.some(v => (v.code || "").toUpperCase() === code && (!isEditing || code !== editingCode.toUpperCase()))
     if (clash) return setFormError("A promo code with that name already exists.")
 
@@ -157,18 +178,12 @@ export default function AdminPromotions() {
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  const toggleActive = (code) =>
-    persist(vouchers.map(v => (v.code || "").toUpperCase() === code.toUpperCase() ? { ...v, active: !(v.active !== false) } : v))
+  const toggleActive = (code) => persist(vouchers.map(v => (v.code || "").toUpperCase() === code.toUpperCase() ? { ...v, active: !(v.active !== false) } : v))
+  const deleteVoucher = (code) => { persist(vouchers.filter(v => (v.code || "").toUpperCase() !== code.toUpperCase())); if (isEditing && editingCode.toUpperCase() === code.toUpperCase()) resetForm() }
 
-  const deleteVoucher = (code) => {
-    persist(vouchers.filter(v => (v.code || "").toUpperCase() !== code.toUpperCase()))
-    if (isEditing && editingCode.toUpperCase() === code.toUpperCase()) resetForm()
-  }
 
   const annSet = (k) => (v) => { setAnnForm(p => ({ ...p, [k]: v })); if (annError) setAnnError("") }
   const resetAnnForm = () => { setAnnForm(blankAnnForm); setAnnEditing(null); setAnnError("") }
-
-  // Picking an emoji clears any image, and vice versa (one visual per notification).
   const pickEmoji = (em) => setAnnForm(p => ({ ...p, emoji: p.emoji === em ? "" : em, image: "" }))
 
   const handleAnnImage = async (e) => {
@@ -204,13 +219,8 @@ export default function AdminPromotions() {
     setAnnError("")
   }
 
-  const toggleAnn = (id) =>
-    persistAnnouncements(announcements.map(a => a.id === id ? { ...a, active: !(a.active !== false) } : a))
-
-  const deleteAnn = (id) => {
-    persistAnnouncements(announcements.filter(a => a.id !== id))
-    if (annIsEditing && annEditingId === id) resetAnnForm()
-  }
+  const toggleAnn = (id) => persistAnnouncements(announcements.map(a => a.id === id ? { ...a, active: !(a.active !== false) } : a))
+  const deleteAnn = (id) => { persistAnnouncements(announcements.filter(a => a.id !== id)); if (annIsEditing && annEditingId === id) resetAnnForm() }
 
   const discountLabel = (v) => v.type === "percent" ? `${v.value}% off` : `₱${Number(v.value).toLocaleString()} off`
 
@@ -218,13 +228,85 @@ export default function AdminPromotions() {
   const onFocusBorder = (e) => { e.target.style.borderColor = accentG; e.target.style.boxShadow = "0 0 0 2px rgba(46,139,52,0.15)" }
   const onBlurBorder  = (e) => { e.target.style.borderColor = inputBdr; e.target.style.boxShadow = "none" }
 
+
+  // 🚀 ── Handle Multi-Product Select Logic ──
+  const togglePromoProduct = (id) => {
+    setSelectedPromoIds(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
+  }
+
+  const handleSelectAll = () => {
+    const visibleIds = filteredPromoProducts.map(p => p.id);
+    const allSelected = visibleIds.every(id => selectedPromoIds.includes(id));
+    
+    if (allSelected) {
+      setSelectedPromoIds(prev => prev.filter(id => !visibleIds.includes(id)));
+    } else {
+      setSelectedPromoIds(prev => [...new Set([...prev, ...visibleIds])]);
+    }
+  }
+
+  // 🚀 ── Handle the Bulk Flash Sale Submission ──
+  const handleApplyFlashSale = async () => {
+    if (selectedPromoIds.length === 0) {
+      setFlashSaleError("Please select at least one product.");
+      return;
+    }
+    if (flashDiscount === "") {
+      setFlashSaleError("Please enter a discount percentage (0 to remove).");
+      return;
+    }
+    
+    setFlashSaleLoading(true);
+    setFlashSaleError("");
+    setFlashSaleSuccess("");
+
+    try {
+      // Process all selected products in parallel
+      await Promise.all(selectedPromoIds.map(id => 
+        api.post(`/products/admin/${id}/promote`, { discount_percent: Number(flashDiscount) })
+      ));
+      
+      // Create a smart announcement based on count
+      if (Number(flashDiscount) > 0) {
+          let text = "";
+          let image = "";
+
+          if (selectedPromoIds.length === 1) {
+              const promotedProduct = products.find(p => p.id === selectedPromoIds[0]);
+              text = `Flash Sale! ${promotedProduct.name} is now ${flashDiscount}% OFF! Shop now.`;
+              image = promotedProduct.image_url || "";
+          } else {
+              text = `Massive Flash Sale! Up to ${flashDiscount}% OFF selected items! Grab them before they're gone.`;
+          }
+
+          const promoAnnouncement = { id: Date.now(), emoji: "🔥", image, text, active: true };
+          persistAnnouncements([promoAnnouncement, ...announcements]);
+      }
+      
+      setFlashSaleSuccess(`Successfully updated ${selectedPromoIds.length} product(s)!`);
+      setSelectedPromoIds([]); 
+      setFlashDiscount(""); 
+      setTimeout(() => setFlashSaleSuccess(""), 4000);
+      
+      // Optionally refresh product list to get new prices
+      const freshProducts = await api.getAdminProducts();
+      setProducts(freshProducts.data || freshProducts);
+
+    } catch (err) {
+      setFlashSaleError("Failed to apply promotion: " + (err.response?.data?.detail || err.message));
+    } finally {
+      setFlashSaleLoading(false);
+    }
+  }
+
+
   return (
     <div className="space-y-5">
       {/* ── Page header ── */}
       <div>
-        <h1 className="text-xl font-bold" style={{ color: bodyTxt }}>Promotions</h1>
+        <h1 className="text-xl font-bold" style={{ color: bodyTxt }}>Promotions & Flash Sales</h1>
         <p className="text-sm mt-0.5" style={{ color: subTxt }}>
-          Create promo codes customers can apply at checkout, and send notifications to the customer site.
+          Manage global promo codes, apply direct product discounts, and send announcements.
         </p>
       </div>
 
@@ -335,6 +417,118 @@ export default function AdminPromotions() {
         </div>
       </div>
 
+      {/* ── 🚀 NEW: Multi-Select Flash Sales ── */}
+      <div className="rounded-xl overflow-hidden"
+        style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
+        <div className="px-5 py-3.5 flex items-center justify-between" style={{ borderBottom: `1px solid ${headerBdr}`, backgroundColor: headerBg }}>
+          <div>
+            <p className="text-sm font-semibold flex items-center gap-2" style={{ color: bodyTxt }}>
+              <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              Direct Product Flash Sale
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: mutedTxt }}>
+              Select multiple products to mark down instantly. Customers will see a notification right away.
+            </p>
+          </div>
+        </div>
+
+        <div className="p-5 space-y-4">
+          <div className="flex flex-col md:flex-row gap-4 items-start">
+            
+            {/* Category Filter */}
+            <div className="w-full md:w-1/3">
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: mutedTxt }}>Filter Category</label>
+              <select 
+                value={promoCategory} 
+                onChange={e => setPromoCategory(e.target.value)}
+                className="w-full px-3 py-2.5 text-sm rounded-lg outline-none transition-all cursor-pointer"
+                style={inputStyle} onFocus={onFocusBorder} onBlur={onBlurBorder}>
+                {promoCategories.map(c => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Discount Percentage and Apply Button */}
+            <div className="w-full md:w-2/3">
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: mutedTxt }}>Discount (%)</label>
+              <div className="flex items-center gap-3">
+                <input 
+                  type="number" 
+                  min="0" max="99" 
+                  value={flashDiscount} 
+                  onChange={e => setFlashDiscount(e.target.value.replace(/[^0-9]/g, ""))}
+                  placeholder="e.g. 20"
+                  className="w-24 px-3 py-2.5 text-sm rounded-lg outline-none transition-all"
+                  style={inputStyle} onFocus={onFocusBorder} onBlur={onBlurBorder} 
+                />
+                <button 
+                  onClick={handleApplyFlashSale} 
+                  disabled={flashSaleLoading}
+                  className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white rounded-lg transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
+                  style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
+                  {flashSaleLoading ? "Applying..." : `Apply to ${selectedPromoIds.length} item(s)`}
+                </button>
+              </div>
+              <p className="text-[10px] mt-1.5" style={{ color: mutedTxt }}>Set discount to 0 to remove an active promotion.</p>
+            </div>
+          </div>
+
+          {/* Scrollable Multi-Select Product List */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs font-semibold" style={{ color: mutedTxt }}>Select Products to Promote</label>
+              <button 
+                onClick={handleSelectAll}
+                className="text-xs font-bold hover:underline transition-colors"
+                style={{ color: accentG }}>
+                {filteredPromoProducts.every(p => selectedPromoIds.includes(p.id)) && filteredPromoProducts.length > 0 ? "Deselect All" : "Select All"}
+              </button>
+            </div>
+            
+            <div className="rounded-lg overflow-y-auto p-2 space-y-1.5" 
+              style={{ maxHeight: "240px", border: `1px solid ${inputBdr}`, backgroundColor: isDark ? "rgba(0,0,0,0.1)" : "#f9fafb" }}>
+              {filteredPromoProducts.length === 0 ? (
+                <p className="text-xs text-center py-4" style={{ color: mutedTxt }}>No products found in this category.</p>
+              ) : (
+                filteredPromoProducts.map(p => (
+                  <label key={p.id} className="flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors hover:bg-black/5"
+                    style={{ backgroundColor: selectedPromoIds.includes(p.id) ? (isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4") : "transparent" }}>
+                    <input 
+                      type="checkbox" 
+                      checked={selectedPromoIds.includes(p.id)}
+                      onChange={() => togglePromoProduct(p.id)}
+                      className="w-4 h-4 rounded text-green-600 focus:ring-green-500 cursor-pointer border-gray-300" 
+                    />
+                    <img src={p.image_url} alt="" className="w-8 h-8 rounded object-cover" style={{ border: `1px solid ${inputBdr}` }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold truncate" style={{ color: bodyTxt }}>{p.name}</p>
+                      <p className="text-[10px]" style={{ color: mutedTxt }}>
+                        Base: ₱{p.price} {p.original_price ? `(Currently on sale from ₱${p.original_price})` : ""}
+                      </p>
+                    </div>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Flash Sale Status Messages */}
+          {flashSaleError && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium" style={{ background: isDark ? "rgba(239,68,68,0.12)" : "#fef2f2", border: `1px solid ${isDark ? "rgba(239,68,68,0.3)" : "#fecaca"}`, color: isDark ? "#fca5a5" : "#dc2626" }}>
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              {flashSaleError}
+            </div>
+          )}
+          {flashSaleSuccess && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium" style={{ background: isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4", border: `1px solid ${isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0"}`, color: isDark ? "#4ade80" : G }}>
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
+              {flashSaleSuccess}
+            </div>
+          )}
+        </div>
+      </div>
+
       {/* ── Existing promo codes ── */}
       <div className="rounded-xl overflow-hidden"
         style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
@@ -355,7 +549,6 @@ export default function AdminPromotions() {
           </div>
         ) : (
           <>
-            {/* Desktop table */}
             <table className="w-full text-sm hidden md:table">
               <thead style={{ borderBottom: `1px solid ${tableBdr}` }}>
                 <tr style={{ backgroundColor: tableHead }}>
@@ -403,7 +596,6 @@ export default function AdminPromotions() {
               </tbody>
             </table>
 
-            {/* Mobile cards */}
             <div className="md:hidden divide-y" style={{ borderColor: tableBdr }}>
               {vouchers.map((v, idx) => {
                 const expired = isExpired(v)
@@ -448,11 +640,9 @@ export default function AdminPromotions() {
           </p>
         </div>
 
-        {/* Hidden file input for the optional notification image */}
         <input ref={annFileRef} type="file" accept="image/*" onChange={handleAnnImage} style={{ display: "none" }} />
 
         <div className="p-5 space-y-5">
-          {/* Composer */}
           <div className="space-y-4">
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: mutedTxt }}>
               {annIsEditing ? "Edit notification" : "New notification"}
@@ -472,7 +662,6 @@ export default function AdminPromotions() {
               <label className="block text-xs font-semibold mb-1.5" style={{ color: mutedTxt }}>Icon <span className="font-normal">· optional, pick an emoji or upload an image</span></label>
 
               {annForm.image ? (
-                // Image chosen: show thumbnail + remove
                 <div className="flex items-center gap-3">
                   <img src={annForm.image} alt="" className="w-12 h-12 rounded-lg object-cover flex-shrink-0" style={{ border: `1px solid ${inputBdr}` }} />
                   <button onClick={() => annSet("image")("")}
@@ -515,7 +704,6 @@ export default function AdminPromotions() {
               Show to customers
             </button>
 
-            {/* Live preview (styled like a bell-dropdown row) */}
             {annForm.text.trim() && (
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wider mb-1.5" style={{ color: mutedTxt }}>Preview</p>
@@ -558,7 +746,6 @@ export default function AdminPromotions() {
             </div>
           </div>
 
-          {/* Existing notifications */}
           {announcements.length > 0 && (
             <div className="space-y-2 pt-1" style={{ borderTop: `1px solid ${divider}` }}>
               <p className="text-xs font-semibold uppercase tracking-wider pt-3" style={{ color: mutedTxt }}>

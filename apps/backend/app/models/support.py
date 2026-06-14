@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Text, Integer, Enum, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, Integer, Boolean, Enum, DateTime, ForeignKey
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from .base import Base, now_utc
@@ -57,3 +57,27 @@ class ActivityLog(Base):
 
     # Relationships
     user = relationship("User", back_populates="activity_logs")
+    
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    # 🚀 FIX: Nullable is now True so global alerts don't crash
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=True) 
+    
+    type = Column(String(50), nullable=False)
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    
+    # 🚀 Includes your existing order_id relation
+    order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="SET NULL"), nullable=True)
+    
+    is_read = Column(Boolean, default=False)
+    
+    # 🚀 NEW: The global broadcast flag
+    is_global = Column(Boolean, default=False) 
+    
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+
+    # Relationships
+    user = relationship("User", back_populates="notifications")

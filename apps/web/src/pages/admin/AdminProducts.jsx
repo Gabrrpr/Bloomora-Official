@@ -7,7 +7,7 @@ import FallbackImage from "../../components/FallbackImage.jsx"
 
 const PLACEHOLDER_IMAGE = new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href
 const AVAILABILITIES = ["Available", "Limited", "Out of Stock"]
-const STATUSES       = ["Active", "Inactive"]
+const STATUSES       = ["Active", "Inactive", "On Sale"]
 
 // 🚀 OCCASIONS LIST
 const OCCASIONS_LIST = [
@@ -16,7 +16,7 @@ const OCCASIONS_LIST = [
   "New Baby", "Sympathy", "Thank You", "Valentine's Day", "Wedding"
 ]
 
-// ── Flower petal loader (same bloom animation as the login/register screen) ──
+// ── Flower petal loader ──
 function FlowerLoader({ message = "Loading products...", isDark = false }) {
   const petals = [
     { angle: 0,   color: "#f48fb1" },
@@ -31,7 +31,7 @@ function FlowerLoader({ message = "Loading products...", isDark = false }) {
       <style>{`
         @keyframes adminPetalBloom {
           0%, 100% { opacity: 0.2; }
-          50%       { opacity: 1;   }
+          50%        { opacity: 1;   }
         }
       `}</style>
       <div className="flex flex-col items-center justify-center rounded-xl"
@@ -200,7 +200,8 @@ function MTextarea({ value, onChange, placeholder, rows=3, d }) {
 function ExportProductsBtn({ data=[], d }) {
   const handleExport = () => {
     const headers = ["id","name","category","status","availability","price","original_price","stock","reorder_point"]
-    const rows = data.length ? data.map(p => {
+    const rows = data.length ? data.map(p => {  
+      const displayOriginal = (Number(p.original_price) > Number(p.price)) ? p.original_price : "";
       const avail = !p.is_available?"Out of stock":(p.stock??0)<=(p.reorder_point??10)?"Low stock":"In stock"
       return [p.id??"",p.name??"",p.category??"",p.status??"",avail,p.price??0,p.original_price??"",p.stock??0,p.reorder_point??10]
         .map(v => { const s=String(v??""); return (s.includes(",")||s.includes("\n")||s.includes('"'))?`"${s.replace(/"/g,'""')}"`:s }).join(",")
@@ -253,7 +254,8 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     is_visible: true,
     composition: [],
     occasions: [],
-    branches: [] // 🚀 ADDED BRANCHES INITIAL STATE
+    branches: [],
+    tags: "" // 🚀 Added Tag state
   })
 
   const [compSelection, setCompSelection] = useState("");
@@ -297,7 +299,6 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     return err
   }
 
-  // 🚀 Added Toggle Branch handler
   const toggleBranch = (branch) => {
     setForm(prev => ({
       ...prev,
@@ -384,9 +385,14 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
         if (form.limited_end_at) fd.append("limited_end_at", form.limited_end_at);
       }
       if (form.composition.length > 0) fd.append("composition", JSON.stringify(form.composition));
-      
       if (form.occasions.length > 0) fd.append("occasions", JSON.stringify(form.occasions));
-      if (form.branches.length > 0) fd.append("branches", JSON.stringify(form.branches)); // 🚀 Appends branches
+      if (form.branches.length > 0) fd.append("branches", JSON.stringify(form.branches));
+
+      // 🚀 Format tags correctly
+      if (form.tags.trim()) {
+        const parsedTags = form.tags.split(",").map(t => t.trim()).filter(Boolean);
+        fd.append("tags", JSON.stringify(parsedTags));
+      }
 
       const res = await api.createProduct(fd);
       onSave(res.product); 
@@ -529,6 +535,16 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             </div>
           </div>
 
+          {/* 🚀 TAGS INPUT */}
+          <div>
+            <div className="flex items-end justify-between mb-1.5">
+              <MLabel d={d}>Search Tags (Keywords)</MLabel>
+              <span className="text-[10px] font-semibold" style={{ color: d.subC }}>Comma-separated</span>
+            </div>
+            <MInput value={form.tags} onChange={set("tags")} placeholder="e.g. romantic, anniversary, sale" d={d}/>
+            <p className="text-[10px] mt-1" style={{ color: d.subC }}>Words entered here help customers find this product via search.</p>
+          </div>
+
           <div>
             <MLabel d={d}>Base Selling Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
             <MInput type="number" value={form.price} onChange={set("price")} placeholder="999" error={errors.price} d={d}/>
@@ -568,7 +584,13 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
           </div>
 
           <div className="flex items-start space-x-3 mt-4 p-3 rounded-lg" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f9fafb", border: `1px solid ${d.inputBdr}` }}>
-            <input type="checkbox" id="is_visible" checked={form.is_visible} onChange={(e) => set("is_visible")(e.target.checked)} className="mt-0.5 h-4 w-4 text-green-600 rounded cursor-pointer" />
+            <input 
+              type="checkbox" 
+              id="is_visible" 
+              checked={form.is_visible} 
+              onChange={(e) => set("is_visible")(e.target.checked)} 
+              className="mt-0.5 h-4 w-4 text-green-600 rounded cursor-pointer" 
+            />
             <div className="flex flex-col">
               <label htmlFor="is_visible" className="text-sm font-semibold cursor-pointer" style={{ color: d.headC }}>Show on Customer Storefront</label>
               <span className="text-xs mt-0.5" style={{ color: d.subC }}>Uncheck this if the item is a raw material (like single stems or vases) used only for custom AI arrangements or for composing a product.</span>
@@ -751,10 +773,11 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
 function EditProductModal({ product, onClose, onSave, categories, products = [] }) {
   const d = useAdminTokens()
   
+  // 🚀 FIX: Capitalize category to match dropdown, correctly parse booleans, format tags
   const [form, setForm] = useState({
     name: product.name || "",
     group: product.product_group || "floral",
-    category: product.category || "",
+    category: product.category ? product.category.charAt(0).toUpperCase() + product.category.slice(1) : "",
     productType: product.product_type || "",
     price: product.price ? String(product.price) : "",
     availability: !product.is_available ? "Out of Stock" : product.stock <= (product.reorder_point || 10) ? "Limited" : "Available",
@@ -765,10 +788,11 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     limited_start_at: product.limited_start_at || "", 
     limited_end_at: product.limited_end_at || "",
     stock: product.stock ?? 0,
-    is_visible: product.is_visible ?? true,
+    is_visible: [false, "false", 0, "0"].includes(product.is_visible) ? false : true,
     composition: product.composition || [],
     occasions: product.occasions || [],
-    branches: product.branches || []
+    branches: product.branches || [],
+    tags: Array.isArray(product.tags) ? product.tags.join(", ") : (product.tags || "")
   })
 
   const [compSelection, setCompSelection] = useState("");
@@ -900,11 +924,16 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
         if (form.limited_end_at) fd.append("limited_end_at", form.limited_end_at);
       }
       fd.append("composition", JSON.stringify(form.composition));
-      
       if (form.occasions.length > 0) fd.append("occasions", JSON.stringify(form.occasions));
-      
-      // 🚀 APPPEND BRANCHES TO THE PUT REQUEST
       if (form.branches.length >= 0) fd.append("branches", JSON.stringify(form.branches));
+
+      // 🚀 Format tags correctly
+      if (form.tags.trim()) {
+        const parsedTags = form.tags.split(",").map(t => t.trim()).filter(Boolean);
+        fd.append("tags", JSON.stringify(parsedTags));
+      } else {
+        fd.append("tags", "[]");
+      }
 
       const res = await api.updateProduct(product.id, fd);
       onSave(res.product); 
@@ -1031,6 +1060,16 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             </div>
           </div>
 
+          {/* 🚀 TAGS INPUT */}
+          <div>
+            <div className="flex items-end justify-between mb-1.5">
+              <MLabel d={d}>Search Tags (Keywords)</MLabel>
+              <span className="text-[10px] font-semibold" style={{ color: d.subC }}>Comma-separated</span>
+            </div>
+            <MInput value={form.tags} onChange={set("tags")} placeholder="e.g. romantic, anniversary, sale" d={d}/>
+            <p className="text-[10px] mt-1" style={{ color: d.subC }}>Words entered here help customers find this product via search.</p>
+          </div>
+
           <div>
             <MLabel d={d}>Status</MLabel>
             <MSel value={form.status} onChange={set("status")} options={STATUSES} d={d}/>
@@ -1074,20 +1113,17 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             </div>
           </div>
 
-          <div>
-            <MLabel d={d}>Visibility</MLabel>
-            <div className="flex items-start space-x-3 mt-2 p-3 rounded-lg" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f9fafb", border: `1px solid ${d.inputBdr}` }}>
-              <input 
-                type="checkbox" 
-                id="edit_is_visible" 
-                checked={form.is_visible} 
-                onChange={(e) => set("is_visible")(e.target.checked)} 
-                className="mt-0.5 h-4 w-4 text-green-600 rounded cursor-pointer" 
-              />
-              <div className="flex flex-col">
-                <label htmlFor="edit_is_visible" className="text-sm font-semibold cursor-pointer" style={{ color: d.headC }}>Show on Customer Storefront</label>
-                <span className="text-xs mt-0.5" style={{ color: d.subC }}>Uncheck this if the item is a raw material used only for custom AI arrangements.</span>
-              </div>
+          <div className="flex items-start space-x-3 mt-2 p-3 rounded-lg" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f9fafb", border: `1px solid ${d.inputBdr}` }}>
+            <input 
+              type="checkbox" 
+              id="edit_is_visible" 
+              checked={form.is_visible} 
+              onChange={(e) => set("is_visible")(e.target.checked)} 
+              className="mt-0.5 h-4 w-4 text-green-600 rounded cursor-pointer" 
+            />
+            <div className="flex flex-col">
+              <label htmlFor="edit_is_visible" className="text-sm font-semibold cursor-pointer" style={{ color: d.headC }}>Show on Customer Storefront</label>
+              <span className="text-xs mt-0.5" style={{ color: d.subC }}>Uncheck this if the item is a raw material used only for custom AI arrangements.</span>
             </div>
           </div>
 
@@ -1111,7 +1147,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             ))}
           </div>
 
-          {/* 🚀 BRANCHES SELECTION GRID */}
+          {/* BRANCHES SELECTION GRID */}
           <div className="mt-4 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
             <MLabel d={d}>Available Branches <span style={{ color:"#f87171" }}>*</span></MLabel>
             <p className="text-xs mb-3" style={{ color: d.subC }}>
@@ -1122,7 +1158,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
                 <label 
                   key={branch} 
                   className="flex items-center space-x-2 cursor-pointer p-1.5 rounded transition-colors"
-                  // 🚀 Use the theme token for consistent, visible hover states
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = d.rowHov}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
                 >
@@ -1279,9 +1314,10 @@ function ViewProductModal({ product, onClose }) {
     { label:"Status",       value:product.status,   capitalize:true },
     { label:"Price",        value:`₱${(+product.price).toLocaleString()}` },
     { label:"Stock",        value:product.stock },
+    { label:"Search Tags",  value:product.tags?.length > 0 ? (Array.isArray(product.tags) ? product.tags.join(", ") : product.tags) : "—" }, // 🚀 ADDED TO VIEW
     { label:"Description",  value:product.description || "—" },
     { label:"Occasions",    value:product.occasions?.length > 0 ? product.occasions.join(", ") : "—" }, 
-    { label:"Branches",     value:product.branches?.length > 0 ? product.branches.join(", ") : "—" }, // 🚀 ADDED TO VIEW
+    { label:"Branches",     value:product.branches?.length > 0 ? product.branches.join(", ") : "—" },
   ]
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
@@ -1332,7 +1368,6 @@ function DeleteProductModal({ product, onClose, onConfirm, isDeleting }) {
         style={{ maxWidth: "400px", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${d.modalBdr}`, backgroundColor: d.modalBg }}>
         
         <div className="p-6 text-center">
-          {/* Warning Icon */}
           <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
             style={{ backgroundColor: d.isDark ? "rgba(239,68,68,0.1)" : "#fee2e2", color: d.isDark ? "#ef4444" : "#dc2626" }}>
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1432,11 +1467,21 @@ export default function AdminProducts() {
   }
 
   const filtered = products.filter(p => {
-    const ms=!search||p.name?.toLowerCase().includes(search.toLowerCase())
-    const mc=!category||p.category?.toLowerCase()===category.toLowerCase()
-    const mst=!status||p.status===status.toLowerCase()
-    return ms&&mc&&mst
-  }).sort((a,b) => { if(priceSort==="asc")return+a.price-+b.price; if(priceSort==="desc")return+b.price-+a.price; return 0 })
+    const ms = !search || p.name?.toLowerCase().includes(search.toLowerCase());
+    const mc = !category || p.category?.toLowerCase() === category.toLowerCase();
+    
+    // 🚀 Consolidated Filter Logic
+    let mst = !status || status === "All Status";
+    if (status === "Active") mst = p.status === "active";
+    else if (status === "Inactive") mst = p.status === "inactive";
+    else if (status === "On Sale") mst = !!p.original_price; 
+
+    return ms && mc && mst;
+  }).sort((a, b) => { 
+    if(priceSort === "asc") return +a.price - +b.price; 
+    if(priceSort === "desc") return +b.price - +a.price; 
+    return 0;
+  });
 
   const totalPages  = Math.max(1,Math.ceil(filtered.length/PAGE_SIZE))
   const pageSafe    = Math.min(page,totalPages)
@@ -1570,7 +1615,12 @@ export default function AdminProducts() {
                     <td className="px-4 py-3">
                       <div>
                         <span className="font-bold" style={{ color:d.priceG }}>₱{(+p.price).toLocaleString()}</span>
-                        {p.original_price && <span className="block text-xs line-through" style={{ color:d.subC }}>₱{(+p.original_price).toLocaleString()}</span>}
+                        {/* 🚀 THE FIX: Only render if original_price is strictly greater than the current price */}
+                        {p.original_price && Number(p.original_price) > Number(p.price) && (
+                          <span className="block text-xs line-through" style={{ color:d.subC }}>
+                            ₱{(+p.original_price).toLocaleString()}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3"><StatusBadge status={p.status}/></td>

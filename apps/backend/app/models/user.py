@@ -56,3 +56,4 @@ class User(Base):
     ai_usage_logs = relationship("AIUsageLog", back_populates="user")
     addresses = relationship("Address", back_populates="user", cascade="all, delete-orphan")
     arrangements = relationship("Arrangement", back_populates="user")
+    notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")

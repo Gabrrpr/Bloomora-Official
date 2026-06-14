@@ -141,8 +141,6 @@ function Confetti() {
   )
 }
 
-
-
 function AIPanel({ onUse, onBack }) {
   const [relationship, setRelationship] = useState("")
   const [occasion,     setOccasion]     = useState("")
@@ -161,9 +159,8 @@ function AIPanel({ onUse, onBack }) {
     } catch (e) {
       setErr("Could not generate message. Please try again.")
     }
-    setLoading(false)
+    loading && setLoading(false)
   }
-
 
   return (
     <div className="pms-scroll flex-1 overflow-y-auto px-7 py-6 flex flex-col gap-4">
@@ -314,8 +311,7 @@ function CardStep({ delivLabel, dest, onClose, onNavigate }) {
     if (!form.from.trim()) e.from = true
     setFormErr(e)
     if (Object.keys(e).length > 0) return
-    if (Object.keys(e).length > 0) return
-  clearPendingCard()
+    clearPendingCard()
     setPhase("done")
   }
 
@@ -814,6 +810,10 @@ function ImgZoom({ product, isDark }) {
     setPos({ x: ((e.clientX-r.left)/r.width)*100, y: ((e.clientY-r.top)/r.height)*100 })
   }
 
+  // 🚀 FIX: Safely parse original price to ensure we only show discounts when one actually exists
+  const originalPrice = product.original_price || product.original || 0;
+  const hasDiscount = originalPrice > product.price;
+
   return (
     <div ref={ref} className="pm-img flex-shrink-0 relative overflow-hidden"
       style={{ width: "42%", cursor: active ? "crosshair" : "default", background: isDark ? "#0f172a" : "#f3f4f6" }}
@@ -829,10 +829,13 @@ function ImgZoom({ product, isDark }) {
           willChange: "transform"
         }}/>
 
-      <div className="absolute top-4 left-4 text-white text-xs font-bold px-3 py-1 rounded-md z-10 pointer-events-none"
-        style={{ background: DG }}>
-        -{pctOff(product.original, product.price)}% OFF
-      </div>
+      {/* 🚀 FIX: Conditionally render the "-X% OFF" badge only if it's a real discount */}
+      {hasDiscount && (
+        <div className="absolute top-4 left-4 text-white text-xs font-bold px-3 py-1 rounded-md z-10 pointer-events-none"
+          style={{ background: DG }}>
+          -{pctOff(originalPrice, product.price)}% OFF
+        </div>
+      )}
 
       {product.ribbon && (
         <div className="absolute top-11 left-0 z-10 pointer-events-none">
@@ -936,20 +939,20 @@ function ReviewSummary({ reviews, isDark }) {
 
 /* ── Main Export ── */
 export default function ProductPreviewModal({ product, products = [], onClose, onNavigate }) {
-  const [color,      setColor]      = useState(null)
-  const [qty,        setQty]        = useState(null)
-  const [addOns,     setAddOns]     = useState([])
-  const [delivType,  setDelivType]  = useState(null)
-  const [customDate, setCustDate]   = useState("")
-  const [showCal,    setShowCal]    = useState(false)
-  const [step,       setStep]       = useState("product")
-  const [dest,       setDest]       = useState("cart")
-  const [visible,    setVisible]    = useState(false)
-  const [tab,        setTab]        = useState("details")
-  const [errors,     setErrors]     = useState({})
-  const [reviews,    setReviews]    = useState([])
+  const [color,       setColor]       = useState(null)
+  const [qty,         setQty]         = useState(null)
+  const [addOns,      setAddOns]      = useState([])
+  const [delivType,   setDelivType]   = useState(null)
+  const [customDate,  setCustDate]    = useState("")
+  const [showCal,     setShowCal]     = useState(false)
+  const [step,        setStep]        = useState("product")
+  const [dest,        setDest]        = useState("cart")
+  const [visible,     setVisible]     = useState(false)
+  const [tab,         setTab]         = useState("details")
+  const [errors,      setErrors]      = useState({})
+  const [reviews,     setReviews]     = useState([])
 
-  const [liveAddOns,    setLiveAddOns]    = useState([])
+  const [liveAddOns,     setLiveAddOns]     = useState([])
   const [loadingAddOns, setLoadingAddOns] = useState(true)
   const [showAllAddons, setShowAllAddons] = useState(false)
 
@@ -964,6 +967,10 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   const suggestions = products
   .filter(p => p.category?.toLowerCase() === product.category?.toLowerCase() && p.id !== product.id)
   .slice(0, 4);
+
+  // 🚀 FIX: Global evaluation of whether this product has a valid promotional markdown
+  const originalPrice = product.original_price || product.original || 0;
+  const hasDiscount = originalPrice > product.price;
 
   /* Fetch reviews */
   useEffect(() => {
@@ -1213,7 +1220,6 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
                       
                       <span style={{ color: isDark?"#334155":"#e5e7eb", margin:"0 2px" }}>·</span>
                       
-                      {/* 🚀 NEW: Stock Indicator */}
                       <span className="text-sm font-semibold" style={{ color: product.stock > 0 ? (isDark ? "#4ade80" : G) : "#ef4444" }}>
                         {product.stock > 0 ? `${product.stock} left in stock` : "Out of stock"}
                       </span>
@@ -1226,18 +1232,23 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
                         style={{ color: isDark?"#00ff88":"#111827", textShadow: isDark?"0 0 20px rgba(0,255,136,0.4)":"none" }}>
                         ₱{total.toLocaleString()}
                       </span>
-                      <span className="text-sm line-through" style={{ color: isDark?"#64748b":"#9ca3af" }}>
-                        ₱{(product.original||0).toLocaleString()}
-                      </span>
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded"
-                        style={{
-                          color: isDark?"#00ff88":G,
-                          background: isDark?"rgba(0,255,136,0.1)":"#f0fdf4",
-                          border: `1px solid ${isDark?"rgba(0,255,136,0.25)":"#bbf7d0"}`,
-                          textShadow: isDark?"0 0 8px rgba(0,255,136,0.5)":"none"
-                        }}>
-                        Save ₱{((product.original||0)-product.price).toLocaleString()}
-                      </span>
+                      {/* 🚀 FIX: Only show original price and save badge if there is a real discount */}
+                      {hasDiscount && (
+                        <>
+                          <span className="text-sm line-through" style={{ color: isDark?"#64748b":"#9ca3af" }}>
+                            ₱{originalPrice.toLocaleString()}
+                          </span>
+                          <span className="text-xs font-semibold px-2 py-0.5 rounded"
+                            style={{
+                              color: isDark?"#00ff88":G,
+                              background: isDark?"rgba(0,255,136,0.1)":"#f0fdf4",
+                              border: `1px solid ${isDark?"rgba(0,255,136,0.25)":"#bbf7d0"}`,
+                              textShadow: isDark?"0 0 8px rgba(0,255,136,0.5)":"none"
+                            }}>
+                            Save ₱{(originalPrice - product.price).toLocaleString()}
+                          </span>
+                        </>
+                      )}
                     </div>
 
                     {/* Tabs */}
@@ -1363,7 +1374,6 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
                                     style={{
                                       border: `1.5px solid ${addonBdr}`,
                                       background: addonBg,
-                                      // 🚀 We apply the grayscale and opacity here to gray it out
                                       opacity: isUnavailable ? 0.5 : 1,
                                       filter: isUnavailable ? "grayscale(100%)" : "none",
                                       cursor: isUnavailable ? "not-allowed" : "pointer",
@@ -1372,7 +1382,6 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
                                     onMouseEnter={e => { if (!on && !isUnavailable) e.currentTarget.style.borderColor = isDark?"#334155":"#d1d5db" }}
                                     onMouseLeave={e => { if (!on && !isUnavailable) e.currentTarget.style.borderColor = isDark?"#1e293b":"#e5e7eb" }}>
                                     
-                                    {/* 🚀 OVERLAY TEXT FOR OUT OF STOCK */}
                                     {isUnavailable && (
                                       <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/10 backdrop-blur-[1px]">
                                         <span className="bg-gray-800 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react"
 import ProductPreviewModal from "../../components/ProductPreviewModal.jsx"
 import Footer from "../../components/Footer.jsx"
 import FallbackImage from "../../components/FallbackImage.jsx"
+import GridCard from "../../components/GridCard.jsx";
 import { api } from "../../services/api.js"
 
 const G  = "#2E8B34"
@@ -60,6 +61,11 @@ function WishlistBtn({ id, wishlist, toggleWishlist, small }) {
 }
 
 function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
+  // 🚀 THE FIX: Calculate if a real discount exists
+  const currentPrice = Number(product.price) || 0;
+  const oldPrice = Number(product.original) || 0;
+  const hasDiscount = oldPrice > currentPrice;
+
   return (
     <div className="bg-white flex group hover:shadow-md transition-shadow duration-200"
       style={{ border:"1px solid #e8edf0", borderRadius:"12px", overflow:"hidden", cursor:"pointer", height:"210px" }}
@@ -80,9 +86,12 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
             </div>
           </div>
         )}
-        <div className="absolute top-3 right-3 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow" style={{ backgroundColor:DG }}>
-          -{discount(product.original, product.price)}%
-        </div>
+        {/* 🚀 THE FIX: Only show badge if discounted */}
+        {hasDiscount && (
+          <div className="absolute top-3 right-3 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow" style={{ backgroundColor:DG }}>
+            -{discount(oldPrice, currentPrice)}%
+          </div>
+        )}
       </div>
       <div className="flex-1 flex flex-col justify-center" style={{ padding:"20px 28px", minWidth:0 }}>
         <span className="inline-block text-[10px] font-bold uppercase tracking-widest mb-2 px-2.5 py-0.5 rounded-full"
@@ -104,11 +113,14 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
         </div>
         <div>
           <div style={{ fontSize:"24px", fontWeight:800, color:G, lineHeight:1, marginBottom:"3px" }}>
-            ₱{product.price.toLocaleString()}
+            ₱{currentPrice.toLocaleString()}
           </div>
-          <div style={{ fontSize:"13px", color:"#9ca3af", textDecoration:"line-through" }}>
-            ₱{product.original.toLocaleString()}
-          </div>
+          {/* 🚀 THE FIX: Only show strikethrough if discounted */}
+          {hasDiscount && (
+            <div style={{ fontSize:"13px", color:"#9ca3af", textDecoration:"line-through" }}>
+              ₱{oldPrice.toLocaleString()}
+            </div>
+          )}
         </div>
         <button onClick={e => { e.stopPropagation(); onPreview(product) }}
           className="w-full flex items-center justify-center gap-1.5 text-white rounded-lg transition-all"
@@ -128,6 +140,12 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
 
 function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
   const wishlisted = wishlist.includes(product.id)
+  
+  // 🚀 THE FIX: Calculate if a real discount exists
+  const currentPrice = Number(product.price) || 0;
+  const oldPrice = Number(product.original) || 0;
+  const hasDiscount = oldPrice > currentPrice;
+
   return (
     <div
       className="bg-white flex group transition-shadow duration-200 hover:shadow-sm"
@@ -149,9 +167,12 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
             </div>
           </div>
         )}
-        <div className="absolute bottom-2 right-2 text-white text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor:DG }}>
-          -{discount(product.original, product.price)}%
-        </div>
+        {/* 🚀 THE FIX: Only show badge if discounted */}
+        {hasDiscount && (
+          <div className="absolute bottom-2 right-2 text-white text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor:DG }}>
+            -{discount(oldPrice, currentPrice)}%
+          </div>
+        )}
       </div>
       <div style={{ flex:1, minWidth:0, padding:"11px 12px", display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
         <div>
@@ -168,8 +189,11 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
         </div>
         <div style={{ display:"flex", alignItems:"center", justifycontent:"space-between", gap:"6px", marginTop:"8px" }}>
           <div style={{ display:"flex", alignItems:"baseline", gap:"4px" }}>
-            <span style={{ fontSize:"15px", fontWeight:800, color:G, lineHeight:1 }}>₱{product.price.toLocaleString()}</span>
-            <span style={{ fontSize:"11px", color:"#9ca3af", textDecoration:"line-through" }}>₱{product.original.toLocaleString()}</span>
+            <span style={{ fontSize:"15px", fontWeight:800, color:G, lineHeight:1 }}>₱{currentPrice.toLocaleString()}</span>
+            {/* 🚀 THE FIX: Only show strikethrough if discounted */}
+            {hasDiscount && (
+              <span style={{ fontSize:"11px", color:"#9ca3af", textDecoration:"line-through" }}>₱{oldPrice.toLocaleString()}</span>
+            )}
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:"6px", flexShrink:0 }}>
             <button onClick={e => { e.stopPropagation(); onPreview(product) }}
@@ -190,59 +214,6 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
             </button>
           </div>
         </div>
-      </div>
-    </div>
-  )
-}
-
-function GridCard({ product, wishlist, toggleWishlist, onPreview }) {
-  return (
-    <div className="bg-white group hover:shadow-lg transition-shadow duration-200"
-      style={{ border:"1px solid #e5e7eb", borderRadius:"8px", overflow:"hidden", cursor:"pointer" }}
-      onClick={() => onPreview(product)}>
-      <div className="relative overflow-hidden bg-gray-50" style={{ aspectRatio:"1/1" }}>
-        <FallbackImage
-          src={product.image}
-          alt={product.name}
-          fallbackSrc="/EstingsLogo.svg"
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-        />
-        {product.ribbon && (
-          <div className="absolute top-3 left-0 z-10">
-            <div className="text-[10px] font-bold text-white shadow-sm"
-              style={{ backgroundColor:RIBBON_COLORS[product.ribbon], clipPath:"polygon(0 0, calc(100% - 6px) 0, 100% 50%, calc(100% - 6px) 100%, 0 100%)", padding:"3px 16px 3px 9px" }}>
-              {product.ribbon}
-            </div>
-          </div>
-        )}
-        <div className="absolute top-2 right-2 text-white text-[10px] font-bold px-1.5 py-0.5" style={{ backgroundColor:DG, borderRadius:"4px" }}>
-          -{discount(product.original, product.price)}%
-        </div>
-      </div>
-      <div className="p-3">
-        <div className="flex items-center justify-between mb-1">
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-base font-bold" style={{ color:G }}>₱{product.price.toLocaleString()}</span>
-            <span className="text-xs text-gray-400 line-through">₱{product.original.toLocaleString()}</span>
-          </div>
-          <WishlistBtn id={product.id} wishlist={wishlist} toggleWishlist={toggleWishlist} small/>
-        </div>
-        <p className="text-sm font-medium text-gray-800 leading-snug mb-1.5 line-clamp-2">{product.name}</p>
-        <div className="flex items-center gap-1 mb-3">
-          <Stars rating={product.rating}/>
-          <span className="text-xs text-gray-400">{product.rating} ({product.reviews})</span>
-        </div>
-        <button onClick={e => { e.stopPropagation(); onPreview(product) }}
-          className="w-full text-sm font-semibold py-2 text-white transition-all flex items-center justify-center gap-1.5"
-          style={{ backgroundColor:G, borderRadius:"6px", border:"none", cursor:"pointer" }}
-          onMouseEnter={e => e.currentTarget.style.backgroundColor=DG}
-          onMouseLeave={e => e.currentTarget.style.backgroundColor=G}>
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-          </svg>
-          View Details
-        </button>
       </div>
     </div>
   )
@@ -600,7 +571,10 @@ export default function Shop({ onNavigate, initialCategory }) {
           const mapped = data.map(p => ({
             ...p,
             image: p.image_url || new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href,
-            original: p.original_price || (p.price * 1.2),
+            
+            // 🚀 THE FIX: Remove the "* 1.2". If there is no original price, it stays null!
+            original: p.original_price || null, 
+            
             rating: 5.0,
             reviews: 0,
             ribbon: p.ribbon || null,
@@ -613,7 +587,6 @@ export default function Shop({ onNavigate, initialCategory }) {
         setProducts([]);
       });
   }, []);
-
   useEffect(() => {
     if (isMobile && (viewAs === "grid3" || viewAs === "grid4")) setViewAs("grid2")
   }, [isMobile])
