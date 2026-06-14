@@ -1,4 +1,6 @@
 import { useEffect } from "react"
+import estingsLogo     from "../assets/EstingsLogo.svg"
+import estingsText     from "../assets/Estings.svg"
 import paypalImg       from "../assets/footer/PayPal.png"
 import westernUnionImg from "../assets/footer/WesternUnion.png"
 import gcashImg        from "../assets/footer/GCash.png"
@@ -18,6 +20,16 @@ const CUSTOMER_CARE = [
   { label: "FAQs",           page: "faq" },
   { label: "Track My Order", page: "orders" },
   { label: "Return Policy",  page: "return-policy" },
+]
+// Legal links live in the copyright bar. "Cookie Policy" re-opens the cookie
+// consent banner (there is no standalone cookie page), the rest are routed
+// pages: Privacy Policy -> "privacy", Terms & Conditions -> "terms",
+// Refund Policy -> "return-policy".
+const LEGAL_LINKS = [
+  { label: "Privacy Policy",      page: "privacy" },
+  { label: "Terms & Conditions",  page: "terms" },
+  { label: "Cookie Policy",       action: "cookies" },
+  { label: "Refund Policy",       page: "return-policy" },
 ]
 const SOCIAL_LINKS = [
   { name: "Facebook",  href: "https://www.facebook.com/profile.php?id=100063877087893", icon: <svg width="16" height="16" fill="currentColor" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg> },
@@ -66,15 +78,12 @@ const FOOTER_CSS = `
     transition: opacity 0.15s, transform 0.15s;
   }
   .ft-logo-img:hover { opacity: 1 !important; transform: scale(1.06); }
-  .ft-top-btn {
-    width: 32px; height: 32px; display: flex; align-items: center;
-    justify-content: center; border-radius: 8px; cursor: pointer;
-    transition: background 0.18s, border-color 0.18s, color 0.18s;
+  .ft-legal-link {
+    background: none; border: none; cursor: pointer; padding: 0;
+    font-size: 12px; color: rgba(255,255,255,0.45);
+    transition: color 0.15s; font-family: var(--font-ui);
   }
-  .ft-top-btn:hover {
-    background: rgba(125,170,145,0.20) !important;
-    border-color: #7daa91 !important; color: white !important;
-  }
+  .ft-legal-link:hover { color: rgba(255,255,255,0.95) !important; }
 
   @keyframes ftSway1 { 0%,100%{ transform:rotate(-3deg)   } 50%{ transform:rotate(3deg)   } }
   @keyframes ftSway2 { 0%,100%{ transform:rotate(2.5deg)  } 50%{ transform:rotate(-3.5deg) } }
@@ -160,8 +169,6 @@ function FlowerBorder() {
     const ty = groundY - Math.cos(r) * h     // tip y
     const mx = cx + Math.sin(r) * h * 0.48   // bezier mid-control x
     const my = groundY - Math.cos(r) * h * 0.48  // bezier mid-control y
-    // Left edge: base-left → control (mx - offset) → tip
-    // Right edge: tip → control (mx + offset) → base-right
     return (
       `M ${cx - w} ${groundY} ` +
       `Q ${mx - w * 0.4} ${my} ${tx} ${ty} ` +
@@ -169,10 +176,7 @@ function FlowerBorder() {
     )
   }
 
-  /* ── Grass tuft: 6 blades fanning from one base point ───────
-     sz = overall size scale. Returns array of <path> elements.
-     Blades: [x-offset, tilt°, height-fraction, useDark]
-  ──────────────────────────────────────────────────────────── */
+  /* ── Grass tuft: 6 blades fanning from one base point ─────── */
   const grassTuft = (cx, groundY, sz) => {
     const blades = [
       [ -sz * 0.55, -24, 0.80, true  ],
@@ -180,7 +184,7 @@ function FlowerBorder() {
       [ -sz * 0.05,  -3, 1.06, false ],
       [  sz * 0.18,   9, 0.98, true  ],
       [  sz * 0.40,  19, 0.84, false ],
-      [ -sz * 0.12,  13, 0.72, true  ],  // short front blade for depth
+      [ -sz * 0.12,  13, 0.72, true  ],
     ]
     return blades.map(([dx, tilt, hf, dark], i) => (
       <path key={i} d={bladePath(cx + dx, groundY, sz * hf, tilt)}
@@ -205,10 +209,7 @@ function FlowerBorder() {
     { x:1400, groundY:204, stemH:68,  pw:18, ph:27, n:5, type:"round", color:"#f590b8", hi:"#fac8da", center:"#d4a030", double:true,  sway:"ft-sway1" },
   ]
 
-  /* ── Standalone grass tufts between flowers ─────────────────
-     Each has its own sway + transformOrigin so it moves
-     independently from the flowers around it.
-  ──────────────────────────────────────────────────────────── */
+  /* ── Standalone grass tufts between flowers ── */
   const GRASS = [
     { x:18,   groundY:198, sz:30, sway:"ft-sway3" },
     { x:65,   groundY:197, sz:22, sway:"ft-sway1" },
@@ -287,7 +288,7 @@ function FlowerBorder() {
             <g key={idx} className={f.sway}
               style={{ transformOrigin: `${f.x}px ${f.groundY}px` }}>
 
-              {/* Tiny grass tuft at stem root — stays short, won't cover stem */}
+              {/* Tiny grass tuft at stem root */}
               {grassTuft(f.x, f.groundY, f.pw * 0.9)}
 
               {/* Stem */}
@@ -343,8 +344,16 @@ function FlowerBorder() {
 }
 
 export default function Footer({ onNavigate }) {
-  const go          = page => onNavigate?.(page)
-  const scrollToTop = () => window.scrollTo({ top: 0, behavior: "smooth" })
+  const go = page => onNavigate?.(page)
+
+  // "Cookie Policy" re-opens the cookie consent banner. App.jsx can listen for
+  // this event to set showCookieConsent back to true.
+  const openCookieSettings = () => window.dispatchEvent(new CustomEvent("bloomora:open-cookie-settings"))
+
+  const handleLegal = (link) => {
+    if (link.action === "cookies") openCookieSettings()
+    else if (link.page) go(link.page)
+  }
 
   useEffect(() => {
     if (document.getElementById("bloomora-footer-css")) return
@@ -366,10 +375,10 @@ export default function Footer({ onNavigate }) {
           <div className="ft-row1" style={{ display:"flex", alignItems:"center", gap:"20px", flexWrap:"wrap",
             paddingBottom:"36px", borderBottom:`1px solid ${C.divider}`, marginBottom:"40px" }}>
             <div style={{ display:"flex", alignItems:"center", gap:"10px", flexShrink:0 }}>
-              <img src="/src/assets/EstingsLogo.svg" alt=""
+              <img src={estingsLogo} alt=""
                 style={{ width:"40px", height:"40px", objectFit:"contain" }}
                 onError={e => e.target.style.display="none"} />
-              <img src="/src/assets/Estings.svg" alt="Esting's"
+              <img src={estingsText} alt="Esting's"
                 style={{ height:"34px", maxWidth:"55vw", objectFit:"contain", filter:"brightness(0) invert(1)" }}
                 onError={e => e.target.style.display="none"} />
             </div>
@@ -459,6 +468,8 @@ export default function Footer({ onNavigate }) {
               .ft-copybar  { padding-left: 22px !important; padding-right: 22px !important; }
               .ft-row1     { flex-direction: column !important; align-items: flex-start !important; gap: 18px !important; }
               .ft-row1-sep { display: none !important; }
+              .ft-copybar  { flex-direction: column !important; align-items: flex-start !important; }
+              .ft-legal    { justify-content: flex-start !important; }
             }
             @media (max-width: 400px)  { .ft-main-row { grid-template-columns: 1fr !important; } }
             @media (max-width: 380px)  {
@@ -468,26 +479,27 @@ export default function Footer({ onNavigate }) {
           `}</style>
         </div>
 
-        {/* Copyright bar */}
+        {/* Copyright + legal bar */}
         <div style={{ borderTop:`1px solid ${C.divider}`, background:"rgba(0,0,0,0.18)" }}>
-          <div className="ft-copybar" style={{ maxWidth:"1280px", margin:"0 auto", padding:"14px 40px",
+          <div className="ft-copybar" style={{ maxWidth:"1280px", margin:"0 auto", padding:"14px 40px 20px",
             display:"flex", alignItems:"center", justifyContent:"space-between", flexWrap:"wrap", gap:"12px" }}>
             <p style={{ fontSize:"12px", color:C.textDim, margin:0, fontFamily:"var(--font-ui)" }}>
               © {new Date().getFullYear()} Esting's Flower International Inc. All rights reserved.
             </p>
-            <div style={{ display:"flex", alignItems:"center", gap:"20px" }}>
-              <button onClick={() => go("terms")}
-                style={{ fontSize:"12px", color:C.textDim, background:"none", border:"none", cursor:"pointer", padding:0, transition:"color 0.15s", fontFamily:"var(--font-ui)" }}
-                onMouseEnter={e => e.currentTarget.style.color = C.text}
-                onMouseLeave={e => e.currentTarget.style.color = C.textDim}>
-                Terms of Service
-              </button>
-              <button onClick={scrollToTop} title="Back to top" className="ft-top-btn"
-                style={{ background:C.cardBg, border:`1px solid ${C.divider}`, color:C.textMid }}>
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M18 15l-6-6-6 6"/>
-                </svg>
-              </button>
+            <div className="ft-legal" style={{ display:"flex", alignItems:"center", gap:"18px", flexWrap:"wrap" }}>
+              {LEGAL_LINKS.map(link => (
+                <button key={link.label} onClick={() => handleLegal(link)} className="ft-legal-link"
+                  style={{
+                    background:"none", border:"none", padding:0, margin:0, cursor:"pointer",
+                    fontSize:"12px", lineHeight:1.4, fontWeight:400,
+                    fontFamily:"var(--font-ui)", color:C.textDim,
+                    whiteSpace:"nowrap", transition:"color 0.15s",
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.color = C.text}
+                  onMouseLeave={e => e.currentTarget.style.color = C.textDim}>
+                  {link.label}
+                </button>
+              ))}
             </div>
           </div>
         </div>
