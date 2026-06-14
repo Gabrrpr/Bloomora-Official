@@ -56,9 +56,9 @@ function markAnnouncementsRead(notifs) {
 // ── Shortened promo text for mobile responsiveness ──
 const PROMOTIONS = [
   { text: "Flowers for Every", highlight: "Occasion", cta: "EXPLORE", page: "occasions" },
-  { text: "Build Your", highlight: "Bouquet", cta: "CREATE", page: "make-it-personal" },
-  { text: "Fresh Flowers", highlight: "Daily", cta: "SHOP", page: "shop" },
-  { text: "Manila & Pampanga", highlight: "Stores", cta: "VISIT", page: "contact" },
+  { text: "Build Your Own", highlight: "Bouquet", cta: "CREATE NOW", page: "make-it-personal" },
+  { text: "Fresh Flowers", highlight: "Daily", cta: "SHOP NOW", page: "shop" },
+  { text: "Manila & Pampanga", highlight: "Stores", cta: "VISIT US", page: "contact" },
 ];
 
 const SOCIAL_LINKS = [
@@ -557,13 +557,13 @@ function DropdownMenu({ items, categories, onNavigate, onClose }) {
         <div className="flex" style={{ borderTop:"none" }}>
           {categories.map((cat, ci) => (
             <div key={cat.heading} className="flex-1 py-3" style={{ borderRight: ci < categories.length-1 ? `1px solid ${isDark?"#2d3748":"#f3f4f6"}` : "none" }}>
-              
+
               <button onClick={(e) => { e.stopPropagation(); if (cat.headingPage && onNavigate) onNavigate(cat.headingPage, cat.headingParam); onClose?.(); }}
                 className="w-full text-left px-4 pb-2 text-xs font-bold uppercase tracking-widest transition-colors hover:underline"
                 style={{ color:headingGreen, backgroundColor:"transparent", border:"none" }}>
                 {cat.heading}
               </button>
-              
+
               {cat.items.map(item => (
                 <button key={item.label} onClick={(e) => { e.stopPropagation(); if (item.page && onNavigate) onNavigate(item.page, item.param); onClose?.(); }}
                   className="w-full text-left px-4 py-2 text-sm transition-all duration-150 capitalize"
@@ -890,6 +890,9 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
   const [unreadCount, setUnreadCount]           = useState(0);
   const [loadingNotifs, setLoadingNotifs]       = useState(false);
 
+  // Track which mobile-drawer accordions are expanded (by link label)
+  const [mobileExpanded, setMobileExpanded]     = useState({});
+
   useEffect(() => {
     const refresh = () => {
       const anns = readAnnouncementNotifs();
@@ -923,9 +926,9 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
   const openMipD   = ()  => { clearTimeout(mipTimer.current); setMipOpen(true); };
   const closeMipD  = ()  => { mipTimer.current = setTimeout(() => setMipOpen(false), 220); };
 
-  const handleBranchSelect = loc => { 
-    setSelectedLocation(loc); 
-    setLocationOpen(false); 
+  const handleBranchSelect = loc => {
+    setSelectedLocation(loc);
+    setLocationOpen(false);
     setBranchModal(loc);
 
     localStorage.setItem("bloomora_active_branch", loc);
@@ -959,6 +962,9 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
     });
   };
 
+  const toggleMobileSection = (label) =>
+    setMobileExpanded(prev => ({ ...prev, [label]: !prev[label] }));
+
   const NAV_LINKS = [
     { label: "Home", page: "home" },
     {
@@ -989,7 +995,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
   ];
 
   useEffect(() => {
-    api.get("/products/categories/hierarchy") 
+    api.get("/products/categories/hierarchy")
       .then(data => {
         if (data) setDynamicShopCategories(data);
       })
@@ -1076,10 +1082,10 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
     setMobileOpen(false);
   };
 
-  const handleAccountClick = (e) => { 
-    e.stopPropagation(); 
-    setUserOpen(false); 
-    onNavigate?.(user ? "account" : "login"); 
+  const handleAccountClick = (e) => {
+    e.stopPropagation();
+    setUserOpen(false);
+    onNavigate?.(user ? "account" : "login");
   };
 
   useEffect(() => {
@@ -1093,6 +1099,43 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
     };
     document.addEventListener("mousedown", h);
     return () => document.removeEventListener("mousedown", h);
+  }, []);
+
+  // Lock body scroll while the mobile drawer is open so the page behind it
+  // stays put (matches the slide-in drawer pattern).
+  useEffect(() => {
+    if (mobileOpen) {
+      const prev = document.body.style.overflow;
+      document.body.style.overflow = "hidden";
+      return () => { document.body.style.overflow = prev; };
+    }
+  }, [mobileOpen]);
+
+  // Close the drawer on Escape.
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const h = (e) => { if (e.key === "Escape") setMobileOpen(false); };
+    document.addEventListener("keydown", h);
+    return () => document.removeEventListener("keydown", h);
+  }, [mobileOpen]);
+
+  // Track whether we are on a desktop-class viewport that actually supports
+  // hover. The cart hover preview only makes sense here; on touch / narrow
+  // screens we skip it entirely (tapping the icon navigates instead).
+  const [isDesktop, setIsDesktop] = useState(() => {
+    if (typeof window === "undefined") return true;
+    return window.matchMedia("(min-width: 1024px) and (hover: hover)").matches;
+  });
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px) and (hover: hover)");
+    const onChange = () => setIsDesktop(mq.matches);
+    onChange();
+    mq.addEventListener?.("change", onChange);
+    window.addEventListener("resize", onChange);
+    return () => {
+      mq.removeEventListener?.("change", onChange);
+      window.removeEventListener("resize", onChange);
+    };
   }, []);
 
   // Measure the navbar's bottom edge so mobile dropdowns that break out to
@@ -1114,6 +1157,12 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
     };
   }, [notifOpen, cartOpen, mobileOpen, showBranchPopup, locationOpen]);
 
+  // ── Mobile drawer link colors (shared) ──
+  const drawerText = isDark ? "#d1d5db" : "#374151";
+  const drawerSubText = isDark ? "#9ca3af" : "#6b7280";
+  const drawerBorder = isDark ? "#1e293b" : "#f1f5f9";
+  const drawerHeadingGreen = isDark ? "#4ade80" : SITE_GREEN;
+
   return (
     <>
       <style>{`
@@ -1123,9 +1172,9 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
       {branchModal && <BranchModal branch={branchModal} onClose={() => setBranchModal(null)} />}
       {searchOpen && <SearchOverlay onClose={() => setSearchOpen(false)} onNavigate={onNavigate} />}
 
-      <div 
-        className="w-full sticky top-0" 
-        ref={navRef} 
+      <div
+        className="w-full sticky top-0"
+        ref={navRef}
         style={{ zIndex: 99999, pointerEvents: "auto", position: "sticky" }}
       >
         <PromoCarousel onNavigate={onNavigate} leftSlot={
@@ -1251,15 +1300,25 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
               </button>
 
               <div className="relative" ref={cartRef}>
-                <button onClick={(e) => { e.stopPropagation(); onNavigate?.("cart"); }}
+                <button onClick={(e) => { e.stopPropagation(); setCartOpen(false); onNavigate?.("cart"); }}
                   className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative"
                   style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
-                  onMouseEnter={e => { openCartD(); e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"; }}
+                  onMouseEnter={e => { if (isDesktop) openCartD(); e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"; }}
                   onMouseLeave={e => { closeCartD(); e.currentTarget.style.backgroundColor = "transparent"; }}>
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007ZM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0Zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0Z"/></svg>
                   <span className="absolute -top-1 -right-1 flex items-center justify-center text-white font-bold rounded-full" style={{ backgroundColor:cartCount>0?"#e11d48":"#9ca3af", fontSize:"9px", width:"16px", height:"16px" }}>{cartCount}</span>
                 </button>
-                {cartOpen && <div onMouseEnter={openCartD} onMouseLeave={closeCartD}><CartDropdown cartCount={cartCount} onNavigate={onNavigate} navBottom={navBottom} /></div>}
+                {/* Hover preview is a desktop-only affordance. It is gated on
+                   `isDesktop` AND wrapped in `hidden lg:block`, so even if a
+                   touch device fires a synthetic mouseenter the dropdown can
+                   never appear on mobile (where there is no hover-out to dismiss
+                   it and it would cover the page). On mobile, tapping the icon
+                   just navigates to the cart page. */}
+                {cartOpen && isDesktop && (
+                  <div className="hidden lg:block" onMouseEnter={openCartD} onMouseLeave={closeCartD}>
+                    <CartDropdown cartCount={cartCount} onNavigate={onNavigate} navBottom={navBottom} />
+                  </div>
+                )}
               </div>
 
               <div className="relative" ref={notifRef}>
@@ -1380,14 +1439,14 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
               <div className="relative" ref={userRef} onMouseEnter={openUserD} onMouseLeave={closeUserD}>
                 <button onClick={handleAccountClick}
                   className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative overflow-hidden border"
-                  style={{ 
+                  style={{
                     borderColor: isDark ? "#334155" : "#e5e7eb",
                     backgroundColor: user?.profilePictureUrl ? "transparent" : (isDark ? "#1a2332" : "#f9fafb"),
                     color: isDark ? "#e5e7eb" : "#4b5563"
                   }}
                   onMouseEnter={e => { if (!user?.profilePictureUrl) e.currentTarget.style.backgroundColor = isDark ? "#2d3748" : "#f3f4f6"; }}
                   onMouseLeave={e => { if (!user?.profilePictureUrl) e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"; }}>
-                  
+
                   {user?.profilePictureUrl ? (
                     <img src={user.profilePictureUrl} alt="Profile" className="w-full h-full object-cover" />
                   ) : (
@@ -1403,158 +1462,239 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                 style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
                 onClick={(e) => { e.stopPropagation(); setMobileOpen(p => !p); }}
                 onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"}
-                onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
-                <svg className="w-5 h-5 transition-transform duration-300 ease-out" style={{ transform: mobileOpen ? "rotate(90deg)" : "rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
-                  {mobileOpen
-                    ? <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/>
-                    : <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
+                aria-label="Open menu">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
                 </svg>
               </button>
             </div>
 
           </div>
+        </nav>
+      </div>
 
-          {/* Mobile menu */}
-          <div
-            className="lg:hidden grid overflow-hidden transition-all duration-300 ease-out"
-            style={{ gridTemplateRows: mobileOpen ? "1fr" : "0fr", opacity: mobileOpen ? 1 : 0, pointerEvents: mobileOpen ? "auto" : "none" }}
-          >
-            <div className="min-h-0 overflow-hidden">
-              <div
-                className="mt-2 transition-transform duration-300 ease-out"
-                style={{ borderTop: `1px solid ${isDark ? "#2d3748" : "#f3f4f6"}`, transform: mobileOpen ? "translateY(0)" : "translateY(-6px)" }}
-              >
+      {/* ══════════════════════════════════════════════════════════════════
+          MOBILE DRAWER — slides in from the right over a dimmed backdrop.
+          The page behind stays visible (and is dimmed), matching the
+          requested side-drawer pattern. Esting's wordmark sits at the top.
+          ══════════════════════════════════════════════════════════════════ */}
+      {/* Backdrop — fades in, click to close. Always mounted so it can animate
+         opacity; pointer events only while open. */}
+      <div
+        className="lg:hidden fixed inset-0 z-[99998]"
+        onClick={() => setMobileOpen(false)}
+        aria-hidden={!mobileOpen}
+        style={{
+          backgroundColor: "rgba(0,0,0,0.45)",
+          opacity: mobileOpen ? 1 : 0,
+          pointerEvents: mobileOpen ? "auto" : "none",
+          transition: "opacity 0.3s ease",
+        }}
+      />
 
-              <div className="px-2 py-3 border-b" style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6" }}>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-bold uppercase tracking-widest" style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>Make it Personal</p>
-                  {!isCustomizationEnabled && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 uppercase">Disabled</span>}
-                </div>
-                {!isCustomizationEnabled && (
-                  <p className="text-[11px] leading-relaxed px-1 text-amber-600 font-medium mb-3">
-                    ⚠️ Custom bouquet ordering is temporarily paused. Please pick from our standard options!
-                  </p>
-                )}
-                <div className="space-y-1">
-                  {MIP_OPTIONS.map(opt => {
-                    const isMobOptionLocked = !isCustomizationEnabled && opt.page !== "ai-gallery";
-                    return (
-                      <button key={opt.page}
-                        disabled={isMobOptionLocked}
-                        onClick={(e) => { e.stopPropagation(); if (!isMobOptionLocked) { onNavigate?.(opt.page); setMobileOpen(false); } }}
-                        className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all"
-                        style={{
-                          color: isMobOptionLocked ? "#9ca3af" : (isDark ? "#d1d5db" : "#374151"),
-                          opacity: isMobOptionLocked ? 0.4 : 1,
-                          cursor: isMobOptionLocked ? "not-allowed" : "pointer",
-                          backgroundColor: "transparent"
-                        }}
-                        onMouseEnter={e => { if (!isMobOptionLocked) e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4"; }}
-                        onMouseLeave={e => { if (!isMobOptionLocked) e.currentTarget.style.backgroundColor = "transparent"; }}>
-                        <span style={{ color: isMobOptionLocked ? "#9ca3af" : opt.accent }}>{opt.icon}</span>
-                        {opt.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+      {/* Drawer panel — fixed to the right edge, slides via translateX. */}
+      <aside
+        className="lg:hidden fixed top-0 right-0 h-full z-[99999] flex flex-col"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Menu"
+        style={{
+          width: "min(86vw, 360px)",
+          backgroundColor: isDark ? "#0f172a" : "#ffffff",
+          boxShadow: mobileOpen ? "-16px 0 48px rgba(0,0,0,0.28)" : "none",
+          transform: mobileOpen ? "translateX(0)" : "translateX(100%)",
+          transition: "transform 0.32s cubic-bezier(0.32,0.72,0,1)",
+          willChange: "transform",
+        }}
+      >
+        {/* Header — Esting's logo + wordmark, with a close button */}
+        <div className="flex items-center justify-between px-5 pt-5 pb-4 flex-shrink-0"
+          style={{ borderBottom: `1px solid ${drawerBorder}` }}>
+          <div className="flex items-center gap-2.5 min-w-0 cursor-pointer"
+            onClick={() => { onNavigate?.("home"); setMobileOpen(false); }}>
+            <img src={estingsLogo} alt="Esting's Logo" className="w-10 h-10 object-contain flex-shrink-0"
+              style={{ filter: isDark ? "brightness(1.15)" : "none" }}/>
+            <div className="flex flex-col leading-none items-start min-w-0">
+              <img src={estingsText} alt="Esting's" className="h-6 object-contain"
+                style={{ filter: isDark ? "brightness(0) invert(1)" : "none" }}/>
+              <span className="text-[8px] font-semibold uppercase tracking-[0.08em] mt-1 truncate"
+                style={{ color: isDark ? "#ffffff" : SITE_GREEN }}>
+                Flower International Inc.
+              </span>
+            </div>
+          </div>
+          <button onClick={() => setMobileOpen(false)} aria-label="Close menu"
+            className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer border-none flex-shrink-0 transition-colors"
+            style={{ background: isDark ? "#1e293b" : "#f3f4f6", color: isDark ? "#e2e8f0" : "#374151" }}>
+            <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
 
-              {FINAL_NAV_LINKS.map(link => (
-                <div key={link.label}>
-                  <button onClick={(e) => { e.stopPropagation(); handleNavClick(link); }}
-                    className="w-full flex items-center text-left px-2 py-2.5 text-sm font-medium border-b transition-colors"
+        {/* Scrollable body */}
+        <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
+
+          {/* Make it Personal */}
+          <div className="px-3 py-4" style={{ borderBottom: `1px solid ${drawerBorder}` }}>
+            <div className="flex items-center justify-between mb-2 px-2">
+              <p className="text-xs font-bold uppercase tracking-widest" style={{ color: drawerHeadingGreen }}>Make it Personal</p>
+              {!isCustomizationEnabled && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 uppercase">Disabled</span>}
+            </div>
+            {!isCustomizationEnabled && (
+              <p className="text-[11px] leading-relaxed px-2 text-amber-600 font-medium mb-3">
+                Custom bouquet ordering is temporarily paused. Please pick from our standard options.
+              </p>
+            )}
+            <div className="space-y-0.5">
+              {MIP_OPTIONS.map(opt => {
+                const isMobOptionLocked = !isCustomizationEnabled && opt.page !== "ai-gallery";
+                return (
+                  <button key={opt.page}
+                    disabled={isMobOptionLocked}
+                    onClick={(e) => { e.stopPropagation(); if (!isMobOptionLocked) { onNavigate?.(opt.page); setMobileOpen(false); } }}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all"
                     style={{
-                      color: active===link.label ? (isDark ? "#4ade80" : SITE_GREEN) : (link.highlight ? (isDark ? "#ff6b81" : "#f43f5e") : (isDark ? "#d1d5db" : "#4b5563")),
-                      borderColor: isDark ? "#2d3748" : "#f3f4f6",
-                    }}>
-                    {link.highlight && <span className="mr-1">✨</span>}
-                    {link.label}
+                      color: isMobOptionLocked ? "#9ca3af" : drawerText,
+                      opacity: isMobOptionLocked ? 0.45 : 1,
+                      cursor: isMobOptionLocked ? "not-allowed" : "pointer",
+                      backgroundColor: "transparent"
+                    }}
+                    onMouseEnter={e => { if (!isMobOptionLocked) e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4"; }}
+                    onMouseLeave={e => { if (!isMobOptionLocked) e.currentTarget.style.backgroundColor = "transparent"; }}>
+                    <span className="flex-shrink-0" style={{ color: isMobOptionLocked ? "#9ca3af" : opt.accent }}>{opt.icon}</span>
+                    {opt.label}
                   </button>
-
-                  {(link.dropdown || link.categories) && (
-                    <div style={{ paddingLeft:"16px", backgroundColor: isDark ? "#0f172a" : "#f9fafb" }}>
-                      
-                      {link.dropdown && link.dropdown.map(sub => (
-                        <button key={sub.label} onClick={(e) => { e.stopPropagation(); onNavigate?.(sub.page, sub.param); setMobileOpen(false); }}
-                          className="block w-full text-left px-2 py-2 text-xs border-b transition-colors"
-                          style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6", color: isDark ? "#9ca3af" : "#6b7280" }}
-                          onMouseEnter={e => e.currentTarget.style.color = isDark ? "#4ade80" : VIBRANT_GREEN}
-                          onMouseLeave={e => e.currentTarget.style.color = isDark ? "#9ca3af" : "#6b7280"}>
-                          {sub.label}
-                        </button>
-                      ))}
-
-                      {link.categories && link.categories.map(cat => (
-                        <div key={cat.heading} className="py-2 border-b last:border-b-0" style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6" }}>
-                          
-                          <button onClick={(e) => { e.stopPropagation(); onNavigate?.(cat.headingPage || "shop", cat.headingParam || cat.heading); setMobileOpen(false); }}
-                            className="block w-full text-left px-2 py-1.5 text-[11px] font-bold uppercase tracking-widest transition-colors"
-                            style={{ color: isDark ? "#4ade80" : SITE_GREEN }}>
-                            {cat.heading}
-                          </button>
-                          
-                          {cat.items.map(sub => (
-                            <button key={sub.label} onClick={(e) => { e.stopPropagation(); onNavigate?.(sub.page, sub.param); setMobileOpen(false); }}
-                              className="block w-full text-left pl-4 pr-2 py-2 text-xs transition-colors"
-                              style={{ color: isDark ? "#9ca3af" : "#6b7280" }}
-                              onMouseEnter={e => e.currentTarget.style.color = isDark ? "#4ade80" : VIBRANT_GREEN}
-                              onMouseLeave={e => e.currentTarget.style.color = isDark ? "#9ca3af" : "#6b7280"}>
-                              {sub.label}
-                            </button>
-                          ))}
-                          
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              <div className="px-2 py-3 border-t" style={{ borderColor: isDark ? "#2d3748" : "#f3f4f6" }}>
-                {user ? (
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2 mb-3">
-                      
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white overflow-hidden border border-gray-200" 
-                        style={{ background: user?.profilePictureUrl ? "transparent" : "linear-gradient(135deg,#2E8B34,#0C573E)" }}>
-                        {user?.profilePictureUrl ? (
-                          <img src={user.profilePictureUrl} alt="Profile" className="w-full h-full object-cover" />
-                        ) : (
-                          user?.firstName?.[0]?.toUpperCase() || "U"
-                        )}
-                      </div>
-
-                      <div>
-                        <p className="text-sm font-semibold" style={{ color: isDark ? "#f3f4f6" : "#111827" }}>{user.firstName} {user.lastName}</p>
-                        <p className="text-xs" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>{user.email}</p>
-                      </div>
-                    </div>
-                    {[{l:"My Account",p:"account"},{l:"My Orders",p:"orders"},{l:"Wishlist",p:"wishlist"},{l:"Settings",p:"settings"}].map(({l,p}) => (
-                      <button key={p} onClick={(e) => { e.stopPropagation(); onNavigate?.(p); setMobileOpen(false); }}
-                        className="w-full text-left text-sm px-2 py-1.5 rounded transition-colors"
-                        style={{ color: isDark ? "#d1d5db" : "#4b5563" }}
-                        onMouseEnter={e=>{e.currentTarget.style.backgroundColor=isDark?"rgba(74,222,128,0.1)":"#f0fdf4";e.currentTarget.style.color=isDark?"#4ade80":VIBRANT_GREEN;}}
-                        onMouseLeave={e=>{e.currentTarget.style.backgroundColor="transparent";e.currentTarget.style.color=isDark?"#d1d5db":"#4b5563";}}>{l}</button>
-                    ))}
-                    <button onClick={(e) => { e.stopPropagation(); handleLogout(); }} className="flex items-center gap-2 text-sm text-red-500 font-medium px-2 py-1.5 rounded hover:bg-red-50 transition-colors w-full mt-1">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
-                      Logout
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex gap-2">
-                    <button onClick={(e) => { e.stopPropagation(); onNavigate?.("login"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90" style={{ backgroundColor:SITE_GREEN }}>Login</button>
-                    <button onClick={(e) => { e.stopPropagation(); onNavigate?.("register"); setMobileOpen(false); }} className="flex-1 py-2 text-sm font-semibold rounded-lg border transition-all hover:opacity-80" style={{ borderColor:SITE_GREEN, color:SITE_GREEN }}>Sign Up</button>
-                  </div>
-                )}
-              </div>
-
-              </div>
+                );
+              })}
             </div>
           </div>
 
-        </nav>
-      </div>
+          {/* Primary nav links (with collapsible sub-sections) */}
+          <nav className="px-3 py-2">
+            {FINAL_NAV_LINKS.map(link => {
+              const hasChildren = !!(link.dropdown || link.categories);
+              const expanded = !!mobileExpanded[link.label];
+              return (
+                <div key={link.label}>
+                  <div className="flex items-center">
+                    <button onClick={(e) => { e.stopPropagation(); handleNavClick(link); }}
+                      className="flex-1 flex items-center text-left px-2 py-3 text-sm font-medium transition-colors rounded-lg"
+                      style={{
+                        color: active===link.label ? drawerHeadingGreen : (link.highlight ? (isDark ? "#ff6b81" : "#f43f5e") : drawerText),
+                      }}>
+                      {link.highlight && <span className="mr-1.5">✨</span>}
+                      {link.label}
+                    </button>
+                    {hasChildren && (
+                      <button onClick={(e) => { e.stopPropagation(); toggleMobileSection(link.label); }}
+                        aria-label={expanded ? `Collapse ${link.label}` : `Expand ${link.label}`}
+                        className="w-9 h-9 flex items-center justify-center rounded-lg flex-shrink-0 transition-colors"
+                        style={{ color: drawerSubText }}>
+                        <svg className="w-4 h-4 transition-transform" style={{ transform: expanded ? "rotate(180deg)" : "rotate(0)" }}
+                          fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Collapsible children */}
+                  {hasChildren && (
+                    <div className="grid transition-all duration-300 ease-out"
+                      style={{ gridTemplateRows: expanded ? "1fr" : "0fr" }}>
+                      <div className="min-h-0 overflow-hidden">
+                        <div className="ml-2 pl-3 pb-2" style={{ borderLeft: `2px solid ${drawerBorder}` }}>
+
+                          {link.dropdown && link.dropdown.map(sub => (
+                            <button key={sub.label} onClick={(e) => { e.stopPropagation(); onNavigate?.(sub.page, sub.param); setMobileOpen(false); }}
+                              className="block w-full text-left px-2 py-2 text-xs rounded-md transition-colors"
+                              style={{ color: drawerSubText }}
+                              onMouseEnter={e => e.currentTarget.style.color = isDark ? "#4ade80" : VIBRANT_GREEN}
+                              onMouseLeave={e => e.currentTarget.style.color = drawerSubText}>
+                              {sub.label}
+                            </button>
+                          ))}
+
+                          {link.categories && link.categories.map(cat => (
+                            <div key={cat.heading} className="py-1.5">
+                              <button onClick={(e) => { e.stopPropagation(); onNavigate?.(cat.headingPage || "shop", cat.headingParam || cat.heading); setMobileOpen(false); }}
+                                className="block w-full text-left px-2 py-1.5 text-[11px] font-bold uppercase tracking-widest transition-colors"
+                                style={{ color: drawerHeadingGreen }}>
+                                {cat.heading}
+                              </button>
+                              {cat.items.map(sub => (
+                                <button key={sub.label} onClick={(e) => { e.stopPropagation(); onNavigate?.(sub.page, sub.param); setMobileOpen(false); }}
+                                  className="block w-full text-left pl-3 pr-2 py-2 text-xs rounded-md transition-colors capitalize"
+                                  style={{ color: drawerSubText }}
+                                  onMouseEnter={e => e.currentTarget.style.color = isDark ? "#4ade80" : VIBRANT_GREEN}
+                                  onMouseLeave={e => e.currentTarget.style.color = drawerSubText}>
+                                  {sub.label}
+                                </button>
+                              ))}
+                            </div>
+                          ))}
+
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </nav>
+
+          {/* Account section */}
+          <div className="px-3 py-4 mt-1" style={{ borderTop: `1px solid ${drawerBorder}` }}>
+            {user ? (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2.5 mb-3 px-1">
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold text-white overflow-hidden border border-gray-200 flex-shrink-0"
+                    style={{ background: user?.profilePictureUrl ? "transparent" : "linear-gradient(135deg,#2E8B34,#0C573E)" }}>
+                    {user?.profilePictureUrl ? (
+                      <img src={user.profilePictureUrl} alt="Profile" className="w-full h-full object-cover" />
+                    ) : (
+                      user?.firstName?.[0]?.toUpperCase() || "U"
+                    )}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold truncate" style={{ color: isDark ? "#f3f4f6" : "#111827" }}>{user.firstName} {user.lastName}</p>
+                    <p className="text-xs truncate" style={{ color: drawerSubText }}>{user.email}</p>
+                  </div>
+                </div>
+                {[{l:"My Account",p:"account"},{l:"My Orders",p:"orders"},{l:"Wishlist",p:"wishlist"},{l:"Settings",p:"settings"}].map(({l,p}) => (
+                  <button key={p} onClick={(e) => { e.stopPropagation(); onNavigate?.(p); setMobileOpen(false); }}
+                    className="w-full text-left text-sm px-2 py-2 rounded-lg transition-colors"
+                    style={{ color: drawerText }}
+                    onMouseEnter={e=>{e.currentTarget.style.backgroundColor=isDark?"rgba(74,222,128,0.1)":"#f0fdf4";e.currentTarget.style.color=isDark?"#4ade80":VIBRANT_GREEN;}}
+                    onMouseLeave={e=>{e.currentTarget.style.backgroundColor="transparent";e.currentTarget.style.color=drawerText;}}>{l}</button>
+                ))}
+                <button onClick={(e) => { e.stopPropagation(); handleLogout(); setMobileOpen(false); }}
+                  className="flex items-center gap-2 text-sm text-red-500 font-medium px-2 py-2 rounded-lg hover:bg-red-50 transition-colors w-full mt-1">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75"/></svg>
+                  Logout
+                </button>
+              </div>
+            ) : (
+              <div className="flex gap-2">
+                <button onClick={(e) => { e.stopPropagation(); onNavigate?.("login"); setMobileOpen(false); }} className="flex-1 py-2.5 text-sm font-semibold text-white rounded-lg transition-all hover:opacity-90" style={{ backgroundColor:SITE_GREEN }}>Login</button>
+                <button onClick={(e) => { e.stopPropagation(); onNavigate?.("register"); setMobileOpen(false); }} className="flex-1 py-2.5 text-sm font-semibold rounded-lg border transition-all hover:opacity-80" style={{ borderColor:SITE_GREEN, color:SITE_GREEN }}>Sign Up</button>
+              </div>
+            )}
+          </div>
+
+          {/* Socials footer */}
+          <div className="px-5 py-5 flex items-center gap-2" style={{ borderTop: `1px solid ${drawerBorder}` }}>
+            {SOCIAL_LINKS.map(s => (
+              <a key={s.name} href={s.href} title={s.name} target="_blank" rel="noopener noreferrer"
+                className="w-9 h-9 rounded-full flex items-center justify-center transition-all"
+                style={{ backgroundColor: isDark ? "#1e293b" : "#f3f4f6", color: isDark ? "#9ca3af" : "#4b5563" }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = SITE_GREEN; e.currentTarget.style.color = "#ffffff"; }}
+                onMouseLeave={e => { e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "#f3f4f6"; e.currentTarget.style.color = isDark ? "#9ca3af" : "#4b5563"; }}>
+                {s.icon}
+              </a>
+            ))}
+          </div>
+
+        </div>
+      </aside>
     </>
   );
 }

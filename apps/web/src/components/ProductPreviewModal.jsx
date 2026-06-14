@@ -25,13 +25,27 @@ const CATEGORY_COLORS = {
 const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"]
 const WDAYS  = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
 
-const pctOff      = (o, p) => Math.round((1 - p / o) * 100)
+const pctOff      = (o, p) => (o && o > p ? Math.round((1 - p / o) * 100) : 0)
+const hasDiscount = (o, p) => o && o > p
 const pad         = d      => String(d).padStart(2, "0")
 const toStr       = d      => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`
 const todayD      = ()     => { const d = new Date(); d.setHours(0,0,0,0); return d }
 const tomorrowStr = ()     => { const d = new Date(); d.setDate(d.getDate()+1); return toStr(d) }
 const fmtDate     = s      => { if (!s) return ""; const [y,m,d] = s.split("-").map(Number); return new Date(y,m-1,d).toLocaleDateString("en-PH",{weekday:"short",month:"short",day:"numeric"}) }
 const isTodayAvail = ()    => new Date().getHours() < 14
+
+/* ── Viewport hook: decides full-page (mobile) vs modal (desktop) ── */
+function useIsMobile(breakpoint = 900) {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth <= breakpoint : false
+  )
+  useEffect(() => {
+    const onResize = () => setIsMobile(window.innerWidth <= breakpoint)
+    window.addEventListener("resize", onResize)
+    return () => window.removeEventListener("resize", onResize)
+  }, [breakpoint])
+  return isMobile
+}
 
 /* ── Mini Calendar ── */
 function MiniCalendar({ selected, onSelect }) {
@@ -141,7 +155,12 @@ function Confetti() {
   )
 }
 
+
 function AIPanel({ onUse, onBack }) {
+
+
+function AIPanel({ onUse, onBack, isMobile }) {
+
   const [relationship, setRelationship] = useState("")
   const [occasion,     setOccasion]     = useState("")
   const [tone,         setTone]         = useState("warm")
@@ -163,7 +182,7 @@ function AIPanel({ onUse, onBack }) {
   }
 
   return (
-    <div className="pms-scroll flex-1 overflow-y-auto px-7 py-6 flex flex-col gap-4">
+    <div className={`pms-scroll flex-1 overflow-y-auto flex flex-col gap-4 ${isMobile ? "px-4 py-5" : "px-7 py-6"}`}>
       <div>
         <button onClick={onBack}
           className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 cursor-pointer bg-transparent border-none mb-4 p-0">
@@ -182,13 +201,15 @@ function AIPanel({ onUse, onBack }) {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className={`grid gap-3 ${isMobile ? "grid-cols-1" : "grid-cols-2"}`}>
         {[["Relationship",relationship,setRelationship,RELATIONSHIP_OPTIONS],["Occasion",occasion,setOccasion,OCCASION_OPTIONS]].map(([l,val,setter,opts]) => (
           <div key={l}>
             <label className="block text-xs font-semibold uppercase tracking-widest text-gray-500 mb-1.5">{l} *</label>
             <select value={val} onChange={e => { setter(e.target.value); setErr("") }}
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 bg-white cursor-pointer"
-              style={{ color: val ? "#1f2937" : "#9ca3af" }}>
+              className="w-full rounded-lg px-3 py-2.5 text-sm bg-white cursor-pointer outline-none transition-colors"
+              style={{ border: "1.5px solid #e5e7eb", color: val ? "#1f2937" : "#9ca3af" }}
+              onFocus={e => e.target.style.borderColor = G}
+              onBlur={e  => e.target.style.borderColor = "#e5e7eb"}>
               <option value="">Select...</option>
               {opts.map(o => <option key={o} value={o}>{o}</option>)}
             </select>
@@ -222,7 +243,10 @@ function AIPanel({ onUse, onBack }) {
           placeholder="e.g. She loves sunflowers, we have been friends for 10 years..."
           value={extra}
           onChange={e => setExtra(e.target.value)}
-          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 bg-white"/>
+          className="w-full rounded-lg px-3 py-2.5 text-sm bg-white outline-none transition-colors"
+          style={{ border: "1.5px solid #e5e7eb", color: "#1f2937" }}
+          onFocus={e => e.target.style.borderColor = G}
+          onBlur={e  => e.target.style.borderColor = "#e5e7eb"}/>
       </div>
 
       {err && <p className="text-xs text-red-500">{err}</p>}
@@ -273,7 +297,7 @@ function AIPanel({ onUse, onBack }) {
 }
 
 /* ── Card Step ── */
-function CardStep({ delivLabel, dest, onClose, onNavigate }) {
+function CardStep({ delivLabel, dest, onClose, onNavigate, isMobile }) {
   const [phase,   setPhase]   = useState("choice")
   const [form,    setForm]    = useState(() => {
   const pending = getPendingCard()
@@ -329,10 +353,10 @@ function CardStep({ delivLabel, dest, onClose, onNavigate }) {
           {choice ? "Your greeting card has been included." : "Your order has been added without a greeting card."}
         </p>
         {delivLabel && (
-          <div className="flex items-center gap-2 text-base font-semibold px-6 py-3 rounded-full border-2 mb-6"
+          <div className={`flex items-center gap-2 font-semibold rounded-full border-2 mb-6 max-w-full ${isMobile ? "text-sm px-4 py-2.5" : "text-base px-6 py-3"}`}
             style={{ color: DG, background: "#f0fdf4", borderColor: "#bbf7d0" }}>
-            <svg width="16" height="16" fill="none" stroke={DG} strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-            Delivery: {delivLabel}
+            <svg width={isMobile?14:16} height={isMobile?14:16} fill="none" stroke={DG} strokeWidth={2} viewBox="0 0 24 24" className="flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            <span className="text-center">Delivery: {delivLabel}</span>
           </div>
         )}
         <p className="text-sm text-gray-400">Redirecting you now...</p>
@@ -342,40 +366,41 @@ function CardStep({ delivLabel, dest, onClose, onNavigate }) {
 
   /* ── Choice ── */
   if (phase === "choice") return (
-    <div className="w-full h-full flex flex-col items-center justify-center px-12 py-10 overflow-y-auto">
-      <div className="w-16 h-16 rounded-full flex items-center justify-center mb-5"
+    <div className={`w-full h-full flex flex-col items-center justify-center overflow-y-auto ${isMobile ? "px-4 py-6" : "px-12 py-10"}`}>
+      <div className={`rounded-full flex items-center justify-center ${isMobile ? "w-14 h-14 mb-4" : "w-16 h-16 mb-5"}`}
         style={{ background: `linear-gradient(135deg,${DG},${G})`, boxShadow: "0 10px 32px rgba(46,139,52,0.25)" }}>
-        <svg width="30" height="30" fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+        <svg width={isMobile ? 26 : 30} height={isMobile ? 26 : 30} fill="none" stroke="white" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
       </div>
-      <p className="text-3xl font-bold text-gray-900 mb-2 text-center">Added to cart!</p>
-      <p className="text-lg text-gray-500 text-center leading-relaxed max-w-sm mb-3">Would you like to include a greeting card with your order?</p>
+      <p className={`font-bold text-gray-900 mb-2 text-center ${isMobile ? "text-2xl" : "text-3xl"}`}>Added to cart!</p>
+      <p className={`text-gray-500 text-center leading-relaxed max-w-sm mb-3 ${isMobile ? "text-base" : "text-lg"}`}>Would you like to include a greeting card with your order?</p>
       {delivLabel && (
-        <div className="text-sm font-semibold px-5 py-2 rounded-full border-2 mb-8"
+        <div className={`font-semibold rounded-full border-2 max-w-full text-center ${isMobile ? "text-xs px-4 py-2 mb-6" : "text-sm px-5 py-2 mb-8"}`}
           style={{ color: DG, background: "#f0fdf4", borderColor: "#bbf7d0" }}>
           Delivery: {delivLabel}
         </div>
       )}
-      <div className="pm-card-choice-grid grid grid-cols-2 gap-4 w-full max-w-lg">
+      {/* Two options, always side by side */}
+      <div className={`grid grid-cols-2 w-full ${isMobile ? "gap-3 max-w-md" : "gap-4 max-w-lg"}`}>
         {[
           { key: true,  img: withCardImg, label: "Yes, add a card", sub: "Include a greeting card" },
           { key: false, img: noCardImg,   label: "No thanks",       sub: "Continue without card" }
         ].map(opt => (
           <button key={String(opt.key)}
             onClick={() => { setChoice(opt.key); setPhase(opt.key ? "form" : "done") }}
-            className="rounded-2xl overflow-hidden bg-white text-left p-0 cursor-pointer transition-all"
+            className="rounded-2xl overflow-hidden bg-white text-left p-0 cursor-pointer transition-all flex flex-col"
             style={{
               border: `2px solid ${hovered===opt.key ? G : "#e5e7eb"}`,
               boxShadow: hovered===opt.key ? "0 8px 28px rgba(46,139,52,0.16)" : "none"
             }}
             onMouseEnter={() => setHovered(opt.key)}
             onMouseLeave={() => setHovered(null)}>
-            <div className="h-44 bg-gray-50 overflow-hidden">
+            <div className="bg-gray-50 overflow-hidden w-full" style={{ aspectRatio: isMobile ? "4/3" : "auto", height: isMobile ? "auto" : 176 }}>
               <img src={opt.img} alt={opt.label} className="w-full h-full object-cover"
                 onError={e => { e.target.style.display="none" }}/>
             </div>
-            <div className="p-4">
-              <p className="text-base font-semibold text-gray-900 m-0">{opt.label}</p>
-              <p className="text-sm text-gray-400 mt-1 m-0">{opt.sub}</p>
+            <div className={isMobile ? "p-3" : "p-4"}>
+              <p className={`font-semibold text-gray-900 m-0 ${isMobile ? "text-sm" : "text-base"}`}>{opt.label}</p>
+              <p className={`text-gray-400 mt-1 m-0 ${isMobile ? "text-xs" : "text-sm"}`}>{opt.sub}</p>
             </div>
           </button>
         ))}
@@ -388,97 +413,118 @@ function CardStep({ delivLabel, dest, onClose, onNavigate }) {
   const NAME_MAX = 30
   const leftImg  = showAI ? writingImg : letterImg
 
+  /* The inner form/AI body is shared; only the wrapper differs by viewport.
+     Keyed wrappers replay the fade/slide transition when toggling AI ↔ form. */
+  const Body = (
+    showAI ? (
+      <div key="ai" className="pm-step-anim flex-1 flex flex-col min-h-0">
+        <AIPanel
+          isMobile={isMobile}
+          onUse={msg => { setForm(f => ({...f,msg})); setFormErr(e => ({...e,msg:false})); setShowAI(false) }}
+          onBack={() => setShowAI(false)}/>
+      </div>
+    ) : (
+      <div key="form" className={`pm-step-anim pm-scroll flex-1 overflow-y-auto flex flex-col ${isMobile ? "px-4 py-5" : "px-6 py-6"}`}>
+        <p className="text-xl font-bold text-gray-900 mb-1">Write your greeting card</p>
+        <p className="text-sm text-gray-400 mb-4">All fields are required.</p>
+
+        <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 mb-4">
+          <svg width="15" height="15" fill="none" stroke="#d97706" strokeWidth={2} viewBox="0 0 24 24" className="flex-shrink-0 mt-0.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+          <p className="text-xs text-amber-800 leading-relaxed m-0">Please keep your message kind and respectful.</p>
+        </div>
+
+        {/* Preview */}
+        <div className="border border-gray-200 rounded-xl p-4 mb-4 bg-gray-50">
+          <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">Preview</p>
+          <p className="text-sm leading-relaxed min-h-10 mb-3 break-words"
+            style={{ color: form.msg ? "#1f2937" : "#d1d5db", fontStyle: form.msg ? "normal" : "italic" }}>
+            {form.msg || "Your message..."}
+          </p>
+          <div className="flex justify-between border-t border-gray-100 pt-2">
+            <span className="text-sm text-gray-500">To: <strong className="text-gray-800">{form.to || "..."}</strong></span>
+            <span className="text-sm text-gray-500">From: <strong className="text-gray-800">{form.from || "..."}</strong></span>
+          </div>
+        </div>
+
+        {/* Message field */}
+        <div className="mb-3">
+          <div className="flex items-center justify-between mb-1.5 gap-2">
+            <label className="text-xs font-semibold uppercase tracking-widest flex items-center gap-1 flex-shrink-0"
+              style={{ color: formErr.msg ? "#ef4444" : "#374151" }}>
+              Message <span className="text-red-400">*</span>
+              {formErr.msg && <span className="normal-case tracking-normal font-normal">required</span>}
+            </label>
+            <div className="flex items-center gap-2.5 flex-shrink-0">
+              <button onClick={() => setShowAI(true)}
+                className="flex items-center gap-1 text-xs font-semibold cursor-pointer bg-transparent border-none p-0 underline underline-offset-2 whitespace-nowrap"
+                style={{ color: G }}>
+                <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24" className="flex-shrink-0"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+                {isMobile ? "Use AI" : "No idea what to write?"}
+              </button>
+              <span className="text-xs text-gray-400">{form.msg.length}/{MSG_MAX}</span>
+            </div>
+          </div>
+          <textarea rows={3} placeholder="Write a warm, kind message..." value={form.msg} maxLength={MSG_MAX}
+            onChange={e => { setForm(f => ({...f,msg:e.target.value})); setFormErr(e => ({...e,msg:false})) }}
+            style={{ ...inp(formErr.msg), resize: "none" }}
+            onFocus={e  => e.target.style.borderColor = formErr.msg ? "#ef4444" : G}
+            onBlur={e   => e.target.style.borderColor = formErr.msg ? "#fca5a5" : "#e5e7eb"}/>
+        </div>
+
+        {/* To / From */}
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          {[["to","e.g. Maria","To"],["from","e.g. Juan","From"]].map(([k,ph,l]) => (
+            <div key={k}>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold uppercase tracking-widest flex items-center gap-1"
+                  style={{ color: formErr[k] ? "#ef4444" : "#374151" }}>
+                  {l} <span className="text-red-400">*</span>
+                  {formErr[k] && <span className="normal-case tracking-normal font-normal">req.</span>}
+                </label>
+                <span className="text-xs text-gray-400">{form[k].length}/{NAME_MAX}</span>
+              </div>
+              <input placeholder={ph} value={form[k]} maxLength={NAME_MAX}
+                onChange={e => { setForm(f => ({...f,[k]:e.target.value})); setFormErr(e => ({...e,[k]:false})) }}
+                style={inp(formErr[k])}
+                onFocus={e => e.target.style.borderColor = formErr[k] ? "#ef4444" : G}
+                onBlur={e  => e.target.style.borderColor = formErr[k] ? "#fca5a5" : "#e5e7eb"}/>
+            </div>
+          ))}
+        </div>
+
+        <button onClick={handleConfirm}
+          className="w-full py-3.5 rounded-xl text-base font-semibold text-white border-none cursor-pointer mb-3"
+          style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+          Confirm & Add to Cart
+        </button>
+        <button onClick={() => setPhase("choice")}
+          className="w-full text-center bg-transparent border-none text-sm text-gray-400 cursor-pointer">
+          Back
+        </button>
+      </div>
+    )
+  )
+
+  /* Mobile: single column — the whole sheet scrolls, card hugs its content */
+  if (isMobile) return (
+    <div className="w-full h-full overflow-y-auto bg-gray-100">
+      <div className="m-3 rounded-2xl bg-white overflow-hidden" style={{ boxShadow: "0 2px 16px rgba(0,0,0,0.08)" }}>
+        {Body}
+      </div>
+    </div>
+  )
+
+  /* Desktop: two columns, form vertically centered (scrolls if too tall) */
   return (
     <div className="pm-card-form w-full h-full flex flex-row overflow-hidden">
       <div className="pm-card-img flex-shrink-0 overflow-hidden bg-gray-50 flex items-center justify-center p-6" style={{ width: "50%" }}>
         <img src={leftImg} alt="" className="w-full h-full object-contain"/>
       </div>
-      <div className="pm-card-right flex flex-col bg-gray-100 overflow-hidden" style={{ width: "50%" }}>
-        <div className="flex-1 flex flex-col m-4 rounded-2xl bg-white overflow-hidden" style={{ boxShadow: "0 2px 16px rgba(0,0,0,0.08)" }}>
-          {showAI ? (
-            <AIPanel
-              onUse={msg => { setForm(f => ({...f,msg})); setFormErr(e => ({...e,msg:false})); setShowAI(false) }}
-              onBack={() => setShowAI(false)}/>
-          ) : (
-            <div className="pm-scroll pm-card-form-right flex-1 overflow-y-auto px-6 py-6 flex flex-col">
-              <p className="text-xl font-bold text-gray-900 mb-1">Write your greeting card</p>
-              <p className="text-sm text-gray-400 mb-4">All fields are required.</p>
-
-              <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 mb-4">
-                <svg width="15" height="15" fill="none" stroke="#d97706" strokeWidth={2} viewBox="0 0 24 24" className="flex-shrink-0 mt-0.5"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-                <p className="text-xs text-amber-800 leading-relaxed m-0">Please keep your message kind and respectful.</p>
-              </div>
-
-              {/* Preview */}
-              <div className="border border-gray-200 rounded-xl p-4 mb-4 bg-gray-50">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-400 mb-2">Preview</p>
-                <p className="text-sm leading-relaxed min-h-10 mb-3 break-words"
-                  style={{ color: form.msg ? "#1f2937" : "#d1d5db", fontStyle: form.msg ? "normal" : "italic" }}>
-                  {form.msg || "Your message..."}
-                </p>
-                <div className="flex justify-between border-t border-gray-100 pt-2">
-                  <span className="text-sm text-gray-500">To: <strong className="text-gray-800">{form.to || "..."}</strong></span>
-                  <span className="text-sm text-gray-500">From: <strong className="text-gray-800">{form.from || "..."}</strong></span>
-                </div>
-              </div>
-
-              {/* Message field */}
-              <div className="mb-3">
-                <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs font-semibold uppercase tracking-widest flex items-center gap-1"
-                    style={{ color: formErr.msg ? "#ef4444" : "#374151" }}>
-                    Message <span className="text-red-400">*</span>
-                    {formErr.msg && <span className="normal-case tracking-normal font-normal">required</span>}
-                  </label>
-                  <div className="flex items-center gap-2.5">
-                    <button onClick={() => setShowAI(true)}
-                      className="flex items-center gap-1 text-xs font-semibold cursor-pointer bg-transparent border-none p-0 underline underline-offset-2"
-                      style={{ color: G }}>
-                      <svg width="11" height="11" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
-                      No idea what to write?
-                    </button>
-                    <span className="text-xs text-gray-400">{form.msg.length}/{MSG_MAX}</span>
-                  </div>
-                </div>
-                <textarea rows={3} placeholder="Write a warm, kind message..." value={form.msg} maxLength={MSG_MAX}
-                  onChange={e => { setForm(f => ({...f,msg:e.target.value})); setFormErr(e => ({...e,msg:false})) }}
-                  style={{ ...inp(formErr.msg), resize: "none" }}
-                  onFocus={e  => e.target.style.borderColor = formErr.msg ? "#ef4444" : G}
-                  onBlur={e   => e.target.style.borderColor = formErr.msg ? "#fca5a5" : "#e5e7eb"}/>
-              </div>
-
-              {/* To / From */}
-              <div className="grid grid-cols-2 gap-3 mb-5">
-                {[["to","e.g. Maria","To"],["from","e.g. Juan","From"]].map(([k,ph,l]) => (
-                  <div key={k}>
-                    <div className="flex items-center justify-between mb-1.5">
-                      <label className="text-xs font-semibold uppercase tracking-widest flex items-center gap-1"
-                        style={{ color: formErr[k] ? "#ef4444" : "#374151" }}>
-                        {l} <span className="text-red-400">*</span>
-                        {formErr[k] && <span className="normal-case tracking-normal font-normal">req.</span>}
-                      </label>
-                      <span className="text-xs text-gray-400">{form[k].length}/{NAME_MAX}</span>
-                    </div>
-                    <input placeholder={ph} value={form[k]} maxLength={NAME_MAX}
-                      onChange={e => { setForm(f => ({...f,[k]:e.target.value})); setFormErr(e => ({...e,[k]:false})) }}
-                      style={inp(formErr[k])}
-                      onFocus={e => e.target.style.borderColor = formErr[k] ? "#ef4444" : G}
-                      onBlur={e  => e.target.style.borderColor = formErr[k] ? "#fca5a5" : "#e5e7eb"}/>
-                  </div>
-                ))}
-              </div>
-
-              <button onClick={handleConfirm}
-                className="w-full py-3.5 rounded-xl text-base font-semibold text-white border-none cursor-pointer mb-3"
-                style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
-                Confirm & Add to Cart
-              </button>
-              <button onClick={() => setPhase("choice")}
-                className="w-full text-center bg-transparent border-none text-sm text-gray-400 cursor-pointer">
-                Back
-              </button>
-            </div>
-          )}
+      <div className="pm-card-right bg-gray-100 overflow-y-auto" style={{ width: "50%" }}>
+        <div className="min-h-full flex flex-col justify-center">
+          <div className="m-4 rounded-2xl bg-white overflow-hidden" style={{ boxShadow: "0 2px 16px rgba(0,0,0,0.08)" }}>
+            {Body}
+          </div>
         </div>
       </div>
     </div>
@@ -503,7 +549,7 @@ function QuoteLineRow({ label, unit, qty, txt, subTxt, bdr, addon }) {
 }
 
 /* ── Quote Step ── */
-function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark, onBack, onClose, onOpenChat }) {
+function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark, onBack, onClose, onOpenChat, isMobile }) {
   const [phase,  setPhase]  = useState("input")   // "input" | "report"
   const [qtyStr, setQtyStr] = useState("")
   const [err,    setErr]    = useState("")
@@ -584,30 +630,25 @@ function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark
   }
 
   return (
-    <div className="pm-quote-form w-full h-full flex flex-row overflow-hidden">
-      <style>{`
-        @media(max-width:900px){
-          .pm-quote-form{flex-direction:column!important}
-          .pm-quote-img{display:none!important}
-          .pm-quote-right{width:100%!important;flex:1 1 auto!important;min-height:0!important}
-          .pm-quote-right > div{margin:10px!important}
-        }
-      `}</style>
-
+    <div className={`pm-quote-form w-full h-full flex overflow-hidden ${isMobile ? "flex-col" : "flex-row"}`}>
       {/* Left image (hidden on mobile so the report uses the full height) */}
-      <div className="pm-quote-img flex-shrink-0 overflow-hidden flex items-center justify-center"
-        style={{ width: "50%", background: isDark ? "#0f172a" : "#f3f4f6" }}>
-        <img src={product.image} alt={product.name} className="w-full h-full object-cover"
-          onError={e => { e.target.style.display="none" }}/>
-      </div>
+      {!isMobile && (
+        <div className="pm-quote-img flex-shrink-0 overflow-hidden flex items-center justify-center"
+          style={{ width: "50%", background: isDark ? "#0f172a" : "#f3f4f6" }}>
+          <img src={product.image} alt={product.name} className="w-full h-full object-cover"
+            onError={e => { e.target.style.display="none" }}/>
+        </div>
+      )}
 
-      {/* Right content */}
-      <div className="pm-quote-right flex flex-col overflow-hidden" style={{ width: "50%", background: panelBg }}>
-        <div className="flex-1 flex flex-col m-4 rounded-2xl overflow-hidden"
+      {/* Right content. On mobile the whole panel scrolls and the white card
+          hugs its content (gray panel shows below), matching the AI writer. */}
+      <div className={`pm-quote-right flex flex-col ${isMobile ? "overflow-y-auto" : "overflow-hidden"}`}
+        style={{ width: isMobile ? "100%" : "50%", flex: isMobile ? "1 1 auto" : undefined, minHeight: 0, background: panelBg }}>
+        <div className={`flex flex-col rounded-2xl overflow-hidden ${isMobile ? "m-2" : "flex-1 m-4"}`}
           style={{ background: docBg, boxShadow: "0 2px 16px rgba(0,0,0,0.08)" }}>
 
           {phase === "input" ? (
-            <div className="pm-scroll flex-1 overflow-y-auto px-6 py-6 flex flex-col">
+            <div className={`pm-scroll px-6 py-6 flex flex-col ${isMobile ? "" : "flex-1 overflow-y-auto"}`}>
               {/* Back */}
               <button onClick={onBack}
                 className="flex items-center gap-1.5 text-sm cursor-pointer bg-transparent border-none mb-4 p-0"
@@ -683,17 +724,17 @@ function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark
 
               {err && <p className="text-xs text-red-500 mt-2">{err}</p>}
 
-              <div className="flex-1"/>
+              {!isMobile && <div className="flex-1"/>}
 
               <button onClick={generate}
-                className="w-full py-3.5 rounded-xl text-sm font-semibold text-white border-none cursor-pointer flex items-center justify-center gap-2 mt-4"
+                className={`w-full py-3.5 rounded-xl text-sm font-semibold text-white border-none cursor-pointer flex items-center justify-center gap-2 ${isMobile ? "mt-6" : "mt-4"}`}
                 style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
                 <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                 Generate Quotation
               </button>
             </div>
           ) : (
-            <div className="pm-scroll flex-1 overflow-y-auto px-6 py-6">
+            <div className={`pm-scroll px-6 py-6 ${isMobile ? "" : "flex-1 overflow-y-auto"}`}>
               {/* Back to change qty */}
               <button onClick={() => setPhase("input")}
                 className="flex items-center gap-1.5 text-sm cursor-pointer bg-transparent border-none mb-4 p-0"
@@ -799,7 +840,7 @@ function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark
   )
 }
 
-/* ── Image Zoom ── */
+/* ── Image Zoom (desktop hover-zoom; delivery badge removed) ── */
 function ImgZoom({ product, isDark }) {
   const [pos,    setPos]    = useState(null)
   const [active, setActive] = useState(false)
@@ -821,7 +862,7 @@ function ImgZoom({ product, isDark }) {
       onMouseEnter={() => setActive(true)}
       onMouseLeave={() => { setActive(false); setPos(null) }}>
 
-      <img src={product.image} alt={product.name} className="w-full h-full object-cover block"
+      <img src={product.image} alt={product.name} className="pm-img-photo w-full h-full object-cover block"
         style={{
           transition: active ? "transform 0.25s ease-out" : "transform 0.4s ease",
           transform: active && pos ? "scale(1.7)" : "scale(1)",
@@ -829,11 +870,16 @@ function ImgZoom({ product, isDark }) {
           willChange: "transform"
         }}/>
 
+
       {/* 🚀 FIX: Conditionally render the "-X% OFF" badge only if it's a real discount */}
       {hasDiscount && (
         <div className="absolute top-4 left-4 text-white text-xs font-bold px-3 py-1 rounded-md z-10 pointer-events-none"
           style={{ background: DG }}>
           -{pctOff(originalPrice, product.price)}% OFF
+      {hasDiscount(product.original, product.price) && (
+        <div className="absolute top-4 left-4 text-white text-xs font-bold px-3 py-1 rounded-md z-10 pointer-events-none"
+          style={{ background: DG }}>
+          -{pctOff(product.original, product.price)}% OFF
         </div>
       )}
 
@@ -845,21 +891,6 @@ function ImgZoom({ product, isDark }) {
           </div>
         </div>
       )}
-
-      <div className="absolute bottom-4 left-3 right-3 rounded-xl px-3.5 py-2.5 flex items-center gap-2.5 pointer-events-none z-10"
-        style={{
-          background: isDark ? "rgba(15,23,42,0.92)" : "rgba(255,255,255,0.95)",
-          boxShadow: isDark ? "0 0 12px rgba(0,255,136,0.08)" : "0 2px 8px rgba(0,0,0,0.07)",
-          border: isDark ? "1px solid rgba(74,222,128,0.15)" : "none"
-        }}>
-        <svg width="14" height="14" fill="none" stroke={isDark ? "#4ade80" : G} strokeWidth={1.8} viewBox="0 0 24 24" className="flex-shrink-0">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 18.75a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h6m-9 0H3.375a1.125 1.125 0 01-1.125-1.125V14.25m17.25 4.5a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m3 0h1.125c.621 0 1.129-.504 1.09-1.124a17.902 17.902 0 00-3.213-9.193 2.056 2.056 0 00-1.58-.86H14.25M16.5 18.75h-2.25m0-11.177v-.958c0-.568-.422-1.048-.987-1.106a48.554 48.554 0 00-10.026 0 1.106 1.106 0 00-.987 1.106v7.635m12-6.677v6.677m0 4.5v-4.5m0 0h-12"/>
-        </svg>
-        <div>
-          <p className="text-xs font-semibold m-0" style={{ color: isDark ? "#e2e8f0" : "#111827" }}>Same-day delivery</p>
-          <p className="text-[10px] m-0" style={{ color: isDark ? "#4ade80" : "#6b7280" }}>Before 2PM · Manila & Pampanga</p>
-        </div>
-      </div>
 
       {active && (
         <div className="absolute top-3 right-3 bg-black/45 text-white text-[10px] font-bold px-2.5 py-1 rounded-full pointer-events-none z-10 backdrop-blur-sm">
@@ -937,6 +968,331 @@ function ReviewSummary({ reviews, isDark }) {
 }
 
 
+/* ════════════════════════════════════════════════════════════════════════
+   SHARED PRODUCT-DETAIL SECTIONS
+   These render the same controls in both the desktop modal and the mobile
+   full-page sheet. They are pure presentation over props — no logic lives
+   here, so the two layouts stay perfectly in sync.
+   ════════════════════════════════════════════════════════════════════════ */
+
+function DescriptionSection({ product, isDark }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-widest mb-2"
+        style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Description</p>
+      <p className="text-sm leading-relaxed"
+        style={{ color: isDark ? "#cbd5e1" : "#374151" }}>
+        {product.description || "No description provided for this arrangement."}
+      </p>
+    </div>
+  )
+}
+
+function ColorSection({ colors, color, errors, setColor, setErrors, isDark }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1"
+        style={{ color: errors.color?"#ef4444":isDark?"#94a3b8":"#374151" }}>
+        Color
+        {color && <span className="normal-case tracking-normal font-medium ml-1" style={{ color: isDark?"#4ade80":G }}>{color.name}</span>}
+        <span className="text-red-400">*</span>
+        {errors.color && <span className="normal-case tracking-normal font-normal text-red-400">required</span>}
+      </p>
+      <div className="flex gap-3 items-center flex-wrap">
+        {colors.map(c => (
+          <button key={c.name} title={c.name}
+            onClick={() => { setColor(c); setErrors(e => ({...e,color:false})) }}
+            className="w-9 h-9 rounded-full transition-transform cursor-pointer"
+            style={{
+              background: c.hex,
+              border: c.outline ? `1.5px solid ${isDark?"#4b5563":"#d1d5db"}` : "1.5px solid transparent",
+              outline: color?.name===c.name ? `3px solid ${errors.color?"#ef4444":isDark?"#4ade80":G}` : "3px solid transparent",
+              outlineOffset: 2,
+              transform: color?.name===c.name ? "scale(1.12)" : "scale(1)"
+            }}/>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function QtySection({ qty, errors, setQty, setErrors, isDark }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1"
+        style={{ color: errors.qty?"#ef4444":isDark?"#94a3b8":"#374151" }}>
+        Size / Quantity <span className="text-red-400">*</span>
+        {errors.qty && <span className="normal-case tracking-normal font-normal text-red-400">required</span>}
+      </p>
+      <div className="flex gap-2 flex-wrap">
+        {QTY_OPTIONS.map(q => (
+          <button key={q} onClick={() => { setQty(q); setErrors(e => ({...e,qty:false})) }}
+            className="px-4 py-2 rounded-lg text-sm transition-all cursor-pointer"
+            style={{
+              fontWeight: qty===q ? 600 : 400,
+              border: `1.5px solid ${qty===q?(isDark?"#4ade80":G):errors.qty?"#fca5a5":isDark?"#334155":"#e5e7eb"}`,
+              background: qty===q ? (isDark?"rgba(74,222,128,0.15)":G) : isDark?"#1e293b":"white",
+              color: qty===q ? (isDark?"#4ade80":"white") : isDark?"#e2e8f0":"#374151",
+              boxShadow: qty===q && isDark ? "0 0 10px rgba(74,222,128,0.2)" : "none"
+            }}>
+            {q}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function AddOnsSection({ loadingAddOns, liveAddOns, visibleAddons, addOns, toggleAddOn, showAllAddons, setShowAllAddons, isDark }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-widest mb-3"
+        style={{ color: isDark?"#94a3b8":"#6b7280" }}>
+        Add-ons <span className="normal-case tracking-normal font-normal" style={{ color: isDark?"#4b5563":"#9ca3af" }}>(optional)</span>
+      </p>
+
+      {loadingAddOns ? (
+        <p className="text-xs text-gray-500 animate-pulse">Loading live add-ons...</p>
+      ) : liveAddOns.length > 0 ? (
+        <div className="grid grid-cols-2 gap-1.5">
+          {visibleAddons.map(a => {
+            const isOutOfStock = a.stock <= 0
+            const isUnavailable = a.stock <= 0 || a.is_available === false;
+            const on = addOns.includes(a.id) && !isOutOfStock
+            const addonBg  = isOutOfStock ? (isDark?"#0f172a":"#f9fafb") : on ? (isDark?"rgba(74,222,128,0.12)":"#f0fdf4") : (isDark?"#0f172a":"white")
+            const addonBdr = isOutOfStock ? (isDark?"#1e293b":"#e5e7eb") : on ? (isDark?"#4ade80":G) : (isDark?"#1e293b":"#e5e7eb")
+            return (
+              <button key={a.id}
+                disabled={isUnavailable}
+                onClick={() => !isUnavailable && toggleAddOn(a.id)}
+                className="flex items-center gap-2.5 p-2.5 rounded-xl text-left transition-all relative overflow-hidden"
+                style={{
+                  border: `1.5px solid ${addonBdr}`,
+                  background: addonBg,
+                  opacity: isUnavailable ? 0.5 : 1,
+                  filter: isUnavailable ? "grayscale(100%)" : "none",
+                  cursor: isUnavailable ? "not-allowed" : "pointer",
+                  boxShadow: on && isDark ? "0 0 8px rgba(74,222,128,0.15)" : "none"
+                }}
+                onMouseEnter={e => { if (!on && !isUnavailable) e.currentTarget.style.borderColor = isDark?"#334155":"#d1d5db" }}
+                onMouseLeave={e => { if (!on && !isUnavailable) e.currentTarget.style.borderColor = isDark?"#1e293b":"#e5e7eb" }}>
+
+                {isUnavailable && (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/10 backdrop-blur-[1px]">
+                    <span className="bg-gray-800 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">
+                      Out of Stock
+                    </span>
+                  </div>
+                )}
+
+                <div className="w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 relative"
+                  style={{ background: isDark?"#1e293b":"#f3f4f6", border: `1px solid ${isDark?"#334155":"#e5e7eb"}` }}>
+                  <img src={a.image_url} alt={a.name} className="w-full h-full object-cover"
+                    onError={e => { e.target.style.display="none" }} />
+                </div>
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold truncate m-0" style={{ color: isDark?"#e2e8f0":"#111827" }}>{a.name}</p>
+                  <p className="text-[10px] mt-0.5 m-0" style={{ color: isUnavailable?"#ef4444":isDark?"#64748b":"#9ca3af" }}>
+                    {isUnavailable ? "Unavailable" : `${a.stock} available`}
+                  </p>
+                  <p className="text-xs font-semibold mt-0.5 m-0"
+                    style={{ color: isUnavailable?(isDark?"#64748b":"#9ca3af"):(isDark?"#4ade80":G) }}>
+                    +₱{a.price}
+                  </p>
+                </div>
+
+                <div className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 transition-all"
+                  style={{
+                    border: `2px solid ${on?(isDark?"#4ade80":G):isDark?"#334155":"#d1d5db"}`,
+                    background: on ? (isDark?"rgba(74,222,128,0.2)":G) : isDark?"#1e293b":"white"
+                  }}>
+                  {on
+                    ? <svg width="9" height="9" fill="none" stroke={isDark?"#4ade80":"white"} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7"/></svg>
+                    : <svg width="8" height="8" fill="none" stroke={isDark?"#4b5563":"#9ca3af"} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
+                  }
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      ) : (
+        <p className="text-xs text-gray-500">No add-ons available right now.</p>
+      )}
+
+      {liveAddOns.length > INITIAL_ADDON_COUNT && (
+        <button onClick={() => setShowAllAddons(p => !p)}
+          className="flex items-center gap-1.5 mt-2 text-xs font-medium cursor-pointer bg-transparent border-none p-0"
+          style={{ color: isDark?"#4ade80":G }}>
+          <svg width="13" height="13" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={showAllAddons?"M5 15l7-7 7 7":"M19 9l-7 7-7-7"}/>
+          </svg>
+          {showAllAddons ? "Show less" : `See all add-ons (${liveAddOns.length-INITIAL_ADDON_COUNT} more)`}
+        </button>
+      )}
+    </div>
+  )
+}
+
+function DeliverySection({ delivType, customDate, showCal, todayOk, errors, setDelivType, setShowCal, setCustDate, setErrors, isDark }) {
+  return (
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1"
+        style={{ color: errors.date?"#ef4444":isDark?"#94a3b8":"#6b7280" }}>
+        Delivery Date <span className="text-red-400">*</span>
+        {errors.date && <span className="normal-case tracking-normal font-normal">required</span>}
+      </p>
+      <div className="flex gap-2 flex-wrap">
+        {[
+          { key:"today",    label:"Today",    sub: todayOk?"Before 2:00 PM":"Unavailable after 2PM", disabled:!todayOk, onClick:()=>{ if(todayOk){ setDelivType("today"); setShowCal(false); setErrors(e=>({...e,date:false})) } } },
+          { key:"tomorrow", label:"Tomorrow", sub: fmtDate(tomorrowStr()), disabled:false, onClick:()=>{ setDelivType("tomorrow"); setShowCal(false); setErrors(e=>({...e,date:false})) } },
+        ].map(btn => (
+          <button key={btn.key} disabled={btn.disabled} onClick={btn.onClick}
+            className="px-3 py-2 rounded-xl text-left transition-all"
+            style={{
+              cursor: btn.disabled ? "not-allowed" : "pointer",
+              opacity: btn.disabled ? 0.45 : 1,
+              border: `1.5px solid ${delivType===btn.key?(isDark?"#4ade80":G):isDark?"#334155":"#e5e7eb"}`,
+              background: delivType===btn.key ? (isDark?"rgba(74,222,128,0.1)":"#f0fdf4") : isDark?"#0f172a":"white",
+              boxShadow: delivType===btn.key && isDark ? "0 0 8px rgba(74,222,128,0.2)" : "none"
+            }}>
+            <p className="text-sm font-semibold m-0"
+              style={{ color: delivType===btn.key?(isDark?"#4ade80":DG):isDark?"#e2e8f0":"#374151" }}>
+              {btn.label}
+            </p>
+            <p className="text-[10px] m-0"
+              style={{ color: delivType===btn.key?(isDark?"#4ade80":G):isDark?"#64748b":"#9ca3af" }}>
+              {btn.sub}
+            </p>
+          </button>
+        ))}
+        <button
+          onClick={() => { setDelivType("custom"); setShowCal(s=>!s); setErrors(e=>({...e,date:false})) }}
+          className="px-3 py-2 rounded-xl text-left transition-all cursor-pointer flex items-center gap-2"
+          style={{
+            border: `1.5px solid ${delivType==="custom"?(isDark?"#4ade80":G):isDark?"#334155":"#e5e7eb"}`,
+            background: delivType==="custom" ? (isDark?"rgba(74,222,128,0.1)":"#f0fdf4") : isDark?"#0f172a":"white",
+            boxShadow: delivType==="custom" && isDark ? "0 0 8px rgba(74,222,128,0.2)" : "none"
+          }}>
+          <svg width="13" height="13" fill="none" stroke={delivType==="custom"?(isDark?"#4ade80":DG):isDark?"#64748b":"#6b7280"} strokeWidth={1.8} viewBox="0 0 24 24" className="flex-shrink-0">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+          </svg>
+          <div>
+            <p className="text-sm font-semibold m-0"
+              style={{ color: delivType==="custom"?(isDark?"#4ade80":DG):isDark?"#e2e8f0":"#374151" }}>
+              {customDate ? fmtDate(customDate) : "Pick a date"}
+            </p>
+            <p className="text-[10px] m-0"
+              style={{ color: delivType==="custom"?(isDark?"#4ade80":G):isDark?"#64748b":"#9ca3af" }}>
+              {customDate ? "Tap to change" : "Open calendar"}
+            </p>
+          </div>
+        </button>
+      </div>
+      {showCal && delivType==="custom" && (
+        <div>
+          <MiniCalendar selected={customDate} onSelect={d => { setCustDate(d); setShowCal(false); setErrors(e=>({...e,date:false})) }}/>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SuggestionsSection({ suggestions, isDark }) {
+  if (suggestions.length === 0) return null
+  return (
+    <div className="pt-6" style={{ borderTop: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
+      <p className="text-xs font-semibold uppercase tracking-widest mb-4"
+        style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>You might also like</p>
+      <div className="flex gap-3 overflow-x-auto pb-2 -mr-4 pr-4">
+        {suggestions.map(s => (
+          <div key={s.id} className="flex-shrink-0 w-28 rounded-lg overflow-hidden border"
+            style={{ borderColor: isDark ? "#334155" : "#e5e7eb" }}>
+            <img src={s.image_url || s.image} className="w-full h-20 object-cover" alt={s.name} />
+            <div className="p-2">
+              <p className="text-[10px] font-bold truncate" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>{s.name}</p>
+              <p className="text-[10px]" style={{ color: G }}>₱{(+s.price).toLocaleString()}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ReviewsSection({ reviews, isDark }) {
+  return (
+    <div className="pb-4">
+      <ReviewSummary reviews={reviews} isDark={isDark} />
+      {reviews.length > 0 ? (
+        <div className="space-y-4">
+          {reviews.map(review => (
+            <div key={review.id} className="pb-4" style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
+              <div className="flex justify-between items-center mb-2">
+                <span className="font-bold text-sm" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>{review.user_name}</span>
+                <span className="text-xs" style={{ color: "#f59e0b" }}>{"★".repeat(review.star_rating)}</span>
+              </div>
+              <p className="text-sm" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>{review.comment}</p>
+              {review.image_url && (
+                <img src={review.image_url} alt="Review" className="w-20 h-20 rounded-lg mt-2 object-cover"
+                  style={{ border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}` }} />
+              )}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col items-center p-8 rounded-xl text-center"
+          style={{ border: `1.5px dashed ${isDark ? "#334155" : "#d1fae5"}`, background: isDark ? "#0f172a" : "#f9fafb" }}>
+          <div className="w-12 h-12 rounded-full flex items-center justify-center mb-3"
+            style={{ background: isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4" }}>
+            <svg width="22" height="22" fill="none" stroke={isDark ? "#4ade80" : G} strokeWidth={1.6} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11.048 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.977-2.888a1 1 0 00-1.176 0l-3.977 2.888c-.783.57-1.838-.196-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118L2.063 10.79c-.783-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+            </svg>
+          </div>
+          <p className="text-sm font-semibold m-0" style={{ color: isDark ? "#f8fafc" : "#111827" }}>No reviews yet</p>
+          <p className="text-xs mt-1 m-0" style={{ color: isDark ? "#94a3b8" : "#9ca3af" }}>Be the first to share your experience.</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CareSection({ isDark }) {
+  return (
+    <div className="pb-4 space-y-2.5">
+      <p className="text-sm leading-relaxed mb-2" style={{ color: isDark?"#64748b":"#6b7280" }}>
+        Proper care significantly extends the life of your arrangement.
+      </p>
+      {[
+        {
+          lightBg:"#eff6ff", lightBdr:"#bfdbfe", darkBg:"rgba(59,130,246,0.08)", darkBdr:"rgba(59,130,246,0.2)",
+          title:"Water daily", desc:"Replace water every 1-2 days with clean, room-temperature water.",
+          icon:<svg width="17" height="17" fill="none" stroke={isDark?"#60a5fa":"#3b82f6"} strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10"/><path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6"/><ellipse cx="19" cy="5" rx="3" ry="3.5" fill={isDark?"rgba(59,130,246,0.3)":"#bfdbfe"} stroke={isDark?"#60a5fa":"#3b82f6"} strokeWidth={1.5}/></svg>
+        },
+        {
+          lightBg:"#eef2ff", lightBdr:"#c7d2fe", darkBg:"rgba(99,102,241,0.08)", darkBdr:"rgba(99,102,241,0.2)",
+          title:"Avoid direct sunlight", desc:"Keep away from heat sources and direct sun to slow wilting.",
+          icon:<svg width="17" height="17" fill="none" stroke={isDark?"#818cf8":"#6366f1"} strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z" fill={isDark?"rgba(99,102,241,0.2)":"#e0e7ff"}/></svg>
+        },
+        {
+          lightBg:"#f0fdf4", lightBdr:"#bbf7d0", darkBg:"rgba(74,222,128,0.06)", darkBdr:"rgba(74,222,128,0.2)",
+          title:"Trim stems", desc:"Cut 1-2cm at a 45 degree angle every few days for better absorption.",
+          icon:<svg width="17" height="17" fill="none" stroke={isDark?"#4ade80":"#10b981"} strokeWidth={1.8} viewBox="0 0 24 24" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>
+        },
+      ].map((t,i) => (
+        <div key={i} className="flex gap-3 p-3.5 rounded-xl items-start"
+          style={{ background: isDark?t.darkBg:t.lightBg, border: `1px solid ${isDark?t.darkBdr:t.lightBdr}` }}>
+          <div className="flex-shrink-0 mt-0.5">{t.icon}</div>
+          <div>
+            <p className="text-sm font-semibold mb-0.5 m-0" style={{ color: isDark?"#e2e8f0":"#111827" }}>{t.title}</p>
+            <p className="text-xs leading-snug m-0" style={{ color: isDark?"#64748b":"#6b7280" }}>{t.desc}</p>
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /* ── Main Export ── */
 export default function ProductPreviewModal({ product, products = [], onClose, onNavigate }) {
   const [color,       setColor]       = useState(null)
@@ -958,6 +1314,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
 
   const todayOk = isTodayAvail()
   const { isDark } = useTheme()
+  const isMobile = useIsMobile(900)
 
   const modalBg  = isDark ? "#1e293b" : "white"
   const rightBg  = isDark ? "#0f172a" : "#f3f4f6"
@@ -1000,14 +1357,53 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
 
   const visibleAddons = showAllAddons ? liveAddOns : liveAddOns.slice(0, INITIAL_ADDON_COUNT)
 
+  /* Measure the app's fixed top navbar so we can sit cleanly beneath it
+     instead of guessing a fixed pixel value (heights differ on mobile/desktop). */
+  const [navH, setNavH] = useState(isMobile ? 64 : 80)
+
   /* Mount */
   useEffect(() => {
     setColor(colors[0])
     requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)))
     document.body.style.overflow = "hidden"
+
+    /* Inject the step-transition keyframes once.
+       NOTE: pm-step-anim is now only applied to the major step wrappers
+       (product <-> card <-> quote, and form <-> AI). It is intentionally
+       NOT applied to per-click UI like tabs, the calendar reveal, care
+       guide or reviews, which were causing flicker on every interaction. */
+    if (!document.getElementById("bloomora-pm-step-css")) {
+      const s = document.createElement("style")
+      s.id = "bloomora-pm-step-css"
+      s.textContent = `@keyframes pmStepIn{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}.pm-step-anim{animation:pmStepIn 0.32s cubic-bezier(0.22,0.61,0.36,1) both}@media(prefers-reduced-motion:reduce){.pm-step-anim{animation:none}}`
+      document.head.appendChild(s)
+    }
+
+    /* Find the site's fixed/sticky header and read its height */
+    const measureNav = () => {
+      const candidates = Array.from(document.querySelectorAll("nav, header, [data-navbar]"))
+      let h = 0
+      for (const el of candidates) {
+        const cs = window.getComputedStyle(el)
+        const r  = el.getBoundingClientRect()
+        /* Only count a bar that is pinned to the very top of the viewport */
+        if ((cs.position === "fixed" || cs.position === "sticky") && r.top <= 4 && r.height > 0) {
+          h = Math.max(h, r.height)
+        }
+      }
+      /* Fall back to a sane default if nothing matched */
+      setNavH(h > 0 && h < 200 ? Math.round(h) : (isMobile ? 64 : 80))
+    }
+    measureNav()
+    window.addEventListener("resize", measureNav)
+
     const esc = e => { if (e.key==="Escape") close() }
     document.addEventListener("keydown", esc)
-    return () => { document.removeEventListener("keydown", esc); document.body.style.overflow = "" }
+    return () => {
+      document.removeEventListener("keydown", esc)
+      window.removeEventListener("resize", measureNav)
+      document.body.style.overflow = ""
+    }
   }, [])
 
   const close       = () => { setVisible(false); setTimeout(onClose, 260) }
@@ -1066,83 +1462,248 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
     .filter(Boolean)
     .map(a => ({ id: a.id, name: a.name, price: a.price }))
 
-  /* Open the live chat widget with the quotation attached; keep this modal open behind it */
+  /* Open the live chat widget with the quotation attached. The preview stays
+     open behind/under the chat so the user keeps their context. */
   const openChatWithQuote = (quote) => {
     window.dispatchEvent(new CustomEvent("bloomora:open-chat", { detail: { quote } }))
   }
 
-  return (
+  const openChatWithProduct = () => {
+    window.dispatchEvent(new CustomEvent("bloomora:open-chat", { detail: { product: { name: product.name, price: product.price, image: product.image } } }))
+  }
+
+  /* Shared prop bundles so both layouts pass the exact same wiring */
+  const colorProps    = { colors, color, errors, setColor, setErrors, isDark }
+  const qtyProps      = { qty, errors, setQty, setErrors, isDark }
+  const addOnProps    = { loadingAddOns, liveAddOns, visibleAddons, addOns, toggleAddOn, showAllAddons, setShowAllAddons, isDark }
+  const deliveryProps = { delivType, customDate, showCal, todayOk, errors, setDelivType, setShowCal, setCustDate, setErrors, isDark }
+
+  /* ── Title row: Quote + Ask us buttons (shared markup, sizes per layout) ── */
+  const ActionPills = ({ compact }) => (
+    <div className="flex items-center gap-2 flex-shrink-0">
+      <button
+        onClick={() => setStep("quote")}
+        className="flex items-center gap-1.5 rounded-full font-bold text-white transition-all cursor-pointer border-none"
+        style={{ padding: compact ? "8px 12px" : "6px 14px", fontSize: compact ? 13 : 12, background: `linear-gradient(135deg,${DG},${G})`, boxShadow: "0 3px 10px rgba(46,139,52,0.3)" }}>
+        <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        Quote
+      </button>
+      <button
+        onClick={openChatWithProduct}
+        className="flex items-center gap-1.5 rounded-full font-bold text-white transition-all cursor-pointer border-none"
+        style={{ padding: compact ? "8px 12px" : "6px 14px", fontSize: compact ? 13 : 12, background: "linear-gradient(135deg,#25d366,#128c48)", boxShadow: "0 3px 10px rgba(37,211,102,0.35)" }}>
+        <svg width="13" height="13" fill="currentColor" viewBox="0 0 448 512"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg>
+        Ask us
+      </button>
+    </div>
+  )
+
+  const Stars = ({ size = 13 }) => (
     <>
-      <style>{`
-        .pm-scroll::-webkit-scrollbar{width:4px}
-        .pm-scroll::-webkit-scrollbar-thumb{background:${isDark?"#334155":"#e5e7eb"};border-radius:4px}
-        @media(max-width:900px){
-          .pm-wrap{flex-direction:column!important;border-radius:14px!important}
-          .pm-img{width:100%!important;height:auto!important;aspect-ratio:1/1!important;min-height:unset!important;max-height:none!important;flex-shrink:0!important}
-          .pm-right{margin:8px!important}
-          .pm-right-scroll{padding:14px 16px 0!important}
-          .pm-footer{padding:10px 16px 14px!important}
-          .pm-card-form{flex-direction:column!important}
-          .pm-card-img{width:100%!important;height:auto!important;aspect-ratio:1/1!important;padding:0!important;flex-shrink:0!important;max-height:none!important}
-          .pm-card-img img{object-fit:cover!important}
-          .pm-card-right{width:100%!important}
-          .pm-card-form-right{max-height:45vh!important}
-          .pm-card-choice-grid{grid-template-columns:1fr 1fr!important}
-        }
-        @media(max-width:600px){
-          .pm-overlay{padding:118px 14px 14px!important}
-          .pm-wrap{width:100%!important;border-radius:12px!important;height:calc(100vh - 146px)!important}
-          .pm-card-form-right{max-height:40vh!important}
-          .pm-card-choice-grid{grid-template-columns:1fr!important;max-width:280px!important}
-        }
-        @media(max-height:520px) and (orientation:landscape){
-          .pm-overlay{padding:82px 12px 12px!important}
-          .pm-img{width:40%!important;height:100%!important;aspect-ratio:unset!important;flex-shrink:0!important}
-          .pm-card-form{flex-direction:row!important}
-          .pm-card-img{width:36%!important;height:100%!important}
-          .pm-card-right{width:64%!important}
-        }
-      `}</style>
+      {[1,2,3,4,5].map(i => (
+        <svg key={i} width={size} height={size} fill={i<=Math.floor(product.rating)?"#f59e0b":isDark?"#334155":"#e5e7eb"} viewBox="0 0 20 20">
+          <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+        </svg>
+      ))}
+    </>
+  )
 
-      {/* Overlay */}
-      <div className="pm-overlay fixed inset-0 z-[49] flex items-center justify-center box-border"
-        style={{
-          padding: "148px 28px 28px",
-          backgroundColor: visible ? "rgba(0,0,0,0.58)" : "transparent",
-          backdropFilter: visible ? "blur(8px)" : "none",
-          WebkitBackdropFilter: visible ? "blur(8px)" : "none",
-          transition: "background-color 0.22s,backdrop-filter 0.22s"
-        }}
-        onClick={close}>
+  const errorBanner = Object.values(errors).some(Boolean) && (
+    <div className="px-3 py-2 rounded-lg flex items-center gap-2"
+      style={{
+        background: isDark?"rgba(239,68,68,0.1)":"#fef2f2",
+        border: `1px solid ${isDark?"rgba(239,68,68,0.3)":"#fecaca"}`
+      }}>
+      <svg width="13" height="13" fill="none" stroke="#ef4444" strokeWidth={2} viewBox="0 0 24 24" className="flex-shrink-0">
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+      </svg>
+      <p className="text-xs font-medium text-red-500">
+        Please select: {[errors.color&&"color", errors.qty&&"size", errors.date&&"delivery date"].filter(Boolean).join(", ")}
+      </p>
+    </div>
+  )
 
-        {/* Modal */}
-        <div className="pm-wrap relative flex flex-row overflow-hidden w-[85vw] h-full"
+  /* ════════════ Tabs (shared) ════════════ */
+  const Tabs = () => (
+    <div className="flex" style={{ borderBottom: `1px solid ${isDark?"#1e293b":"#f3f4f6"}` }}>
+      {[["details","Details"],["care","Care Guide"],["reviews","Reviews"]].map(([k,l]) => (
+        <button key={k} onClick={() => setTab(k)}
+          className="px-4 py-2 text-sm transition-colors"
           style={{
-            borderRadius: 18,
-            background: modalBg,
-            boxShadow: "0 28px 80px rgba(0,0,0,0.28)",
-            opacity: visible ? 1 : 0,
-            transform: visible ? "scale(1)" : "scale(0.97)",
-            transition: "opacity 0.22s,transform 0.26s cubic-bezier(0.34,1.1,0.64,1)"
-          }}
-          onClick={e => e.stopPropagation()}>
+            color: tab===k ? G : isDark?"#94a3b8":"#6b7280",
+            fontWeight: tab===k ? 600 : 400,
+            background: "none",
+            border: "none",
+            borderBottom: `2.5px solid ${tab===k ? G : "transparent"}`,
+            cursor: "pointer",
+            marginBottom: -1
+          }}>
+          {l}
+        </button>
+      ))}
+    </div>
+  )
 
-          {/* Close button */}
-          <button onClick={close}
-            className="absolute top-3.5 right-3.5 z-50 w-8 h-8 rounded-full flex items-center justify-center shadow-sm transition-colors cursor-pointer"
-            style={{ border: `1px solid ${isDark?"#334155":"#e5e7eb"}`, background: isDark?"#334155":"white" }}
-            onMouseEnter={e => e.currentTarget.style.background = isDark?"#475569":"#f3f4f6"}
-            onMouseLeave={e => e.currentTarget.style.background = isDark?"#334155":"white"}>
-            <svg width="11" height="11" fill="none" stroke={isDark?"#e2e8f0":"#374151"} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
-          </button>
+  /* ════════════ Tab body (shared) — no per-click animation (prevents flicker) ════════════ */
+  const TabBody = () => (
+    <div>
+      {tab === "details" && (
+        <div className="pb-4 space-y-5">
+          <DescriptionSection product={product} isDark={isDark} />
+          <ColorSection {...colorProps} />
+          <SuggestionsSection suggestions={suggestions} isDark={isDark} />
+          <QtySection {...qtyProps} />
+          <div className="pb-5" style={{ borderBottom: `1px solid ${isDark?"#1e293b":"#f3f4f6"}` }}>
+            <AddOnsSection {...addOnProps} />
+          </div>
+          <DeliverySection {...deliveryProps} />
+          <p className="text-sm leading-relaxed" style={{ color: isDark?"#64748b":"#6b7280" }}>
+            Hand-arranged by our skilled florists using the freshest blooms. Each arrangement is made to order.
+          </p>
+        </div>
+      )}
+      {tab === "care"    && <CareSection isDark={isDark} />}
+      {tab === "reviews" && <ReviewsSection reviews={reviews} isDark={isDark} />}
+    </div>
+  )
 
-          {/* ── Card step ── */}
-          {isCard && (
-            <CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate}/>
-          )}
+  /* ════════════ Price block (shared) ════════════ */
+  const PriceBlock = () => (
+    <div className="flex items-center gap-2 flex-wrap mb-5 pb-5"
+      style={{ borderBottom: `1px solid ${isDark?"#1e293b":"#f3f4f6"}` }}>
+      <span className="text-3xl font-bold tracking-tight"
+        style={{ color: isDark?"#00ff88":"#111827", textShadow: isDark?"0 0 20px rgba(0,255,136,0.4)":"none" }}>
+        ₱{total.toLocaleString()}
+      </span>
+      {hasDiscount(product.original, product.price) && (
+        <>
+          <span className="text-sm line-through" style={{ color: isDark?"#64748b":"#9ca3af" }}>
+            ₱{product.original.toLocaleString()}
+          </span>
+          <span className="text-xs font-semibold px-2 py-0.5 rounded"
+            style={{
+              color: isDark?"#00ff88":G,
+              background: isDark?"rgba(0,255,136,0.1)":"#f0fdf4",
+              border: `1px solid ${isDark?"rgba(0,255,136,0.25)":"#bbf7d0"}`,
+              textShadow: isDark?"0 0 8px rgba(0,255,136,0.5)":"none"
+            }}>
+            Save ₱{(product.original-product.price).toLocaleString()}
+          </span>
+        </>
+      )}
+    </div>
+  )
 
-          {/* ── Quote step ── */}
-          {isQuote && (
+  /* ════════════ Meta row: stars / sold / stock (shared) ════════════ */
+  const MetaRow = () => (
+    <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+      <Stars />
+      <span className="text-sm font-medium" style={{ color: isDark?"#cbd5e1":"#374151" }}>{product.rating}</span>
+      <span style={{ color: isDark?"#334155":"#e5e7eb", margin:"0 2px" }}>·</span>
+      <span className="text-sm" style={{ color: isDark?"#64748b":"#9ca3af" }}>{(product.reviews*2).toLocaleString()} sold</span>
+      <span style={{ color: isDark?"#334155":"#e5e7eb", margin:"0 2px" }}>·</span>
+      <span className="text-sm font-semibold" style={{ color: product.stock > 0 ? (isDark ? "#4ade80" : G) : "#ef4444" }}>
+        {product.stock > 0 ? `${product.stock} left in stock` : "Out of stock"}
+      </span>
+    </div>
+  )
+
+  /* ════════════ Footer CTAs (shared markup) ════════════ */
+  const FooterCTAs = () => (
+    <div className="flex gap-2.5">
+      <button onClick={() => startFlow("cart")}
+        className="flex-1 py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+        style={{
+          border: `2px solid ${isDark?"#4ade80":G}`,
+          background: isDark?"rgba(74,222,128,0.05)":"white",
+          color: isDark?"#4ade80":G,
+          boxShadow: isDark?"0 0 10px rgba(74,222,128,0.15)":"none"
+        }}>
+        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+        </svg>
+        Add to Cart
+      </button>
+      <button onClick={() => startFlow("checkout")}
+        className="flex-1 py-3.5 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all cursor-pointer border-none"
+        style={{
+          background: `linear-gradient(135deg,${DG},${G})`,
+          boxShadow: isDark?"0 0 20px rgba(0,255,136,0.3)":"none"
+        }}>
+        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/>
+        </svg>
+        Buy Now
+      </button>
+    </div>
+  )
+
+  /* ═══════════════════════════════════════════════════════════════════
+     MOBILE — FULL-PAGE SHEET
+     A single scrolling column: image header → product info → tabs → body.
+     The footer (totals + CTAs) is pinned to the bottom. No two-column
+     squeezing, so it lays out cleanly on every iPhone width.
+     ═══════════════════════════════════════════════════════════════════ */
+  if (isMobile) {
+    const pageBg = isDark ? "#0f172a" : "#ffffff"
+
+    /* One back action for the whole mobile sheet:
+         - in card/quote sub-steps  → return to the product view
+         - on the product view       → close the preview (back to shop)
+       Both the left arrow button and the right text button call this, so
+       there is always a reachable way back even on narrow phones (iPhone 13). */
+    const goBack = () => { if (isCard || isQuote) { setStep("product") } else { close() } }
+    const backLabel = (isCard || isQuote) ? "Back" : "Back to shop"
+
+    return (
+      <div className="fixed left-0 right-0 bottom-0 z-[40] flex flex-col"
+        style={{
+          top: `calc(${navH}px + env(safe-area-inset-top,0px))`,
+          background: pageBg,
+          opacity: visible ? 1 : 0,
+          transform: visible ? "translateY(0)" : "translateY(12px)",
+          transition: "opacity 0.22s, transform 0.26s cubic-bezier(0.34,1.1,0.64,1)"
+        }}>
+
+        {/* Sub-step top bar (card / quote only). These steps have no image
+            header to anchor floating buttons on, so they keep a slim bar with
+            a back arrow + label and a close X. The product view does NOT use
+            this — its controls float directly on the image (see below) so they
+            can never be hidden behind the site navbar. */}
+        {(isCard || isQuote) && (
+          <div className="flex-shrink-0 flex items-center gap-2 px-3 z-20"
+            style={{
+              height: 52,
+              background: isDark ? "rgba(15,23,42,0.96)" : "rgba(255,255,255,0.96)",
+              backdropFilter: "blur(10px)",
+              WebkitBackdropFilter: "blur(10px)",
+              borderBottom: `1px solid ${isDark?"#1e293b":"#f1f5f9"}`
+            }}>
+            <button onClick={goBack} aria-label={backLabel}
+              className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer border-none flex-shrink-0"
+              style={{ background: isDark?"#1e293b":"#f3f4f6" }}>
+              <svg width="16" height="16" fill="none" stroke={isDark?"#e2e8f0":"#374151"} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7"/></svg>
+            </button>
+            <button onClick={goBack}
+              className="flex items-center text-sm font-medium cursor-pointer bg-transparent border-none p-0 min-w-0 flex-1 truncate text-left"
+              style={{ color: isDark?"#94a3b8":"#374151" }}>
+              <span className="truncate">{backLabel}</span>
+            </button>
+            <button onClick={close} aria-label="Close"
+              className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer border-none flex-shrink-0"
+              style={{ background: isDark?"#1e293b":"#f3f4f6" }}>
+              <svg width="14" height="14" fill="none" stroke={isDark?"#e2e8f0":"#374151"} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
+            </button>
+          </div>
+        )}
+
+        {/* Content area */}
+        {isCard ? (
+          <div key="m-card" className="pm-step-anim flex-1 min-h-0 overflow-hidden">
+            <CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate} isMobile/>
+          </div>
+        ) : isQuote ? (
+          <div key="m-quote" className="pm-step-anim flex-1 min-h-0 overflow-hidden">
             <QuoteStep
               product={product}
               color={color}
@@ -1153,21 +1714,185 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
               onBack={() => setStep("product")}
               onClose={close}
               onOpenChat={openChatWithQuote}
+              isMobile
             />
+          </div>
+        ) : (
+          <div key="m-product" className="flex-1 min-h-0 flex flex-col">
+
+            {/* Solid pinned back bar — always visible at the top of the sheet,
+                directly under the site navbar. This is a normal layout element
+                (not floating), so it can never be hidden behind the image or
+                lost to a z-index/navbar overlap. */}
+            <div className="flex-shrink-0 flex items-center justify-between px-3"
+              style={{
+                height: 48,
+                background: isDark ? "#0f172a" : "#ffffff",
+                borderBottom: `1px solid ${isDark?"#1e293b":"#f1f5f9"}`
+              }}>
+              <button onClick={close}
+                className="flex items-center gap-1.5 text-sm font-semibold cursor-pointer bg-transparent border-none p-0"
+                style={{ color: isDark?"#e2e8f0":"#374151" }}>
+                <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7"/></svg>
+                Back to shop
+              </button>
+              <button onClick={close} aria-label="Close"
+                className="w-8 h-8 rounded-full flex items-center justify-center cursor-pointer border-none"
+                style={{ background: isDark?"#1e293b":"#f3f4f6" }}>
+                <svg width="14" height="14" fill="none" stroke={isDark?"#e2e8f0":"#374151"} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
+              </button>
+            </div>
+
+            <div className="pm-scroll flex-1 min-h-0 overflow-y-auto" style={{ background: pageBg }}>
+
+              {/* Image header */}
+              <div className="relative w-full overflow-hidden" style={{ aspectRatio: "1/1", background: isDark?"#0f172a":"#f8fafc" }}>
+                <img src={product.image} alt={product.name} className="w-full h-full object-contain"
+                  onError={e => { e.target.style.display="none" }}/>
+
+                {hasDiscount(product.original, product.price) && (
+                  <div className="absolute top-3 left-3 text-white text-xs font-bold px-3 py-1 rounded-md z-10"
+                    style={{ background: DG }}>
+                    -{pctOff(product.original, product.price)}% OFF
+                  </div>
+                )}
+                {product.ribbon && (
+                  <div className="absolute top-11 left-0 z-10">
+                    <div className="text-[11px] font-bold text-white px-4 py-1"
+                      style={{ background: product._ribbonColor||G, clipPath: "polygon(0 0,calc(100% - 6px) 0,100% 50%,calc(100% - 6px) 100%,0 100%)" }}>
+                      {product.ribbon}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Info */}
+              <div className="px-4 pt-4">
+                <p className="text-xs mb-1.5" style={{ color: isDark?"#64748b":"#9ca3af" }}>
+                  {product.category}
+                  <span style={{ color: isDark?"#334155":"#d1d5db", margin:"0 4px" }}>/</span>
+                  <span className="font-medium" style={{ color: G }}>{product.name}</span>
+                </p>
+
+                <h2 className="text-2xl font-bold leading-tight mb-3"
+                  style={{ color: isDark?"#f1f5f9":"#111827" }}>
+                  {product.name}
+                </h2>
+
+                {/* Quote + Ask us pills, full width on mobile */}
+                <div className="mb-4"><ActionPills compact /></div>
+
+                <MetaRow />
+                <PriceBlock />
+                <div className="mb-5"><Tabs /></div>
+                <TabBody />
+              </div>
+
+              {/* spacer so content clears the fixed footer */}
+              <div style={{ height: 8 }}/>
+            </div>
+
+            {/* Pinned footer */}
+            <div className="flex-shrink-0 px-4 pt-3"
+              style={{
+                paddingBottom: "calc(12px + env(safe-area-inset-bottom,0px))",
+                borderTop: `1px solid ${isDark?"#1e293b":"#f1f5f9"}`,
+                background: isDark ? "#0f172a" : "#ffffff"
+              }}>
+              {addOnTotal > 0 && (
+                <div className="flex justify-between mb-2.5 pb-2.5 border-b border-dashed"
+                  style={{ borderColor: isDark?"#1e293b":"#f3f4f6" }}>
+                  <span className="text-xs" style={{ color: isDark?"#64748b":"#9ca3af" }}>Base ₱{product.price.toLocaleString()} + extras ₱{addOnTotal}</span>
+                  <span className="text-sm font-bold" style={{ color: isDark?"#4ade80":DG }}>Total ₱{total.toLocaleString()}</span>
+                </div>
+              )}
+              {errorBanner && <div className="mb-2.5">{errorBanner}</div>}
+              <FooterCTAs />
+            </div>
+          </div>
+        )}
+
+        <style>{`
+          .pm-scroll::-webkit-scrollbar{width:0}
+        `}</style>
+      </div>
+    )
+  }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     DESKTOP / LAPTOP — FULL PAGE (edge-to-edge, not a modal)
+     Fills the viewport below the fixed navbar. Two-column product layout
+     on the left/right, card and quote sub-steps take the full canvas.
+     ═══════════════════════════════════════════════════════════════════ */
+  return (
+    <>
+      <style>{`
+        .pm-scroll::-webkit-scrollbar{width:4px}
+        .pm-scroll::-webkit-scrollbar-thumb{background:${isDark?"#334155":"#e5e7eb"};border-radius:4px}
+      `}</style>
+
+      {/* Full-page canvas — sits below the fixed navbar. Controls live INSIDE
+         the content cards (not in an outer bar) so they can never be clipped by
+         the navbar. Equal top/bottom breathing room shows the card's rounded
+         corners on every edge. */}
+      <div className="pm-page fixed left-0 right-0 bottom-0 z-[40] flex flex-col box-border"
+        style={{
+          top: navH,
+          paddingTop: 16,
+          background: rightBg,
+          opacity: visible ? 1 : 0,
+          transition: "opacity 0.25s ease"
+        }}>
+
+        {/* Canvas body — one rounded floating panel with equal spacing all
+           around, so the corner radius shows on top exactly like the bottom */}
+        <div className="pm-wrap relative flex flex-row overflow-hidden flex-1 min-h-0 mx-4 mb-4 rounded-2xl"
+          style={{ background: modalBg, boxShadow: `0 4px 24px ${cardBdr}` }}>
+
+          {/* ── Card step ── */}
+          {isCard && (
+            <div key="d-card" className="pm-step-anim w-full h-full">
+              <CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate}/>
+            </div>
+          )}
+
+          {/* ── Quote step ── */}
+          {isQuote && (
+            <div key="d-quote" className="pm-step-anim w-full h-full">
+              <QuoteStep
+                product={product}
+                color={color}
+                sizeLabel={qty}
+                addOnObjects={quoteAddOnObjects}
+                addOnTotal={addOnTotal}
+                isDark={isDark}
+                onBack={() => setStep("product")}
+                onClose={close}
+                onOpenChat={openChatWithQuote}
+              />
+            </div>
           )}
 
           {/* ── Product step ── */}
           {!isCard && !isQuote && (
-            <>
+            <div key="d-product" className="flex flex-row w-full h-full">
               <ImgZoom product={product} isDark={isDark}/>
 
-              <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: rightBg }}>
-                {/* White card */}
-                <div className="pm-right flex-1 flex flex-col m-4 rounded-2xl overflow-hidden"
-                  style={{ background: cardBg, boxShadow: `0 2px 16px ${cardBdr}` }}>
+              <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: cardBg }}>
+                <div className="pm-right flex-1 flex flex-col overflow-hidden">
 
-                  {/* ── Scrollable area ── */}
-                  <div className="pm-scroll pm-right-scroll flex-1 overflow-y-auto px-6 pt-6 pb-0">
+                  {/* Scrollable area */}
+                  <div className="pm-scroll pm-right-scroll flex-1 overflow-y-auto px-6 pt-8 pb-0">
+
+                    {/* In-card header: Back to shop (right-aligned) */}
+                    <div className="flex items-center justify-end mb-4">
+                      <button onClick={close}
+                        className="flex items-center gap-1.5 text-sm font-medium cursor-pointer bg-transparent border-none p-0"
+                        style={{ color: isDark?"#94a3b8":"#6b7280" }}>
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7"/></svg>
+                        Back to shop
+                      </button>
+                    </div>
 
                     {/* Breadcrumb */}
                     <p className="text-xs mb-1.5" style={{ color: isDark?"#64748b":"#9ca3af" }}>
@@ -1182,30 +1907,8 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
                         style={{ color: isDark?"#f1f5f9":"#111827" }}>
                         {product.name}
                       </h2>
-                      <div className="flex items-center gap-2 flex-shrink-0">
-                        {/* Quote button */}
-                        <button
-                          onClick={() => setStep("quote")}
-                          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold text-white transition-all cursor-pointer border-none"
-                          style={{ background: `linear-gradient(135deg,${DG},${G})`, boxShadow: "0 3px 10px rgba(46,139,52,0.3)" }}
-                          onMouseEnter={e => { e.currentTarget.style.boxShadow="0 5px 18px rgba(46,139,52,0.45)"; e.currentTarget.style.transform="translateY(-1px)" }}
-                          onMouseLeave={e => { e.currentTarget.style.boxShadow="0 3px 10px rgba(46,139,52,0.3)"; e.currentTarget.style.transform="none" }}>
-                          <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                          Quote
-                        </button>
-                        {/* WhatsApp / Ask us */}
-                        <button
-                          onClick={() => window.dispatchEvent(new CustomEvent("bloomora:open-chat", { detail: { product: { name: product.name, price: product.price, image: product.image } } }))}
-                          className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold text-white transition-all cursor-pointer border-none"
-                          style={{ background: "linear-gradient(135deg,#25d366,#128c48)", boxShadow: "0 3px 10px rgba(37,211,102,0.35)" }}
-                          onMouseEnter={e => { e.currentTarget.style.boxShadow="0 5px 18px rgba(37,211,102,0.5)"; e.currentTarget.style.transform="translateY(-1px)" }}
-                          onMouseLeave={e => { e.currentTarget.style.boxShadow="0 3px 10px rgba(37,211,102,0.35)"; e.currentTarget.style.transform="none" }}>
-                          <svg width="13" height="13" fill="currentColor" viewBox="0 0 448 512"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg>
-                          Ask us
-                        </button>
-                      </div>
+                      <ActionPills />
                     </div>
-
                     {/* Stars + Sold + Stock */}
                     <div className="flex items-center gap-1.5 mb-3 flex-wrap">
                       {[1,2,3,4,5].map(i => (
@@ -1576,27 +2279,19 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
                         )}
                       </div>
                     )}
+                    <MetaRow />
+                    <PriceBlock />
+                    <div className="mb-5"><Tabs /></div>
+                    <TabBody />
 
                   </div>
-                  {/* ↑ pm-scroll closes here */}
 
-                  {/* Errors banner — sibling of scroll, inside white card */}
+                  {/* Errors banner */}
                   {Object.values(errors).some(Boolean) && (
-                    <div className="mx-5 mt-2 px-3 py-2 rounded-lg flex items-center gap-2"
-                      style={{
-                        background: isDark?"rgba(239,68,68,0.1)":"#fef2f2",
-                        border: `1px solid ${isDark?"rgba(239,68,68,0.3)":"#fecaca"}`
-                      }}>
-                      <svg width="13" height="13" fill="none" stroke="#ef4444" strokeWidth={2} viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
-                      </svg>
-                      <p className="text-xs font-medium text-red-500">
-                        Please select: {[errors.color&&"color", errors.qty&&"size", errors.date&&"delivery date"].filter(Boolean).join(", ")}
-                      </p>
-                    </div>
+                    <div className="mx-5 mt-2">{errorBanner}</div>
                   )}
 
-                  {/* Footer buttons — sibling of scroll, inside white card */}
+                  {/* Footer buttons */}
                   <div className="pm-footer flex-shrink-0 px-6 py-4 rounded-b-2xl"
                     style={{ borderTop: `1px solid ${isDark?"#1e293b":"#f3f4f6"}`, background: cardBg }}>
                     {addOnTotal > 0 && (
@@ -1605,49 +2300,16 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
                         <span className="text-sm font-bold" style={{ color: DG }}>Total ₱{total.toLocaleString()}</span>
                       </div>
                     )}
-                    <div className="flex gap-2.5">
-                      <button onClick={() => startFlow("cart")}
-                        className="flex-1 py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
-                        style={{
-                          border: `2px solid ${isDark?"#4ade80":G}`,
-                          background: isDark?"rgba(74,222,128,0.05)":"white",
-                          color: isDark?"#4ade80":G,
-                          boxShadow: isDark?"0 0 10px rgba(74,222,128,0.15)":"none"
-                        }}
-                        onMouseEnter={e => { e.currentTarget.style.background=isDark?"rgba(74,222,128,0.15)":G; e.currentTarget.style.color=isDark?"#4ade80":"white" }}
-                        onMouseLeave={e => { e.currentTarget.style.background=isDark?"rgba(74,222,128,0.05)":"white"; e.currentTarget.style.color=isDark?"#4ade80":G }}>
-                        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
-                        </svg>
-                        Add to Cart
-                      </button>
-                      <button onClick={() => startFlow("checkout")}
-                        className="flex-1 py-3.5 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all cursor-pointer border-none"
-                        style={{
-                          background: `linear-gradient(135deg,${DG},${G})`,
-                          boxShadow: isDark?"0 0 20px rgba(0,255,136,0.3)":"none"
-                        }}
-                        onMouseEnter={e => e.currentTarget.style.boxShadow=isDark?"0 0 30px rgba(0,255,136,0.5)":"0 4px 12px rgba(46,139,52,0.3)"}
-                        onMouseLeave={e => e.currentTarget.style.boxShadow=isDark?"0 0 20px rgba(0,255,136,0.3)":"none"}>
-                        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                        </svg>
-                        Buy Now
-                      </button>
-                    </div>
+                    <FooterCTAs />
                   </div>
 
                 </div>
-                {/* ↑ white card closes */}
               </div>
-              {/* ↑ right panel closes */}
-            </>
+            </div>
           )}
 
         </div>
-        {/* ↑ pm-wrap closes */}
       </div>
-      {/* ↑ pm-overlay closes */}
     </>
   )
 }
