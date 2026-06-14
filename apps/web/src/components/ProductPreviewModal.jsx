@@ -155,10 +155,6 @@ function Confetti() {
   )
 }
 
-
-function AIPanel({ onUse, onBack }) {
-
-
 function AIPanel({ onUse, onBack, isMobile }) {
 
   const [relationship, setRelationship] = useState("")
@@ -872,16 +868,13 @@ function ImgZoom({ product, isDark }) {
 
 
       {/* 🚀 FIX: Conditionally render the "-X% OFF" badge only if it's a real discount */}
-      {hasDiscount && (
+      {hasDiscount(originalPrice, product.price) && (
         <div className="absolute top-4 left-4 text-white text-xs font-bold px-3 py-1 rounded-md z-10 pointer-events-none"
           style={{ background: DG }}>
           -{pctOff(originalPrice, product.price)}% OFF
-      {hasDiscount(product.original, product.price) && (
-        <div className="absolute top-4 left-4 text-white text-xs font-bold px-3 py-1 rounded-md z-10 pointer-events-none"
-          style={{ background: DG }}>
-          -{pctOff(product.original, product.price)}% OFF
         </div>
       )}
+
 
       {product.ribbon && (
         <div className="absolute top-11 left-0 z-10 pointer-events-none">
@@ -1411,6 +1404,8 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
 
   const addOnTotal = addOns.reduce((s, id) => s + (liveAddOns.find(a => a.id===id)?.price || 0), 0)
   const total      = product.price + addOnTotal
+
+  const checkDiscount = (o, p) => o && o > p;
 
   const delivLabel =
     delivType === "today"   ? "Today (before 2PM)" :
