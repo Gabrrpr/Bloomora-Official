@@ -3,6 +3,9 @@ import { api } from "../../services/api.js"
 import { addToCart } from "../../utils/cart.js"
 import { useTheme } from "../../context/ThemeContext"
 
+// 🚀 IMPORT AI CARD COMPOSER UTILS
+import { generateCardMessage, RELATIONSHIP_OPTIONS, OCCASION_OPTIONS, TONE_OPTIONS } from "../../utils/cardMessage.js"
+
 const G  = "#2E8B34"
 const DG = "#0C573E"
 
@@ -26,7 +29,6 @@ const MATERIAL_CATEGORIES = [
   { key: "accessory", label: "Accessories" },
 ]
 
-// Fun facts cycled through while the AI generates the arrangement.
 const FLOWER_FACTS = [
   "Roses can live for over a week with fresh water and a clean stem cut.",
   "Sunflowers turn to follow the sun across the sky, a habit called heliotropism.",
@@ -46,6 +48,20 @@ export default function DescribeArrangement({ onNavigate }) {
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
   const [products, setProducts] = useState([])
+  
+  // Add-ons state
+  const [liveAddOns, setLiveAddOns] = useState([])
+  const [selectedAddOns, setSelectedAddOns] = useState([])
+  const [showAllAddons, setShowAllAddons] = useState(false)
+
+  // 🚀 NEW: AI Card Composer State
+  const [cardMessage, setCardMessage] = useState("")
+  const [showAIPanel, setShowAIPanel] = useState(false)
+  const [aiCardState, setAiCardState] = useState({ relationship: "", occasion: "", tone: "warm", extra: "" })
+  const [generatingCard, setGeneratingCard] = useState(false)
+  const [generatedCardMsg, setGeneratedCardMsg] = useState("")
+  const [cardError, setCardError] = useState("")
+
   const [selectedMaterials, setSelectedMaterials] = useState({ flower: null, vase: null, wrapping: null, accessory: null })
   const [showMaterials, setShowMaterials] = useState(false)
   const [customizationEnabled, setCustomizationEnabled] = useState(true)
@@ -56,41 +72,33 @@ export default function DescribeArrangement({ onNavigate }) {
   const [customName, setCustomName] = useState("")
   const MAX = 500
 
-  // ── UI-only state: animated typing placeholder + loading progress/fact cycling ──
   const [typedPlaceholder, setTypedPlaceholder] = useState("")
   const [promptFocused, setPromptFocused] = useState(false)
   const [progress, setProgress] = useState(0)
   const [factIdx, setFactIdx] = useState(0)
 
-  // ── Dark-mode color tokens (only affect rendering, never logic) ──
-  const pageBg     = isDark
-    ? "radial-gradient(1100px 600px at 50% -8%, #0f2018 0%, #0d1a14 45%, #0f172a 100%)"
-    : "radial-gradient(1100px 600px at 50% -8%, #eaf6ec 0%, #f4f9f1 45%, #fbf7ef 100%)"
-  const accentG    = isDark ? "#4ade80" : G
-  const accentDG   = isDark ? "#4ade80" : DG
-  const accentPink = isDark ? "#f9a8d4" : "#db2777"
-
-  const cardBg     = isDark ? "rgba(30,41,59,0.92)" : "rgba(255,255,255,0.9)"
-  const cardBdr    = isDark ? "#334155" : "#dcfce7"
-  const cardShadow = isDark ? "0 12px 40px rgba(0,0,0,0.45)" : "0 12px 40px rgba(12,87,62,0.08)"
-
-  const headingC   = isDark ? "#f1f5f9" : "#1f2937"
-  const subHeadC   = isDark ? "#cbd5e1" : "#374151"
-  const bodyC      = isDark ? "#94a3b8" : "#6b7280"
-  const mutedC     = isDark ? "#64748b" : "#9ca3af"
-  const faintC     = isDark ? "#475569" : "#d1d5db"
-
-  const inputBg    = isDark ? "#0f172a" : "#ffffff"
-  const inputBdr   = isDark ? "#475569" : "#e5e7eb"
-  const inputText  = isDark ? "#f1f5f9" : "#1f2937"
-
+  // ── Dark-mode color tokens ──
+  const pageBg       = isDark ? "radial-gradient(1100px 600px at 50% -8%, #0f2018 0%, #0d1a14 45%, #0f172a 100%)" : "radial-gradient(1100px 600px at 50% -8%, #eaf6ec 0%, #f4f9f1 45%, #fbf7ef 100%)"
+  const accentG      = isDark ? "#4ade80" : G
+  const accentDG     = isDark ? "#4ade80" : DG
+  const accentPink   = isDark ? "#f9a8d4" : "#db2777"
+  const cardBg       = isDark ? "rgba(30,41,59,0.92)" : "rgba(255,255,255,0.9)"
+  const cardBdr      = isDark ? "#334155" : "#dcfce7"
+  const cardShadow   = isDark ? "0 12px 40px rgba(0,0,0,0.45)" : "0 12px 40px rgba(12,87,62,0.08)"
+  const headingC     = isDark ? "#f1f5f9" : "#1f2937"
+  const subHeadC     = isDark ? "#cbd5e1" : "#374151"
+  const bodyC        = isDark ? "#94a3b8" : "#6b7280"
+  const mutedC       = isDark ? "#64748b" : "#9ca3af"
+  const faintC       = isDark ? "#475569" : "#d1d5db"
+  const inputBg      = isDark ? "#0f172a" : "#ffffff"
+  const inputBdr     = isDark ? "#475569" : "#e5e7eb"
+  const inputText    = isDark ? "#f1f5f9" : "#1f2937"
   const tileBg       = isDark ? "#1e293b" : "white"
   const tileSelBg    = isDark ? "rgba(74,222,128,0.12)" : "#F0F7F1"
   const tileBdr      = isDark ? "#334155" : "#e5e7eb"
   const tilePlaceBg  = isDark ? "#0f172a" : "#f3f4f6"
   const dividerC     = isDark ? "#334155" : "#f3f4f6"
   const iconCircleBg = isDark ? "rgba(74,222,128,0.12)" : "rgba(46,139,52,0.1)"
-
   const tableRowBdr  = isDark ? "#334155" : "#f3f4f6"
   const totalRowBg   = isDark ? "rgba(74,222,128,0.08)" : "#f4f9f1"
   const subtleBoxBg  = isDark ? "#1e293b" : "#f9fafb"
@@ -104,7 +112,11 @@ export default function DescribeArrangement({ onNavigate }) {
           api.getAiUsage().catch(() => ({ remaining: 5, limit: 5 })),
         ])
         setCustomizationEnabled(toggleRes.enabled)
-        setProducts(Array.isArray(productsRes) ? productsRes : productsRes.products || [])
+        
+        const allProds = Array.isArray(productsRes) ? productsRes : productsRes.products || []
+        setProducts(allProds)
+        
+        setLiveAddOns(allProds.filter(p => p.category?.toLowerCase() === "add-on" || p.category?.toLowerCase() === "addon" || p.category?.toLowerCase() === "accessories"))
         setAiUsage(usageRes)
       } catch (e) {
         console.error("Failed to load", e)
@@ -116,9 +128,6 @@ export default function DescribeArrangement({ onNavigate }) {
     load()
   }, [])
 
-  // ── Animated typing placeholder (types + deletes example prompts) ──
-  // Pauses while the user has focused or typed into the box, so it never
-  // interferes with real input — purely a visual hint when the field is empty.
   useEffect(() => {
     if (prompt || promptFocused) { setTypedPlaceholder(""); return }
     let exampleIdx = 0
@@ -133,7 +142,7 @@ export default function DescribeArrangement({ onNavigate }) {
         setTypedPlaceholder(full.slice(0, charIdx))
         if (charIdx === full.length) {
           deleting = true
-          timer = setTimeout(tick, 1800) // hold the full line before deleting
+          timer = setTimeout(tick, 1800)
           return
         }
         timer = setTimeout(tick, 38)
@@ -153,17 +162,14 @@ export default function DescribeArrangement({ onNavigate }) {
     return () => clearTimeout(timer)
   }, [prompt, promptFocused])
 
-  // ── Loading: animate a growing progress bar and rotate fun facts ──
   useEffect(() => {
     if (!loading) { setProgress(0); return }
     setProgress(8)
     setFactIdx(Math.floor(Math.random() * FLOWER_FACTS.length))
 
-    // Ease the bar upward toward ~90% while we wait for the real response.
     const prog = setInterval(() => {
       setProgress(p => (p >= 90 ? 90 : p + Math.max(1, (92 - p) * 0.08)))
     }, 280)
-    // Rotate the fun fact every few seconds.
     const facts = setInterval(() => {
       setFactIdx(i => (i + 1) % FLOWER_FACTS.length)
     }, 3600)
@@ -171,19 +177,11 @@ export default function DescribeArrangement({ onNavigate }) {
     return () => { clearInterval(prog); clearInterval(facts) }
   }, [loading])
 
+  const getProductsByCategory = (category) => products.filter(p => p.category === category && p.status !== "inactive")
 
-  const getProductsByCategory = (category) =>
-    products.filter(p => p.category === category && p.is_available)
-
-  // Look up a product's actual price from DB by id
   const getProductPrice = (productId) => {
     const p = products.find(p => p.id === productId)
     return p ? parseFloat(p.price) : 0
-  }
-
-  const getProductName = (productId) => {
-    const p = products.find(p => p.id === productId)
-    return p ? p.name : ""
   }
 
   const toggleMaterial = (category, productId) => {
@@ -193,6 +191,32 @@ export default function DescribeArrangement({ onNavigate }) {
     }))
   }
 
+  const toggleAddOn = (id) => {
+    setSelectedAddOns(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
+  }
+
+  // 🚀 NEW: Generate AI Greeting Card Logic
+  const handleGenerateCard = async () => {
+    if (!aiCardState.relationship || !aiCardState.occasion) {
+      setCardError("Please select a relationship and occasion.");
+      return;
+    }
+    setCardError("");
+    setGeneratingCard(true);
+    setGeneratedCardMsg("");
+    try {
+      const text = await generateCardMessage(aiCardState);
+      setGeneratedCardMsg(text);
+    } catch (e) {
+      setCardError("Could not generate message. Please try again.");
+    }
+    setGeneratingCard(false);
+  }
+
+  const acceptGeneratedMessage = () => {
+    setCardMessage(generatedCardMsg);
+    setShowAIPanel(false);
+  }
 
   const handleGenerate = async () => {
     if (!customizationEnabled) {
@@ -204,29 +228,24 @@ export default function DescribeArrangement({ onNavigate }) {
     setError(null)
     setResult(null)
     setUnavailableItems([])
+    setSelectedAddOns([])
 
     try {
-      // 🚀 THE FIX: Secretly supercharge the user's prompt!
-      
-      // 1. Gather all currently available inventory items from your React state
       const availableInventory = products
-        .filter(p => p.is_available)
+        .filter(p => p.is_available && p.status !== "inactive" && p.stock > 0)
         .map(p => p.name)
         .join(", ");
 
-      // 2. Inject strict camera rules and inventory constraints into the prompt
-      const superchargedPrompt = `${prompt.trim()}. 
-        Strict visual rules: Professional product photography, front-view, eye-level camera angle, standing upright. DO NOT use a top-down or bird's-eye view. 
-        Strict inventory rules: You MUST ONLY utilize flowers, vases, and wrappings from this exact list: [${availableInventory}].`;
+      const superchargedPrompt = `Customer Request: "${prompt.trim()}". 
+        If the request is vague (like just an occasion or color), act as an expert florist and invent a beautiful recipe that perfectly matches the vibe. 
+        Strict inventory rules: You MUST ONLY pick flowers, vases, and wrappings from this exact list of available stock: [${availableInventory}]. 
+        Strict visual rules for the image generator: Ultra-realistic 8k macro photography, studio lighting, hyper-detailed, elegant floral design, lifelike textures, natural lighting. NO artificial-looking gloss, NO cartoonish colors. Professional florist portfolio shot, eye-level, standing upright against a clean, neutral background. DO NOT use a top-down view.`;
 
-      // 3. Send the supercharged prompt to the backend
-      const payload = {
-        prompt_text: superchargedPrompt, 
-        flower_id: selectedMaterials.flower || undefined,
-        vase_id: selectedMaterials.vase || undefined,
-        wrapping_id: selectedMaterials.wrapping || undefined,
-        accessory_id: selectedMaterials.accessory || undefined,
-      }
+      const payload = { prompt_text: superchargedPrompt }
+      if (selectedMaterials.flower) payload.flower_id = selectedMaterials.flower;
+      if (selectedMaterials.vase) payload.vase_id = selectedMaterials.vase;
+      if (selectedMaterials.wrapping) payload.wrapping_id = selectedMaterials.wrapping;
+      if (selectedMaterials.accessory) payload.accessory_id = selectedMaterials.accessory;
       
       const data = await api.checkAndGenerate(payload)
 
@@ -234,10 +253,7 @@ export default function DescribeArrangement({ onNavigate }) {
         setUnavailableItems(data.unavailable_items)
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
       } else if (data.success) {
-        // Enrich price_breakdown items with actual DB prices AND group duplicates!
         if (data.price_breakdown?.items) {
-
-          // 1. Assign correct DB prices to each raw item
           const pricedItems = data.price_breakdown.items.map(item => {
             const dbPrice = getProductPrice(item.product_id)
             const qty = item.quantity || 1
@@ -249,29 +265,21 @@ export default function DescribeArrangement({ onNavigate }) {
             }
           })
 
-          // 2. 🚀 THE FIX: Group the items by name so we don't get "1x Sunflower" three times
           const groupedMap = pricedItems.reduce((acc, item) => {
             const key = item.product_name;
             if (!acc[key]) {
-              acc[key] = { ...item }; // First time seeing it, add to list
+              acc[key] = { ...item };
             } else {
-              // We've seen this flower before! Add to its quantity and subtotal
               acc[key].quantity += item.quantity;
               acc[key].subtotal += item.subtotal;
             }
             return acc;
           }, {});
 
-          // 3. Convert our grouped object back into an array for the UI
           data.price_breakdown.items = Object.values(groupedMap);
-
-          // 4. Recalculate the grand total
-          data.price_breakdown.total_price = data.price_breakdown.items.reduce(
-            (sum, item) => sum + item.subtotal, 0
-          )
+          data.price_breakdown.total_price = data.price_breakdown.items.reduce((sum, item) => sum + item.subtotal, 0)
         }
 
-        // Snap the progress bar to 100% before revealing the result.
         setProgress(100)
         setResult(data)
         setCustomName(data.price_breakdown?.items?.[0]?.product_name || "AI Arrangement")
@@ -286,24 +294,48 @@ export default function DescribeArrangement({ onNavigate }) {
     }
   }
 
+  const baseTotal = result?.price_breakdown?.total_price || 0;
+  const addOnTotal = selectedAddOns.reduce((sum, id) => sum + (liveAddOns.find(a => a.id === id)?.price || 0), 0);
+  const grandTotal = baseTotal + addOnTotal;
 
-  const handleAddToCart = () => {
+  const handleAddToCart = (destination = "cart") => {
     if (!result) return
-    const breakdownNames = result.price_breakdown?.items?.map(i => i.product_name).join(", ") || "Custom arrangement"
+    
+    const breakdownNames = result.price_breakdown?.items?.map(i => `${i.quantity}x ${i.product_name}`).join(", ") || "Custom arrangement"
+    
+    const compositionArray = result.price_breakdown?.items?.map(i => ({
+      product_id: i.product_id,
+      name: i.product_name,
+      quantity: i.quantity
+    })) || [];
+
+    const selectedAddOnObjects = selectedAddOns.map(id => {
+      const addon = liveAddOns.find(a => a.id === id)
+      return { id: addon.id, name: addon.name, price: parseFloat(addon.price), qty: 1 }
+    });
+
     const cartItem = {
       id: result.arrangement_id || `arr-${Date.now()}`,
-      group: "Describe your arrangement",
+      group: "Custom AI Arrangement",
       groupIcon: "",
       name: customName || arrangementName,
-      desc: `Custom arrangement: ${breakdownNames}. ${prompt.trim()}`,
+      desc: `Contains: ${breakdownNames}.`,
       qty: 1,
-      price: result.price_breakdown?.total_price || 0,
+      price: baseTotal,
+      totalPrice: grandTotal,
+      addOns: selectedAddOnObjects,
+      composition: compositionArray,
+      
+      // 🚀 Include the custom greeting card message in the cart payload!
+      cardMessage: cardMessage.trim() ? cardMessage.trim() : null,
+      
       checked: true,
       img: result.generated_image_url,
       imgLabel: null,
     }
+    
     addToCart(cartItem)
-    onNavigate("cart")
+    onNavigate(destination)
   }
 
   const handleTryAlternative = (field, productId) => {
@@ -315,21 +347,25 @@ export default function DescribeArrangement({ onNavigate }) {
     }
   }
 
+  const resetAll = () => {
+    setResult(null); 
+    setUnavailableItems([]); 
+    setSelectedAddOns([]);
+    setCardMessage("");
+    setShowAIPanel(false);
+    setGeneratedCardMsg("");
+  }
+
   const arrangementName = result?.price_breakdown?.items?.[0]?.product_name || "AI Arrangement"
   const arrangementDesc = result
-    ? `A custom arrangement featuring ${result.price_breakdown?.items?.map(i => i.product_name).join(", ") || "your selected materials"}.`
+    ? `A custom arrangement featuring ${result.price_breakdown?.items?.map(i => `${i.quantity}x ${i.product_name}`).join(", ") || "your selected materials"}.`
     : ""
 
   return (
     <>
-    {/* Soft botanical gradient backdrop — replaces the flat grey/white */}
-    <div
-      className="min-h-screen flex items-start justify-center"
-      style={{ background: pageBg }}
-    >
+    <div className="min-h-screen flex items-start justify-center" style={{ background: pageBg }}>
       <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
 
-        {/* Page heading */}
         <div className="text-center mb-6">
           <p className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold tracking-[0.2em] uppercase mb-2" style={{ color: accentG }}>
             <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#f472b6" }} />
@@ -348,8 +384,6 @@ export default function DescribeArrangement({ onNavigate }) {
 
           {/* ── Left column ── */}
           <div className="space-y-5">
-
-            {/* Prompt card */}
             <div className="backdrop-blur-sm border rounded-3xl p-6 sm:p-7"
               style={{ backgroundColor: cardBg, borderColor: cardBdr, boxShadow: cardShadow }}>
               <div className="flex items-center gap-2.5 mb-1.5">
@@ -373,14 +407,9 @@ export default function DescribeArrangement({ onNavigate }) {
                 style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
               />
 
-              {/* ── Inline validation / error — shown directly under the prompt box ── */}
               {error && (
                 <div className="mt-3 flex items-start gap-2.5 px-4 py-3 rounded-xl text-sm"
-                  style={{
-                    backgroundColor: isDark ? "rgba(239,68,68,0.12)" : "#fef2f2",
-                    border: `1px solid ${isDark ? "rgba(239,68,68,0.3)" : "#fecaca"}`,
-                    color: isDark ? "#fca5a5" : "#dc2626",
-                  }}>
+                  style={{ backgroundColor: isDark ? "rgba(239,68,68,0.12)" : "#fef2f2", border: `1px solid ${isDark ? "rgba(239,68,68,0.3)" : "#fecaca"}`, color: isDark ? "#fca5a5" : "#dc2626" }}>
                   <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
@@ -399,7 +428,6 @@ export default function DescribeArrangement({ onNavigate }) {
                 </button>
               </div>
 
-              {/* Optional Materials toggle */}
               <div className="mt-5 border-t pt-4" style={{ borderColor: dividerC }}>
                 <button
                   onClick={() => setShowMaterials(p => !p)}
@@ -428,32 +456,50 @@ export default function DescribeArrangement({ onNavigate }) {
                           <div key={key}>
                             <p className="text-sm font-semibold mb-2.5" style={{ color: subHeadC }}>{label}</p>
                             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
-                              {categoryProducts.map(p => (
-                                <button
-                                  key={p.id}
-                                  onClick={() => toggleMaterial(key, p.id)}
-                                  className="relative flex flex-col items-center gap-1.5 p-2.5 rounded-xl border-2 transition-all text-left"
-                                  style={{
-                                    borderColor: selectedMaterials[key] === p.id ? accentG : tileBdr,
-                                    backgroundColor: selectedMaterials[key] === p.id ? tileSelBg : tileBg,
-                                  }}
-                                >
-                                  {p.image_url ? (
-                                    <img src={p.image_url} alt={p.name} className="w-12 h-12 rounded-lg object-cover" />
-                                  ) : (
-                                    <div className="w-12 h-12 rounded-lg flex items-center justify-center text-xs" style={{ backgroundColor: tilePlaceBg, color: mutedC }}>No img</div>
-                                  )}
-                                  <span className="text-[11px] font-medium leading-tight text-center truncate w-full" style={{ color: subHeadC }}>{p.name}</span>
-                                  <span className="text-[11px]" style={{ color: mutedC }}>₱{(+p.price).toLocaleString()}</span>
-                                  {selectedMaterials[key] === p.id && (
-                                    <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: accentG }}>
-                                      <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke={isDark ? "#08120c" : "#ffffff"}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                                      </svg>
-                                    </div>
-                                  )}
-                                </button>
-                              ))}
+                              {categoryProducts.map(p => {
+                                const isOutOfStock = p.stock <= 0 || !p.is_available;
+                                return (
+                                  <button
+                                    key={p.id}
+                                    disabled={isOutOfStock}
+                                    onClick={() => !isOutOfStock && toggleMaterial(key, p.id)}
+                                    className="relative flex flex-col items-center gap-1.5 p-2.5 rounded-xl border-2 transition-all text-left overflow-hidden"
+                                    style={{
+                                      borderColor: selectedMaterials[key] === p.id ? accentG : tileBdr,
+                                      backgroundColor: isOutOfStock ? (isDark ? "#0f172a" : "#f9fafb") : (selectedMaterials[key] === p.id ? tileSelBg : tileBg),
+                                      opacity: isOutOfStock ? 0.6 : 1,
+                                      cursor: isOutOfStock ? "not-allowed" : "pointer",
+                                      filter: isOutOfStock ? "grayscale(100%)" : "none"
+                                    }}
+                                  >
+                                    {isOutOfStock && (
+                                      <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/10 backdrop-blur-[1px]">
+                                        <span className="bg-gray-800 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">Out of Stock</span>
+                                      </div>
+                                    )}
+
+                                    {p.image_url ? (
+                                      <img src={p.image_url} alt={p.name} className="w-12 h-12 rounded-lg object-cover" />
+                                    ) : (
+                                      <div className="w-12 h-12 rounded-lg flex items-center justify-center text-xs" style={{ backgroundColor: tilePlaceBg, color: mutedC }}>No img</div>
+                                    )}
+                                    
+                                    <span className="text-[11px] font-medium leading-tight text-center truncate w-full" style={{ color: subHeadC }}>{p.name}</span>
+                                    
+                                    <span className="text-[11px] font-semibold" style={{ color: isOutOfStock ? "#ef4444" : mutedC }}>
+                                      {isOutOfStock ? "Unavailable" : `₱${(+p.price).toLocaleString()}`}
+                                    </span>
+
+                                    {selectedMaterials[key] === p.id && !isOutOfStock && (
+                                      <div className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: accentG }}>
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke={isDark ? "#08120c" : "#ffffff"}>
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                        </svg>
+                                      </div>
+                                    )}
+                                  </button>
+                                )
+                              })}
                             </div>
                           </div>
                         )
@@ -463,7 +509,6 @@ export default function DescribeArrangement({ onNavigate }) {
                 )}
               </div>
 
-              {/* AI usage warnings */}
               {aiUsage && aiUsage.remaining === 0 && (
                 <div className="mt-4 px-4 py-3 rounded-xl text-sm"
                   style={{ backgroundColor: isDark ? "rgba(239,68,68,0.12)" : "#fef2f2", border: `1px solid ${isDark ? "rgba(239,68,68,0.3)" : "#fee2e2"}`, color: isDark ? "#fca5a5" : "#dc2626" }}>
@@ -494,7 +539,6 @@ export default function DescribeArrangement({ onNavigate }) {
                   className="flex items-center gap-2 px-7 py-3.5 text-base font-bold text-white rounded-2xl transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-50"
                   style={{ background: customizationEnabled && prompt.trim() && aiUsage?.remaining !== 0 ? "linear-gradient(135deg, #e879a0, #f43f5e)" : (isDark ? "#475569" : "#d1d5db") }}
                 >
-
                   {loading ? (
                     <>
                       <svg className="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none">
@@ -515,7 +559,6 @@ export default function DescribeArrangement({ onNavigate }) {
               </div>
             </div>
 
-            {/* Unavailable items */}
             {unavailableItems.length > 0 && (
               <div className="border rounded-2xl p-6"
                 style={{ backgroundColor: cardBg, borderColor: isDark ? "rgba(245,158,11,0.3)" : "#fde68a" }}>
@@ -557,7 +600,6 @@ export default function DescribeArrangement({ onNavigate }) {
               </div>
             )}
 
-            {/* Result card */}
             {result && result.success && (
               <div className="border rounded-3xl overflow-hidden"
                 style={{ backgroundColor: cardBg, borderColor: cardBdr, boxShadow: cardShadow }}>
@@ -570,8 +612,8 @@ export default function DescribeArrangement({ onNavigate }) {
                     <span className="text-sm" style={{ color: mutedC }}>Preview and analysis</span>
                   </div>
                   <button
-                    onClick={() => { setResult(null); setUnavailableItems([]) }}
-                    className="px-3 py-1.5 rounded-lg transition text-sm"
+                    onClick={resetAll}
+                    className="px-3 py-1.5 rounded-lg transition text-sm hover:bg-gray-100 dark:hover:bg-slate-800"
                     style={{ color: mutedC }}
                   >
                     Reset
@@ -579,7 +621,6 @@ export default function DescribeArrangement({ onNavigate }) {
                 </div>
 
                 <div className="px-7 pb-7 flex flex-col sm:flex-row gap-6">
-                  {/* AI Generated Image */}
                   <div
                     className="w-full sm:w-52 h-64 rounded-2xl flex-shrink-0 flex items-center justify-center border overflow-hidden cursor-pointer hover:opacity-90 transition"
                     style={{ borderColor: dividerC, backgroundColor: tilePlaceBg }}
@@ -587,11 +628,7 @@ export default function DescribeArrangement({ onNavigate }) {
                     title="Click for a closer look"
                   >
                     {result.generated_image_url ? (
-                      <img
-                        src={result.generated_image_url}
-                        alt={arrangementName}
-                        className="w-full h-full object-cover"
-                      />
+                      <img src={result.generated_image_url} alt={arrangementName} className="w-full h-full object-cover" />
                     ) : (
                       <div className="text-center px-3">
                         <p className="text-sm mb-1" style={{ color: faintC }}>No image generated</p>
@@ -600,7 +637,7 @@ export default function DescribeArrangement({ onNavigate }) {
                     )}
                   </div>
 
-                  <div className="flex-1">
+                  <div className="flex-1 min-w-0">
                     <div className="mb-3">
                       <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: mutedC }}>Arrangement Name</label>
                       <input
@@ -614,22 +651,17 @@ export default function DescribeArrangement({ onNavigate }) {
                     </div>
                     <p className="text-sm leading-relaxed mb-5" style={{ color: bodyC }}>{arrangementDesc}</p>
 
-                    {/* Materials Used */}
                     {result.price_breakdown?.items?.length > 0 && (
                       <div className="mb-5">
                         <p className="text-sm font-semibold mb-2.5" style={{ color: subHeadC }}>Materials Used</p>
                         <div className="flex flex-wrap gap-2 rounded-xl border p-3.5" style={{ borderColor: tileBdr }}>
                           {result.price_breakdown.items.map((item, idx) => (
-                            <span
-                              key={idx}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm"
-                              style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}
-                            >
+                            <span key={idx} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm" style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>
                               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: accentG }} />
                               <span className="font-medium" style={{ color: subHeadC }}>{item.material_type}:</span>
                               <span style={{ color: bodyC }}>
                                 {item.product_name} 
-                                {item.quantity > 1 && <span className="ml-1 text-xs font-semibold px-1.5 py-0.5 rounded-md" style={{ color: mutedC, backgroundColor: isDark ? "#0f172a" : "#f3f4f6" }}>× {item.quantity}</span>}
+                                {item.quantity > 0 && <span className="ml-1 text-xs font-semibold px-1.5 py-0.5 rounded-md" style={{ color: mutedC, backgroundColor: isDark ? "#0f172a" : "#f3f4f6" }}>× {item.quantity}</span>}
                               </span>
                             </span>
                           ))}
@@ -637,8 +669,167 @@ export default function DescribeArrangement({ onNavigate }) {
                       </div>
                     )}
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-                      {/* Cost Breakdown — bordered table with row lines */}
+                    <div className="mb-5 border-t pt-5" style={{ borderColor: dividerC }}>
+                      <p className="text-sm font-semibold mb-2.5 flex justify-between" style={{ color: subHeadC }}>
+                        Enhance Your Arrangement <span className="text-xs font-normal" style={{ color: mutedC }}>(Optional)</span>
+                      </p>
+                      {liveAddOns.length > 0 ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          {(showAllAddons ? liveAddOns : liveAddOns.slice(0, 4)).map(a => {
+                            const isUnavailable = a.stock <= 0 || a.is_available === false
+                            const on = selectedAddOns.includes(a.id) && !isUnavailable
+                            const addonBg  = isUnavailable ? (isDark ? "#0f172a" : "#f9fafb") : on ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : (isDark ? "#0f172a" : "white")
+                            const addonBdr = isUnavailable ? (isDark ? "#1e293b" : "#e5e7eb") : on ? (isDark ? "#4ade80" : G) : (isDark ? "#1e293b" : "#e5e7eb")
+                            
+                            return (
+                              <button key={a.id}
+                                disabled={isUnavailable}
+                                onClick={() => !isUnavailable && toggleAddOn(a.id)}
+                                className="flex items-center gap-2.5 p-2 rounded-xl text-left transition-all relative overflow-hidden"
+                                style={{
+                                  border: `1.5px solid ${addonBdr}`,
+                                  background: addonBg,
+                                  opacity: isUnavailable ? 0.5 : 1,
+                                  filter: isUnavailable ? "grayscale(100%)" : "none",
+                                  cursor: isUnavailable ? "not-allowed" : "pointer"
+                                }}>
+                                <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0" style={{ background: isDark ? "#1e293b" : "#f3f4f6" }}>
+                                  <img src={a.image_url} alt={a.name} className="w-full h-full object-cover" onError={e => e.target.style.display="none"}/>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-semibold truncate m-0" style={{ color: isDark ? "#e2e8f0" : "#111827" }}>{a.name}</p>
+                                  <p className="text-[10px] font-semibold mt-0.5 m-0" style={{ color: isUnavailable ? (isDark ? "#64748b" : "#9ca3af") : (isDark ? "#4ade80" : G) }}>
+                                    {isUnavailable ? "Unavailable" : `+₱${a.price}`}
+                                  </p>
+                                </div>
+                                <div className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 mr-1"
+                                  style={{
+                                    border: `2px solid ${on ? (isDark ? "#4ade80" : G) : isDark ? "#334155" : "#d1d5db"}`,
+                                    background: on ? (isDark ? "rgba(74,222,128,0.2)" : G) : "transparent"
+                                  }}>
+                                  {on && <svg width="8" height="8" fill="none" stroke="white" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
+                                </div>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      ) : (
+                        <p className="text-xs" style={{ color: mutedC }}>No add-ons available right now.</p>
+                      )}
+                      {liveAddOns.length > 4 && (
+                        <button onClick={() => setShowAllAddons(!showAllAddons)} className="text-xs font-semibold mt-3 hover:underline" style={{ color: accentG }}>
+                          {showAllAddons ? "Show Less" : "See More Options"}
+                        </button>
+                      )}
+                    </div>
+
+                    {/* 🚀 NEW: AI Card Composer seamlessly embedded */}
+                    <div className="mb-5 border-t pt-5" style={{ borderColor: dividerC }}>
+                      <div className="flex items-center justify-between mb-2.5">
+                        <p className="text-sm font-semibold" style={{ color: subHeadC }}>
+                          Greeting Card <span className="text-xs font-normal" style={{ color: mutedC }}>(Optional)</span>
+                        </p>
+                        <button onClick={() => setShowAIPanel(!showAIPanel)} className="text-xs font-semibold flex items-center gap-1 transition-colors hover:underline" style={{ color: accentG }}>
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          </svg>
+                          {showAIPanel ? "Write it myself" : "Use AI Writer"}
+                        </button>
+                      </div>
+
+                      {showAIPanel ? (
+                        <div className="p-4 rounded-xl border mb-2" style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>
+                          <div className="grid grid-cols-2 gap-3 mb-3">
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>Relationship *</label>
+                              <select
+                                value={aiCardState.relationship}
+                                onChange={e => { setAiCardState(s => ({...s, relationship: e.target.value})); setCardError(""); }}
+                                className="w-full rounded-lg px-3 py-2 text-sm border outline-none transition"
+                                style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
+                              >
+                                <option value="">Select...</option>
+                                {RELATIONSHIP_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>Occasion *</label>
+                              <select
+                                value={aiCardState.occasion}
+                                onChange={e => { setAiCardState(s => ({...s, occasion: e.target.value})); setCardError(""); }}
+                                className="w-full rounded-lg px-3 py-2 text-sm border outline-none transition"
+                                style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
+                              >
+                                <option value="">Select...</option>
+                                {OCCASION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                              </select>
+                            </div>
+                          </div>
+
+                          <div className="mb-3">
+                            <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>Tone</label>
+                            <div className="flex gap-1.5 flex-wrap">
+                              {TONE_OPTIONS.map(t => (
+                                <button key={t.value} onClick={() => setAiCardState(s => ({...s, tone: t.value}))}
+                                  className="px-2.5 py-1 rounded-full text-xs transition-all border"
+                                  style={{
+                                    fontWeight: aiCardState.tone === t.value ? 600 : 400,
+                                    borderColor: aiCardState.tone === t.value ? accentG : tileBdr,
+                                    backgroundColor: aiCardState.tone === t.value ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : inputBg,
+                                    color: aiCardState.tone === t.value ? accentG : subHeadC
+                                  }}>
+                                  {t.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="mb-3">
+                            <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>Extra Context <span className="normal-case tracking-normal font-normal opacity-70">(optional)</span></label>
+                            <input
+                              type="text"
+                              placeholder="e.g. She loves sunflowers, it's our 10th anniversary..."
+                              value={aiCardState.extra}
+                              onChange={e => setAiCardState(s => ({...s, extra: e.target.value}))}
+                              className="w-full rounded-lg px-3 py-2 text-sm border outline-none transition"
+                              style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
+                            />
+                          </div>
+
+                          {cardError && <p className="text-xs text-red-500 mb-3">{cardError}</p>}
+
+                          <button onClick={handleGenerateCard} disabled={generatingCard}
+                            className="w-full py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition border-none text-white cursor-pointer hover:opacity-90"
+                            style={{ background: generatingCard ? (isDark ? "#475569" : "#d1d5db") : `linear-gradient(135deg,${DG},${G})` }}>
+                            {generatingCard ? "Writing..." : "Generate Message"}
+                          </button>
+
+                          {generatedCardMsg && (
+                            <div className="mt-4 border rounded-xl overflow-hidden" style={{ borderColor: isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0" }}>
+                              <div className="p-3" style={{ backgroundColor: isDark ? "rgba(74,222,128,0.06)" : "#f0fdf4" }}>
+                                <p className="text-sm italic leading-relaxed" style={{ color: subHeadC }}>"{generatedCardMsg}"</p>
+                              </div>
+                              <div className="flex border-t" style={{ borderColor: isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0" }}>
+                                <button onClick={() => setGeneratedCardMsg("")} className="flex-1 py-2 text-xs font-semibold border-r transition hover:opacity-80" style={{ borderColor: isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0", color: bodyC, backgroundColor: isDark ? "#0f172a" : "white" }}>Try Again</button>
+                                <button onClick={acceptGeneratedMessage} className="flex-1 py-2 text-xs font-bold transition hover:opacity-80" style={{ color: accentG, backgroundColor: isDark ? "#0f172a" : "white" }}>Use This Message</button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <textarea
+                          value={cardMessage}
+                          onChange={e => setCardMessage(e.target.value.slice(0, 160))}
+                          placeholder="Write a warm, kind message..."
+                          rows={3}
+                          className="w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-1 focus:ring-green-600 transition resize-none"
+                          style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
+                        />
+                      )}
+                      {!showAIPanel && <p className="text-[10px] text-right mt-1" style={{ color: mutedC }}>{cardMessage.length} / 160</p>}
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-5">
                       <div>
                         <p className="text-sm font-semibold mb-2.5" style={{ color: subHeadC }}>Cost Breakdown</p>
                         <div className="rounded-xl border overflow-hidden" style={{ borderColor: tileBdr }}>
@@ -653,16 +844,25 @@ export default function DescribeArrangement({ onNavigate }) {
                                   <td className="px-3 py-2.5 text-right font-medium whitespace-nowrap" style={{ color: subHeadC }}>₱{(+item.subtotal).toLocaleString()}</td>
                                 </tr>
                               ))}
+                              {selectedAddOns.map(id => {
+                                const addon = liveAddOns.find(a => a.id === id);
+                                if (!addon) return null;
+                                return (
+                                  <tr key={`addon-${id}`} className="border-b" style={{ borderColor: tableRowBdr }}>
+                                    <td className="px-3 py-2.5 align-top" style={{ color: bodyC }}><span style={{ color: accentG }} className="font-bold mr-1">+</span>{addon.name}</td>
+                                    <td className="px-3 py-2.5 text-right font-medium whitespace-nowrap" style={{ color: subHeadC }}>₱{(+addon.price).toLocaleString()}</td>
+                                  </tr>
+                                )
+                              })}
                               <tr style={{ backgroundColor: totalRowBg }}>
-                                <td className="px-3 py-3 text-base font-bold" style={{ color: headingC }}>Total</td>
-                                <td className="px-3 py-3 text-right text-base font-bold whitespace-nowrap" style={{ color: accentDG }}>₱{(+result.price_breakdown?.total_price).toLocaleString()}.00</td>
+                                <td className="px-3 py-3 text-base font-bold" style={{ color: headingC }}>Grand Total</td>
+                                <td className="px-3 py-3 text-right text-base font-bold whitespace-nowrap" style={{ color: accentDG }}>₱{grandTotal.toLocaleString()}.00</td>
                               </tr>
                             </tbody>
                           </table>
                         </div>
                       </div>
 
-                      {/* Availability info — bordered card */}
                       <div>
                         <p className="text-sm font-semibold mb-2.5" style={{ color: subHeadC }}>Flower Availability</p>
                         <div className="rounded-xl border p-4" style={{ borderColor: tileBdr }}>
@@ -690,14 +890,24 @@ export default function DescribeArrangement({ onNavigate }) {
                         </div>
                       </div>
                     </div>
+                    
+                    <div className="flex gap-3 mt-6">
+                      <button
+                        onClick={() => handleAddToCart("cart")}
+                        className="flex-1 py-3.5 text-sm font-bold rounded-xl transition-all"
+                        style={{ border: `2px solid ${accentG}`, color: accentG, backgroundColor: "transparent" }}
+                      >
+                        Add to Cart
+                      </button>
+                      <button
+                        onClick={() => handleAddToCart("checkout")}
+                        className="flex-1 py-3.5 text-sm font-bold text-white rounded-xl transition-all hover:brightness-105 active:scale-[0.98]"
+                        style={{ backgroundColor: accentG, color: isDark ? "#08120c" : "#ffffff", boxShadow: "0 4px 14px rgba(46,139,52,0.3)" }}
+                      >
+                        Buy Now
+                      </button>
+                    </div>
 
-                    <button
-                      onClick={handleAddToCart}
-                      className="mt-5 w-full py-3.5 text-base font-bold text-white rounded-xl transition-all hover:brightness-105 active:scale-[0.98]"
-                      style={{ backgroundColor: accentG, color: isDark ? "#08120c" : "#ffffff" }}
-                    >
-                      Add to shopping bag
-                    </button>
                   </div>
                 </div>
 
@@ -714,7 +924,6 @@ export default function DescribeArrangement({ onNavigate }) {
             )}
           </div>
 
-          {/* ── Right column: Prompt Tips ── */}
           <div className="backdrop-blur-sm border rounded-3xl p-7 self-start"
             style={{ backgroundColor: cardBg, borderColor: cardBdr, boxShadow: isDark ? "0 12px 40px rgba(0,0,0,0.4)" : "0 12px 40px rgba(12,87,62,0.06)" }}>
             <div className="flex items-center gap-2.5 mb-5">
@@ -740,37 +949,27 @@ export default function DescribeArrangement({ onNavigate }) {
               ))}
             </div>
           </div>
-
         </div>
       </div>
     </div>
 
-    {/* ── Loading overlay: blurred backdrop + centered progress + flower facts ── */}
     {loading && (
       <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
         style={{ backgroundColor: isDark ? "rgba(8,15,10,0.6)" : "rgba(12,87,62,0.35)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
         <div className="w-full max-w-md rounded-3xl px-8 py-10 text-center shadow-2xl"
           style={{ backgroundColor: isDark ? "#1e293b" : "#ffffff", animation: "daPop 0.3s cubic-bezier(0.34,1.56,0.64,1) both" }}>
-          {/* Bloom icon — soft rose/green halo for the accent palette */}
           <div className="w-16 h-16 mx-auto mb-5 rounded-full flex items-center justify-center"
             style={{ background: "linear-gradient(135deg, rgba(244,114,182,0.18), rgba(46,139,52,0.14))" }}>
             <svg className="w-10 h-10" viewBox="0 0 48 48" fill="none" style={{ animation: "daBob 2.6s ease-in-out infinite" }}>
-              {/* Stem */}
               <path d="M24 30V44" stroke="#2E8B34" strokeWidth="2.4" strokeLinecap="round" />
-              {/* Leaves */}
               <path d="M24 38c-3.5 0-6.3-2-7-5.2 3.5-.6 6.3 1.2 7 5.2Z" fill="#34a853" />
               <path d="M24 34c3-.2 5.6-2 6.4-4.8-3.2-.4-5.8 1.4-6.4 4.8Z" fill="#2E8B34" />
-              {/* Six rounded petals around the center */}
               {[0,60,120,180,240,300].map(deg => (
-                <ellipse key={deg} cx="24" cy="12" rx="5.2" ry="8" fill="#f472b6"
-                  transform={`rotate(${deg} 24 22)`} />
+                <ellipse key={deg} cx="24" cy="12" rx="5.2" ry="8" fill="#f472b6" transform={`rotate(${deg} 24 22)`} />
               ))}
-              {/* Inner petal shading */}
               {[30,90,150,210,270,330].map(deg => (
-                <ellipse key={deg} cx="24" cy="15" rx="3.2" ry="5" fill="#ec4899" opacity="0.45"
-                  transform={`rotate(${deg} 24 22)`} />
+                <ellipse key={deg} cx="24" cy="15" rx="3.2" ry="5" fill="#ec4899" opacity="0.45" transform={`rotate(${deg} 24 22)`} />
               ))}
-              {/* Flower center */}
               <circle cx="24" cy="22" r="6" fill="#fbbf24" />
               <circle cx="24" cy="22" r="3.2" fill="#f59e0b" />
             </svg>
@@ -779,19 +978,15 @@ export default function DescribeArrangement({ onNavigate }) {
           <h3 className="text-xl font-bold mb-1.5" style={{ color: accentDG }}>Creating your bouquet</h3>
           <p className="text-sm mb-7" style={{ color: mutedC }}>Arranging every petal just for you...</p>
 
-          {/* Growing progress bar with a flower riding the leading edge */}
           <div className="relative w-full mb-2" style={{ paddingTop: "12px" }}>
             <div className="w-full h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: isDark ? "#0f172a" : "#f1ece6" }}>
               <div className="h-full rounded-full transition-all duration-300 ease-out"
                 style={{ width: `${progress}%`, background: "linear-gradient(90deg, #f472b6, #fbbf24 55%, #2E8B34)" }} />
             </div>
-            {/* Flower marker — centered on the bar, riding its leading edge */}
-            <div className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ease-out"
-              style={{ left: `${progress}%`, top: "17px" }}>
+            <div className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ease-out" style={{ left: `${progress}%`, top: "17px" }}>
               <svg className="w-[30px] h-[30px]" viewBox="0 0 24 24" fill="none" style={{ animation: "daSpin 4s linear infinite", filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.2))" }}>
                 {[0,72,144,216,288].map(deg => (
-                  <ellipse key={deg} cx="12" cy="6.5" rx="2.8" ry="4.2" fill="#f472b6"
-                    transform={`rotate(${deg} 12 12)`} />
+                  <ellipse key={deg} cx="12" cy="6.5" rx="2.8" ry="4.2" fill="#f472b6" transform={`rotate(${deg} 12 12)`} />
                 ))}
                 <circle cx="12" cy="12" r="3.4" fill="#fbbf24" />
                 <circle cx="12" cy="12" r="1.6" fill="#f59e0b" />
@@ -800,9 +995,7 @@ export default function DescribeArrangement({ onNavigate }) {
           </div>
           <p className="text-xs font-semibold mb-7" style={{ color: mutedC }}>{Math.round(progress)}%</p>
 
-          {/* Fun fact */}
-          <div className="rounded-2xl px-5 py-4 text-left"
-            style={{ backgroundColor: isDark ? "rgba(219,39,119,0.1)" : "#fdf2f8", border: `1px solid ${isDark ? "rgba(219,39,119,0.3)" : "#fbcfe8"}` }}>
+          <div className="rounded-2xl px-5 py-4 text-left" style={{ backgroundColor: isDark ? "rgba(219,39,119,0.1)" : "#fdf2f8", border: `1px solid ${isDark ? "rgba(219,39,119,0.3)" : "#fbcfe8"}` }}>
             <p className="text-xs font-bold tracking-wider uppercase mb-1.5" style={{ color: isDark ? "#f9a8d4" : "#db2777" }}>Did you know?</p>
             <p key={factIdx} className="text-sm leading-relaxed" style={{ color: isDark ? "#cbd5e1" : "#4b5563", animation: "daFade 0.5s ease both" }}>
               {FLOWER_FACTS[factIdx]}
@@ -812,30 +1005,17 @@ export default function DescribeArrangement({ onNavigate }) {
       </div>
     )}
 
-    {/* Lightbox modal for closer look */}
     {lightboxOpen && result?.generated_image_url && (
-      <div
-        className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
-        onClick={() => setLightboxOpen(false)}
-      >
-        <button
-          className="absolute top-4 right-4 text-white/80 hover:text-white transition"
-          onClick={() => setLightboxOpen(false)}
-        >
+      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setLightboxOpen(false)}>
+        <button className="absolute top-4 right-4 text-white/80 hover:text-white transition" onClick={() => setLightboxOpen(false)}>
           <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
-        <img
-          src={result.generated_image_url}
-          alt={arrangementName}
-          className="max-w-full max-h-[85vh] rounded-xl shadow-2xl object-contain"
-          onClick={e => e.stopPropagation()}
-        />
+        <img src={result.generated_image_url} alt={arrangementName} className="max-w-full max-h-[85vh] rounded-xl shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
       </div>
     )}
 
-    {/* Keyframes for the loading overlay animations */}
     <style>{`
       @keyframes daPop  { from { opacity:0; transform:scale(0.94) translateY(10px); } to { opacity:1; transform:scale(1) translateY(0); } }
       @keyframes daFade { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }

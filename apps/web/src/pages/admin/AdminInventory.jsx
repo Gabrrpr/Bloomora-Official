@@ -122,25 +122,103 @@ function FL({ children, isDark }) {
   return <label className="block text-sm font-semibold mb-1" style={{ color: isDark ? "#94a3b8" : "#374151" }}>{children}</label>
 }
 
-function AddItemForm({ onBack, onSaveSuccess, isDark, initialData }) {
-  const isEditing = Boolean(initialData);
+// ── View Inventory Modal ──
+function ViewInventoryModal({ item, onClose, isDark }) {
+  const d = {
+    overlayBg: "rgba(15,23,42,0.72)",
+    modalBg: isDark ? "#1a2332" : "white",
+    modalBdr: isDark ? "#2d3748" : "#e8edf2",
+    modalHdr: isDark ? "#111827" : "#fafbfc",
+    modalHdrBdr: isDark ? "#1e293b" : "#f1f5f9",
+    modalFtr: isDark ? "#0f172a" : "#fafbfc",
+    modalFtrBdr: isDark ? "#1e293b" : "#f1f5f9",
+    headC: isDark ? "#f1f5f9" : "#111827",
+    subC: isDark ? "#94a3b8" : "#6b7280",
+    labelC: isDark ? "#94a3b8" : "#6b7280",
+    cellC: isDark ? "#e2e8f0" : "#1e293b",
+    inputBg: isDark ? "#1e293b" : "white",
+    inputBdr: isDark ? "#374151" : "#dde3ec",
+  }
 
+  const rows = [
+    { label: "Item Name", value: item.name },
+    { label: "Category", value: item.category || "—", capitalize: true },
+    { label: "Unit Type", value: item.unit_type || "piece" },
+    { label: "Current Stock", value: item.stock ?? 0 },
+    { label: "Reorder Point", value: item.reorder_point ?? 10 },
+    { label: "Cost per Unit", value: `₱${parseFloat(item.cost_per_unit || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}` },
+    { label: "Status", value: item.status === "inactive" ? "Discontinued" : "Active" },
+    { label: "Branches", value: Array.isArray(item.branches) && item.branches.length > 0 ? item.branches.join(", ") : "Unassigned" },
+  ]
+
+  return createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ backgroundColor: d.overlayBg, backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: 9999, top: 0, left: 0, width: "100vw", height: "100vh" }}
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="rounded-xl w-full overflow-hidden flex flex-col"
+        style={{ maxWidth: "420px", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${d.modalBdr}`, backgroundColor: d.modalBg }}>
+
+        <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
+          style={{ borderBottom: `1px solid ${d.modalHdrBdr}`, background: d.modalHdr }}>
+          <div>
+            <p className="text-base font-bold" style={{ color: d.headC }}>Inventory Details</p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-lg transition-all" style={{ color: d.subC }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "#f1f5f9"} 
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+          {rows.map(row => (
+            <div key={row.label}>
+              <p className="text-xs font-bold uppercase tracking-wider mb-0.5" style={{ color: d.labelC }}>{row.label}</p>
+              <p className="text-sm font-semibold" style={{ color: d.cellC, textTransform: row.capitalize ? 'capitalize' : 'none' }}>{row.value}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-end gap-2 px-6 py-4 flex-shrink-0"
+          style={{ borderTop: `1px solid ${d.modalFtrBdr}`, backgroundColor: d.modalFtr }}>
+          <button onClick={onClose} className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
+            style={{ borderColor: d.inputBdr, color: d.subC, backgroundColor: d.inputBg }}>
+            Close
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+// ── Edit Inventory Form (No longer Add Item) ──
+function EditItemForm({ item, onBack, onSaveSuccess, isDark }) {
   const [f, setF] = useState({ 
-    name: initialData?.name || "", 
-    sku: initialData?.sku || initialData?.id?.slice(0, 8) || "", 
-    category: initialData?.category || "", 
-    unit: initialData?.unit_type || "", 
-    branch: "", 
-    stock: initialData?.stock ?? "0", 
-    reorderLevel: initialData?.reorder_point ?? "", 
-    costPerUnit: initialData?.cost_per_unit ?? "", 
-    status: "" 
+    name: item.name || "", 
+    sku: item.sku || String(item.id).slice(0, 8) || "", 
+    category: item.category || "", 
+    unit: item.unit_type || "", 
+    branches: item.branches || [], 
+    stock: item.stock ?? "0", 
+    reorderLevel: item.reorder_point ?? "", 
+    costPerUnit: item.cost_per_unit ?? "", 
+    status: item.status === "inactive" ? "Discontinued" : "Active" 
   })
   
   const s = k => v => setF(p => ({ ...p, [k]: v }))
   const CATEGORIES = ["Fresh Flowers", "Dried Flowers", "Artificial Flowers", "Foliage & Greenery", "Vases & Containers", "Ribbons & Wrapping", "Floral Foam & Supplies", "Seasonal & Event"]
   const UNITS      = ["piece", "bunch", "stem", "box", "pack", "roll", "sheet", "kg", "g", "L", "mL"]
   const STATUSES   = ["Active", "Low Stock", "Out of Stock", "Discontinued"]
+
+  const toggleBranch = (branch) => {
+    setF(prev => ({
+      ...prev,
+      branches: prev.branches.includes(branch) 
+        ? prev.branches.filter(b => b !== branch) 
+        : [...prev.branches, branch]
+    }));
+  };
 
   const handleSave = async () => {
     try {
@@ -151,28 +229,18 @@ function AddItemForm({ onBack, onSaveSuccess, isDark, initialData }) {
       if (f.stock !== "") formData.append("stock", parseInt(f.stock) || 0);
       if (f.reorderLevel !== "") formData.append("reorder_point", parseInt(f.reorderLevel) || 10);
       if (f.costPerUnit !== "") formData.append("cost_per_unit", parseFloat(f.costPerUnit) || 0.00);
-      if (!isEditing){
-        formData.append("stock", 0)
-      }
       
       const statusMap = { "Active": "active", "Low Stock": "active", "Out of Stock": "active", "Discontinued": "inactive" };
       if (f.status) formData.append("status", statusMap[f.status] || "active");
+      if (f.branches) formData.append("branches", JSON.stringify(f.branches));
 
-      let updatedItem = null;
-
-      if (isEditing) {
-        const res = await api.put(`/products/admin/${initialData.id}`, formData); 
-        updatedItem = res.data || res;
-      } else {
-        formData.append("price", "0.00"); 
-        const res = await api.post(`/products/admin`, formData);
-        updatedItem = res.data || res;
-      }
+      const res = await api.put(`/products/admin/${item.id}`, formData); 
+      const updatedItem = res.data || res;
 
       if (onSaveSuccess) onSaveSuccess(updatedItem);
     } catch (err) {
-      console.error("Failed to save inventory item:", err);
-      alert("Failed to save. Check the console for details.");
+      console.error("Failed to update inventory item:", err);
+      alert("Failed to update. Check the console for details.");
     }
   }
 
@@ -180,7 +248,7 @@ function AddItemForm({ onBack, onSaveSuccess, isDark, initialData }) {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h2 className="text-lg font-bold" style={{ color: isDark ? "#e2e8f0" : "#111827" }}>
-          {isEditing ? "Edit Inventory Item" : "Add New Inventory Item"}
+          Edit Inventory Item
         </h2>
         <button onClick={onBack}
           className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all"
@@ -195,9 +263,30 @@ function AddItemForm({ onBack, onSaveSuccess, isDark, initialData }) {
             <div><FL isDark={isDark}>SKU / Item ID</FL><FInput placeholder="FLW-001" value={f.sku} onChange={s("sku")} isDark={isDark} /></div>
             <div><FL isDark={isDark}>Category</FL><FSel options={CATEGORIES} value={f.category} onChange={s("category")} placeholder="Select" isDark={isDark} /></div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3">
             <div><FL isDark={isDark}>Unit</FL><FSel options={UNITS} value={f.unit} onChange={s("unit")} placeholder="Select" isDark={isDark} /></div>
-            <div><FL isDark={isDark}>Branch</FL><FSel options={["Manila", "Pampanga"]} value={f.branch} onChange={s("branch")} placeholder="Select" isDark={isDark} /></div>
+          </div>
+          <div className="mt-2">
+            <FL isDark={isDark}>Available Branches *</FL>
+
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              {["Manila", "Pampanga"].map((branch) => (
+                <label 
+                  key={branch} 
+                  className="flex items-center space-x-2 cursor-pointer p-1.5 rounded transition-colors"
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.04)" : "#f8fffe"}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                >
+                  <input 
+                    type="checkbox" 
+                    checked={f.branches.includes(branch)}
+                    onChange={() => toggleBranch(branch)}
+                    className="rounded text-green-600 focus:ring-green-500 bg-white border-gray-300"
+                  />
+                  <span className="text-xs font-medium" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{branch}</span>
+                </label>
+              ))}
+            </div>
           </div>
         </StepCard>
         <StepCard n={2} title="Stock Details" isDark={isDark}>
@@ -213,9 +302,7 @@ function AddItemForm({ onBack, onSaveSuccess, isDark, initialData }) {
                 isDark={isDark} 
               />
               <p className="text-[10px] mt-1 text-amber-600 italic">
-                {isEditing 
-                  ? 'To update stock, use the "Invoice" button on the main page.'
-                  : 'New items start at 0 stock. Use "Invoice" to log deliveries.'}
+                To update stock quantities, use the "Invoice" button on the main page.
               </p>
             </div>
             <div><FL isDark={isDark}>Reorder Level</FL><FInput type="number" placeholder="10" value={f.reorderLevel} onChange={s("reorderLevel")} isDark={isDark} /></div>
@@ -230,7 +317,7 @@ function AddItemForm({ onBack, onSaveSuccess, isDark, initialData }) {
           className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95"
           style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
           <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" /></svg>
-          {isEditing ? "Save Changes" : "Add Item"}
+          Save Changes
         </button>
       </div>
     </div>
@@ -293,8 +380,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
   const [lines, setLines] = useState({});
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState(null);
-  
-  // 🚀 Branch selection state for Invoices
   const [branch, setBranch] = useState("Manila");
 
   const today = new Date().toISOString().split('T')[0];
@@ -659,15 +744,14 @@ export default function AdminInventory() {
   const [loading, setLoading]     = useState(true)
   const [page, setPage]           = useState(1)
   
-  // 🚀 These are the core filter states required for the toolbar
   const [search, setSearch]       = useState("")
   const [branchFilter, setBranchFilter] = useState("") 
   const [statusFilter, setStatus] = useState("")
   const [category, setCategory] = useState("")
   const [stockSort, setStockSort] = useState("")
   
-  const [showForm, setShowForm]   = useState(false)
   const [editingItem, setEditingItem] = useState(null)
+  const [viewingItem, setViewingItem] = useState(null)
   const [successMsg, setSuccessMsg] = useState("")
   const [deletingItem, setDeletingItem] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
@@ -693,7 +777,6 @@ export default function AdminInventory() {
 
   const dynamicCategories = Array.from(new Set(inventory.map(p => p.category?.toLowerCase()).filter(Boolean))).map(c => c.charAt(0).toUpperCase() + c.slice(1))
 
-  // 🚀 Bulletproof Filtering Logic
   const filtered = inventory.filter(item => {
     const matchSearch = !search || item.name.toLowerCase().includes(search.toLowerCase()) || String(item.id).includes(search)
     let matchStatus = true
@@ -830,14 +913,13 @@ export default function AdminInventory() {
     a.click(); URL.revokeObjectURL(a.href)
   }
 
-  if (showForm) return (
-    <AddItemForm 
-      initialData={editingItem} 
-      onBack={() => { setShowForm(false); setEditingItem(null); }} 
+  if (editingItem) return (
+    <EditItemForm 
+      item={editingItem} 
+      onBack={() => setEditingItem(null)} 
       onSaveSuccess={async (savedItem) => {
-        setShowForm(false);
         setEditingItem(null);
-        setSuccessMsg(editingItem ? "Item successfully updated!" : "New item added to inventory!");
+        setSuccessMsg("Item successfully updated!");
 
         if (savedItem && savedItem.id) {
           setInventory(prev => {
@@ -997,6 +1079,14 @@ export default function AdminInventory() {
         />
       )}
 
+      {viewingItem && (
+        <ViewInventoryModal 
+          item={viewingItem} 
+          onClose={() => setViewingItem(null)} 
+          isDark={isDark} 
+        />
+      )}
+
       {showInvoice && (
         <ReceiveStockModal
           inventory={inventory}
@@ -1035,11 +1125,7 @@ export default function AdminInventory() {
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.65)" }}>Total Items</p>
             <p className="text-2xl sm:text-3xl font-bold text-white mt-2 leading-tight break-words">{totalItems}</p>
           </div>
-          <button onClick={() => setShowForm(true)}
-            className="mt-3 self-start text-xs font-bold px-3 py-1.5 rounded-md transition-all hover:scale-105"
-            style={{ backgroundColor: "rgba(255,255,255,0.15)", color: "white", border: "1px solid rgba(255,255,255,0.2)" }}>
-            + Add Item
-          </button>
+          {/* Add Item Button Removed */}
         </div>
         {[
           { label: "Est. Inventory Value", val: `₱${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, accent: "#3b82f6" },
@@ -1247,8 +1333,9 @@ export default function AdminInventory() {
                       </td>
                       <td className="px-4 py-3 align-top">
                         <ActionBtns 
+                          onView={() => setViewingItem(item)}
+                          onEdit={() => setEditingItem(item)} 
                           onDelete={() => setDeletingItem(item)} 
-                          onEdit={() => { setEditingItem(item); setShowForm(true); }} 
                         />
                       </td>
                     </tr>

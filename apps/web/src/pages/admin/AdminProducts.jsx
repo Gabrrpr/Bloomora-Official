@@ -247,7 +247,11 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
   
   const [form, setForm] = useState({ 
     name:"", group:"floral", category:"", productType:"", 
-    price:"", availability:"Available", 
+    price:"", 
+    // 🚀 NEW: Added Base Price and Markup for Add Modal
+    basePrice: "", markupPercentage: "", 
+    markupPercentage:"10",
+    availability:"Available", 
     status:"Active", description:"", image_url:"", 
     season_key:"", limited_start_at:"", limited_end_at:"",
     stock: 0,          
@@ -255,8 +259,29 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     composition: [],
     occasions: [],
     branches: [],
-    tags: "" // 🚀 Added Tag state
+    tags: "" 
   })
+
+  // 🚀 NEW: Auto-compute pricing logic
+  const handlePricingChange = (field, value) => {
+    setForm(prev => {
+      const next = { ...prev, [field]: value };
+      const base = parseFloat(next.basePrice);
+      const markup = parseFloat(next.markupPercentage);
+      const final = parseFloat(next.price);
+
+      if (field === 'basePrice' || field === 'markupPercentage') {
+         if (!isNaN(base) && !isNaN(markup)) {
+           next.price = (base + (base * (markup / 100))).toFixed(2);
+         }
+      } else if (field === 'price') {
+         if (!isNaN(base) && base > 0 && !isNaN(final)) {
+           next.markupPercentage = (((final - base) / base) * 100).toFixed(2);
+         }
+      }
+      return next;
+    });
+  };
 
   const [compSelection, setCompSelection] = useState("");
   const [compQty, setCompQty] = useState(1);
@@ -372,7 +397,12 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
       fd.append("group", form.group.toLowerCase().trim());
       fd.append("category", form.category.toLowerCase().trim());
       fd.append("product_type", form.productType.toLowerCase().trim());
+      
+      // 🚀 NEW: Append all pricing data
       fd.append("price", String(form.price));
+      fd.append("base_price", String(form.basePrice || 0));
+      fd.append("markup_percentage", String(form.markupPercentage || 0));
+
       fd.append("status", form.status.toLowerCase());
       fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false");
       if (form.description) fd.append("description", form.description.trim());
@@ -388,15 +418,28 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
       if (form.occasions.length > 0) fd.append("occasions", JSON.stringify(form.occasions));
       if (form.branches.length > 0) fd.append("branches", JSON.stringify(form.branches));
 
-      // 🚀 Format tags correctly
       if (form.tags.trim()) {
         const parsedTags = form.tags.split(",").map(t => t.trim()).filter(Boolean);
         fd.append("tags", JSON.stringify(parsedTags));
       }
 
+      console.log("--- Payload Debug ---");
+        for (let pair of fd.entries()) {
+            console.log(pair[0] + ': ' + pair[1]);
+        }
+        console.log("---------------------");
+
       const res = await api.createProduct(fd);
-      onSave(res.product); 
+      const newProduct = {
+        ...(res.product || res.data || res),
+        base_price: form.basePrice,
+        markup_percentage: form.markupPercentage,
+        price: form.price
+      };
+      
+      onSave(newProduct); 
       onClose();
+      
     } catch (e) {
       console.error("API Error:", e);
       alert("Error: " + (e.response?.data?.detail || e.message));
@@ -535,7 +578,6 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             </div>
           </div>
 
-          {/* 🚀 TAGS INPUT */}
           <div>
             <div className="flex items-end justify-between mb-1.5">
               <MLabel d={d}>Search Tags (Keywords)</MLabel>
@@ -545,9 +587,41 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             <p className="text-[10px] mt-1" style={{ color: d.subC }}>Words entered here help customers find this product via search.</p>
           </div>
 
-          <div>
-            <MLabel d={d}>Base Selling Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
-            <MInput type="number" value={form.price} onChange={set("price")} placeholder="999" error={errors.price} d={d}/>
+          {/* 🚀 NEW PRICING GRID */}
+          <div className="p-4 rounded-xl mb-4" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <MLabel d={d}>Base Cost (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
+                <MInput 
+                  type="number" 
+                  value={form.basePrice} 
+                  onChange={(val) => handlePricingChange('basePrice', val)} 
+                  placeholder="e.g. 500" 
+                  d={d}
+                />
+              </div>
+              <div>
+                <MLabel d={d}>Markup (%) <span style={{ color:"#f87171" }}>*</span></MLabel>
+                <MInput 
+                  type="number" 
+                  value={form.markupPercentage} 
+                  onChange={(val) => handlePricingChange('markupPercentage', val)} 
+                  placeholder="e.g. 50" 
+                  d={d}
+                />
+              </div>
+              <div>
+                <MLabel d={d}>Final Selling Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
+                <MInput 
+                  type="number" 
+                  value={form.price} 
+                  onChange={(val) => handlePricingChange('price', val)} 
+                  placeholder="0.00" 
+                  error={errors.price} 
+                  d={d}
+                />
+              </div>
+            </div>
             {errors.price && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.price}</p>}
           </div>
 
@@ -572,7 +646,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             <div>
               <MLabel d={d}>Availability</MLabel>
               <div className="flex gap-1">
-                {AVAILABILITIES.map(a => (
+                {["Available", "Limited", "Out of Stock"].map(a => (
                   <button key={a} type="button" onClick={()=>set("availability")(a)}
                     className="flex-1 py-2 text-[10px] font-bold rounded-md border transition-all"
                     style={{ backgroundColor:form.availability===a?DG:d.inputBg, color:form.availability===a?"white":d.subC, borderColor:form.availability===a?DG:d.inputBdr }}>
@@ -599,7 +673,11 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
 
           {/* OCCASIONS SELECTION GRID */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {OCCASIONS_LIST.map((occ) => (
+            {[
+              "Anniversary", "Birthday", "Congratulation", "Get Well", 
+              "Graduation", "I am Sorry", "Love & Romance", "Mother's Day", 
+              "New Baby", "Sympathy", "Thank You", "Valentine's Day", "Wedding"
+            ].map((occ) => (
               <label 
                 key={occ} 
                 className="flex items-center space-x-2 cursor-pointer p-1.5 rounded transition-colors"
@@ -618,23 +696,32 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
           </div>
 
           {/* BRANCHES SELECTION GRID */}
-          <div className="grid grid-cols-2 gap-2">
-            {["Manila", "Pampanga"].map((branch) => (
-              <label 
-                key={branch} 
-                className="flex items-center space-x-2 cursor-pointer p-1.5 rounded transition-colors"
-                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = d.rowHov}
-                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-              >
-                <input 
-                  type="checkbox" 
-                  checked={form.branches.includes(branch)}
-                  onChange={() => toggleBranch(branch)}
-                  className="rounded text-green-600 focus:ring-green-500 bg-white border-gray-300"
-                />
-                <span className="text-xs font-medium" style={{ color: d.cellC }}>{branch}</span>
-              </label>
-            ))}
+          <div className="mt-4 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
+            <MLabel d={d}>Available Branches <span style={{ color:"#f87171" }}>*</span></MLabel>
+            <p className="text-xs mb-3" style={{ color: d.subC }}>
+              Select which fulfillment centers carry this product.
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {["Manila", "Pampanga"].map((branch) => (
+                <label 
+                  key={branch} 
+                  className="flex items-center space-x-2 cursor-pointer p-1.5 rounded transition-colors"
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = d.rowHov}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+                >
+                  <input 
+                    type="checkbox" 
+                    checked={form.branches.includes(branch)}
+                    onChange={() => toggleBranch(branch)}
+                    className="rounded text-green-600 focus:ring-green-500 bg-white border-gray-300"
+                  />
+                  <span className="text-xs font-medium" style={{ color: d.cellC }}>{branch}</span>
+                </label>
+              ))}
+            </div>
+            {form.branches.length === 0 && (
+               <p className="text-xs text-red-500 mt-2 font-semibold">Please select at least one branch.</p>
+            )}
           </div>
 
           <div className="mt-6 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
@@ -750,7 +837,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             onMouseEnter={e=>e.currentTarget.style.backgroundColor=d.hdrBg} onMouseLeave={e=>e.currentTarget.style.backgroundColor=d.inputBg}>
             Cancel
           </button>
-          <button type="button" onClick={handleSave} disabled={isUploading || isSaving}
+          <button type="button" onClick={handleSave} disabled={isUploading || isSaving || form.branches.length === 0}
             className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background:`linear-gradient(135deg,${DG},${G})` }}>
             {isSaving ? "Adding..." : "Add Product"}
@@ -773,13 +860,17 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
 function EditProductModal({ product, onClose, onSave, categories, products = [] }) {
   const d = useAdminTokens()
   
-  // 🚀 FIX: Capitalize category to match dropdown, correctly parse booleans, format tags
   const [form, setForm] = useState({
     name: product.name || "",
     group: product.product_group || "floral",
     category: product.category ? product.category.charAt(0).toUpperCase() + product.category.slice(1) : "",
     productType: product.product_type || "",
     price: product.price ? String(product.price) : "",
+    
+    // 🚀 NEW: Added Base Price and Markup for Edit Modal
+    basePrice: product.base_price ?? "", 
+    markupPercentage: product.markup_percentage ?? "10",
+    
     availability: !product.is_available ? "Out of Stock" : product.stock <= (product.reorder_point || 10) ? "Limited" : "Available",
     status: product.status === "active" || product.status === "Active" ? "Active" : "Inactive",
     description: product.description || "", 
@@ -794,6 +885,27 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     branches: product.branches || [],
     tags: Array.isArray(product.tags) ? product.tags.join(", ") : (product.tags || "")
   })
+
+  // 🚀 NEW: Auto-compute pricing logic
+  const handlePricingChange = (field, value) => {
+    setForm(prev => {
+      const next = { ...prev, [field]: value };
+      const base = parseFloat(next.basePrice);
+      const markup = parseFloat(next.markupPercentage);
+      const final = parseFloat(next.price);
+
+      if (field === 'basePrice' || field === 'markupPercentage') {
+         if (!isNaN(base) && !isNaN(markup)) {
+           next.price = (base + (base * (markup / 100))).toFixed(2);
+         }
+      } else if (field === 'price') {
+         if (!isNaN(base) && base > 0 && !isNaN(final)) {
+           next.markupPercentage = (((final - base) / base) * 100).toFixed(2);
+         }
+      }
+      return next;
+    });
+  };
 
   const [compSelection, setCompSelection] = useState("");
   const [compQty, setCompQty] = useState(1);
@@ -910,7 +1022,12 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
       fd.append("group", (form.group || "floral").toLowerCase().trim());
       fd.append("category", (form.category || "").toLowerCase().trim());
       fd.append("product_type", (form.productType || "").toLowerCase().trim());
+      
+      // 🚀 NEW: Append all pricing data
       fd.append("price", String(form.price));
+      fd.append("base_price", String(form.basePrice || 0));
+      fd.append("markup_percentage", String(form.markupPercentage || 0));
+
       fd.append("status", (form.status || "active").toLowerCase());
       fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false");
       fd.append("branches", JSON.stringify(form.branches));
@@ -925,9 +1042,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
       }
       fd.append("composition", JSON.stringify(form.composition));
       if (form.occasions.length > 0) fd.append("occasions", JSON.stringify(form.occasions));
-      if (form.branches.length >= 0) fd.append("branches", JSON.stringify(form.branches));
 
-      // 🚀 Format tags correctly
       if (form.tags.trim()) {
         const parsedTags = form.tags.split(",").map(t => t.trim()).filter(Boolean);
         fd.append("tags", JSON.stringify(parsedTags));
@@ -1060,7 +1175,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             </div>
           </div>
 
-          {/* 🚀 TAGS INPUT */}
           <div>
             <div className="flex items-end justify-between mb-1.5">
               <MLabel d={d}>Search Tags (Keywords)</MLabel>
@@ -1072,12 +1186,44 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
 
           <div>
             <MLabel d={d}>Status</MLabel>
-            <MSel value={form.status} onChange={set("status")} options={STATUSES} d={d}/>
+            <MSel value={form.status} onChange={set("status")} options={["Active", "Inactive", "On Sale"]} d={d}/>
           </div>
 
-          <div>
-            <MLabel d={d}>Base Selling Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
-            <MInput type="number" value={form.price} onChange={set("price")} placeholder="999" error={errors.price} d={d}/>
+          {/* 🚀 NEW PRICING GRID */}
+          <div className="p-4 rounded-xl mb-4" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <MLabel d={d}>Base Cost (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
+                <MInput 
+                  type="number" 
+                  value={form.basePrice} 
+                  onChange={(val) => handlePricingChange('basePrice', val)} 
+                  placeholder="e.g. 500" 
+                  d={d}
+                />
+              </div>
+              <div>
+                <MLabel d={d}>Markup (%) <span style={{ color:"#f87171" }}>*</span></MLabel>
+                <MInput 
+                  type="number" 
+                  value={form.markupPercentage} 
+                  onChange={(val) => handlePricingChange('markupPercentage', val)} 
+                  placeholder="e.g. 50" 
+                  d={d}
+                />
+              </div>
+              <div>
+                <MLabel d={d}>Final Selling Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
+                <MInput 
+                  type="number" 
+                  value={form.price} 
+                  onChange={(val) => handlePricingChange('price', val)} 
+                  placeholder="0.00" 
+                  error={errors.price} 
+                  d={d}
+                />
+              </div>
+            </div>
             {errors.price && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.price}</p>}
           </div>
 
@@ -1102,7 +1248,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             <div>
               <MLabel d={d}>Availability</MLabel>
               <div className="flex gap-1">
-                {AVAILABILITIES.map(a => (
+                {["Available", "Limited", "Out of Stock"].map(a => (
                   <button key={a} type="button" onClick={()=>set("availability")(a)}
                     className="flex-1 py-2 text-[10px] font-bold rounded-md border transition-all"
                     style={{ backgroundColor:form.availability===a?DG:d.inputBg, color:form.availability===a?"white":d.subC, borderColor:form.availability===a?DG:d.inputBdr }}>
@@ -1129,7 +1275,11 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
 
           {/* OCCASIONS SELECTION GRID */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {OCCASIONS_LIST.map((occ) => (
+            {[
+              "Anniversary", "Birthday", "Congratulation", "Get Well", 
+              "Graduation", "I am Sorry", "Love & Romance", "Mother's Day", 
+              "New Baby", "Sympathy", "Thank You", "Valentine's Day", "Wedding"
+            ].map((occ) => (
               <label 
                 key={occ} 
                 className="flex items-center space-x-2 cursor-pointer p-1.5 rounded transition-colors"
@@ -1171,6 +1321,9 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
                 </label>
               ))}
             </div>
+            {form.branches.length === 0 && (
+               <p className="text-xs text-red-500 mt-2 font-semibold">Please select at least one branch.</p>
+            )}
           </div>
 
           <div className="mt-6 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
@@ -1286,11 +1439,11 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             onMouseEnter={e=>e.currentTarget.style.backgroundColor=d.hdrBg} onMouseLeave={e=>e.currentTarget.style.backgroundColor=d.inputBg}>
             Cancel
           </button>
-          <button type="button" onClick={handleSave} disabled={isUploading || isSaving}
+          <button type="button" onClick={handleSave} disabled={isUploading || isSaving || form.branches.length === 0}
             className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
             style={{ background:`linear-gradient(135deg,${DG},${G})`, boxShadow:"0 2px 8px rgba(12,87,62,0.3)" }}>
             <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
-            Save Changes
+            {isSaving ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </div>

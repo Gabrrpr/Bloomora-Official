@@ -23,11 +23,20 @@ ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif"}
 # ── Helpers ───────────────────────────────────────────────────────────────────
 def serialize_product(p: Product) -> dict:
     inv = p.inventory
+
+    # 🚀 THE FIX: Use cost_per_unit for the Base Cost, NOT original_price
+    cost_per_unit = float(inv.cost_per_unit) if (inv and inv.cost_per_unit is not None) else None
+    current_price = float(p.price) if p.price else 0
+    
+    markup_percentage = None
+    if cost_per_unit and cost_per_unit > 0 and current_price > 0:
+        markup_percentage = round(((current_price - cost_per_unit) / cost_per_unit) * 100, 2)
+
     return {
         "id": str(p.id),
         "name": p.name,
         "description": p.description,
-        "price": float(p.price) if p.price else 0,
+        "price": current_price,
         "product_group": p.product_group,
         "product_type": p.product_type,
         "category": p.category,
@@ -37,13 +46,18 @@ def serialize_product(p: Product) -> dict:
         "stock": inv.current_stock if inv else 0,
         "reorder_point": inv.reorder_point if inv else 10,
         "unit_type": inv.unit_type if (inv and inv.unit_type) else "piece",
-        "cost_per_unit": float(inv.cost_per_unit) if (inv and inv.cost_per_unit is not None) else None,
+        "cost_per_unit": cost_per_unit,
         "composition": getattr(p, "composition", []),
         "occasions": getattr(p, "occasions", []),
         "branches": getattr(p, "branches", []),
         "is_visible": getattr(p, "is_visible", True),
         "tags": getattr(p, "tags", []),
         "original_price": float(p.original_price) if getattr(p, "original_price", None) else None,
+        "base_price": cost_per_unit,
+        "markup_percentage": markup_percentage,
+        "season_key": getattr(p, "season_key", None),
+        "limited_start_at": getattr(p, "limited_start_at", None),
+        "limited_end_at": getattr(p, "limited_end_at", None),
     }
 
 
@@ -296,12 +310,20 @@ def get_admin_products(
         for p in products:
             pid = str(p.id)
             inv = inv_by_product_id.get(pid)
+            
+            # 🚀 THE FIX: Calculate Base Cost and Markup dynamically for the Admin Grid
+            cost_per_unit = float(inv.get("cost_per_unit")) if inv and inv.get("cost_per_unit") is not None else None
+            current_price = float(p.price) if p.price else 0
+            
+            markup_percentage = None
+            if cost_per_unit and cost_per_unit > 0 and current_price > 0:
+                markup_percentage = round(((current_price - cost_per_unit) / cost_per_unit) * 100, 2)
 
             result.append({
                 "id": pid,
                 "name": p.name,
                 "description": p.description,
-                "price": float(p.price) if p.price else 0,
+                "price": current_price,
                 "category": p.category.value if hasattr(p.category, "value") else p.category,
                 "image_url": p.image_url,
                 "is_available": p.is_available,
@@ -311,7 +333,9 @@ def get_admin_products(
                 "stock": int(inv.get("current_stock") or 0) if inv else 0,
                 "reorder_point": int(inv.get("reorder_point") or 10) if inv else 10,
                 "unit_type": inv.get("unit_type") if inv and inv.get("unit_type") else "piece",
-                "cost_per_unit": float(inv.get("cost_per_unit")) if inv and inv.get("cost_per_unit") is not None else None,
+                "cost_per_unit": cost_per_unit,
+                "base_price": cost_per_unit,
+                "markup_percentage": markup_percentage,
                 "occasions": getattr(p, "occasions", []),
                 "branches": getattr(p, "branches", []),
                 "composition": getattr(p, "composition", []),
@@ -409,6 +433,8 @@ def create_product(
     group: str = Form(..., alias="group"),
     product_type: str = Form(None),
     price: str = Form(...),
+    base_price: Optional[str] = Form(None),
+    markup_percentage: Optional[str] = Form(None),
     category: str = Form(...),
     status: str = Form("active"),
     is_available: bool = Form(True),
@@ -420,6 +446,7 @@ def create_product(
     composition: Optional[str] = Form(None),
     occasions: Optional[str] = Form(None),
     branches: Optional[str] = Form(None),
+    tags: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
@@ -455,13 +482,22 @@ def create_product(
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid branches JSON.")
 
-    # ✅ FIX: Create the product object FIRST before referencing new_product.id
+    # 🚀 THE FIX: Parse tags safely into a list
+    parsed_tags = []
+    if tags:
+        try:
+            parsed_tags = json.loads(tags)
+        except json.JSONDecodeError:
+            if tags:
+                parsed_tags = [t.strip() for t in tags.split(",") if t.strip()]
+
     new_product = Product(
         id=uuid.uuid4(),
         name=name,
         product_group=group.lower().strip(),
         description=description,
         price=price_val,
+        original_price=None, # Leave Flash Sale blank on creation
         category=category.lower().strip(),
         product_type=product_type.lower().strip() if product_type else None,
         status=status_enum,
@@ -473,11 +509,11 @@ def create_product(
         composition=parsed_comp,
         occasions=parsed_occasions,
         branches=parsed_branches,
+        tags=parsed_tags,
     )
     db.add(new_product)
-    db.flush()  # Flush so new_product.id is available for recipe links
+    db.flush() 
 
-    # ✅ FIX: Composition loop now runs AFTER flush so new_product.id exists
     if parsed_comp:
         for item in parsed_comp:
             comp_id = item.get("id")
@@ -491,10 +527,19 @@ def create_product(
                 )
                 db.add(new_recipe_link)
 
+    # 🚀 THE FIX: Store Base Price safely inside Inventory
+    cost_val = 0.0
+    if base_price:
+        try:
+            cost_val = float(base_price)
+        except Exception:
+            pass
+
     inventory = Inventory(
         product_id=new_product.id,
         current_stock=stock,
         reorder_point=10,
+        cost_per_unit=cost_val, 
     )
     db.add(inventory)
     db.commit()
@@ -510,6 +555,8 @@ def update_product(
     group: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
     price: Optional[str] = Form(None),
+    base_price: Optional[str] = Form(None),
+    markup_percentage: Optional[str] = Form(None),
     category: Optional[str] = Form(None),
     product_type: Optional[str] = Form(None),
     status: Optional[str] = Form(None),
@@ -526,6 +573,7 @@ def update_product(
     composition: Optional[str] = Form(None),
     occasions: Optional[str] = Form(None),
     branches: Optional[str] = Form(None),
+    tags: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
@@ -586,23 +634,42 @@ def update_product(
                     db.add(new_recipe_link)
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid composition JSON format.")
+    
     if occasions is not None:
         try:
             product.occasions = json.loads(occasions)
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid occasions JSON format.")
+            
     if branches is not None:
         try:
             parsed_branches = json.loads(branches)
             product.branches = parsed_branches
-            print(f"DEBUG: Saving branches for {product.name}: {parsed_branches}")
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid branches JSON format.")
+
+    # 🚀 THE FIX: Parse Tags correctly
+    if tags is not None:
+        try:
+            product.tags = json.loads(tags)
+        except json.JSONDecodeError:
+            if tags:
+                product.tags = [t.strip() for t in tags.split(",") if t.strip()]
+            else:
+                product.tags = []
 
     db.commit()
     db.refresh(product)
 
-    if any(v is not None for v in [stock, unit_type, reorder_point, cost_per_unit]):
+    # 🚀 THE FIX: Map Base Price over to Inventory Cost properly
+    cost_val = cost_per_unit
+    if base_price is not None:
+        try:
+            cost_val = float(base_price)
+        except Exception:
+            pass
+
+    if any(v is not None for v in [stock, unit_type, reorder_point, cost_val]):
         inv = db.query(Inventory).filter(Inventory.product_id == product.id).first()
         if not inv:
             inv = Inventory(
@@ -618,8 +685,8 @@ def update_product(
             inv.unit_type = unit_type
         if reorder_point is not None:
             inv.reorder_point = reorder_point
-        if cost_per_unit is not None:
-            inv.cost_per_unit = cost_per_unit
+        if cost_val is not None:
+            inv.cost_per_unit = cost_val
 
         db.commit()
 

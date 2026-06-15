@@ -2,6 +2,7 @@ import httpx
 import io
 import os
 import base64
+from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from supabase import create_client, Client
 from urllib.parse import quote
@@ -46,16 +47,14 @@ class PollinationsService:
         
         # --- A. APPLY ESTING'S LOGO (Top-Left) ---
         try:
-            # 🚀 THE FIX: Build an absolute path based on where this file lives
-            # This gets the directory of pollinations_service.py
-            current_dir = os.path.dirname(os.path.abspath(__file__))
+            # 🚀 THE FIX: Dynamically jump out of the backend folder and into the web folder
+            current_dir = Path(__file__).resolve().parent # .../apps/backend/app/services
+            apps_dir = current_dir.parent.parent.parent   # .../apps/
             
-            # Assuming pollinations_service.py is in an 'app' folder (e.g. app/services/pollinations_service.py)
-            # This navigates up one folder to 'app', then into 'assets'
-            # Tweak the ".." if your folder structure is slightly different!
-            logo_path = os.path.join(current_dir, "..", "assets", "EstingsLogo.svg")
+            # NOTE: If this fails with UnidentifiedImageError, change .svg to .png!
+            logo_path = apps_dir / "web" / "public" / "EstingsLogo.svg"
             
-            logo = Image.open(logo_path).convert("RGBA")
+            logo = Image.open(str(logo_path)).convert("RGBA")
             
             # Resize the logo so it's not too massive (150x150 max)
             logo.thumbnail((150, 150))

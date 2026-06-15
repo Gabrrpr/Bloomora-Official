@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { addToCart } from "../utils/cart.js"
 import { useTheme } from "../context/ThemeContext"
+import { useBranch } from "../context/branchContext"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -220,6 +221,16 @@ export default function ProductPreviewModalSimple({product,onClose,onNavigate}){
   const total=product.price*qty
   const delivLabel=delivType==="today"?"Today (before 2PM)":delivType==="tomorrow"?`Tomorrow, ${fmtDate(tomorrowStr())}`:delivType==="custom"&&customDate?fmtDate(customDate):null
 
+  const suggestedProducts = products
+    .filter(p => {
+      if (p.id === product.id) return false;
+      if (p.category?.toLowerCase() !== product.category?.toLowerCase()) return false;
+      if (p.status === "inactive" || !p.is_available || p.stock <= 0) return false;
+      if (!Array.isArray(p.branches) || !p.branches.includes(branch)) return false;
+      return true;
+    })
+    .slice(0, 4)
+
   useEffect(()=>{
     requestAnimationFrame(()=>requestAnimationFrame(()=>setVisible(true)))
     document.body.style.overflow="hidden"
@@ -401,6 +412,33 @@ export default function ProductPreviewModalSimple({product,onClose,onNavigate}){
                         </div>
                       )
                     })()}
+
+                    {/* 🚀 ADDED SUGGESTIONS SECTION FOR SIMPLE MODAL */}
+                    {suggestedProducts.length > 0 && (
+                      <div className="mt-5 mb-5 pt-5" style={{ borderTop: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
+                        <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: isDark ? "#4ade80" : DG }}>
+                          You Might Also Like
+                        </p>
+                        <div className="flex gap-3 overflow-x-auto pb-2 -mr-4 pr-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                          {suggestedProducts.map(s => (
+                            <button 
+                              key={s.id} 
+                              onClick={() => {
+                                onClose(); 
+                                onNavigate(`/product/${s.id}`); 
+                              }}
+                              className="flex-shrink-0 w-28 rounded-lg overflow-hidden border cursor-pointer text-left p-0 transition-transform hover:scale-105"
+                              style={{ borderColor: isDark ? "#334155" : "#e5e7eb", background: "transparent" }}>
+                              <img src={s.image_url || s.image || "/placeholder.webp"} className="w-full h-24 object-cover" alt={s.name} />
+                              <div className="p-2">
+                                <p className="text-[10px] font-bold truncate" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>{s.name}</p>
+                                <p className="text-[10px] font-bold mt-0.5" style={{ color: isDark ? "#4ade80" : G }}>₱{(+s.price).toLocaleString()}</p>
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Quantity */}
                     <div>

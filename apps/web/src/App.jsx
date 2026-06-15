@@ -30,7 +30,6 @@ import DescribeArrangement from "./pages/customer/DescribeArrangement";
 import FAQ from "./pages/customer/FAQ";
 import ReturnPolicy from "./pages/customer/ReturnPolicy";
 import AIGalleryPage from "./pages/customer/AIGalleryPage";
-import AICardComposer from "./pages/customer/AICardComposer";
 import ChatWidget from "./components/ChatWidget";
 import CookieConsent from "./components/CookieConsent";
 import AdPopup from "./components/AdPopup";
@@ -180,7 +179,6 @@ function AppContent() {
             case "mix-and-match": return <MixAndMatch onNavigate={navigate} />;
             case "describe-arrangement": return <DescribeArrangement onNavigate={navigate} />;
             case "ai-gallery": return <AIGalleryPage onNavigate={navigate} />;
-            case "ai-card-composer": return <AICardComposer onNavigate={navigate} />;
 
             case "cart": return <Cart onNavigate={navigate} cartCount={cartCount} setCartCount={setCartCount} />;
             case "checkout": return <Checkout onNavigate={navigate} />;

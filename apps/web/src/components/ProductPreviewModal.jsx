@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { addToCart } from "../utils/cart.js"
 import { useTheme } from "../context/ThemeContext"
+import { useBranch } from "../context/branchContext"
 import { api } from "../services/api.js"
 import { generateCardMessage, RELATIONSHIP_OPTIONS, OCCASION_OPTIONS, TONE_OPTIONS, getPendingCard, clearPendingCard } from "../utils/cardMessage.js"
 
@@ -1281,8 +1282,14 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   const colors  = CATEGORY_COLORS[product.category] || CATEGORY_COLORS.Roses
 
   // ✅ FIX: similarProducts derived directly from the products prop — no missing state, no dead API call
-  const similarProducts = products
-    .filter(p => p.category?.toLowerCase() === product.category?.toLowerCase() && p.id !== product.id)
+  const suggestedProducts = products
+    .filter(p => {
+      if (p.id === product.id) return false;
+      if (p.category?.toLowerCase() !== product.category?.toLowerCase()) return false;
+      if (p.status === "inactive" || !p.is_available || p.stock <= 0) return false;
+      if (!Array.isArray(p.branches) || !p.branches.includes(branch)) return false;
+      return true;
+    })
     .slice(0, 4)
 
   const originalPrice = product.original_price || product.original || 0
@@ -1486,7 +1493,12 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
           <DescriptionSection product={product} isDark={isDark}/>
           <ColorSection {...colorProps}/>
           {/* ✅ FIX: pass `similar` prop matching SuggestionsSection's expected prop name */}
-          <SuggestionsSection similar={similarProducts} isDark={isDark}/>
+          <SuggestionsSection 
+             suggestions={suggestedProducts} 
+             isDark={isDark} 
+             onClose={onClose} 
+             onNavigate={onNavigate} 
+          />
           <QtySection {...qtyProps}/>
           <div className="pb-5" style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
             <AddOnsSection {...addOnProps}/>
@@ -1544,31 +1556,54 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   )
 
   /* ── Footer CTAs ── */
-  const FooterCTAs = () => (
-    <div className="flex gap-2.5">
-      <button onClick={() => startFlow("cart")}
-        className="flex-1 py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
-        style={{
-          border: `2px solid ${isDark ? "#4ade80" : G}`,
-          background: isDark ? "rgba(74,222,128,0.05)" : "white",
-          color: isDark ? "#4ade80" : G,
-          boxShadow: isDark ? "0 0 10px rgba(74,222,128,0.15)" : "none"
-        }}>
-        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
-        </svg>
-        Add to Cart
-      </button>
-      <button onClick={() => startFlow("checkout")}
-        className="flex-1 py-3.5 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all cursor-pointer border-none"
-        style={{ background: `linear-gradient(135deg,${DG},${G})`, boxShadow: isDark ? "0 0 20px rgba(0,255,136,0.3)" : "none" }}>
-        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/>
-        </svg>
-        Buy Now
-      </button>
-    </div>
-  )
+  const FooterCTAs = () => {
+    // 🚀 THE FIX: Check if the item is legally allowed to be sold
+    const isOutOfStock = product.stock <= 0 || !product.is_available || product.status === "inactive";
+
+    if (isOutOfStock) {
+      return (
+        <button disabled
+          className="w-full py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2"
+          style={{
+            background: isDark ? "#1e293b" : "#f3f4f6",
+            color: isDark ? "#64748b" : "#9ca3af",
+            border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`,
+            cursor: "not-allowed"
+          }}>
+          <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+          Currently Out of Stock
+        </button>
+      );
+    }
+
+    return (
+      <div className="flex gap-2.5">
+        <button onClick={() => startFlow("cart")}
+          className="flex-1 py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
+          style={{
+            border: `2px solid ${isDark ? "#4ade80" : G}`,
+            background: isDark ? "rgba(74,222,128,0.05)" : "white",
+            color: isDark ? "#4ade80" : G,
+            boxShadow: isDark ? "0 0 10px rgba(74,222,128,0.15)" : "none"
+          }}>
+          <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
+          </svg>
+          Add to Cart
+        </button>
+        <button onClick={() => startFlow("checkout")}
+          className="flex-1 py-3.5 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all cursor-pointer border-none"
+          style={{ background: `linear-gradient(135deg,${DG},${G})`, boxShadow: isDark ? "0 0 20px rgba(0,255,136,0.3)" : "none" }}>
+          <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/>
+          </svg>
+          Buy Now
+        </button>
+      </div>
+    );
+  }
 
   /* ══════════════════════════════════════════════
      MOBILE — FULL-PAGE SHEET
