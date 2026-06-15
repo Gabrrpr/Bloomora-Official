@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from "react"
 import { useTheme } from "../../context/ThemeContext"
+import { useBranch } from "../../context/branchContext"
 import { loadVouchers, saveVouchers } from "../../utils/vouchers.js"
 import { api } from "../../services/api.js"
 
-const DG = "#0C573E"
+const DG = "#0C573E"  
 const G  = "#2E8B34"
 
 // Customer notifications live here (read by the navbar bell).
@@ -59,6 +60,7 @@ const EMOJI_CHOICES = ["🌸", "🌷", "💐", "🎁", "❤️", "🎉", "✨", 
 
 export default function AdminPromotions() {
   const { isDark } = useTheme()
+  const { branch, setBranch } = useBranch();
 
   const cardBg    = isDark ? "#1e293b" : "white"
   const cardBdr   = isDark ? "#334155" : "#e8edf2"
@@ -90,7 +92,7 @@ export default function AdminPromotions() {
   const annIsEditing = annEditingId !== null
   const annFileRef = useRef(null)
 
-  // 🚀 ── Flash Sales State (Upgraded for Multi-Select) ──
+  // 🚀 ── Flash Sales State ──
   const [products, setProducts] = useState([])
   const [promoCategory, setPromoCategory] = useState("All")
   const [selectedPromoIds, setSelectedPromoIds] = useState([])
@@ -112,10 +114,11 @@ export default function AdminPromotions() {
     return c ? c.charAt(0).toUpperCase() + c.slice(1) : "";
   }).filter(Boolean)))];
 
+  // 🚀 The Magic Filter: Only show products matching the Branch AND the Category
   const filteredPromoProducts = products.filter(p => {
-    if (promoCategory === "All") return true;
-    const c = p.category?.trim().toLowerCase();
-    return c === promoCategory.toLowerCase();
+    const matchesBranch = p.branches?.includes(branch);
+    const matchesCategory = promoCategory === "All" || p.category?.trim().toLowerCase() === promoCategory.toLowerCase();
+    return matchesBranch && matchesCategory;
   });
 
   const isEditing = editingCode !== null
@@ -273,22 +276,22 @@ export default function AdminPromotions() {
 
           if (selectedPromoIds.length === 1) {
               const promotedProduct = products.find(p => p.id === selectedPromoIds[0]);
-              text = `Flash Sale! ${promotedProduct.name} is now ${flashDiscount}% OFF! Shop now.`;
+              text = `Flash Sale! ${promotedProduct.name} is now ${flashDiscount}% OFF in our ${branch} branch! Shop now.`;
               image = promotedProduct.image_url || "";
           } else {
-              text = `Massive Flash Sale! Up to ${flashDiscount}% OFF selected items! Grab them before they're gone.`;
+              text = `Massive Flash Sale! Up to ${flashDiscount}% OFF selected items in ${branch}! Grab them before they're gone.`;
           }
 
           const promoAnnouncement = { id: Date.now(), emoji: "🔥", image, text, active: true };
           persistAnnouncements([promoAnnouncement, ...announcements]);
       }
       
-      setFlashSaleSuccess(`Successfully updated ${selectedPromoIds.length} product(s)!`);
+      setFlashSaleSuccess(`Successfully updated ${selectedPromoIds.length} product(s) for the ${branch} branch!`);
       setSelectedPromoIds([]); 
       setFlashDiscount(""); 
       setTimeout(() => setFlashSaleSuccess(""), 4000);
       
-      // Optionally refresh product list to get new prices
+      // Refresh product list to get new prices
       const freshProducts = await api.getAdminProducts();
       setProducts(freshProducts.data || freshProducts);
 
@@ -299,15 +302,37 @@ export default function AdminPromotions() {
     }
   }
 
-
   return (
     <div className="space-y-5">
       {/* ── Page header ── */}
-      <div>
-        <h1 className="text-xl font-bold" style={{ color: bodyTxt }}>Promotions & Flash Sales</h1>
-        <p className="text-sm mt-0.5" style={{ color: subTxt }}>
-          Manage global promo codes, apply direct product discounts, and send announcements.
-        </p>
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold" style={{ color: bodyTxt }}>Promotions & Flash Sales</h1>
+          <p className="text-sm mt-0.5" style={{ color: subTxt }}>
+            Manage global promo codes, apply direct product discounts, and send announcements.
+          </p>
+        </div>
+        
+        {/* 🚀 Branch Selector UI */}
+        <div className="flex gap-2">
+          {["Manila", "Pampanga"].map(b => (
+            <button 
+              key={b} 
+              onClick={() => {
+                setBranch(b);
+                setSelectedPromoIds([]); // Clear selection to prevent cross-branch mistakes
+              }}
+              className="px-6 py-2 rounded-md font-bold transition-all text-sm"
+              style={{
+                backgroundColor: branch === b ? DG : "transparent",
+                color: branch === b ? "white" : subTxt,
+                border: `1px solid ${branch === b ? DG : inputBdr}`
+              }}
+            >
+              {b}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* ── Create / edit promo code ── */}
@@ -417,17 +442,17 @@ export default function AdminPromotions() {
         </div>
       </div>
 
-      {/* ── 🚀 NEW: Multi-Select Flash Sales ── */}
+      {/* ── 🚀 NEW: Multi-Select Flash Sales (Now Branch-Aware) ── */}
       <div className="rounded-xl overflow-hidden"
         style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
         <div className="px-5 py-3.5 flex items-center justify-between" style={{ borderBottom: `1px solid ${headerBdr}`, backgroundColor: headerBg }}>
           <div>
             <p className="text-sm font-semibold flex items-center gap-2" style={{ color: bodyTxt }}>
               <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-              Direct Product Flash Sale
+              Flash Sales ({branch})
             </p>
             <p className="text-xs mt-0.5" style={{ color: mutedTxt }}>
-              Select multiple products to mark down instantly. Customers will see a notification right away.
+              Select products to mark down instantly for the {branch} branch.
             </p>
           </div>
         </div>
@@ -489,7 +514,7 @@ export default function AdminPromotions() {
             <div className="rounded-lg overflow-y-auto p-2 space-y-1.5" 
               style={{ maxHeight: "240px", border: `1px solid ${inputBdr}`, backgroundColor: isDark ? "rgba(0,0,0,0.1)" : "#f9fafb" }}>
               {filteredPromoProducts.length === 0 ? (
-                <p className="text-xs text-center py-4" style={{ color: mutedTxt }}>No products found in this category.</p>
+                <p className="text-xs text-center py-4" style={{ color: mutedTxt }}>No products found in {branch} for this category.</p>
               ) : (
                 filteredPromoProducts.map(p => (
                   <label key={p.id} className="flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors hover:bg-black/5"

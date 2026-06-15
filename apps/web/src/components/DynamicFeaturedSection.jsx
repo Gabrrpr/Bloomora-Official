@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useTheme } from "../context/ThemeContext"
 import { api } from "../services/api"
-import { useCurrency } from "../context/CuurencyContext" // matches existing filename
+import { useCurrency } from "../context/CuurencyContext" 
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -109,7 +109,6 @@ function useScrollReveal(threshold = 0.08) {
   return [ref, visible]
 }
 
-
 // ─── 1. Your Beautiful Single Section Layout ─────────────────────────────────
 function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
   const { formatPrice } = useCurrency() || { formatPrice: (price) => `₱${Number(price).toLocaleString()}` }
@@ -208,7 +207,7 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
           </div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
             {slotProducts.map((p, i) => {
-              if (!p) return null
+              if (!p) return null // 🚀 Safely ignores if product doesn't exist in this branch!
               const ribbon = featured[i]?.ribbonOverride ?? p.ribbon
               const ribbonColor = RIBBON_COLORS[ribbon]
               return (
@@ -240,17 +239,35 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
   )
 }
 
-export default function DynamicFeaturedSections({ onNavigate, onPreview }) {
+// 🚀 2. Inject `branch` as a prop directly from Home.jsx
+export default function DynamicFeaturedSections({ branch, onNavigate, onPreview }) {
+
+  console.log("⚙️ DynamicFeaturedSections receiving branch:", branch);
+
   const { isDark } = useTheme()
-  const [sectionsData, setSectionsData] = useState([])
-  const [allProducts, setAllProducts] = useState([])
+
+  // Normalize branch once to match API keys (Manila/Pampanga)
+  const normalizedBranch = useMemo(() => {
+    const b = (branch ?? "").toString().trim();
+    if (!b) return "";
+    return b.charAt(0).toUpperCase() + b.slice(1).toLowerCase();
+  }, [branch]);
+
+  const [rawSettingsData, setRawSettingsData] = useState(null)
+  const [rawProductsData, setRawProductsData] = useState([])
   const [loading, setLoading] = useState(true)
 
+
+  // 🚀 Fetch the database payload whenever the selected branch changes
   useEffect(() => {
     let isMounted = true
 
-    const loadAllData = async () => {
+    const fetchMasterData = async () => {
       try {
+        // Force a UI update during branch switching
+        setLoading(true)
+        setRawSettingsData(null)
+
         const [settingsData, productsData] = await Promise.all([
           api.get("/products/admin/settings/homepage").catch(() => null),
           api.get("/products/").catch(() => [])
@@ -258,34 +275,65 @@ export default function DynamicFeaturedSections({ onNavigate, onPreview }) {
 
         if (!isMounted) return
 
-        const rawProducts = Array.isArray(productsData) ? productsData : (productsData?.products || productsData?.items || productsData?.data || [])
-        const normalizedProducts = rawProducts.map(p => ({
-          ...p,
-          id: p.id,
-          name: p.name || "Unnamed",
-          price: Number(p.price) || 0,
-          image: p.image || p.image_url || null,
-        }))
-
-        setAllProducts(normalizedProducts)
-
-        if (settingsData && Object.keys(settingsData).length > 0) {
-          const sectionsArray = Object.keys(settingsData)
-            .filter(key => key !== "__carousel__")
-            .map(key => ({ id: key, ...settingsData[key] }))
-            .filter(section => section && section.banner && section.__type !== "carousel")
-          setSectionsData(sectionsArray)
-        }
+        setRawSettingsData(settingsData)
+        setRawProductsData(
+          Array.isArray(productsData)
+            ? productsData
+            : (productsData?.products || productsData?.items || productsData?.data || [])
+        )
       } catch (err) {
-        console.error("Failed to load sections data.", err)
+        console.error("Failed to load master layout data.", err)
       } finally {
         if (isMounted) setLoading(false)
       }
     }
 
-    loadAllData()
-    return () => { isMounted = false }
-  }, [])
+    fetchMasterData()
+    return () => {
+      isMounted = false
+    }
+  }, [normalizedBranch])
+
+  // 🚀 INSTANT LAYOUT SWAP: Extract the sections for the selected branch without re-fetching
+  const activeSections = useMemo(() => {
+    if (!rawSettingsData) return []
+
+    // Check if the database has our new multi-branch structure
+    const isMultiBranchFormat = rawSettingsData.Manila || rawSettingsData.Pampanga;
+    const targetBranchData = isMultiBranchFormat
+      ? (rawSettingsData[normalizedBranch] || {})
+      : rawSettingsData;
+
+    return Object.keys(targetBranchData)
+      .filter(key => key !== "__carousel__")
+      .map(key => ({ id: key, ...targetBranchData[key] }))
+      .filter(section => {
+        // Some CMS rows use productId as `""`/`undefined` instead of null.
+        const hasFeatured = Array.isArray(section.featured)
+          ? section.featured.some(f => f?.productId !== null && f?.productId !== undefined && String(f?.productId).trim() !== "")
+          : false;
+
+        const hasCategories = Array.isArray(section.categories)
+          ? section.categories.some(c => c?.productId !== null && c?.productId !== undefined && String(c?.productId).trim() !== "")
+          : false;
+
+        return hasFeatured || hasCategories;
+      });
+  }, [rawSettingsData, normalizedBranch])
+
+  // 🚀 INSTANT PRODUCT FILTER: Filter inventory by physical branch availability
+  const activeBranchProducts = useMemo(() => {
+    return rawProductsData
+      .map(p => ({
+        ...p,
+        id: p.id,
+        name: p.name || "Unnamed",
+        price: Number(p.price) || 0,
+        image: p.image || p.image_url || null,
+        branches: p.branches || [] // Ensure branches are recognized
+      }))
+      .filter(p => p.branches?.includes(branch)) // 💥 Filter down to local inventory
+  }, [rawProductsData, branch])
 
   return (
     <>
@@ -293,17 +341,24 @@ export default function DynamicFeaturedSections({ onNavigate, onPreview }) {
 
       {loading ? (
         <DFSLoader />
-      ) : (
-        sectionsData.map((section) => (
+      ) : activeSections.length > 0 ? (
+        activeSections.map((section) => (
           <SectionBlock
-            key={section.id}
+            key={`${section.id}-${branch}`}
             data={section}
-            products={allProducts}
+            products={activeBranchProducts} // Pass the strictly filtered products down
             isDark={isDark}
             onNavigate={onNavigate}
             onPreview={onPreview}
           />
         ))
+      ) : (
+        // What to show if Pampanga genuinely has no layout sections built yet
+        <div className="py-24 text-center">
+            <p style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>
+                We're currently curating our featured collections for the {branch} branch. Check back soon!
+            </p>
+        </div>
       )}
     </>
   )

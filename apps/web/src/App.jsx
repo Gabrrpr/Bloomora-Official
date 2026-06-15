@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { CurrencyProvider } from "./context/CuurencyContext";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
+import { BranchProvider } from './context/branchContext'
 
 import { api } from "./services/api";
 import Navbar from "./components/Navbar";
@@ -37,6 +38,7 @@ import WorldClock from "./pages/customer/WorldClock";
 import WriteReviewPage from "./pages/customer/WriteReviewPage";
 import Profile from "./pages/customer/Profile";
 import OAuthCallback from "./context/OAuthCallback";
+
 
 const DARK_CSS = `
   [data-theme="dark"] body { background: #0f172a; color: #e5e7eb; }
@@ -217,7 +219,9 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <CurrencyProvider>
-          <AppContent />
+          <BranchProvider>
+            <AppContent />
+          </BranchProvider>
         </CurrencyProvider>
       </AuthProvider>
     </ThemeProvider>

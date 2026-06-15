@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react"
 import { useTheme } from "../../context/ThemeContext"
+import { useBranch } from "../../context/branchContext"
 import { api } from "../../services/api.js"
 
 const G  = "#2E8B34"
@@ -62,13 +63,11 @@ const blankSlide = () => ({
 const generateCarouselSection = () => ({
   __type: "carousel",
   tabLabel: "Bouquet Carousel",
-  // header copy shown above the carousel on the homepage
   eyebrow: "Handcrafted Daily",
   heading: "Today's Fresh Picks",
   subheading: "Browse the bouquets we're arranging right now.",
   ctaLabel: "Shop all bouquets",
   ctaTarget: "shop",
-  // the rotating slides
   slides: [blankSlide(), blankSlide(), blankSlide()],
 })
 
@@ -79,12 +78,6 @@ const DEFAULT_DATA = {
   funeral: generateBlankSection("Featured Funeral"),
 }
 
-// Deep-merge a saved featured section onto a fresh blank one. A plain spread
-// (`{ ...blank, ...saved }`) replaces whole keys, so a section saved with only
-// 2 categories or a banner missing `description` would lose the 3rd tile / show
-// a blank field. This fills every nested gap instead: banner fields backfill
-// from defaults, and the categories / featured arrays are padded back up to
-// their full slot count (3 tiles, 4 featured) while preserving saved entries.
 function mergeSection(saved, label) {
   const blank = generateBlankSection(label)
   if (!saved || typeof saved !== "object") return blank
@@ -94,7 +87,6 @@ function mergeSection(saved, label) {
       const s = Array.isArray(savedArr) ? savedArr[i] : undefined
       return s && typeof s === "object" ? { ...blankItem, ...s } : { ...blankItem }
     })
-    // keep any extra saved entries beyond the default slot count
     if (Array.isArray(savedArr) && savedArr.length > blankArr.length) {
       for (let i = blankArr.length; i < savedArr.length; i++) {
         if (savedArr[i] && typeof savedArr[i] === "object") out.push(savedArr[i])
@@ -470,9 +462,6 @@ function CategoryEditor({ tile, idx, products, onUpdate, t, isDark, onPickClick 
 }
 
 // ─── Carousel Slide Editor ───────────────────────────────────────────────────
-// One row per rotating bloom. Image is pulled from a linked product (same
-// pattern as category tiles), while name / tag / price are free-text overrides
-// so copy can differ from the catalog entry.
 function CarouselSlideEditor({ slide, idx, total, product, onUpdate, onPickClick, onClear, onMove, t, isDark }) {
   return (
     <div className="rounded-lg p-3"
@@ -732,8 +721,6 @@ function CarouselEditor({ data, onChange, products, loading, t, isDark }) {
 }
 
 // ─── Carousel Live Preview ───────────────────────────────────────────────────
-// Mirrors ChooseYourBloom: left/center/right peek layout, caption, dots. A mini
-// prev/next stepper lets the admin scrub through slides to verify each one.
 function CarouselPreview({ data, products, isDark }) {
   const slides = (data.slides || [])
 
@@ -749,7 +736,6 @@ function CarouselPreview({ data, products, isDark }) {
   const haloC     = isDark ? "rgba(74,222,128,0.10)" : "rgba(46,139,52,0.06)"
   const peekBg    = isDark ? "#0f1a14" : "#f4f8f4"
 
-  // resolve image + display copy for a slide (overrides fall back to product)
   const resolve = slide => {
     if (!slide) return null
     const product = products.find(p => String(p.id) === String(slide.productId))
@@ -762,7 +748,6 @@ function CarouselPreview({ data, products, isDark }) {
   }
 
   const [idx, setIdx] = useState(0)
-  // keep index valid as slides are added/removed
   useEffect(() => {
     if (idx > slides.length - 1) setIdx(Math.max(0, slides.length - 1))
   }, [slides.length, idx])
@@ -819,7 +804,6 @@ function CarouselPreview({ data, products, isDark }) {
 
         {/* stage */}
         <div className="relative mx-auto" style={{ maxWidth: 460, height: 230 }}>
-          {/* prev / next */}
           <button onClick={() => setIdx(i => mod(i - 1, slides.length))}
             aria-label="Previous slide"
             className="absolute left-0 top-1/2 -translate-y-1/2 z-30 rounded-full flex items-center justify-center transition-transform hover:scale-110 active:scale-95"
@@ -839,14 +823,12 @@ function CarouselPreview({ data, products, isDark }) {
             </svg>
           </button>
 
-          {/* left peek */}
           {left && (
             <div className="hidden sm:flex absolute top-1/2 -translate-y-1/2 items-center justify-center"
               style={{ left: "3%", width: "30%", height: "78%" }}>
               <PeekImg data={left} />
             </div>
           )}
-          {/* right peek */}
           {right && (
             <div className="hidden sm:flex absolute top-1/2 -translate-y-1/2 items-center justify-center"
               style={{ right: "3%", width: "30%", height: "78%" }}>
@@ -1225,10 +1207,28 @@ export default function AdminFeaturedProducts() {
   const { isDark } = useTheme()
   const t = useTokens(isDark)
 
-  const [tabIds, setTabIds] = useState(Object.keys(DEFAULT_DATA))
+  // 🚀 Added Branch Context hooks
+  const { branch, setBranch } = useBranch()
+
+  // 🚀 Keep track of all layouts across both branches
+  const [allData, setAllData] = useState({
+    Manila: DEFAULT_DATA,
+    Pampanga: DEFAULT_DATA
+  })
+
+  // 🚀 Derive current branch's data, tab IDs, and active tab safely
+  const data = allData[branch] || DEFAULT_DATA
+  const tabIds = Object.keys(data)
+
   const [activeTab, setActiveTab] = useState(tabIds[0])
   
-  const [data, setData]     = useState(DEFAULT_DATA)
+  // Re-sync activeTab when branch toggles or allData finishes loading
+  useEffect(() => {
+    if (tabIds.length > 0 && !tabIds.includes(activeTab)) {
+      setActiveTab(tabIds[0])
+    }
+  }, [branch, tabIds, activeTab])
+  
   const [products, setProds]= useState([])
   const [loading, setLoading]= useState(true)
   const [dirty, setDirty]   = useState(false)
@@ -1240,33 +1240,36 @@ export default function AdminFeaturedProducts() {
 
   const isCarousel = id => id === CAROUSEL_ID || data[id]?.__type === "carousel"
 
+  // 🚀 Helper to ensure old DB versions map to the new formatting seamlessly
+  const formatSettings = (parsed) => {
+    const upgradedData = {}
+    const savedCarousel = parsed[CAROUSEL_ID] || Object.values(parsed).find(s => s?.__type === "carousel")
+    upgradedData[CAROUSEL_ID] = { ...generateCarouselSection(), ...(savedCarousel || {}) }
+
+    Object.keys(parsed).forEach(k => {
+      if (k === CAROUSEL_ID || parsed[k]?.__type === "carousel") return
+      const label = parsed[k].tabLabel || (k === 'bouquets' ? "Featured Bouquets" : (k === 'nonFloral' ? "Featured Non-Floral" : (k === 'funeral' ? "Featured Funeral" : k)))
+      upgradedData[k] = { ...mergeSection(parsed[k], label), tabLabel: label }
+    })
+    return upgradedData;
+  }
+
   useEffect(() => {
     api.get("/products/admin/settings/homepage")
       .then(parsed => {
         if (parsed && Object.keys(parsed).length > 0) {
-          const upgradedData = {}
-
-          // Carousel always leads — build it first so its tab sits at the front,
-          // regardless of what order the keys were saved in the database.
-          const savedCarousel = parsed[CAROUSEL_ID]
-            || Object.values(parsed).find(s => s?.__type === "carousel")
-          upgradedData[CAROUSEL_ID] = { ...generateCarouselSection(), ...(savedCarousel || {}) }
-
-          Object.keys(parsed).forEach(k => {
-            if (k === CAROUSEL_ID || parsed[k]?.__type === "carousel") {
-              // already placed above — skip so it isn't duplicated / reordered
-              return
-            }
-            const label = parsed[k].tabLabel
-              || (k === 'bouquets' ? "Featured Bouquets" : (k === 'nonFloral' ? "Featured Non-Floral" : (k === 'funeral' ? "Featured Funeral" : k)))
-            upgradedData[k] = { ...mergeSection(parsed[k], label), tabLabel: label }
-          })
-
-          setData(upgradedData)
-          setTabIds(Object.keys(upgradedData))
-          
-          if (!upgradedData[activeTab]) {
-             setActiveTab(Object.keys(upgradedData)[0])
+          // 🚀 Check if DB has migrated to branch-aware format
+          if (parsed.Manila || parsed.Pampanga) {
+            setAllData({
+              Manila: parsed.Manila ? formatSettings(parsed.Manila) : DEFAULT_DATA,
+              Pampanga: parsed.Pampanga ? formatSettings(parsed.Pampanga) : DEFAULT_DATA
+            });
+          } else {
+            // Legacy Migration (apply old data to Manila only)
+            setAllData({
+              Manila: formatSettings(parsed),
+              Pampanga: DEFAULT_DATA
+            });
           }
         }
       })
@@ -1276,16 +1279,17 @@ export default function AdminFeaturedProducts() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    api.get("/products/")
+    api.getAdminProducts() // 🚀 Using admin product list
       .then(rows => {
         if (cancelled) return
-        const normalized = (Array.isArray(rows) ? rows : []).map(p => ({
+        const normalized = (Array.isArray(rows.data || rows) ? (rows.data || rows) : []).map(p => ({
           id: p.id,
           name: p.name,
           price: Number(p.price) || 0,
           image: p.image || p.image_url || null,
           category: p.category || null,
           ribbon: p.ribbon || null,
+          branches: p.branches || [], // 🚀 Ensure branches are mapped
         }))
         setProds(normalized)
       })
@@ -1297,10 +1301,17 @@ export default function AdminFeaturedProducts() {
     return () => { cancelled = true }
   }, [])
 
-  const currentData = data[activeTab] || generateBlankSection(activeTab)
+  const currentData = data[activeTab] || generateBlankSection(activeTab || "New")
   
+  // 🚀 Safely update ONLY the current branch's layout
   const setCurrentData = next => {
-    setData(prev => ({ ...prev, [activeTab]: next }))
+    setAllData(prev => ({
+      ...prev,
+      [branch]: {
+        ...prev[branch],
+        [activeTab]: next
+      }
+    }))
     setDirty(true)
     setSaved(false)
   }
@@ -1327,32 +1338,32 @@ export default function AdminFeaturedProducts() {
 
     if (modal.type === 'add') {
       const newId = `section_${Date.now()}`;
-      setData(prev => ({
+      setAllData(prev => ({
         ...prev,
-        [newId]: generateBlankSection(trimmedInput)
+        [branch]: {
+          ...prev[branch],
+          [newId]: generateBlankSection(trimmedInput)
+        }
       }));
-      setTabIds(prev => [...prev, newId]);
       setActiveTab(newId);
     } 
     else if (modal.type === 'rename') {
-      setData(prev => ({
+      setAllData(prev => ({
         ...prev,
-        [activeTab]: {
-          ...prev[activeTab],
-          tabLabel: trimmedInput
+        [branch]: {
+          ...prev[branch],
+          [activeTab]: {
+            ...prev[branch][activeTab],
+            tabLabel: trimmedInput
+          }
         }
       }));
     } 
     else if (modal.type === 'delete') {
-      setData(prev => {
-        const newData = { ...prev };
-        delete newData[activeTab];
-        return newData;
-      });
-      setTabIds(prev => {
-        const newTabs = prev.filter(id => id !== activeTab);
-        setActiveTab(newTabs[0] || null);
-        return newTabs;
+      setAllData(prev => {
+        const branchData = { ...prev[branch] };
+        delete branchData[activeTab];
+        return { ...prev, [branch]: branchData };
       });
     }
 
@@ -1364,7 +1375,8 @@ export default function AdminFeaturedProducts() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      await api.post("/products/admin/settings/homepage", data)
+      // 🚀 Save the massive multi-branch JSON blob to the DB
+      await api.post("/products/admin/settings/homepage", allData) 
       setDirty(false)
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
@@ -1378,7 +1390,7 @@ export default function AdminFeaturedProducts() {
   if (!activeTab && tabIds.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
-         <p className="text-gray-500 mb-4">No sections exist.</p>
+         <p className="text-gray-500 mb-4">No sections exist in {branch}.</p>
          <button onClick={() => openModal('add')} className="px-4 py-2 bg-green-600 text-white rounded-md font-bold">Add First Section</button>
 
          {/* Render Modal even when empty if they are adding the first section */}
@@ -1396,45 +1408,69 @@ export default function AdminFeaturedProducts() {
                  </div>
               </div>
             </div>
-          )}
+         )}
       </div>
     )
   }
 
   const activeIsCarousel = isCarousel(activeTab)
 
+  // 🚀 Ensure picker only displays products physically at the current branch
+  const branchProducts = products.filter(p => p.branches?.includes(branch));
+
   return (
     <div className="space-y-5">
       {/* header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold" style={{ color: t.textPrimary }}>Featured Products</h1>
           <p className="text-sm mt-1" style={{ color: t.textSecondary }}>
-            Curate which products appear in the homepage Featured sections.
+            Curate which products appear in the homepage Featured sections for each branch.
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {saved && (
-            <span className="text-xs font-semibold px-3 py-1.5 rounded-md flex items-center gap-1.5"
-              style={{ backgroundColor: isDark ? "rgba(74,222,128,0.15)" : "#f0fdf4", color: isDark ? "#4ade80" : "#16a34a" }}>
-              <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
-              </svg>
-              Live
-            </span>
-          )}
-          <button onClick={handleSave} disabled={!dirty || saving}
-            className="text-xs font-bold px-4 py-2 rounded-md text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
-            style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
-            {saving ? (
-               <svg width="13" height="13" fill="none" viewBox="0 0 24 24" style={{animation:"spin 1s linear infinite"}}><circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round"/></svg>
-            ) : (
-              <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
-              </svg>
+        <div className="flex flex-col items-end gap-3">
+          
+          {/* 🚀 Branch Selector UI */}
+          <div className="flex gap-2">
+            {["Manila", "Pampanga"].map(b => (
+              <button 
+                key={b} 
+                onClick={() => setBranch(b)}
+                className="px-6 py-2 rounded-md font-bold transition-all text-sm"
+                style={{
+                  backgroundColor: branch === b ? DG : "transparent",
+                  color: branch === b ? "white" : t.textSecondary,
+                  border: `1px solid ${branch === b ? DG : t.inputBorder}`
+                }}
+              >
+                {b}
+              </button>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {saved && (
+              <span className="text-xs font-semibold px-3 py-1.5 rounded-md flex items-center gap-1.5"
+                style={{ backgroundColor: isDark ? "rgba(74,222,128,0.15)" : "#f0fdf4", color: isDark ? "#4ade80" : "#16a34a" }}>
+                <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={3} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+                </svg>
+                Saved!
+              </span>
             )}
-            Publish to Homepage
-          </button>
+            <button onClick={handleSave} disabled={!dirty || saving}
+              className="text-xs font-bold px-4 py-2 rounded-md text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+              style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
+              {saving ? (
+                 <svg width="13" height="13" fill="none" viewBox="0 0 24 24" style={{animation:"spin 1s linear infinite"}}><circle cx="12" cy="12" r="10" stroke="rgba(255,255,255,0.3)" strokeWidth="3"/><path d="M12 2a10 10 0 0 1 10 10" stroke="white" strokeWidth="3" strokeLinecap="round"/></svg>
+              ) : (
+                <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2.2} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+                </svg>
+              )}
+              Publish to Homepage
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1507,7 +1543,7 @@ export default function AdminFeaturedProducts() {
             <CarouselEditor
               data={currentData}
               onChange={setCurrentData}
-              products={products}
+              products={branchProducts} // 🚀 Pass branch-filtered products
               loading={loading}
               t={t}
               isDark={isDark}
@@ -1516,7 +1552,7 @@ export default function AdminFeaturedProducts() {
             <TabEditor
               data={currentData}
               onChange={setCurrentData}
-              products={products}
+              products={branchProducts} // 🚀 Pass branch-filtered products
               loading={loading}
               t={t}
               isDark={isDark}
@@ -1534,9 +1570,9 @@ export default function AdminFeaturedProducts() {
           </div>
           <div className="xl:sticky xl:top-4">
             {activeIsCarousel ? (
-              <CarouselPreview data={currentData} products={products} isDark={isDark} />
+              <CarouselPreview data={currentData} products={branchProducts} isDark={isDark} />
             ) : (
-              <FeaturedPreview data={currentData} products={products} isDark={isDark} />
+              <FeaturedPreview data={currentData} products={branchProducts} isDark={isDark} />
             )}
           </div>
         </div>

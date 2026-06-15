@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from "react";
+import { useBranch } from "../context/branchContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useTheme } from "../context/ThemeContext.jsx";
 import { getCartCount, getCart } from "../utils/cart.js";
@@ -874,9 +875,10 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
 
   const [active, setActive]                     = useState("Home");
   const [locationOpen, setLocationOpen]         = useState(false);
-  const [selectedLocation, setSelectedLocation] = useState(() => {
-    return localStorage.getItem("bloomora_active_branch") || "Manila";
-  });
+  
+  // 🚀 Connect to Global Branch Context!
+  const { branch: selectedLocation, setBranch: setSelectedLocation } = useBranch() || { branch: "Manila", setBranch: () => {} };
+
   const [branchModal, setBranchModal]           = useState(null);
   const [openMenu, setOpenMenu]                 = useState(null);
   const [mobileOpen, setMobileOpen]             = useState(false);
@@ -927,12 +929,9 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
   const closeMipD  = ()  => { mipTimer.current = setTimeout(() => setMipOpen(false), 220); };
 
   const handleBranchSelect = loc => {
-    setSelectedLocation(loc);
+    setSelectedLocation(loc); // 🚀 This now updates the global state directly!
     setLocationOpen(false);
     setBranchModal(loc);
-
-    localStorage.setItem("bloomora_active_branch", loc);
-    window.dispatchEvent(new Event("bloomora:branch-updated"));
   };
   const handleLogout       = ()  => { logout(); setUserOpen(false); onNavigate?.("login"); };
 

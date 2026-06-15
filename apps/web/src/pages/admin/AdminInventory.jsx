@@ -5,7 +5,7 @@ import { api } from "../../services/api.js"
 import { DG, G, ActionBtns } from "./_adminShared"
 import estingsWordmark from "../../assets/Estings.svg"
 
-// ── Flower petal loader (same bloom animation as the login/register screen) ──
+// ── Flower petal loader ──
 function FlowerLoader({ message = "Loading...", isDark = false }) {
   const petals = [
     { angle: 0,   color: "#f48fb1" },
@@ -123,17 +123,14 @@ function FL({ children, isDark }) {
 }
 
 function AddItemForm({ onBack, onSaveSuccess, isDark, initialData }) {
-  // 1. Check if we are editing an existing item or adding a new one
   const isEditing = Boolean(initialData);
 
-  // 2. Pre-fill the form with initialData if it exists
   const [f, setF] = useState({ 
     name: initialData?.name || "", 
     sku: initialData?.sku || initialData?.id?.slice(0, 8) || "", 
     category: initialData?.category || "", 
     unit: initialData?.unit_type || "", 
-    stock: initialData?.stock || "",
-    branch: "", // Add to your DB if needed
+    branch: "", 
     stock: initialData?.stock ?? "0", 
     reorderLevel: initialData?.reorder_point ?? "", 
     costPerUnit: initialData?.cost_per_unit ?? "", 
@@ -147,7 +144,6 @@ function AddItemForm({ onBack, onSaveSuccess, isDark, initialData }) {
 
   const handleSave = async () => {
     try {
-      // 1. Convert our data to FormData because FastAPI expects Form(...)
       const formData = new FormData();
       if (f.name) formData.append("name", f.name);
       if (f.category) formData.append("category", f.category);
@@ -159,20 +155,21 @@ function AddItemForm({ onBack, onSaveSuccess, isDark, initialData }) {
         formData.append("stock", 0)
       }
       
-      // Map the frontend status to the backend's expected "active"/"inactive"
       const statusMap = { "Active": "active", "Low Stock": "active", "Out of Stock": "active", "Discontinued": "inactive" };
       if (f.status) formData.append("status", statusMap[f.status] || "active");
 
-      // 2. Send it to the correct /admin/ URLs!
+      let updatedItem = null;
+
       if (isEditing) {
-        await api.put(`/products/admin/${initialData.id}`, formData); 
+        const res = await api.put(`/products/admin/${initialData.id}`, formData); 
+        updatedItem = res.data || res;
       } else {
-        // Assume you need some default price/category for new items if not provided
         formData.append("price", "0.00"); 
-        await api.post(`/products/admin`, formData);
+        const res = await api.post(`/products/admin`, formData);
+        updatedItem = res.data || res;
       }
 
-      if (onSaveSuccess) onSaveSuccess();
+      if (onSaveSuccess) onSaveSuccess(updatedItem);
     } catch (err) {
       console.error("Failed to save inventory item:", err);
       alert("Failed to save. Check the console for details.");
@@ -212,7 +209,7 @@ function AddItemForm({ onBack, onSaveSuccess, isDark, initialData }) {
                 placeholder="0" 
                 value={f.stock} 
                 onChange={() => {}}
-                disabled={true} // 🚀 Disables if we are editing an existing item
+                disabled={true}
                 isDark={isDark} 
               />
               <p className="text-[10px] mt-1 text-amber-600 italic">
@@ -240,7 +237,6 @@ function AddItemForm({ onBack, onSaveSuccess, isDark, initialData }) {
   )
 }
 
-// ── Delete Inventory Modal ────────────────────────────────────────────────────
 function DeleteInventoryModal({ item, onClose, onConfirm, isDeleting, isDark }) {
   const overlayBg = "rgba(15,23,42,0.72)";
   const modalBg = isDark ? "#1a2332" : "white";
@@ -260,7 +256,6 @@ function DeleteInventoryModal({ item, onClose, onConfirm, isDeleting, isDark }) 
         style={{ maxWidth: "400px", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${modalBdr}`, backgroundColor: modalBg }}>
         
         <div className="p-6 text-center">
-          {/* Warning Icon */}
           <div className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
             style={{ backgroundColor: isDark ? "rgba(239,68,68,0.1)" : "#fee2e2", color: isDark ? "#ef4444" : "#dc2626" }}>
             <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -293,14 +288,15 @@ function DeleteInventoryModal({ item, onClose, onConfirm, isDeleting, isDark }) 
   )
 }
 
-// ── Receive Stock Modal (the "Invoice" / restock screen) ──────────────────────
 function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
   const [search, setSearch] = useState("");
   const [lines, setLines] = useState({});
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState(null);
+  
+  // 🚀 Branch selection state for Invoices
+  const [branch, setBranch] = useState("Manila");
 
-  // 1. Ensure 'today' is defined
   const today = new Date().toISOString().split('T')[0];
 
   const c = {
@@ -316,7 +312,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
     rowBg: isDark ? "#111827" : "#fafbfc",
   };
 
-  // 2. Define 'matches' here (inside the function)
   const selectedIds = Object.keys(lines);
   const matches = !search ? [] : inventory.filter(it =>
     !lines[it.id] && (
@@ -325,7 +320,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
     )
   ).slice(0, 6);
 
-  // 3. Define helper handlers
   const addLine = (it) => { 
     setLines(p => ({ ...p, [it.id]: { qty: "", cost: "", date: today } })); 
     setSearch(""); 
@@ -342,6 +336,7 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
     if (validLines.length === 0) return;
     setSaving(true);
     const ok = [], failed = [];
+    const updatedItemsForState = []; 
 
     for (const id of validLines) {
       const item = itemById(id);
@@ -352,7 +347,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
       const newStock = (parseInt(item.stock) || 0) + received;
 
       try {
-        // 1. Update Product Stock
         const fd = new FormData();
         fd.append("stock", newStock);
         if (totalCost > 0 && received > 0) {
@@ -360,16 +354,17 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
         }
         await api.put(`/products/admin/${id}`, fd);
 
-        // 2. Create Audit Log
         await api.post(`/products/admin/stock-logs`, {
           product_id: id,
           qty_change: received,
           purchasing_price: totalCost,
           date_of_issuance: lines[id].date,
-          notes: "Manual Restock"
+          branch: branch, 
+          notes: `Manual Restock - Delivered to ${branch}` 
         });
 
         ok.push(item.name);
+        updatedItemsForState.push({ id, newStock });
       } catch (e) {
         console.error("Restock failed for", id, e);
         failed.push(item.name);
@@ -377,7 +372,8 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
     }
     setSaving(false);
     setResult({ ok, failed });
-    if (failed.length === 0) onSaved(ok.length);
+    
+    if (failed.length === 0) onSaved(ok.length, updatedItemsForState);
   };
 
   const totalUnits = validLines.reduce((s, id) => s + (parseInt(lines[id].qty) || 0), 0)
@@ -389,7 +385,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
       <div className="rounded-xl w-full overflow-hidden flex flex-col relative"
         style={{ maxWidth: "640px", height: "min(88vh, 720px)", maxHeight: "88vh", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${c.bdr}`, backgroundColor: c.bg }}>
 
-        {/* saving overlay — dims the modal and shows a real spinner */}
         {saving && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3"
             style={{ backgroundColor: isDark ? "rgba(10,15,25,0.78)" : "rgba(255,255,255,0.82)", backdropFilter: "blur(2px)", zIndex: 20 }}>
@@ -404,7 +399,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
           </div>
         )}
 
-        {/* Header */}
         <div className="px-6 py-4 flex items-start justify-between" style={{ borderBottom: `1px solid ${c.bdr}` }}>
           <div className="flex items-center gap-3">
             <span className="w-10 h-10 rounded-lg flex items-center justify-center text-white flex-shrink-0"
@@ -425,9 +419,31 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
           </button>
         </div>
 
-        {/* Body */}
         <div className="px-6 py-4 overflow-y-auto" style={{ flex: 1 }}>
-          {/* Product search */}
+          
+          <div className="mb-5">
+            <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: c.sub }}>
+              Fulfillment Branch <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <select 
+                value={branch} 
+                onChange={e => setBranch(e.target.value)}
+                className="w-full appearance-none px-3 py-2.5 text-sm border rounded-md cursor-pointer outline-none transition-all"
+                style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }}
+                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
+                onBlur={e => { e.target.style.borderColor = c.inputBdr; e.target.style.boxShadow = "none" }}
+              >
+                <option value="Manila">Manila</option>
+                <option value="Pampanga">Pampanga</option>
+              </select>
+              <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: c.sub }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
+              </svg>
+            </div>
+            <p className="text-[10px] mt-1" style={{ color: c.sub }}>Select which location is receiving this delivery.</p>
+          </div>
+
           <div className="relative mb-4">
             <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
@@ -437,7 +453,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
               style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }}
               onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
               onBlur={e => { e.target.style.borderColor = c.inputBdr; e.target.style.boxShadow = "none" }} />
-            {/* search results dropdown */}
             {matches.length > 0 && (
               <div className="absolute left-0 right-0 mt-1 rounded-md overflow-hidden z-10"
                 style={{ backgroundColor: c.bg, border: `1px solid ${c.bdr}`, boxShadow: "0 12px 32px rgba(0,0,0,0.18)" }}>
@@ -455,7 +470,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
             )}
           </div>
 
-          {/* Selected lines */}
           {selectedIds.length === 0 ? (
             <div className="text-center py-10 rounded-lg" style={{ backgroundColor: c.rowBg, border: `1px dashed ${c.bdr}` }}>
               <p className="text-sm font-medium" style={{ color: c.sub }}>No products added yet.</p>
@@ -463,7 +477,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
             </div>
           ) : (
             <div className="space-y-2">
-              {/* column hints — widths + gap mirror the data rows below */}
               <div className="hidden sm:flex items-center gap-2 px-3 text-[11px] font-bold uppercase tracking-wider" style={{ color: c.sub }}>
                 <span className="flex-1 min-w-0">Product</span>
                 <span style={{ width: 96, textAlign: "center", flexShrink: 0 }}>Qty Received</span>
@@ -479,7 +492,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                 return (
                   <div key={id} className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-2 p-3 sm:pb-6 rounded-lg"
                     style={{ backgroundColor: c.rowBg, border: `1px solid ${c.bdr}` }}>
-                    {/* product name + remove (remove shows top-right on mobile) */}
                     <div className="flex items-start justify-between gap-2 flex-1 min-w-0">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold truncate" style={{ color: c.cell }}>{item.name}</p>
@@ -493,7 +505,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                     </div>
 
                     <div className="flex gap-3 sm:contents">
-                      {/* Quantity Input */}
                       <div className="w-24">
                         <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1">Qty</label>
                         <input type="number" min="0" value={lines[id].qty} onChange={e => setQty(id, e.target.value)} placeholder="0"
@@ -501,7 +512,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                           style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg }} />
                       </div>
 
-                      {/* Purchasing Price Input */}
                       <div className="w-32">
                         <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1">Total Paid (₱)</label>
                         <input type="number" min="0" value={lines[id].cost} onChange={e => setCost(id, e.target.value)} placeholder="0.00"
@@ -509,7 +519,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                           style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg }} />
                       </div>
 
-                      {/* Date of Issuance Input */}
                       <div className="w-36">
                         <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1">Date Issued</label>
                         <input type="date" value={lines[id].date} onChange={e => setDate(id, e.target.value)}
@@ -518,7 +527,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                       </div>
                     </div>
 
-                    {/* new total */}
                     <div className="flex items-center justify-between sm:block sm:w-auto" style={{ minWidth: 0 }}>
                       <span className="sm:hidden text-[10px] font-bold uppercase tracking-wider" style={{ color: c.sub }}>New Total</span>
                       <div className="sm:w-[120px]" style={{ textAlign: "right" }}>
@@ -528,7 +536,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                       </div>
                     </div>
 
-                    {/* remove button — desktop only (mobile has it up top) */}
                     <button onClick={() => removeLine(id)} className="hidden sm:block p-1.5 rounded-md transition-colors" style={{ color: c.sub, flexShrink: 0 }}
                       onMouseEnter={e => { e.currentTarget.style.backgroundColor = isDark ? "rgba(239,68,68,0.12)" : "#fee2e2"; e.currentTarget.style.color = "#ef4444" }}
                       onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = c.sub }}>
@@ -540,7 +547,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
             </div>
           )}
 
-          {/* partial-failure report */}
           {result && result.failed.length > 0 && (
             <div className="mt-4 px-4 py-3 rounded-lg text-sm"
               style={{ backgroundColor: isDark ? "rgba(239,68,68,0.1)" : "#fef2f2", color: isDark ? "#f87171" : "#dc2626", border: `1px solid ${isDark ? "rgba(239,68,68,0.25)" : "#fecaca"}` }}>
@@ -550,7 +556,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
           )}
         </div>
 
-        {/* Footer */}
         <div className="px-6 py-4 flex items-center justify-between gap-3" style={{ borderTop: `1px solid ${c.bdr}`, backgroundColor: c.rowBg }}>
           <p className="text-sm" style={{ color: c.sub }}>
             {validLines.length > 0
@@ -577,7 +582,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
   )
 }
 
-// ── Invoice / Receive Stock trigger button ───────────────────────────────────
 function InvoiceBtn({ onClick, isDark }) {
   return (
     <button onClick={onClick}
@@ -592,27 +596,6 @@ function InvoiceBtn({ onClick, isDark }) {
     </button>
   )
 }
-
-function ExportInventoryBtn({ data = [], isDark }) {
-  const handleExport = () => {
-    const headers = ["Item Name", "Category", "Unit Type", "Current Stock", "Cost per Unit", "Status"]
-    const rows = data.length
-      ? data.map(r => { const st = r.stock <= 0 ? "Out of Stock" : r.stock <= (r.reorder_point || 10) ? "Low Stock" : "Active"; return `"${r.name}","${r.category}","${r.unit_type || 'piece'}","${r.stock}","${r.cost_per_unit || '0.00'}","${st}"` })
-      : [headers.map(() => "—").join(",")]
-    const csv = [headers.join(","), ...rows].join("\n")
-    const blob = new Blob([csv], { type: "text/csv" }), url = URL.createObjectURL(blob), a = document.createElement("a")
-    a.href = url; a.download = `inventory_export_${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(url)
-  }
-  return (
-    <button onClick={handleExport}
-      className="no-print flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all active:scale-95"
-      style={{ borderColor: isDark ? "#374151" : "#dde3ec", color: isDark ? "#94a3b8" : "#6b7280", backgroundColor: isDark ? "#1e293b" : "white" }}>
-      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
-      Export
-    </button>
-  )
-}
-
 
 function ExportCSVBtn({ onClick, isDark }) {
   return (
@@ -666,45 +649,39 @@ function Pagination({ showing, page, totalPages, onPageChange, isDark }) {
   )
 }
 
+// ── Main Component ──
 export default function AdminInventory() {
   const { isDark } = useTheme()
   const PAGE_SIZE = 15
+  
+  // States
   const [inventory, setInventory] = useState([])
   const [loading, setLoading]     = useState(true)
   const [page, setPage]           = useState(1)
+  
+  // 🚀 These are the core filter states required for the toolbar
   const [search, setSearch]       = useState("")
+  const [branchFilter, setBranchFilter] = useState("") 
+  const [statusFilter, setStatus] = useState("")
+  const [category, setCategory] = useState("")
+  const [stockSort, setStockSort] = useState("")
+  
   const [showForm, setShowForm]   = useState(false)
   const [editingItem, setEditingItem] = useState(null)
-  const [statusFilter, setStatus] = useState("")
   const [successMsg, setSuccessMsg] = useState("")
   const [deletingItem, setDeletingItem] = useState(null)
   const [isDeleting, setIsDeleting] = useState(false)
-  const [category, setCategory] = useState("")
-  const [stockSort, setStockSort] = useState("")
   const [showInvoice, setShowInvoice] = useState(false)
 
-  
   const handleConfirmDelete = async (id) => {
     setIsDeleting(true);
     try {
-      console.log("Attempting to delete ID:", id);
       await api.delete(`/products/admin/${id}`); 
-      
-      // 1. Force a clean state update
-      setInventory(currentInventory => {
-        const updated = currentInventory.filter(item => item.id !== id);
-        console.log("Old count:", currentInventory.length, "New count:", updated.length);
-        return updated;
-      });
-
-      // 2. Clear modal
+      setInventory(currentInventory => currentInventory.filter(item => item.id !== id));
       setDeletingItem(null);
       setSuccessMsg("Item successfully deleted!");
       
-      // 3. Optional: Re-fetch fresh data from the server to be 100% sure
-      // This solves the issue if the server didn't actually destroy the record
-      await fetchInventory();
-
+      fetchInventory();
       setTimeout(() => setSuccessMsg(""), 3500);
     } catch (e) {
       console.error("Delete failed:", e);
@@ -716,37 +693,42 @@ export default function AdminInventory() {
 
   const dynamicCategories = Array.from(new Set(inventory.map(p => p.category?.toLowerCase()).filter(Boolean))).map(c => c.charAt(0).toUpperCase() + c.slice(1))
 
-  // The ONE and ONLY filtered variable
+  // 🚀 Bulletproof Filtering Logic
   const filtered = inventory.filter(item => {
-    const matchSearch = !search || item.name.toLowerCase().includes(search.toLowerCase()) || item.id.includes(search)
+    const matchSearch = !search || item.name.toLowerCase().includes(search.toLowerCase()) || String(item.id).includes(search)
     let matchStatus = true
     if (statusFilter === "Active")       matchStatus = item.stock > (item.reorder_point || 10)
     if (statusFilter === "Low Stock")    matchStatus = item.stock > 0 && item.stock <= (item.reorder_point || 10)
     if (statusFilter === "Out of Stock") matchStatus = item.stock <= 0
     const matchCat = !category || item.category?.toLowerCase() === category.toLowerCase()
-    return matchSearch && matchStatus && matchCat
+
+    let matchBranch = true;
+    if (branchFilter && branchFilter !== "All Branches") {
+      if (branchFilter === "Unassigned") {
+        matchBranch = !item.branches || item.branches.length === 0;
+      } else {
+        matchBranch = Array.isArray(item.branches) && item.branches.includes(branchFilter);
+      }
+    }
+
+    return matchSearch && matchStatus && matchCat && matchBranch
   }).sort((a, b) => {
     if (stockSort === "asc") return a.stock - b.stock;
     if (stockSort === "desc") return b.stock - a.stock;
     return 0;
   })
   
-
   const fetchInventory = useCallback(async () => {
     setLoading(true)
     try { 
       const data = await api.get("/products/admin/all"); 
-      
       const activeItems = (data || []).filter(item => {
-        // 1. Hide inactive items
         if (item.status === 'inactive') return false;
         
-        // 2. 🚀 THE FIX: Bulletproof string matching
         const cat = (item.category || "").toLowerCase();
         const type = (item.product_type || "").toLowerCase();
         const group = (item.product_group || "").toLowerCase();
         
-        // If ANY of these fields contain the word "bouquet" or "arrangement", hide it!
         if (
           cat.includes("bouquet") || cat.includes("arrangement") ||
           type.includes("bouquet") || type.includes("arrangement") ||
@@ -754,10 +736,8 @@ export default function AdminInventory() {
         ) {
           return false;
         }
-        
-        return true; // Keep the raw materials (roses, vases, ribbons)
+        return true; 
       });
-      
       setInventory(activeItems); 
     }
     catch (err) { console.error("Failed to load inventory:", err) }
@@ -773,7 +753,6 @@ export default function AdminInventory() {
   const lowStockCount = inventory.filter(i => i.stock > 0 && i.stock <= (i.reorder_point || 10)).length
   const outOfStockCount = inventory.filter(i => i.stock <= 0).length
 
-  // ── Extra metrics for the printed report (derived; no new data needed) ──
   const totalUnits = inventory.reduce((s, i) => s + (parseInt(i.stock || 0) || 0), 0)
   const reorderNeeded = lowStockCount + outOfStockCount
   const categoryCount = new Set(inventory.map(i => (i.category || "").toLowerCase()).filter(Boolean)).size
@@ -783,12 +762,8 @@ export default function AdminInventory() {
   const activeCount = Math.max(0, totalItems - lowStockCount - outOfStockCount)
   const pct = n => (totalItems ? (n / totalItems) * 100 : 0)
 
-  // Shared status derivation (screen badge + print pill)
   const statusOf = it => it.stock <= 0 ? "Out of Stock" : it.stock <= (it.reorder_point || 10) ? "Low Stock" : "Active"
 
-  // ── Print: full filtered dataset grouped by category, with subtotals ──
-  // The screen table stays paginated; the printed report covers everything
-  // that matches the active filters, organized into category sections.
   const printGroups = (() => {
     const map = new Map()
     filtered.forEach(item => {
@@ -808,23 +783,20 @@ export default function AdminInventory() {
   const filteredUnits = filtered.reduce((s, i) => s + (parseInt(i.stock || 0) || 0), 0)
   const filteredValue = filtered.reduce((s, i) => s + (parseFloat(i.cost_per_unit || 0) || 0) * (parseInt(i.stock || 0) || 0), 0)
 
-  // Report scope line shown under the printed title
   const printScope = [
     category ? `Category: ${category}` : "All Categories",
     statusFilter ? `Status: ${statusFilter}` : "All Statuses",
+    branchFilter ? `Branch: ${branchFilter}` : "All Branches",
     search ? `Search: "${search}"` : null,
     stockSort === "asc" ? "Sorted by Stock (Low to High)" : stockSort === "desc" ? "Sorted by Stock (High to Low)" : null,
     `${filtered.length} of ${totalItems} items`,
   ].filter(Boolean).join("   ·   ")
 
-  console.log("Current Inventory Count:", inventory.length);
-  console.log("Calculated Total Value:", totalValue);
-
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageSafe = Math.min(page, totalPages)
   const paginated = filtered.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE)
 
-  useEffect(() => { setPage(1) }, [search, statusFilter, category, stockSort])
+  useEffect(() => { setPage(1) }, [search, statusFilter, category, stockSort, branchFilter])
 
   const d = {
     headingC:  isDark ? "#e2e8f0" : "#0f172a",
@@ -844,10 +816,11 @@ export default function AdminInventory() {
   const printTime   = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })
 
   const handleCSV = () => {
-    const headers = ["Item Name", "Category", "Unit", "Current Stock", "Reorder Point", "Cost per Unit (₱)", "Status"]
+    const headers = ["Item Name", "Category", "Unit", "Current Stock", "Reorder Point", "Cost per Unit (₱)", "Status", "Branches"]
     const rows = filtered.map(item => {
       const st = item.stock <= 0 ? "Out of Stock" : item.stock <= (item.reorder_point || 10) ? "Low Stock" : "Active"
-      return [item.name, item.category || "—", item.unit_type || "piece", item.stock, item.reorder_point || 10, item.cost_per_unit || "0.00", st]
+      const br = item.branches ? item.branches.join(", ") : "Unassigned"
+      return [item.name, item.category || "—", item.unit_type || "piece", item.stock, item.reorder_point || 10, item.cost_per_unit || "0.00", st, br]
     })
     const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(",")).join("\n")
     const a = Object.assign(document.createElement("a"), {
@@ -861,24 +834,26 @@ export default function AdminInventory() {
     <AddItemForm 
       initialData={editingItem} 
       onBack={() => { setShowForm(false); setEditingItem(null); }} 
-      onSaveSuccess={async () => {
-        // 1. Close form and show success message
-        const isUpdate = Boolean(editingItem);
+      onSaveSuccess={async (savedItem) => {
         setShowForm(false);
         setEditingItem(null);
-        setSuccessMsg(isUpdate ? "Item successfully updated!" : "New item added to inventory!");
+        setSuccessMsg(editingItem ? "Item successfully updated!" : "New item added to inventory!");
 
-        // 2. 🚀 Force the table to pull the LIVE data immediately
-        await fetchInventory();
-
-        // 3. Make the banner disappear after 3.5 seconds
+        if (savedItem && savedItem.id) {
+          setInventory(prev => {
+            const exists = prev.find(p => String(p.id) === String(savedItem.id));
+            if (exists) return prev.map(p => String(p.id) === String(savedItem.id) ? savedItem : p);
+            return [savedItem, ...prev];
+          });
+        }
+        
+        fetchInventory();
         setTimeout(() => setSuccessMsg(""), 3500);
       }}
       isDark={isDark} 
     />
   )
 
-  // Show the branded flower loader while the first inventory fetch is in flight
   if (loading) {
     return (
       <div className="space-y-5">
@@ -890,16 +865,8 @@ export default function AdminInventory() {
 
   return (
     <div className="space-y-5">
-
-      {/* ── Print styles ──
-          The printed report is fully separate from the screen UI:
-          everything in .print-only renders ONLY on paper, and the
-          interactive table card is no-print. Print sections in order:
-          1 letterhead band  2 title + scope  3 summary cards
-          4 stock health bar  5 grouped detail table  6 footer/signatures */}
       <style>{`
         .print-only { display: none; }
-
         @media print {
           @page { margin: 12mm 10mm; }
           body * { visibility: hidden !important; }
@@ -912,51 +879,26 @@ export default function AdminInventory() {
           .print-only { display: block !important; }
           .print-letterhead, .print-doc-title, .print-summary, .print-health { break-inside: avoid; page-break-inside: avoid; }
 
-          /* ── 1. Letterhead: brand band ── */
           .print-letterhead {
             display: flex !important; align-items: center; justify-content: space-between; gap: 16px;
             padding: 13px 18px; border-radius: 12px;
             background: linear-gradient(135deg,#0C573E 0%,#15724B 55%,#2E8B34 100%) !important;
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
           }
-          .print-logo-word {
-            height: 34px; width: auto; max-width: 240px; display: block;
-            object-fit: contain; filter: brightness(0) invert(1);
-          }
-          .print-tagline {
-            margin: 5px 0 0; font-size: 8px; font-weight: 700;
-            letter-spacing: 0.3em; text-transform: uppercase; color: rgba(255,255,255,0.82) !important;
-          }
+          .print-logo-word { height: 34px; width: auto; max-width: 240px; display: block; object-fit: contain; filter: brightness(0) invert(1); }
+          .print-tagline { margin: 5px 0 0; font-size: 8px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: rgba(255,255,255,0.82) !important; }
           .print-meta { text-align: right; flex-shrink: 0; }
-          .print-meta .ref {
-            display: inline-block; margin: 0; padding: 3px 10px; border-radius: 9999px;
-            border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.12) !important;
-            color: #ffffff !important; font-size: 8.5px; font-weight: 700;
-            letter-spacing: 0.12em; text-transform: uppercase;
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
-          }
+          .print-meta .ref { display: inline-block; margin: 0; padding: 3px 10px; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.12) !important; color: #ffffff !important; font-size: 8.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-meta .gen { margin: 6px 0 0; font-size: 9px; color: rgba(255,255,255,0.85) !important; }
           .print-meta .gen strong { color: #ffffff !important; font-weight: 700; }
 
-          /* ── 2. Document title + report scope ── */
           .print-doc-title { display: flex !important; flex-direction: column; align-items: center; margin: 16px 0 2px; }
-          .print-doc-title .t {
-            margin: 0; font-size: 15px; font-weight: 800;
-            letter-spacing: 0.3em; text-transform: uppercase; color: #0C573E !important;
-          }
-          .print-doc-title .rule {
-            width: 54px; height: 3px; border-radius: 9999px; margin: 7px 0 6px;
-            background: linear-gradient(90deg,#0C573E,#2E8B34) !important;
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
-          }
+          .print-doc-title .t { margin: 0; font-size: 15px; font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: #0C573E !important; }
+          .print-doc-title .rule { width: 54px; height: 3px; border-radius: 9999px; margin: 7px 0 6px; background: linear-gradient(90deg,#0C573E,#2E8B34) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-doc-title .scope { margin: 0; font-size: 9px; color: #6b7280 !important; letter-spacing: 0.02em; text-align: center; }
 
-          /* ── 3. Summary cards ── */
           .print-summary { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 0; }
-          .print-summary-card {
-            border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px;
-            background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-          }
+          .print-summary-card { border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px; background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-summary-card.c-total { border-top-color: #0C573E !important; }
           .print-summary-card.c-value { border-top-color: #2E8B34 !important; }
           .print-summary-card.c-low   { border-top-color: #d97706 !important; }
@@ -968,18 +910,11 @@ export default function AdminInventory() {
           .print-summary-card .value.red   { color: #dc2626 !important; }
           .print-summary-card .cap { margin: 3px 0 0; font-size: 8px; color: #9ca3af !important; }
 
-          /* ── 4. Stock health distribution ── */
-          .print-health {
-            margin: 10px 0 0; border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 12px 11px;
-            background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-          }
+          .print-health { margin: 10px 0 0; border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 12px 11px; background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-health .head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; }
           .print-health .hk { margin: 0; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9ca3af !important; }
           .print-health .hv { margin: 0; font-size: 8.5px; color: #6b7280 !important; }
-          .print-health .bar {
-            display: flex; height: 10px; border-radius: 9999px; overflow: hidden;
-            background: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-          }
+          .print-health .bar { display: flex; height: 10px; border-radius: 9999px; overflow: hidden; background: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-health .seg { display: block; height: 100%; }
           .print-health .s-active { background: #2E8B34 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-health .s-low    { background: #f59e0b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -988,7 +923,6 @@ export default function AdminInventory() {
           .print-health .li { display: flex; align-items: center; gap: 5px; font-size: 8.5px; color: #374151 !important; }
           .print-health .dot { width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; }
 
-          /* ── 5. Detail table (grouped by category) ── */
           .print-detail { display: block !important; margin-top: 14px; }
           .print-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; padding: 0 2px; }
           .print-section-title { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #0C573E !important; }
@@ -997,12 +931,7 @@ export default function AdminInventory() {
           .print-detail table { width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; }
           .print-detail thead { display: table-header-group; }
           .print-detail tr { page-break-inside: avoid; }
-          .print-detail th {
-            background: #0C573E !important; color: #ffffff !important;
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
-            border: none; padding: 7px; text-align: left;
-            font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; line-height: 1.25;
-          }
+          .print-detail th { background: #0C573E !important; color: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border: none; padding: 7px; text-align: left; font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; line-height: 1.25; }
           .print-detail th.col-idx    { width: 4.5%; }
           .print-detail th.col-name   { width: 30%; }
           .print-detail th.col-unit   { width: 8.5%; }
@@ -1011,11 +940,7 @@ export default function AdminInventory() {
           .print-detail th.col-cost   { width: 12.5%; }
           .print-detail th.col-val    { width: 13.5%; }
           .print-detail th.col-status { width: 12.5%; }
-          .print-detail td {
-            border-bottom: 1px solid #eef1f4; padding: 6.5px 7px;
-            font-size: 9.5px; color: #1f2937 !important; vertical-align: top;
-            word-break: break-word; overflow-wrap: anywhere;
-          }
+          .print-detail td { border-bottom: 1px solid #eef1f4; padding: 6.5px 7px; font-size: 9.5px; color: #1f2937 !important; vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
           .print-detail .num { text-align: right; }
           .print-detail .center { text-align: center; }
           .print-detail .nowrap { white-space: nowrap !important; }
@@ -1024,48 +949,21 @@ export default function AdminInventory() {
           .print-detail tr.alt td { background: #f7faf8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-detail tbody tr:last-child td { border-bottom: none; }
 
-          /* stock numbers tinted by status */
           .print-detail .stk { font-weight: 700; }
           .print-detail .stk.active { color: #15803d !important; }
           .print-detail .stk.low    { color: #b45309 !important; }
           .print-detail .stk.out    { color: #b91c1c !important; }
 
-          /* category section rows */
           .print-detail tr.cat-row { page-break-after: avoid; break-after: avoid; }
-          .print-detail tr.cat-row td {
-            background: #eaf5ee !important; color: #0C573E !important;
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
-            border-top: 1px solid #d8ebdd; border-bottom: 1px solid #d8ebdd;
-            padding: 6px 8px; font-size: 8.5px; font-weight: 800;
-            letter-spacing: 0.08em; text-transform: uppercase;
-          }
-          .print-detail tr.cat-row .cat-meta {
-            float: right; font-weight: 600; letter-spacing: 0;
-            text-transform: none; color: #15724B !important;
-          }
-
-          /* report total row */
-          .print-detail tr.grand td {
-            background: #0C573E !important; color: #ffffff !important;
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
-            border: none; padding: 8px 7px; font-size: 9.5px; font-weight: 800;
-          }
-
-          /* status pill on paper */
-          .print-pill {
-            display: inline-block !important; padding: 2px 8px; border-radius: 9999px;
-            font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
-            white-space: nowrap; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-          }
+          .print-detail tr.cat-row td { background: #eaf5ee !important; color: #0C573E !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border-top: 1px solid #d8ebdd; border-bottom: 1px solid #d8ebdd; padding: 6px 8px; font-size: 8.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+          .print-detail tr.cat-row .cat-meta { float: right; font-weight: 600; letter-spacing: 0; text-transform: none; color: #15724B !important; }
+          .print-detail tr.grand td { background: #0C573E !important; color: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border: none; padding: 8px 7px; font-size: 9.5px; font-weight: 800; }
+          .print-pill { display: inline-block !important; padding: 2px 8px; border-radius: 9999px; font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-pill.active { background: #dcfce7 !important; color: #15803d !important; }
           .print-pill.low    { background: #fef3c7 !important; color: #b45309 !important; }
           .print-pill.out    { background: #fee2e2 !important; color: #b91c1c !important; }
 
-          /* ── 6. Footer + signatures ── */
-          .print-footer {
-            display: flex !important; align-items: flex-end; justify-content: space-between; gap: 24px;
-            margin-top: 20px; padding-top: 11px; border-top: 2px solid #e5e7eb;
-          }
+          .print-footer { display: flex !important; align-items: flex-end; justify-content: space-between; gap: 24px; margin-top: 20px; padding-top: 11px; border-top: 2px solid #e5e7eb; }
           .print-footer .note { margin: 0; font-size: 8.5px; color: #9ca3af !important; max-width: 46%; line-height: 1.55; }
           .print-footer .note strong { color: #6b7280 !important; }
           .print-signs { display: flex; gap: 34px; }
@@ -1089,7 +987,6 @@ export default function AdminInventory() {
         </div>
       )}
 
-      {/* 🚀 NEW: Render the delete modal */}
       {deletingItem && (
         <DeleteInventoryModal 
           item={deletingItem} 
@@ -1100,16 +997,23 @@ export default function AdminInventory() {
         />
       )}
 
-      {/* Receive Stock (Invoice) modal */}
       {showInvoice && (
         <ReceiveStockModal
           inventory={inventory}
           isDark={isDark}
           onClose={() => setShowInvoice(false)}
-          onSaved={async (count) => {
+          onSaved={async (count, updatedItems) => {
             setShowInvoice(false)
             setSuccessMsg(`Stock received: ${count} item${count > 1 ? "s" : ""} updated.`)
-            await fetchInventory()
+            
+            if (updatedItems && updatedItems.length > 0) {
+              setInventory(prev => prev.map(p => {
+                const match = updatedItems.find(u => String(u.id) === String(p.id));
+                return match ? { ...p, stock: match.newStock } : p;
+              }));
+            }
+            
+            fetchInventory();
             setTimeout(() => setSuccessMsg(""), 3500)
           }}
         />
@@ -1124,7 +1028,6 @@ export default function AdminInventory() {
         </div>
       </div>
 
-      {/* ── Stat cards ── */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 no-print">
         <div className="rounded-xl p-4 sm:p-5 flex flex-col justify-between relative overflow-hidden"
           style={{ background: "linear-gradient(135deg,#0a4a34 0%,#1a7040 60%,#2E8B34 100%)", boxShadow: "0 4px 16px rgba(12,87,62,0.25)" }}>
@@ -1160,10 +1063,7 @@ export default function AdminInventory() {
         ))}
       </div>
 
-      {/* ── Printable area ── */}
       <div id="inventory-print-area">
-
-        {/* ── Print 1: letterhead brand band ── */}
         <div className="print-only print-letterhead">
           <div>
             <img className="print-logo-word" src={estingsWordmark} alt="Esting's Flower International Inc." />
@@ -1175,14 +1075,12 @@ export default function AdminInventory() {
           </div>
         </div>
 
-        {/* ── Print 2: document title + report scope ── */}
         <div className="print-only print-doc-title">
           <p className="t">Inventory Report</p>
           <span className="rule" />
           <p className="scope">{printScope}</p>
         </div>
 
-        {/* ── Print 3: summary cards (company-wide snapshot) ── */}
         <div className="print-only print-summary">
           <div className="print-summary-card c-total">
             <p className="label">Total Items</p>
@@ -1206,7 +1104,6 @@ export default function AdminInventory() {
           </div>
         </div>
 
-        {/* ── Print 4: stock health distribution ── */}
         {totalItems > 0 && (
           <div className="print-only print-health">
             <div className="head">
@@ -1226,11 +1123,9 @@ export default function AdminInventory() {
           </div>
         )}
 
-        {/* ── Screen table card (interactive; never printed) ── */}
         <div className="no-print rounded-xl overflow-hidden"
           style={{ border: `1px solid ${d.cardBdr}`, backgroundColor: d.cardBg, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
 
-          {/* Toolbar */}
           <div className="p-3 sm:p-4" style={{ borderBottom: `1px solid ${d.toolbarBdr}`, backgroundColor: d.toolbarBg }}>
             <div className="flex items-center gap-2 flex-wrap">
               {[
@@ -1257,20 +1152,45 @@ export default function AdminInventory() {
                 </div>
               ))}
 
-              <div className="relative flex-1" style={{ minWidth: "200px" }}>
-                <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
-                </svg>
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search item name or ID"
-                  className="w-full pl-9 pr-4 py-2 text-sm border rounded-md outline-none transition-all"
-                  style={{ borderColor: d.inputBdr, backgroundColor: d.inputBg, color: d.inputTxt }}
-                  onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
-                  onBlur={e => { e.target.style.borderColor = d.inputBdr; e.target.style.boxShadow = "none" }} />
+              <div className="flex-1 flex items-stretch rounded-md overflow-hidden transition-all" 
+                   style={{ minWidth: "280px", border: `1px solid ${d.inputBdr}`, backgroundColor: d.inputBg }}
+                   onFocusCapture={e => { e.currentTarget.style.borderColor="#4ade80"; e.currentTarget.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)" }}
+                   onBlurCapture={e => { e.currentTarget.style.borderColor=d.inputBdr; e.currentTarget.style.boxShadow="none" }}>
+                
+                <div className="relative flex-shrink-0" style={{ borderRight: `1px solid ${d.inputBdr}` }}>
+                  <select 
+                    value={branchFilter || "All Branches"} 
+                    onChange={(e) => setBranchFilter(e.target.value === "All Branches" ? "" : e.target.value)}
+                    className="h-full appearance-none pl-3 pr-8 py-2 text-sm cursor-pointer outline-none bg-transparent"
+                    style={{ color: d.inputTxt }}
+                  >
+                    <option value="All Branches">All Branches</option>
+                    <option value="Manila">Manila</option>
+                    <option value="Pampanga">Pampanga</option>
+                    <option value="Unassigned">Unassigned</option>
+                  </select>
+                  <svg className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
+                  </svg>
+                </div>
+
+                <div className="relative flex-1 flex items-center">
+                   <svg className="w-4 h-4 absolute left-3 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
+                  </svg>
+                  <input 
+                    value={search} 
+                    onChange={e => setSearch(e.target.value)} 
+                    placeholder="Search item name or ID..."
+                    className="w-full pl-9 pr-3 py-2 text-sm outline-none bg-transparent"
+                    style={{ color: d.inputTxt }}
+                  />
+                </div>
               </div>
+
             </div>
           </div>
 
-          {/* Table */}
           <div className="overflow-x-auto">
             <table className="w-full" style={{ minWidth: "760px" }}>
               <thead style={{ borderBottom: `1px solid ${d.toolbarBdr}`, backgroundColor: d.toolbarBg }}>
@@ -1281,12 +1201,13 @@ export default function AdminInventory() {
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Current Stock</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Cost per Unit</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Status</th>
+                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Branch</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={7} className="px-5 py-12 text-center text-sm" style={{ color: d.subC }}>Loading inventory...</td></tr>
+                  <tr><td colSpan={8} className="px-5 py-12 text-center text-sm" style={{ color: d.subC }}>Loading inventory...</td></tr>
                 ) : paginated.length > 0 ? paginated.map((item, idx) => {
                   const invStatus = statusOf(item)
                   return (
@@ -1310,6 +1231,21 @@ export default function AdminInventory() {
                         <InvStatusBadge status={invStatus} isDark={isDark} />
                       </td>
                       <td className="px-4 py-3 align-top">
+                        {Array.isArray(item.branches) && item.branches.length > 0 ? (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider" 
+                            style={{ 
+                              backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "#f3f4f6", 
+                              color: d.subC, border: `1px solid ${isDark ? "#374151" : "#e5e7eb"}`
+                            }}>
+                            {item.branches.join(", ")}
+                          </span>
+                        ) : (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-gray-100 text-gray-500">
+                            Unassigned
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 align-top">
                         <ActionBtns 
                           onDelete={() => setDeletingItem(item)} 
                           onEdit={() => { setEditingItem(item); setShowForm(true); }} 
@@ -1318,7 +1254,7 @@ export default function AdminInventory() {
                     </tr>
                   )
                 }) : (
-                  <tr><td colSpan={7} className="px-5 py-12 text-center text-sm" style={{ color: d.subC }}>No inventory items found.</td></tr>
+                  <tr><td colSpan={8} className="px-5 py-12 text-center text-sm" style={{ color: d.subC }}>No inventory items found.</td></tr>
                 )}
               </tbody>
             </table>
@@ -1330,9 +1266,6 @@ export default function AdminInventory() {
           />
         </div>
 
-        {/* ── Print 5: full detail table, grouped by category ──
-            Prints EVERY filtered item (not just the current page),
-            with per-category subtotals and a report total row. */}
         <div className="print-only print-detail">
           <div className="print-section-head">
             <p className="print-section-title">Inventory Detail</p>
@@ -1401,7 +1334,6 @@ export default function AdminInventory() {
           </div>
         </div>
 
-        {/* ── Print 6: footer + signature lines ── */}
         <div className="print-only print-footer">
           <p className="note">
             <strong>Esting's Flower International Inc.</strong> Confidential. This report is generated for internal use only and reflects recorded stock levels as of the date and time indicated above. Figures are based on the filters applied at the time of printing.

@@ -37,7 +37,7 @@ function WishlistBtn({ id, wishlist, toggleWishlist, small }) {
 export default function GridCard({ product, wishlist, toggleWishlist, onPreview }) {
   const currentPrice = Number(product.price) || 0;
   const oldPrice = Number(product.original_price || product.original) || 0;
-  const hasDiscount = oldPrice > currentPrice;
+  const isDiscounted = oldPrice > currentPrice;
 
   return (
     <div
@@ -51,7 +51,7 @@ export default function GridCard({ product, wishlist, toggleWishlist, onPreview 
           alt={product.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
-        {hasDiscount && (
+        {isDiscounted && (
           <div className="absolute top-2 right-2 text-white text-[10px] font-bold px-1.5 py-0.5" style={{ backgroundColor: DG, borderRadius: "4px" }}>
             -{discount(oldPrice, currentPrice)}%
           </div>
@@ -61,7 +61,7 @@ export default function GridCard({ product, wishlist, toggleWishlist, onPreview 
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-baseline gap-1.5">
             <span className="text-base font-bold" style={{ color: G }}>₱{currentPrice.toLocaleString()}</span>
-            {hasDiscount && (
+            {isDiscounted && (
               <span className="text-xs text-gray-400 line-through">₱{oldPrice.toLocaleString()}</span>
             )}
           </div>

@@ -1401,6 +1401,7 @@ function DeleteProductModal({ product, onClose, onConfirm, isDeleting }) {
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
+// ── Main page ─────────────────────────────────────────────────────────────────
 export default function AdminProducts() {
   const d = useAdminTokens()
   const { isDark } = d
@@ -1410,6 +1411,9 @@ export default function AdminProducts() {
   const [category, setCategory]           = useState("")
   const [status, setStatus]               = useState("")
   const [priceSort, setPriceSort]         = useState("")
+  // 🚀 1. ADDED: State for Branch Filter
+  const [branchFilter, setBranchFilter]   = useState("") 
+  
   const [page, setPage]                   = useState(1)
   const [showModal, setShowModal]         = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
@@ -1437,7 +1441,9 @@ export default function AdminProducts() {
   }, [])
 
   useEffect(() => { fetchProducts() }, [fetchProducts])
-  useEffect(() => { setPage(1) }, [search,category,status,priceSort])
+  
+  // 🚀 2. ADDED: branchFilter to the pagination reset dependencies
+  useEffect(() => { setPage(1) }, [search,category,status,priceSort,branchFilter])
 
   const handleSave     = p => { setProducts(prev=>[p,...prev]); setTotalCount(c=>c+1) }
   const handleEditSave = p => { setProducts(prev=>prev.map(x=>x.id===p.id?p:x)); setEditingProduct(null) }
@@ -1470,14 +1476,23 @@ export default function AdminProducts() {
     const ms = !search || p.name?.toLowerCase().includes(search.toLowerCase());
     const mc = !category || p.category?.toLowerCase() === category.toLowerCase();
     
-    // 🚀 Consolidated Filter Logic
+    // 🚀 THE FIX: Teach the filter how to find "Unassigned" products
+    let mb = true;
+    if (branchFilter && branchFilter !== "All Branches") {
+      if (branchFilter === "Unassigned") {
+        mb = !p.branches || p.branches.length === 0; // True if no branches
+      } else {
+        mb = Array.isArray(p.branches) && p.branches.includes(branchFilter);
+      }
+    }
+    
     let mst = !status || status === "All Status";
     if (status === "Active") mst = p.status === "active";
     else if (status === "Inactive") mst = p.status === "inactive";
     else if (status === "On Sale") mst = !!p.original_price; 
 
-    return ms && mc && mst;
-  }).sort((a, b) => { 
+    return ms && mc && mst && mb;
+  }).sort((a, b) => {
     if(priceSort === "asc") return +a.price - +b.price; 
     if(priceSort === "desc") return +b.price - +a.price; 
     return 0;
@@ -1550,15 +1565,18 @@ export default function AdminProducts() {
         <div className="p-3 sm:p-4" style={{ borderBottom:`1px solid ${d.hdrBdr}`, backgroundColor:d.hdrBg }}>
           <div className="flex items-center gap-2 flex-wrap">
             {[
-              { val:category,  set:setCategory,  opts:["All Categories",...dynamicCategories], min:"130px" },
-              { val:status,    set:setStatus,    opts:["All Status","Active","Inactive"],       min:"120px" },
-              { val:priceSort, set:setPriceSort, opts:["Price: Default","Price: Low to High","Price: High to Low"], min:"160px",
+              { val:category,     set:setCategory,     opts:["All Categories",...dynamicCategories], min:"130px" },
+              { val:status,       set:setStatus,       opts:["All Status","Active","Inactive", "On Sale"], min:"120px" },
+              
+              { val:branchFilter, set:setBranchFilter, opts:["All Branches", "Manila", "Pampanga", "Unassigned"], min:"130px" },
+              { val:priceSort,    set:setPriceSort,    opts:["Price: Default","Price: Low to High","Price: High to Low"], min:"160px",
                 map:{ "Price: Default":"","Price: Low to High":"asc","Price: High to Low":"desc" },
                 unmap:{ "":"Price: Default","asc":"Price: Low to High","desc":"Price: High to Low" } },
             ].map((f,i) => (
               <div key={i} className="relative">
                 <select value={f.unmap?f.unmap[f.val]||f.opts[0]:f.val}
-                  onChange={e => f.set(f.map?f.map[e.target.value]||"":e.target.value==="All Categories"?"":e.target.value==="All Status"?"":e.target.value)}
+                  // 🚀 Updated onChange to cleanly handle resetting any "All [Value]" selection
+                  onChange={e => f.set(f.map ? f.map[e.target.value] || "" : (e.target.value.startsWith("All ") ? "" : e.target.value))}
                   className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md cursor-pointer outline-none transition-all"
                   style={{ ...selStyle, minWidth:f.min }}
                   onFocus={e=>{e.target.style.borderColor="#4ade80";e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)"}}
@@ -1591,7 +1609,7 @@ export default function AdminProducts() {
           <table className="w-full" style={{ minWidth:"700px" }}>
             <thead style={{ borderBottom:`1px solid ${d.hdrBdr}`, backgroundColor:d.hdrBg }}>
               <tr>
-                {["Image","Product Name","Category","Price","Status","Availability","Action"].map(h => (
+                {["Image","Product Name","Category","Price","Status","Availability","Branches","Action"].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color:d.subC }}>{h}</th>
                 ))}
               </tr>
@@ -1615,7 +1633,6 @@ export default function AdminProducts() {
                     <td className="px-4 py-3">
                       <div>
                         <span className="font-bold" style={{ color:d.priceG }}>₱{(+p.price).toLocaleString()}</span>
-                        {/* 🚀 THE FIX: Only render if original_price is strictly greater than the current price */}
                         {p.original_price && Number(p.original_price) > Number(p.price) && (
                           <span className="block text-xs line-through" style={{ color:d.subC }}>
                             ₱{(+p.original_price).toLocaleString()}
@@ -1625,6 +1642,15 @@ export default function AdminProducts() {
                     </td>
                     <td className="px-4 py-3"><StatusBadge status={p.status}/></td>
                     <td className="px-4 py-3"><StatusBadge status={avail}/></td>
+                    <td className="px-4 py-3">
+                      {Array.isArray(p.branches) && p.branches.length > 0 ? (
+                        <span className="text-xs font-semibold" style={{ color:d.subC }}>
+                          {p.branches.join(", ")}
+                        </span>
+                      ) : (
+                        <span className="text-xs" style={{ color:d.subC }}>—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <ActionBtns onEdit={()=>setEditingProduct(p)} onView={()=>setViewingProduct(p)} onDelete={()=>setDeletingProduct(p)}/>
                     </td>
