@@ -278,11 +278,13 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 @limiter.limit("3/minute")
 def forgot_password_send_otp(request: Request, payload: SendOTPRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
+    generic_response = {
+        "status": "success",
+        "message": "If an account exists for this email, a reset code has been sent.",
+    }
 
-    if not user:
-        raise HTTPException(status_code=404, detail="Email not found.")
-    if not user.is_verified:
-        raise HTTPException(status_code=400, detail="Email not verified. Please register first.")
+    if not user or not user.is_verified:
+        return generic_response
 
     otp = generate_otp()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
@@ -294,19 +296,17 @@ def forgot_password_send_otp(request: Request, payload: SendOTPRequest, db: Sess
     if not sent:
         raise HTTPException(status_code=500, detail=f"Failed to send OTP email: {error}")
 
-    return {"status": "success", "message": "OTP sent to email."}
+    return generic_response
 
 
 @router.post("/forgot-password/reset")
 def forgot_password_reset(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
 
-    if not user:
-        raise HTTPException(status_code=404, detail="Email not found.")
-    if user.otp_code != payload.otp:
-        raise HTTPException(status_code=400, detail="Invalid OTP.")
-    if user.otp_expires_at < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="OTP has expired.")
+    if not user or user.otp_code != payload.otp:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code.")
+    if not user.otp_expires_at or user.otp_expires_at < datetime.now(timezone.utc):
+        raise HTTPException(status_code=400, detail="Invalid or expired reset code.")
     if len(payload.new_password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
 

@@ -1,8 +1,8 @@
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import * as Haptics from 'expo-haptics';
 import { Home, Search, ShoppingBag, Sparkles, UserRound, type LucideIcon } from 'lucide-react-native';
-import { useEffect } from 'react';
-import { Platform, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Reanimated, {
   Extrapolation,
   interpolate,
@@ -16,6 +16,7 @@ import Reanimated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts, theme } from '@/constants/theme';
+import { addCartUpdatedListener, getGuestCartItems } from '@/services/guest-cart';
 
 type FloatingTabRoute = 'index' | 'categories' | 'generate' | 'cart' | 'me';
 
@@ -40,6 +41,17 @@ export function FloatingTabBar({ descriptors, navigation, state }: BottomTabBarP
   const layout = getFloatingTabLayout(width, height, insets.bottom, visibleRoutes.length);
   const activeIndex = useSharedValue(visibleActiveIndex);
   const isHomeTab = state.routes[state.index]?.name === 'index';
+  const [cartCount, setCartCount] = useState(0);
+
+  const refreshCartCount = useCallback(() => {
+    getGuestCartItems()
+      .then((items) => {
+        setCartCount(items.reduce((total, item) => total + item.quantity, 0));
+      })
+      .catch(() => {
+        setCartCount(0);
+      });
+  }, []);
 
   useEffect(() => {
     activeIndex.value = withSpring(visibleActiveIndex, {
@@ -48,6 +60,12 @@ export function FloatingTabBar({ descriptors, navigation, state }: BottomTabBarP
       stiffness: 260,
     });
   }, [activeIndex, visibleActiveIndex]);
+
+  useEffect(() => {
+    refreshCartCount();
+  }, [refreshCartCount, state.index]);
+
+  useEffect(() => addCartUpdatedListener(refreshCartCount), [refreshCartCount]);
 
   const activePlateStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: activeIndex.value * layout.itemWidth }],
@@ -109,6 +127,7 @@ export function FloatingTabBar({ descriptors, navigation, state }: BottomTabBarP
               key={route.key}
               label={item.label}
               layout={layout}
+              badgeCount={routeName === 'cart' ? cartCount : 0}
               onPress={onPress}
               tabBarAccessibilityLabel={options?.tabBarAccessibilityLabel}
               testID={options?.tabBarButtonTestID}
@@ -123,6 +142,7 @@ export function FloatingTabBar({ descriptors, navigation, state }: BottomTabBarP
 function FloatingTabItem({
   active,
   activeIndex,
+  badgeCount,
   icon: Icon,
   index,
   label,
@@ -133,6 +153,7 @@ function FloatingTabItem({
 }: {
   active: boolean;
   activeIndex: SharedValue<number>;
+  badgeCount?: number;
   icon: LucideIcon;
   index: number;
   label: string;
@@ -171,8 +192,15 @@ function FloatingTabItem({
       style={[styles.tabButton, { width: layout.itemWidth }]}
       testID={testID}
       onPress={onPress}>
-      <Reanimated.View style={iconStyle}>
+      <Reanimated.View style={[styles.iconSlot, iconStyle]}>
         <Icon color={iconColor} size={layout.icon} strokeWidth={active ? 2.55 : 2.15} />
+        {badgeCount ? (
+          <View style={styles.cartBadge}>
+            <Text numberOfLines={1} adjustsFontSizeToFit style={styles.cartBadgeText}>
+              {badgeCount > 99 ? '99+' : badgeCount}
+            </Text>
+          </View>
+        ) : null}
       </Reanimated.View>
       <Reanimated.Text numberOfLines={1} style={[styles.label, layout.labelText, labelStyle]}>
         {label}
@@ -259,6 +287,30 @@ const styles = StyleSheet.create({
     position: 'absolute',
     right: 1,
     top: 1,
+  },
+  cartBadge: {
+    alignItems: 'center',
+    backgroundColor: '#E11D48',
+    borderColor: theme.colors.surface,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1.5,
+    height: 17,
+    justifyContent: 'center',
+    minWidth: 17,
+    paddingHorizontal: 4,
+    position: 'absolute',
+    right: -10,
+    top: -8,
+  },
+  cartBadgeText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansBold,
+    fontSize: 9,
+    lineHeight: 11,
+    textAlign: 'center',
+  },
+  iconSlot: {
+    position: 'relative',
   },
   label: {
     fontFamily: Fonts.sansMedium,

@@ -13,13 +13,15 @@
       "channel": "preview",
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://bloomora-api.onrender.com/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://bloomora-api.onrender.com/api/v1",
+        "EXPO_PUBLIC_WEB_URL": "https://blueviolet-otter-621683.hostingersite.com"
       }
     },
     "apk": {
       "channel": "apk",
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://bloomora-api.onrender.com/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://bloomora-api.onrender.com/api/v1",
+        "EXPO_PUBLIC_WEB_URL": "https://blueviolet-otter-621683.hostingersite.com"
       },
       "android": {
         "buildType": "apk"
@@ -29,7 +31,8 @@
       "channel": "production",
       "autoIncrement": true,
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://bloomora-api.onrender.com/api/v1"
+        "EXPO_PUBLIC_API_URL": "https://bloomora-api.onrender.com/api/v1",
+        "EXPO_PUBLIC_WEB_URL": "https://blueviolet-otter-621683.hostingersite.com"
       }
     }
   },

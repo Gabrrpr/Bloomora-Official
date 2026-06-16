@@ -3,9 +3,13 @@ export type Product = {
   colors?: ProductColor[];
   description?: string;
   name: string;
+  originalPriceCents?: number;
   priceCents: number;
   tag: string;
   imageUrl?: string;
+  isActive?: boolean;
+  isFlashSale?: boolean;
+  isPromoted?: boolean;
   categoryId: string;
   categoryName?: string;
   branch?: 'all' | 'manila' | 'pampanga' | string;

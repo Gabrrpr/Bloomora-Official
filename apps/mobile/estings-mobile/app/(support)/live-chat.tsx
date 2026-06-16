@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system/legacy';
 import { Image as ExpoImage } from 'expo-image';
@@ -36,6 +36,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  BackHandler,
   ScrollView,
   StyleSheet,
   Text,
@@ -64,6 +65,7 @@ const chatOutlineWidth = 1;
 const inputLineHeight = 20;
 const inputMaxLines = 5;
 const inputMaxHeight = inputLineHeight * inputMaxLines + 16;
+const chatHistoryPollMs = 5000;
 let hasAcceptedChatAgreementThisSession = false;
 
 type SupportStatus = 'Active' | 'Inactive' | 'Connecting' | 'Sign in required';
@@ -163,6 +165,7 @@ const emptySheetContent: Record<
 
 export default function LiveChatScreen() {
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ productId?: string; productName?: string; productPrice?: string }>();
   const scrollRef = useRef<ScrollView>(null);
   const chatPopSoundRef = useRef<Audio.Sound | null>(null);
   const chatPopUriRef = useRef<string | null>(null);
@@ -182,6 +185,7 @@ export default function LiveChatScreen() {
   const [quickReplySetIndex, setQuickReplySetIndex] = useState(0);
   const [activeFloatingMenu, setActiveFloatingMenu] = useState<FloatingMenuType | null>(null);
   const [composerHeight, setComposerHeight] = useState(64);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [isChatAgreementVisible, setIsChatAgreementVisible] = useState(!hasAcceptedChatAgreementThisSession);
   const [emptySheetType, setEmptySheetType] = useState<EmptySheetType | null>(null);
   const [deleteTargetMessage, setDeleteTargetMessage] = useState<ChatMessage | null>(null);
@@ -189,8 +193,27 @@ export default function LiveChatScreen() {
   const [previewScale, setPreviewScale] = useState(1);
   const [visibleDetailsMessageId, setVisibleDetailsMessageId] = useState<string | null>(null);
   const [validationMessage, setValidationMessage] = useState('');
+  const sentProductReferenceKey = useRef<string | null>(null);
 
   const isSignedIn = Boolean(session);
+  const productReferenceMessage = useMemo(() => {
+    const productId = typeof params.productId === 'string' ? params.productId.trim() : '';
+    const productName = typeof params.productName === 'string' ? params.productName.trim() : '';
+    const productPrice = typeof params.productPrice === 'string' ? params.productPrice.trim() : '';
+
+    if (!productId || !productName) {
+      return '';
+    }
+
+    return [
+      "I'm interested in this product:",
+      productName,
+      productPrice ? `Price: ${productPrice}` : null,
+      `Product ID: ${productId}`,
+    ]
+      .filter(Boolean)
+      .join('\n');
+  }, [params.productId, params.productName, params.productPrice]);
   const canSend = useMemo(
     () =>
       isSignedIn &&
@@ -218,6 +241,16 @@ export default function LiveChatScreen() {
 
   useEffect(() => {
     let isMounted = true;
+    let historyPollTimer: ReturnType<typeof setInterval> | null = null;
+
+    const mergeHistory = (history: BackendChatMessage[]) => {
+      if (!isMounted) {
+        return;
+      }
+
+      setMessages((currentMessages) => mergeBackendMessages(currentMessages, history));
+      setShowQuickReplies(history.length === 0);
+    };
 
     getAuthSession()
       .then(async (nextSession) => {
@@ -226,6 +259,7 @@ export default function LiveChatScreen() {
         }
 
         setSession(nextSession);
+        setIsAuthReady(true);
 
         if (!nextSession) {
           setChatSessionId(null);
@@ -248,8 +282,19 @@ export default function LiveChatScreen() {
           return;
         }
 
-        setMessages(history.length > 0 ? [initialMessages[0], ...history.map(mapBackendChatMessage)] : initialMessages);
-        setShowQuickReplies(history.length === 0);
+        mergeHistory(history);
+
+        historyPollTimer = setInterval(() => {
+          getChatHistory({ session: nextSession, userId: nextChatSession.id })
+            .then(mergeHistory)
+            .catch(() => {
+              if (isMounted) {
+                setSupportStatus((currentStatus) =>
+                  currentStatus === 'Sign in required' ? currentStatus : 'Inactive'
+                );
+              }
+            });
+        }, chatHistoryPollMs);
 
         const websocket = new WebSocket(getChatWebSocketUrl({ session: nextSession, userId: nextChatSession.id }));
         wsRef.current = websocket;
@@ -307,6 +352,7 @@ export default function LiveChatScreen() {
       })
       .catch((error) => {
         if (isMounted) {
+          setIsAuthReady(true);
           setSupportStatus('Inactive');
           setValidationMessage(error instanceof Error ? error.message : 'Chat is unavailable.');
         }
@@ -314,11 +360,29 @@ export default function LiveChatScreen() {
 
     return () => {
       isMounted = false;
+      if (historyPollTimer) {
+        clearInterval(historyPollTimer);
+      }
       wsRef.current?.close();
       wsRef.current = null;
     };
     // This bootstraps chat once when the screen mounts; helper functions are stable for this screen lifetime.
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+
+    const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
+      router.back();
+      return true;
+    });
+
+    return () => {
+      subscription.remove();
+    };
   }, []);
 
   useEffect(() => {
@@ -348,6 +412,26 @@ export default function LiveChatScreen() {
       useNativeDriver: false,
     }).start();
   }, [composerModeAnim, hasTypedMessage]);
+
+  useEffect(() => {
+    if (!productReferenceMessage) {
+      return;
+    }
+
+    if (!session || !chatSessionId) {
+      setInput((currentInput) => currentInput || productReferenceMessage);
+      return;
+    }
+
+    if (sentProductReferenceKey.current === productReferenceMessage) {
+      return;
+    }
+
+    sentProductReferenceKey.current = productReferenceMessage;
+    void sendMessage(productReferenceMessage);
+    // Product references should be sent once after chat session bootstrap.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatSessionId, productReferenceMessage, session]);
 
   useEffect(() => {
     if (Platform.OS === 'android') {
@@ -787,31 +871,15 @@ export default function LiveChatScreen() {
         />
       ) : null}
 
-      <View
-        style={[
-          styles.composerShell,
-          {
-            paddingBottom: composerBottomPadding,
-          },
-        ]}
-        onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}>
-        {!isSignedIn ? (
-          <View style={styles.lockedComposer}>
-            <View style={styles.lockedComposerIcon}>
-              <ShieldCheck size={theme.icon.md} color={theme.colors.primary} />
-            </View>
-            <View style={styles.lockedComposerCopy}>
-              <Text style={styles.lockedComposerTitle}>Sign in to chat</Text>
-              <Text style={styles.lockedComposerText}>{"Log in to message Esting's support and view your chat history."}</Text>
-            </View>
-            <Pressable style={styles.lockedComposerButton} onPress={() => router.push('/(auth)/login')}>
-              <Text style={styles.lockedComposerButtonText}>Sign in</Text>
-            </Pressable>
-          </View>
-        ) : null}
-
-        {isSignedIn ? (
-          <>
+      {isSignedIn ? (
+        <View
+          style={[
+            styles.composerShell,
+            {
+              paddingBottom: composerBottomPadding,
+            },
+          ]}
+          onLayout={(event) => setComposerHeight(event.nativeEvent.layout.height)}>
         {pendingAttachments.length ? (
           <ScrollView
             horizontal
@@ -970,8 +1038,6 @@ export default function LiveChatScreen() {
             </Pressable>
           </Animated.View>
         </View>
-          </>
-        ) : null}
 
         {validationMessage ? <Text style={styles.validationText}>{validationMessage}</Text> : null}
         <Text style={styles.termsNote}>
@@ -986,6 +1052,7 @@ export default function LiveChatScreen() {
           .
         </Text>
       </View>
+      ) : null}
 
       <OptionsSheet
         title={emptySheet?.title ?? ''}
@@ -1063,7 +1130,35 @@ export default function LiveChatScreen() {
       <Modal
         animationType="fade"
         transparent
-        visible={isChatAgreementVisible}
+        visible={isAuthReady && !isSignedIn}
+        onRequestClose={() => router.back()}>
+        <View style={styles.agreementOverlay}>
+          <View style={styles.agreementCard}>
+            <View style={styles.agreementIcon}>
+              <ShieldCheck size={28} color={theme.colors.primary} strokeWidth={2.2} />
+            </View>
+            <Text style={styles.agreementTitle}>Sign in required</Text>
+            <Text style={styles.agreementText}>
+              {"You need to sign in to use Esting's live chat, send messages, and view your chat history."}
+            </Text>
+            <View style={styles.agreementActions}>
+              <Pressable style={({ pressed }) => [styles.agreementSecondaryButton, pressed && styles.buttonPressed]} onPress={() => router.back()}>
+                <Text style={styles.agreementSecondaryText}>Back</Text>
+              </Pressable>
+              <Pressable
+                style={({ pressed }) => [styles.agreementPrimaryButton, pressed && styles.buttonPressed]}
+                onPress={() => router.replace('/(auth)/login')}>
+                <Text style={styles.agreementPrimaryText}>Sign in</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={isSignedIn && isChatAgreementVisible}
         onRequestClose={() => router.back()}>
         <View style={styles.agreementOverlay}>
           <View style={styles.agreementCard}>
@@ -1265,23 +1360,45 @@ function SuggestedQuestionsCard({
 
 function HeaderGradient() {
   return (
-    <Svg
-      height="100%"
-      pointerEvents="none"
-      preserveAspectRatio="none"
-      style={StyleSheet.absoluteFill}
-      viewBox="0 0 100 100"
-      width="100%">
-      <Defs>
-        <LinearGradient id="chatHeaderGradient" x1="0" x2="100" y1="0" y2="100">
-          <Stop offset="0" stopColor="#126F3A" />
-          <Stop offset="0.58" stopColor="#1C7E3F" />
-          <Stop offset="1" stopColor="#3B9B4A" />
-        </LinearGradient>
-      </Defs>
-      <Rect fill="url(#chatHeaderGradient)" height="100" width="100" />
-    </Svg>
+    <View pointerEvents="none" style={styles.headerGradient}>
+      <Svg
+        height="100%"
+        pointerEvents="none"
+        preserveAspectRatio="none"
+        viewBox="0 0 100 100"
+        width="100%">
+        <Defs>
+          <LinearGradient id="chatHeaderGradient" x1="0" x2="100" y1="0" y2="100">
+            <Stop offset="0" stopColor="#126F3A" />
+            <Stop offset="0.58" stopColor="#1C7E3F" />
+            <Stop offset="1" stopColor="#3B9B4A" />
+          </LinearGradient>
+        </Defs>
+        <Rect fill="url(#chatHeaderGradient)" height="100" width="100" />
+      </Svg>
+    </View>
   );
+}
+
+function mergeBackendMessages(currentMessages: ChatMessage[], history: BackendChatMessage[]) {
+  if (history.length === 0) {
+    return initialMessages;
+  }
+
+  const existingIds = new Set(currentMessages.map((message) => message.id));
+  const mergedMessages =
+    currentMessages[0]?.id === initialMessages[0].id
+      ? [...currentMessages]
+      : [initialMessages[0], ...currentMessages];
+
+  for (const backendMessage of history) {
+    if (!existingIds.has(backendMessage.id)) {
+      mergedMessages.push(mapBackendChatMessage(backendMessage));
+      existingIds.add(backendMessage.id);
+    }
+  }
+
+  return mergedMessages;
 }
 
 function mapBackendChatMessage(message: BackendChatMessage): ChatMessage {
@@ -1552,12 +1669,20 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.md,
     paddingHorizontal: theme.spacing.lg,
   },
+  headerGradient: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
   backButton: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
     height: 38,
     justifyContent: 'center',
     width: 38,
+    zIndex: 1,
   },
   moreButton: {
     alignItems: 'center',
@@ -1568,6 +1693,7 @@ const styles = StyleSheet.create({
     height: 38,
     justifyContent: 'center',
     width: 38,
+    zIndex: 1,
   },
   supportAvatar: {
     alignItems: 'center',
@@ -1579,6 +1705,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     overflow: 'hidden',
     width: 44,
+    zIndex: 1,
   },
   supportAvatarCompact: {
     height: 30,
@@ -1597,6 +1724,7 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
     justifyContent: 'center',
+    zIndex: 1,
   },
   title: {
     color: theme.colors.white,
@@ -1862,50 +1990,6 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.md,
     paddingTop: theme.spacing.md,
-  },
-  lockedComposer: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-  },
-  lockedComposerIcon: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.greenSoft,
-    borderColor: chatOutlineColor,
-    borderRadius: theme.radius.pill,
-    borderWidth: chatOutlineWidth,
-    height: 42,
-    justifyContent: 'flex-start',
-    width: 42,
-  },
-  lockedComposerCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  lockedComposerTitle: {
-    color: theme.colors.text,
-    fontSize: 14,
-    fontWeight: '800',
-  },
-  lockedComposerText: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    fontWeight: '500',
-    lineHeight: 16,
-  },
-  lockedComposerButton: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.pill,
-    justifyContent: 'center',
-    minHeight: 38,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  lockedComposerButtonText: {
-    color: theme.colors.white,
-    fontSize: 13,
-    fontWeight: '800',
   },
   previewList: {
     gap: theme.spacing.sm,

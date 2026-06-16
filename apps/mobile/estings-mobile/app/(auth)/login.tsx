@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EstingsLogo } from '@/components/estings-logo';
 import { Fonts, theme } from '@/constants/theme';
-import { loginWithPassword } from '@/services/auth-api';
+import { loginWithOAuthProvider, loginWithPassword } from '@/services/auth-api';
 import { type FormErrors, isValidEmail, required } from '@/utils/auth-validation';
 
 type LoginField = 'identifier' | 'password';
@@ -34,6 +34,7 @@ export default function LoginScreen() {
   const [failedSignInAttempts, setFailedSignInAttempts] = useState(0);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [socialSubmittingProvider, setSocialSubmittingProvider] = useState<'facebook' | 'google' | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -102,6 +103,31 @@ export default function LoginScreen() {
       }
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleSocialSignIn(provider: 'facebook' | 'google') {
+    if (isSubmitting || socialSubmittingProvider) {
+      return;
+    }
+
+    setSocialSubmittingProvider(provider);
+    setSubmitError(null);
+
+    try {
+      await loginWithOAuthProvider(provider);
+      setFailedSignInAttempts(0);
+      router.replace('/(tabs)');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+
+      setSubmitError(
+        message.toLowerCase().includes('cancel')
+          ? 'Social sign in was cancelled.'
+          : `Unable to continue with ${provider === 'google' ? 'Google' : 'Facebook'}, please try again.`,
+      );
+    } finally {
+      setSocialSubmittingProvider(null);
     }
   }
 
@@ -209,10 +235,16 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.socialRow}>
-            <SocialButton label="Continue with Google">
+            <SocialButton
+              disabled={isSubmitting || socialSubmittingProvider !== null}
+              label={socialSubmittingProvider === 'google' ? 'Signing in with Google' : 'Continue with Google'}
+              onPress={() => handleSocialSignIn('google')}>
               <GoogleIcon />
             </SocialButton>
-            <SocialButton label="Continue with Facebook">
+            <SocialButton
+              disabled={isSubmitting || socialSubmittingProvider !== null}
+              label={socialSubmittingProvider === 'facebook' ? 'Signing in with Facebook' : 'Continue with Facebook'}
+              onPress={() => handleSocialSignIn('facebook')}>
               <FontAwesome name="facebook" size={22} color="#1877F2" />
             </SocialButton>
           </View>
@@ -298,13 +330,22 @@ function PrimaryButton({ disabled = false, label, onPress }: { disabled?: boolea
 
 function SocialButton({
   children,
+  disabled = false,
   label,
+  onPress,
 }: {
   children: React.ReactNode;
+  disabled?: boolean;
   label: string;
+  onPress: () => void;
 }) {
   return (
-    <Pressable accessibilityLabel={label} accessibilityRole="button" style={({ pressed }) => [styles.socialButton, pressed && styles.pressed]}>
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [styles.socialButton, disabled && styles.socialButtonDisabled, pressed && !disabled && styles.pressed]}>
       {children}
     </Pressable>
   );
@@ -518,6 +559,9 @@ const styles = StyleSheet.create({
     height: 54,
     justifyContent: 'center',
     width: 54,
+  },
+  socialButtonDisabled: {
+    opacity: 0.58,
   },
   googleIcon: {
     height: 26,

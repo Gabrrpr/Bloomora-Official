@@ -5,6 +5,7 @@ import type { CartItem, Product } from '@/constants/shop';
 
 const guestCartFileUri = `${FileSystem.documentDirectory}guest-cart.json`;
 const guestCartStorageKey = 'estings.guest-cart';
+const cartUpdatedEventName = 'estings:cart-updated';
 
 type GuestCartPayload = {
   items: CartItem[];
@@ -39,11 +40,25 @@ async function writeGuestCart(items: CartItem[]) {
 
   if (Platform.OS === 'web') {
     globalThis.localStorage?.setItem(guestCartStorageKey, JSON.stringify(payload));
+    dispatchCartUpdated();
     return;
   }
 
   writeQueue = writeQueue.then(() => FileSystem.writeAsStringAsync(guestCartFileUri, JSON.stringify(payload)));
   await writeQueue;
+  dispatchCartUpdated();
+}
+
+function dispatchCartUpdated() {
+  globalThis.dispatchEvent?.(new Event(cartUpdatedEventName));
+}
+
+export function addCartUpdatedListener(listener: () => void) {
+  globalThis.addEventListener?.(cartUpdatedEventName, listener);
+
+  return () => {
+    globalThis.removeEventListener?.(cartUpdatedEventName, listener);
+  };
 }
 
 export async function getGuestCartItems() {
@@ -77,6 +92,11 @@ export async function getGuestCartItems() {
   }
 
   return sanitizeItems(parsed.items);
+}
+
+export async function setGuestCartItems(items: CartItem[]) {
+  await writeGuestCart(items);
+  return sanitizeItems(items);
 }
 
 export async function addGuestCartItem(product: Product, quantity = 1) {
@@ -116,6 +136,38 @@ export async function updateGuestCartItemQuantity(productId: string, quantity: n
 export async function removeGuestCartItem(productId: string) {
   const items = await getGuestCartItems();
   const nextItems = items.filter((item) => item.product.id !== productId);
+
+  await writeGuestCart(nextItems);
+  return nextItems;
+}
+
+export type AiArrangementCartInput = {
+  arrangementId?: string;
+  description: string;
+  imageUrl?: string;
+  name: string;
+  priceCents: number;
+};
+
+export async function addAiArrangementToCart(input: AiArrangementCartInput) {
+  const productId = input.arrangementId || `ai-arr-${Date.now()}`;
+
+  const syntheticProduct: Product = {
+    categoryId: 'cat-ai-arrangement',
+    categoryName: 'Custom AI Arrangement',
+    description: input.description,
+    id: productId,
+    imageUrl: input.imageUrl,
+    isActive: true,
+    name: input.name,
+    priceCents: input.priceCents,
+    productType: 'Ai Arrangement',
+    stock: 1,
+    tag: 'AI Generated',
+  };
+
+  const items = await getGuestCartItems();
+  const nextItems = [...items, createCartItem(syntheticProduct, 1)];
 
   await writeGuestCart(nextItems);
   return nextItems;

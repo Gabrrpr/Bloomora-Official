@@ -10,12 +10,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
-  useWindowDimensions,
   View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native';
-import { ChevronDown, ImageOff, MapPin, Search, WifiOff, X } from 'lucide-react-native';
+import { Search, Star, WifiOff, X, Zap } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppBrandHeader } from '@/components/app-brand-header';
@@ -23,83 +20,50 @@ import { EmptyState } from '@/components/bloom-ui';
 import { ProductCard } from '@/components/product-card';
 import { formatPhp, type Product } from '@/constants/shop';
 import { theme } from '@/constants/theme';
-import { shopApi, type ShopHeroSlide } from '@/services/shop-api';
+import { shopApi } from '@/services/shop-api';
+import { buildDiscoveryProductOrder, createRecommendationSeed } from '@/utils/product-recommendations';
 
+const imageNotFound = require('@/assets/images/default-img/ImageNotFound.webp');
+const makeItPersonalBanner = require('@/assets/images/banners/MakeItPersonal_Banner.png');
 const pageBackground = '#F5F5F5';
+const hairlineColor = 'rgba(31, 42, 36, 0.09)';
 const softText = '#2F3A34';
-type ShopBranch = 'all' | 'manila' | 'pampanga';
+type ProductSectionKind =
+  | 'flash-sale'
+  | 'featured'
+  | 'new-arrivals'
+  | 'random'
+  | 'floral-products'
+  | 'non-floral-products';
 
-const shopBranches: { label: string; value: ShopBranch }[] = [
-  { label: 'All', value: 'all' },
-  { label: 'Manila', value: 'manila' },
-  { label: 'Pampanga', value: 'pampanga' },
-];
-
-const defaultShopHero: ShopHeroSlide = {
-  accent: theme.colors.primary,
-  cta: 'Shop Flowers',
-  ctaSecondary: 'Make It Personal',
-  ctaSecondaryNav: 'create',
-  description:
-    'Since 1959, Esting\'s has been part of countless moments big and small. Every arrangement is made by hand with fresh flowers and genuine care.',
-  headline: 'Fresh Blooms,\nSince 1959',
-  id: 'mobile-shop-default',
-  tag: 'Esting\'s Flower International Inc.',
+type ProductSectionConfig = {
+  id: ProductSectionKind;
+  isVisible: boolean;
+  order: number;
+  title: string;
 };
 
-const defaultShopHeroes: ShopHeroSlide[] = [
-  defaultShopHero,
-  {
-    accent: '#e11d48',
-    cta: 'Shop Flowers',
-    ctaSecondary: 'Explore Collection',
-    ctaSecondaryNav: 'shop',
-    description:
-      'Whether it is an apology, a misunderstanding, or a way to say you care, flowers can say it simply.',
-    headline: 'Let flowers\ndo the talking',
-    id: 'mobile-shop-apology',
-    tag: 'Made a mistake?',
-  },
-  {
-    accent: '#7c3aed',
-    cta: 'Try It Now',
-    ctaSecondary: 'See Examples',
-    ctaSecondaryNav: 'create',
-    description:
-      'Describe your ideal bouquet or build your own arrangement through Mix and Match.',
-    headline: 'Flowers,\nMade Your Way',
-    id: 'mobile-shop-personal',
-    tag: 'Make It Personal',
-  },
-  {
-    accent: '#d97706',
-    cta: 'Shop Flowers',
-    ctaSecondary: 'View Occasions',
-    ctaSecondaryNav: 'occasions',
-    description:
-      'From everyday surprises to big moments, fresh arrangements help express what you feel.',
-    headline: 'Simple Ways\nto Show You Care',
-    id: 'mobile-shop-moments',
-    tag: 'Fresh Flowers, For Any Moment',
-  },
+const productSectionConfig: ProductSectionConfig[] = [
+  { id: 'flash-sale', isVisible: true, order: 5, title: 'Flash Sale' },
+  { id: 'featured', isVisible: true, order: 10, title: 'Featured Products' },
+  { id: 'new-arrivals', isVisible: true, order: 20, title: 'New Arrivals' },
+  { id: 'random', isVisible: true, order: 30, title: 'Discover Something New' },
+  { id: 'floral-products', isVisible: true, order: 40, title: 'Floral Products' },
+  { id: 'non-floral-products', isVisible: true, order: 50, title: 'Non Floral Products' },
 ];
+const productSectionPreviewLimit = 12;
 
 export default function CategoriesScreen() {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isAppendingProducts, setIsAppendingProducts] = useState(false);
-  const [isBranchMenuOpen, setIsBranchMenuOpen] = useState(false);
+  const [isSearchBarMounted, setIsSearchBarMounted] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [productOrderSeed, setProductOrderSeed] = useState(() => createRecommendationSeed());
   const [query, setQuery] = useState('');
-  const [selectedBranch, setSelectedBranch] = useState<ShopBranch>('all');
-  const [activeHeroIndex, setActiveHeroIndex] = useState(0);
-  const [shopHeroes, setShopHeroes] = useState<ShopHeroSlide[]>(defaultShopHeroes);
-  const [visibleProductCount, setVisibleProductCount] = useState(4);
-  const lastProductBatchAt = useRef(0);
-  const productBatchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchBarProgress = useRef(new Animated.Value(0)).current;
 
   const loadCatalog = useCallback(async (showRefresh = false) => {
     if (showRefresh) {
@@ -110,7 +74,6 @@ export default function CategoriesScreen() {
 
     try {
       const { products: nextProducts } = await shopApi.getCatalog({
-        branch: selectedBranch,
         forceRefresh: showRefresh,
       });
 
@@ -122,137 +85,92 @@ export default function CategoriesScreen() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [selectedBranch]);
+  }, []);
 
   useEffect(() => {
     loadCatalog();
   }, [loadCatalog]);
 
-  useEffect(() => {
-    let isActive = true;
-
-    shopApi
-      .getHeroSlides()
-      .then((data) => {
-        if (isActive && data.slides.length > 0) {
-          setShopHeroes(data.slides);
-          setActiveHeroIndex(0);
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      isActive = false;
-    };
-  }, []);
+  const handleRefreshCatalog = useCallback(() => {
+    setProductOrderSeed(createRecommendationSeed());
+    loadCatalog(true);
+  }, [loadCatalog]);
 
   const filteredProducts = useMemo(() => {
-    if (selectedBranch === 'all') {
-      return products;
-    }
-
-    return products.filter((product) => {
-      const branch = normalizeProductBranch(product.branch);
-
-      return branch === selectedBranch;
+    return buildDiscoveryProductOrder({
+      products,
+      seed: productOrderSeed,
     });
-  }, [products, selectedBranch]);
-
-  const lazyVisibleProducts = filteredProducts.slice(0, visibleProductCount);
-  const canAppendProducts = visibleProductCount < filteredProducts.length;
-  const selectedBranchLabel = shopBranches.find((branch) => branch.value === selectedBranch)?.label ?? 'All';
+  }, [productOrderSeed, products]);
+  const productSections = useMemo(
+    () => buildProductSections(filteredProducts, products, productOrderSeed),
+    [filteredProducts, productOrderSeed, products],
+  );
+  const hasRenderableSections = productSections.some(shouldRenderProductSection);
 
   const handleSubmitSearch = useCallback(() => {
     const nextQuery = query.trim();
 
+    setIsSearchOpen(false);
+    setIsSearchBarMounted(false);
     router.push(nextQuery ? `/search-results?q=${encodeURIComponent(nextQuery)}` : '/search-results');
   }, [query]);
 
-  const handleCatalogScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-      const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+  const handleOpenSearch = useCallback(() => {
+    setIsSearchOpen(true);
+    setIsSearchBarMounted(true);
+    searchBarProgress.stopAnimation();
+    Animated.timing(searchBarProgress, {
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+  }, [searchBarProgress]);
 
-      if (distanceFromBottom < 420 && canAppendProducts && Date.now() - lastProductBatchAt.current > 700 && !isAppendingProducts) {
-        lastProductBatchAt.current = Date.now();
-        setIsAppendingProducts(true);
-
-        productBatchTimer.current = setTimeout(() => {
-          setVisibleProductCount((current) => Math.min(current + 4, filteredProducts.length));
-          setIsAppendingProducts(false);
-          productBatchTimer.current = null;
-        }, 260);
+  const handleCloseSearch = useCallback(() => {
+    searchBarProgress.stopAnimation();
+    Animated.timing(searchBarProgress, {
+      duration: 180,
+      easing: Easing.in(Easing.cubic),
+      toValue: 0,
+      useNativeDriver: true,
+    }).start(({ finished }) => {
+      if (!finished) {
+        return;
       }
-    },
-    [canAppendProducts, filteredProducts.length, isAppendingProducts],
-  );
 
-  useEffect(() => {
-    setVisibleProductCount(4);
-    lastProductBatchAt.current = 0;
-    setIsAppendingProducts(false);
+      setIsSearchOpen(false);
+      setIsSearchBarMounted(false);
+      setQuery('');
+    });
+  }, [searchBarProgress]);
 
-    if (productBatchTimer.current) {
-      clearTimeout(productBatchTimer.current);
-      productBatchTimer.current = null;
-    }
-  }, [filteredProducts.length, selectedBranch]);
-
-  useEffect(() => {
-    return () => {
-      if (productBatchTimer.current) {
-        clearTimeout(productBatchTimer.current);
-      }
-    };
+  const handleOpenProductList = useCallback((params: ProductListRouteParams) => {
+    router.push(buildProductListRoute(params));
   }, []);
 
   return (
     <View style={styles.screen}>
       <View style={styles.stickyHeader}>
-        <AppBrandHeader showSearchAction={false} />
+        <AppBrandHeader onSearchPress={handleOpenSearch} />
 
-        <View style={styles.searchRow}>
-          <View style={styles.searchBox}>
-            <Search size={theme.icon.sm} color={theme.colors.textMuted} />
-            <TextInput
-              autoCapitalize="none"
-              autoCorrect={false}
-              onChangeText={setQuery}
-              placeholder="Search flowers, gifts, colors"
-              placeholderTextColor={theme.colors.textMuted}
-              returnKeyType="search"
-              style={styles.searchInput}
-              onSubmitEditing={handleSubmitSearch}
-              value={query}
-            />
-            {query ? (
-              <Pressable
-                accessibilityLabel="Clear search"
-                accessibilityRole="button"
-                hitSlop={8}
-                onPress={() => {
-                  setQuery('');
-                }}>
-                <X size={theme.icon.sm} color={theme.colors.textMuted} />
-              </Pressable>
-            ) : null}
-          </View>
-          <BranchSelector
-            isOpen={isBranchMenuOpen}
-            selectedBranch={selectedBranch}
-            onSelect={(branch) => {
-              setSelectedBranch(branch);
-              setIsBranchMenuOpen(false);
-            }}
-            onToggle={() => setIsBranchMenuOpen((current) => !current)}
-          />
-        </View>
       </View>
 
+      {isSearchBarMounted ? (
+        <FloatingSearchBar
+          isOpen={isSearchOpen}
+          onChangeText={setQuery}
+          onClose={handleCloseSearch}
+          onSubmit={handleSubmitSearch}
+          progress={searchBarProgress}
+          topInset={insets.top}
+          value={query}
+        />
+      ) : null}
+
       <ScrollView
-        onScroll={handleCatalogScroll}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={() => loadCatalog(true)} tintColor={theme.colors.primary} />}
-        scrollEventThrottle={160}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefreshCatalog} tintColor={theme.colors.primary} />}
         showsVerticalScrollIndicator={false}
         style={styles.catalogScroll}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 104 }]}>
@@ -261,38 +179,26 @@ export default function CategoriesScreen() {
         ) : errorMessage ? (
           <CatalogUnavailableState message={errorMessage} onRetry={() => loadCatalog(true)} />
         ) : (
-          <ShopCmsHeroCarousel
-            activeIndex={activeHeroIndex}
-            heroes={shopHeroes}
-            onActiveIndexChange={setActiveHeroIndex}
-            width={width}
-          />
+          <MakeItPersonalBanner />
         )}
 
-      {isLoading || errorMessage ? null : (
-        <SectionTitle
-          title="Products"
-        />
-      )}
-
-      {isLoading || errorMessage ? null : lazyVisibleProducts.length > 0 ? (
-        <View style={styles.productGrid}>
-          {lazyVisibleProducts.map((product) => (
-            <ProductCard
-              key={product.id}
-              product={product}
+      {isLoading || errorMessage ? null : hasRenderableSections ? (
+        productSections.map((section) =>
+          shouldRenderProductSection(section) ? (
+            <ProductSection
+              key={section.id}
+              onViewMore={() => handleOpenProductList({ section: section.id, title: section.title })}
+              products={section.products}
+              sectionId={section.id}
+              title={section.title}
             />
-          ))}
-          {isAppendingProducts ? <ProductAppendLoader /> : null}
-          {!isAppendingProducts && canAppendProducts ? <View style={styles.productScrollBuffer} /> : null}
-        </View>
+          ) : null,
+        )
       ) : (
         <EmptyState
           title="No products found"
           description={
-            selectedBranch === 'all'
-              ? 'Try another category or search term.'
-              : `No products are listed for ${selectedBranchLabel} yet. Try All branches.`
+            'Try another category or search term.'
           }
         />
       )}
@@ -301,113 +207,16 @@ export default function CategoriesScreen() {
   );
 }
 
-function ShopCmsHeroCarousel({
-  activeIndex,
-  heroes,
-  onActiveIndexChange,
-  width,
-}: {
-  activeIndex: number;
-  heroes: ShopHeroSlide[];
-  onActiveIndexChange: (index: number) => void;
-  width: number;
-}) {
-  const handleMomentumEnd = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const nextIndex = Math.round(event.nativeEvent.contentOffset.x / width);
-      onActiveIndexChange(Math.min(Math.max(nextIndex, 0), heroes.length - 1));
-    },
-    [heroes.length, onActiveIndexChange, width],
-  );
-
+function MakeItPersonalBanner() {
   return (
-    <View style={styles.heroCarousel}>
-      <ScrollView
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        onMomentumScrollEnd={handleMomentumEnd}
-        scrollEventThrottle={16}>
-        {heroes.map((hero) => (
-          <ShopCmsHero hero={hero} key={String(hero.id)} width={width} />
-        ))}
-      </ScrollView>
-      <View style={styles.heroDots}>
-        {heroes.map((hero, index) => (
-          <View
-            key={`dot-${hero.id}`}
-            style={[
-              styles.heroDot,
-              index === activeIndex && styles.heroDotActive,
-              index === activeIndex && { backgroundColor: hero.accent || theme.colors.primary },
-            ]}
-          />
-        ))}
-      </View>
-    </View>
+    <Pressable
+      accessibilityLabel="Try Make it Personal"
+      accessibilityRole="button"
+      onPress={() => router.push({ pathname: '/(tabs)/generate', params: { frame: 'selection' } })}
+      style={({ pressed }) => [styles.bannerButton, pressed && styles.productTilePressed]}>
+      <Image contentFit="cover" source={makeItPersonalBanner} style={styles.makeItPersonalBanner} />
+    </Pressable>
   );
-}
-
-function ShopCmsHero({ hero, width }: { hero: ShopHeroSlide; width: number }) {
-  const accent = hero.accent || theme.colors.primary;
-  const imageUrl = resolveCmsImage(hero.image);
-
-  return (
-    <View style={[styles.hero, { backgroundColor: accent, width }]}>
-      {imageUrl ? (
-        <Image cachePolicy="memory-disk" contentFit="cover" source={{ uri: imageUrl }} style={styles.heroImage} />
-      ) : (
-        <View style={styles.heroTexture}>
-          <View style={[styles.heroAccentCircle, { borderColor: 'rgba(255, 255, 255, 0.24)' }]} />
-          <View style={[styles.heroAccentLine, { backgroundColor: 'rgba(255, 255, 255, 0.18)' }]} />
-        </View>
-      )}
-      <View style={styles.heroOverlay} />
-      <View style={styles.heroCopy}>
-        <Text numberOfLines={1} style={[styles.eyebrow, { backgroundColor: `${accent}88` }]}>
-          {hero.tag}
-        </Text>
-        <Text numberOfLines={2} style={styles.title}>
-          {hero.headline.split('\n').slice(0, 2).map((line, index, lines) => (
-            <Text key={`${line}-${index}`}>
-              {line}
-              {index < lines.length - 1 ? '\n' : ''}
-            </Text>
-          ))}
-        </Text>
-        <Text numberOfLines={2} style={styles.subtitle}>
-          {hero.description}
-        </Text>
-        <View style={styles.heroActions}>
-          <Pressable accessibilityRole="button" onPress={() => {}} style={({ pressed }) => [styles.heroPrimaryButton, pressed && styles.productTilePressed]}>
-            <Text style={styles.heroPrimaryButtonText}>{hero.cta || 'Shop Flowers'}</Text>
-          </Pressable>
-          {hero.ctaSecondary ? (
-            <Pressable
-              accessibilityRole="button"
-              onPress={() => {
-                if (hero.ctaSecondaryNav === 'create') {
-                  router.push('/create/describe');
-                }
-              }}
-              style={({ pressed }) => [styles.heroSecondaryButton, pressed && styles.productTilePressed]}>
-              <Text style={styles.heroSecondaryButtonText}>{hero.ctaSecondary}</Text>
-            </Pressable>
-          ) : null}
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function resolveCmsImage(image?: string | null) {
-  const trimmedImage = image?.trim();
-
-  if (!trimmedImage) {
-    return undefined;
-  }
-
-  return /^https?:\/\//i.test(trimmedImage) ? trimmedImage : undefined;
 }
 
 function CatalogUnavailableState({ message, onRetry }: { message: string; onRetry: () => void }) {
@@ -426,114 +235,397 @@ function CatalogUnavailableState({ message, onRetry }: { message: string; onRetr
 }
 
 function ProductAppendLoader() {
+  const skeletonColumns = splitIntoColumns([0, 1, 2, 3]);
+
   return (
-    <>
-      {[0, 1, 2, 3].map((item) => (
-        <View key={`append-${item}`} style={styles.productTile}>
-          <SkeletonBlock style={styles.productImage} />
-          <View style={styles.productBody}>
-            <SkeletonBlock style={styles.skeletonLineWide} />
-            <SkeletonBlock style={styles.skeletonLineShort} />
-          </View>
+    <View style={styles.productGrid}>
+      {skeletonColumns.map((column, columnIndex) => (
+        <View key={`append-column-${columnIndex}`} style={styles.productColumn}>
+          {column.map((item) => (
+            <View key={`append-${item}`} style={styles.productTile}>
+              <SkeletonBlock style={styles.productImage} />
+              <View style={styles.productBody}>
+                <SkeletonBlock style={styles.skeletonLineWide} />
+                <SkeletonBlock style={styles.skeletonLineShort} />
+              </View>
+            </View>
+          ))}
         </View>
       ))}
-    </>
-  );
-}
-
-function SectionTitle({ title }: { title: string }) {
-  return (
-    <View style={styles.sectionHeader}>
-      <View>
-        <Text style={styles.sectionTitle}>{title}</Text>
-      </View>
     </View>
   );
 }
 
-function BranchSelector({
+type ProductListRouteParams = {
+  category?: string;
+  group?: 'occasions';
+  section?: ProductSectionKind;
+  title: string;
+};
+
+function FloatingSearchBar({
   isOpen,
-  onSelect,
-  onToggle,
-  selectedBranch,
+  onChangeText,
+  onClose,
+  onSubmit,
+  progress,
+  topInset,
+  value,
 }: {
   isOpen: boolean;
-  onSelect: (branch: ShopBranch) => void;
-  onToggle: () => void;
-  selectedBranch: ShopBranch;
+  onChangeText: (value: string) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+  progress: Animated.Value;
+  topInset: number;
+  value: string;
 }) {
-  const selectedLabel = shopBranches.find((branch) => branch.value === selectedBranch)?.label ?? 'All';
+  const opacity = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+  const translateY = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-10, 0],
+  });
+  const scale = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.96, 1],
+  });
 
   return (
-    <View style={styles.branchSelectorWrap}>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityState={{ expanded: isOpen }}
-        onPress={onToggle}
-        style={({ pressed }) => [styles.branchTrigger, pressed && styles.branchButtonPressed]}>
-        <MapPin size={14} color={theme.colors.primary} strokeWidth={2.2} />
-        <View style={styles.branchTriggerCopy}>
-          <Text style={styles.branchTriggerLabel}>Branch</Text>
-          <Text numberOfLines={1} style={styles.branchTriggerText}>{selectedLabel}</Text>
-        </View>
-        <ChevronDown size={14} color={theme.colors.textMuted} strokeWidth={2.2} />
-      </Pressable>
-      {isOpen ? (
-        <View style={styles.branchMenu}>
-        {shopBranches.map((branch) => {
-          const isSelected = branch.value === selectedBranch;
+    <Animated.View
+      pointerEvents={isOpen ? 'auto' : 'none'}
+      style={[
+        styles.searchOverlay,
+        {
+          opacity,
+          top: topInset + 74,
+          transform: [{ translateY }, { scale }],
+        },
+      ]}>
+      <View style={styles.searchBar}>
+        <Search size={theme.icon.sm} color={theme.colors.textMuted} />
+        <TextInput
+          autoCapitalize="none"
+          autoCorrect={false}
+          autoFocus
+          onChangeText={onChangeText}
+          onSubmitEditing={onSubmit}
+          placeholder="Search flowers, gifts, colors"
+          placeholderTextColor={theme.colors.textMuted}
+          returnKeyType="search"
+          style={styles.searchInput}
+          value={value}
+        />
+        {value ? (
+          <Pressable accessibilityLabel="Clear search" accessibilityRole="button" hitSlop={8} onPress={() => onChangeText('')}>
+            <X size={theme.icon.sm} color={theme.colors.textMuted} />
+          </Pressable>
+        ) : null}
+        <Pressable accessibilityLabel="Close search" accessibilityRole="button" hitSlop={8} onPress={onClose}>
+          <X size={theme.icon.sm} color={theme.colors.textMuted} />
+        </Pressable>
+      </View>
+    </Animated.View>
+  );
+}
 
-          return (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ selected: isSelected }}
-              key={branch.value}
-              onPress={() => onSelect(branch.value)}
-              style={({ pressed }) => [
-                styles.branchButton,
-                isSelected && styles.branchButtonActive,
-                pressed && styles.branchButtonPressed,
-              ]}>
-              <Text style={[styles.branchButtonText, isSelected && styles.branchButtonTextActive]}>
-                {branch.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+function ProductSection({
+  onViewMore,
+  products,
+  sectionId,
+  title,
+}: {
+  onViewMore: () => void;
+  products: Product[];
+  sectionId: ProductSectionKind;
+  title: string;
+}) {
+  const isFlashSale = sectionId === 'flash-sale';
+  const previewProducts = products.slice(0, productSectionPreviewLimit);
+  const productColumns = splitIntoColumns(previewProducts);
+  const canViewMore = isFlashSale ? products.length > 0 : products.length > productSectionPreviewLimit;
+
+  return (
+    <View style={styles.productSection}>
+      <SectionTitle canViewMore={canViewMore} isFlashSale={isFlashSale} onViewMore={onViewMore} title={title} />
+      {isFlashSale ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.flashSaleRail}>
+          {previewProducts.length > 0 ? (
+            previewProducts.map((product) => (
+              <FlashSaleProductCard key={product.id} product={product} />
+            ))
+          ) : (
+            <FlashSaleSkeletonPreview />
+          )}
+        </ScrollView>
+      ) : (
+        <View style={styles.productGrid}>
+          {productColumns.map((column, columnIndex) => (
+            <View key={`${title}-${columnIndex}`} style={styles.productColumn}>
+              {column.map((product) => (
+                <ProductCard
+                  key={product.id}
+                  product={product}
+                  style={styles.productCard}
+                />
+              ))}
+            </View>
+          ))}
         </View>
+      )}
+    </View>
+  );
+}
+
+function FlashSaleSkeletonPreview() {
+  return (
+    <>
+      <View style={styles.flashSaleSkeletonCard}>
+        <View style={styles.flashSaleSkeletonImage} />
+        <View style={styles.flashSaleSkeletonBody}>
+          <View style={styles.flashSaleSkeletonLineWide} />
+          <View style={styles.flashSaleSkeletonLineMedium} />
+          <View style={styles.flashSaleSkeletonSpacer} />
+          <View style={styles.flashSaleSkeletonLineShort} />
+        </View>
+      </View>
+      <View style={[styles.flashSaleSkeletonCard, styles.flashSaleSkeletonCardPartial]}>
+        <View style={styles.flashSaleSkeletonImage} />
+        <View style={styles.flashSaleSkeletonBody}>
+          <View style={styles.flashSaleSkeletonLineWide} />
+          <View style={styles.flashSaleSkeletonLineMedium} />
+          <View style={styles.flashSaleSkeletonSpacer} />
+          <View style={styles.flashSaleSkeletonLineShort} />
+        </View>
+      </View>
+    </>
+  );
+}
+
+function FlashSaleProductCard({ product }: { product: Product }) {
+  const isSoldOut = (product.stock ?? 0) <= 0;
+  const originalPrice = product.originalPriceCents && product.originalPriceCents > product.priceCents ? product.originalPriceCents : undefined;
+  const description = product.description?.trim() || product.categoryName || product.productType || product.productGroup || product.tag;
+
+  return (
+    <Pressable
+      accessibilityLabel={`View ${product.name} details`}
+      accessibilityRole="button"
+      onPress={() => router.push(`/product-details?id=${encodeURIComponent(product.id)}`)}
+      style={({ pressed }) => [styles.flashSaleCard, pressed && styles.productTilePressed]}>
+      <View style={styles.flashSaleImageWrap}>
+        {product.imageUrl ? (
+          <Image cachePolicy="memory-disk" contentFit="cover" recyclingKey={`flash-${product.id}`} source={{ uri: product.imageUrl }} style={styles.flashSaleImage} />
+        ) : (
+          <Image contentFit="cover" source={imageNotFound} style={styles.flashSaleImage} />
+        )}
+        {isSoldOut ? (
+          <View style={styles.flashSaleSoldOutBadge}>
+            <Text style={styles.flashSaleSoldOutText}>Sold out</Text>
+          </View>
+        ) : null}
+      </View>
+      <View style={styles.flashSaleCardBody}>
+        <Text numberOfLines={2} style={styles.flashSaleCardName}>
+          {product.name}
+        </Text>
+        <View style={styles.flashSalePriceRow}>
+          <Text style={styles.flashSaleCardPrice}>{formatPhp(product.priceCents)}</Text>
+          {originalPrice ? <Text style={styles.flashSaleOriginalPrice}>{formatPhp(originalPrice)}</Text> : null}
+        </View>
+        <Text numberOfLines={2} style={styles.flashSaleCardMeta}>
+          {description}
+        </Text>
+        <View style={styles.flashSaleRatingRow}>
+          <View style={styles.flashSaleStars}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <Star key={star} size={11} color="#DDE0DD" fill="transparent" strokeWidth={2} />
+            ))}
+          </View>
+          <Text style={styles.flashSaleRatingText}>(0)</Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+function SectionTitle({
+  canViewMore,
+  isFlashSale,
+  onViewMore,
+  title,
+}: {
+  canViewMore?: boolean;
+  isFlashSale?: boolean;
+  onViewMore?: () => void;
+  title: string;
+}) {
+  return (
+    <View style={[styles.sectionHeader, isFlashSale && styles.flashSaleHeader]}>
+      <View style={styles.sectionTitleWrap}>
+        <View style={styles.sectionTitleRow}>
+          {isFlashSale ? <Zap color={theme.colors.white} fill="transparent" size={20} strokeWidth={2.4} /> : null}
+          <Text style={[styles.sectionTitle, isFlashSale && styles.flashSaleTitle]}>{title}</Text>
+        </View>
+        {isFlashSale ? (
+          <View style={styles.flashCountdown}>
+            {['00', '00', '00'].map((value, index) => (
+              <View key={`${value}-${index}`} style={styles.flashCountdownBox}>
+                <Text style={styles.flashCountdownText}>{value}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+        <View style={styles.sectionTitleLine} />
+      </View>
+      {canViewMore && onViewMore ? (
+        <Pressable accessibilityRole="button" onPress={onViewMore} style={({ pressed }) => [styles.viewMoreButton, pressed && styles.productTilePressed]}>
+          <Text style={[styles.viewMoreText, isFlashSale && styles.flashSaleViewMoreText]}>Shop More</Text>
+        </Pressable>
       ) : null}
     </View>
   );
 }
 
+function buildProductSections(products: Product[], allProducts: Product[], seed: string) {
+  return productSectionConfig
+    .filter((section) => section.isVisible)
+    .sort((first, second) => first.order - second.order)
+    .map((section) => ({
+      ...section,
+      products: prioritizeProductsWithImages(getProductsForSection(section.id, products, seed, allProducts)),
+    }));
+}
 
-function normalizeProductBranch(branch?: string) {
-  const normalizedBranch = branch?.trim().toLowerCase();
+function shouldRenderProductSection(section: ProductSectionConfig & { products: Product[] }) {
+  return section.id === 'flash-sale' || section.products.length > 0;
+}
 
-  if (!normalizedBranch) {
-    return undefined;
+function getProductsForSection(sectionId: ProductSectionKind, products: Product[], seed: string, allProducts: Product[] = products) {
+  switch (sectionId) {
+    case 'flash-sale':
+      return getFlashSaleProducts(allProducts);
+    case 'featured':
+      return products.filter(isFeaturedProduct);
+    case 'new-arrivals':
+      return products.filter(isNewArrivalProduct);
+    case 'random':
+      return [...products].sort(
+        (first, second) =>
+          getStableRandomValue(`${seed}:discover:${first.id}`) - getStableRandomValue(`${seed}:discover:${second.id}`),
+      );
+    case 'floral-products':
+      return products.filter(isFloralProduct);
+    case 'non-floral-products':
+      return products.filter((product) => !isFloralProduct(product));
+    default:
+      return products;
+  }
+}
+
+function getFlashSaleProducts(products: Product[]) {
+  return products.filter((product) => isActiveProduct(product) && isFlashSaleProduct(product));
+}
+
+function prioritizeProductsWithImages(products: Product[]) {
+  return [...products].sort((first, second) => Number(hasProductImage(second)) - Number(hasProductImage(first)));
+}
+
+function hasProductImage(product: Product) {
+  return Boolean(product.imageUrl?.trim());
+}
+
+function isFlashSaleProduct(product: Product) {
+  const metadata = product as Product & { isFlashSale?: boolean; isPromoted?: boolean };
+  const searchableText = [product.name, product.description, product.categoryName, product.productGroup, product.productType, product.tag]
+    .filter(Boolean)
+    .join(' ');
+
+  return Boolean(
+    (product.originalPriceCents && product.originalPriceCents > product.priceCents) ||
+      metadata.isFlashSale ||
+      metadata.isPromoted ||
+      /\b(flash\s*sale|promo|promoted|discount|sale)\b/i.test(searchableText),
+  );
+}
+
+function isActiveProduct(product: Product) {
+  return product.isActive !== false;
+}
+
+function isFeaturedProduct(product: Product) {
+  const metadata = product as Product & { featured?: boolean; isFeatured?: boolean };
+
+  return Boolean(metadata.featured || metadata.isFeatured || /\b(featured|premium|highlight)\b/i.test(product.tag));
+}
+
+function isNewArrivalProduct(product: Product) {
+  const metadata = product as Product & { isNew?: boolean };
+  const createdTime = product.createdAt ? new Date(product.createdAt).getTime() : Number.NaN;
+  const isRecentlyCreated = Number.isFinite(createdTime) && Date.now() - createdTime <= 1000 * 60 * 60 * 24 * 30;
+
+  return Boolean(metadata.isNew || /\b(new|arrival|fresh)\b/i.test(product.tag) || isRecentlyCreated);
+}
+
+function isFloralProduct(product: Product) {
+  const searchableText = [product.categoryName, product.productGroup, product.productType, product.tag, product.name]
+    .filter(Boolean)
+    .join(' ');
+
+  if (/\b(non[\s-]?floral|add[\s-]?on|gift|chocolate|teddy|balloon|vase|wrapper|ribbon|card|cake)\b/i.test(searchableText)) {
+    return false;
   }
 
-  if (normalizedBranch.includes('manila')) {
-    return 'manila';
+  return /\b(floral|flower|flowers|bouquet|arrangement|rose|roses|orchid|orchids|tulip|tulips|lily|lilies|sunflower|carnation|stems?)\b/i.test(
+    searchableText,
+  );
+}
+
+function splitIntoColumns<T>(items: T[]) {
+  return [
+    items.filter((_, index) => index % 2 === 0),
+    items.filter((_, index) => index % 2 === 1),
+  ];
+}
+
+function getStableRandomValue(value: string) {
+  let hash = 2166136261;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
   }
 
-  if (normalizedBranch.includes('pampanga')) {
-    return 'pampanga';
+  return (Math.abs(hash) % 10000) / 10000;
+}
+
+function buildProductListRoute(params: ProductListRouteParams) {
+  const searchParams = new URLSearchParams();
+
+  searchParams.set('title', params.title);
+
+  if (params.section) {
+    searchParams.set('section', params.section);
   }
 
-  if (normalizedBranch === 'all') {
-    return 'all';
+  if (params.category) {
+    searchParams.set('category', params.category);
   }
 
-  return normalizedBranch;
+  if (params.group) {
+    searchParams.set('group', params.group);
+  }
+
+  return `/product-list?${searchParams.toString()}` as const;
 }
 
 function CatalogSkeleton() {
   return (
     <View style={styles.skeletonWrap}>
-      <View style={styles.hero}>
-        <SkeletonBlock style={styles.heroImage} />
+      <View style={styles.bannerSkeleton}>
+        <SkeletonBlock style={styles.bannerSkeletonImage} />
       </View>
       <View style={styles.sectionHeader}>
         <View style={styles.skeletonHeaderCopy}>
@@ -541,17 +633,7 @@ function CatalogSkeleton() {
           <SkeletonBlock style={styles.skeletonLineShort} />
         </View>
       </View>
-      <View style={styles.productGrid}>
-        {[0, 1, 2, 3].map((item) => (
-          <View key={`product-${item}`} style={styles.productTile}>
-            <SkeletonBlock style={styles.productImage} />
-            <View style={styles.productBody}>
-              <SkeletonBlock style={styles.skeletonLineWide} />
-              <SkeletonBlock style={styles.skeletonLineShort} />
-            </View>
-          </View>
-        ))}
-      </View>
+      <ProductAppendLoader />
     </View>
   );
 }
@@ -591,16 +673,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stickyHeader: {
-    backgroundColor: theme.colors.white,
-    borderBottomColor: 'rgba(31, 42, 36, 0.08)',
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
+    borderBottomColor: hairlineColor,
     borderBottomWidth: 1,
-    elevation: 4,
-    gap: theme.spacing.md,
-    paddingBottom: theme.spacing.md,
-    shadowColor: '#1F2A24',
-    shadowOffset: { height: 4, width: 0 },
-    shadowOpacity: 0.06,
-    shadowRadius: 10,
+    paddingBottom: theme.spacing.sm,
     zIndex: 20,
   },
   catalogScroll: {
@@ -608,54 +684,26 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    gap: theme.spacing.lg,
+    gap: theme.spacing.md,
     paddingTop: 0,
   },
-  heroCarousel: {
+  bannerButton: {
     backgroundColor: theme.colors.white,
     overflow: 'hidden',
-    position: 'relative',
-  },
-  hero: {
-    height: 218,
-    justifyContent: 'center',
-    overflow: 'hidden',
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.md,
-    position: 'relative',
-  },
-  heroImage: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: theme.colors.surfaceAlt,
-    height: '100%',
     width: '100%',
   },
-  heroFallback: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    backgroundColor: theme.colors.greenSoft,
-    justifyContent: 'center',
+  makeItPersonalBanner: {
+    aspectRatio: 1088 / 503,
+    backgroundColor: theme.colors.white,
+    width: '100%',
   },
-  heroTexture: {
-    ...StyleSheet.absoluteFillObject,
+  bannerSkeleton: {
+    backgroundColor: theme.colors.white,
     overflow: 'hidden',
   },
-  heroAccentCircle: {
-    borderRadius: 140,
-    borderWidth: 1,
-    height: 230,
-    position: 'absolute',
-    right: -78,
-    top: -66,
-    width: 230,
-  },
-  heroAccentLine: {
-    borderRadius: theme.radius.pill,
-    height: 3,
-    left: theme.spacing.lg,
-    position: 'absolute',
-    right: theme.spacing.lg,
-    top: theme.spacing.lg,
+  bannerSkeletonImage: {
+    aspectRatio: 1088 / 503,
+    width: '100%',
   },
   unavailablePanel: {
     alignItems: 'center',
@@ -710,109 +758,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
-  heroOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.22)',
-  },
-  heroCopy: {
-    gap: 7,
-    maxWidth: 288,
-  },
-  eyebrow: {
-    color: theme.colors.white,
-    alignSelf: 'flex-start',
-    borderColor: 'rgba(255, 255, 255, 0.22)',
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    fontSize: 9,
-    fontWeight: '700',
-    letterSpacing: 0,
-    overflow: 'hidden',
-    paddingHorizontal: 9,
-    paddingVertical: 4,
-    textTransform: 'uppercase',
-  },
-  title: {
-    color: theme.colors.white,
-    fontSize: 26,
-    fontWeight: '700',
-    letterSpacing: 0,
-    lineHeight: 31,
-  },
-  subtitle: {
-    color: theme.colors.white,
-    fontSize: 12,
-    lineHeight: 17,
-    opacity: 0.9,
-  },
-  heroActions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-    paddingTop: 5,
-  },
-  heroPrimaryButton: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.white,
-    borderRadius: theme.radius.pill,
-    justifyContent: 'center',
-    minHeight: 35,
-    paddingHorizontal: theme.spacing.md,
-  },
-  heroPrimaryButtonText: {
-    color: theme.colors.primary,
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  heroSecondaryButton: {
-    alignItems: 'center',
-    borderColor: 'rgba(255, 255, 255, 0.46)',
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    justifyContent: 'center',
-    minHeight: 35,
-    paddingHorizontal: theme.spacing.md,
-  },
-  heroSecondaryButtonText: {
-    color: theme.colors.white,
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  heroDots: {
-    alignItems: 'center',
-    bottom: 10,
-    flexDirection: 'row',
-    gap: 6,
-    justifyContent: 'center',
-    left: 0,
+  searchOverlay: {
+    left: theme.spacing.lg,
     position: 'absolute',
-    right: 0,
+    right: theme.spacing.lg,
+    zIndex: 60,
   },
-  heroDot: {
-    backgroundColor: 'rgba(255, 255, 255, 0.58)',
-    borderRadius: theme.radius.pill,
-    height: 5,
-    width: 5,
-  },
-  heroDotActive: {
-    width: 18,
-  },
-  searchRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  searchBox: {
+  searchBar: {
     alignItems: 'center',
     backgroundColor: theme.colors.white,
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.pill,
     borderWidth: theme.borderWidth,
-    flex: 1,
     flexDirection: 'row',
     gap: theme.spacing.sm,
-    minHeight: 48,
+    minHeight: 50,
     paddingHorizontal: theme.spacing.lg,
   },
   searchInput: {
@@ -822,131 +782,88 @@ const styles = StyleSheet.create({
     minWidth: 0,
     paddingVertical: theme.spacing.sm,
   },
-  branchSelectorWrap: {
-    position: 'relative',
-    width: 132,
-    zIndex: 30,
-  },
-  branchTrigger: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.white,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    borderWidth: theme.borderWidth,
-    flexDirection: 'row',
-    gap: 6,
-    justifyContent: 'center',
-    minHeight: 48,
-    paddingHorizontal: theme.spacing.xs,
-  },
-  branchTriggerCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  branchTriggerLabel: {
-    color: theme.colors.textMuted,
-    fontSize: 9,
-    fontWeight: '600',
-    lineHeight: 11,
-  },
-  branchTriggerText: {
-    color: theme.colors.primary,
-    fontSize: 12,
-    fontWeight: '700',
-    lineHeight: 15,
-  },
-  branchMenu: {
-    backgroundColor: theme.colors.white,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    borderWidth: theme.borderWidth,
-    overflow: 'hidden',
-    position: 'absolute',
-    right: 0,
-    top: 54,
-    width: 128,
-    zIndex: 40,
-  },
-  branchButton: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.white,
-    borderBottomColor: theme.colors.subtleBorder,
-    borderBottomWidth: 1,
-    justifyContent: 'center',
-    minHeight: 40,
-    paddingHorizontal: theme.spacing.md,
-  },
-  branchButtonActive: {
-    backgroundColor: theme.colors.greenSoft,
-  },
-  branchButtonPressed: {
-    opacity: 0.78,
-  },
-  branchButtonText: {
-    color: theme.colors.textMuted,
-    fontSize: 13,
-    fontWeight: '500',
-    lineHeight: 17,
-  },
-  branchButtonTextActive: {
-    color: theme.colors.primary,
-    fontWeight: '600',
-  },
-  categoryCardSection: {
-    gap: theme.spacing.md,
-  },
-  categoryCards: {
-    gap: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  categoryCard: {
-    backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    borderWidth: theme.borderWidth,
-    overflow: 'hidden',
-    width: 188,
-  },
-  categoryCardImage: {
-    backgroundColor: theme.colors.surfaceAlt,
-    height: 126,
-    width: '100%',
-  },
-  categoryCardFallback: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.greenSoft,
-    height: 126,
-    justifyContent: 'center',
-    width: '100%',
-  },
-  categoryCardBody: {
-    gap: theme.spacing.xs,
-    padding: theme.spacing.md,
-  },
-  categoryCardTitle: {
-    color: softText,
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  categoryCardMeta: {
-    color: theme.colors.primary,
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  categoryCardPreview: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-  },
   sectionHeader: {
     alignItems: 'center',
+    backgroundColor: theme.colors.white,
+    borderTopColor: 'rgba(31, 42, 36, 0.06)',
+    borderTopWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
+    minHeight: 56,
     paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.sm,
+  },
+  flashSaleHeader: {
+    backgroundColor: theme.colors.primary,
+    borderTopWidth: 0,
+    minHeight: 52,
+  },
+  sectionTitleWrap: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flex: 1,
+    gap: theme.spacing.md,
+    minWidth: 0,
+  },
+  sectionTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    minWidth: 0,
   },
   sectionTitle: {
     color: softText,
-    fontSize: 22,
-    fontWeight: '600',
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  flashSaleTitle: {
+    color: theme.colors.white,
+    fontSize: 15,
+  },
+  flashCountdown: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  flashCountdownBox: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.white,
+    borderRadius: 6,
+    justifyContent: 'center',
+    minHeight: 26,
+    minWidth: 26,
+    paddingHorizontal: 3,
+  },
+  flashCountdownText: {
+    color: theme.colors.primary,
+    fontSize: 14,
+    fontWeight: '800',
+  },
+  sectionTitleLine: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
+    height: 0,
+    marginTop: 0,
+    width: 0,
+  },
+  viewMoreButton: {
+    backgroundColor: 'transparent',
+    borderRadius: theme.radius.sm,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 6,
+  },
+  viewMoreText: {
+    color: theme.colors.primary,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  flashSaleViewMoreText: {
+    color: theme.colors.white,
+    fontSize: 10,
+  },
+  productSection: {
+    gap: theme.spacing.sm,
+    paddingBottom: theme.spacing.md,
   },
   skeletonWrap: {
     gap: theme.spacing.lg,
@@ -975,22 +892,169 @@ const styles = StyleSheet.create({
   },
   productGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.lg,
   },
-  productScrollBuffer: {
-    height: 32,
+  flashSaleRail: {
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  flashSaleCard: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.white,
+    borderColor: theme.colors.white,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    minHeight: 144,
+    overflow: 'hidden',
+    padding: theme.spacing.sm,
+    width: 318,
+  },
+  flashSaleSkeletonCard: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.white,
+    borderColor: theme.colors.white,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    minHeight: 144,
+    overflow: 'hidden',
+    padding: theme.spacing.sm,
+    width: 318,
+  },
+  flashSaleSkeletonCardPartial: {
+    opacity: 0.9,
+    width: 206,
+  },
+  flashSaleSkeletonImage: {
+    backgroundColor: 'rgba(31, 42, 36, 0.18)',
+    borderRadius: theme.radius.sm,
+    height: 116,
+    width: 116,
+  },
+  flashSaleSkeletonBody: {
+    flex: 1,
+    gap: 9,
+    minWidth: 0,
+  },
+  flashSaleSkeletonLineWide: {
+    backgroundColor: 'rgba(31, 42, 36, 0.17)',
+    borderRadius: theme.radius.sm,
+    height: 15,
+    width: '88%',
+  },
+  flashSaleSkeletonLineMedium: {
+    backgroundColor: 'rgba(31, 42, 36, 0.14)',
+    borderRadius: theme.radius.sm,
+    height: 15,
+    width: '58%',
+  },
+  flashSaleSkeletonLineShort: {
+    backgroundColor: 'rgba(31, 42, 36, 0.12)',
+    borderRadius: theme.radius.sm,
+    height: 14,
+    width: '58%',
+  },
+  flashSaleSkeletonSpacer: {
+    height: 36,
+  },
+  flashSaleImageWrap: {
+    backgroundColor: theme.colors.greenSoft,
+    borderRadius: theme.radius.sm,
+    height: 116,
+    overflow: 'hidden',
+    position: 'relative',
+    width: 116,
+  },
+  flashSaleImage: {
+    height: '100%',
+    width: '100%',
+  },
+  flashSaleSoldOutBadge: {
+    backgroundColor: 'rgba(31, 42, 36, 0.78)',
+    borderRadius: theme.radius.pill,
+    left: 7,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    position: 'absolute',
+    top: 7,
+  },
+  flashSaleSoldOutText: {
+    color: theme.colors.white,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  flashSaleCardBody: {
+    flex: 1,
+    gap: 7,
+    minWidth: 0,
+  },
+  flashSaleCardName: {
+    color: softText,
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  flashSalePriceRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  flashSaleCardPrice: {
+    color: theme.colors.primary,
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 19,
+  },
+  flashSaleOriginalPrice: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
+    textDecorationLine: 'line-through',
+  },
+  flashSaleCardMeta: {
+    color: theme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
+  },
+  flashSaleRatingRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  flashSaleStars: {
+    flexDirection: 'row',
+    gap: 1,
+  },
+  flashSaleRatingText: {
+    color: theme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 14,
+  },
+  productColumn: {
+    flex: 1,
+    gap: theme.spacing.sm,
+  },
+  productCard: {
+    borderColor: theme.colors.white,
+    borderWidth: 1,
     width: '100%',
   },
   productTile: {
     backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.white,
     borderRadius: theme.radius.md,
-    borderWidth: theme.borderWidth,
+    borderWidth: 1,
     overflow: 'hidden',
     position: 'relative',
-    width: '47.8%',
+    width: '100%',
   },
   productTilePressed: {
     opacity: 0.82,

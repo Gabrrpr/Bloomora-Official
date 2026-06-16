@@ -1,7 +1,7 @@
 import { router, useFocusEffect, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import * as WebBrowser from 'expo-web-browser';
-import { ArrowRight, Check, ChevronUp, Flower2, Gift, Minus, Plus, ShoppingBag, Trash2 } from 'lucide-react-native';
+import { ArrowRight, Check, ChevronRight, ChevronUp, Flower2, Gift, Minus, Plus, ShoppingBag, Sparkles, Trash2 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -19,16 +19,19 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppBrandHeader, getAppBrandHeaderLayout } from '@/components/app-brand-header';
+import { ProductCard } from '@/components/product-card';
 import { formatPhp, getCartSummary, type CartItem, type Product } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { ApiError } from '@/services/api-client';
 import { clearAuthSession, getAuthSession, type AuthSession } from '@/services/auth-session';
-import { getGuestCartItems, removeGuestCartItem, updateGuestCartItemQuantity } from '@/services/guest-cart';
+import { getGuestCartItems, removeGuestCartItem, setGuestCartItems, updateGuestCartItemQuantity } from '@/services/guest-cart';
 import { createOrdersFromCart, createPayMongoCheckout } from '@/services/payments-api';
 import { shopApi } from '@/services/shop-api';
+import { buildCartProductRecommendations, createRecommendationSeed } from '@/utils/product-recommendations';
 
 const outlineColor = 'rgba(31, 42, 36, 0.11)';
 const hairlineColor = 'rgba(31, 42, 36, 0.09)';
+const pageBackground = '#F5F5F5';
 const floatingCheckoutOffset = 92;
 const paymentCancelRoute = '/payment/cancel' as Href;
 const paymentSuccessRoute = '/payment/success' as Href;
@@ -40,8 +43,9 @@ export default function CartScreen() {
   const headerHeight = brandHeaderLayout.top + brandHeaderLayout.height;
   const lastRecommendationBatchAt = useRef(0);
   const recommendationBatchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recommendationSeed = useRef(createRecommendationSeed()).current;
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [hasRequestedRecommendations, setHasRequestedRecommendations] = useState(false);
+  const [hasRequestedRecommendations, setHasRequestedRecommendations] = useState(true);
   const [recommendedProducts, setRecommendedProducts] = useState<Product[]>([]);
   const [selectedProductIds, setSelectedProductIds] = useState<ReadonlySet<string>>(() => new Set());
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -54,29 +58,64 @@ export default function CartScreen() {
     () => cartItems.filter((item) => selectedProductIds.has(item.product.id)),
     [cartItems, selectedProductIds],
   );
+  const cartRecommendationKey = useMemo(
+    () => cartItems.map((item) => `${item.product.id}:${item.quantity}`).join('|'),
+    [cartItems],
+  );
   const cartSummary = getCartSummary(selectedCartItems);
-  const itemCount = cartItems.reduce((total, item) => total + item.quantity, 0);
   const selectedItemCount = selectedCartItems.reduce((total, item) => total + item.quantity, 0);
   const isSignedIn = Boolean(session);
   const isAllSelected = cartItems.length > 0 && selectedProductIds.size === cartItems.length;
-  const visibleRecommendations = useMemo(() => {
-    const cartProductIds = new Set(cartItems.map((item) => item.product.id));
-
-    return recommendedProducts.filter((product) => !cartProductIds.has(product.id)).slice(0, visibleRecommendationCount);
-  }, [cartItems, recommendedProducts, visibleRecommendationCount]);
-  const recommendationCap = Math.min(recommendedProducts.length, 16);
+  const rankedRecommendations = useMemo(
+    () =>
+      buildCartProductRecommendations({
+        cartItems,
+        products: recommendedProducts,
+        seed: recommendationSeed,
+      }),
+    [cartItems, recommendedProducts, recommendationSeed],
+  );
+  const visibleRecommendations = rankedRecommendations.slice(0, visibleRecommendationCount);
+  const recommendationCap = rankedRecommendations.length;
   const canAppendRecommendations = visibleRecommendationCount < recommendationCap;
 
   const loadCart = useCallback(async () => {
     setIsLoading(true);
 
     try {
-      const [nextItems, nextSession] = await Promise.all([getGuestCartItems(), getAuthSession()]);
+      const storedItems = await getGuestCartItems();
+
+      setCartItems(storedItems);
+      setSelectedProductIds(new Set(storedItems.map((item) => item.product.id)));
+
+      const liveProducts = await shopApi.getProducts();
+      const nextItems = hydrateCartItemsFromInventory(storedItems, liveProducts);
+
+      if (!areCartItemsEquivalent(storedItems, nextItems)) {
+        await setGuestCartItems(nextItems);
+      }
+
       setCartItems(nextItems);
       setSelectedProductIds(new Set(nextItems.map((item) => item.product.id)));
-      setSession(nextSession);
+    } catch (error) {
+      console.warn('Failed to load cart items.', error);
+      try {
+        const fallbackItems = await getGuestCartItems();
+
+        setCartItems(fallbackItems);
+        setSelectedProductIds(new Set(fallbackItems.map((item) => item.product.id)));
+      } catch (fallbackError) {
+        console.warn('Failed to load local cart items.', fallbackError);
+      }
     } finally {
       setIsLoading(false);
+    }
+
+    try {
+      setSession(await getAuthSession());
+    } catch (error) {
+      console.warn('Failed to load auth session for cart.', error);
+      setSession(null);
     }
   }, []);
 
@@ -91,11 +130,7 @@ export default function CartScreen() {
           recommendationBatchTimer.current = null;
         }
         lastRecommendationBatchAt.current = 0;
-        setHasRequestedRecommendations(false);
         setIsAppendingRecommendations(false);
-        setIsRecommendationLoading(false);
-        setRecommendedProducts([]);
-        setVisibleRecommendationCount(4);
       };
     }, [loadCart]),
   );
@@ -116,6 +151,11 @@ export default function CartScreen() {
   const requestRecommendations = useCallback(() => {
     setHasRequestedRecommendations(true);
   }, []);
+
+  useEffect(() => {
+    setVisibleRecommendationCount(4);
+    lastRecommendationBatchAt.current = 0;
+  }, [cartRecommendationKey]);
 
   const appendRecommendationBatch = useCallback(() => {
     if (isAppendingRecommendations || !canAppendRecommendations) {
@@ -166,8 +206,19 @@ export default function CartScreen() {
     setIsCheckingOut(true);
 
     try {
+      const liveProducts = await shopApi.getProducts();
+      const hydratedSelectedItems = hydrateCartItemsFromInventory(selectedCartItems, liveProducts, {
+        removeUnavailable: true,
+      });
+
+      if (hydratedSelectedItems.length !== selectedCartItems.length) {
+        Alert.alert('Cart updated', 'Some selected items are no longer available. Please review your cart before checkout.');
+        await loadCart();
+        return;
+      }
+
       const orderResponse = await createOrdersFromCart({
-        items: selectedCartItems,
+        items: hydratedSelectedItems,
         session,
       });
       const checkout = await createPayMongoCheckout({
@@ -204,7 +255,7 @@ export default function CartScreen() {
     } finally {
       setIsCheckingOut(false);
     }
-  }, [isCheckingOut, selectedCartItems, session]);
+  }, [isCheckingOut, loadCart, selectedCartItems, session]);
 
   useEffect(() => {
     if (!hasRequestedRecommendations || recommendedProducts.length > 0 || isRecommendationLoading) {
@@ -219,6 +270,12 @@ export default function CartScreen() {
       .then((products) => {
         if (isActive) {
           setRecommendedProducts(products);
+        }
+      })
+      .catch((error) => {
+        if (isActive) {
+          console.warn('Failed to load cart recommendations.', error);
+          setRecommendedProducts([]);
         }
       })
       .finally(() => {
@@ -275,16 +332,8 @@ export default function CartScreen() {
         ]}>
 
         <View style={styles.body}>
-          <View>
-            <Text style={styles.eyebrow}>SHOPPING BAG</Text>
-            <Text style={styles.title}>Your Cart</Text>
-            <Text style={styles.subtitle}>
-              {itemCount > 0
-                ? `${itemCount} ${itemCount === 1 ? 'item' : 'items'} in your cart`
-                : isSignedIn
-                  ? 'Browse now, then checkout with your saved account details.'
-                  : 'Browse now, sign in when you are ready to checkout.'}
-            </Text>
+          <View style={styles.pageHeader}>
+            <Text style={styles.title}>Shopping Bag</Text>
           </View>
 
           {cartItems.length === 0 ? (
@@ -301,7 +350,7 @@ export default function CartScreen() {
           ) : (
             <>
               <View style={styles.cartList}>
-                {cartItems.map((item) => (
+                {cartItems.map((item, index) => (
                   <CartLineItem
                     item={item}
                     key={item.id}
@@ -321,6 +370,7 @@ export default function CartScreen() {
                       });
                     }}
                     onUpdateQuantity={handleUpdateQuantity}
+                    showDivider={index < cartItems.length - 1}
                   />
                 ))}
               </View>
@@ -407,16 +457,19 @@ function CartLineItem({
   onRemove,
   onToggleSelected,
   onUpdateQuantity,
+  showDivider,
 }: {
   isSelected: boolean;
   item: CartItem;
   onRemove: (productId: string) => void;
   onToggleSelected: () => void;
   onUpdateQuantity: (productId: string, quantity: number) => void;
+  showDivider: boolean;
 }) {
   const lineTotal = item.product.priceCents * item.quantity;
   const removeProgress = useRef(new Animated.Value(0)).current;
   const [isRemoving, setIsRemoving] = useState(false);
+  const isAiArrangement = item.product.productType === 'Ai Arrangement';
 
   const handleRemove = useCallback(() => {
     if (isRemoving) {
@@ -431,6 +484,13 @@ function CartLineItem({
       useNativeDriver: true,
     }).start(() => onRemove(item.product.id));
   }, [isRemoving, item.product.id, onRemove, removeProgress]);
+
+  const handleNavigateToArrangement = useCallback(() => {
+    router.push(`/create/arrangement-details?cartItemId=${encodeURIComponent(item.id)}`);
+  }, [item.id]);
+  const handleNavigateToProduct = useCallback(() => {
+    router.push(`/product-details?id=${encodeURIComponent(item.product.id)}`);
+  }, [item.product.id]);
 
   const animatedStyle = {
     opacity: removeProgress.interpolate({
@@ -453,24 +513,51 @@ function CartLineItem({
     ],
   };
 
-  return (
-    <Animated.View style={[styles.cartItem, animatedStyle]}>
+  const itemContent = (
+    <>
       <View style={styles.cartItemMain}>
         <Checkbox checked={isSelected} label={`Select ${item.product.name}`} onPress={onToggleSelected} />
         {item.product.imageUrl ? (
-          <Image cachePolicy="memory-disk" contentFit="cover" recyclingKey={item.product.id} source={{ uri: item.product.imageUrl }} style={styles.cartItemImage} />
+          <Pressable
+            accessibilityLabel={`View ${item.product.name} details`}
+            accessibilityRole="button"
+            onPress={handleNavigateToProduct}
+            style={({ pressed }) => pressed && styles.pressed}>
+            <Image cachePolicy="memory-disk" contentFit="cover" recyclingKey={item.product.id} source={{ uri: item.product.imageUrl }} style={styles.cartItemImage} />
+          </Pressable>
         ) : (
-          <View style={styles.cartItemFallback}>
+          <Pressable
+            accessibilityLabel={`View ${item.product.name} details`}
+            accessibilityRole="button"
+            onPress={handleNavigateToProduct}
+            style={({ pressed }) => [styles.cartItemFallback, pressed && styles.pressed]}>
             <Flower2 size={24} color={theme.colors.primary} />
-          </View>
+          </Pressable>
         )}
         <View style={styles.cartItemBody}>
-          <Text numberOfLines={1} style={styles.cartItemCategory}>
-            {item.product.categoryName ?? item.product.tag}
-          </Text>
-          <Text numberOfLines={2} style={styles.cartItemName}>
-            {item.product.name}
-          </Text>
+          <View style={styles.cartItemCategoryRow}>
+            {isAiArrangement ? (
+              <View style={styles.aiBadge}>
+                <Sparkles size={10} color={theme.colors.white} strokeWidth={2.4} />
+                <Text style={styles.aiBadgeText}>AI</Text>
+              </View>
+            ) : null}
+            <Text numberOfLines={1} style={[styles.cartItemCategory, isAiArrangement && styles.cartItemCategoryAi]}>
+              {item.product.categoryName ?? item.product.tag}
+            </Text>
+            {isAiArrangement ? (
+              <ChevronRight size={14} color={theme.colors.primary} strokeWidth={2.2} />
+            ) : null}
+          </View>
+          <Pressable
+            accessibilityLabel={`View ${item.product.name} details`}
+            accessibilityRole="button"
+            onPress={handleNavigateToProduct}
+            style={({ pressed }) => pressed && styles.pressed}>
+            <Text numberOfLines={2} style={styles.cartItemName}>
+              {item.product.name}
+            </Text>
+          </Pressable>
           <Text style={styles.cartItemPrice}>{formatPhp(lineTotal)}</Text>
           <View style={styles.cartItemActions}>
             <View style={styles.quantityControl}>
@@ -507,6 +594,25 @@ function CartLineItem({
         <Text style={styles.addOnText}>Add-on deals at lower prices</Text>
         <ArrowRight size={16} color={theme.colors.textMuted} />
       </Pressable>
+    </>
+  );
+
+  return (
+    <Animated.View style={[styles.cartItem, isAiArrangement && styles.cartItemAi, animatedStyle]}>
+      <View style={styles.cartItemContent}>
+        {isAiArrangement ? (
+          <Pressable
+            accessibilityLabel={`View AI arrangement details for ${item.product.name}`}
+            accessibilityRole="button"
+            onPress={handleNavigateToArrangement}
+            style={({ pressed }) => pressed && styles.pressed}>
+            {itemContent}
+          </Pressable>
+        ) : (
+          itemContent
+        )}
+      </View>
+      {showDivider ? <View style={styles.cartItemDivider} /> : null}
     </Animated.View>
   );
 }
@@ -522,6 +628,8 @@ function RecommendationGallery({
   isLoading: boolean;
   products: Product[];
 }) {
+  const productColumns = splitIntoColumns(products);
+
   return (
     <View style={styles.recommendationSection}>
       <View style={styles.recommendationTitleRow}>
@@ -533,25 +641,12 @@ function RecommendationGallery({
         <GallerySkeleton />
       ) : (
         <View style={styles.recommendationGrid}>
-          {products.map((product) => (
-            <Pressable
-              accessibilityLabel={`View ${product.name} details`}
-              accessibilityRole="button"
-              key={product.id}
-              onPress={() => router.push(`/product-details?id=${encodeURIComponent(product.id)}`)}
-              style={({ pressed }) => [styles.recommendationCard, pressed && styles.pressed]}>
-              {product.imageUrl ? (
-                <Image cachePolicy="memory-disk" contentFit="contain" recyclingKey={product.id} source={{ uri: product.imageUrl }} style={styles.recommendationImage} />
-              ) : (
-                <View style={styles.recommendationImageFallback}>
-                  <Flower2 size={28} color={theme.colors.primary} />
-                </View>
-              )}
-              <View style={styles.recommendationBody}>
-                <Text numberOfLines={2} style={styles.recommendationName}>{product.name}</Text>
-                <Text style={styles.recommendationPrice}>{formatPhp(product.priceCents)}</Text>
-              </View>
-            </Pressable>
+          {productColumns.map((column, columnIndex) => (
+            <View key={`products-${columnIndex}`} style={styles.recommendationColumn}>
+              {column.map((product) => (
+                <ProductCard key={product.id} product={product} style={styles.recommendationCard} />
+              ))}
+            </View>
           ))}
         </View>
       )}
@@ -562,15 +657,21 @@ function RecommendationGallery({
 }
 
 function RecommendationAppendLoader() {
+  const skeletonColumns = splitIntoColumns([0, 1]);
+
   return (
-    <View style={styles.recommendationAppendLoader}>
-      {[0, 1].map((item) => (
-        <View key={item} style={styles.recommendationCard}>
-          <SkeletonBlock style={styles.recommendationImage} />
-          <View style={styles.recommendationBody}>
-            <SkeletonBlock style={styles.skeletonLineWide} />
-            <SkeletonBlock style={styles.skeletonLineShort} />
-          </View>
+    <View style={styles.recommendationGrid}>
+      {skeletonColumns.map((column, columnIndex) => (
+        <View key={`append-column-${columnIndex}`} style={styles.recommendationColumn}>
+          {column.map((item) => (
+            <View key={item} style={styles.recommendationCard}>
+              <SkeletonBlock style={styles.recommendationImage} />
+              <View style={styles.recommendationBody}>
+                <SkeletonBlock style={styles.skeletonLineWide} />
+                <SkeletonBlock style={styles.skeletonLineShort} />
+              </View>
+            </View>
+          ))}
         </View>
       ))}
     </View>
@@ -695,19 +796,32 @@ function CartHeaderSkeleton() {
 }
 
 function GallerySkeleton() {
+  const skeletonColumns = splitIntoColumns([0, 1, 2, 3]);
+
   return (
     <View style={styles.recommendationGrid}>
-      {[0, 1, 2, 3].map((item) => (
-        <View key={item} style={styles.recommendationCard}>
-          <SkeletonBlock style={styles.recommendationImage} />
-          <View style={styles.recommendationBody}>
-            <SkeletonBlock style={styles.skeletonLineWide} />
-            <SkeletonBlock style={styles.skeletonLineShort} />
-          </View>
+      {skeletonColumns.map((column, columnIndex) => (
+        <View key={`skeleton-column-${columnIndex}`} style={styles.recommendationColumn}>
+          {column.map((item) => (
+            <View key={item} style={styles.recommendationCard}>
+              <SkeletonBlock style={styles.recommendationImage} />
+              <View style={styles.recommendationBody}>
+                <SkeletonBlock style={styles.skeletonLineWide} />
+                <SkeletonBlock style={styles.skeletonLineShort} />
+              </View>
+            </View>
+          ))}
         </View>
       ))}
     </View>
   );
+}
+
+function splitIntoColumns<T>(items: T[]) {
+  return [
+    items.filter((_, index) => index % 2 === 0),
+    items.filter((_, index) => index % 2 === 1),
+  ];
 }
 
 function SkeletonCard() {
@@ -783,9 +897,62 @@ function SummaryRow({ isTotal = false, label, value }: { isTotal?: boolean; labe
   );
 }
 
+function hydrateCartItemsFromInventory(
+  items: CartItem[],
+  products: Product[],
+  options: { removeUnavailable?: boolean } = {},
+) {
+  const liveProductsById = new Map(products.map((product) => [product.id, product]));
+
+  return items.flatMap((item) => {
+    const liveProduct = liveProductsById.get(item.product.id);
+
+    if (!liveProduct || liveProduct.isActive === false) {
+      return options.removeUnavailable ? [] : [item];
+    }
+
+    if (options.removeUnavailable && (liveProduct.stock ?? 0) <= 0) {
+      return [];
+    }
+
+    const quantity = liveProduct.stock && liveProduct.stock > 0 ? Math.min(item.quantity, liveProduct.stock) : item.quantity;
+
+    if (quantity <= 0) {
+      return [];
+    }
+
+    return [
+      {
+        ...item,
+        product: liveProduct,
+        quantity,
+      },
+    ];
+  });
+}
+
+function areCartItemsEquivalent(firstItems: CartItem[], secondItems: CartItem[]) {
+  if (firstItems.length !== secondItems.length) {
+    return false;
+  }
+
+  return firstItems.every((firstItem, index) => {
+    const secondItem = secondItems[index];
+
+    return (
+      firstItem.product.id === secondItem?.product.id &&
+      firstItem.quantity === secondItem.quantity &&
+      firstItem.product.priceCents === secondItem.product.priceCents &&
+      firstItem.product.stock === secondItem.product.stock &&
+      firstItem.product.imageUrl === secondItem.product.imageUrl &&
+      firstItem.product.isActive === secondItem.product.isActive
+    );
+  });
+}
+
 const styles = StyleSheet.create({
   screen: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: pageBackground,
     flex: 1,
   },
   stickyBrandHeader: {
@@ -796,7 +963,7 @@ const styles = StyleSheet.create({
     zIndex: 40,
   },
   scroll: {
-    backgroundColor: theme.colors.background,
+    backgroundColor: pageBackground,
     flex: 1,
   },
   content: {
@@ -805,6 +972,9 @@ const styles = StyleSheet.create({
   body: {
     gap: theme.spacing.lg,
     paddingHorizontal: theme.spacing.lg,
+  },
+  pageHeader: {
+    paddingTop: theme.spacing.xs,
   },
   eyebrow: {
     color: theme.colors.primary,
@@ -815,8 +985,8 @@ const styles = StyleSheet.create({
   title: {
     color: theme.colors.text,
     fontFamily: Fonts.sansSemiBold,
-    fontSize: 26,
-    lineHeight: 32,
+    fontSize: 24,
+    lineHeight: 30,
   },
   subtitle: {
     color: theme.colors.textMuted,
@@ -904,17 +1074,26 @@ const styles = StyleSheet.create({
     transform: [{ scale: 0.98 }],
   },
   cartList: {
-    marginBottom: -theme.spacing.md,
-  },
-  cartItem: {
     backgroundColor: theme.colors.surface,
     borderColor: outlineColor,
-    borderRadius: theme.radius.md,
+    borderRadius: theme.radius.lg,
     borderWidth: 1,
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.md,
     overflow: 'hidden',
-    padding: theme.spacing.md,
+  },
+  cartItem: {
+    backgroundColor: 'transparent',
+    gap: theme.spacing.md,
+    overflow: 'hidden',
+    paddingTop: theme.spacing.lg,
+  },
+  cartItemDivider: {
+    backgroundColor: hairlineColor,
+    height: 1,
+    marginHorizontal: theme.spacing.lg,
+  },
+  cartItemContent: {
+    paddingHorizontal: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
   },
   cartItemMain: {
     alignItems: 'flex-start',
@@ -961,12 +1140,40 @@ const styles = StyleSheet.create({
     gap: 3,
     minWidth: 0,
   },
+  cartItemCategoryRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
   cartItemCategory: {
     color: theme.colors.primary,
+    flex: 1,
     fontFamily: Fonts.sansBold,
     fontSize: 11,
     lineHeight: 14,
     textTransform: 'uppercase',
+  },
+  cartItemCategoryAi: {
+    flex: 0,
+  },
+  cartItemAi: {
+    backgroundColor: 'rgba(139, 92, 246, 0.035)',
+  },
+  aiBadge: {
+    alignItems: 'center',
+    backgroundColor: '#8B5CF6',
+    borderRadius: theme.radius.sm,
+    flexDirection: 'row',
+    gap: 2,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  aiBadgeText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansBold,
+    fontSize: 9,
+    lineHeight: 12,
+    letterSpacing: 0.5,
   },
   cartItemName: {
     color: theme.colors.text,
@@ -990,9 +1197,9 @@ const styles = StyleSheet.create({
   quantityControl: {
     alignItems: 'center',
     backgroundColor: theme.colors.surfaceAlt,
-    borderColor: outlineColor,
+    borderColor: 'transparent',
     borderRadius: theme.radius.sm,
-    borderWidth: 1,
+    borderWidth: 0,
     flexDirection: 'row',
     gap: theme.spacing.sm,
     padding: 4,
@@ -1015,9 +1222,9 @@ const styles = StyleSheet.create({
   removeButton: {
     alignItems: 'center',
     backgroundColor: theme.colors.surfaceAlt,
-    borderColor: outlineColor,
+    borderColor: 'transparent',
     borderRadius: theme.radius.sm,
-    borderWidth: 1,
+    borderWidth: 0,
     height: 36,
     justifyContent: 'center',
     width: 36,
@@ -1025,13 +1232,12 @@ const styles = StyleSheet.create({
   addOnDeal: {
     alignItems: 'center',
     backgroundColor: theme.colors.surfaceAlt,
-    borderColor: hairlineColor,
     borderRadius: theme.radius.sm,
-    borderWidth: 1,
     flexDirection: 'row',
     gap: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
     minHeight: 42,
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
   },
   addOnIcon: {
     alignItems: 'center',
@@ -1077,23 +1283,22 @@ const styles = StyleSheet.create({
   },
   recommendationGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
   },
-  recommendationAppendLoader: {
-    flexDirection: 'row',
-    gap: theme.spacing.md,
+  recommendationColumn: {
+    flex: 1,
+    gap: theme.spacing.sm,
   },
   recommendationScrollBuffer: {
     height: 32,
   },
   recommendationCard: {
     backgroundColor: theme.colors.surface,
-    borderColor: outlineColor,
-    borderRadius: theme.radius.sm,
+    borderColor: theme.colors.white,
+    borderRadius: theme.radius.md,
     borderWidth: 1,
     overflow: 'hidden',
-    width: '47.8%',
+    width: '100%',
   },
   recommendationImage: {
     backgroundColor: theme.colors.white,
@@ -1116,7 +1321,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sansMedium,
     fontSize: 13,
     lineHeight: 18,
-    minHeight: 36,
   },
   recommendationPrice: {
     color: theme.colors.primary,

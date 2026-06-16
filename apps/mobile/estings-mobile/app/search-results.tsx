@@ -105,6 +105,7 @@ export default function SearchResultsScreen() {
   }, [normalizedQuery, products, selectedBudget, selectedSort]);
 
   const visibleSearchResults = searchResults.slice(0, visibleResultCount);
+  const resultColumns = splitIntoColumns(visibleSearchResults);
 
   const handleSubmitSearch = useCallback(() => {
     const nextQuery = query.trim();
@@ -211,11 +212,16 @@ export default function SearchResultsScreen() {
           <EmptyState title="Search unavailable" description={errorMessage} />
         ) : visibleSearchResults.length > 0 ? (
           <View style={styles.productGrid}>
-            {visibleSearchResults.map((product) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-              />
+            {resultColumns.map((column, columnIndex) => (
+              <View key={`results-${columnIndex}`} style={styles.productColumn}>
+                {column.map((product) => (
+                  <ProductCard
+                    key={product.id}
+                    product={product}
+                    style={styles.productCard}
+                  />
+                ))}
+              </View>
             ))}
           </View>
         ) : (
@@ -303,19 +309,32 @@ function sortProducts(products: Product[], sort: SortOption) {
 
 
 function SearchSkeleton() {
+  const skeletonColumns = splitIntoColumns([0, 1, 2, 3]);
+
   return (
     <View style={styles.productGrid}>
-      {[0, 1, 2, 3].map((item) => (
-        <View key={item} style={styles.productTile}>
-          <SkeletonBlock style={styles.productImage} />
-          <View style={styles.productBody}>
-            <SkeletonBlock style={styles.skeletonLineWide} />
-            <SkeletonBlock style={styles.skeletonLineShort} />
-          </View>
+      {skeletonColumns.map((column, columnIndex) => (
+        <View key={`skeleton-column-${columnIndex}`} style={styles.productColumn}>
+          {column.map((item) => (
+            <View key={item} style={styles.productTile}>
+              <SkeletonBlock style={styles.productImage} />
+              <View style={styles.productBody}>
+                <SkeletonBlock style={styles.skeletonLineWide} />
+                <SkeletonBlock style={styles.skeletonLineShort} />
+              </View>
+            </View>
+          ))}
         </View>
       ))}
     </View>
   );
+}
+
+function splitIntoColumns<T>(items: T[]) {
+  return [
+    items.filter((_, index) => index % 2 === 0),
+    items.filter((_, index) => index % 2 === 1),
+  ];
 }
 
 function SearchHeaderSkeleton() {
@@ -514,18 +533,24 @@ const styles = StyleSheet.create({
   },
   productGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
     paddingHorizontal: theme.spacing.lg,
+  },
+  productColumn: {
+    flex: 1,
+    gap: theme.spacing.sm,
+  },
+  productCard: {
+    width: '100%',
   },
   productTile: {
     backgroundColor: theme.colors.surface,
-    borderColor: theme.colors.border,
+    borderColor: theme.colors.white,
     borderRadius: theme.radius.md,
-    borderWidth: theme.borderWidth,
+    borderWidth: 1,
     overflow: 'hidden',
     position: 'relative',
-    width: '47.8%',
+    width: '100%',
   },
   productImage: {
     backgroundColor: theme.colors.white,

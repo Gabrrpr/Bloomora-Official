@@ -14,6 +14,7 @@ export default function CreateLayout() {
       <Stack.Screen name="describe" />
       <Stack.Screen name="mix-and-match" />
       <Stack.Screen name="examples" />
+      <Stack.Screen name="arrangement-details" />
     </Stack>
   );
 }
