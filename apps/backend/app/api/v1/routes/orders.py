@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session, object_session 
 from sqlalchemy import or_, func, String, text
 from typing import List, Optional
@@ -270,11 +270,11 @@ def create_orders(
         transaction = Transaction(
             id=uuid.uuid4(),
             order_id=order.id,
-            payment_method=pm,
+            payment_method=payment_method, # Must match one of your constraint types: 'qrph', 'cash', etc.
             total_amount=order.total_amount,
-            status=PaymentStatusEnum.pending,
-            reference_number=payment_reference if payment_method == "qrph" else f"PM-{secrets.token_hex(6).upper()}",
-            
+            status='pending',
+            reference_number=payment_reference,
+            provider='manual', # 🚀 Added to satisfy NOT NULL constraint
         )
         db.add(transaction)
         db.commit()
@@ -285,7 +285,7 @@ def create_orders(
     checkout_url = None
     
     # If the user chose an online payment method, create a PayMongo link
-    if payment_method in ["gcash", "paymaya", "card", "qrph"]:
+    if payment_method in ["gcash", "paymaya", "card", "qrph", "paymongo"]:
         
         # ✅ FIX: Use os.getenv to pull the real key from your .env file
         PAYMONGO_SECRET_KEY = os.getenv("PAYMONGO_SECRET_KEY")
@@ -307,7 +307,7 @@ def create_orders(
                         "quantity": 1
                     }],
                     "payment_method_types": ["gcash", "paymaya", "card", "qrph"],
-                    "success_url": "http://localhost:5173/payment-success",
+                    "success_url": "http://localhost:5173/confirmation",
                     "cancel_url": "http://localhost:5173/checkout",         
                     "description": f"Payment for {len(created_orders)} items"
                 }
@@ -428,78 +428,66 @@ def confirm_payment(
     }
 
 # ── Admin/Staff: Update Order Status ───────────────────────────────────────────
-@router.post("/{order_id}/action", response_model=dict)
-def admin_order_action(
-    order_id: str,
-    payload: dict,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff), # 🚀 SECURED
-):
-    action_status = payload.get("status")
-    if not action_status: raise HTTPException(status_code=400, detail="Missing 'status' in payload")
-
-    status_key = str(action_status).lower().replace(" ", "_")
-    try: new_status = OrderStatusEnum(status_key)
-    except ValueError: raise HTTPException(status_code=400, detail=f"Invalid status: {action_status}")
-
-    try: order_uuid = uuid.UUID(order_id)
-    except ValueError: raise HTTPException(status_code=400, detail="Invalid order ID")
-
-    order = db.query(Order).filter(Order.id == order_uuid).first()
-    if not order: raise HTTPException(status_code=404, detail="Order not found")
-
-    order.status = new_status
-    db.commit()
-    db.refresh(order)
-
-    _notify_order(db, order, status_key)
-
-    return {
-        "status": "success",
-        "message": "Order status updated",
-        **serialize_order(order),
-    }
-    
 @router.post("/paymongo-webhook")
 async def paymongo_webhook(request: Request, db: Session = Depends(get_db)):
-    """PayMongo calls this URL automatically when a payment succeeds."""
     try:
-        # Get the JSON payload sent by PayMongo
+        # 1. Parse the incoming JSON from PayMongo
         payload = await request.json()
         
-        # We only care about successful payments
-        event_type = payload.get("data", {}).get("attributes", {}).get("type")
+        data = payload.get("data", {})
+        attributes = data.get("attributes", {})
         
-        if event_type == "checkout_session.payment.paid":
-            # 🚀 Get the Session ID from the payload
-            # PayMongo nests this deep inside the event data
-            checkout_session_id = payload["data"]["attributes"]["data"]["id"]
+        # 2. Check if the payment was successful
+        # Note: Depending on your PayMongo API version, the structure is typically 
+        # inside data.attributes.type. If this doesn't trigger, print(payload) 
+        # to see the exact structure PayMongo is sending.
+        if attributes.get("type") == "checkout_session.payment.paid":
+            session_id = data.get("id")
             
-            print(f"💰 PAYMONGO WEBHOOK: Payment received for {checkout_session_id}")
+            # 3. Find the transaction
+            tx = db.query(Transaction).filter(
+                Transaction.provider_checkout_session_id == session_id
+            ).first()
 
-            # 🚀 Find all transactions tied to this PayMongo session
-            transactions = db.query(Transaction).filter(
-                Transaction.reference_number == checkout_session_id,
-                Transaction.status == PaymentStatusEnum.pending
-            ).all()
-
-            for tx in transactions:
-                # 1. Mark transaction as Paid
-                tx.status = PaymentStatusEnum.paid
+            if tx:
+                tx.status = 'paid'
+                tx.paid_at = datetime.utcnow()
+                tx.raw_webhook_event = payload 
                 
-                # 2. Mark the parent order as Confirmed
+                # 4. Update the Order status
                 order = db.query(Order).filter(Order.id == tx.order_id).first()
                 if order:
-                    order.status = OrderStatusEnum.confirmed
-                    
-                    # 3. Fire off the automated notification/email
-                    _notify_order(db, order, "confirmed")
-
-            db.commit()
-            
-        return {"status": "success", "message": "Webhook processed"}
+                    order.status = 'confirmed'
+                
+                db.commit()
+                print(f"✅ Payment Verified for: {session_id}")
+        
+        # 5. ALWAYS return 200 OK so PayMongo stops sending this specific event
+        return {"status": "success"}
 
     except Exception as e:
         print("❌ WEBHOOK ERROR:", str(e))
-        # Always return 200 to PayMongo, otherwise it will keep retrying and spamming your server
+        # Even on error, we return 200 so PayMongo doesn't flag your endpoint as "down"
         return {"status": "error", "message": "Handled gracefully"}
+    
+@router.get("/transactions", response_model=List[dict])
+def list_transactions(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    # Join Transaction with Order and User to get the customer names
+    transactions = db.query(Transaction, Order, User).join(Order).join(User, Order.user_id == User.id).all()
+    
+    return [
+        {
+            "id": str(t.Transaction.id),
+            "order_number": f"ORD-{t.Order.id.hex[:8].upper()}",
+            "customer_name": f"{t.User.first_name} {t.User.last_name}",
+            "type": "Sale", # You can map this based on transaction type if needed
+            "method": t.Transaction.payment_method.value,
+            "status": t.Transaction.status.value,
+            "trn": t.Transaction.reference_number, # 🚀 The TRN is here!
+            "created_at": t.Transaction.created_at.isoformat()
+        }
+        for t in transactions
+    ]
