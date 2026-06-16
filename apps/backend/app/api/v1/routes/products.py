@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Body
+from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Body, Request 
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_, text, func, cast, String
 from typing import List, Optional
@@ -12,6 +12,7 @@ from supabase import create_client, Client
 from app.core.config import settings
 from app.core.dependencies import get_db, get_current_user, require_staff
 from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum, Review, Order, ProductRecipe, Notification
+from app.utils.logger import log_activity
 
 router = APIRouter()
 
@@ -82,10 +83,15 @@ def get_flash_sales(db: Session = Depends(get_db)):
 @router.get("/search", response_model=List[dict])
 def search_products(q: str = "", db: Session = Depends(get_db)):
     """Smart Content-Based Search Algorithm."""
-    if not q:
+    if not q or not q.strip():
         return []
 
-    search_term = f"%{q.lower()}%"
+    search_term = f"%{q.lower().strip()}%"
+
+    # DEBUG — paste this terminal output here
+    sample = db.query(Product).limit(5).all()
+    for p in sample:
+        print(f"[DEBUG] {p.name} | tags={p.tags} | desc_snippet={str(p.description or '')[:40]}")
 
     results = (
         db.query(Product)
@@ -94,12 +100,19 @@ def search_products(q: str = "", db: Session = Depends(get_db)):
             or_(
                 func.lower(Product.name).ilike(search_term),
                 func.lower(Product.category).ilike(search_term),
-                func.lower(Product.description).ilike(search_term),
-                cast(Product.tags, String).ilike(search_term),
+                # ✅ Guard against NULL description
+                and_(
+                    Product.description.isnot(None),
+                    func.lower(Product.description).ilike(search_term),
+                ),
+                # ✅ Proper JSONB array search — each element individually
+                Product.tags.cast(String).ilike(search_term),
             )
         )
         .all()
     )
+
+    print(f"[SEARCH] q='{q}' | hits={len(results)} | names={[r.name for r in results]}")
 
     return [serialize_product(p) for p in results]
 
@@ -238,7 +251,6 @@ def get_product_reviews(product_id: str, db: Session = Depends(get_db)):
 
 @router.get("/", response_model=List[dict])
 def get_products(db: Session = Depends(get_db)):
-    """Get all available products for public catalog, including stock."""
     products = (
         db.query(Product)
         .outerjoin(Inventory, Product.id == Inventory.product_id)
@@ -257,7 +269,10 @@ def get_products(db: Session = Depends(get_db)):
             "id": str(p.id),
             "name": p.name,
             "price": float(p.price) if p.price else 0,
-            "category": p.category.lower().strip() if p.category else "",
+            
+            # 🚀 THE FIX: Safely extract the string value before calling .lower()
+            "category": (p.category.value if hasattr(p.category, "value") else str(p.category)).lower().strip() if p.category else "",
+            
             "product_group": p.product_group.lower().strip() if p.product_group else "floral",
             "product_type": p.product_type.lower().strip() if p.product_type else "",
             "original_price": float(p.original_price) if getattr(p, "original_price", None) else None,
@@ -269,10 +284,10 @@ def get_products(db: Session = Depends(get_db)):
             "limited_end_at": p.limited_end_at.isoformat() if p.limited_end_at else None,
             "occasions": getattr(p, "occasions", []),
             "branches": getattr(p, "branches", []),
+            "tags": getattr(p, "tags", []), 
         }
         for p in products
     ]
-
 
 # ── Admin endpoints ───────────────────────────────────────────────────────────
 
@@ -551,6 +566,7 @@ def create_product(
 @router.put("/admin/{product_id}", response_model=dict)
 def update_product(
     product_id: str,
+    request: Request,
     name: Optional[str] = Form(None),
     group: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
@@ -660,6 +676,14 @@ def update_product(
 
     db.commit()
     db.refresh(product)
+    
+    log_activity(
+        db=db,
+        action=f"Update Record: Staff/Admin updated details for product '{product.name}'",
+        user_id=str(current_user.id), 
+        role=current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+        ip_address=request.client.host # Captures the user's IP
+    )
 
     # 🚀 THE FIX: Map Base Price over to Inventory Cost properly
     cost_val = cost_per_unit

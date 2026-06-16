@@ -11,6 +11,9 @@ import os
 import traceback
 from app.services.currencyService import get_latest_rates
 
+# 🚀 1. NEW: Import your scheduler
+from app.utils.scheduler import start_scheduler
+
 from app.api.v1.routes import (
     addresses,  
     auth,
@@ -59,6 +62,11 @@ app = FastAPI(
     version="1.0.0",
     redirect_slashes=False,
 )
+
+# 🚀 2. NEW: Add the startup event to boot up the scheduler
+@app.on_event("startup")
+def on_startup():
+    start_scheduler()
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

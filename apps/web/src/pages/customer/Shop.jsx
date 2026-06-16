@@ -61,15 +61,26 @@ function WishlistBtn({ id, wishlist, toggleWishlist, small }) {
 }
 
 function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
-  // 🚀 THE FIX: Calculate if a real discount exists
   const currentPrice = Number(product.price) || 0;
   const oldPrice = Number(product.original) || 0;
   const hasDiscount = oldPrice > currentPrice;
+  // 🚀 Added stock check
+  const isOutOfStock = product.stock <= 0 || !product.is_available || product.status === "inactive";
 
   return (
-    <div className="bg-white flex group hover:shadow-md transition-shadow duration-200"
-      style={{ border:"1px solid #e8edf0", borderRadius:"12px", overflow:"hidden", cursor:"pointer", height:"210px" }}
-      onClick={() => onPreview(product)}>
+    <div className={`bg-white flex group transition-all duration-200 relative ${isOutOfStock ? "grayscale opacity-75 cursor-not-allowed" : "hover:shadow-md cursor-pointer"}`}
+      style={{ border:"1px solid #e8edf0", borderRadius:"12px", overflow:"hidden", height:"210px" }}
+      onClick={() => !isOutOfStock && onPreview(product)}>
+      
+      {/* 🚀 Out of Stock Overlay */}
+      {isOutOfStock && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/30 backdrop-blur-[1px]">
+          <span className="bg-gray-900 text-white text-xs font-bold px-4 py-1.5 rounded shadow-lg tracking-widest uppercase">
+            Out of Stock
+          </span>
+        </div>
+      )}
+
       <div className="relative flex-shrink-0" style={{ width:"210px", height:"100%", backgroundColor:"#f8fafb" }}>
         <FallbackImage
           src={product.image}
@@ -78,7 +89,7 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
           className="group-hover:scale-105 transition-transform duration-500"
           style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover" }}
         />
-        {product.ribbon && (
+        {product.ribbon && !isOutOfStock && (
           <div className="absolute top-3 left-0 z-10">
             <div className="text-[10px] font-bold text-white shadow"
               style={{ backgroundColor:RIBBON_COLORS[product.ribbon], clipPath:"polygon(0 0, calc(100% - 7px) 0, 100% 50%, calc(100% - 7px) 100%, 0 100%)", padding:"3px 16px 3px 10px" }}>
@@ -86,14 +97,13 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
             </div>
           </div>
         )}
-        {/* 🚀 THE FIX: Only show badge if discounted */}
-        {hasDiscount && (
+        {hasDiscount && !isOutOfStock && (
           <div className="absolute top-3 right-3 text-white text-[10px] font-bold px-1.5 py-0.5 rounded shadow" style={{ backgroundColor:DG }}>
             -{discount(oldPrice, currentPrice)}%
           </div>
         )}
       </div>
-      <div className="flex-1 flex flex-col justify-center" style={{ padding:"20px 28px", minWidth:0 }}>
+      <div className="flex-1 flex flex-col justify-center relative z-10" style={{ padding:"20px 28px", minWidth:0 }}>
         <span className="inline-block text-[10px] font-bold uppercase tracking-widest mb-2 px-2.5 py-0.5 rounded-full"
           style={{ backgroundColor:"#f0fdf4", color:G, width:"fit-content" }}>{product.category}</span>
         <h3 style={{ fontSize:"16px", fontWeight:700, color:"#111827", margin:"0 0 8px", lineHeight:1.25 }}>{product.name}</h3>
@@ -102,12 +112,14 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
           <span style={{ fontSize:"13px", fontWeight:600, color:"#374151" }}>{product.rating}</span>
           <span style={{ fontSize:"13px", color:"#9ca3af" }}>({product.reviews.toLocaleString()})</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor:G }}/>
-          <span style={{ fontSize:"12px", color:"#6b7280" }}>In Stock · Ready to deliver</span>
-        </div>
+        {!isOutOfStock && (
+          <div className="flex items-center gap-1.5">
+            <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor:G }}/>
+            <span style={{ fontSize:"12px", color:"#6b7280" }}>In Stock · Ready to deliver</span>
+          </div>
+        )}
       </div>
-      <div className="flex flex-col justify-between flex-shrink-0" style={{ width:"190px", padding:"20px 22px" }}>
+      <div className="flex flex-col justify-between flex-shrink-0 relative z-10" style={{ width:"190px", padding:"20px 22px" }}>
         <div className="flex justify-end">
           <WishlistBtn id={product.id} wishlist={wishlist} toggleWishlist={toggleWishlist}/>
         </div>
@@ -115,22 +127,17 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
           <div style={{ fontSize:"24px", fontWeight:800, color:G, lineHeight:1, marginBottom:"3px" }}>
             ₱{currentPrice.toLocaleString()}
           </div>
-          {/* 🚀 THE FIX: Only show strikethrough if discounted */}
           {hasDiscount && (
             <div style={{ fontSize:"13px", color:"#9ca3af", textDecoration:"line-through" }}>
               ₱{oldPrice.toLocaleString()}
             </div>
           )}
         </div>
-        <button onClick={e => { e.stopPropagation(); onPreview(product) }}
+        <button disabled={isOutOfStock} onClick={e => { e.stopPropagation(); onPreview(product) }}
           className="w-full flex items-center justify-center gap-1.5 text-white rounded-lg transition-all"
-          style={{ backgroundColor:G, padding:"9px 12px", fontSize:"13px", fontWeight:600, border:"none", cursor:"pointer" }}
-          onMouseEnter={e => e.currentTarget.style.backgroundColor=DG}
-          onMouseLeave={e => e.currentTarget.style.backgroundColor=G}>
-          <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-          </svg>
+          style={{ backgroundColor: isOutOfStock ? "#9ca3af" : G, padding:"9px 12px", fontSize:"13px", fontWeight:600, border:"none", cursor: isOutOfStock ? "not-allowed" : "pointer" }}
+          onMouseEnter={e => { if(!isOutOfStock) e.currentTarget.style.backgroundColor=DG }}
+          onMouseLeave={e => { if(!isOutOfStock) e.currentTarget.style.backgroundColor=G }}>
           View Details
         </button>
       </div>
@@ -140,18 +147,27 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
 
 function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
   const wishlisted = wishlist.includes(product.id)
-  
-  // 🚀 THE FIX: Calculate if a real discount exists
   const currentPrice = Number(product.price) || 0;
   const oldPrice = Number(product.original) || 0;
   const hasDiscount = oldPrice > currentPrice;
+  // 🚀 Added stock check
+  const isOutOfStock = product.stock <= 0 || !product.is_available || product.status === "inactive";
 
   return (
     <div
-      className="bg-white flex group transition-shadow duration-200 hover:shadow-sm"
-      style={{ border:"1px solid #e8edf0", borderRadius:"12px", overflow:"hidden", cursor:"pointer", alignItems:"stretch" }}
-      onClick={() => onPreview(product)}
+      className={`bg-white flex group transition-all duration-200 relative ${isOutOfStock ? "grayscale opacity-75 cursor-not-allowed" : "hover:shadow-sm cursor-pointer"}`}
+      style={{ border:"1px solid #e8edf0", borderRadius:"12px", overflow:"hidden", alignItems:"stretch" }}
+      onClick={() => !isOutOfStock && onPreview(product)}
     >
+      {/* 🚀 Out of Stock Overlay */}
+      {isOutOfStock && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/30 backdrop-blur-[1px]">
+          <span className="bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded shadow tracking-widest uppercase">
+            Out of Stock
+          </span>
+        </div>
+      )}
+
       <div className="relative flex-shrink-0" style={{ width:"108px", minHeight:"108px", backgroundColor:"#f8fafb", position:"relative" }}>
         <FallbackImage
           src={product.image}
@@ -159,7 +175,7 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
           fallbackSrc="/EstingsLogo.svg"
           style={{ position:"absolute", inset:0, width:"100%", height:"100%", objectFit:"cover", display:"block" }}
         />
-        {product.ribbon && (
+        {product.ribbon && !isOutOfStock && (
           <div className="absolute top-2 left-0 z-10">
             <div className="text-[9px] font-bold text-white"
               style={{ backgroundColor:RIBBON_COLORS[product.ribbon], clipPath:"polygon(0 0,calc(100% - 5px) 0,100% 50%,calc(100% - 5px) 100%,0 100%)", padding:"2px 10px 2px 7px" }}>
@@ -167,14 +183,13 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
             </div>
           </div>
         )}
-        {/* 🚀 THE FIX: Only show badge if discounted */}
-        {hasDiscount && (
+        {hasDiscount && !isOutOfStock && (
           <div className="absolute bottom-2 right-2 text-white text-[9px] font-bold px-1.5 py-0.5 rounded" style={{ backgroundColor:DG }}>
             -{discount(oldPrice, currentPrice)}%
           </div>
         )}
       </div>
-      <div style={{ flex:1, minWidth:0, padding:"11px 12px", display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
+      <div className="relative z-10" style={{ flex:1, minWidth:0, padding:"11px 12px", display:"flex", flexDirection:"column", justifyContent:"space-between" }}>
         <div>
           <p style={{ fontSize:"9px", fontWeight:800, letterSpacing:"0.16em", textTransform:"uppercase", color:G, margin:"0 0 3px" }}>
             {product.category}
@@ -190,20 +205,15 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
         <div style={{ display:"flex", alignItems:"center", justifycontent:"space-between", gap:"6px", marginTop:"8px" }}>
           <div style={{ display:"flex", alignItems:"baseline", gap:"4px" }}>
             <span style={{ fontSize:"15px", fontWeight:800, color:G, lineHeight:1 }}>₱{currentPrice.toLocaleString()}</span>
-            {/* 🚀 THE FIX: Only show strikethrough if discounted */}
             {hasDiscount && (
               <span style={{ fontSize:"11px", color:"#9ca3af", textDecoration:"line-through" }}>₱{oldPrice.toLocaleString()}</span>
             )}
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:"6px", flexShrink:0 }}>
-            <button onClick={e => { e.stopPropagation(); onPreview(product) }}
-              style={{ display:"inline-flex", alignItems:"center", gap:"4px", backgroundColor:G, color:"white", fontSize:"11px", fontWeight:700, padding:"6px 11px", borderRadius:"8px", border:"none", cursor:"pointer", lineHeight:1, flexShrink:0 }}
-              onMouseEnter={e => e.currentTarget.style.backgroundColor=DG}
-              onMouseLeave={e => e.currentTarget.style.backgroundColor=G}>
-              <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ flexShrink:0 }}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
-              </svg>
+            <button disabled={isOutOfStock} onClick={e => { e.stopPropagation(); onPreview(product) }}
+              style={{ display:"inline-flex", alignItems:"center", gap:"4px", backgroundColor:isOutOfStock?"#9ca3af":G, color:"white", fontSize:"11px", fontWeight:700, padding:"6px 11px", borderRadius:"8px", border:"none", cursor:isOutOfStock?"not-allowed":"pointer", lineHeight:1, flexShrink:0 }}
+              onMouseEnter={e => { if(!isOutOfStock) e.currentTarget.style.backgroundColor=DG }}
+              onMouseLeave={e => { if(!isOutOfStock) e.currentTarget.style.backgroundColor=G }}>
               View
             </button>
             <button onClick={e => { e.stopPropagation(); toggleWishlist(product.id) }}
@@ -517,7 +527,8 @@ export default function Shop({ onNavigate, initialCategory }) {
     return saved ? [saved] : ["Manila"];
   });
   const [selectedOccasions, setSelectedOccasions] = useState([]) // 🚀 NEW OCCASIONS STATE
-  
+  const [searchQuery, setSearchQuery] = useState("");
+
   const [priceRange, setPriceRange]           = useState([0, 999999])
   const [wishlist, setWishlist]               = useState([])
   const [sortOpen, setSortOpen]               = useState(false)
@@ -525,6 +536,7 @@ export default function Shop({ onNavigate, initialCategory }) {
   const [previewProduct, setPreviewProduct]   = useState(null)
   const sortRef = useRef(null)
 
+  // Initialize searchQuery (read from URL search param handled below)
 
   useEffect(() => {
     const handleBranchUpdate = () => {
@@ -561,6 +573,18 @@ export default function Shop({ onNavigate, initialCategory }) {
   }, [initialCategory]);
 
   useEffect(() => {
+  const handleUrlChange = () => {
+    const params = new URLSearchParams(window.location.search);
+    const query = params.get("search") || "";
+    setSearchQuery(query);
+  };
+
+  handleUrlChange(); // reads on mount
+  window.addEventListener("popstate", handleUrlChange);
+  return () => window.removeEventListener("popstate", handleUrlChange);
+}, []);
+
+  useEffect(() => {
     api.get("/products/categories/hierarchy") 
       .then(data => { if (data) setCategoryHierarchy(data); })
       .catch(err => console.error("Failed to load hierarchy", err));
@@ -578,6 +602,7 @@ export default function Shop({ onNavigate, initialCategory }) {
             rating: 5.0,
             reviews: 0,
             ribbon: p.ribbon || null,
+            search_tags: p.search_tags || p.tags || [],
           }));
           setProducts(mapped);
         } else { setProducts([]); }
@@ -615,8 +640,58 @@ export default function Shop({ onNavigate, initialCategory }) {
 
   const dynamicCategories = getSidebarCategories();
 
+  // 🚀 Live search: if user types, fetch from backend search endpoint
+  // (backend supports name/category/description/tags)
+  const [searchResults, setSearchResults] = useState(null)
+  const [searchLoading, setSearchLoading] = useState(false)
+
+  useEffect(() => {
+    let alive = true
+    const q = (searchQuery || "").trim()
+
+    if (!q) {
+      setSearchResults(null)
+      setSearchLoading(false)
+      return
+    }
+
+    ;(async () => {
+      try {
+        setSearchLoading(true)
+        const res = await api.get(`/products/search?q=${encodeURIComponent(q)}`)
+
+        if (!alive) return
+
+        const mapped = Array.isArray(res)
+          ? res.map(p => ({
+              ...p,
+              image: p.image_url || p.image || new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href,
+              rating: typeof p.rating === "number" ? p.rating : 5.0,
+              reviews: typeof p.reviews === "number" ? p.reviews : 0,
+              ribbon: p.ribbon || null,
+              original: p.original_price || null,
+            }))
+          : []
+
+        setSearchResults(mapped)
+      } catch (e) {
+        console.error("Search fetch failed", e)
+        if (alive) setSearchResults([])
+      } finally {
+        if (alive) setSearchLoading(false)
+      }
+    })()
+
+    return () => {
+      alive = false
+    }
+  }, [searchQuery])
+
   // 🚀 LIVE MULTI-LAYER FILTER COMBINATIONS
-  const filtered = products
+  const baseList = (searchResults !== null ? searchResults : products)
+
+  const filtered = baseList
+
     .filter(p => normalizeCat(p.category) !== 'add-on' && normalizeCat(p.category) !== 'addon')
     .filter(p => {
       const activeNorm = normalizeCat(activeCategory);
@@ -632,28 +707,37 @@ export default function Shop({ onNavigate, initialCategory }) {
       if (!activeTypes || activeTypes.length === 0) return true;
       return activeTypes.map(normalizeCat).includes(normalizeCat(p.product_type || ""));
     })
-    
     .filter(p => {
       if (!selectedLocations || selectedLocations.length === 0) return true;
-      
       const selectedLocsNorm = selectedLocations.map(normalizeCat);
-      
-      // 1. Get branches (ensure it's an array) 
       const branches = Array.isArray(p.branches) ? p.branches : [];
-      
-      // 2. Get shipped_from (handle null/undefined)
       const shippedFrom = p.shipped_from || "";
-
-      // 3. Create a unified list of all location sources for this product
       const productLocations = [...branches, shippedFrom].map(normalizeCat);
-
-      // DEBUG: Uncomment the line below to see what the system "sees" for each product
-      // console.log(`Checking ${p.name}: locations found =`, productLocations);
-
-      // 4. Return true if ANY of the selected locations match ANY of the product's locations
       return selectedLocsNorm.some(loc => productLocations.includes(loc));
     })
     .filter(p => p.price >= priceRange[0] && p.price <= priceRange[1])
+    
+    // 🚀 ADD THIS: The Global Search Filter
+    .filter(p => {
+      if (!searchQuery) return true;
+      const q = searchQuery.toLowerCase().trim();
+
+      const matchName = (p.name || "").toLowerCase().includes(q);
+      const matchCat = (p.category || "").toLowerCase().includes(q);
+      const matchDesc = (p.description || "").toLowerCase().includes(q);
+
+      const rawTags = p.search_tags ?? p.tags;
+      let matchTags = false;
+      if (Array.isArray(rawTags)) {
+        matchTags = rawTags.some(tag => (tag || "").toLowerCase().includes(q));
+      } else if (typeof rawTags === "string") {
+        // Handle comma-separated string format e.g. "roses,red,valentines"
+        matchTags = rawTags.split(",").some(tag => tag.trim().toLowerCase().includes(q));
+      }
+
+      return matchName || matchCat || matchDesc || matchTags;
+    })
+    
     .sort((a, b) => {
       if (sortBy === "price-asc")  return a.price - b.price;
       if (sortBy === "price-desc") return b.price - a.price;
@@ -780,6 +864,24 @@ export default function Shop({ onNavigate, initialCategory }) {
                     <button onClick={() => setSelectedOccasions(prev => prev.filter(o => o !== occ))} className="ml-0.5 text-green-600 font-bold">×</button>
                   </span>
                 ))}
+              </div>
+            )}
+
+            {searchQuery && (
+              <div className="flex flex-wrap gap-2 mb-4">
+                <span className="flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
+                  Search: "{searchQuery}"
+                  <button 
+                    onClick={() => {
+                      // Clear the URL and the state
+                      window.history.pushState({}, '', window.location.pathname);
+                      setSearchQuery("");
+                    }} 
+                    className="ml-0.5 text-blue-600 font-bold hover:text-blue-900"
+                  >
+                    ×
+                  </button>
+                </span>
               </div>
             )}
 

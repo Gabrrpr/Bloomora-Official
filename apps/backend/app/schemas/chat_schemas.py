@@ -1,14 +1,13 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 from datetime import datetime
 
 class MessageCreate(BaseModel):
-    user_id: UUID
-    text: str
-    image_url: str | None = None
-    # 🚀 ADDED: To link chats to specific orders
-    context_id: str | None = None 
+    user_id: str
+    text: Optional[str] = None
+    image_url: Optional[str] = None
+    context_id: Optional[str] = None
 
 class MessageOut(BaseModel):
     id: UUID
@@ -18,8 +17,7 @@ class MessageOut(BaseModel):
     image_url: str | None = None
     is_read: int
     created_at: datetime
-    # 🚀 ADDED: To send order context to the frontend
-    context_id: str | None = None 
+    context_id: Optional[str] = None
 
     class Config:
         from_attributes = True

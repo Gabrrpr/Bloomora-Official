@@ -1,22 +1,38 @@
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useTheme } from "../../context/ThemeContext"
-import { DG, G, ExportBtn } from "./_adminShared"
+import { DG, G } from "./_adminShared"
+import { api } from "../../services/api.js"
 
 const ACTION_OPTIONS = ["All Actions", "Login", "Logout", "Create Record", "Update Record", "Delete Record", "Export Data", "Password Change", "Failed Login"]
 const USER_OPTIONS   = ["All Users", "Admins only", "Staff only", "Delivery Staff only"]
 const DATE_OPTIONS   = ["Date Range: All", "Today", "Yesterday", "This week", "This month", "Last 3 months"]
 
-function PrintBtn({ onClick }) {
+function PrintBtn({ onClick, isDark }) {
   return (
     <button onClick={onClick}
       className="no-print flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all active:scale-95"
-      style={{ borderColor: "#dde3ec", color: "#374151", backgroundColor: "white" }}
-      onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f9fafb"}
-      onMouseLeave={e => e.currentTarget.style.backgroundColor = "white"}>
+      style={{ borderColor: isDark ? "#374151" : "#dde3ec", color: isDark ? "#94a3b8" : "#374151", backgroundColor: isDark ? "#1e293b" : "white" }}
+      onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#2d3f55" : "#f9fafb"}
+      onMouseLeave={e => e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "white"}>
       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
       </svg>
       Print
+    </button>
+  )
+}
+
+function ExportCSVBtn({ onClick, isDark }) {
+  return (
+    <button onClick={onClick}
+      className="no-print flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all active:scale-95"
+      style={{ borderColor: isDark ? "#374151" : "#dde3ec", color: isDark ? "#94a3b8" : "#374151", backgroundColor: isDark ? "#1e293b" : "white" }}
+      onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#2d3f55" : "#f9fafb"}
+      onMouseLeave={e => e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "white"}>
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+      </svg>
+      Export CSV
     </button>
   )
 }
@@ -44,8 +60,8 @@ function SelectFilter({ value, onChange, options, minWidth = "130px", isDark }) 
 
 function ActionBadge({ action, isDark }) {
   const cfg = {
-    Login:             { bg: isDark ? "rgba(74,222,128,0.12)"  : "#dcfce7", color: isDark ? "#4ade80" : "#15803d" },
-    Logout:            { bg: isDark ? "rgba(148,163,184,0.10)" : "#f1f5f9", color: isDark ? "#94a3b8" : "#475569" },
+    "Login":           { bg: isDark ? "rgba(74,222,128,0.12)"  : "#dcfce7", color: isDark ? "#4ade80" : "#15803d" },
+    "Logout":          { bg: isDark ? "rgba(148,163,184,0.10)" : "#f1f5f9", color: isDark ? "#94a3b8" : "#475569" },
     "Create Record":   { bg: isDark ? "rgba(96,165,250,0.12)"  : "#dbeafe", color: isDark ? "#60a5fa" : "#1d4ed8" },
     "Update Record":   { bg: isDark ? "rgba(250,204,21,0.12)"  : "#fefce8", color: isDark ? "#facc15" : "#854d0e" },
     "Delete Record":   { bg: isDark ? "rgba(248,113,113,0.12)" : "#fee2e2", color: isDark ? "#f87171" : "#dc2626" },
@@ -53,11 +69,15 @@ function ActionBadge({ action, isDark }) {
     "Password Change": { bg: isDark ? "rgba(251,146,60,0.12)"  : "#fff7ed", color: isDark ? "#fb923c" : "#c2410c" },
     "Failed Login":    { bg: isDark ? "rgba(248,113,113,0.12)" : "#fee2e2", color: isDark ? "#f87171" : "#dc2626" },
   }
-  const s = cfg[action] || { bg: isDark ? "rgba(148,163,184,0.10)" : "#f1f5f9", color: isDark ? "#94a3b8" : "#475569" }
+  
+  // Smart matching: If the action string contains the key, style it accordingly.
+  const matchedKey = Object.keys(cfg).find(k => action?.toLowerCase().includes(k.toLowerCase()))
+  const s = cfg[matchedKey] || { bg: isDark ? "rgba(148,163,184,0.10)" : "#f1f5f9", color: isDark ? "#94a3b8" : "#475569" }
+  
   return (
-    <span className="inline-block px-2.5 py-0.5 rounded-md text-xs font-bold"
+    <span className="inline-block px-2.5 py-0.5 rounded-md text-xs font-bold whitespace-nowrap"
       style={{ backgroundColor: s.bg, color: s.color }}>
-      {action || "—"}
+      {matchedKey || "System Action"}
     </span>
   )
 }
@@ -68,14 +88,19 @@ function RoleBadge({ role, isDark }) {
     staff:    { label: "Staff",    color: isDark ? "#60a5fa" : "#1d4ed8" },
     delivery: { label: "Delivery", color: isDark ? "#fb923c" : "#c2410c" },
   }
-  const s = cfg[role?.toLowerCase()] || { label: role || "—", color: isDark ? "#94a3b8" : "#475569" }
-  return <span className="text-xs font-semibold" style={{ color: s.color }}>{s.label}</span>
+  const s = cfg[role?.toLowerCase()] || { label: role || "System", color: isDark ? "#94a3b8" : "#475569" }
+  return <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: s.color }}>{s.label}</span>
 }
 
-const COLS = ["Timestamp", "User", "Role", "Action", "IP Address", "Details"]
+const COLS = ["Timestamp", "User ID", "Role", "Action Type", "IP Address", "Details"]
+const PAGE_SIZE = 20
 
 export default function AdminActivityLogs() {
   const { isDark } = useTheme()
+  const [logs, setLogs] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+
   const [search, setSearch]             = useState("")
   const [actionFilter, setActionFilter] = useState("All Actions")
   const [userFilter, setUserFilter]     = useState("All Users")
@@ -89,13 +114,100 @@ export default function AdminActivityLogs() {
   const inputTxt   = isDark ? "#e2e8f0" : "#374151"
   const cardBg     = isDark ? "#1a2332" : "white"
   const cardBdr    = isDark ? "#1e293b" : "#e8edf2"
+  const cellTxt    = isDark ? "#e2e8f0" : "#1e293b"
+
+  // Fetch logs from your backend
+  const fetchLogs = useCallback(async () => {
+    setLoading(true)
+    try {
+      // 🚀 THE FIX: Point to the new users.py route!
+      const data = await api.get("/users/activity-logs")
+      setLogs(Array.isArray(data) ? data : [])
+    } catch (e) {
+      console.error("Failed to fetch activity logs:", e)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchLogs() }, [fetchLogs])
+
+  // Filter Logic
+  const filtered = logs.filter(log => {
+    // 1. Search Filter (matches ID, Action text, or IP)
+    const matchSearch = !search || 
+      log.action?.toLowerCase().includes(search.toLowerCase()) || 
+      log.ip_address?.toLowerCase().includes(search.toLowerCase()) ||
+      log.user_id?.toLowerCase().includes(search.toLowerCase())
+
+    // 2. Action Filter
+    const matchAction = actionFilter === "All Actions" || log.action?.toLowerCase().includes(actionFilter.toLowerCase())
+
+    // 3. User Role Filter
+    let matchRole = true
+    if (userFilter === "Admins only") matchRole = log.role?.toLowerCase() === "admin"
+    if (userFilter === "Staff only") matchRole = log.role?.toLowerCase() === "staff"
+    if (userFilter === "Delivery Staff only") matchRole = log.role?.toLowerCase() === "delivery"
+
+    // 4. Date Filter Math
+    let matchDate = true
+    if (dateFilter !== "Date Range: All" && log.created_at) {
+      const logDate = new Date(log.created_at)
+      const now = new Date()
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      
+      if (dateFilter === "Today") {
+        matchDate = logDate >= startOfToday
+      } else if (dateFilter === "Yesterday") {
+        const startOfYesterday = new Date(startOfToday)
+        startOfYesterday.setDate(startOfYesterday.getDate() - 1)
+        matchDate = logDate >= startOfYesterday && logDate < startOfToday
+      } else if (dateFilter === "This week") {
+        const startOfThisWeek = new Date(startOfToday)
+        startOfThisWeek.setDate(startOfToday.getDate() - now.getDay())
+        matchDate = logDate >= startOfThisWeek
+      } else if (dateFilter === "This month") {
+        const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+        matchDate = logDate >= startOfThisMonth
+      } else if (dateFilter === "Last 3 months") {
+        const threeMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate())
+        matchDate = logDate >= threeMonthsAgo
+      }
+    }
+
+    return matchSearch && matchAction && matchRole && matchDate
+  }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) // Sort newest first
+
+  // Pagination Logic
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+  const pageSafe = Math.min(page, totalPages)
+  const paginated = filtered.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE)
+
+  useEffect(() => { setPage(1) }, [search, actionFilter, userFilter, dateFilter])
 
   const handlePrint = () => window.print()
   const printDate   = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
 
+  const handleCSV = () => {
+    const headers = ["ID", "Timestamp", "User ID", "Role", "Action", "IP Address"]
+    const rows = filtered.map(log => [
+      log.id,
+      new Date(log.created_at).toLocaleString("en-PH"),
+      log.user_id || "System",
+      log.role || "N/A",
+      log.action,
+      log.ip_address || "N/A"
+    ])
+    const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(",")).join("\n")
+    const a = Object.assign(document.createElement("a"), {
+      href: URL.createObjectURL(new Blob([csv], { type: "text/csv" })),
+      download: `activity_logs_${new Date().toISOString().slice(0,10)}.csv`
+    })
+    a.click(); URL.revokeObjectURL(a.href)
+  }
+
   return (
     <div className="space-y-5">
-
       <style>{`
         @media print {
           body * { visibility: hidden !important; }
@@ -114,10 +226,10 @@ export default function AdminActivityLogs() {
 
       {/* Heading row with Export + Print */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-xl font-bold" style={{ color: isDark ? "#e2e8f0" : "#0f172a" }}>Activity Log</h1>
+        <h1 className="text-xl font-bold" style={{ color: isDark ? "#e2e8f0" : "#0f172a" }}>Activity Logs</h1>
         <div className="flex items-center gap-2">
-          <ExportBtn />
-          <PrintBtn onClick={handlePrint} />
+          <ExportCSVBtn onClick={handleCSV} isDark={isDark} />
+          <PrintBtn onClick={handlePrint} isDark={isDark} />
         </div>
       </div>
 
@@ -165,7 +277,7 @@ export default function AdminActivityLogs() {
                   style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
                 </svg>
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search logs..."
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search ID, Action, or IP..."
                   className="w-full pl-9 pr-4 py-2 text-sm border rounded-md outline-none transition-all"
                   style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}
                   onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = "0 0 0 2px rgba(74,222,128,0.18)" }}
@@ -175,33 +287,103 @@ export default function AdminActivityLogs() {
           </div>
 
           <div className="overflow-x-auto">
-            <table className="w-full" style={{ minWidth: "700px" }}>
+            <table className="w-full" style={{ minWidth: "900px" }}>
               <thead style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
                 <tr>
                   {COLS.map(h => (
-                    <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider"
+                    <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider whitespace-nowrap"
                       style={{ color: isDark ? "#64748b" : "#94a3b8" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody style={{ borderTop: `1px solid ${toolbarBdr}` }}>
-                <tr>
-                  <td colSpan={6} className="px-5 py-12 text-center text-sm" style={{ color: subTxt }}>
-                    No activity logs yet — connect to the backend.
-                  </td>
-                </tr>
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="px-5 py-12 text-center text-sm" style={{ color: subTxt }}>
+                      Loading activity logs...
+                    </td>
+                  </tr>
+                ) : paginated.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-5 py-12 text-center text-sm" style={{ color: subTxt }}>
+                      No matching activity logs found.
+                    </td>
+                  </tr>
+                ) : (
+                  paginated.map((log, idx) => (
+                    <tr key={log.id} 
+                      style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#f8fafc"}`, backgroundColor: isDark ? (idx % 2 === 0 ? "#1a2332" : "#111827") : "white" }}
+                      onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.04)" : "#f8fffe"}
+                      onMouseLeave={e => e.currentTarget.style.backgroundColor = isDark ? (idx % 2 === 0 ? "#1a2332" : "#111827") : "white"}>
+                      
+                      {/* Timestamp */}
+                      <td className="px-4 py-3 align-top whitespace-nowrap">
+                        <span className="text-sm font-medium" style={{ color: cellTxt }}>
+                          {new Date(log.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}
+                        </span>
+                        <span className="block text-xs mt-0.5" style={{ color: subTxt }}>
+                          {new Date(log.created_at).toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </td>
+
+                      {/* User ID */}
+                      <td className="px-4 py-3 align-top">
+                        <span className="text-xs font-mono bg-gray-100 dark:bg-slate-800 px-2 py-1 rounded" style={{ color: cellTxt }}>
+                          {log.user_id ? log.user_id.slice(0, 8) + "..." : "System"}
+                        </span>
+                      </td>
+
+                      {/* Role */}
+                      <td className="px-4 py-3 align-top">
+                        <RoleBadge role={log.role} isDark={isDark} />
+                      </td>
+
+                      {/* Action Type Badge */}
+                      <td className="px-4 py-3 align-top">
+                        <ActionBadge action={log.action} isDark={isDark} />
+                      </td>
+
+                      {/* IP Address */}
+                      <td className="px-4 py-3 align-top">
+                        <span className="text-xs font-mono text-gray-500">{log.ip_address || "N/A"}</span>
+                      </td>
+
+                      {/* Details (Full Action Text) */}
+                      <td className="px-4 py-3 align-top">
+                        <span className="text-sm leading-snug break-words block max-w-xs" style={{ color: subTxt }}>
+                          {log.action}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
 
           <div className="flex items-center justify-between px-4 sm:px-5 py-3 flex-wrap gap-2 no-print"
             style={{ borderTop: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
-            <span className="text-sm" style={{ color: subTxt }}>Showing 0 log entries</span>
+            <span className="text-sm" style={{ color: subTxt }}>Showing {paginated.length} of {filtered.length} entries</span>
+            
             <div className="flex items-center gap-1">
-              {["←", "1", "2", "3", "→"].map((p, i) => (
-                <button key={i} className="px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all"
-                  style={{ background: p === "1" ? `linear-gradient(135deg,${DG},${G})` : isDark ? "#1e293b" : "white", color: p === "1" ? "white" : isDark ? "#94a3b8" : "#6b7280", border: p === "1" ? "none" : `1px solid ${isDark ? "#374151" : "#e2e8f0"}` }}>{p}</button>
+              <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="px-3 py-1.5 text-xs font-semibold border rounded-md transition-all"
+                style={page <= 1 ? { borderColor: inputBdr, color: subTxt, cursor: "not-allowed", opacity: 0.5 } : { borderColor: inputBdr, color: inputTxt, backgroundColor: inputBg }}>
+                ← Prev
+              </button>
+              
+              {[page - 1, page, page + 1].filter(p => p >= 1 && p <= totalPages).map(p => (
+                <button key={p} onClick={() => setPage(p)} className="px-3 py-1.5 text-xs font-semibold border rounded-md transition-all"
+                  style={p === page 
+                    ? { borderColor: G, color: isDark ? "#4ade80" : G, backgroundColor: isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4" } 
+                    : { borderColor: inputBdr, color: inputTxt, backgroundColor: inputBg }}>
+                  {p}
+                </button>
               ))}
+              
+              <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="px-3 py-1.5 text-xs font-semibold border rounded-md transition-all"
+                style={page >= totalPages ? { borderColor: inputBdr, color: subTxt, cursor: "not-allowed", opacity: 0.5 } : { borderColor: inputBdr, color: inputTxt, backgroundColor: inputBg }}>
+                Next →
+              </button>
             </div>
           </div>
         </div>

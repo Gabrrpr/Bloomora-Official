@@ -309,7 +309,9 @@ export default function ProductPreviewModalSimple({product,onClose,onNavigate}){
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <h2 className="text-2xl font-bold leading-tight flex-1" style={{color:isDark?"#f1f5f9":"#111827"}}>{product.name}</h2>
                     <button
-                      onClick={()=>window.dispatchEvent(new CustomEvent("bloomora:open-chat"))}
+                      onClick={() => window.dispatchEvent(new CustomEvent("bloomora:open-chat", { 
+                        detail: { product: { id: product.id, name: product.name, price: product.price, image: product.image } } 
+                      }))}
                       className="flex items-center gap-1.5 flex-shrink-0 px-3.5 py-1.5 rounded-full text-xs font-bold text-white transition-all cursor-pointer border-none"
                       style={{background:"linear-gradient(135deg,#25d366,#128c48)",boxShadow:"0 3px 10px rgba(37,211,102,0.35)"}}
                       onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 5px 18px rgba(37,211,102,0.5)";e.currentTarget.style.transform="translateY(-1px)"}}

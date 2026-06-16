@@ -16,7 +16,34 @@ const QUICK_REPLIES = [
   "Our price range starts at ₱500 for small arrangements.",
 ]
 
-// 🚀 UPGRADED: Now supports actual images if they exist in your DB
+// 🚀 UPGRADED: Product Context UI Bubble
+function ProductContextPreview({ contextId, products, onPreview }) {
+  if (!contextId) return null;
+  const product = (products || []).find(p => String(p.id) === String(contextId));
+
+  if (!product) {
+    return (
+      <div className="flex items-center gap-3 p-2 mb-1.5 bg-gray-50 border border-gray-200 rounded-lg shadow-sm w-fit opacity-70">
+        <div className="w-10 h-10 rounded bg-gray-200 animate-pulse dark:bg-gray-700" />
+        <p className="text-xs font-bold text-gray-500 m-0 pr-2">Loading context...</p>
+      </div>
+    );
+  }
+
+  return (
+    <button 
+      onClick={() => onPreview(product)} // 🚀 Triggers the new modal
+      className="flex items-center gap-3 p-2 mb-1.5 bg-green-50 border border-green-200 rounded-lg shadow-sm w-fit dark:bg-green-900/20 dark:border-green-800/40 hover:bg-green-100 dark:hover:bg-green-800/40 transition-colors cursor-pointer text-left outline-none"
+      title="Click to view product details">
+      <img src={product.image_url || product.image} alt={product.name} className="w-10 h-10 rounded object-cover border border-green-200 dark:border-green-800" onError={(e) => { e.target.style.display = 'none' }} />
+      <div className="pr-2">
+        <p className="text-[9px] font-bold text-green-700 uppercase tracking-wider mb-0.5 dark:text-green-500">Asking about (Click to view)</p>
+        <p className="text-xs font-bold text-green-900 truncate max-w-[150px] dark:text-green-400">{product.name}</p>
+      </div>
+    </button>
+  );
+}
+
 function Avatar({ name = "?", imageUrl, size = 38 }) {
   if (imageUrl) {
     return (
@@ -57,7 +84,6 @@ function ConvoItem({ convo, isActive, onClick, isDark }) {
       onMouseLeave={e => { if (!isActive) e.currentTarget.style.backgroundColor = "transparent" }}
     >
       <div className="relative flex-shrink-0">
-        {/* 🚀 UPGRADED: Passes the image URL to the Avatar */}
         <Avatar name={convo.user_name} imageUrl={convo.user_avatar || convo.profile_picture} size={40} />
       </div>
       <div className="flex-1 min-w-0">
@@ -69,6 +95,57 @@ function ConvoItem({ convo, isActive, onClick, isDark }) {
       </div>
     </button>
   )
+}
+
+function AdminProductModal({ product, onClose, isDark }) {
+  if (!product) return null;
+
+  const overlayBg = isDark ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0.4)";
+  const modalBg = isDark ? "#1e293b" : "white";
+  const titleColor = isDark ? "#f1f5f9" : "#111827";
+  const subTxt = isDark ? "#94a3b8" : "#6b7280";
+  const borderColor = isDark ? "#334155" : "#e5e7eb";
+
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, zIndex: 9999, backgroundColor: overlayBg, display: "flex", alignItems: "center", justifyContent: "center", padding: "20px" }}>
+      <div onClick={e => e.stopPropagation()} style={{ backgroundColor: modalBg, borderRadius: "16px", width: "100%", maxWidth: "380px", overflow: "hidden", boxShadow: "0 24px 60px rgba(0,0,0,0.4)", border: `1px solid ${borderColor}`, animation: "chatFadeUp 0.2s ease-out" }}>
+        
+        {/* Header & Image */}
+        <div style={{ position: "relative", height: "220px", backgroundColor: isDark ? "#0f172a" : "#f3f4f6" }}>
+          <button onClick={onClose} className="hover:scale-110 transition-transform" style={{ position: "absolute", top: "12px", right: "12px", width: "32px", height: "32px", borderRadius: "50%", backgroundColor: "rgba(0,0,0,0.6)", color: "white", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10 }}>
+            ✕
+          </button>
+          <img src={product.image_url || product.image} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={(e) => { e.target.style.display = 'none' }} />
+        </div>
+        
+        {/* Details Area */}
+        <div style={{ padding: "24px" }}>
+          <p style={{ fontSize: "10px", fontWeight: "bold", textTransform: "uppercase", letterSpacing: "1px", color: "#2E8B34", margin: "0 0 6px 0" }}>
+            {product.category || "Product"}
+          </p>
+          <h2 style={{ fontSize: "20px", fontWeight: "bold", color: titleColor, margin: "0 0 16px 0", lineHeight: "1.2" }}>
+            {product.name}
+          </h2>
+          
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", paddingBottom: "16px", borderBottom: `1px solid ${borderColor}` }}>
+            <span style={{ fontSize: "22px", fontWeight: "900", color: isDark ? "#4ade80" : "#0C573E" }}>
+              ₱{Number(product.price).toLocaleString()}
+            </span>
+            <div style={{ textAlign: "right" }}>
+              <span style={{ fontSize: "12px", color: subTxt, display: "block", marginBottom: "2px" }}>Inventory</span>
+              <span style={{ fontSize: "14px", fontWeight: "bold", color: product.stock > 0 ? titleColor : "#ef4444" }}>
+                {product.stock > 0 ? `${product.stock} in stock` : "Out of stock"}
+              </span>
+            </div>
+          </div>
+          
+          <p className="pm-scroll" style={{ fontSize: "13px", color: subTxt, lineHeight: "1.6", margin: 0, maxHeight: "120px", overflowY: "auto", whiteSpace: "pre-wrap" }}>
+            {product.description || "No specific details provided for this item."}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function AdminChat() {
@@ -90,6 +167,10 @@ export default function AdminChat() {
   const [loadingMsgs, setLoadingMsgs] = useState(false)
   const [typing, setTyping] = useState(false)
   const [enlargedImage, setEnlargedImage] = useState(null);
+  const [previewProduct, setPreviewProduct] = useState(null);
+  
+  // 🚀 NEW: State for products to perform the lookup
+  const [allProducts, setAllProducts] = useState([]);
 
   const fileInputRef = useRef(null)
   const bottomRef = useRef(null)
@@ -98,6 +179,13 @@ export default function AdminChat() {
   const activeIdRef = useRef(activeId)
 
   useEffect(() => { activeIdRef.current = activeId }, [activeId])
+
+  // 🚀 NEW: Fetch all products on mount
+  useEffect(() => {
+    api.getAdminProducts()
+      .then(data => setAllProducts(Array.isArray(data) ? data : []))
+      .catch(console.error);
+  }, []);
 
   // ── UI Tokens ──
   const cardBg = isDark ? "#1a2332" : "white"
@@ -170,7 +258,12 @@ export default function AdminChat() {
     try {
       const data = await api.getChatHistory(customerId)
       const msgs = (data || []).map(msg => ({
-        id: msg.id, sender: msg.sender === 'customer' ? 'customer' : 'staff', text: msg.message, image: msg.image_url, time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : '',
+        id: msg.id, 
+        sender: msg.sender === 'customer' ? 'customer' : 'staff', 
+        text: msg.message, 
+        image: msg.image_url, 
+        time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : '',
+        context_id: msg.context_id // 🚀 ADDED mapping
       }))
       setMessages(msgs)
     } finally { setLoadingMsgs(false) }
@@ -226,6 +319,7 @@ export default function AdminChat() {
             text: data.message || data.text,
             image: data.image_url,
             time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            context_id: data.context_id // 🚀 ADDED mapping
         }]);
       }
       loadConversations();
@@ -246,7 +340,6 @@ export default function AdminChat() {
     { label: "Unread", count: conversations.filter(c => c.unread_count > 0).length },
   ]
 
-  // 🚀 UPGRADED: Bulletproof Sorting (Latest First) & Advanced Searching
   const safeQuery = (searchQuery || "").toLowerCase().trim();
   const processedConversations = [...(conversations || [])]
     .filter(c => {
@@ -256,7 +349,6 @@ export default function AdminChat() {
       return nameMatch || msgMatch;
     })
     .sort((a, b) => {
-      // Sorts by the most recently updated message time
       const dateA = new Date(a.updated_at || a.last_message_time || a.created_at || 0).getTime();
       const dateB = new Date(b.updated_at || b.last_message_time || b.created_at || 0).getTime();
       return dateB - dateA;
@@ -282,7 +374,6 @@ export default function AdminChat() {
             ) : processedConversations.length === 0 ? (
               <div className="p-5 text-center text-xs" style={{ color: subTxt }}>No conversations found.</div>
             ) : (
-              // 🚀 UPGRADED: Maps over the sorted/filtered list
               processedConversations.map(c => (
                 <ConvoItem 
                   key={c.customer_id} 
@@ -306,7 +397,6 @@ export default function AdminChat() {
                   return (
                     <div key={msg.id} className={`group flex items-end gap-2.5 ${isStaff ? "justify-end" : "justify-start"}`}>
                       {!isStaff && (
-                        /* 🚀 UPGRADED: Passes image to chat bubbles */
                         <Avatar 
                           name={activeConvo?.user_name || "Customer"} 
                           imageUrl={activeConvo?.user_avatar || activeConvo?.profile_picture} 
@@ -318,18 +408,34 @@ export default function AdminChat() {
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                         </button>
                       )}
+                      
                       <div style={{ maxWidth: "60%" }}>
+                        {/* 🚀 UPGRADED: Renders the Context Bubble if an ID exists! */}
+                        {msg.context_id && (
+                          <div className={msg.from === "user" ? "flex justify-end" : "flex justify-start"}>
+                            <ProductContextPreview 
+                              contextId={msg.context_id} 
+                              products={allProducts} 
+                              onPreview={(selectedProduct) => setPreviewProduct(selectedProduct)} // 🚀 Add this!
+                            />
+                          </div>
+                        )}
+                        
                         {msg.image && (
                           <img 
                             src={msg.image} 
                             alt="Attachment" 
-                            className="rounded-xl cursor-pointer hover:opacity-90 transition-opacity shadow-sm" 
+                            className="rounded-xl cursor-pointer hover:opacity-90 transition-opacity shadow-sm mb-1" 
                             style={{ maxWidth: "200px", maxHeight: "200px", objectFit: "cover" }} 
-                            onClick={() => setEnlargedImage(msg.image)} /* 🚀 Opens the modal */
+                            onClick={() => setEnlargedImage(msg.image)} 
                             onError={(e) => e.target.style.display = 'none'} 
                           />
                         )}
-                        {msg.text && <div className="px-4 py-2 text-sm shadow-sm" style={{ backgroundColor: isStaff ? DG : bubbleBg, color: isStaff ? "white" : bubbleTxt, borderRadius: "16px" }}>{msg.text}</div>}
+                        {msg.text && (
+                          <div className="px-4 py-2 text-sm shadow-sm" style={{ backgroundColor: isStaff ? DG : bubbleBg, color: isStaff ? "white" : bubbleTxt, borderRadius: "16px" }}>
+                            {msg.text}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )
@@ -337,7 +443,7 @@ export default function AdminChat() {
                 <div ref={bottomRef} />
               </div>
 
-              {/* Input */}
+              {/* Input Area */}
               <div className="p-4 border-t" style={{ backgroundColor: toolbarBg, borderColor: toolbarBdr }}>
                 {attachedImage && (
                   <div className="mb-2 relative w-16 h-16 border rounded-lg overflow-hidden">
@@ -378,10 +484,9 @@ export default function AdminChat() {
         <div 
           className="fixed inset-0 flex items-center justify-center z-[9999]"
           style={{ backgroundColor: "rgba(0, 0, 0, 0.85)", backdropFilter: "blur(4px)" }}
-          onClick={() => setEnlargedImage(null)} // Clicking background closes it
+          onClick={() => setEnlargedImage(null)}
         >
           <div className="relative max-w-5xl max-h-screen p-4 flex flex-col items-center">
-            {/* Close Button */}
             <button 
               className="absolute top-2 right-2 md:top-6 md:right-6 text-white hover:text-gray-300 p-2 rounded-full bg-black/50"
               onClick={(e) => { e.stopPropagation(); setEnlargedImage(null); }}
@@ -390,17 +495,20 @@ export default function AdminChat() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
-            
-            {/* The Image */}
             <img 
               src={enlargedImage} 
               alt="Enlarged" 
               className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
-              onClick={(e) => e.stopPropagation()} // Clicking the image itself doesn't close it
+              onClick={(e) => e.stopPropagation()} 
             />
           </div>
         </div>
       )}
+      <AdminProductModal 
+        product={previewProduct} 
+        onClose={() => setPreviewProduct(null)} 
+        isDark={isDark} 
+      />
     </div>
   )
 }

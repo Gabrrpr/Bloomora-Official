@@ -1,19 +1,17 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text, extract
+from sqlalchemy import func, text, extract, or_
 from datetime import datetime
-
+from typing import List
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.models.order import Order
-from app.models import RoleEnum
+# 🚀 IMPORT TRANSACTION AND PAYMENT ENUMS TO FILTER UNPAID ENTRIES
+from app.models import RoleEnum, Transaction, PaymentStatusEnum
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
-
-
-
 
 
 @router.get("/revenue")
@@ -39,12 +37,16 @@ def get_revenue(
     # Use date_trunc as the period column — no raw created_at in SELECT
     period_col = func.date_trunc(trunc, Order.created_at).label("period")
 
+    # 🚀 SECURED JOIN: Only pull orders that are linked to a 'paid' transaction status
     q = db.query(
         func.sum(Order.total_amount).label("revenue"),
         Order.branch_name,
         period_col,
+    ).join(
+        Transaction, Order.id == Transaction.order_id
     ).filter(
-        Order.status.in_(["delivered", "confirmed", "preparing", "out_for_delivery"])
+        Order.status.in_(["delivered", "confirmed", "preparing", "out_for_delivery"]),
+        Transaction.status == PaymentStatusEnum.paid
     )
 
     if date_filter is not None:
@@ -78,15 +80,29 @@ def get_summary(
 ):
     today = datetime.now().date()
 
-    q_revenue = db.query(func.sum(Order.total_amount)).filter(
+    # 🚀 REVENUE TODAY: Only summarize transactions explicitly marked as PAID
+    q_revenue = db.query(func.sum(Order.total_amount)).join(
+        Transaction, Order.id == Transaction.order_id
+    ).filter(
         func.date(Order.created_at) == today,
         Order.status.in_(["delivered", "confirmed", "preparing", "out_for_delivery"]),
+        Transaction.status == PaymentStatusEnum.paid,
     )
-    q_pending = db.query(func.count(Order.id)).filter(
-        Order.status == "pending"
+
+    # 🚀 PENDING ORDERS: Only show up if payment validation cleared first
+    q_pending = db.query(func.count(Order.id)).join(
+        Transaction, Order.id == Transaction.order_id
+    ).filter(
+        Order.status == "pending",
+        Transaction.status == PaymentStatusEnum.paid,
     )
-    q_today_count = db.query(func.count(Order.id)).filter(
-        func.date(Order.created_at) == today
+
+    # 🚀 ORDERS TODAY: Count total cleared and paid entries for the dashboard cards
+    q_today_count = db.query(func.count(Order.id)).join(
+        Transaction, Order.id == Transaction.order_id
+    ).filter(
+        func.date(Order.created_at) == today,
+        Transaction.status == PaymentStatusEnum.paid,
     )
 
     if branch != "all":
@@ -108,13 +124,18 @@ def get_recent_orders(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return the most recent orders for dashboard cards."""
+    """Return the most recent cleared orders for dashboard cards."""
     if getattr(current_user, "role", None) not in [RoleEnum.admin, RoleEnum.staff]:
-        # Keep consistent with other admin/staff endpoints: deny staff if not allowed.
-        # (Dashboard is intended for admin/staff only.)
         return []
 
-    q = db.query(Order).order_by(Order.created_at.desc()).limit(limit)
+    # 🚀 RECENT ORDERS MODIFICATION: Prevent unpaid or missing reference orders from leaking into dashboard streams
+    q = db.query(Order).join(
+        Transaction, Order.id == Transaction.order_id
+    ).filter(
+        Transaction.status == PaymentStatusEnum.paid
+    ).order_by(
+        Order.created_at.desc()
+    ).limit(limit)
 
     if branch and branch != "all":
         q = q.filter(Order.branch_name == branch)
@@ -141,4 +162,3 @@ def get_recent_orders(
         }
         for o in orders
     ]
-

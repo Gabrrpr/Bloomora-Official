@@ -142,8 +142,8 @@ export const api = {
     });
   },
   
-  async sendMessage(user_id, text, image_url = null) {
-    return api.post('/chats/messages', { user_id, text, image_url });
+  async sendMessage(user_id, text, image_url = null, context_id = null) {
+    return api.post('/chats/messages', { user_id, text, image_url, context_id });
   },
 
   async uploadChatImage(file) {
@@ -214,8 +214,16 @@ export const api = {
   },
 
   // ── Orders ────────────────────────────────────────────────────────────────
-  async createOrder({ items, delivery_address, delivery_notes, special_note, scheduled_at, payment_method }) {
-    return api.post('/orders/', { items, delivery_address, delivery_notes, special_note, scheduled_at, payment_method });
+  async createOrder({ items, delivery_address, delivery_notes, special_note, scheduled_at, payment_method, payment_reference }) {
+    return api.post('/orders/', { 
+      items, 
+      delivery_address, 
+      delivery_notes, 
+      special_note, 
+      scheduled_at, 
+      payment_method, 
+      payment_reference 
+    });
   },
 
   async confirmPayment(orderId) {

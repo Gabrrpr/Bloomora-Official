@@ -104,6 +104,8 @@ export default function Orders({ onNavigate }) {
                     />
                   </div>
 
+                  
+
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm font-bold text-gray-800">{order.order_number}</span>

@@ -70,6 +70,7 @@ def serialize_order(o) -> dict:
         "delivery_notes": o.delivery_notes,
         "scheduled_at": o.scheduled_at.isoformat() if getattr(o, 'scheduled_at', None) else None,
         "payment_status": o.transaction.status.value if hasattr(o, 'transaction') and o.transaction and hasattr(o.transaction.status, "value") else "pending",
+        "payment_reference": o.transaction.reference_number if hasattr(o, 'transaction') and o.transaction else None,
         "can_review": getattr(o, 'can_review', False),
         "has_reviewed": getattr(o, 'has_reviewed', False),
         "created_at": o.created_at.isoformat() if getattr(o, 'created_at', None) else None,
@@ -171,9 +172,13 @@ def create_orders(
     scheduled_at = payload.get("scheduled_at")
     payment_method = payload.get("payment_method", "qrph").lower()
     special_note = payload.get("special_note", None)
+    payment_reference = payload.get("payment_reference", "").strip()
 
     if not cart_items:
         raise HTTPException(status_code=400, detail="Cart is empty.")
+    
+    if payment_method == "qrph" and not payment_reference:
+        raise HTTPException(status_code=400, detail="Transaction Reference Number (TRN) is required to verify your payment.")
 
     created_orders = []
     total_checkout_amount = Decimal("0.00") # 🚀 Tracks the grand total for PayMongo
@@ -268,7 +273,8 @@ def create_orders(
             payment_method=pm,
             total_amount=order.total_amount,
             status=PaymentStatusEnum.pending,
-            reference_number=f"REF-{secrets.token_hex(6).upper()}",
+            reference_number=payment_reference if payment_method == "qrph" else f"PM-{secrets.token_hex(6).upper()}",
+            
         )
         db.add(transaction)
         db.commit()
@@ -318,8 +324,21 @@ def create_orders(
             if response.status_code == 200:
                 pm_data = response.json()
                 checkout_url = pm_data["data"]["attributes"]["checkout_url"]
+                
+                # 🚀 1. Grab the real Session ID from PayMongo
+                checkout_session_id = pm_data["data"]["id"] 
+
+                # 🚀 2. Update the transactions we just created to use this ID!
+                db.query(Transaction).filter(
+                    Transaction.order_id.in_(created_orders)
+                ).update(
+                    {"reference_number": checkout_session_id}, 
+                    synchronize_session=False
+                )
+                db.commit()
+                
             else:
-                print("PayMongo Error:", response.text) # Logs to your terminal for debugging
+                print("PayMongo Error:", response.text)
         except Exception as e:
             print("Failed to reach PayMongo:", str(e))
 
@@ -440,3 +459,47 @@ def admin_order_action(
         "message": "Order status updated",
         **serialize_order(order),
     }
+    
+@router.post("/paymongo-webhook")
+async def paymongo_webhook(request: Request, db: Session = Depends(get_db)):
+    """PayMongo calls this URL automatically when a payment succeeds."""
+    try:
+        # Get the JSON payload sent by PayMongo
+        payload = await request.json()
+        
+        # We only care about successful payments
+        event_type = payload.get("data", {}).get("attributes", {}).get("type")
+        
+        if event_type == "checkout_session.payment.paid":
+            # 🚀 Get the Session ID from the payload
+            # PayMongo nests this deep inside the event data
+            checkout_session_id = payload["data"]["attributes"]["data"]["id"]
+            
+            print(f"💰 PAYMONGO WEBHOOK: Payment received for {checkout_session_id}")
+
+            # 🚀 Find all transactions tied to this PayMongo session
+            transactions = db.query(Transaction).filter(
+                Transaction.reference_number == checkout_session_id,
+                Transaction.status == PaymentStatusEnum.pending
+            ).all()
+
+            for tx in transactions:
+                # 1. Mark transaction as Paid
+                tx.status = PaymentStatusEnum.paid
+                
+                # 2. Mark the parent order as Confirmed
+                order = db.query(Order).filter(Order.id == tx.order_id).first()
+                if order:
+                    order.status = OrderStatusEnum.confirmed
+                    
+                    # 3. Fire off the automated notification/email
+                    _notify_order(db, order, "confirmed")
+
+            db.commit()
+            
+        return {"status": "success", "message": "Webhook processed"}
+
+    except Exception as e:
+        print("❌ WEBHOOK ERROR:", str(e))
+        # Always return 200 to PayMongo, otherwise it will keep retrying and spamming your server
+        return {"status": "error", "message": "Handled gracefully"}

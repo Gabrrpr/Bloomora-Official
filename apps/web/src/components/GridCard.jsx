@@ -24,7 +24,7 @@ function WishlistBtn({ id, wishlist, toggleWishlist, small }) {
   return (
     <button
       onClick={(e) => { e.stopPropagation(); toggleWishlist(id); }}
-      className={`${sz} flex items-center justify-center rounded-lg transition-all flex-shrink-0`}
+      className={`${sz} flex items-center justify-center rounded-lg transition-all flex-shrink-0 cursor-pointer`}
       style={{ backgroundColor: wishlisted ? "#fef2f2" : "#f3f4f6", border: wishlisted ? "1px solid #fecaca" : "1px solid #e5e7eb" }}
     >
       <svg className="w-3.5 h-3.5" fill={wishlisted ? "#e11d48" : "none"} stroke={wishlisted ? "#e11d48" : "#9ca3af"} strokeWidth={2} viewBox="0 0 24 24">
@@ -38,26 +38,38 @@ export default function GridCard({ product, wishlist, toggleWishlist, onPreview 
   const currentPrice = Number(product.price) || 0;
   const oldPrice = Number(product.original_price || product.original) || 0;
   const isDiscounted = oldPrice > currentPrice;
+  
+  // 🚀 THE FIX: Calculate if out of stock
+  const isOutOfStock = product.stock <= 0 || !product.is_available || product.status === "inactive";
 
   return (
     <div
-      className="bg-white group hover:shadow-lg transition-shadow duration-200"
-      style={{ border: "1px solid #e5e7eb", borderRadius: "8px", overflow: "hidden", cursor: "pointer" }}
-      onClick={() => onPreview(product)}
+      className={`bg-white group transition-all duration-200 relative ${isOutOfStock ? "grayscale opacity-75 cursor-not-allowed" : "hover:shadow-lg cursor-pointer"}`}
+      style={{ border: "1px solid #e5e7eb", borderRadius: "8px", overflow: "hidden" }}
+      onClick={() => !isOutOfStock && onPreview(product)}
     >
+      {/* 🚀 THE FIX: Out of Stock Overlay */}
+      {isOutOfStock && (
+        <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/30 backdrop-blur-[1px]">
+          <span className="bg-gray-900 text-white text-[10px] sm:text-xs font-bold px-3 py-1.5 rounded shadow tracking-widest uppercase">
+            Out of Stock
+          </span>
+        </div>
+      )}
+
       <div className="relative overflow-hidden bg-gray-50" style={{ aspectRatio: "1/1" }}>
         <FallbackImage
           src={product.image || product.image_url}
           alt={product.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
-        {isDiscounted && (
+        {isDiscounted && !isOutOfStock && (
           <div className="absolute top-2 right-2 text-white text-[10px] font-bold px-1.5 py-0.5" style={{ backgroundColor: DG, borderRadius: "4px" }}>
             -{discount(oldPrice, currentPrice)}%
           </div>
         )}
       </div>
-      <div className="p-3">
+      <div className="p-3 relative z-10">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-baseline gap-1.5">
             <span className="text-base font-bold" style={{ color: G }}>₱{currentPrice.toLocaleString()}</span>
@@ -73,9 +85,10 @@ export default function GridCard({ product, wishlist, toggleWishlist, onPreview 
           <span className="text-xs text-gray-400">{product.rating || 5} ({product.reviews || 0})</span>
         </div>
         <button
+          disabled={isOutOfStock}
           onClick={(e) => { e.stopPropagation(); onPreview(product); }}
           className="w-full text-sm font-semibold py-2 text-white transition-all flex items-center justify-center gap-1.5"
-          style={{ backgroundColor: G, borderRadius: "6px", border: "none", cursor: "pointer" }}
+          style={{ backgroundColor: isOutOfStock ? "#9ca3af" : G, borderRadius: "6px", border: "none", cursor: isOutOfStock ? "not-allowed" : "pointer" }}
         >
           View Details
         </button>

@@ -4,6 +4,7 @@ from sqlalchemy import Column, String, Text, Enum, Boolean, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from .base import Base, now_utc
+from sqlalchemy.sql import func
 
 class RoleEnum(str, enum.Enum):
     admin    = "admin"

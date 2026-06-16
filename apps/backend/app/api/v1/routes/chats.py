@@ -130,8 +130,7 @@ async def create_message(
         sender=sender,
         image_url=message.image_url,
         is_read=0,
-        # 🚀 SAVES THE ORDER/PRODUCT CONTEXT IF PASSED
-        context_id=getattr(message, "context_id", None)
+        context_id=message.context_id
     )
     db.add(new_message)
     db.commit()
@@ -146,7 +145,7 @@ async def create_message(
         "sender": sender,
         "created_at": new_message.created_at.isoformat(),
         "is_read": new_message.is_read,
-        "context_id": getattr(new_message, "context_id", None)
+        "context_id": new_message.context_id
     }
 
     if sender == 'customer':
@@ -213,23 +212,23 @@ def get_all_conversations(
             orders_list = []
             for o in recent_orders:
                 try:
-                    product_name = "Custom"
-                    if o.product_id and o.product:
-                        try:
-                            product_name = o.product.name
-                        except Exception:
-                            pass
-                    elif o.arrangement_id and o.arrangement:
-                        try:
-                            product_name = o.arrangement.name
-                        except Exception:
-                            pass
+                    product_name = "Custom Order"
+                    
+                    # 🚀 THE FIX: Safely check for attributes before accessing them!
+                    if hasattr(o, 'product_name') and o.product_name:
+                        product_name = o.product_name
+                    elif hasattr(o, 'product') and o.product and hasattr(o.product, 'name'):
+                        product_name = o.product.name
+                    elif hasattr(o, 'items') and o.items:
+                        product_name = f"{len(o.items)} Item(s)"
+                    elif hasattr(o, 'arrangement') and o.arrangement and hasattr(o.arrangement, 'name'):
+                        product_name = o.arrangement.name
                     
                     orders_list.append({
                         "order_number": f"ORD-{o.id.hex[:8].upper()}",
                         "product": product_name,
                         "status": o.status.value if hasattr(o.status, 'value') else str(o.status),
-                        "total_amount": float(o.total_amount)
+                        "total_amount": float(o.total_amount) if hasattr(o, 'total_amount') and o.total_amount else 0.0
                     })
                 except Exception as e:
                     print(f"Error processing order {o.id}: {e}")

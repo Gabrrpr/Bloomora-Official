@@ -969,27 +969,94 @@ function ColorSection({ colors, color, errors, setColor, setErrors, isDark }) {
 }
 
 function QtySection({ qty, errors, setQty, setErrors, isDark }) {
+  const G = "#2E8B34";
+  const MAX_QTY = 99; // Prevents customers from accidentally ordering 10,000 items
+
+  const handleDecrement = () => {
+    if (qty > 1) {
+      setQty(qty - 1);
+      setErrors(e => ({ ...e, qty: false }));
+    }
+  };
+
+  const handleIncrement = () => {
+    if (qty < MAX_QTY) {
+      setQty((qty || 0) + 1);
+      setErrors(e => ({ ...e, qty: false }));
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const val = parseInt(e.target.value.replace(/\D/g, ''), 10);
+    setQty(isNaN(val) ? "" : Math.min(val, MAX_QTY));
+    setErrors(e => ({ ...e, qty: false }));
+  };
+
+  const handleBlur = () => {
+    if (!qty || qty < 1) setQty(1);
+  };
+
   return (
     <div>
       <p className="text-xs font-semibold uppercase tracking-widest mb-3 flex items-center gap-1"
         style={{ color: errors.qty ? "#ef4444" : isDark ? "#94a3b8" : "#374151" }}>
-        Size / Quantity <span className="text-red-400">*</span>
+        Quantity <span className="text-red-400">*</span>
         {errors.qty && <span className="normal-case tracking-normal font-normal text-red-400">required</span>}
       </p>
-      <div className="flex gap-2 flex-wrap">
-        {QTY_OPTIONS.map(q => (
-          <button key={q} onClick={() => { setQty(q); setErrors(e => ({...e,qty:false})) }}
-            className="px-4 py-2 rounded-lg text-sm transition-all cursor-pointer"
-            style={{
-              fontWeight: qty===q ? 600 : 400,
-              border: `1.5px solid ${qty===q ? (isDark ? "#4ade80" : G) : errors.qty ? "#fca5a5" : isDark ? "#334155" : "#e5e7eb"}`,
-              background: qty===q ? (isDark ? "rgba(74,222,128,0.15)" : G) : isDark ? "#1e293b" : "white",
-              color: qty===q ? (isDark ? "#4ade80" : "white") : isDark ? "#e2e8f0" : "#374151",
-              boxShadow: qty===q && isDark ? "0 0 10px rgba(74,222,128,0.2)" : "none"
-            }}>
-            {q}
-          </button>
-        ))}
+      
+      <div className="flex items-center rounded-lg border w-fit overflow-hidden transition-colors"
+        style={{ 
+          borderColor: errors.qty ? "#fca5a5" : isDark ? "#334155" : "#e5e7eb", 
+          backgroundColor: isDark ? "#0f172a" : "white",
+          boxShadow: errors.qty ? "0 0 0 1px #fee2e2" : "none"
+        }}>
+        
+        {/* Minus Button */}
+        <button 
+          onClick={handleDecrement}
+          disabled={qty <= 1}
+          className="w-10 h-10 flex items-center justify-center transition-colors disabled:opacity-30 cursor-pointer"
+          style={{ 
+            color: isDark ? "#e2e8f0" : "#374151", 
+            borderRight: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`,
+            backgroundColor: isDark ? (qty <= 1 ? "transparent" : "rgba(255,255,255,0.05)") : (qty <= 1 ? "#f9fafb" : "transparent")
+          }}
+          onMouseEnter={e => { if (qty > 1) e.currentTarget.style.backgroundColor = isDark ? "rgba(255,255,255,0.1)" : "#f3f4f6" }}
+          onMouseLeave={e => { if (qty > 1) e.currentTarget.style.backgroundColor = "transparent" }}
+        >
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M20 12H4"/>
+          </svg>
+        </button>
+
+        {/* Number Input */}
+        <input 
+          type="text" 
+          inputMode="numeric"
+          value={qty} 
+          onChange={handleInputChange}
+          onBlur={handleBlur}
+          className="w-14 h-10 text-center text-sm font-bold bg-transparent outline-none m-0 p-0"
+          style={{ color: isDark ? "#f1f5f9" : "#111827" }}
+        />
+
+        {/* Plus Button */}
+        <button 
+          onClick={handleIncrement}
+          disabled={qty >= MAX_QTY}
+          className="w-10 h-10 flex items-center justify-center transition-colors cursor-pointer"
+          style={{ 
+            color: isDark ? "#e2e8f0" : "#374151", 
+            borderLeft: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`,
+            backgroundColor: "transparent"
+          }}
+          onMouseEnter={e => { if (qty < MAX_QTY) e.currentTarget.style.backgroundColor = isDark ? "rgba(255,255,255,0.1)" : "#f3f4f6" }}
+          onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
+        >
+          <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4"/>
+          </svg>
+        </button>
       </div>
     </div>
   )
@@ -1255,7 +1322,7 @@ function CareSection({ isDark }) {
    ════════════════════════════════════════════════════════════════ */
 export default function ProductPreviewModal({ product, products = [], onClose, onNavigate }) {
   const [color,         setColor]         = useState(null)
-  const [qty,           setQty]           = useState(null)
+  const [qty, setQty] = useState(1)
   const [addOns,        setAddOns]        = useState([])
   const [delivType,     setDelivType]     = useState(null)
   const [customDate,    setCustDate]      = useState("")
@@ -1416,7 +1483,18 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
     .map(a => ({ id: a.id, name: a.name, price: a.price }))
 
   const openChatWithQuote   = (quote)   => window.dispatchEvent(new CustomEvent("bloomora:open-chat", { detail: { quote } }))
-  const openChatWithProduct = ()        => window.dispatchEvent(new CustomEvent("bloomora:open-chat", { detail: { product: { name: product.name, price: product.price, image: product.image } } }))
+  const openChatWithProduct = () => {
+  window.dispatchEvent(new CustomEvent("bloomora:open-chat", { 
+    detail: { 
+      product: { 
+        id: product.id, 
+        name: product.name, 
+        price: product.price, 
+        image: product.image 
+      } 
+    } 
+  }));
+};
 
   /* Shared prop bundles */
   const colorProps    = { colors, color, errors, setColor, setErrors, isDark }

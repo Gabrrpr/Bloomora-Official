@@ -567,6 +567,14 @@ export default function AdminOrders() {
                 </div>
               </div>
 
+              {/*NEW: Payment Reference Block */}
+              <div className="p-3 rounded-lg border mb-3" style={{ backgroundColor: isDark ? "#0f172a" : "#f8fafc", borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
+                <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>Payment Reference (TRN)</p>
+                <p className="text-sm font-mono font-semibold" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>
+                  {viewingOrder.payment_reference || "No Reference Provided"}
+                </p>
+              </div>
+
               {/* Totals and Metadata */}
               <div className="grid grid-cols-2 gap-3">
                 <div>

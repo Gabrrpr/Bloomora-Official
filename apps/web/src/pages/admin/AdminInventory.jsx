@@ -44,7 +44,7 @@ function FlowerLoader({ message = "Loading...", isDark = false }) {
 
 function InvStatusBadge({ status, isDark }) {
   const styles = {
-    "Active":       { bg: isDark ? "rgba(74,222,128,0.12)"  : "#f0fdf4", text: isDark ? "#4ade80" : "#16a34a" },
+    "Active":         { bg: isDark ? "rgba(74,222,128,0.12)"  : "#f0fdf4", text: isDark ? "#4ade80" : "#16a34a" },
     "Low Stock":    { bg: isDark ? "rgba(251,191,36,0.12)"  : "#fffbeb", text: isDark ? "#fbbf24" : "#d97706" },
     "Out of Stock": { bg: isDark ? "rgba(248,113,113,0.12)" : "#fef2f2", text: isDark ? "#f87171" : "#dc2626" },
   }
@@ -192,7 +192,7 @@ function ViewInventoryModal({ item, onClose, isDark }) {
   )
 }
 
-// ── Edit Inventory Form (No longer Add Item) ──
+// ── Edit Inventory Form ──
 function EditItemForm({ item, onBack, onSaveSuccess, isDark }) {
   const [f, setF] = useState({ 
     name: item.name || "", 
@@ -221,15 +221,35 @@ function EditItemForm({ item, onBack, onSaveSuccess, isDark }) {
   };
 
   const handleSave = async () => {
+    // 🚀 NEW: Strict Validation before saving
+    const stockVal = parseInt(f.stock);
+    const reorderVal = parseInt(f.reorderLevel) || 0;
+    const costVal = parseFloat(f.costPerUnit) || 0;
+
+    if (isNaN(stockVal) || stockVal < 0) {
+      alert("⚠️ Current Stock must be a valid number (0 or higher).");
+      return;
+    }
+    if (reorderVal < 0) {
+      alert("⚠️ Reorder Level cannot be negative.");
+      return;
+    }
+    if (costVal < 0) {
+      alert("⚠️ Cost per unit cannot be negative.");
+      return;
+    }
+
     try {
       const formData = new FormData();
       if (f.name) formData.append("name", f.name);
       if (f.category) formData.append("category", f.category);
       if (f.unit) formData.append("unit_type", f.unit);
-      if (f.stock !== "") formData.append("stock", parseInt(f.stock) || 0);
-      if (f.reorderLevel !== "") formData.append("reorder_point", parseInt(f.reorderLevel) || 10);
-      if (f.costPerUnit !== "") formData.append("cost_per_unit", parseFloat(f.costPerUnit) || 0.00);
       
+      // 🚀 NEW: Append validated values
+      formData.append("stock", stockVal); 
+      formData.append("reorder_point", reorderVal);
+      formData.append("cost_per_unit", costVal);
+
       const statusMap = { "Active": "active", "Low Stock": "active", "Out of Stock": "active", "Discontinued": "inactive" };
       if (f.status) formData.append("status", statusMap[f.status] || "active");
       if (f.branches) formData.append("branches", JSON.stringify(f.branches));
@@ -293,16 +313,17 @@ function EditItemForm({ item, onBack, onSaveSuccess, isDark }) {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <FL isDark={isDark}>Current Stock</FL>
+              {/* 🚀 NEW: Unlocked Input with Warning Disclaimer */}
               <FInput 
                 type="number" 
                 placeholder="0" 
                 value={f.stock} 
-                onChange={() => {}}
-                disabled={true}
+                onChange={s("stock")}
+                disabled={false}
                 isDark={isDark} 
               />
-              <p className="text-[10px] mt-1 text-amber-600 italic">
-                To update stock quantities, use the "Invoice" button on the main page.
+              <p className="text-[10px] mt-1.5 p-2 rounded-lg bg-amber-50 text-amber-700 font-medium leading-snug border border-amber-200 dark:bg-amber-900/20 dark:border-amber-700/30 dark:text-amber-500">
+                ⚠️ <strong>Warning:</strong> Manually changing stock here bypasses restock logs. This may affect inventory accuracy. Use the "Invoice" button for standard deliveries.
               </p>
             </div>
             <div><FL isDark={isDark}>Reorder Level</FL><FInput type="number" placeholder="10" value={f.reorderLevel} onChange={s("reorderLevel")} isDark={isDark} /></div>
@@ -381,6 +402,7 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState(null);
   const [branch, setBranch] = useState("Manila");
+  const [valErr, setValErr] = useState(""); // 🚀 NEW: Error state for validation
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -419,7 +441,23 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
 
   const handleSave = async () => {
     if (validLines.length === 0) return;
+
+    // 🚀 NEW: Strict Validation Check
+    let errorFound = "";
+    validLines.forEach(id => {
+      const q = parseInt(lines[id].qty);
+      const cost = parseFloat(lines[id].cost);
+      if (isNaN(q) || q < 0) errorFound = `Invalid quantity for ${itemById(id).name}`;
+      if (isNaN(cost) || cost < 0) errorFound = `Invalid cost for ${itemById(id).name}`;
+    });
+
+    if (errorFound) {
+      setValErr(errorFound);
+      return;
+    }
+
     setSaving(true);
+    setValErr("");
     const ok = [], failed = [];
     const updatedItemsForState = []; 
 
@@ -504,6 +542,15 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
           </button>
         </div>
 
+        {/* 🚀 NEW: Validation Error Banner */}
+        {valErr && (
+          <div className="px-6 pt-4">
+            <div className="px-4 py-2.5 text-sm font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg dark:bg-red-900/20 dark:border-red-800/40 dark:text-red-400">
+              {valErr}
+            </div>
+          </div>
+        )}
+
         <div className="px-6 py-4 overflow-y-auto" style={{ flex: 1 }}>
           
           <div className="mb-5">
@@ -573,7 +620,7 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                 const item = itemById(id)
                 if (!item) return null
                 const received = parseInt(lines[id].qty) || 0
-                const newTotal = (parseInt(item .stock) || 0) + received
+                const newTotal = (parseInt(item.stock) || 0) + received
                 return (
                   <div key={id} className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-2 p-3 sm:pb-6 rounded-lg"
                     style={{ backgroundColor: c.rowBg, border: `1px solid ${c.bdr}` }}>

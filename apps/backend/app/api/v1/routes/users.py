@@ -3,18 +3,16 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
-import uuid
-import secrets
-import io
-import time
+import uuid, secrets, io, time
 from PIL import Image
 
-from app.core.dependencies import get_db, get_current_user, require_staff
-from app.models import User, RoleEnum, BranchEnum
 from app.api.v1.routes.auth import hash_password, generate_username 
+from app.core.dependencies import get_db, get_current_user, require_staff
+from app.core.supabase import supabase
+from app.models import User, RoleEnum, BranchEnum, ActivityLog
 from pydantic import BaseModel, EmailStr
 from app.services.email_service import send_otp_email, send_staff_confirm_email
-from app.core.supabase import supabase
+from app.utils.logger import log_activity
 
 router = APIRouter(tags=["Users"]) 
 
@@ -276,6 +274,23 @@ def activate_staff_account(payload: StaffActivateRequest, db: Session = Depends(
     db.commit()
     return {"status": "success", "message": "Account activated successfully. You can now log in."}
 
+@router.get("/activity-logs")
+def get_activity_logs(db: Session = Depends(get_db)):
+    # Fetch all logs, ordered by newest first
+    logs = db.query(ActivityLog).order_by(ActivityLog.created_at.desc()).all()
+    
+    # Format them cleanly for the frontend
+    return [
+        {
+            "id": str(log.id),
+            "user_id": str(log.user_id) if log.user_id else None,
+            "role": log.role,
+            "action": log.action,
+            "ip_address": log.ip_address,
+            "created_at": log.created_at.isoformat() if log.created_at else None
+        }
+        for log in logs
+    ]
 
 @router.get("/{user_id}", response_model=dict)
 def get_user(

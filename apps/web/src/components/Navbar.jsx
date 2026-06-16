@@ -416,8 +416,13 @@ function SearchOverlay({ onClose, onNavigate }) {
   }, []);
 
   const doSearch = (term) => {
-    if (term && term.trim()) { onNavigate?.("shop"); onClose(); }
-  };
+  if (term && term.trim()) {
+    window.history.pushState({}, '', `/shop?search=${encodeURIComponent(term)}`);
+    onNavigate("shop");                          // 1. switch to shop page
+    window.dispatchEvent(new Event('popstate')); // 2. trigger URL read
+    onClose();                                   // 3. close overlay
+  }
+};
 
   const fillSearch = (term) => {
     setQuery(term);
