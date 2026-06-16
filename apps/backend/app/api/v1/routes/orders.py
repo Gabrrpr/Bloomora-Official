@@ -188,62 +188,57 @@ def create_orders(
         product_id = None
 
         item_id = item.get("id", "")
-        group = str(item.get("group", "")).lower()
         qty = int(item.get("qty", 1))
 
-        is_custom_request = "describe" in group or "mix" in group or "custom" in group or str(item_id).startswith("arr-")
+        # Safely parse the UUID (removes 'arr-' prefix if the frontend happens to send it)
+        try:
+            clean_id = str(item_id).replace("arr-", "")
+            item_uuid = uuid.UUID(clean_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid ID format: {item_id}")
+
         db_price = Decimal("0.00")
 
-        if is_custom_request:
-            try:
-                arr_uuid = uuid.UUID(str(item_id))
-                arrangement = db.query(Arrangement).filter(Arrangement.id == arr_uuid).with_for_update().first()
-                if not arrangement:
-                    raise HTTPException(status_code=404, detail="Custom arrangement session expired.")
-                
-                # 🚀 WAREHOUSE LOGIC: Deduct Raw Materials for Mix & Match
-                if hasattr(arrangement, 'items'):
-                    for component in arrangement.items:
-                        inv = db.query(Inventory).filter(Inventory.product_id == component.product_id).with_for_update().first()
-                        
-                        if not inv or inv.current_stock < (component.quantity * qty):
-                            raise HTTPException(status_code=400, detail=f"Insufficient raw materials for custom order.")
-                        
-                        inv.current_stock -= (component.quantity * qty)
-                        
-                        if inv.current_stock <= 0:
-                            prod = db.query(Product).filter(Product.id == component.product_id).first()
-                            if prod: prod.is_available = False
+        # 🚀 SMART CHECK: Ask the database if this ID belongs to an Arrangement first
+        arrangement = db.query(Arrangement).filter(Arrangement.id == item_uuid).with_for_update().first()
 
-                db_price = arrangement.estimated_price
-                arrangement_id = arrangement.id
-                
-            except ValueError:
-                raise HTTPException(status_code=400, detail="Invalid custom arrangement ID.")
-                
+        if arrangement:
+            # --- IT IS AN ARRANGEMENT ---
+            if hasattr(arrangement, 'items') and arrangement.items:
+                for component in arrangement.items:
+                    inv = db.query(Inventory).filter(Inventory.product_id == component.product_id).with_for_update().first()
+                    
+                    if not inv or inv.current_stock < (component.quantity * qty):
+                        raise HTTPException(status_code=400, detail="Insufficient raw materials for custom order.")
+                    
+                    inv.current_stock -= (component.quantity * qty)
+                    
+                    if inv.current_stock <= 0:
+                        prod = db.query(Product).filter(Product.id == component.product_id).first()
+                        if prod: prod.is_available = False
+
+            db_price = arrangement.estimated_price
+            arrangement_id = arrangement.id
+            
         else:
-            try:
-                product_id = uuid.UUID(str(item_id))
-                
-                product = db.query(Product).filter(Product.id == product_id).first()
-                inventory = db.query(Inventory).filter(Inventory.product_id == product_id).with_for_update().first()
-                
-                if not product or not product.is_available or not inventory:
-                    raise HTTPException(status_code=404, detail=f"Product unavailable: {item_id}")
-                
-                # 🚀 WAREHOUSE LOGIC: Deduct Standard Product Stock
-                if inventory.current_stock < qty:
-                    raise HTTPException(status_code=400, detail=f"Insufficient stock for {product.name}. Only {inventory.current_stock} left.")
-                
-                inventory.current_stock -= qty
-                if inventory.current_stock <= 0:
-                    product.is_available = False
-                
-                db_price = product.price
-                
-            except ValueError:
-                raise HTTPException(status_code=400, detail=f"Invalid Product ID: {item_id}")
+            # --- IT MUST BE A STANDARD PRODUCT ---
+            product = db.query(Product).filter(Product.id == item_uuid).first()
+            inventory = db.query(Inventory).filter(Inventory.product_id == item_uuid).with_for_update().first()
+            
+            if not product or not product.is_available or not inventory:
+                raise HTTPException(status_code=404, detail=f"Product unavailable: {item_id}")
+            
+            if inventory.current_stock < qty:
+                raise HTTPException(status_code=400, detail=f"Insufficient stock. Only {inventory.current_stock} left.")
+            
+            inventory.current_stock -= qty
+            if inventory.current_stock <= 0:
+                product.is_available = False
+            
+            db_price = product.price
+            product_id = product.id
 
+        # --- Proceed with creating the Order ---
         item_total = db_price * qty
         total_checkout_amount += item_total
 
@@ -264,17 +259,22 @@ def create_orders(
         db.commit()
         db.refresh(order)
 
-        try: pm = PaymentMethodEnum(payment_method)
-        except ValueError: pm = PaymentMethodEnum.qrph
+        try: 
+            pm = PaymentMethodEnum(payment_method)
+        except ValueError: 
+            pm = PaymentMethodEnum.qrph
+
+        # 2. Determine the provider based on the raw input
+        is_online_payment = payment_method in ["gcash", "paymaya", "card", "qrph", "paymongo"]
 
         transaction = Transaction(
             id=uuid.uuid4(),
             order_id=order.id,
-            payment_method=payment_method, # Must match one of your constraint types: 'qrph', 'cash', etc.
+            payment_method=pm.value, # 🚀 FIX: Use pm.value to guarantee it passes the DB Check Constraint!
             total_amount=order.total_amount,
             status='pending',
             reference_number=payment_reference,
-            provider='manual', # 🚀 Added to satisfy NOT NULL constraint
+            provider='paymongo' if is_online_payment else 'manual', # 🚀 FIX: Put PayMongo in the correct column!
         )
         db.add(transaction)
         db.commit()
@@ -431,28 +431,27 @@ def confirm_payment(
 @router.post("/paymongo-webhook")
 async def paymongo_webhook(request: Request, db: Session = Depends(get_db)):
     try:
-        # 1. Parse the incoming JSON from PayMongo
         payload = await request.json()
+        data = payload.get("data", {}).get("attributes", {})
         
-        data = payload.get("data", {})
-        attributes = data.get("attributes", {})
+        # 1. Inspect the payload type
+        event_type = data.get("type")
         
-        # 2. Check if the payment was successful
-        # Note: Depending on your PayMongo API version, the structure is typically 
-        # inside data.attributes.type. If this doesn't trigger, print(payload) 
-        # to see the exact structure PayMongo is sending.
-        if attributes.get("type") == "checkout_session.payment.paid":
-            session_id = data.get("id")
+        if event_type == "payment.paid":
+            # 2. Extract the Payment Intent ID from the deep payload
+            # The structure is data -> attributes -> data -> attributes
+            inner_data = data.get("data", {}).get("attributes", {})
+            pi_id = inner_data.get("payment_intent_id")
             
-            # 3. Find the transaction
+            # 3. Look up transaction. 
+            # NOTE: You MUST have saved this ID when creating the order!
             tx = db.query(Transaction).filter(
-                Transaction.provider_checkout_session_id == session_id
+                Transaction.provider_payment_intent_id == pi_id
             ).first()
 
             if tx:
                 tx.status = 'paid'
                 tx.paid_at = datetime.utcnow()
-                tx.raw_webhook_event = payload 
                 
                 # 4. Update the Order status
                 order = db.query(Order).filter(Order.id == tx.order_id).first()
@@ -460,15 +459,15 @@ async def paymongo_webhook(request: Request, db: Session = Depends(get_db)):
                     order.status = 'confirmed'
                 
                 db.commit()
-                print(f"✅ Payment Verified for: {session_id}")
+                print(f"✅ Payment Verified for: {pi_id}")
+            else:
+                print(f"⚠️ No transaction found for Payment Intent: {pi_id}")
         
-        # 5. ALWAYS return 200 OK so PayMongo stops sending this specific event
         return {"status": "success"}
 
     except Exception as e:
         print("❌ WEBHOOK ERROR:", str(e))
-        # Even on error, we return 200 so PayMongo doesn't flag your endpoint as "down"
-        return {"status": "error", "message": "Handled gracefully"}
+        return {"status": "error"}
     
 @router.get("/transactions", response_model=List[dict])
 def list_transactions(

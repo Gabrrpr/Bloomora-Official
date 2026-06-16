@@ -60,7 +60,7 @@ function AppContent() {
     
     if (path.includes("/oauth/callback") && hasCode) return "oauth-callback";
     if (path.includes("activate-staff")) return "activate-staff";
-    
+    if (path.includes("/confirmation")) return "confirmation";
     if (path.includes("/login")) return "login";
     if (path.includes("/register")) return "register";
     if (path.includes("/staff") || path.includes("/admin")) return "admin";
@@ -86,6 +86,7 @@ function AppContent() {
       else if (path.includes("/staff") || path.includes("admin")) {
         setPage("admin");
       } else if (path.includes("activate-staff")) setPage("activate-staff");
+      else if (path.includes("/confirmation")) setPage("confirmation");
       else if (path === "/" || path === "") setPage("home");
     };
     window.addEventListener("popstate", handleLocationChange);

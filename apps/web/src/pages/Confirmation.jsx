@@ -4,16 +4,59 @@ const G = "#2E8B34"
 
 export default function Confirmation({ onNavigate }) {
   const [order, setOrder] = useState(null)
+  const [isPaid, setIsPaid] = useState(false)
+  const [loading, setLoading] = useState(true)
 
+  // 1. Load initial data
   useEffect(() => {
     try {
       const raw = localStorage.getItem("bloomora_last_order")
-      if (raw) setOrder(JSON.parse(raw))
+      if (raw) {
+        const parsedOrder = JSON.parse(raw)
+        setOrder(parsedOrder)
+        
+        // If it's already paid, skip loading
+        if (parsedOrder.payment_status === 'paid') {
+          setIsPaid(true)
+          setLoading(false)
+        } else if (parsedOrder.payment_method !== "paymongo") {
+          // If it's manual (QRPH), don't show the "Verifying" loader
+          setLoading(false)
+        }
+      } else {
+        setLoading(false)
+      }
     } catch {
       setOrder(null)
+      setLoading(false)
     }
   }, [])
 
+  // 2. Polling logic (Only if payment is pending)
+  useEffect(() => {
+    if (!order || !order.orderIds?.[0] || isPaid || order.payment_method !== "paymongo") return
+
+    const orderId = order.orderIds[0]
+
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/orders/${orderId}`)
+        const data = await response.json()
+        
+        if (data.payment_status === 'paid') {
+          setIsPaid(true)
+          setLoading(false)
+          clearInterval(interval)
+        }
+      } catch (err) {
+        console.error("Polling failed", err)
+      }
+    }, 3000)
+
+    return () => clearInterval(interval)
+  }, [order, isPaid])
+
+  // Initial State: No Order
   if (!order) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#F7F8FA" }}>
@@ -27,15 +70,23 @@ export default function Confirmation({ onNavigate }) {
     )
   }
 
+  // Loading State: Waiting for Webhook
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#F7F8FA" }}>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-700 mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Verifying your payment...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // Success State: Render Receipt
   const placedDate = order.placedAt
     ? new Date(order.placedAt).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })
     : "—"
 
-  const txnId = order.orderIds?.[0]
-    ? `TRX-${order.orderIds[0].slice(0, 8).toUpperCase()}`
-    : "TRX-000000"
-
-  // 🚀 Helper to format payment method nicely
   const getPaymentLabel = () => {
     if (order.payment_method === "paymongo") return "Online Payment (PayMongo)";
     if (order.payment_method === "qrph") return "Manual Transfer (QRPh)";
@@ -58,7 +109,7 @@ export default function Confirmation({ onNavigate }) {
               {order.payment_method === "qrph" && " We will verify your payment reference shortly."}
             </p>
 
-            {/* Delivery */}
+            {/* Delivery Details */}
             <div className="mb-6">
               <h2 className="text-base font-semibold text-gray-800 mb-4">Delivery Details</h2>
               <div className="space-y-2 text-sm">
@@ -101,7 +152,6 @@ export default function Confirmation({ onNavigate }) {
               </div>
             </div>
 
-            {/* Items */}
             <div className="px-5 divide-y divide-gray-100">
               {order.items?.map((item, i) => (
                 <div key={i} className="py-3.5 flex items-center gap-3">
@@ -117,7 +167,6 @@ export default function Confirmation({ onNavigate }) {
               ))}
             </div>
 
-            {/* Totals */}
             <div className="px-5 py-4 border-t border-gray-100 bg-gray-50/50 space-y-2">
               <div className="flex justify-between text-sm text-gray-500"><span>Subtotal</span><span>₱{(order.subtotal || 0).toLocaleString()}.00</span></div>
               <div className="flex justify-between text-base font-bold text-gray-800 pt-2 border-t border-gray-200 mt-2">

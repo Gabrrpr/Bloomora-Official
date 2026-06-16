@@ -248,9 +248,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
   const [form, setForm] = useState({ 
     name:"", group:"floral", category:"", productType:"", 
     price:"", 
-    // 🚀 NEW: Added Base Price and Markup for Add Modal
-    basePrice: "", markupPercentage: "", 
-    markupPercentage:"10",
+    basePrice: "", markupPercentage: "10", 
     availability:"Available", 
     status:"Active", description:"", image_url:"", 
     season_key:"", limited_start_at:"", limited_end_at:"",
@@ -262,7 +260,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     tags: "" 
   })
 
-  // 🚀 NEW: Auto-compute pricing logic
+  // 🚀 Auto-compute pricing logic
   const handlePricingChange = (field, value) => {
     setForm(prev => {
       const next = { ...prev, [field]: value };
@@ -374,6 +372,17 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     }));
   };
 
+  const handleUpdateCompositionQty = (productId, newQty) => {
+    setForm(prev => ({
+      ...prev,
+      composition: prev.composition.map(item => 
+        item.product_id === productId 
+          ? { ...item, quantity: newQty === "" ? "" : parseInt(newQty) } 
+          : item
+      )
+    }));
+  };
+
   const handleUpload = async (e) => {
     const file = e.target.files[0]; if (!file) return
     setUploading(true)
@@ -398,7 +407,6 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
       fd.append("category", form.category.toLowerCase().trim());
       fd.append("product_type", form.productType.toLowerCase().trim());
       
-      // 🚀 NEW: Append all pricing data
       fd.append("price", String(form.price));
       fd.append("base_price", String(form.basePrice || 0));
       fd.append("markup_percentage", String(form.markupPercentage || 0));
@@ -422,12 +430,6 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
         const parsedTags = form.tags.split(",").map(t => t.trim()).filter(Boolean);
         fd.append("tags", JSON.stringify(parsedTags));
       }
-
-      console.log("--- Payload Debug ---");
-        for (let pair of fd.entries()) {
-            console.log(pair[0] + ': ' + pair[1]);
-        }
-        console.log("---------------------");
 
       const res = await api.createProduct(fd);
       const newProduct = {
@@ -587,7 +589,6 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             <p className="text-[10px] mt-1" style={{ color: d.subC }}>Words entered here help customers find this product via search.</p>
           </div>
 
-          {/* 🚀 NEW PRICING GRID */}
           <div className="p-4 rounded-xl mb-4" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
@@ -671,7 +672,6 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             </div>
           </div>
 
-          {/* OCCASIONS SELECTION GRID */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {[
               "Anniversary", "Birthday", "Congratulation", "Get Well", 
@@ -695,7 +695,6 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             ))}
           </div>
 
-          {/* BRANCHES SELECTION GRID */}
           <div className="mt-4 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
             <MLabel d={d}>Available Branches <span style={{ color:"#f87171" }}>*</span></MLabel>
             <p className="text-xs mb-3" style={{ color: d.subC }}>
@@ -785,12 +784,21 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
                 <input 
                   type="number" 
                   min="1" 
-                  max={selectedMaterial ? selectedMaterial.stock : 1} 
+                  max={selectedMaterial ? selectedMaterial.stock : undefined} 
                   value={compQty} 
                   onChange={e => {
-                    const val = Number(e.target.value);
-                    const maxAvailable = selectedMaterial ? selectedMaterial.stock : 1;
+                    if (e.target.value === "") {
+                      setCompQty("");
+                      return;
+                    }
+                    const val = parseInt(e.target.value, 10);
+                    const maxAvailable = selectedMaterial ? selectedMaterial.stock : 9999;
                     setCompQty(val > maxAvailable ? maxAvailable : val);
+                  }}
+                  onBlur={e => {
+                    if (e.target.value === "" || Number(e.target.value) < 1) {
+                      setCompQty(1);
+                    }
                   }}
                   className="w-full px-3 py-2 text-sm border rounded-md outline-none text-center h-[42px]"
                   style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }} 
@@ -810,11 +818,22 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
                 {form.composition.map((item) => (
                   <div key={item.product_id} className="flex items-center justify-between p-2 rounded-lg border" style={{ backgroundColor: d.cardBg, borderColor: d.cardBdr }}>
                     <div className="flex items-center gap-3">
-                      <span className="flex items-center justify-center w-7 h-7 rounded-md text-xs font-bold" style={{ backgroundColor: `${G}15`, color: G }}>
-                        {item.quantity}x
-                      </span>
+                      <input 
+                        type="number" 
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => handleUpdateCompositionQty(item.product_id, e.target.value)}
+                        onBlur={(e) => {
+                          if (e.target.value === "") {
+                             handleUpdateCompositionQty(item.product_id, 1);
+                          }
+                        }}
+                        className="w-12 h-8 rounded-md text-center text-xs font-bold border"
+                        style={{ backgroundColor: `${G}15`, color: G, borderColor: G }}
+                      />
                       <span className="text-sm font-semibold" style={{ color: d.cellC }}>{item.name}</span>
                     </div>
+
                     <button type="button" onClick={() => handleRemoveCompositionItem(item.product_id)} className="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                     </button>
@@ -825,11 +844,10 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
           </div>
 
           <div>
-            <MLabel d={d}>Description <span style={{ color:d.subC, fontWeight:400 }}>(optional)</span></MLabel>
+            <MLabel d={d}>Description <span style={{ color: d.subC, fontWeight: 400 }}>(optional)</span></MLabel>
             <MTextarea value={form.description} onChange={set("description")} placeholder="Brief description..." d={d}/>
           </div>
         </div>
-
         <div className="flex items-center justify-end gap-2 px-6 py-5 flex-shrink-0"
           style={{ borderTop:`1px solid ${d.modalFtrBdr}`, backgroundColor:d.modalFtr }}>
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
@@ -840,7 +858,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
           <button type="button" onClick={handleSave} disabled={isUploading || isSaving || form.branches.length === 0}
             className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background:`linear-gradient(135deg,${DG},${G})` }}>
-            {isSaving ? "Adding..." : "Add Product"}
+            {isSaving ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </div>
@@ -867,7 +885,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     productType: product.product_type || "",
     price: product.price ? String(product.price) : "",
     
-    // 🚀 NEW: Added Base Price and Markup for Edit Modal
     basePrice: product.base_price ?? "", 
     markupPercentage: product.markup_percentage ?? "10",
     
@@ -886,7 +903,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     tags: Array.isArray(product.tags) ? product.tags.join(", ") : (product.tags || "")
   })
 
-  // 🚀 NEW: Auto-compute pricing logic
+  // 🚀 Auto-compute pricing logic
   const handlePricingChange = (field, value) => {
     setForm(prev => {
       const next = { ...prev, [field]: value };
@@ -999,6 +1016,17 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     }));
   };
 
+  const handleUpdateCompositionQty = (productId, newQty) => {
+    setForm(prev => ({
+      ...prev,
+      composition: prev.composition.map(item => 
+        item.product_id === productId 
+          ? { ...item, quantity: newQty === "" ? "" : parseInt(newQty) } 
+          : item
+      )
+    }));
+  };
+
   const handleUpload = async (e) => {
     const file=e.target.files[0]; if (!file) return
     setUploading(true)
@@ -1023,7 +1051,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
       fd.append("category", (form.category || "").toLowerCase().trim());
       fd.append("product_type", (form.productType || "").toLowerCase().trim());
       
-      // 🚀 NEW: Append all pricing data
       fd.append("price", String(form.price));
       fd.append("base_price", String(form.basePrice || 0));
       fd.append("markup_percentage", String(form.markupPercentage || 0));
@@ -1189,7 +1216,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             <MSel value={form.status} onChange={set("status")} options={["Active", "Inactive", "On Sale"]} d={d}/>
           </div>
 
-          {/* 🚀 NEW PRICING GRID */}
           <div className="p-4 rounded-xl mb-4" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
@@ -1273,7 +1299,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             </div>
           </div>
 
-          {/* OCCASIONS SELECTION GRID */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {[
               "Anniversary", "Birthday", "Congratulation", "Get Well", 
@@ -1297,7 +1322,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             ))}
           </div>
 
-          {/* BRANCHES SELECTION GRID */}
           <div className="mt-4 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
             <MLabel d={d}>Available Branches <span style={{ color:"#f87171" }}>*</span></MLabel>
             <p className="text-xs mb-3" style={{ color: d.subC }}>
@@ -1387,12 +1411,21 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
                 <input 
                   type="number" 
                   min="1" 
-                  max={selectedMaterial ? selectedMaterial.stock : 1} 
+                  max={selectedMaterial ? selectedMaterial.stock : undefined} 
                   value={compQty} 
                   onChange={e => {
-                    const val = Number(e.target.value);
-                    const maxAvailable = selectedMaterial ? selectedMaterial.stock : 1;
+                    if (e.target.value === "") {
+                      setCompQty("");
+                      return;
+                    }
+                    const val = parseInt(e.target.value, 10);
+                    const maxAvailable = selectedMaterial ? selectedMaterial.stock : 9999;
                     setCompQty(val > maxAvailable ? maxAvailable : val);
+                  }}
+                  onBlur={e => {
+                    if (e.target.value === "" || Number(e.target.value) < 1) {
+                      setCompQty(1);
+                    }
                   }}
                   className="w-full px-3 py-2 text-sm border rounded-md outline-none text-center h-[42px]"
                   style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }} 
@@ -1412,11 +1445,22 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
                 {form.composition.map((item) => (
                   <div key={item.product_id} className="flex items-center justify-between p-2 rounded-lg border" style={{ backgroundColor: d.cardBg, borderColor: d.cardBdr }}>
                     <div className="flex items-center gap-3">
-                      <span className="flex items-center justify-center w-7 h-7 rounded-md text-xs font-bold" style={{ backgroundColor: `${G}15`, color: G }}>
-                        {item.quantity}x
-                      </span>
+                      <input 
+                        type="number" 
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => handleUpdateCompositionQty(item.product_id, e.target.value)}
+                        onBlur={(e) => {
+                          if (e.target.value === "") {
+                             handleUpdateCompositionQty(item.product_id, 1);
+                          }
+                        }}
+                        className="w-12 h-8 rounded-md text-center text-xs font-bold border"
+                        style={{ backgroundColor: `${G}15`, color: G, borderColor: G }}
+                      />
                       <span className="text-sm font-semibold" style={{ color: d.cellC }}>{item.name}</span>
                     </div>
+
                     <button type="button" onClick={() => handleRemoveCompositionItem(item.product_id)} className="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                     </button>
@@ -1427,11 +1471,10 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
           </div>
 
           <div>
-            <MLabel d={d}>Description <span style={{ color:d.subC, fontWeight:400 }}>(optional)</span></MLabel>
+            <MLabel d={d}>Description <span style={{ color: d.subC, fontWeight: 400 }}>(optional)</span></MLabel>
             <MTextarea value={form.description} onChange={set("description")} placeholder="Brief description..." d={d}/>
           </div>
         </div>
-
         <div className="flex items-center justify-end gap-2 px-6 py-5 flex-shrink-0"
           style={{ borderTop:`1px solid ${d.modalFtrBdr}`, backgroundColor:d.modalFtr }}>
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
@@ -1440,13 +1483,13 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             Cancel
           </button>
           <button type="button" onClick={handleSave} disabled={isUploading || isSaving || form.branches.length === 0}
-            className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-50"
-            style={{ background:`linear-gradient(135deg,${DG},${G})`, boxShadow:"0 2px 8px rgba(12,87,62,0.3)" }}>
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
+            className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ background:`linear-gradient(135deg,${DG},${G})` }}>
             {isSaving ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </div>
+      
       {lightboxSrc && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center px-4"
           style={{ backgroundColor:"rgba(0,0,0,0.85)" }} onClick={()=>setLightboxSrc(null)}>
@@ -1467,7 +1510,7 @@ function ViewProductModal({ product, onClose }) {
     { label:"Status",       value:product.status,   capitalize:true },
     { label:"Price",        value:`₱${(+product.price).toLocaleString()}` },
     { label:"Stock",        value:product.stock },
-    { label:"Search Tags",  value:product.tags?.length > 0 ? (Array.isArray(product.tags) ? product.tags.join(", ") : product.tags) : "—" }, // 🚀 ADDED TO VIEW
+    { label:"Search Tags",  value:product.tags?.length > 0 ? (Array.isArray(product.tags) ? product.tags.join(", ") : product.tags) : "—" }, 
     { label:"Description",  value:product.description || "—" },
     { label:"Occasions",    value:product.occasions?.length > 0 ? product.occasions.join(", ") : "—" }, 
     { label:"Branches",     value:product.branches?.length > 0 ? product.branches.join(", ") : "—" },
@@ -1554,7 +1597,6 @@ function DeleteProductModal({ product, onClose, onConfirm, isDeleting }) {
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-// ── Main page ─────────────────────────────────────────────────────────────────
 export default function AdminProducts() {
   const d = useAdminTokens()
   const { isDark } = d
@@ -1564,7 +1606,6 @@ export default function AdminProducts() {
   const [category, setCategory]           = useState("")
   const [status, setStatus]               = useState("")
   const [priceSort, setPriceSort]         = useState("")
-  // 🚀 1. ADDED: State for Branch Filter
   const [branchFilter, setBranchFilter]   = useState("") 
   
   const [page, setPage]                   = useState(1)
@@ -1595,7 +1636,6 @@ export default function AdminProducts() {
 
   useEffect(() => { fetchProducts() }, [fetchProducts])
   
-  // 🚀 2. ADDED: branchFilter to the pagination reset dependencies
   useEffect(() => { setPage(1) }, [search,category,status,priceSort,branchFilter])
 
   const handleSave     = p => { setProducts(prev=>[p,...prev]); setTotalCount(c=>c+1) }
@@ -1629,11 +1669,10 @@ export default function AdminProducts() {
     const ms = !search || p.name?.toLowerCase().includes(search.toLowerCase());
     const mc = !category || p.category?.toLowerCase() === category.toLowerCase();
     
-    // 🚀 THE FIX: Teach the filter how to find "Unassigned" products
     let mb = true;
     if (branchFilter && branchFilter !== "All Branches") {
       if (branchFilter === "Unassigned") {
-        mb = !p.branches || p.branches.length === 0; // True if no branches
+        mb = !p.branches || p.branches.length === 0; 
       } else {
         mb = Array.isArray(p.branches) && p.branches.includes(branchFilter);
       }
@@ -1728,7 +1767,6 @@ export default function AdminProducts() {
             ].map((f,i) => (
               <div key={i} className="relative">
                 <select value={f.unmap?f.unmap[f.val]||f.opts[0]:f.val}
-                  // 🚀 Updated onChange to cleanly handle resetting any "All [Value]" selection
                   onChange={e => f.set(f.map ? f.map[e.target.value] || "" : (e.target.value.startsWith("All ") ? "" : e.target.value))}
                   className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md cursor-pointer outline-none transition-all"
                   style={{ ...selStyle, minWidth:f.min }}
