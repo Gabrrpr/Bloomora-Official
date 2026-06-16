@@ -3,14 +3,19 @@ import { router, usePathname } from 'expo-router';
 import { MessageCircle, X } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
-  PanResponder,
-  Pressable,
+  Animated as RNAnimated,
   StyleSheet,
   Text,
   useWindowDimensions,
   View,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { theme } from '@/constants/theme';
@@ -25,6 +30,7 @@ const tapSlop = 5;
 const previewVisibleMs = 5600;
 const removeDropDistance = removeTargetSize * 0.82;
 const removeMagnetDistance = 148;
+const chatHistoryPollMs = 5000;
 
 type BubblePosition = {
   x: number;
@@ -35,15 +41,24 @@ export function ChatFloatingBubble() {
   const pathname = usePathname();
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const pan = useRef(new Animated.ValueXY()).current;
-  const headAnim = useRef(new Animated.Value(0)).current;
-  const previewAnim = useRef(new Animated.Value(0)).current;
-  const removeTargetAnim = useRef(new Animated.Value(0)).current;
+  const initialPosition = useMemo(
+    () => ({ x: width - bubbleSize - sideInset, y: height * 0.66 }),
+    [height, width],
+  );
+  const translateX = useSharedValue(initialPosition.x);
+  const translateY = useSharedValue(initialPosition.y);
+  const gestureStartX = useSharedValue(initialPosition.x);
+  const gestureStartY = useSharedValue(initialPosition.y);
+  const hasDraggedValue = useSharedValue(false);
+  const isOverRemoveTargetValue = useSharedValue(false);
+  const previewAnim = useRef(new RNAnimated.Value(0)).current;
+  const removeTargetAnim = useRef(new RNAnimated.Value(0)).current;
   const positionRef = useRef<BubblePosition>({ x: width - bubbleSize - sideInset, y: height * 0.66 });
   const wsRef = useRef<WebSocket | null>(null);
   const previewHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dragStartRef = useRef<BubblePosition>({ x: width - bubbleSize - sideInset, y: height * 0.66 });
-  const currentPanPositionRef = useRef<BubblePosition>({ x: width - bubbleSize - sideInset, y: height * 0.66 });
+  const liveDragPositionRef = useRef<BubblePosition>({ x: width - bubbleSize - sideInset, y: height * 0.66 });
+  const isOverRemoveTargetRef = useRef(false);
   const lastStaffMessageIdRef = useRef<string | null>(null);
   const [chatSession, setChatSession] = useState<{ session: AuthSession; userId: string } | null>(null);
   const [isHidden, setIsHidden] = useState(false);
@@ -52,9 +67,12 @@ export function ChatFloatingBubble() {
   const [latestPreview, setLatestPreview] = useState('');
   const [isSnappedLeft, setIsSnappedLeft] = useState(false);
   const [isOverRemoveTarget, setIsOverRemoveTarget] = useState(false);
+  const [isAuthChecked, setIsAuthChecked] = useState(false);
+  const isDraggingRef = useRef(false);
 
   const isLiveChatRoute = pathname.includes('/live-chat');
-  const shouldMount = Boolean(chatSession) && !isLiveChatRoute;
+  const isAuthRoute = pathname.includes('/login') || pathname.includes('/sign-up') || pathname.includes('/forgot-password');
+  const shouldMount = isAuthChecked && Boolean(chatSession) && !isLiveChatRoute && !isAuthRoute;
   const previewMaxWidth = Math.min(238, width - bubbleSize - sideInset * 2 - 24);
   const previewBubbleWidth = Math.min(
     previewMaxWidth,
@@ -98,7 +116,7 @@ export function ChatFloatingBubble() {
         return;
       }
 
-      Animated.timing(previewAnim, {
+      RNAnimated.timing(previewAnim, {
         duration: 180,
         toValue: 0,
         useNativeDriver: true,
@@ -112,7 +130,7 @@ export function ChatFloatingBubble() {
       clearTimeout(previewHideTimerRef.current);
     }
 
-    Animated.spring(previewAnim, {
+    RNAnimated.spring(previewAnim, {
       damping: 14,
       mass: 0.7,
       stiffness: 160,
@@ -132,39 +150,36 @@ export function ChatFloatingBubble() {
     router.push('/live-chat');
   }, [hidePreviewBubble]);
 
-  useEffect(() => {
-    const nextPosition = clampPosition(positionRef.current, bounds);
-    positionRef.current = nextPosition;
-    currentPanPositionRef.current = nextPosition;
-    setIsSnappedLeft(nextPosition.x + bubbleSize / 2 < width / 2);
-    pan.setValue(nextPosition);
-  }, [bounds, pan, width]);
+  const placeBubbleOnNearestSide = useCallback(
+    (position = positionRef.current, updatePanValue = true) => {
+      const snappedPosition = snapToSide(clampPosition(position, bounds), bounds, width);
+
+      positionRef.current = snappedPosition;
+      liveDragPositionRef.current = snappedPosition;
+      setIsSnappedLeft(snappedPosition.x + bubbleSize / 2 < width / 2);
+
+      if (updatePanValue) {
+        translateX.value = snappedPosition.x;
+        translateY.value = snappedPosition.y;
+      }
+
+      return snappedPosition;
+    },
+    [bounds, translateX, translateY, width],
+  );
 
   useEffect(() => {
-    const listenerId = pan.addListener((value) => {
-      currentPanPositionRef.current = {
-        x: value.x,
-        y: value.y,
-      };
-    });
+    if (isDraggingRef.current) {
+      return;
+    }
 
-    return () => {
-      pan.removeListener(listenerId);
-    };
-  }, [pan]);
+    placeBubbleOnNearestSide();
+  }, [placeBubbleOnNearestSide]);
 
   useEffect(() => {
-    Animated.spring(headAnim, {
-      damping: 12,
-      mass: 0.8,
-      stiffness: 150,
-      toValue: shouldMount && !isHidden ? 1 : 0,
-      useNativeDriver: false,
-    }).start();
-  }, [headAnim, isHidden, shouldMount]);
+    isDraggingRef.current = isDragging;
 
-  useEffect(() => {
-    Animated.spring(removeTargetAnim, {
+    RNAnimated.spring(removeTargetAnim, {
       damping: 14,
       mass: 0.75,
       stiffness: 170,
@@ -181,12 +196,30 @@ export function ChatFloatingBubble() {
     };
   }, []);
 
+  const clearBubbleSession = useCallback(() => {
+    wsRef.current?.close();
+    wsRef.current = null;
+    setChatSession(null);
+    setUnreadCount(0);
+    setLatestPreview('');
+    setIsDragging(false);
+    setIsHidden(false);
+    hidePreviewBubble(true);
+    lastStaffMessageIdRef.current = null;
+  }, [hidePreviewBubble]);
+
   useEffect(() => {
     let isMounted = true;
 
     getAuthSession()
       .then(async (session) => {
-        if (!isMounted || !session) {
+        if (!isMounted) {
+          return;
+        }
+
+        if (!session) {
+          clearBubbleSession();
+          setIsAuthChecked(true);
           return;
         }
 
@@ -194,6 +227,8 @@ export function ChatFloatingBubble() {
 
         if (isMounted) {
           setChatSession({ session, userId: chat.id });
+          setIsHidden(false);
+          setIsAuthChecked(true);
           getChatHistory({ session, userId: chat.id })
             .then((history) => {
               const latestStaffMessage = [...history]
@@ -206,14 +241,15 @@ export function ChatFloatingBubble() {
       })
       .catch(() => {
         if (isMounted) {
-          setChatSession(null);
+          clearBubbleSession();
+          setIsAuthChecked(true);
         }
       });
 
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [clearBubbleSession, pathname]);
 
   useEffect(() => {
     if (!chatSession || isLiveChatRoute) {
@@ -277,7 +313,7 @@ export function ChatFloatingBubble() {
           missedMessages.forEach(showIncomingMessage);
         })
         .catch(() => {});
-    }, 12000);
+    }, chatHistoryPollMs);
 
     return () => {
       isActive = false;
@@ -295,6 +331,8 @@ export function ChatFloatingBubble() {
       setUnreadCount(0);
       setLatestPreview('');
       setIsDragging(false);
+      setIsHidden(false);
+      placeBubbleOnNearestSide();
 
       if (chatSession) {
         getChatHistory({ session: chatSession.session, userId: chatSession.userId })
@@ -307,96 +345,173 @@ export function ChatFloatingBubble() {
           .catch(() => {});
       }
     }
-  }, [chatSession, isLiveChatRoute]);
+  }, [chatSession, isLiveChatRoute, placeBubbleOnNearestSide]);
 
-  const responder = useMemo(
+  const setDragActive = useCallback((active: boolean) => {
+    isDraggingRef.current = active;
+    setIsDragging(active);
+  }, []);
+
+  const setRemoveTargetActive = useCallback((active: boolean) => {
+    if (isOverRemoveTargetRef.current === active) {
+      return;
+    }
+
+    isOverRemoveTargetRef.current = active;
+    setIsOverRemoveTarget(active);
+  }, []);
+
+  const finishDrag = useCallback(
+    (position: BubblePosition) => {
+      const snappedPosition = snapToSide(clampPosition(position, bounds), bounds, width);
+
+      positionRef.current = snappedPosition;
+      liveDragPositionRef.current = snappedPosition;
+      setIsSnappedLeft(snappedPosition.x + bubbleSize / 2 < width / 2);
+      setDragActive(false);
+      setRemoveTargetActive(false);
+
+      return snappedPosition;
+    },
+    [bounds, setDragActive, setRemoveTargetActive, width],
+  );
+
+  const hideFromDrag = useCallback(
+    (restorePosition: BubblePosition) => {
+      setIsHidden(true);
+      setDragActive(false);
+      setRemoveTargetActive(false);
+      hidePreviewBubble(true);
+      placeBubbleOnNearestSide(restorePosition);
+    },
+    [hidePreviewBubble, placeBubbleOnNearestSide, setDragActive, setRemoveTargetActive],
+  );
+
+  const bubbleGesture = useMemo(
     () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        onPanResponderGrant: () => {
-          setIsDragging(true);
-          setIsOverRemoveTarget(false);
-          pan.stopAnimation();
-          dragStartRef.current = clampPosition(currentPanPositionRef.current, bounds);
-          positionRef.current = dragStartRef.current;
-          pan.setValue(dragStartRef.current);
-        },
-        onPanResponderMove: (_, gesture) => {
-          const rawPosition = clampPosition(
-            {
-              x: dragStartRef.current.x + gesture.dx,
-              y: dragStartRef.current.y + gesture.dy,
-            },
-            bounds,
-          );
-          const magnetizedPosition = magnetizeToRemoveTarget(rawPosition, removeTarget);
-          const bubbleCenter = getBubbleCenter(magnetizedPosition);
+      Gesture.Pan()
+        .manualActivation(false)
+        .onBegin(() => {
+          gestureStartX.value = translateX.value;
+          gestureStartY.value = translateY.value;
+          isOverRemoveTargetValue.value = false;
+          runOnJS(setRemoveTargetActive)(false);
+        })
+        .onUpdate((event) => {
+          const hasMoved = Math.abs(event.translationX) > tapSlop || Math.abs(event.translationY) > tapSlop;
+
+          if (hasMoved && !hasDraggedValue.value) {
+            hasDraggedValue.value = true;
+            runOnJS(setDragActive)(true);
+          }
+
+          if (!hasMoved) {
+            return;
+          }
+
+          const rawX = Math.min(Math.max(gestureStartX.value + event.translationX, bounds.minX), bounds.maxX);
+          const rawY = Math.min(Math.max(gestureStartY.value + event.translationY, bounds.minY), bounds.maxY);
+          const bubbleCenterX = rawX + bubbleSize / 2;
+          const bubbleCenterY = rawY + bubbleSize / 2;
           const distanceFromRemove = Math.hypot(
-            bubbleCenter.x - removeTarget.centerX,
-            bubbleCenter.y - removeTarget.centerY,
+            bubbleCenterX - removeTarget.centerX,
+            bubbleCenterY - removeTarget.centerY,
           );
-
           const isInRemoveZone = distanceFromRemove < removeDropDistance;
-          const nextPosition = isInRemoveZone ? getRemoveTargetBubblePosition(removeTarget) : magnetizedPosition;
+          let nextX = rawX;
+          let nextY = rawY;
 
-          setIsOverRemoveTarget(isInRemoveZone);
-          positionRef.current = nextPosition;
-          pan.setValue(nextPosition);
-        },
-        onPanResponderRelease: (_, gesture) => {
-          const didTap = Math.abs(gesture.dx) <= tapSlop && Math.abs(gesture.dy) <= tapSlop;
+          if (distanceFromRemove <= removeMagnetDistance) {
+            const targetX = removeTarget.centerX - bubbleSize / 2;
+            const targetY = removeTarget.centerY - bubbleSize / 2;
+            const pullStrength = Math.min(0.48, ((removeMagnetDistance - distanceFromRemove) / removeMagnetDistance) * 0.72);
+
+            nextX = rawX + (targetX - rawX) * pullStrength;
+            nextY = rawY + (targetY - rawY) * pullStrength;
+          }
+
+          if (isInRemoveZone) {
+            nextX = removeTarget.centerX - bubbleSize / 2;
+            nextY = removeTarget.centerY - bubbleSize / 2;
+          }
+
+          translateX.value = nextX;
+          translateY.value = nextY;
+
+          if (isOverRemoveTargetValue.value !== isInRemoveZone) {
+            isOverRemoveTargetValue.value = isInRemoveZone;
+            runOnJS(setRemoveTargetActive)(isInRemoveZone);
+          }
+        })
+        .onEnd((event) => {
+          const didTap = Math.abs(event.translationX) <= tapSlop && Math.abs(event.translationY) <= tapSlop;
 
           if (didTap) {
-            setIsDragging(false);
-            setIsOverRemoveTarget(false);
-            openChat();
+            hasDraggedValue.value = false;
+            runOnJS(setDragActive)(false);
+            isOverRemoveTargetValue.value = false;
+            runOnJS(setRemoveTargetActive)(false);
+            runOnJS(openChat)();
             return;
           }
 
-          const nextPosition = clampPosition(positionRef.current, bounds);
-          const bubbleCenter = getBubbleCenter(nextPosition);
+          const finalPosition = {
+            x: Math.min(Math.max(translateX.value, bounds.minX), bounds.maxX),
+            y: Math.min(Math.max(translateY.value, bounds.minY), bounds.maxY),
+          };
+          const bubbleCenterX = finalPosition.x + bubbleSize / 2;
+          const bubbleCenterY = finalPosition.y + bubbleSize / 2;
           const distanceFromRemove = Math.hypot(
-            bubbleCenter.x - removeTarget.centerX,
-            bubbleCenter.y - removeTarget.centerY,
+            bubbleCenterX - removeTarget.centerX,
+            bubbleCenterY - removeTarget.centerY,
           );
 
+          hasDraggedValue.value = false;
+          isOverRemoveTargetValue.value = false;
+
           if (distanceFromRemove < removeDropDistance) {
-            setIsHidden(true);
-            setIsDragging(false);
-            setIsOverRemoveTarget(false);
-            positionRef.current = nextPosition;
-            pan.setValue(nextPosition);
+            runOnJS(hideFromDrag)({ x: gestureStartX.value, y: gestureStartY.value });
             return;
           }
 
-          const snappedPosition = snapToSide(nextPosition, bounds, width);
-          positionRef.current = snappedPosition;
-          setIsSnappedLeft(snappedPosition.x + bubbleSize / 2 < width / 2);
-          setIsDragging(false);
-          setIsOverRemoveTarget(false);
-          Animated.spring(pan, {
-            friction: 8,
-            tension: 90,
-            toValue: snappedPosition,
-            useNativeDriver: false,
-          }).start();
-        },
-        onPanResponderTerminate: () => {
-          setIsDragging(false);
-          setIsOverRemoveTarget(false);
-          const snappedPosition = snapToSide(clampPosition(positionRef.current, bounds), bounds, width);
-          positionRef.current = snappedPosition;
-          Animated.spring(pan, {
-            friction: 8,
-            tension: 90,
-            toValue: snappedPosition,
-            useNativeDriver: false,
-          }).start();
-        },
-      }),
-    [bounds, openChat, pan, removeTarget, width],
+          const snappedX = finalPosition.x + bubbleSize / 2 < width / 2 ? bounds.minX : bounds.maxX;
+          const snappedPosition = { x: snappedX, y: finalPosition.y };
+
+          translateX.value = withSpring(snappedPosition.x, { damping: 18, stiffness: 210 });
+          translateY.value = withSpring(snappedPosition.y, { damping: 18, stiffness: 210 });
+          runOnJS(finishDrag)(snappedPosition);
+        })
+        .onFinalize(() => {
+          hasDraggedValue.value = false;
+          isOverRemoveTargetValue.value = false;
+        }),
+    [
+      bounds,
+      finishDrag,
+      gestureStartX,
+      gestureStartY,
+      hasDraggedValue,
+      hideFromDrag,
+      isOverRemoveTargetValue,
+      openChat,
+      removeTarget,
+      setDragActive,
+      setRemoveTargetActive,
+      translateX,
+      translateY,
+      width,
+    ],
   );
+
+  const bubblePositionStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      {
+        scale: shouldMount && !isHidden ? 1 : 0.78,
+      },
+    ],
+  }));
 
   if (!shouldMount) {
     return null;
@@ -404,7 +519,7 @@ export function ChatFloatingBubble() {
 
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-      <Animated.View
+      <RNAnimated.View
           pointerEvents="none"
           style={[
             styles.removeTarget,
@@ -431,30 +546,20 @@ export function ChatFloatingBubble() {
             styles.removeTargetActive,
           ]}>
           <X size={28} color={theme.colors.textMuted} strokeWidth={2.4} />
-        </Animated.View>
+        </RNAnimated.View>
 
+      <GestureDetector gesture={bubbleGesture}>
       <Animated.View
-        {...responder.panHandlers}
         pointerEvents={isHidden ? 'none' : 'auto'}
         style={[
           styles.bubbleWrap,
           isOverRemoveTarget && styles.bubbleWrapRemoveReady,
-          {
-            opacity: headAnim,
-            transform: [
-              ...pan.getTranslateTransform(),
-              {
-                scale: headAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.78, 1],
-                }),
-              },
-            ],
-          },
+          bubblePositionStyle,
+          { opacity: shouldMount && !isHidden ? 1 : 0 },
           isDragging && styles.bubbleWrapEditing,
         ]}>
         {unreadCount > 0 && latestPreview ? (
-          <Animated.View
+          <RNAnimated.View
             style={[
               styles.messagePreview,
               isSnappedLeft ? styles.messagePreviewLeft : styles.messagePreviewRight,
@@ -485,13 +590,12 @@ export function ChatFloatingBubble() {
                 isSnappedLeft ? styles.messagePreviewTailLeft : styles.messagePreviewTailRight,
               ]}
             />
-          </Animated.View>
+          </RNAnimated.View>
         ) : null}
-        <Pressable
+        <View
           accessibilityLabel="Open Esting's chat heads"
           accessibilityRole="button"
-          style={({ pressed }) => [styles.bubble, pressed && styles.bubblePressed]}
-          onPress={undefined}>
+          style={styles.bubble}>
           <Image source={supportAvatarImage} style={styles.bubbleImage} contentFit="cover" />
           <View style={styles.bubbleIcon}>
             <MessageCircle size={12} color={theme.colors.white} strokeWidth={2.35} />
@@ -501,8 +605,9 @@ export function ChatFloatingBubble() {
               <Text style={styles.unreadText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
             </View>
           ) : null}
-        </Pressable>
+        </View>
       </Animated.View>
+      </GestureDetector>
     </View>
   );
 }
@@ -632,9 +737,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 16,
     width: bubbleSize,
-  },
-  bubblePressed: {
-    transform: [{ scale: 0.96 }],
   },
   bubbleImage: {
     borderRadius: theme.radius.pill,

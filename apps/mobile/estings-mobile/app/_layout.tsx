@@ -19,6 +19,7 @@ import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { Platform, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 
 import { ChatFloatingBubble } from '@/components/chat-floating-bubble';
@@ -60,6 +61,7 @@ export default function RootLayout() {
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+      <GestureHandlerRootView style={{ flex: 1 }}>
       <View style={{ backgroundColor: '#FFFFFF', flex: 1 }}>
         <Stack
           screenOptions={{
@@ -78,6 +80,7 @@ export default function RootLayout() {
           <Stack.Screen name="checkout" options={{ headerShown: false }} />
           <Stack.Screen name="create" options={{ headerShown: false }} />
           <Stack.Screen name="payment" options={{ headerShown: false }} />
+          <Stack.Screen name="product-list" options={{ headerShown: false }} />
           <Stack.Screen name="product-details" options={{ headerShown: false }} />
           <Stack.Screen name="search-results" options={{ headerShown: false }} />
           <Stack.Screen name="(modals)/modal" options={{ presentation: 'modal', title: 'Modal' }} />
@@ -85,6 +88,7 @@ export default function RootLayout() {
         <ChatFloatingBubble />
         <StatusBar backgroundColor="#FFFFFF" style="dark" translucent={false} />
       </View>
+      </GestureHandlerRootView>
     </ThemeProvider>
   );
 }

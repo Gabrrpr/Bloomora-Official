@@ -16,6 +16,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts, theme } from '@/constants/theme';
+import { resetForgotPassword, sendForgotPasswordOtp } from '@/services/auth-api';
 import { type FormErrors, isSixDigitOtp, isValidEmail, required } from '@/utils/auth-validation';
 
 type ForgotField = 'email' | 'otp' | 'newPassword' | 'confirmPassword';
@@ -32,6 +33,8 @@ export default function ForgotPasswordScreen() {
   const [isNewPasswordHidden, setIsNewPasswordHidden] = useState(true);
   const [isConfirmPasswordHidden, setIsConfirmPasswordHidden] = useState(true);
   const [isDiscardVisible, setIsDiscardVisible] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [requestMessage, setRequestMessage] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors<ForgotField>>({});
   const [resendSeconds, setResendSeconds] = useState(30);
   const requirementsProgress = useState(() => new Animated.Value(0))[0];
@@ -140,9 +143,24 @@ export default function ForgotPasswordScreen() {
     router.back();
   }
 
-  function handleNext() {
+  async function handleNext() {
+    if (isSubmitting) {
+      return;
+    }
+
+    setRequestMessage(null);
+
     if (step === 'email' && validateEmail()) {
-      setStep('otp');
+      setIsSubmitting(true);
+      try {
+        await sendForgotPasswordOtp(email);
+        setOtp('');
+        setStep('otp');
+      } catch (error) {
+        setRequestMessage(error instanceof Error ? error.message : 'Unable to send reset code. Please try again.');
+      } finally {
+        setIsSubmitting(false);
+      }
       return;
     }
 
@@ -152,16 +170,39 @@ export default function ForgotPasswordScreen() {
     }
 
     if (step === 'reset' && validateReset()) {
-      router.replace('/login');
+      setIsSubmitting(true);
+      try {
+        await resetForgotPassword({
+          email,
+          newPassword,
+          otp,
+        });
+        router.replace('/login');
+      } catch (error) {
+        setRequestMessage(error instanceof Error ? error.message : 'Unable to reset password. Please try again.');
+      } finally {
+        setIsSubmitting(false);
+      }
     }
   }
 
-  function handleResendCode() {
-    if (resendSeconds > 0) {
+  async function handleResendCode() {
+    if (resendSeconds > 0 || isSubmitting || !validateEmail()) {
       return;
     }
 
-    setResendSeconds(30);
+    setRequestMessage(null);
+    setIsSubmitting(true);
+
+    try {
+      await sendForgotPasswordOtp(email);
+      setOtp('');
+      setResendSeconds(30);
+    } catch (error) {
+      setRequestMessage(error instanceof Error ? error.message : 'Unable to resend reset code. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
@@ -217,6 +258,12 @@ export default function ForgotPasswordScreen() {
             />
           ) : null}
 
+          {requestMessage ? (
+            <View style={styles.requestMessage}>
+              <Text style={styles.requestMessageText}>{requestMessage}</Text>
+            </View>
+          ) : null}
+
           {step === 'otp' ? (
             <OtpPinInput
               error={errors.otp}
@@ -270,11 +317,11 @@ export default function ForgotPasswordScreen() {
             <View style={styles.otpFooterContent}>
               <Pressable
                 accessibilityRole="button"
-                disabled={resendSeconds > 0}
+                disabled={resendSeconds > 0 || isSubmitting}
                 onPress={handleResendCode}
-                style={({ pressed }) => [styles.resendButton, pressed && resendSeconds === 0 && styles.pressed]}>
-                <Text style={[styles.resendText, resendSeconds === 0 && styles.resendTextReady]}>
-                  {resendSeconds > 0 ? `Resend Code in ${resendSeconds} seconds` : 'Resend Code'}
+                style={({ pressed }) => [styles.resendButton, pressed && resendSeconds === 0 && !isSubmitting && styles.pressed]}>
+                <Text style={[styles.resendText, resendSeconds === 0 && !isSubmitting && styles.resendTextReady]}>
+                  {isSubmitting ? 'Sending...' : resendSeconds > 0 ? `Resend Code in ${resendSeconds} seconds` : 'Resend Code'}
                 </Text>
               </Pressable>
               <Pressable
@@ -293,9 +340,10 @@ export default function ForgotPasswordScreen() {
           ) : null}
           <Pressable
             accessibilityRole="button"
+            disabled={isSubmitting}
             onPress={handleNext}
-            style={({ pressed }) => [styles.nextButton, pressed && styles.pressed]}>
-            <Text style={styles.nextButtonText}>{screenCopy.action}</Text>
+            style={({ pressed }) => [styles.nextButton, isSubmitting && styles.nextButtonDisabled, pressed && !isSubmitting && styles.pressed]}>
+            <Text style={styles.nextButtonText}>{getActionLabel(step, isSubmitting, screenCopy.action)}</Text>
           </Pressable>
         </View>
       </ScrollView>
@@ -573,6 +621,22 @@ function getStepNumber(step: ForgotStep) {
   return 1;
 }
 
+function getActionLabel(step: ForgotStep, isSubmitting: boolean, fallback: string) {
+  if (!isSubmitting) {
+    return fallback;
+  }
+
+  if (step === 'email') {
+    return 'Sending Code...';
+  }
+
+  if (step === 'reset') {
+    return 'Resetting...';
+  }
+
+  return fallback;
+}
+
 function getPasswordRules(value: string) {
   return [
     { label: 'At least 8 characters', isValid: value.length >= 8 },
@@ -737,6 +801,21 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
     paddingHorizontal: theme.spacing.md,
+  },
+  requestMessage: {
+    backgroundColor: '#FCEAEA',
+    borderColor: 'rgba(217, 107, 107, 0.18)',
+    borderRadius: 8,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  requestMessageText: {
+    color: theme.colors.danger,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   resetFields: {
     gap: theme.spacing.xs,
@@ -998,6 +1077,9 @@ const styles = StyleSheet.create({
     minHeight: 64,
     justifyContent: 'center',
     paddingHorizontal: theme.spacing.lg,
+  },
+  nextButtonDisabled: {
+    opacity: 0.62,
   },
   nextButtonText: {
     color: theme.colors.white,

@@ -50,6 +50,7 @@ type ProductFeedItem = {
   description: string;
   longDescription: string;
   image: ImageSourcePropType | null;
+  imagePresentation?: 'cover' | 'poster';
   stock: number;
   rating: number;
   reviewCount: number;
@@ -236,18 +237,24 @@ export default function HomeScreen() {
   const shareDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sectionPagerRef = useRef<FlatList<FeedSection>>(null);
   const initialSectionIndex = feedSections.findIndex((section) => section.value === 'new');
+  const exploreProducts = useMemo(
+    () => catalogProducts.map((product) => mapCatalogProductToFeedItem(product)),
+    [catalogProducts],
+  );
   const sectionProducts = useMemo(
     () =>
       feedSections.reduce(
         (sections, section) => ({
           ...sections,
-          [section.value]: productFeedData
-            .filter((product) => product.section === section.value)
+          [section.value]: (section.value === 'explore' && exploreProducts.length > 0
+            ? exploreProducts
+            : productFeedData.filter((product) => product.section === section.value)
+          )
             .sort((first, second) => getFeedItemSort(section.value, first) - getFeedItemSort(section.value, second)),
         }),
         {} as Record<FeedSection, ProductFeedItem[]>,
       ),
-    [],
+    [exploreProducts],
   );
   const searchResults = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -454,7 +461,10 @@ export default function HomeScreen() {
   }
 
   function handleShare(productId: string) {
-    const nextProduct = productFeedData.find((product) => product.id === productId) ?? productFeedData[0];
+    const nextProduct =
+      feedSections
+        .flatMap((section) => sectionProducts[section.value])
+        .find((product) => product.id === productId) ?? productFeedData[0];
 
     if (shareDismissTimer.current) {
       clearTimeout(shareDismissTimer.current);
@@ -504,6 +514,10 @@ export default function HomeScreen() {
       setIsProductSearchLoading(false);
     }
   }, [catalogProducts.length, isProductSearchLoading]);
+
+  useEffect(() => {
+    void loadCatalogProductsForSearch();
+  }, [loadCatalogProductsForSearch]);
 
   function handleOpenSearch() {
     setIsSearchOpen(true);
@@ -711,6 +725,7 @@ function VerticalProductFeed({
   verticalFeedRefs: React.MutableRefObject<Record<FeedSection, ProductFeedListRef | null>>;
 }) {
   const feedRef = useRef<FlatList<ProductFeedItem>>(null);
+  const productsKey = products.map((product) => product.id).join(':');
   const loopedProducts = useMemo(
     () => Array.from({ length: feedLoopCopies }, () => products).flat(),
     [products],
@@ -771,7 +786,7 @@ function VerticalProductFeed({
       disableIntervalMomentum={true}
       directionalLockEnabled
       getItemLayout={getItemLayout}
-      key={`${section}-${layout.screenWidth}x${layout.feedItemHeight}`}
+      key={`${section}-${productsKey}-${layout.screenWidth}x${layout.feedItemHeight}`}
       initialScrollIndex={middleFeedIndex}
       keyExtractor={(item, index) => `${item.id}-${index}`}
       onMomentumScrollEnd={handleMomentumScrollEnd}
@@ -837,14 +852,30 @@ function ProductFeedImageCard({
   scrollY: Animated.Value;
 }) {
   return (
-    <View style={[styles.feedItem, { height: layout.feedItemHeight, width: layout.screenWidth }, webSnapItemStyle]}>
-      <View style={styles.productImageContainer}>
+    <View
+      style={[
+        styles.feedItem,
+        item.section === 'explore' && styles.exploreFeedItem,
+        { height: layout.feedItemHeight, width: layout.screenWidth },
+        webSnapItemStyle,
+      ]}>
+      <View style={[styles.productImageContainer, item.section === 'explore' && styles.exploreImageContainer]}>
         {item.image ? (
-          <Image source={item.image} style={styles.productImage} resizeMode="cover" />
+          item.imagePresentation === 'poster' ? (
+            <>
+              <Image source={item.image} style={styles.posterBackdropImage} resizeMode="cover" blurRadius={22} />
+              <View style={[styles.posterBackdropWash, item.section === 'explore' && styles.explorePosterBackdropWash]} />
+              <View style={styles.posterImageFrame}>
+                <Image source={item.image} style={styles.posterImage} resizeMode="contain" />
+              </View>
+            </>
+          ) : (
+            <Image source={item.image} style={styles.productImage} resizeMode="cover" />
+          )
         ) : (
           <View style={[styles.blankFeedImage, item.section === 'for-you' && styles.forYouFeedImage]} />
         )}
-        <View style={styles.imageVeil} />
+        <View style={[styles.imageVeil, item.imagePresentation === 'poster' && styles.posterImageVeil]} />
       </View>
       <BottomVignette layout={layout} />
       <ProductFeedContent
@@ -1445,6 +1476,33 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
 }
 
+function mapCatalogProductToFeedItem(product: Product): ProductFeedItem {
+  const description = product.description?.trim() || `${product.name} from Esting's flower collection.`;
+  const category = product.categoryName || product.productGroup || product.productType || product.tag || 'Bouquet';
+  const tags = [product.tag, product.categoryName, product.productGroup, product.productType].filter(
+    (tag): tag is string => Boolean(tag),
+  );
+
+  return {
+    id: product.id,
+    name: product.name,
+    price: Math.round(product.priceCents / 100),
+    currency: 'PHP',
+    category,
+    section: 'explore',
+    description,
+    longDescription: description,
+    image: product.imageUrl ? { uri: product.imageUrl } : null,
+    imagePresentation: 'poster',
+    stock: product.stock ?? 0,
+    rating: 5,
+    reviewCount: 0,
+    isNew: false,
+    isBestSeller: product.tag.toLowerCase().includes('best'),
+    tags,
+  };
+}
+
 function getFeedItemSort(section: FeedSection, item: ProductFeedItem) {
   if (section === 'new' && item.id === 'mothers-day-for-you') {
     return 0;
@@ -1604,7 +1662,11 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     position: 'relative',
   },
+  exploreFeedItem: {
+    backgroundColor: '#1E8B4E',
+  },
   productImageContainer: {
+    backgroundColor: '#F4F4F1',
     bottom: 0,
     left: 0,
     overflow: 'hidden',
@@ -1612,9 +1674,40 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
+  exploreImageContainer: {
+    backgroundColor: '#1E8B4E',
+  },
   productImage: {
     width: '100%',
     height: '100%',
+  },
+  posterBackdropImage: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.2,
+    transform: [{ scale: 1.18 }],
+  },
+  posterBackdropWash: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(48, 50, 49, 0.78)',
+  },
+  explorePosterBackdropWash: {
+    backgroundColor: 'rgba(30, 139, 78, 0.88)',
+  },
+  posterImageFrame: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    left: 12,
+    overflow: 'hidden',
+    position: 'absolute',
+    right: 12,
+    top: 136,
+  },
+  posterImage: {
+    aspectRatio: 1,
+    borderRadius: 28,
+    maxHeight: 430,
+    overflow: 'hidden',
+    width: '100%',
   },
   blankFeedImage: {
     backgroundColor: '#111A13',
@@ -1627,6 +1720,9 @@ const styles = StyleSheet.create({
   imageVeil: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: 'rgba(0, 0, 0, 0.08)',
+  },
+  posterImageVeil: {
+    backgroundColor: 'rgba(0, 0, 0, 0.02)',
   },
   bottomVignette: {
     bottom: 0,

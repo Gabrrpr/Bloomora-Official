@@ -23,7 +23,11 @@ type BackendProduct = {
   id: string;
   image_url?: string | null;
   is_available?: boolean | null;
+  is_flash_sale?: boolean | null;
+  is_promoted?: boolean | null;
   name: string;
+  original?: number | null;
+  original_price?: number | null;
   price: number;
   product_group?: string | null;
   product_type?: string | null;
@@ -167,6 +171,8 @@ function mapBackendProduct(product: BackendProduct): Product {
   const category = product.category || 'Flowers';
   const productGroup = product.product_group || undefined;
   const branch = normalizeBranch(product.branch_name ?? product.branch);
+  const originalPrice = Number(product.original_price ?? product.original ?? 0);
+  const price = Number(product.price || 0);
 
   return {
     branch,
@@ -176,8 +182,12 @@ function mapBackendProduct(product: BackendProduct): Product {
     description: product.description || undefined,
     id: product.id,
     imageUrl: normalizeImageUrl(product.image_url),
+    isActive: product.is_available !== false,
+    isFlashSale: product.is_flash_sale === true,
+    isPromoted: product.is_promoted === true,
     name: product.name,
-    priceCents: Math.round(Number(product.price || 0) * 100),
+    originalPriceCents: originalPrice > price ? Math.round(originalPrice * 100) : undefined,
+    priceCents: Math.round(price * 100),
     productGroup: productGroup ? toTitleCase(productGroup) : undefined,
     productType: product.product_type ? toTitleCase(product.product_type) : undefined,
     stock: Number(product.stock ?? 0),

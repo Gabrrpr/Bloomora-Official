@@ -1,4 +1,6 @@
-import { apiFetch } from '@/services/api-client';
+import * as WebBrowser from 'expo-web-browser';
+
+import { apiFetch, getApiBaseUrl, initializeApiBaseUrl } from '@/services/api-client';
 import { clearAuthSession, getAuthSession, saveAuthSession, type AuthSession, type AuthUser } from '@/services/auth-session';
 
 type LoginResponse = {
@@ -14,6 +16,23 @@ type RefreshResponse = {
   token_type: string;
 };
 
+type OAuthProvider = 'facebook' | 'google';
+
+type OAuthExchangeResponse = {
+  access_token: string;
+  refresh_token?: string;
+  role?: string;
+  token_type: string;
+};
+
+type AuthMessageResponse = {
+  message?: string;
+  status?: string;
+};
+
+const productionWebBaseUrl = 'https://blueviolet-otter-621683.hostingersite.com';
+const defaultWebBaseUrl = process.env.EXPO_PUBLIC_WEB_URL ?? (__DEV__ ? 'http://localhost:5173' : productionWebBaseUrl);
+
 export async function loginWithPassword(identifier: string, password: string) {
   const response = await apiFetch<LoginResponse>('/auth/login', {
     body: JSON.stringify({
@@ -28,6 +47,48 @@ export async function loginWithPassword(identifier: string, password: string) {
     refreshToken: response.refresh_token,
     tokenType: response.token_type,
     user: response.user,
+  };
+
+  await saveAuthSession(session);
+
+  return session;
+}
+
+export async function loginWithOAuthProvider(provider: OAuthProvider) {
+  await initializeApiBaseUrl();
+
+  const apiBaseUrl = getApiBaseUrl().replace(/\/$/, '');
+  const webCallbackUrl = `${defaultWebBaseUrl.replace(/\/$/, '')}/oauth/callback`;
+  const authUrl = `${apiBaseUrl}/auth/${provider}`;
+  const authResult = await WebBrowser.openAuthSessionAsync(authUrl, webCallbackUrl, {
+    preferEphemeralSession: false,
+  });
+
+  if (authResult.type !== 'success') {
+    throw new Error('Sign in was cancelled.');
+  }
+
+  const code = getOAuthCodeFromUrl(authResult.url);
+
+  if (!code) {
+    throw new Error('OAuth sign in did not return a valid code.');
+  }
+
+  const exchange = await apiFetch<OAuthExchangeResponse>(`/auth/oauth/exchange?code=${encodeURIComponent(code)}`, {
+    skipAuthRefresh: true,
+  });
+  const user = await apiFetch<AuthUser>('/auth/me', {
+    skipAuthRefresh: true,
+    token: exchange.access_token,
+  });
+  const session: AuthSession = {
+    accessToken: exchange.access_token,
+    refreshToken: exchange.refresh_token,
+    tokenType: exchange.token_type,
+    user: {
+      ...user,
+      role: user.role ?? exchange.role,
+    },
   };
 
   await saveAuthSession(session);
@@ -64,5 +125,45 @@ export async function refreshAuthSession() {
   } catch {
     await clearAuthSession();
     return null;
+  }
+}
+
+export async function sendForgotPasswordOtp(email: string) {
+  return apiFetch<AuthMessageResponse>('/auth/forgot-password/send-otp', {
+    body: JSON.stringify({
+      email: email.trim(),
+    }),
+    method: 'POST',
+    skipAuthRefresh: true,
+  });
+}
+
+export async function resetForgotPassword({
+  email,
+  newPassword,
+  otp,
+}: {
+  email: string;
+  newPassword: string;
+  otp: string;
+}) {
+  return apiFetch<AuthMessageResponse>('/auth/forgot-password/reset', {
+    body: JSON.stringify({
+      email: email.trim(),
+      new_password: newPassword,
+      otp,
+    }),
+    method: 'POST',
+    skipAuthRefresh: true,
+  });
+}
+
+function getOAuthCodeFromUrl(url: string) {
+  try {
+    return new URL(url).searchParams.get('code');
+  } catch {
+    const match = /[?&]code=([^&]+)/.exec(url);
+
+    return match ? decodeURIComponent(match[1]) : null;
   }
 }

@@ -7,6 +7,7 @@ export const DEFAULT_API_BASE_URL =
 
 const apiBaseUrlFileUri = `${FileSystem.documentDirectory}api-base-url.json`;
 const apiBaseUrlStorageKey = 'estings.api-base-url';
+const serviceUnavailableMessage = 'Unable to reach service (E-NETWORK-002). Please try again.';
 
 let apiBaseUrl = DEFAULT_API_BASE_URL;
 let hasLoadedStoredApiBaseUrl = false;
@@ -87,11 +88,11 @@ export async function resetApiBaseUrl() {
   return apiBaseUrl;
 }
 
-function buildUrl(path: string) {
-  const baseUrl = getApiBaseUrl().replace(/\/$/, '');
+function buildUrl(path: string, baseUrl = getApiBaseUrl()) {
+  const normalizedBaseUrl = baseUrl.replace(/\/$/, '');
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
 
-  return `${baseUrl}${normalizedPath}`;
+  return `${normalizedBaseUrl}${normalizedPath}`;
 }
 
 export async function apiFetch<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
@@ -103,18 +104,10 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
   let response: Response;
 
   try {
-    response = await fetch(buildUrl(path), {
-      ...requestOptions,
-      headers: {
-        Accept: 'application/json',
-        ...(requestOptions.body ? { 'Content-Type': 'application/json' } : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...headers,
-      },
-    });
+    response = await fetchWithRecovery(path, requestOptions, headers, token);
   } catch (error) {
     await assertNetworkConnection();
-    throw new ApiError(0, 'Unable to reach service (E-NETWORK-002). Please try again.');
+    throw error instanceof ApiError ? error : new ApiError(0, serviceUnavailableMessage);
   }
 
   if (response.status === 401 && token && !skipAuthRefresh) {
@@ -123,18 +116,10 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
 
     if (nextSession?.accessToken) {
       try {
-        response = await fetch(buildUrl(path), {
-          ...requestOptions,
-          headers: {
-            Accept: 'application/json',
-            ...(requestOptions.body ? { 'Content-Type': 'application/json' } : {}),
-            Authorization: `Bearer ${nextSession.accessToken}`,
-            ...headers,
-          },
-        });
+        response = await fetchWithRecovery(path, requestOptions, headers, nextSession.accessToken);
       } catch (error) {
         await assertNetworkConnection();
-        throw new ApiError(0, 'Unable to reach service (E-NETWORK-002). Please try again.');
+        throw error instanceof ApiError ? error : new ApiError(0, serviceUnavailableMessage);
       }
     }
   }
@@ -155,6 +140,71 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
   }
 
   return response.json() as Promise<T>;
+}
+
+async function fetchWithRecovery(
+  path: string,
+  requestOptions: RequestInit,
+  headers: HeadersInit | undefined,
+  token: string | undefined,
+) {
+  const currentBaseUrl = getApiBaseUrl();
+
+  try {
+    return await fetchFromBaseUrl(path, currentBaseUrl, requestOptions, headers, token);
+  } catch {
+    await assertNetworkConnection();
+  }
+
+  await sleep(700);
+
+  try {
+    return await fetchFromBaseUrl(path, currentBaseUrl, requestOptions, headers, token);
+  } catch {
+    await assertNetworkConnection();
+  }
+
+  if (normalizeBaseUrl(currentBaseUrl) !== normalizeBaseUrl(DEFAULT_API_BASE_URL)) {
+    apiBaseUrl = DEFAULT_API_BASE_URL;
+    hasLoadedStoredApiBaseUrl = true;
+    await clearStoredApiBaseUrl();
+
+    try {
+      return await fetchFromBaseUrl(path, DEFAULT_API_BASE_URL, requestOptions, headers, token);
+    } catch {
+      await assertNetworkConnection();
+    }
+  }
+
+  throw new ApiError(0, serviceUnavailableMessage);
+}
+
+function fetchFromBaseUrl(
+  path: string,
+  baseUrl: string,
+  requestOptions: RequestInit,
+  headers: HeadersInit | undefined,
+  token: string | undefined,
+) {
+  return fetch(buildUrl(path, baseUrl), {
+    ...requestOptions,
+    headers: {
+      Accept: 'application/json',
+      ...(requestOptions.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...headers,
+    },
+  });
+}
+
+function normalizeBaseUrl(baseUrl: string) {
+  return baseUrl.trim().replace(/\/$/, '').toLowerCase();
+}
+
+function sleep(durationMs: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, durationMs);
+  });
 }
 
 async function readStoredApiBaseUrl() {

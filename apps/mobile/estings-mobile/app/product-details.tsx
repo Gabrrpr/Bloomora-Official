@@ -2,6 +2,7 @@ import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import {
   ActivityIndicator,
+  Animated,
   Image as RNImage,
   Pressable,
   ScrollView,
@@ -11,7 +12,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import { ArrowLeft, Heart, ImageOff, Minus, Package, Plus, Share2, ShoppingBag, Star } from 'lucide-react-native';
+import { ArrowLeft, Check, Heart, MessageCircle, Minus, Package, Plus, Share2, ShoppingBag, Star } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -20,10 +21,13 @@ import { EstingsLogo } from '@/components/estings-logo';
 import { ProductRecommendationGallery } from '@/components/product-recommendation-gallery';
 import { formatPhp, type Product, type ProductColor } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
-import { addGuestCartItem } from '@/services/guest-cart';
+import { addGuestCartItem, getGuestCartItems } from '@/services/guest-cart';
 import { shopApi, type ProductRatingSummary, type ProductReview } from '@/services/shop-api';
+import { buildRelatedProductRecommendations, createRecommendationSeed } from '@/utils/product-recommendations';
 
 const cartRoute = '/(tabs)/cart' as Href;
+const imageNotFound = require('@/assets/images/default-img/ImageNotFound.webp');
+const pageBackground = '#F5F5F5';
 
 export default function ProductDetailsScreen() {
   const insets = useSafeAreaInsets();
@@ -31,8 +35,14 @@ export default function ProductDetailsScreen() {
   const productId = typeof params.id === 'string' ? params.id : '';
   const lastRecommendationBatchAt = useRef(0);
   const recommendationBatchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const compactHeaderProgress = useRef(new Animated.Value(0)).current;
+  const recommendationSeed = useRef(createRecommendationSeed()).current;
+  const scrollRef = useRef<ScrollView>(null);
+  const toastProgress = useRef(new Animated.Value(0)).current;
+  const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isAdded, setIsAdded] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
+  const [cartItemCount, setCartItemCount] = useState(0);
   const [isAppendingRecommendations, setIsAppendingRecommendations] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [productColors, setProductColors] = useState<ProductColor[]>([]);
@@ -43,6 +53,8 @@ export default function ProductDetailsScreen() {
   const [visibleRecommendationCount, setVisibleRecommendationCount] = useState(4);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
+  const [showCompactHeader, setShowCompactHeader] = useState(false);
+  const [showAddedToast, setShowAddedToast] = useState(false);
 
   const loadProducts = useCallback(async () => {
     setIsLoading(true);
@@ -126,13 +138,28 @@ export default function ProductDetailsScreen() {
   const hasMultipleImages = images.length > 1;
 
   const recommendedProducts = useMemo(
-    () => products.filter((item) => item.id !== productId),
-    [productId, products],
+    () =>
+      buildRelatedProductRecommendations({
+        currentProduct: product,
+        products,
+        seed: recommendationSeed,
+      }),
+    [product, products, recommendationSeed],
   );
   const visibleRecommendations = recommendedProducts.slice(0, visibleRecommendationCount);
-  const recommendationCap = Math.min(recommendedProducts.length, 16);
+  const recommendationCap = recommendedProducts.length;
   const canAppendRecommendations = visibleRecommendationCount < recommendationCap;
   const isSoldOut = (product?.stock ?? 0) <= 0;
+  const soldCount = getProductSoldCount(product);
+
+  const loadCartItemCount = useCallback(async () => {
+    const items = await getGuestCartItems();
+    setCartItemCount(items.reduce((total, item) => total + item.quantity, 0));
+  }, []);
+
+  useEffect(() => {
+    void loadCartItemCount();
+  }, [loadCartItemCount]);
 
   const handleAddToCart = useCallback(async () => {
     if (isAdded) {
@@ -144,9 +171,56 @@ export default function ProductDetailsScreen() {
       return;
     }
 
-    await addGuestCartItem(product, quantity);
+    const nextItems = await addGuestCartItem(product, quantity);
     setIsAdded(true);
-  }, [isAdded, isSoldOut, product, quantity]);
+    setShowAddedToast(true);
+    setCartItemCount(nextItems.reduce((total, item) => total + item.quantity, 0));
+
+    if (toastTimer.current) {
+      clearTimeout(toastTimer.current);
+    }
+
+    toastProgress.stopAnimation();
+    Animated.timing(toastProgress, {
+      duration: 180,
+      toValue: 1,
+      useNativeDriver: true,
+    }).start();
+
+    toastTimer.current = setTimeout(() => {
+      Animated.timing(toastProgress, {
+        duration: 190,
+        toValue: 0,
+        useNativeDriver: true,
+      }).start(({ finished }) => {
+        if (finished) {
+          setShowAddedToast(false);
+        }
+      });
+      toastTimer.current = null;
+    }, 1800);
+  }, [isAdded, isSoldOut, product, quantity, toastProgress]);
+
+  const handleBuyNow = useCallback(async () => {
+    if (!product || isSoldOut) {
+      return;
+    }
+
+    const nextItems = await addGuestCartItem(product, quantity);
+    setIsAdded(true);
+    setCartItemCount(nextItems.reduce((total, item) => total + item.quantity, 0));
+    router.push(`/checkout?ids=${encodeURIComponent(product.id)}` as Href);
+  }, [isSoldOut, product, quantity]);
+
+  const handleChatAboutProduct = useCallback(() => {
+    if (!product) {
+      return;
+    }
+
+    router.push(
+      `/live-chat?productId=${encodeURIComponent(product.id)}&productName=${encodeURIComponent(product.name)}&productPrice=${encodeURIComponent(formatPhp(product.priceCents))}` as Href,
+    );
+  }, [product]);
 
   const appendRecommendationBatch = useCallback(() => {
     if (isAppendingRecommendations || !canAppendRecommendations) {
@@ -162,18 +236,35 @@ export default function ProductDetailsScreen() {
     }, 260);
   }, [canAppendRecommendations, isAppendingRecommendations, recommendationCap]);
 
+  const handleScrollToTop = useCallback(() => {
+    scrollRef.current?.scrollTo({ animated: true, y: 0 });
+  }, []);
+
   const handleProductScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
       const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+      const shouldShowCompactHeader = contentOffset.y > 180;
+
+      if (shouldShowCompactHeader !== showCompactHeader) {
+        setShowCompactHeader(shouldShowCompactHeader);
+      }
 
       if (distanceFromBottom < 340 && Date.now() - lastRecommendationBatchAt.current > 700) {
         lastRecommendationBatchAt.current = Date.now();
         appendRecommendationBatch();
       }
     },
-    [appendRecommendationBatch],
+    [appendRecommendationBatch, showCompactHeader],
   );
+
+  useEffect(() => {
+    Animated.timing(compactHeaderProgress, {
+      duration: 180,
+      toValue: showCompactHeader ? 1 : 0,
+      useNativeDriver: true,
+    }).start();
+  }, [compactHeaderProgress, showCompactHeader]);
 
   useEffect(() => {
     setIsAdded(false);
@@ -193,14 +284,37 @@ export default function ProductDetailsScreen() {
       if (recommendationBatchTimer.current) {
         clearTimeout(recommendationBatchTimer.current);
       }
+      if (toastTimer.current) {
+        clearTimeout(toastTimer.current);
+      }
+      toastProgress.stopAnimation();
     };
-  }, []);
+  }, [toastProgress]);
+
+  const toastAnimatedStyle = {
+    opacity: toastProgress,
+    transform: [
+      {
+        translateY: toastProgress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [14, 0],
+        }),
+      },
+      {
+        scale: toastProgress.interpolate({
+          inputRange: [0, 1],
+          outputRange: [0.96, 1],
+        }),
+      },
+    ],
+  };
 
   return (
     <View style={styles.screen}>
       <ScrollView
+        ref={scrollRef}
         onScroll={handleProductScroll}
-        scrollEventThrottle={160}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
         style={styles.scroll}
         contentContainerStyle={{ paddingBottom: insets.bottom + (product ? 180 : 104) }}>
@@ -236,20 +350,16 @@ export default function ProductDetailsScreen() {
                       <Share2 size={19} color={theme.colors.text} strokeWidth={2.2} />
                     </Pressable>
                     <Pressable
+                      accessibilityLabel="Open cart"
                       accessibilityRole="button"
-                      accessibilityState={{ selected: isFavorite }}
-                      style={({ pressed }) => [
-                        styles.heroNavButton,
-                        isFavorite && styles.heroNavButtonFavorited,
-                        pressed && styles.pressed,
-                      ]}
-                      onPress={() => setIsFavorite((current) => !current)}>
-                      <Heart
-                        size={19}
-                        color={isFavorite ? theme.colors.white : theme.colors.text}
-                        fill={isFavorite ? theme.colors.white : 'transparent'}
-                        strokeWidth={2.2}
-                      />
+                      style={({ pressed }) => [styles.heroNavButton, pressed && styles.pressed]}
+                      onPress={() => router.push(cartRoute)}>
+                      <ShoppingBag size={19} color={theme.colors.text} strokeWidth={2.2} />
+                      {cartItemCount > 0 ? (
+                        <View style={styles.cartCountBadge}>
+                          <Text style={styles.cartCountText}>{cartItemCount > 99 ? '99+' : cartItemCount}</Text>
+                        </View>
+                      ) : null}
                     </Pressable>
                   </View>
                 </View>
@@ -265,9 +375,7 @@ export default function ProductDetailsScreen() {
                       style={[styles.productImage, { aspectRatio }]}
                     />
                   ) : (
-                    <View style={styles.productImageFallback}>
-                      <ImageOff size={64} color={theme.colors.primary} />
-                    </View>
+                    <Image contentFit="contain" source={imageNotFound} style={[styles.productImage, styles.productImageFallback, { aspectRatio }]} />
                   )}
 
                   {/* Image indicators (dots) */}
@@ -292,31 +400,35 @@ export default function ProductDetailsScreen() {
 
             {/* ─── Content area (white, rounded top) ─── */}
             <View style={styles.contentSheet}>
-              {/* Badges row */}
-              {product.tag ? (
-                <View style={styles.badgeRow}>
-                  <View style={styles.badge}>
-                    <Heart size={12} color={theme.colors.primary} fill={theme.colors.primary} strokeWidth={2} />
-                    <Text style={styles.badgeText}>{product.tag}</Text>
-                  </View>
-                  {product.stock != null && product.stock > 0 && product.stock <= 10 ? (
-                    <View style={styles.badgeUrgent}>
-                      <Text style={styles.badgeUrgentText}>🔥 Only {product.stock} left</Text>
-                    </View>
-                  ) : null}
-                </View>
-              ) : null}
-
               {/* Product name + price */}
               <View style={styles.titleBlock}>
-                <Text style={styles.productName}>{product.name}</Text>
                 <View style={styles.priceRow}>
                   <Text style={styles.price}>{formatPhp(product.priceCents)}</Text>
-                  {product.categoryName || product.tag ? (
-                    <Text style={styles.categoryLabel}>
-                      {product.categoryName ?? product.productGroup ?? 'Arrangement'}
-                    </Text>
+                  <View style={styles.priceMetaRow}>
+                    <Text style={styles.soldCountInlineText}>{soldCount.toLocaleString('en-PH')} sold</Text>
+                    <Pressable
+                      accessibilityLabel="Favorite product"
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isFavorite }}
+                      hitSlop={10}
+                      onPress={() => setIsFavorite((current) => !current)}
+                      style={({ pressed }) => [styles.priceFavoriteButton, isFavorite && styles.priceFavoriteButtonActive, pressed && styles.pressed]}>
+                      <Heart
+                        size={24}
+                        color={isFavorite ? '#FF5C93' : theme.colors.textMuted}
+                        fill={isFavorite ? '#FF5C93' : 'transparent'}
+                        strokeWidth={2.2}
+                      />
+                    </Pressable>
+                  </View>
+                </View>
+                <View style={styles.productNameRow}>
+                  {product.tag ? (
+                    <View style={styles.productTagPill}>
+                      <Text style={styles.productTagText}>{product.tag}</Text>
+                    </View>
                   ) : null}
+                  <Text style={styles.productName}>{product.name}</Text>
                 </View>
               </View>
 
@@ -367,12 +479,12 @@ export default function ProductDetailsScreen() {
               </View>
 
               {/* Stock info */}
-              <View style={styles.stockRow}>
-                <View style={[styles.stockDot, isSoldOut ? styles.stockDotOut : styles.stockDotAvailable]} />
-                <Text style={[styles.stockText, isSoldOut && styles.stockTextOut]}>
-                  {isSoldOut ? 'Currently unavailable' : `In Stock (${product.stock ?? 0})`}
-                </Text>
-              </View>
+              {!isSoldOut ? (
+                <View style={styles.stockRow}>
+                  <View style={[styles.stockDot, styles.stockDotAvailable]} />
+                  <Text style={styles.stockText}>In Stock ({product.stock ?? 0})</Text>
+                </View>
+              ) : null}
 
               {/* Divider */}
               <View style={styles.divider} />
@@ -407,9 +519,112 @@ export default function ProductDetailsScreen() {
           isAdded={isAdded}
           isSoldOut={isSoldOut}
           onAddToCart={handleAddToCart}
+          onBuyNow={handleBuyNow}
+          onChat={handleChatAboutProduct}
+          priceLabel={formatPhp(product.priceCents)}
         />
       ) : null}
+
+      {product ? (
+        <ProductScrollHeader
+          animatedStyle={{
+            opacity: compactHeaderProgress,
+            transform: [
+              {
+                translateY: compactHeaderProgress.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [-18, 0],
+                }),
+              },
+            ],
+          }}
+          cartItemCount={cartItemCount}
+          onBack={() => router.back()}
+          onCartPress={() => router.push(cartRoute)}
+          onTitlePress={handleScrollToTop}
+          pointerEvents={showCompactHeader ? 'auto' : 'none'}
+          title={product.name}
+          topInset={insets.top}
+        />
+      ) : null}
+
+      {showAddedToast ? (
+        <Animated.View style={[styles.addedToast, { bottom: insets.bottom + 96 }, toastAnimatedStyle]}>
+          <View style={styles.addedToastIcon}>
+            <Check size={14} color={theme.colors.white} strokeWidth={3} />
+          </View>
+          <Text style={styles.addedToastText}>Added to cart successfully.</Text>
+        </Animated.View>
+      ) : null}
     </View>
+  );
+}
+
+function ProductScrollHeader({
+  animatedStyle,
+  cartItemCount,
+  onBack,
+  onCartPress,
+  onTitlePress,
+  pointerEvents,
+  title,
+  topInset,
+}: {
+  animatedStyle: object;
+  cartItemCount: number;
+  onBack: () => void;
+  onCartPress: () => void;
+  onTitlePress: () => void;
+  pointerEvents: 'auto' | 'none';
+  title: string;
+  topInset: number;
+}) {
+  return (
+    <Animated.View pointerEvents={pointerEvents} style={[styles.compactHeader, { paddingTop: topInset }, animatedStyle]}>
+      <View style={styles.compactHeaderRow}>
+        <View style={styles.compactHeaderLeading}>
+          <Pressable
+            accessibilityLabel="Go back"
+            accessibilityRole="button"
+            hitSlop={10}
+            onPress={onBack}
+            style={({ pressed }) => [styles.compactHeaderButton, pressed && styles.pressed]}>
+            <ArrowLeft size={22} color={theme.colors.text} strokeWidth={2.4} />
+          </Pressable>
+        </View>
+        <Pressable
+          accessibilityLabel="Scroll to product image"
+          accessibilityRole="button"
+          onPress={onTitlePress}
+          style={({ pressed }) => [styles.compactHeaderTitleButton, pressed && styles.pressed]}>
+          <Text numberOfLines={1} style={styles.compactHeaderTitle}>
+            {title}
+          </Text>
+        </Pressable>
+        <View style={styles.compactHeaderActions}>
+          <Pressable
+            accessibilityLabel="Share product"
+            accessibilityRole="button"
+            hitSlop={10}
+            style={({ pressed }) => [styles.compactHeaderButton, pressed && styles.pressed]}>
+            <Share2 size={18} color={theme.colors.text} strokeWidth={2.2} />
+          </Pressable>
+          <Pressable
+            accessibilityLabel="Open cart"
+            accessibilityRole="button"
+            hitSlop={10}
+            onPress={onCartPress}
+            style={({ pressed }) => [styles.compactHeaderButton, pressed && styles.pressed]}>
+            <ShoppingBag size={18} color={theme.colors.text} strokeWidth={2.2} />
+            {cartItemCount > 0 ? (
+              <View style={styles.compactCartCountBadge}>
+                <Text style={styles.compactCartCountText}>{cartItemCount > 99 ? '99+' : cartItemCount}</Text>
+              </View>
+            ) : null}
+          </Pressable>
+        </View>
+      </View>
+    </Animated.View>
   );
 }
 
@@ -571,19 +786,42 @@ function ReviewsSection({ reviews, summary }: { reviews: ProductReview[]; summar
 }
 
 // ─── Bottom action bar ─────────────────────────────────────────────────────────
+function getProductSoldCount(product: Product | undefined) {
+  const productWithSoldCount = product as
+    | (Product & { soldCount?: number; sold_count?: number; totalSold?: number })
+    | undefined;
+  const soldCount = productWithSoldCount?.soldCount ?? productWithSoldCount?.sold_count ?? productWithSoldCount?.totalSold ?? 0;
+
+  return Number.isFinite(soldCount) && soldCount > 0 ? Math.round(soldCount) : 0;
+}
+
 function ProductActionBar({
   bottomInset,
   isAdded,
   isSoldOut,
   onAddToCart,
+  onBuyNow,
+  onChat,
+  priceLabel,
 }: {
   bottomInset: number;
   isAdded: boolean;
   isSoldOut: boolean;
   onAddToCart: () => void;
+  onBuyNow: () => void;
+  onChat: () => void;
+  priceLabel: string;
 }) {
   return (
     <View style={[styles.actionBar, { paddingBottom: bottomInset + theme.spacing.md }]}>
+      <Pressable
+        accessibilityRole="button"
+        style={({ pressed }) => [styles.actionIconButton, pressed && styles.pressed]}
+        onPress={onChat}>
+        <MessageCircle size={21} color={theme.colors.primary} strokeWidth={2.3} />
+        <Text style={styles.actionIconText}>Chat</Text>
+      </Pressable>
+
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ disabled: isSoldOut }}
@@ -595,10 +833,24 @@ function ProductActionBar({
           pressed && !isSoldOut && styles.pressed,
         ]}
         onPress={onAddToCart}>
-        <ShoppingBag size={20} color={isAdded ? theme.colors.primary : theme.colors.white} strokeWidth={2.3} />
+        <ShoppingBag size={18} color={theme.colors.primary} strokeWidth={2.3} />
         <Text style={[styles.cartButtonText, isAdded && styles.cartButtonTextAdded]}>
-          {isSoldOut ? 'Sold out' : isAdded ? 'View cart' : 'Add to cart'}
+          {isAdded ? 'View cart' : 'Add to cart'}
         </Text>
+      </Pressable>
+
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ disabled: isSoldOut }}
+        disabled={isSoldOut}
+        style={({ pressed }) => [
+          styles.buyNowButton,
+          isSoldOut && styles.buyNowButtonDisabled,
+          pressed && !isSoldOut && styles.pressed,
+        ]}
+        onPress={onBuyNow}>
+        <Text style={styles.buyNowLabel}>{isSoldOut ? 'Unavailable' : 'Buy now'}</Text>
+        <Text style={styles.buyNowPrice}>{isSoldOut ? 'Sold out' : priceLabel}</Text>
       </Pressable>
     </View>
   );
@@ -612,6 +864,75 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
+  },
+  compactHeader: {
+    backgroundColor: theme.colors.white,
+    borderBottomColor: 'rgba(31, 42, 36, 0.07)',
+    borderBottomWidth: 1,
+    elevation: 4,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    shadowColor: '#1F2A24',
+    shadowOffset: { height: 3, width: 0 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
+    top: 0,
+    zIndex: 40,
+  },
+  compactHeaderRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    height: 56,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  compactHeaderButton: {
+    alignItems: 'center',
+    height: 44,
+    justifyContent: 'center',
+    position: 'relative',
+    width: 44,
+  },
+  compactHeaderTitle: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansBold,
+    fontSize: 14,
+    lineHeight: 18,
+    paddingHorizontal: theme.spacing.sm,
+    textAlign: 'center',
+  },
+  compactHeaderTitleButton: {
+    alignItems: 'center',
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+  },
+  compactHeaderLeading: {
+    width: 88,
+  },
+  compactHeaderActions: {
+    flexDirection: 'row',
+    width: 88,
+  },
+  compactCartCountBadge: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.white,
+    borderRadius: 9,
+    borderWidth: 1.4,
+    height: 17,
+    justifyContent: 'center',
+    minWidth: 17,
+    paddingHorizontal: 4,
+    position: 'absolute',
+    right: 4,
+    top: 4,
+  },
+  compactCartCountText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansBold,
+    fontSize: 8.5,
+    lineHeight: 11,
   },
   loadingState: {
     alignItems: 'center',
@@ -652,10 +973,31 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
     height: 42,
     justifyContent: 'center',
+    position: 'relative',
     width: 42,
   },
   heroNavButtonFavorited: {
     backgroundColor: theme.colors.primary,
+  },
+  cartCountBadge: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.white,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    height: 18,
+    justifyContent: 'center',
+    minWidth: 18,
+    paddingHorizontal: 4,
+    position: 'absolute',
+    right: -2,
+    top: -3,
+  },
+  cartCountText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansBold,
+    fontSize: 9,
+    lineHeight: 12,
   },
   imageContainer: {
     alignItems: 'center',
@@ -667,10 +1009,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   productImageFallback: {
-    alignItems: 'center',
-    height: 290,
-    justifyContent: 'center',
-    width: '100%',
+    backgroundColor: theme.colors.greenSoft,
   },
   indicatorRow: {
     alignItems: 'center',
@@ -696,11 +1035,11 @@ const styles = StyleSheet.create({
   soldOutBadge: {
     backgroundColor: 'rgba(31, 42, 36, 0.78)',
     borderRadius: theme.radius.pill,
-    left: theme.spacing.lg,
+    bottom: 42,
+    left: theme.spacing.xl,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: 6,
     position: 'absolute',
-    top: 80,
   },
   soldOutText: {
     color: theme.colors.white,
@@ -758,24 +1097,37 @@ const styles = StyleSheet.create({
 
   // Title block
   titleBlock: {
-    gap: theme.spacing.xs,
+    gap: 8,
   },
   productName: {
     color: theme.colors.text,
-    fontFamily: Fonts.sansBold,
-    fontSize: 24,
-    lineHeight: 30,
+    flex: 1,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 18,
+    lineHeight: 23,
+    minWidth: 0,
+  },
+  productNameRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 7,
   },
   priceRow: {
     alignItems: 'center',
     flexDirection: 'row',
+    justifyContent: 'space-between',
     gap: theme.spacing.md,
   },
   price: {
-    color: theme.colors.text,
+    color: theme.colors.primary,
     fontFamily: Fonts.sansExtraBold,
-    fontSize: 22,
-    lineHeight: 28,
+    fontSize: 32,
+    lineHeight: 38,
+  },
+  priceMetaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
   },
   categoryLabel: {
     backgroundColor: theme.colors.surfaceAlt,
@@ -786,6 +1138,37 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     paddingHorizontal: theme.spacing.sm,
     paddingVertical: 3,
+  },
+  priceFavoriteButton: {
+    alignItems: 'center',
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  priceFavoriteButtonActive: {
+    transform: [{ scale: 1.03 }],
+  },
+  productTagPill: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: 4,
+    justifyContent: 'center',
+    marginTop: -1,
+    minHeight: 22,
+    paddingHorizontal: 10,
+  },
+  productTagText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansBold,
+    fontSize: 13,
+    includeFontPadding: false,
+    lineHeight: 17,
+  },
+  soldCountText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 13,
+    lineHeight: 18,
   },
 
   // Meta row
@@ -1060,7 +1443,10 @@ const styles = StyleSheet.create({
 
   // Recommendations
   recommendationWrap: {
-    marginHorizontal: 0,
+    backgroundColor: pageBackground,
+    marginHorizontal: -theme.spacing.xl,
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.lg,
   },
 
   // Action bar
@@ -1070,39 +1456,107 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     bottom: 0,
     flexDirection: 'row',
-    gap: theme.spacing.md,
+    gap: theme.spacing.sm,
     left: 0,
-    paddingHorizontal: theme.spacing.xl,
-    paddingTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing.sm,
     position: 'absolute',
     right: 0,
   },
-  cartButton: {
+  addedToast: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    backgroundColor: '#1F2A24',
+    borderRadius: theme.radius.pill,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    minHeight: 44,
+    paddingHorizontal: theme.spacing.lg,
+    position: 'absolute',
+    zIndex: 60,
+  },
+  addedToastIcon: {
     alignItems: 'center',
     backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.pill,
-    flex: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
+    height: 22,
     justifyContent: 'center',
-    minHeight: 56,
-    paddingHorizontal: theme.spacing.lg,
+    width: 22,
+  },
+  addedToastText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  soldCountInlineText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  actionIconButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 58,
+    width: 58,
+  },
+  actionIconText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 11,
+    lineHeight: 15,
+    marginTop: 2,
+  },
+  cartButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.greenSoft,
+    borderRadius: 16,
+    gap: 2,
+    justifyContent: 'center',
+    minHeight: 58,
+    paddingHorizontal: theme.spacing.md,
+    width: 112,
   },
   cartButtonAdded: {
-    backgroundColor: theme.colors.white,
-    borderColor: theme.colors.primary,
-    borderWidth: 1.5,
+    backgroundColor: theme.colors.greenSoft,
   },
   cartButtonDisabled: {
-    backgroundColor: theme.colors.tabInactive,
+    opacity: 0.45,
   },
   cartButtonText: {
-    color: theme.colors.white,
-    fontFamily: Fonts.sansExtraBold,
-    fontSize: 16,
+    color: theme.colors.primary,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 12,
+    lineHeight: 16,
+    textAlign: 'center',
   },
   cartButtonTextAdded: {
     color: theme.colors.primary,
+  },
+  buyNowButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: 16,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 58,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  buyNowButtonDisabled: {
+    backgroundColor: theme.colors.tabInactive,
+  },
+  buyNowLabel: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  buyNowPrice: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 17,
+    lineHeight: 22,
   },
   pressed: {
     opacity: 0.76,
