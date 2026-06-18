@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
 import ImageUploader from "../../components/ImageUploader"; // Adjust path as needed
@@ -34,8 +34,9 @@ const DEFAULT_SLIDES = [
 
 // ── Live Hero Preview ─────────────────────────────────────────────────────────
 function HeroPreview({ slide, isDark }) {
-  // 🚀 FIXED: Check if the image is a Supabase URL. If yes, use it directly! Otherwise, use the local MAP.
-  const bg = slide.image?.startsWith("http") ? slide.image : (IMAGE_MAP[slide.image] || heroBg1)
+  // Check if the image is a URL (Supabase) or base64 data. If yes, use it! Otherwise, fallback to local map.
+  const isCustomImage = slide.image?.startsWith("http") || slide.image?.startsWith("data:");
+  const bg = isCustomImage ? slide.image : (IMAGE_MAP[slide.image] || heroBg1)
   
   const overlay = isDark
     ? "linear-gradient(90deg, rgba(0,0,0,0.82) 0%, rgba(0,0,0,0.54) 55%, rgba(0,0,0,0.22) 100%)"
@@ -186,24 +187,20 @@ function SaveBtn({ onClick, saved, label="Save Changes" }) {
 function FlowerIcon() {
   return (
     <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-5">
-      {/* Petals — 6 rounded petals radiating outward */}
       <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#f472b6" opacity="0.95"/>
       <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#f472b6" opacity="0.95" transform="rotate(60 20 20)"/>
       <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#ec4899" opacity="0.90" transform="rotate(120 20 20)"/>
       <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#f472b6" opacity="0.95" transform="rotate(180 20 20)"/>
       <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#ec4899" opacity="0.90" transform="rotate(240 20 20)"/>
       <ellipse cx="20" cy="10" rx="4.5" ry="8" fill="#f472b6" opacity="0.95" transform="rotate(300 20 20)"/>
-      {/* Inner petal layer (smaller, rotated 30°) */}
       <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80" transform="rotate(30 20 20)"/>
       <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80" transform="rotate(90 20 20)"/>
       <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80" transform="rotate(150 20 20)"/>
       <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80" transform="rotate(210 20 20)"/>
       <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80" transform="rotate(270 20 20)"/>
       <ellipse cx="20" cy="12" rx="3" ry="6" fill="#fda4c8" opacity="0.80" transform="rotate(330 20 20)"/>
-      {/* Center */}
       <circle cx="20" cy="20" r="5.5" fill="#fbbf24"/>
       <circle cx="20" cy="20" r="3.5" fill="#f59e0b"/>
-      {/* Center dots */}
       <circle cx="20" cy="18.5" r="0.8" fill="#92400e" opacity="0.6"/>
       <circle cx="21.3" cy="20.8" r="0.8" fill="#92400e" opacity="0.6"/>
       <circle cx="18.7" cy="20.8" r="0.8" fill="#92400e" opacity="0.6"/>
@@ -214,12 +211,13 @@ function FlowerIcon() {
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function AdminHero() {
   const { isDark } = useTheme()
-  const [slides,    setSlides]    = useState(DEFAULT_SLIDES)
+  const [slides,    setSlides]    = useState([])
   const [activeIdx, setActiveIdx] = useState(0)
   const [loading,   setLoading]   = useState(true)
   const [saving,    setSaving]    = useState(false)
   const [saved,     setSaved]     = useState(false)
   const [error,     setError]     = useState("")
+  const [uploadingHero, setUploadingHero] = useState(false)
 
   const [rosesEnabled, setRosesEnabled] = useState(() =>
     localStorage.getItem("bloomora-falling-roses") !== "false"
@@ -240,17 +238,47 @@ export default function AdminHero() {
   useEffect(() => {
     api.getHeroSlides()
       .then(data => {
-        if (data?.slides && Array.isArray(data.slides)) {
-          setSlides(data.slides.map((s, i) => ({ ...DEFAULT_SLIDES[i], ...s })))
+        if (data?.slides && Array.isArray(data.slides) && data.slides.length > 0) {
+          // Fill missing properties to ensure smooth editing
+          const defaultTemplate = { tag: "", headline: "", description: "", cta: "", ctaSecondary: "", accent: "#2E8B34", image: "HeroBG1.png" };
+          setSlides(data.slides.map((s, idx) => ({ ...defaultTemplate, ...s, id: s.id || Date.now() + idx })));
+        } else {
+          setSlides(DEFAULT_SLIDES);
         }
       })
-      .catch(() => {})
+      .catch(() => setSlides(DEFAULT_SLIDES))
       .finally(() => setLoading(false))
   }, [])
 
   const updateSlide = (field, value) => {
     setSlides(prev => prev.map((s, i) => i === activeIdx ? { ...s, [field]: value } : s))
   }
+
+  const handleAddSlide = () => {
+    const newSlide = {
+      id: Date.now(),
+      tag: "New Announcement",
+      headline: "Your New\nHeadline Here",
+      description: "Write an engaging description for your new slide.",
+      cta: "Shop Now",
+      ctaSecondary: "Learn More",
+      accent: "#2E8B34",
+      image: "HeroBG1.png" // Defaults to first standard image
+    };
+    setSlides(prev => [...prev, newSlide]);
+    setActiveIdx(slides.length); // Switch view to the newly created slide
+  };
+
+  const handleDeleteSlide = () => {
+    if (slides.length <= 1) {
+      alert("You must have at least one hero slide.");
+      return;
+    }
+    if (window.confirm("Are you sure you want to delete this slide?")) {
+      setSlides(prev => prev.filter((_, i) => i !== activeIdx));
+      setActiveIdx(prev => Math.max(0, prev - 1));
+    }
+  };
 
   const handleSave = async () => {
     setSaving(true); setError("")
@@ -265,7 +293,10 @@ export default function AdminHero() {
   }
 
   const handleReset = () => {
-    if (confirm("Reset all slides to factory defaults?")) setSlides(DEFAULT_SLIDES)
+    if (window.confirm("Reset all slides to factory defaults?")) {
+      setSlides(DEFAULT_SLIDES);
+      setActiveIdx(0);
+    }
   }
 
   const toggleRoses = () => {
@@ -277,7 +308,7 @@ export default function AdminHero() {
 
   const activeSlide = slides[activeIdx]
 
-  if (loading) {
+  if (loading || !activeSlide) {
     return (
       <div className="space-y-5">
         <h1 className="text-xl font-bold" style={{ color: bodyTxt }}>Hero Section</h1>
@@ -289,6 +320,9 @@ export default function AdminHero() {
       </div>
     )
   }
+
+  // Check if current active slide's image is custom
+const isCustomImageActive = activeSlide.image === "custom" || activeSlide.image?.startsWith("http") || activeSlide.image?.startsWith("data:");
 
   return (
     <div className="space-y-5">
@@ -344,6 +378,14 @@ export default function AdminHero() {
             </button>
           )
         })}
+
+        {/* 🚀 ADD SLIDE BUTTON */}
+        <button onClick={handleAddSlide}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-semibold transition-all border border-dashed hover:opacity-70"
+          style={{ borderColor: tabBdr, color: subTxt, backgroundColor: "transparent" }}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
+          Add Slide
+        </button>
       </div>
 
       {/* Live preview */}
@@ -410,14 +452,23 @@ export default function AdminHero() {
 
         <div className="flex items-center gap-3 px-5 py-4"
           style={{ borderBottom:`1px solid ${headerBdr}`, backgroundColor:headerBg }}>
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
-            style={{ background:`linear-gradient(135deg,${DG},${G})` }}>
-            {activeIdx+1}
+          
+          <div className="flex-1 flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+              style={{ background:`linear-gradient(135deg,${DG},${G})` }}>
+              {activeIdx+1}
+            </div>
+            <div>
+              <p className="text-sm font-bold" style={{ color:bodyTxt }}>Editing Slide {activeIdx+1}</p>
+              <p className="text-xs mt-0.5" style={{ color:subTxt }}>Changes reflect instantly in the preview above</p>
+            </div>
           </div>
-          <div>
-            <p className="text-sm font-bold" style={{ color:bodyTxt }}>Editing Slide {activeIdx+1}</p>
-            <p className="text-xs mt-0.5" style={{ color:subTxt }}>Changes reflect instantly in the preview above</p>
-          </div>
+
+          {/* 🚀 DELETE SLIDE BUTTON */}
+          <button onClick={handleDeleteSlide} title="Delete Slide"
+            className="p-2 rounded-md transition-colors text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20" >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+          </button>
         </div>
 
         <div className="p-5 space-y-4">
@@ -450,29 +501,49 @@ export default function AdminHero() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             <Field label="Accent Color" hint="Controls the tag background and primary button color" isDark={isDark}>
               <div className="flex items-center gap-2">
-                <input type="color" value={activeSlide.accent}
+                <input type="color" value={activeSlide.accent || "#2E8B34"}
                   onChange={e => updateSlide("accent", e.target.value)}
                   className="w-10 h-10 p-0 border-0 rounded cursor-pointer flex-shrink-0" />
-                <Input value={activeSlide.accent} onChange={v => updateSlide("accent", v)} placeholder="#2E8B34"
+                <Input value={activeSlide.accent || "#2E8B34"} onChange={v => updateSlide("accent", v)} placeholder="#2E8B34"
                   isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
               </div>
             </Field>
 
-            {/* 🚀 FIXED: The New Hybrid Background Image Selector */}
             <Field label="Background Image" hint="Select a default image or upload a new one" isDark={isDark}>
               <div className="space-y-3">
                 <Select 
-                  value={activeSlide.image?.startsWith("http") ? "custom" : activeSlide.image} 
-                  onChange={v => { if (v !== "custom") updateSlide("image", v) }} 
+                  value={isCustomImageActive ? "custom" : activeSlide.image}
+                  onChange={v => updateSlide("image", v)}
                   options={[...IMAGE_OPTIONS, { label: "Custom Upload...", value: "custom" }]}
-                  isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} 
+                  isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt}
                 />
 
-                {/* Supabase Image Uploader */}
-                <ImageUploader
-                  bucketName="hero-images" 
-                  onUploadComplete={(newUrl) => updateSlide("image", newUrl)} 
-                />
+                {/* The upload button will now correctly appear when "Custom Upload..." is clicked! */}
+                {isCustomImageActive && (
+                  <label className="flex items-center justify-center w-full px-4 py-3 border-2 border-dashed rounded-lg cursor-pointer transition-all hover:opacity-80"
+                    style={{ borderColor: inputBdr, backgroundColor: isDark ? "rgba(255,255,255,0.02)" : "#f8fafc" }}>
+                    <svg className="w-5 h-5 mr-2" style={{ color: subTxt }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+                    <span className="text-sm font-semibold" style={{ color: subTxt }}>
+                      {uploadingHero ? "Uploading to secure server..." : "Click to Upload Custom Hero"}
+                    </span>
+                    <input type="file" accept="image/*" className="hidden" disabled={uploadingHero} 
+                      onChange={async (e) => {
+                        const file = e.target.files[0]; if (!file) return;
+                        setUploadingHero(true);
+                        try {
+                          const fd = new FormData(); fd.append("file", file);
+                          const res = await api.post("/products/admin/upload-image", fd, { headers: { "Content-Type": "multipart/form-data" }});
+                          const url = res.data?.url || res.url;
+                          if (url) updateSlide("image", url); else throw new Error("No URL returned");
+                        } catch (err) { 
+                          alert("Upload failed: " + (err.message || "Unknown error")); 
+                        } finally { 
+                          setUploadingHero(false); 
+                        }
+                      }} 
+                    />
+                  </label>
+                )}
               </div>
             </Field>
           </div>

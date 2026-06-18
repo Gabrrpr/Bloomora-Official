@@ -123,7 +123,19 @@ function AdminCampaignsModal({ mode, campaign, onClose, onSaved, allProducts, is
     Array.isArray(campaign?.product_ids) ? campaign.product_ids : campaign?.products?.map(p => p.id) || []
   )
   const [errors, setErrors] = useState({})
+  
+  // State for Product Filtering inside the Modal
+  const [productSearch, setProductSearch] = useState("")
+  const [branchFilter, setBranchFilter] = useState("All Branches")
+  const [categoryFilter, setCategoryFilter] = useState("All Categories") // 🚀 NEW: Category state
+
   const set = k => v => setForm(p => ({ ...p, [k]: v }))
+
+  // Extract unique categories dynamically from the inventory
+  const uniqueCategories = useMemo(() => {
+    const categories = allProducts.map(p => p.category).filter(Boolean);
+    return Array.from(new Set(categories)).sort();
+  }, [allProducts]);
 
   const validate = () => {
     const errs = {}
@@ -166,6 +178,25 @@ function AdminCampaignsModal({ mode, campaign, onClose, onSaved, allProducts, is
 
   const toggleProduct = id => setSelectedProductIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
 
+  // Filter the visible products based on search, branch, and category selection
+  const filteredProducts = useMemo(() => {
+    return allProducts.filter(p => {
+      const matchesSearch = !productSearch || p.name.toLowerCase().includes(productSearch.toLowerCase());
+      
+      let matchesBranch = true;
+      if (branchFilter !== "All Branches") {
+        matchesBranch = Array.isArray(p.branches) && p.branches.includes(branchFilter);
+      }
+
+      let matchesCategory = true;
+      if (categoryFilter !== "All Categories") {
+        matchesCategory = p.category === categoryFilter;
+      }
+
+      return matchesSearch && matchesBranch && matchesCategory;
+    });
+  }, [allProducts, productSearch, branchFilter, categoryFilter]);
+
   return (
     <ModalShell title={mode === "create" ? "Add Campaign" : "Edit Campaign"} onClose={onClose} isDark={isDark}>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -179,9 +210,10 @@ function AdminCampaignsModal({ mode, campaign, onClose, onSaved, allProducts, is
           isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
 
         <div className="md:col-span-2">
-          <label className="flex items-center gap-2 text-sm font-semibold" style={{ color: isDark ? "#cbd5e1" : "#374151" }}>
-            <input type="checkbox" checked={!!form.is_active} onChange={e => set("is_active")(e.target.checked)} />
-            Active
+          <label className="flex items-center gap-2 text-sm font-semibold cursor-pointer w-max" style={{ color: isDark ? "#cbd5e1" : "#374151" }}>
+            <input type="checkbox" checked={!!form.is_active} onChange={e => set("is_active")(e.target.checked)} 
+              className="w-4 h-4 text-green-600 rounded cursor-pointer" />
+            Set as Active
           </label>
         </div>
 
@@ -197,50 +229,141 @@ function AdminCampaignsModal({ mode, campaign, onClose, onSaved, allProducts, is
         )}
       </div>
 
-      {/* Products */}
-      <div>
-        <p className="text-sm font-semibold mb-2" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>
-          Products (assign to campaign)
-        </p>
-        <div className="border rounded-lg p-3" style={{ borderColor: cardBdr, backgroundColor: isDark ? "#0f172a" : "#fafbfc" }}>
-          {allProducts.length === 0 ? (
-            <p className="text-sm" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>No products available.</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-              {allProducts.slice(0, 30).map(p => (
-                <label key={p.id} className="flex items-center gap-2 text-sm font-medium cursor-pointer"
-                  style={{ color: isDark ? "#cbd5e1" : "#374151" }}>
-                  <input type="checkbox" checked={selectedProductIds.includes(p.id)} onChange={() => toggleProduct(p.id)} />
-                  <span className="truncate" title={p.name}>{p.name}</span>
-                </label>
-              ))}
-              {allProducts.length > 30 && (
-                <p className="text-xs" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>
-                  Showing first 30 products. Refine later if needed.
-                </p>
-              )}
-            </div>
+      {/* Redesigned Product Selection Area */}
+      <div className="mt-4">
+        <div className="flex items-center justify-between mb-3">
+          <div>
+            <p className="text-sm font-semibold" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>
+              Featured Products
+            </p>
+            <p className="text-xs" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>
+              Select which items should appear under this campaign page.
+            </p>
+          </div>
+          {selectedProductIds.length > 0 && (
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full transition-all" 
+              style={{ backgroundColor: isDark ? "rgba(74,222,128,0.15)" : "#dcfce7", color: isDark ? "#4ade80" : "#16a34a" }}>
+              {selectedProductIds.length} Selected
+            </span>
           )}
         </div>
-        <p className="text-xs mt-2" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>
-          Selecting products is optional. If none selected, campaign will have no product mapping.
-        </p>
+
+        <div className="border rounded-xl overflow-hidden shadow-sm" style={{ borderColor: cardBdr, backgroundColor: isDark ? "#0f172a" : "#ffffff" }}>
+          
+          {/* Filters Bar */}
+          <div className="p-3 border-b flex items-center gap-2 flex-wrap sm:flex-nowrap" style={{ borderColor: cardBdr, backgroundColor: isDark ? "#162032" : "#f8fafc" }}>
+            
+            {/* Branch Filter */}
+            <div className="relative">
+              <select
+                value={branchFilter}
+                onChange={e => setBranchFilter(e.target.value)}
+                className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md cursor-pointer outline-none transition-all"
+                style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt, minWidth: "130px" }}
+                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
+                onBlur={e => { e.target.style.borderColor = inputBdr; e.target.style.boxShadow = "none" }}
+              >
+                <option value="All Branches">All Branches</option>
+                <option value="Manila">Manila</option>
+                <option value="Pampanga">Pampanga</option>
+              </select>
+              <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+              </svg>
+            </div>
+
+            {/* 🚀 NEW: Category Filter */}
+            <div className="relative">
+              <select
+                value={categoryFilter}
+                onChange={e => setCategoryFilter(e.target.value)}
+                className="appearance-none pl-3 pr-8 py-2 text-sm border rounded-md cursor-pointer outline-none transition-all"
+                style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt, minWidth: "140px" }}
+                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
+                onBlur={e => { e.target.style.borderColor = inputBdr; e.target.style.boxShadow = "none" }}
+              >
+                <option value="All Categories">All Categories</option>
+                {uniqueCategories.map(cat => (
+                  <option key={cat} value={cat} className="capitalize">{cat}</option>
+                ))}
+              </select>
+              <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
+              </svg>
+            </div>
+
+            {/* Search Bar */}
+            <div className="relative flex-1" style={{ minWidth: "160px" }}>
+              <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={productSearch}
+                onChange={e => setProductSearch(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 text-sm border rounded-md outline-none transition-all"
+                style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}
+                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
+                onBlur={e => { e.target.style.borderColor = inputBdr; e.target.style.boxShadow = "none" }}
+              />
+            </div>
+          </div>
+
+          {/* List Area */}
+          <div className="p-2 overflow-y-auto scrollbar-thin" style={{ maxHeight: "240px" }}>
+            {filteredProducts.length === 0 ? (
+              <p className="text-sm text-center py-6" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>
+                No products match your search or filters.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                {filteredProducts.map(p => (
+                  <label key={p.id} 
+                    className="flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors border border-transparent"
+                    style={{ backgroundColor: selectedProductIds.includes(p.id) ? (isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4") : "transparent" }}
+                    onMouseEnter={e => { if(!selectedProductIds.includes(p.id)) e.currentTarget.style.backgroundColor = isDark ? "rgba(255,255,255,0.03)" : "#f8fafc" }}
+                    onMouseLeave={e => { if(!selectedProductIds.includes(p.id)) e.currentTarget.style.backgroundColor = "transparent" }}
+                  >
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 text-green-600 rounded cursor-pointer flex-shrink-0 mt-0.5"
+                      checked={selectedProductIds.includes(p.id)} 
+                      onChange={() => toggleProduct(p.id)} 
+                    />
+                    <div className="flex flex-col min-w-0">
+                      <span className="text-sm font-semibold truncate" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }} title={p.name}>
+                        {p.name}
+                      </span>
+                      {/* 🚀 Category & Branch Label */}
+                      <span className="text-[10px] uppercase font-bold tracking-wider mt-0.5 flex gap-1.5" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>
+                        <span style={{ color: isDark ? "#94a3b8" : "#64748b" }}>{p.category}</span>
+                        <span>•</span>
+                        <span>{p.branches && p.branches.length > 0 ? p.branches.join(", ") : "Unassigned"}</span>
+                      </span>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Footer buttons */}
-      <div className="flex items-center justify-end gap-2 pt-2">
+      <div className="flex items-center justify-end gap-2 pt-6">
         <button onClick={onClose}
-          className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
+          className="px-4 py-2.5 text-sm font-semibold border rounded-md transition-all"
           style={{ borderColor: isDark ? "#374151" : "#dde3ec", color: isDark ? "#94a3b8" : "#6b7280", backgroundColor: isDark ? "#1a2332" : "white" }}
           onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#2d3f55" : "#f9fafb"}
           onMouseLeave={e => e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "white"}>
           Cancel
         </button>
         <button onClick={handleSave}
-          className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95"
+          className="flex items-center gap-1.5 px-6 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95"
           style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
-          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
           </svg>
           Save Campaign
         </button>
@@ -286,11 +409,17 @@ export default function AdminCampaigns() {
     }
   }
 
+  // 🚀 FIXED: Now pulling `category` so the modal can filter properly
   const fetchProducts = async () => {
     try {
       const res = await api.getAdminProducts()
       const list = (res.data || res) || []
-      setProducts(list.map(p => ({ id: p.id, name: p.name })))
+      setProducts(list.map(p => ({ 
+        id: p.id, 
+        name: p.name, 
+        branches: p.branches || [],
+        category: p.category ? p.category.charAt(0).toUpperCase() + p.category.slice(1) : "Uncategorized" 
+      })))
     } catch (e) {
       console.error("Failed to fetch products for campaigns", e)
       setProducts([])
@@ -344,7 +473,7 @@ export default function AdminCampaigns() {
 
       {/* Stat cards */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-        <WhiteCard label="Total Campaigns"   value={campaigns.length}                         accentColor="#3b82f6" />
+        <WhiteCard label="Total Campaigns"   value={campaigns.length}                        accentColor="#3b82f6" />
         <WhiteCard label="Active"            value={campaigns.filter(c => c.is_active).length}  accentColor="#22c55e" />
         <WhiteCard label="Inactive"          value={campaigns.filter(c => !c.is_active).length} accentColor="#ef4444" />
         <WhiteCard label="Assigned products" value="—" subGray />

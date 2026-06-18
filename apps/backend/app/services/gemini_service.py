@@ -17,13 +17,14 @@ def validate_and_optimize_prompt(user_prompt: str, inventory_list: list[str]) ->
     Task:
     1. Check if the user's floral request is possible using ONLY the inventory above.
     2. If impossible or malicious, set is_possible to false and explain why.
-    3. If possible, set is_possible to true, create the 'optimized_prompt' (must be a visual description for an image generator), AND list the exact names of the inventory items used.
+    3. If possible, set is_possible to true, and create the 'optimized_prompt'. 
+       CRITICAL: The 'optimized_prompt' must be a highly concise visual description for an image generator (MAXIMUM 300 characters / 2 sentences). Do not mention add-ons like chocolates or cards.
+    4. List the exact names of the inventory items used AND provide a realistic 'quantity' for each item based on standard floral design (e.g. 12 roses, 1 vase, 3 filler stems).
     
     User Request: {user_prompt}
     """
 
-    # 🛡️ DEFENSE 2: Strict JSON Schema Enforcement
-    # This prevents Gemini from hallucinating bad JSON structures that crash your server.
+    # 🚀 THE FIX: Enforce Objects with Quantities instead of just Strings
     response_schema = {
         "type": "OBJECT",
         "properties": {
@@ -32,7 +33,14 @@ def validate_and_optimize_prompt(user_prompt: str, inventory_list: list[str]) ->
             "optimized_prompt": {"type": "STRING", "nullable": True},
             "used_items": {
                 "type": "ARRAY",
-                "items": {"type": "STRING"}
+                "items": {
+                    "type": "OBJECT",
+                    "properties": {
+                        "name": {"type": "STRING", "description": "Exact name from inventory list"},
+                        "quantity": {"type": "INTEGER", "description": "Amount used in the arrangement"}
+                    },
+                    "required": ["name", "quantity"]
+                }
             }
         },
         "required": ["is_possible", "used_items"]
@@ -44,9 +52,8 @@ def validate_and_optimize_prompt(user_prompt: str, inventory_list: list[str]) ->
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                response_schema=response_schema, # 🚀 Forces structural compliance
+                response_schema=response_schema, 
                 temperature=0.1,
-                # 🛡️ DEFENSE 3: Maximum Safety Filters
                 safety_settings=[
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold=types.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE),
                     types.SafetySetting(category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold=types.HarmBlockThreshold.BLOCK_LOW_AND_ABOVE),
@@ -58,7 +65,6 @@ def validate_and_optimize_prompt(user_prompt: str, inventory_list: list[str]) ->
         return json.loads(response.text)
     except Exception as e:
         print(f"Gemini Error or Safety Block: {e}")
-        # Safe fallback so the server never crashes
         return {
             "is_possible": False,
             "feedback": "We cannot process this request at the moment. Please try adjusting your floral description.",

@@ -3,7 +3,6 @@ import { api } from "../../services/api.js"
 import { addToCart } from "../../utils/cart.js"
 import { useTheme } from "../../context/ThemeContext"
 
-// 🚀 IMPORT AI CARD COMPOSER UTILS
 import { generateCardMessage, RELATIONSHIP_OPTIONS, OCCASION_OPTIONS, TONE_OPTIONS } from "../../utils/cardMessage.js"
 
 const G  = "#2E8B34"
@@ -43,18 +42,18 @@ const FLOWER_FACTS = [
 export default function DescribeArrangement({ onNavigate }) {
   const { isDark } = useTheme()
 
+  const currentBranch = localStorage.getItem("selectedBranch") || localStorage.getItem("branch") || "Manila"
+
   const [prompt, setPrompt] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
   const [products, setProducts] = useState([])
   
-  // Add-ons state
   const [liveAddOns, setLiveAddOns] = useState([])
   const [selectedAddOns, setSelectedAddOns] = useState([])
   const [showAllAddons, setShowAllAddons] = useState(false)
 
-  // 🚀 NEW: AI Card Composer State
   const [cardMessage, setCardMessage] = useState("")
   const [showAIPanel, setShowAIPanel] = useState(false)
   const [aiCardState, setAiCardState] = useState({ relationship: "", occasion: "", tone: "warm", extra: "" })
@@ -177,7 +176,11 @@ export default function DescribeArrangement({ onNavigate }) {
     return () => { clearInterval(prog); clearInterval(facts) }
   }, [loading])
 
-  const getProductsByCategory = (category) => products.filter(p => p.category === category && p.status !== "inactive")
+  const getProductsByCategory = (category) => products.filter(p => {
+    if (p.category !== category || p.status === "inactive") return false;
+    const inBranch = p.branches?.includes(currentBranch) || !p.branches || p.branches.length === 0;
+    return inBranch;
+  });
 
   const getProductPrice = (productId) => {
     const p = products.find(p => p.id === productId)
@@ -195,7 +198,6 @@ export default function DescribeArrangement({ onNavigate }) {
     setSelectedAddOns(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
   }
 
-  // 🚀 NEW: Generate AI Greeting Card Logic
   const handleGenerateCard = async () => {
     if (!aiCardState.relationship || !aiCardState.occasion) {
       setCardError("Please select a relationship and occasion.");
@@ -232,7 +234,12 @@ export default function DescribeArrangement({ onNavigate }) {
 
     try {
       const availableInventory = products
-        .filter(p => p.is_available && p.status !== "inactive" && p.stock > 0)
+        .filter(p => {
+           if (!p.is_available || p.status === "inactive") return false;
+           const branchStock = currentBranch === "Pampanga" ? p.stock_pampanga : (p.stock_manila ?? p.stock);
+           const inBranch = p.branches?.includes(currentBranch) || !p.branches || p.branches.length === 0;
+           return branchStock > 0 && inBranch;
+        })
         .map(p => p.name)
         .join(", ");
 
@@ -325,13 +332,11 @@ export default function DescribeArrangement({ onNavigate }) {
       totalPrice: grandTotal,
       addOns: selectedAddOnObjects,
       composition: compositionArray,
-      
-      // 🚀 Include the custom greeting card message in the cart payload!
       cardMessage: cardMessage.trim() ? cardMessage.trim() : null,
-      
       checked: true,
       img: result.generated_image_url,
       imgLabel: null,
+      branch: currentBranch
     }
     
     addToCart(cartItem)
@@ -457,7 +462,8 @@ export default function DescribeArrangement({ onNavigate }) {
                             <p className="text-sm font-semibold mb-2.5" style={{ color: subHeadC }}>{label}</p>
                             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2.5">
                               {categoryProducts.map(p => {
-                                const isOutOfStock = p.stock <= 0 || !p.is_available;
+                                const branchStock = currentBranch === "Pampanga" ? p.stock_pampanga : (p.stock_manila ?? p.stock);
+                                const isOutOfStock = branchStock <= 0 || !p.is_available;
                                 return (
                                   <button
                                     key={p.id}
@@ -603,327 +609,347 @@ export default function DescribeArrangement({ onNavigate }) {
             {result && result.success && (
               <div className="border rounded-3xl overflow-hidden"
                 style={{ backgroundColor: cardBg, borderColor: cardBdr, boxShadow: cardShadow }}>
+
+                {/* ── Header ── */}
                 <div className="px-7 pt-6 flex items-center justify-between mb-5">
                   <div className="flex items-center gap-2.5">
                     <svg className="w-5 h-5" style={{ color: isDark ? "#f9a8d4" : "#f472b6" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
-                    <span className="text-base font-bold" style={{ color: subHeadC }}>Final result</span>
-                    <span className="text-sm" style={{ color: mutedC }}>Preview and analysis</span>
+                    <span className="text-base font-bold" style={{ color: subHeadC }}>Your arrangement</span>
+                    <span className="text-sm" style={{ color: mutedC }}>— preview & order</span>
                   </div>
-                  <button
-                    onClick={resetAll}
-                    className="px-3 py-1.5 rounded-lg transition text-sm hover:bg-gray-100 dark:hover:bg-slate-800"
-                    style={{ color: mutedC }}
-                  >
+                  <button onClick={resetAll} className="px-3 py-1.5 rounded-lg text-sm transition hover:bg-gray-100 dark:hover:bg-slate-800" style={{ color: mutedC }}>
                     Reset
                   </button>
                 </div>
 
-                <div className="px-7 pb-7 flex flex-col sm:flex-row gap-6">
+                {/* ── Top zone: image + meta ── */}
+                <div className="px-7 grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-6 mb-0">
+                  {/* Image */}
                   <div
-                    className="w-full sm:w-52 h-64 rounded-2xl flex-shrink-0 flex items-center justify-center border overflow-hidden cursor-pointer hover:opacity-90 transition"
+                    className="relative w-full sm:w-[200px] h-[220px] rounded-2xl overflow-hidden border flex-shrink-0 cursor-pointer group"
                     style={{ borderColor: dividerC, backgroundColor: tilePlaceBg }}
                     onClick={() => result.generated_image_url && setLightboxOpen(true)}
-                    title="Click for a closer look"
                   >
                     {result.generated_image_url ? (
-                      <img src={result.generated_image_url} alt={arrangementName} className="w-full h-full object-cover" />
+                      <>
+                        <img src={result.generated_image_url} alt={arrangementName} className="w-full h-full object-cover" />
+                        <div className="absolute bottom-0 left-0 right-0 px-3 py-2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition"
+                          style={{ background: "linear-gradient(to top, rgba(0,0,0,0.5), transparent)" }}>
+                          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                          <span className="text-[11px] text-white/90">Tap to zoom</span>
+                        </div>
+                      </>
                     ) : (
-                      <div className="text-center px-3">
+                      <div className="flex flex-col items-center justify-center h-full text-center px-3">
                         <p className="text-sm mb-1" style={{ color: faintC }}>No image generated</p>
                         <p className="text-sm font-medium" style={{ color: mutedC }}>{arrangementName}</p>
                       </div>
                     )}
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    <div className="mb-3">
-                      <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: mutedC }}>Arrangement Name</label>
+                  {/* Right meta */}
+                  <div className="flex flex-col gap-3 pt-1">
+                    <div>
+                      <label className="text-[11px] font-semibold uppercase tracking-wider block mb-1.5" style={{ color: mutedC }}>Arrangement name</label>
                       <input
                         type="text"
                         value={customName}
                         onChange={e => setCustomName(e.target.value)}
-                        className="w-full mt-1.5 px-4 py-2.5 text-base font-semibold border rounded-xl focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition"
+                        className="w-full px-4 py-2.5 text-base font-semibold border rounded-xl focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition"
                         style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
                         placeholder="Name your arrangement"
                       />
                     </div>
-                    <p className="text-sm leading-relaxed mb-5" style={{ color: bodyC }}>{arrangementDesc}</p>
+
+                    <p className="text-sm leading-relaxed" style={{ color: bodyC }}>{arrangementDesc}</p>
 
                     {result.price_breakdown?.items?.length > 0 && (
-                      <div className="mb-5">
-                        <p className="text-sm font-semibold mb-2.5" style={{ color: subHeadC }}>Materials Used</p>
-                        <div className="flex flex-wrap gap-2 rounded-xl border p-3.5" style={{ borderColor: tileBdr }}>
+                      <div>
+                        <label className="text-[11px] font-semibold uppercase tracking-wider block mb-1.5" style={{ color: mutedC }}>Materials used</label>
+                        <div className="flex flex-wrap gap-1.5 p-3 rounded-xl border" style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>
                           {result.price_breakdown.items.map((item, idx) => (
-                            <span key={idx} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm" style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>
-                              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: accentG }} />
-                              <span className="font-medium" style={{ color: subHeadC }}>{item.material_type}:</span>
-                              <span style={{ color: bodyC }}>
-                                {item.product_name} 
-                                {item.quantity > 0 && <span className="ml-1 text-xs font-semibold px-1.5 py-0.5 rounded-md" style={{ color: mutedC, backgroundColor: isDark ? "#0f172a" : "#f3f4f6" }}>× {item.quantity}</span>}
-                              </span>
+                            <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-xs"
+                              style={{ borderColor: tileBdr, backgroundColor: isDark ? "#0f172a" : "white" }}>
+                              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: accentG }} />
+                              <span className="font-semibold" style={{ color: subHeadC }}>{item.material_type}:</span>
+                              <span style={{ color: bodyC }}>{item.product_name}</span>
+                              {item.quantity > 1 && (
+                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ color: mutedC, backgroundColor: isDark ? "#1e293b" : "#f3f4f6" }}>×{item.quantity}</span>
+                              )}
                             </span>
                           ))}
                         </div>
                       </div>
                     )}
+                  </div>
+                </div>
 
-                    <div className="mb-5 border-t pt-5" style={{ borderColor: dividerC }}>
-                      <p className="text-sm font-semibold mb-2.5 flex justify-between" style={{ color: subHeadC }}>
-                        Enhance Your Arrangement <span className="text-xs font-normal" style={{ color: mutedC }}>(Optional)</span>
+                {/* ── Prominent Disclaimer Moved Right Under Image ── */}
+                <div className="mx-7 mt-6 mb-2 p-4 flex items-start gap-3 rounded-2xl border" 
+                     style={{ borderColor: isDark ? "rgba(59,130,246,0.2)" : "#bfdbfe", backgroundColor: isDark ? "rgba(59,130,246,0.05)" : "#eff6ff" }}>
+                  <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-0.5" 
+                       style={{ backgroundColor: isDark ? "rgba(59,130,246,0.15)" : "#dbeafe", color: isDark ? "#60a5fa" : "#3b82f6" }}>
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-bold mb-1" style={{ color: isDark ? "#93c5fd" : "#1e40af" }}>AI Concept Preview</p>
+                    <p className="text-xs leading-relaxed" style={{ color: isDark ? "#bfdbfe" : "#1e3a8a" }}>
+                      This image is an AI-generated concept to show the overall color palette and vibe. Your final handcrafted arrangement will strictly follow the exact stem counts and materials listed below in your <strong>Cost breakdown</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                {/* ── Sections ── */}
+                <div className="px-7 pb-2 mt-3 flex flex-col divide-y" style={{ borderColor: dividerC }}>
+                  <div style={{ borderTopColor: dividerC, borderTopWidth: 1 }} />
+
+                  {/* Add-ons */}
+                  <div className="py-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-sm font-semibold" style={{ color: subHeadC }}>
+                        Add-ons <span className="text-xs font-normal" style={{ color: mutedC }}>(optional)</span>
                       </p>
-                      {liveAddOns.length > 0 ? (
+                    </div>
+                    {liveAddOns.length > 0 ? (
+                      <>
                         <div className="grid grid-cols-2 gap-2">
                           {(showAllAddons ? liveAddOns : liveAddOns.slice(0, 4)).map(a => {
                             const isUnavailable = a.stock <= 0 || a.is_available === false
                             const on = selectedAddOns.includes(a.id) && !isUnavailable
-                            const addonBg  = isUnavailable ? (isDark ? "#0f172a" : "#f9fafb") : on ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : (isDark ? "#0f172a" : "white")
-                            const addonBdr = isUnavailable ? (isDark ? "#1e293b" : "#e5e7eb") : on ? (isDark ? "#4ade80" : G) : (isDark ? "#1e293b" : "#e5e7eb")
-                            
                             return (
                               <button key={a.id}
                                 disabled={isUnavailable}
                                 onClick={() => !isUnavailable && toggleAddOn(a.id)}
                                 className="flex items-center gap-2.5 p-2 rounded-xl text-left transition-all relative overflow-hidden"
                                 style={{
-                                  border: `1.5px solid ${addonBdr}`,
-                                  background: addonBg,
+                                  border: `1.5px solid ${on ? accentG : (isDark ? "#1e293b" : "#e5e7eb")}`,
+                                  background: on ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : (isDark ? "#0f172a" : "white"),
                                   opacity: isUnavailable ? 0.5 : 1,
                                   filter: isUnavailable ? "grayscale(100%)" : "none",
                                   cursor: isUnavailable ? "not-allowed" : "pointer"
                                 }}>
                                 <div className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0" style={{ background: isDark ? "#1e293b" : "#f3f4f6" }}>
-                                  <img src={a.image_url} alt={a.name} className="w-full h-full object-cover" onError={e => e.target.style.display="none"}/>
+                                  <img src={a.image_url} alt={a.name} className="w-full h-full object-cover" onError={e => e.target.style.display = "none"} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-semibold truncate m-0" style={{ color: isDark ? "#e2e8f0" : "#111827" }}>{a.name}</p>
-                                  <p className="text-[10px] font-semibold mt-0.5 m-0" style={{ color: isUnavailable ? (isDark ? "#64748b" : "#9ca3af") : (isDark ? "#4ade80" : G) }}>
+                                  <p className="text-xs font-semibold truncate" style={{ color: isDark ? "#e2e8f0" : "#111827" }}>{a.name}</p>
+                                  <p className="text-[11px] font-semibold mt-0.5" style={{ color: isUnavailable ? mutedC : accentG }}>
                                     {isUnavailable ? "Unavailable" : `+₱${a.price}`}
                                   </p>
                                 </div>
                                 <div className="w-4 h-4 rounded-full flex items-center justify-center flex-shrink-0 mr-1"
                                   style={{
-                                    border: `2px solid ${on ? (isDark ? "#4ade80" : G) : isDark ? "#334155" : "#d1d5db"}`,
-                                    background: on ? (isDark ? "rgba(74,222,128,0.2)" : G) : "transparent"
+                                    border: `2px solid ${on ? accentG : (isDark ? "#334155" : "#d1d5db")}`,
+                                    background: on ? accentG : "transparent"
                                   }}>
-                                  {on && <svg width="8" height="8" fill="none" stroke="white" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>}
+                                  {on && <svg width="8" height="8" fill="none" stroke="white" viewBox="0 0 24 24" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>}
                                 </div>
                               </button>
                             )
                           })}
                         </div>
-                      ) : (
-                        <p className="text-xs" style={{ color: mutedC }}>No add-ons available right now.</p>
-                      )}
-                      {liveAddOns.length > 4 && (
-                        <button onClick={() => setShowAllAddons(!showAllAddons)} className="text-xs font-semibold mt-3 hover:underline" style={{ color: accentG }}>
-                          {showAllAddons ? "Show Less" : "See More Options"}
-                        </button>
-                      )}
-                    </div>
-
-                    {/* 🚀 NEW: AI Card Composer seamlessly embedded */}
-                    <div className="mb-5 border-t pt-5" style={{ borderColor: dividerC }}>
-                      <div className="flex items-center justify-between mb-2.5">
-                        <p className="text-sm font-semibold" style={{ color: subHeadC }}>
-                          Greeting Card <span className="text-xs font-normal" style={{ color: mutedC }}>(Optional)</span>
-                        </p>
-                        <button onClick={() => setShowAIPanel(!showAIPanel)} className="text-xs font-semibold flex items-center gap-1 transition-colors hover:underline" style={{ color: accentG }}>
-                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                          </svg>
-                          {showAIPanel ? "Write it myself" : "Use AI Writer"}
-                        </button>
-                      </div>
-
-                      {showAIPanel ? (
-                        <div className="p-4 rounded-xl border mb-2" style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>
-                          <div className="grid grid-cols-2 gap-3 mb-3">
-                            <div>
-                              <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>Relationship *</label>
-                              <select
-                                value={aiCardState.relationship}
-                                onChange={e => { setAiCardState(s => ({...s, relationship: e.target.value})); setCardError(""); }}
-                                className="w-full rounded-lg px-3 py-2 text-sm border outline-none transition"
-                                style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
-                              >
-                                <option value="">Select...</option>
-                                {RELATIONSHIP_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                              </select>
-                            </div>
-                            <div>
-                              <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>Occasion *</label>
-                              <select
-                                value={aiCardState.occasion}
-                                onChange={e => { setAiCardState(s => ({...s, occasion: e.target.value})); setCardError(""); }}
-                                className="w-full rounded-lg px-3 py-2 text-sm border outline-none transition"
-                                style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
-                              >
-                                <option value="">Select...</option>
-                                {OCCASION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
-                              </select>
-                            </div>
-                          </div>
-
-                          <div className="mb-3">
-                            <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>Tone</label>
-                            <div className="flex gap-1.5 flex-wrap">
-                              {TONE_OPTIONS.map(t => (
-                                <button key={t.value} onClick={() => setAiCardState(s => ({...s, tone: t.value}))}
-                                  className="px-2.5 py-1 rounded-full text-xs transition-all border"
-                                  style={{
-                                    fontWeight: aiCardState.tone === t.value ? 600 : 400,
-                                    borderColor: aiCardState.tone === t.value ? accentG : tileBdr,
-                                    backgroundColor: aiCardState.tone === t.value ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : inputBg,
-                                    color: aiCardState.tone === t.value ? accentG : subHeadC
-                                  }}>
-                                  {t.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-
-                          <div className="mb-3">
-                            <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>Extra Context <span className="normal-case tracking-normal font-normal opacity-70">(optional)</span></label>
-                            <input
-                              type="text"
-                              placeholder="e.g. She loves sunflowers, it's our 10th anniversary..."
-                              value={aiCardState.extra}
-                              onChange={e => setAiCardState(s => ({...s, extra: e.target.value}))}
-                              className="w-full rounded-lg px-3 py-2 text-sm border outline-none transition"
-                              style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
-                            />
-                          </div>
-
-                          {cardError && <p className="text-xs text-red-500 mb-3">{cardError}</p>}
-
-                          <button onClick={handleGenerateCard} disabled={generatingCard}
-                            className="w-full py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 transition border-none text-white cursor-pointer hover:opacity-90"
-                            style={{ background: generatingCard ? (isDark ? "#475569" : "#d1d5db") : `linear-gradient(135deg,${DG},${G})` }}>
-                            {generatingCard ? "Writing..." : "Generate Message"}
+                        {liveAddOns.length > 4 && (
+                          <button onClick={() => setShowAllAddons(!showAllAddons)} className="text-xs font-semibold mt-3 hover:underline" style={{ color: accentG }}>
+                            {showAllAddons ? "Show less" : "See more options"}
                           </button>
+                        )}
+                      </>
+                    ) : (
+                      <p className="text-xs" style={{ color: mutedC }}>No add-ons available right now.</p>
+                    )}
+                  </div>
 
-                          {generatedCardMsg && (
-                            <div className="mt-4 border rounded-xl overflow-hidden" style={{ borderColor: isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0" }}>
-                              <div className="p-3" style={{ backgroundColor: isDark ? "rgba(74,222,128,0.06)" : "#f0fdf4" }}>
-                                <p className="text-sm italic leading-relaxed" style={{ color: subHeadC }}>"{generatedCardMsg}"</p>
-                              </div>
-                              <div className="flex border-t" style={{ borderColor: isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0" }}>
-                                <button onClick={() => setGeneratedCardMsg("")} className="flex-1 py-2 text-xs font-semibold border-r transition hover:opacity-80" style={{ borderColor: isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0", color: bodyC, backgroundColor: isDark ? "#0f172a" : "white" }}>Try Again</button>
-                                <button onClick={acceptGeneratedMessage} className="flex-1 py-2 text-xs font-bold transition hover:opacity-80" style={{ color: accentG, backgroundColor: isDark ? "#0f172a" : "white" }}>Use This Message</button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <textarea
-                          value={cardMessage}
-                          onChange={e => setCardMessage(e.target.value.slice(0, 160))}
-                          placeholder="Write a warm, kind message..."
-                          rows={3}
-                          className="w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-1 focus:ring-green-600 transition resize-none"
-                          style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
-                        />
-                      )}
-                      {!showAIPanel && <p className="text-[10px] text-right mt-1" style={{ color: mutedC }}>{cardMessage.length} / 160</p>}
+                  {/* Greeting card */}
+                  <div className="py-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-sm font-semibold" style={{ color: subHeadC }}>
+                        Greeting card <span className="text-xs font-normal" style={{ color: mutedC }}>(optional)</span>
+                      </p>
+                      <button onClick={() => setShowAIPanel(!showAIPanel)} className="text-xs font-semibold flex items-center gap-1 hover:underline" style={{ color: accentG }}>
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                        </svg>
+                        {showAIPanel ? "Write it myself" : "Use AI writer"}
+                      </button>
                     </div>
 
-                    <div className="grid grid-cols-1 gap-5">
-                      <div>
-                        <p className="text-sm font-semibold mb-2.5" style={{ color: subHeadC }}>Cost Breakdown</p>
-                        <div className="rounded-xl border overflow-hidden" style={{ borderColor: tileBdr }}>
-                          <table className="w-full text-sm border-collapse">
-                            <tbody>
-                              {result.price_breakdown?.items?.map((item, idx) => (
-                                <tr key={idx} className="border-b" style={{ borderColor: tableRowBdr }}>
-                                  <td className="px-3 py-2.5 align-top" style={{ color: bodyC }}>
-                                    {item.product_name}
-                                    {item.quantity > 1 && <span className="ml-1 text-xs font-semibold px-1.5 py-0.5 rounded-md" style={{ color: mutedC, backgroundColor: isDark ? "#0f172a" : "#f3f4f6" }}>× {item.quantity}</span>}
-                                  </td>
-                                  <td className="px-3 py-2.5 text-right font-medium whitespace-nowrap" style={{ color: subHeadC }}>₱{(+item.subtotal).toLocaleString()}</td>
-                                </tr>
-                              ))}
-                              {selectedAddOns.map(id => {
-                                const addon = liveAddOns.find(a => a.id === id);
-                                if (!addon) return null;
-                                return (
-                                  <tr key={`addon-${id}`} className="border-b" style={{ borderColor: tableRowBdr }}>
-                                    <td className="px-3 py-2.5 align-top" style={{ color: bodyC }}><span style={{ color: accentG }} className="font-bold mr-1">+</span>{addon.name}</td>
-                                    <td className="px-3 py-2.5 text-right font-medium whitespace-nowrap" style={{ color: subHeadC }}>₱{(+addon.price).toLocaleString()}</td>
-                                  </tr>
-                                )
-                              })}
-                              <tr style={{ backgroundColor: totalRowBg }}>
-                                <td className="px-3 py-3 text-base font-bold" style={{ color: headingC }}>Grand Total</td>
-                                <td className="px-3 py-3 text-right text-base font-bold whitespace-nowrap" style={{ color: accentDG }}>₱{grandTotal.toLocaleString()}.00</td>
-                              </tr>
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-
-                      <div>
-                        <p className="text-sm font-semibold mb-2.5" style={{ color: subHeadC }}>Flower Availability</p>
-                        <div className="rounded-xl border p-4" style={{ borderColor: tileBdr }}>
-                          <div className="text-sm space-y-2 mb-4">
-                            <div className="flex justify-between pb-2 border-b" style={{ borderColor: tableRowBdr }}>
-                              <span style={{ color: bodyC }}>Generated</span>
-                              <span className="font-medium" style={{ color: isDark ? "#4ade80" : "#16a34a" }}>Available</span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span style={{ color: bodyC }}>Remaining AI uses</span>
-                              <span style={{ color: subHeadC }}>{result.remaining_generations} today</span>
-                            </div>
+                    {showAIPanel ? (
+                      <div className="p-4 rounded-xl border" style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>Relationship *</label>
+                            <select value={aiCardState.relationship}
+                              onChange={e => { setAiCardState(s => ({ ...s, relationship: e.target.value })); setCardError("") }}
+                              className="w-full rounded-lg px-3 py-2 text-sm border outline-none transition"
+                              style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}>
+                              <option value="">Select...</option>
+                              {RELATIONSHIP_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                            </select>
                           </div>
-                          <div className="grid grid-cols-3 gap-2 text-sm pt-1">
-                            {[{ l: "Availability", s: "10/10" }, { l: "Popular", s: "9/10" }, { l: "Easy to care", s: "9/10" }].map(({ l, s }) => (
-                              <div key={l} className="text-center">
-                                <svg className="w-5 h-5 mx-auto mb-1" style={{ color: accentG }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M5 13l4 4L19 7" />
-                                </svg>
-                                <p className="font-semibold" style={{ color: subHeadC }}>{s}</p>
-                                <p className="text-xs leading-tight" style={{ color: mutedC }}>{l}</p>
-                              </div>
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>Occasion *</label>
+                            <select value={aiCardState.occasion}
+                              onChange={e => { setAiCardState(s => ({ ...s, occasion: e.target.value })); setCardError("") }}
+                              className="w-full rounded-lg px-3 py-2 text-sm border outline-none transition"
+                              style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}>
+                              <option value="">Select...</option>
+                              {OCCASION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="mb-3">
+                          <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>Tone</label>
+                          <div className="flex gap-1.5 flex-wrap">
+                            {TONE_OPTIONS.map(t => (
+                              <button key={t.value} onClick={() => setAiCardState(s => ({ ...s, tone: t.value }))}
+                                className="px-2.5 py-1 rounded-full text-xs border transition-all"
+                                style={{
+                                  fontWeight: aiCardState.tone === t.value ? 600 : 400,
+                                  borderColor: aiCardState.tone === t.value ? accentG : tileBdr,
+                                  backgroundColor: aiCardState.tone === t.value ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : inputBg,
+                                  color: aiCardState.tone === t.value ? accentG : subHeadC
+                                }}>
+                                {t.label}
+                              </button>
                             ))}
                           </div>
                         </div>
+                        <div className="mb-3">
+                          <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>
+                            Extra context <span className="normal-case tracking-normal font-normal opacity-70">(optional)</span>
+                          </label>
+                          <input type="text" placeholder="e.g. She loves sunflowers, it's our 10th anniversary..."
+                            value={aiCardState.extra}
+                            onChange={e => setAiCardState(s => ({ ...s, extra: e.target.value }))}
+                            className="w-full rounded-lg px-3 py-2 text-sm border outline-none transition"
+                            style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }} />
+                        </div>
+                        {cardError && <p className="text-xs text-red-500 mb-3">{cardError}</p>}
+                        <button onClick={handleGenerateCard} disabled={generatingCard}
+                          className="w-full py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 border-none text-white cursor-pointer hover:opacity-90 transition"
+                          style={{ background: generatingCard ? (isDark ? "#475569" : "#d1d5db") : `linear-gradient(135deg,${DG},${G})` }}>
+                          {generatingCard ? "Writing..." : "Generate message"}
+                        </button>
+                        {generatedCardMsg && (
+                          <div className="mt-4 border rounded-xl overflow-hidden" style={{ borderColor: isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0" }}>
+                            <div className="p-3" style={{ backgroundColor: isDark ? "rgba(74,222,128,0.06)" : "#f0fdf4" }}>
+                              <p className="text-sm italic leading-relaxed" style={{ color: subHeadC }}>"{generatedCardMsg}"</p>
+                            </div>
+                            <div className="flex border-t" style={{ borderColor: isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0" }}>
+                              <button onClick={() => setGeneratedCardMsg("")} className="flex-1 py-2 text-xs font-semibold border-r hover:opacity-80"
+                                style={{ borderColor: isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0", color: bodyC, backgroundColor: isDark ? "#0f172a" : "white" }}>
+                                Try again
+                              </button>
+                              <button onClick={acceptGeneratedMessage} className="flex-1 py-2 text-xs font-bold hover:opacity-80"
+                                style={{ color: accentG, backgroundColor: isDark ? "#0f172a" : "white" }}>
+                                Use this message
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    </div>
-                    
-                    <div className="flex gap-3 mt-6">
-                      <button
-                        onClick={() => handleAddToCart("cart")}
-                        className="flex-1 py-3.5 text-sm font-bold rounded-xl transition-all"
-                        style={{ border: `2px solid ${accentG}`, color: accentG, backgroundColor: "transparent" }}
-                      >
-                        Add to Cart
-                      </button>
-                      <button
-                        onClick={() => handleAddToCart("checkout")}
-                        className="flex-1 py-3.5 text-sm font-bold text-white rounded-xl transition-all hover:brightness-105 active:scale-[0.98]"
-                        style={{ backgroundColor: accentG, color: isDark ? "#08120c" : "#ffffff", boxShadow: "0 4px 14px rgba(46,139,52,0.3)" }}
-                      >
-                        Buy Now
-                      </button>
-                    </div>
+                    ) : (
+                      <textarea
+                        value={cardMessage}
+                        onChange={e => setCardMessage(e.target.value.slice(0, 160))}
+                        placeholder="Write a warm, kind message..."
+                        rows={3}
+                        className="w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-1 focus:ring-green-600 transition resize-none"
+                        style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
+                      />
+                    )}
+                    {!showAIPanel && <p className="text-[10px] text-right mt-1" style={{ color: mutedC }}>{cardMessage.length} / 160</p>}
+                  </div>
 
+                  {/* Cost breakdown */}
+                  <div className="py-5">
+                    <p className="text-sm font-semibold mb-3" style={{ color: subHeadC }}>Cost breakdown</p>
+                    <div className="rounded-xl border overflow-hidden" style={{ borderColor: tileBdr }}>
+                      <table className="w-full text-sm border-collapse">
+                        <tbody>
+                          {result.price_breakdown?.items?.map((item, idx) => (
+                            <tr key={idx} className="border-b" style={{ borderColor: tableRowBdr }}>
+                              <td className="px-3 py-2.5" style={{ color: bodyC }}>
+                                {item.product_name}
+                                {item.quantity > 1 && (
+                                  <span className="ml-1.5 text-xs font-semibold px-1.5 py-0.5 rounded-md" style={{ color: mutedC, backgroundColor: isDark ? "#0f172a" : "#f3f4f6" }}>×{item.quantity}</span>
+                                )}
+                              </td>
+                              <td className="px-3 py-2.5 text-right font-medium whitespace-nowrap" style={{ color: subHeadC }}>₱{(+item.subtotal).toLocaleString()}</td>
+                            </tr>
+                          ))}
+                          {selectedAddOns.map(id => {
+                            const addon = liveAddOns.find(a => a.id === id)
+                            if (!addon) return null
+                            return (
+                              <tr key={`addon-${id}`} className="border-b" style={{ borderColor: tableRowBdr }}>
+                                <td className="px-3 py-2.5" style={{ color: bodyC }}>
+                                  <span style={{ color: accentG }} className="font-bold mr-1">+</span>{addon.name}
+                                  <span className="ml-1 text-xs" style={{ color: mutedC }}>(add-on)</span>
+                                </td>
+                                <td className="px-3 py-2.5 text-right font-medium whitespace-nowrap" style={{ color: subHeadC }}>₱{(+addon.price).toLocaleString()}</td>
+                              </tr>
+                            )
+                          })}
+                          <tr style={{ backgroundColor: totalRowBg }}>
+                            <td className="px-3 py-3 text-base font-bold" style={{ color: headingC }}>Grand total</td>
+                            <td className="px-3 py-3 text-right text-base font-bold whitespace-nowrap" style={{ color: accentDG }}>₱{grandTotal.toLocaleString()}.00</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+
+                  {/* Status chips */}
+                  <div className="grid grid-cols-4 gap-2 mt-3">
+                    {[
+                      { label: "Availability", value: "In stock" },
+                      { label: "Popularity", value: "Top pick" },
+                      { label: "Maintenance", value: "Easy care" },
+                      { label: "AI uses left", value: `${result.remaining_generations} today` },
+                    ].map(({ label, value }) => (
+                      <div key={label} className="flex flex-col items-center py-2.5 px-2 rounded-xl border text-center"
+                        style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>
+                        <svg className="w-4 h-4 mb-1" style={{ color: accentG }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <p className="text-xs font-semibold" style={{ color: subHeadC }}>{value}</p>
+                        <p className="text-[11px] leading-tight mt-0.5" style={{ color: mutedC }}>{label}</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
-                <div className="px-7 pb-5 flex items-start gap-2 border-t pt-4" style={{ borderColor: dividerC }}>
-                  <svg className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: faintC }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <p className="text-sm flex-1" style={{ color: mutedC }}>
-                    This is an AI-generated preview. Your bouquet will be prepared based on your selected options, and the price will remain the same.
-                  </p>
-                  <span className="text-xs font-bold flex-shrink-0 ml-2" style={{ color: mutedC }}>POWERED BY pollinations.ai</span>
+                {/* ── CTA buttons ── */}
+                <div className="flex gap-3 px-7 pb-6 mt-1">
+                  <button onClick={() => handleAddToCart("cart")}
+                    className="flex-1 py-3.5 text-sm font-bold rounded-xl transition-all"
+                    style={{ border: `2px solid ${accentG}`, color: accentG, backgroundColor: "transparent" }}>
+                    Add to cart
+                  </button>
+                  <button onClick={() => handleAddToCart("checkout")}
+                    className="flex-1 py-3.5 text-sm font-bold text-white rounded-xl transition-all hover:brightness-105 active:scale-[0.98]"
+                    style={{ backgroundColor: accentG, boxShadow: "0 4px 14px rgba(46,139,52,0.25)" }}>
+                    Buy now
+                  </button>
                 </div>
+
+                {/* ── Footer note ── */}
+                <div className="px-7 pb-5 flex items-start justify-end gap-2 border-t pt-4" style={{ borderColor: dividerC }}>
+                  <span className="text-[11px] font-bold flex-shrink-0 ml-2" style={{ color: mutedC }}>Powered by pollinations.ai</span>
+                </div>
+
               </div>
             )}
           </div>
 
+          {/* Prompt Tips Sidebar */}
           <div className="backdrop-blur-sm border rounded-3xl p-7 self-start"
             style={{ backgroundColor: cardBg, borderColor: cardBdr, boxShadow: isDark ? "0 12px 40px rgba(0,0,0,0.4)" : "0 12px 40px rgba(12,87,62,0.06)" }}>
             <div className="flex items-center gap-2.5 mb-5">
@@ -963,7 +989,7 @@ export default function DescribeArrangement({ onNavigate }) {
             <svg className="w-10 h-10" viewBox="0 0 48 48" fill="none" style={{ animation: "daBob 2.6s ease-in-out infinite" }}>
               <path d="M24 30V44" stroke="#2E8B34" strokeWidth="2.4" strokeLinecap="round" />
               <path d="M24 38c-3.5 0-6.3-2-7-5.2 3.5-.6 6.3 1.2 7 5.2Z" fill="#34a853" />
-              <path d="M24 34c3-.2 5.6-2 6.4-4.8-3.2-.4-5.8 1.4-6.4 4.8Z" fill="#2E8B34" />
+              <path d="M24 34c3-0.2 5.6-2 6.4-4.8-3.2-0.4-5.8 1.4-6.4 4.8Z" fill="#2E8B34" />
               {[0,60,120,180,240,300].map(deg => (
                 <ellipse key={deg} cx="24" cy="12" rx="5.2" ry="8" fill="#f472b6" transform={`rotate(${deg} 24 22)`} />
               ))}

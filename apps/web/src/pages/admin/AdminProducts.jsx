@@ -260,6 +260,8 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     tags: "" 
   })
 
+  const [branchWarning, setBranchWarning] = useState(false);
+
   // 🚀 Auto-compute pricing logic (Base + Labor)
   const handlePricingChange = (field, value) => {
     setForm(prev => {
@@ -281,7 +283,6 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     });
   };
 
-  // 🚀 Centralized Recipe Logic to auto-calculate Base Price based on materials
   const updateCompositionAndPrice = (newComposition) => {
     setForm(prev => {
       let totalMaterialCost = 0;
@@ -294,15 +295,12 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
 
       const next = { ...prev, composition: newComposition };
       
-      // Auto-update base price and final price if there are items in the recipe
       if (newComposition.length > 0) {
         next.basePrice = totalMaterialCost.toFixed(2);
-        
         const base = totalMaterialCost;
         const labor = parseFloat(next.laborCost) || 0;
         const markup = parseFloat(next.markupPercentage) || 0;
         const totalCost = base + labor;
-        
         next.price = (totalCost + (totalCost * (markup / 100))).toFixed(2);
       }
       return next;
@@ -351,12 +349,14 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
   }
 
   const toggleBranch = (branch) => {
-    setForm(prev => ({
-      ...prev,
-      branches: prev.branches.includes(branch) 
+    setForm(prev => {
+      const newBranches = prev.branches.includes(branch) 
         ? prev.branches.filter(b => b !== branch) 
-        : [...prev.branches, branch]
-    }));
+        : [...prev.branches, branch];
+      
+      if (newBranches.length > 0) setBranchWarning(false);
+      return { ...prev, branches: newBranches };
+    });
   };
 
   const toggleOccasion = (occasion) => {
@@ -432,7 +432,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
       
       fd.append("price", String(form.price));
       fd.append("base_price", String(form.basePrice || 0));
-      fd.append("labor_cost", String(form.laborCost || 0)); // 🚀 Sending Labor Cost
+      fd.append("labor_cost", String(form.laborCost || 0));
       fd.append("markup_percentage", String(form.markupPercentage || 0));
 
       fd.append("status", form.status.toLowerCase());
@@ -475,8 +475,13 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     }
   }
 
-  const floralMaterials = products.filter(p => p.group?.toLowerCase() === 'floral' || p.category?.toLowerCase() === 'flower');
-  const nonFloralMaterials = products.filter(p => p.group?.toLowerCase() !== 'floral' && p.category?.toLowerCase() !== 'flower');
+  const isMaterialAvailableInSelectedBranches = (p) => {
+    if (form.branches.length === 0) return false;
+    return form.branches.every(b => !p.branches || p.branches.length === 0 || p.branches.includes(b));
+  };
+
+  const floralMaterials = products.filter(p => (p.group?.toLowerCase() === 'floral' || p.category?.toLowerCase() === 'flower') && isMaterialAvailableInSelectedBranches(p));
+  const nonFloralMaterials = products.filter(p => (p.group?.toLowerCase() !== 'floral' && p.category?.toLowerCase() !== 'flower') && isMaterialAvailableInSelectedBranches(p));
   const selectedMaterial = products.find(p => p.id === compSelection);
 
   const MaterialDropdownRow = ({ p }) => {
@@ -614,7 +619,6 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             <p className="text-[10px] mt-1" style={{ color: d.subC }}>Words entered here help customers find this product via search.</p>
           </div>
 
-          {/* 🚀 EXPANDED PRICING GRID (Base + Labor) */}
           <div className="p-4 rounded-xl mb-4" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
@@ -770,14 +774,29 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             <div className="flex items-start gap-2 mb-4">
               
               <div className="flex-1 relative">
-                <span className="text-[10px] font-bold uppercase tracking-wider mb-1 block" style={{ color: d.labelC }}>Material</span>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: d.labelC }}>Material</span>
+                  {branchWarning && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded animate-pulse" style={{ backgroundColor: d.isDark ? "rgba(239,68,68,0.15)" : "#fee2e2", color: d.isDark ? "#fca5a5" : "#ef4444" }}>
+                      ⚠️ Select an Available Branch first
+                    </span>
+                  )}
+                </div>
                 
-                <div onClick={() => setIsMaterialDropdownOpen(!isMaterialDropdownOpen)}
+                {/* 🚀 FIXED: Alert UX removed, inline warning added */}
+                <div onClick={() => {
+                    if (form.branches.length === 0) {
+                        setBranchWarning(true);
+                        setTimeout(() => setBranchWarning(false), 2500);
+                        return;
+                    }
+                    setIsMaterialDropdownOpen(!isMaterialDropdownOpen);
+                  }}
                   className="w-full px-3 py-2 text-sm border rounded-md outline-none flex items-center justify-between cursor-pointer transition-all h-[42px]"
                   style={{ 
-                    borderColor: isMaterialDropdownOpen ? "#4ade80" : d.inputBdr, 
-                    backgroundColor: d.inputBg, 
-                    boxShadow: isMaterialDropdownOpen ? "0 0 0 2px rgba(74,222,128,0.18)" : "none" 
+                    borderColor: branchWarning ? "#ef4444" : (isMaterialDropdownOpen ? "#4ade80" : d.inputBdr), 
+                    backgroundColor: branchWarning ? (d.isDark ? "rgba(239,68,68,0.05)" : "#fef2f2") : d.inputBg, 
+                    boxShadow: branchWarning ? "0 0 0 2px rgba(239,68,68,0.15)" : (isMaterialDropdownOpen ? "0 0 0 2px rgba(74,222,128,0.18)" : "none") 
                   }}>
                   {selectedMaterial ? (
                     <div className="flex items-center gap-2">
@@ -785,9 +804,11 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
                       <span className="font-semibold truncate" style={{ color: d.cellC }}>{selectedMaterial.name}</span>
                     </div>
                   ) : (
-                    <span style={{ color: d.subC }}>Select a material...</span>
+                    <span style={{ color: branchWarning ? "#ef4444" : d.subC }}>
+                      {branchWarning ? "Branch required..." : "Select a material..."}
+                    </span>
                   )}
-                  <svg className={`w-4 h-4 transition-transform ${isMaterialDropdownOpen ? "rotate-180" : ""}`} style={{ color: d.subC }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={`w-4 h-4 transition-transform ${isMaterialDropdownOpen ? "rotate-180" : ""}`} style={{ color: branchWarning ? "#ef4444" : d.subC }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
                   </svg>
                 </div>
@@ -804,14 +825,14 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
                         🌸 Floral Materials
                       </div>
                       {floralMaterials.map(p => <MaterialDropdownRow key={p.id} p={p} />)}
-                      {floralMaterials.length === 0 && <p className="px-3 py-2 text-xs" style={{ color: d.subC }}>No floral items found.</p>}
+                      {floralMaterials.length === 0 && <p className="px-3 py-2 text-xs" style={{ color: d.subC }}>No floral items match the selected branch.</p>}
 
                       <div className="sticky top-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider z-10"
                         style={{ backgroundColor: d.hdrBg, color: d.subC, borderTop: `1px solid ${d.divider}`, borderBottom: `1px solid ${d.divider}` }}>
                         🎀 Non-Floral / Accessories
                       </div>
                       {nonFloralMaterials.map(p => <MaterialDropdownRow key={p.id} p={p} />)}
-                      {nonFloralMaterials.length === 0 && <p className="px-3 py-2 text-xs" style={{ color: d.subC }}>No accessories found.</p>}
+                      {nonFloralMaterials.length === 0 && <p className="px-3 py-2 text-xs" style={{ color: d.subC }}>No accessories match the selected branch.</p>}
                     </div>
                   </>
                 )}
@@ -942,6 +963,8 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     tags: Array.isArray(product.tags) ? product.tags.join(", ") : (product.tags || "")
   })
 
+  const [branchWarning, setBranchWarning] = useState(false);
+
   // 🚀 Auto-compute pricing logic (Base + Labor)
   const handlePricingChange = (field, value) => {
     setForm(prev => {
@@ -963,7 +986,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     });
   };
 
-  // 🚀 Centralized Recipe Logic to auto-calculate Base Price based on materials
   const updateCompositionAndPrice = (newComposition) => {
     setForm(prev => {
       let totalMaterialCost = 0;
@@ -976,15 +998,12 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
 
       const next = { ...prev, composition: newComposition };
       
-      // Auto-update base price and final price if there are items in the recipe
       if (newComposition.length > 0) {
         next.basePrice = totalMaterialCost.toFixed(2);
-        
         const base = totalMaterialCost;
         const labor = parseFloat(next.laborCost) || 0;
         const markup = parseFloat(next.markupPercentage) || 0;
         const totalCost = base + labor;
-        
         next.price = (totalCost + (totalCost * (markup / 100))).toFixed(2);
       }
       return next;
@@ -1034,12 +1053,14 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
   }
 
   const toggleBranch = (branch) => {
-    setForm(prev => ({
-      ...prev,
-      branches: prev.branches.includes(branch) 
+    setForm(prev => {
+      const newBranches = prev.branches.includes(branch) 
         ? prev.branches.filter(b => b !== branch) 
-        : [...prev.branches, branch]
-    }));
+        : [...prev.branches, branch];
+      
+      if (newBranches.length > 0) setBranchWarning(false);
+      return { ...prev, branches: newBranches };
+    });
   };
 
   const toggleOccasion = (occasion) => {
@@ -1115,7 +1136,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
       
       fd.append("price", String(form.price));
       fd.append("base_price", String(form.basePrice || 0));
-      fd.append("labor_cost", String(form.laborCost || 0)); // 🚀 Sending Labor Cost
+      fd.append("labor_cost", String(form.laborCost || 0)); 
       fd.append("markup_percentage", String(form.markupPercentage || 0));
 
       fd.append("status", (form.status || "active").toLowerCase());
@@ -1152,8 +1173,14 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
   }
 
   const previewUrl = removeImage ? "" : (form.image_url || getProductImage(product))
-  const floralMaterials = products.filter(p => p.group?.toLowerCase() === 'floral' || p.category?.toLowerCase() === 'flower');
-  const nonFloralMaterials = products.filter(p => p.group?.toLowerCase() !== 'floral' && p.category?.toLowerCase() !== 'flower');
+  
+  const isMaterialAvailableInSelectedBranches = (p) => {
+    if (form.branches.length === 0) return false;
+    return form.branches.every(b => !p.branches || p.branches.length === 0 || p.branches.includes(b));
+  };
+
+  const floralMaterials = products.filter(p => (p.group?.toLowerCase() === 'floral' || p.category?.toLowerCase() === 'flower') && isMaterialAvailableInSelectedBranches(p));
+  const nonFloralMaterials = products.filter(p => (p.group?.toLowerCase() !== 'floral' && p.category?.toLowerCase() !== 'flower') && isMaterialAvailableInSelectedBranches(p));
   const selectedMaterial = products.find(p => p.id === compSelection);
 
   const MaterialDropdownRow = ({ p }) => {
@@ -1279,7 +1306,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             <MSel value={form.status} onChange={set("status")} options={["Active", "Inactive", "On Sale"]} d={d}/>
           </div>
 
-          {/* 🚀 EXPANDED PRICING GRID (Base + Labor) */}
           <div className="p-4 rounded-xl mb-4" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
@@ -1433,14 +1459,29 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             <div className="flex items-start gap-2 mb-4">
               
               <div className="flex-1 relative">
-                <span className="text-[10px] font-bold uppercase tracking-wider mb-1 block" style={{ color: d.labelC }}>Material</span>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] font-bold uppercase tracking-wider block" style={{ color: d.labelC }}>Material</span>
+                  {branchWarning && (
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded animate-pulse" style={{ backgroundColor: d.isDark ? "rgba(239,68,68,0.15)" : "#fee2e2", color: d.isDark ? "#fca5a5" : "#ef4444" }}>
+                      ⚠️ Select an Available Branch first
+                    </span>
+                  )}
+                </div>
                 
-                <div onClick={() => setIsMaterialDropdownOpen(!isMaterialDropdownOpen)}
+                {/* 🚀 FIXED: Alert UX removed, inline warning added */}
+                <div onClick={() => {
+                    if (form.branches.length === 0) {
+                        setBranchWarning(true);
+                        setTimeout(() => setBranchWarning(false), 2500);
+                        return;
+                    }
+                    setIsMaterialDropdownOpen(!isMaterialDropdownOpen);
+                  }}
                   className="w-full px-3 py-2 text-sm border rounded-md outline-none flex items-center justify-between cursor-pointer transition-all h-[42px]"
                   style={{ 
-                    borderColor: isMaterialDropdownOpen ? "#4ade80" : d.inputBdr, 
-                    backgroundColor: d.inputBg, 
-                    boxShadow: isMaterialDropdownOpen ? "0 0 0 2px rgba(74,222,128,0.18)" : "none" 
+                    borderColor: branchWarning ? "#ef4444" : (isMaterialDropdownOpen ? "#4ade80" : d.inputBdr), 
+                    backgroundColor: branchWarning ? (d.isDark ? "rgba(239,68,68,0.05)" : "#fef2f2") : d.inputBg, 
+                    boxShadow: branchWarning ? "0 0 0 2px rgba(239,68,68,0.15)" : (isMaterialDropdownOpen ? "0 0 0 2px rgba(74,222,128,0.18)" : "none") 
                   }}>
                   {selectedMaterial ? (
                     <div className="flex items-center gap-2">
@@ -1448,9 +1489,11 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
                       <span className="font-semibold truncate" style={{ color: d.cellC }}>{selectedMaterial.name}</span>
                     </div>
                   ) : (
-                    <span style={{ color: d.subC }}>Select a material...</span>
+                    <span style={{ color: branchWarning ? "#ef4444" : d.subC }}>
+                      {branchWarning ? "Branch required..." : "Select a material..."}
+                    </span>
                   )}
-                  <svg className={`w-4 h-4 transition-transform ${isMaterialDropdownOpen ? "rotate-180" : ""}`} style={{ color: d.subC }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className={`w-4 h-4 transition-transform ${isMaterialDropdownOpen ? "rotate-180" : ""}`} style={{ color: branchWarning ? "#ef4444" : d.subC }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
                   </svg>
                 </div>
@@ -1467,14 +1510,14 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
                         🌸 Floral Materials
                       </div>
                       {floralMaterials.map(p => <MaterialDropdownRow key={p.id} p={p} />)}
-                      {floralMaterials.length === 0 && <p className="px-3 py-2 text-xs" style={{ color: d.subC }}>No floral items found.</p>}
+                      {floralMaterials.length === 0 && <p className="px-3 py-2 text-xs" style={{ color: d.subC }}>No floral items match the selected branch.</p>}
 
                       <div className="sticky top-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider z-10"
                         style={{ backgroundColor: d.hdrBg, color: d.subC, borderTop: `1px solid ${d.divider}`, borderBottom: `1px solid ${d.divider}` }}>
                         🎀 Non-Floral / Accessories
                       </div>
                       {nonFloralMaterials.map(p => <MaterialDropdownRow key={p.id} p={p} />)}
-                      {nonFloralMaterials.length === 0 && <p className="px-3 py-2 text-xs" style={{ color: d.subC }}>No accessories found.</p>}
+                      {nonFloralMaterials.length === 0 && <p className="px-3 py-2 text-xs" style={{ color: d.subC }}>No accessories match the selected branch.</p>}
                     </div>
                   </>
                 )}

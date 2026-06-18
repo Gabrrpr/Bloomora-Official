@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
+from pydantic import BaseModel
+from google.genai import types
 import uuid
 
 from app.core.dependencies import get_db, get_current_user
@@ -193,12 +195,19 @@ async def check_and_generate(
     db.refresh(arrangement)
 
     # ── Step 7: Generate image via Pollinations (Using Optimized Prompt) ──
-    optimized_prompt = ai_verdict.get("optimized_prompt") or payload.prompt_text
+    base_optimized_prompt = ai_verdict.get("optimized_prompt") or payload.prompt_text
+    
+    final_image_prompt = (
+        f"{base_optimized_prompt}. "
+        f"CRITICAL VISUAL RULE: Only depict the floral arrangement bouquet, vase, and wrapping paper. "
+        f"DO NOT include any external add-on items like greeting cards, chocolates, teddy bears, balloons, jewelry, or extras in the image. "
+        f"Focus solely on the clean florist presentation of the flowers."
+    )
     
     generated_url = await pollinations.generate_arrangement_image(
         db=db,
         arrangement_id=str(arrangement.id),
-        optimized_prompt=optimized_prompt 
+        optimized_prompt=final_image_prompt # Pass our locked down prompt
     )
 
     if not generated_url:
@@ -212,27 +221,46 @@ async def check_and_generate(
     price_breakdown = calculate_price_breakdown(flower, vase, wrapping, accessory)
     
     # 8b. Add items that Gemini intelligently extracted from their text prompt
-    used_item_names = ai_verdict.get("used_items", [])
-    if used_item_names:
-        ai_selected_products = db.query(Product).filter(Product.name.in_(used_item_names)).all()
+    used_item_objects = ai_verdict.get("used_items", []) # Now a list of dicts: [{'name': '...', 'quantity': int}]
+    
+    if used_item_objects:
+        # 1. Extract the raw string names so SQLAlchemy can search for them
+        extracted_names = [
+            item['name'] for item in used_item_objects 
+            if isinstance(item, dict) and 'name' in item
+        ]
         
-        # Get list of IDs already in the breakdown so we don't double charge!
+        # 2. Fetch the products from the DB
+        ai_selected_products = db.query(Product).filter(Product.name.in_(extracted_names)).all()
+        
+        # 3. Create a dictionary map for easy quantity lookup
+        ai_quantities_map = { 
+            item['name']: int(item.get('quantity', 1)) 
+            for item in used_item_objects 
+            if isinstance(item, dict) and 'name' in item 
+        }
+
+        # 4. Get list of IDs already in the breakdown so we don't double charge!
         existing_ids = [item.product_id for item in price_breakdown.items]
         
         for prod in ai_selected_products:
             if str(prod.id) not in existing_ids:
-                # Assuming your Product model has a 'price' or 'unit_price' column
+                # Get the quantity from our map, fallback to 1 just in case
+                ai_quantity = ai_quantities_map.get(prod.name, 1)
+                
+                # Assuming your Product model has a 'price' column (or 'unit_price' fallback)
                 item_price = float(getattr(prod, 'price', getattr(prod, 'unit_price', 0.0)))
+                subtotal_price = item_price * ai_quantity
                 
                 price_breakdown.items.append(PriceBreakdownItem(
                     material_type="Custom Request (AI)",
                     product_id=str(prod.id),
                     product_name=prod.name,
                     unit_price=item_price,
-                    quantity=1,
-                    subtotal=item_price
+                    quantity=ai_quantity,
+                    subtotal=subtotal_price
                 ))
-                price_breakdown.total_price += item_price
+                price_breakdown.total_price += subtotal_price
 
     # Update arrangement with final estimated price
     arrangement.estimated_price = price_breakdown.total_price
@@ -259,4 +287,37 @@ async def check_and_generate(
         remaining_generations=remaining,
         price_breakdown=price_breakdown if price_breakdown is not None else PriceBreakdown(items=[], total_price=0.0),
     )
+class CardRequest(BaseModel):
+    relationship: str
+    occasion: str
+    tone: str
+    extra: str = ""
+
+# 2. Create the new endpoint
+@router.post("/generate-card", tags=["Customization"])
+def generate_card(req: CardRequest):
+    """Uses Gemini to generate a personalized greeting card message."""
+    
+    # Build the instruction for Gemini
+    prompt = f"Write a short, heartfelt greeting card message for a floral delivery. Relationship: {req.relationship}. Occasion: {req.occasion}. Tone: {req.tone}. Extra context: {req.extra}. Keep it under 3 sentences. Do not include quotes around the message."
+    
+    try:
+        # Import your existing Gemini client
+        from app.services.gemini_service import client 
+        
+        response = client.models.generate_content(
+            model='gemini-2.5-flash', 
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.7, # Higher temperature makes it more creative
+            )
+        )
+        # Clean up any accidental quotes Gemini might add
+        clean_message = response.text.strip().strip('"')
+        return {"message": clean_message}
+        
+    except Exception as e:
+        print(f"Gemini Card Error: {e}")
+        # Safe fallback so the frontend doesn't break
+        return {"message": "Thinking of you on this special day. Enjoy the beautiful flowers!"}
 

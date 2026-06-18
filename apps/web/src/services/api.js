@@ -313,6 +313,12 @@ export const api = {
     return api.post('/customization/check-and-generate', data);
   },
 
+  generateCardMessage: async (cardState) => {
+    // This points to the new Python route we just made!
+    const response = await api.post("/customization/generate-card", cardState);
+    return response.data;
+  },
+
   // ── Addresses ───────────────────────────────────────────────────────────
   async getAddresses() {
     return api.get('/addresses/');
