@@ -20,7 +20,7 @@ function FlowerLoader({ message = "Loading...", isDark = false }) {
       <style>{`
         @keyframes adminPetalBloom {
           0%, 100% { opacity: 0.2; }
-          50%       { opacity: 1;   }
+          50%        { opacity: 1;   }
         }
       `}</style>
       <div className="flex flex-col items-center justify-center rounded-xl"
@@ -142,13 +142,15 @@ function ViewInventoryModal({ item, onClose, isDark }) {
 
   const rows = [
     { label: "Item Name", value: item.name },
+    { label: "Branch", value: item.displayBranch, capitalize: true },
     { label: "Category", value: item.category || "—", capitalize: true },
     { label: "Unit Type", value: item.unit_type || "piece" },
-    { label: "Current Stock", value: item.stock ?? 0 },
+    { label: "Manila Stock", value: item.stock_manila ?? 0 },
+    { label: "Pampanga Stock", value: item.stock_pampanga ?? 0 },
+    { label: "Total Shared Stock", value: item.stock ?? 0 },
     { label: "Reorder Point", value: item.reorder_point ?? 10 },
     { label: "Cost per Unit", value: `₱${parseFloat(item.cost_per_unit || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}` },
     { label: "Status", value: item.status === "inactive" ? "Discontinued" : "Active" },
-    { label: "Branches", value: Array.isArray(item.branches) && item.branches.length > 0 ? item.branches.join(", ") : "Unassigned" },
   ]
 
   return createPortal(
@@ -194,13 +196,19 @@ function ViewInventoryModal({ item, onClose, isDark }) {
 
 // ── Edit Inventory Form ──
 function EditItemForm({ item, onBack, onSaveSuccess, isDark }) {
+  // 🚀 Start on "All Branches" by default so they see the total first
+  const [activeBranch, setActiveBranch] = useState("All Branches");
+
+  const [branchStocks, setBranchStocks] = useState({
+    Manila: item.stock_manila ?? 0,
+    Pampanga: item.stock_pampanga ?? 0
+  });
+
   const [f, setF] = useState({ 
     name: item.name || "", 
     sku: item.sku || String(item.id).slice(0, 8) || "", 
     category: item.category || "", 
     unit: item.unit_type || "", 
-    branches: item.branches || [], 
-    stock: item.stock ?? "0", 
     reorderLevel: item.reorder_point ?? "", 
     costPerUnit: item.cost_per_unit ?? "", 
     status: item.status === "inactive" ? "Discontinued" : "Active" 
@@ -211,22 +219,19 @@ function EditItemForm({ item, onBack, onSaveSuccess, isDark }) {
   const UNITS      = ["piece", "bunch", "stem", "box", "pack", "roll", "sheet", "kg", "g", "L", "mL"]
   const STATUSES   = ["Active", "Low Stock", "Out of Stock", "Discontinued"]
 
-  const toggleBranch = (branch) => {
-    setF(prev => ({
-      ...prev,
-      branches: prev.branches.includes(branch) 
-        ? prev.branches.filter(b => b !== branch) 
-        : [...prev.branches, branch]
-    }));
-  };
+  // 🚀 Helpers to handle the "All Branches" dynamic display
+  const isAllBranches = activeBranch === "All Branches";
+  const displayStockValue = isAllBranches 
+    ? (parseInt(branchStocks.Manila) || 0) + (parseInt(branchStocks.Pampanga) || 0)
+    : branchStocks[activeBranch];
 
   const handleSave = async () => {
-    // 🚀 NEW: Strict Validation before saving
-    const stockVal = parseInt(f.stock);
+    const stockMNL = parseInt(branchStocks.Manila) || 0;
+    const stockPMP = parseInt(branchStocks.Pampanga) || 0;
     const reorderVal = parseInt(f.reorderLevel) || 0;
     const costVal = parseFloat(f.costPerUnit) || 0;
 
-    if (isNaN(stockVal) || stockVal < 0) {
+    if (stockMNL < 0 || stockPMP < 0) {
       alert("⚠️ Current Stock must be a valid number (0 or higher).");
       return;
     }
@@ -245,19 +250,25 @@ function EditItemForm({ item, onBack, onSaveSuccess, isDark }) {
       if (f.category) formData.append("category", f.category);
       if (f.unit) formData.append("unit_type", f.unit);
       
-      // 🚀 NEW: Append validated values
-      formData.append("stock", stockVal); 
+      formData.append("stock_manila", stockMNL); 
+      formData.append("stock_pampanga", stockPMP);
+      formData.append("stock", stockMNL + stockPMP);
+      
       formData.append("reorder_point", reorderVal);
       formData.append("cost_per_unit", costVal);
 
       const statusMap = { "Active": "active", "Low Stock": "active", "Out of Stock": "active", "Discontinued": "inactive" };
       if (f.status) formData.append("status", statusMap[f.status] || "active");
-      if (f.branches) formData.append("branches", JSON.stringify(f.branches));
 
       const res = await api.put(`/products/admin/${item.id}`, formData); 
       const updatedItem = res.data || res;
 
-      if (onSaveSuccess) onSaveSuccess(updatedItem);
+      if (onSaveSuccess) onSaveSuccess({
+         ...updatedItem, 
+         stock_manila: stockMNL, 
+         stock_pampanga: stockPMP, 
+         stock: stockMNL + stockPMP 
+      });
     } catch (err) {
       console.error("Failed to update inventory item:", err);
       alert("Failed to update. Check the console for details.");
@@ -286,45 +297,56 @@ function EditItemForm({ item, onBack, onSaveSuccess, isDark }) {
           <div className="grid grid-cols-1 gap-3">
             <div><FL isDark={isDark}>Unit</FL><FSel options={UNITS} value={f.unit} onChange={s("unit")} placeholder="Select" isDark={isDark} /></div>
           </div>
-          <div className="mt-2">
-            <FL isDark={isDark}>Available Branches *</FL>
+        </StepCard>
 
-            <div className="grid grid-cols-2 gap-2 mt-2">
-              {["Manila", "Pampanga"].map((branch) => (
-                <label 
-                  key={branch} 
-                  className="flex items-center space-x-2 cursor-pointer p-1.5 rounded transition-colors"
-                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.04)" : "#f8fffe"}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
-                >
+        <StepCard n={2} title="Stock Details" isDark={isDark}>
+          <div className="mb-4 p-4 rounded-lg" style={{ backgroundColor: isDark ? "#111827" : "#f9fafb", border: `1px solid ${isDark ? "#374151" : "#e5e7eb"}` }}>
+            <FL isDark={isDark}>Select Branch to View/Edit Stock</FL>
+            <div className="flex gap-6 mt-2">
+              {/* 🚀 ADDED ALL BRANCHES OPTION */}
+              {["All Branches", "Manila", "Pampanga"].map(b => (
+                <label key={b} className="flex items-center gap-2 cursor-pointer">
                   <input 
-                    type="checkbox" 
-                    checked={f.branches.includes(branch)}
-                    onChange={() => toggleBranch(branch)}
-                    className="rounded text-green-600 focus:ring-green-500 bg-white border-gray-300"
+                    type="radio" 
+                    name="branchTab" 
+                    value={b} 
+                    checked={activeBranch === b} 
+                    onChange={() => setActiveBranch(b)} 
+                    className="w-4 h-4 text-green-600 focus:ring-green-500 cursor-pointer" 
                   />
-                  <span className="text-xs font-medium" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{branch}</span>
+                  <span className="text-sm font-medium" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{b}</span>
                 </label>
               ))}
             </div>
+            <p className="text-[10px] mt-1.5" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Click a branch to reveal and update its specific stock level.</p>
           </div>
-        </StepCard>
-        <StepCard n={2} title="Stock Details" isDark={isDark}>
+
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <FL isDark={isDark}>Current Stock</FL>
-              {/* 🚀 NEW: Unlocked Input with Warning Disclaimer */}
+              <FL isDark={isDark}>Current Stock ({activeBranch})</FL>
               <FInput 
                 type="number" 
                 placeholder="0" 
-                value={f.stock} 
-                onChange={s("stock")}
-                disabled={false}
+                value={displayStockValue} 
+                onChange={(val) => {
+                  if (!isAllBranches) {
+                    setBranchStocks(prev => ({ ...prev, [activeBranch]: val }))
+                  }
+                }}
+                disabled={isAllBranches} // 🚀 Disabled if viewing "All Branches"
                 isDark={isDark} 
               />
-              <p className="text-[10px] mt-1.5 p-2 rounded-lg bg-amber-50 text-amber-700 font-medium leading-snug border border-amber-200 dark:bg-amber-900/20 dark:border-amber-700/30 dark:text-amber-500">
-                ⚠️ <strong>Warning:</strong> Manually changing stock here bypasses restock logs. This may affect inventory accuracy. Use the "Invoice" button for standard deliveries.
-              </p>
+              
+              {/* 🚀 Dynamic Warning Messages */}
+              {!isAllBranches ? (
+                <p className="text-[10px] mt-1.5 p-2 rounded-lg bg-amber-50 text-amber-700 font-medium leading-snug border border-amber-200 dark:bg-amber-900/20 dark:border-amber-700/30 dark:text-amber-500">
+                  ⚠️ <strong>Warning:</strong> Manually changing stock here bypasses restock logs. Use "Invoice".
+                </p>
+              ) : (
+                <p className="text-[10px] mt-1.5 p-2 rounded-lg bg-blue-50 text-blue-700 font-medium leading-snug border border-blue-200 dark:bg-blue-900/20 dark:border-blue-700/30 dark:text-blue-400">
+                  ℹ️ <strong>Note:</strong> Total shared stock cannot be edited directly. Select a specific branch to adjust inventory.
+                </p>
+              )}
             </div>
             <div><FL isDark={isDark}>Reorder Level</FL><FInput type="number" placeholder="10" value={f.reorderLevel} onChange={s("reorderLevel")} isDark={isDark} /></div>
           </div>
@@ -402,7 +424,7 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
   const [saving, setSaving] = useState(false);
   const [result, setResult] = useState(null);
   const [branch, setBranch] = useState("Manila");
-  const [valErr, setValErr] = useState(""); // 🚀 NEW: Error state for validation
+  const [valErr, setValErr] = useState("");
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -442,7 +464,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
   const handleSave = async () => {
     if (validLines.length === 0) return;
 
-    // 🚀 NEW: Strict Validation Check
     let errorFound = "";
     validLines.forEach(id => {
       const q = parseInt(lines[id].qty);
@@ -467,11 +488,20 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
 
       const received = parseInt(lines[id].qty) || 0;
       const totalCost = parseFloat(lines[id].cost) || 0;
-      const newStock = (parseInt(item.stock) || 0) + received;
+      
+      const currentManila = parseInt(item.stock_manila ?? 0);
+      const currentPampanga = parseInt(item.stock_pampanga ?? 0);
+      
+      const newManila = branch === "Manila" ? currentManila + received : currentManila;
+      const newPampanga = branch === "Pampanga" ? currentPampanga + received : currentPampanga;
+      const totalGlobalStock = newManila + newPampanga;
 
       try {
         const fd = new FormData();
-        fd.append("stock", newStock);
+        fd.append("stock_manila", newManila);
+        fd.append("stock_pampanga", newPampanga);
+        fd.append("stock", totalGlobalStock);
+        
         if (totalCost > 0 && received > 0) {
           fd.append("cost_per_unit", (totalCost / received).toFixed(2));
         }
@@ -487,7 +517,7 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
         });
 
         ok.push(item.name);
-        updatedItemsForState.push({ id, newStock });
+        updatedItemsForState.push({ id, stock_manila: newManila, stock_pampanga: newPampanga, stock: totalGlobalStock });
       } catch (e) {
         console.error("Restock failed for", id, e);
         failed.push(item.name);
@@ -542,7 +572,6 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
           </button>
         </div>
 
-        {/* 🚀 NEW: Validation Error Banner */}
         {valErr && (
           <div className="px-6 pt-4">
             <div className="px-4 py-2.5 text-sm font-semibold text-red-600 bg-red-50 border border-red-200 rounded-lg dark:bg-red-900/20 dark:border-red-800/40 dark:text-red-400">
@@ -578,7 +607,7 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
 
           <div className="relative mb-4">
             <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
             </svg>
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search a product to add to this delivery"
               className="w-full pl-9 pr-4 py-2.5 text-sm border rounded-md outline-none transition-all"
@@ -620,14 +649,16 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                 const item = itemById(id)
                 if (!item) return null
                 const received = parseInt(lines[id].qty) || 0
-                const newTotal = (parseInt(item.stock) || 0) + received
+                const currentBranchStock = branch === "Manila" ? (parseInt(item.stock_manila ?? 0)) : parseInt(item.stock_pampanga ?? 0);
+                const newTotal = currentBranchStock + received;
+
                 return (
                   <div key={id} className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-2 p-3 sm:pb-6 rounded-lg"
                     style={{ backgroundColor: c.rowBg, border: `1px solid ${c.bdr}` }}>
                     <div className="flex items-start justify-between gap-2 flex-1 min-w-0">
                       <div className="min-w-0">
                         <p className="text-sm font-semibold truncate" style={{ color: c.cell }}>{item.name}</p>
-                        <p className="text-xs" style={{ color: c.sub }}>Current: {item.stock ?? 0} {item.unit_type || "piece"}</p>
+                        <p className="text-xs" style={{ color: c.sub }}>Current {branch} Stock: {currentBranchStock} {item.unit_type || "piece"}</p>
                       </div>
                       <button onClick={() => removeLine(id)} className="sm:hidden p-1.5 rounded-md flex-shrink-0 transition-colors" style={{ color: c.sub }}
                         onMouseEnter={e => { e.currentTarget.style.backgroundColor = isDark ? "rgba(239,68,68,0.12)" : "#fee2e2"; e.currentTarget.style.color = "#ef4444" }}
@@ -663,7 +694,7 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                       <span className="sm:hidden text-[10px] font-bold uppercase tracking-wider" style={{ color: c.sub }}>New Total</span>
                       <div className="sm:w-[120px]" style={{ textAlign: "right" }}>
                         <span className="text-sm font-bold" style={{ color: received > 0 ? (isDark ? "#4ade80" : "#16a34a") : c.sub }}>
-                          {item.stock ?? 0}{received > 0 ? ` → ${newTotal}` : ""}
+                          {currentBranchStock}{received > 0 ? ` → ${newTotal}` : ""}
                         </span>
                       </div>
                     </div>
@@ -671,7 +702,7 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                     <button onClick={() => removeLine(id)} className="hidden sm:block p-1.5 rounded-md transition-colors" style={{ color: c.sub, flexShrink: 0 }}
                       onMouseEnter={e => { e.currentTarget.style.backgroundColor = isDark ? "rgba(239,68,68,0.12)" : "#fee2e2"; e.currentTarget.style.color = "#ef4444" }}
                       onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = c.sub }}>
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                   </div>
                 )
@@ -822,14 +853,27 @@ export default function AdminInventory() {
     }
   }
 
+  // 🚀 DYNAMIC DATA PREP: Determine which stock to display per row based on Branch Filter
+  const mappedInventory = inventory.map(item => {
+    let displayStock = parseInt(item.stock || 0); // Default to global shared stock
+    
+    if (branchFilter === "Manila") {
+        displayStock = parseInt(item.stock_manila ?? 0);
+    } else if (branchFilter === "Pampanga") {
+        displayStock = parseInt(item.stock_pampanga ?? 0);
+    }
+    
+    return { ...item, displayStock };
+  });
+
   const dynamicCategories = Array.from(new Set(inventory.map(p => p.category?.toLowerCase()).filter(Boolean))).map(c => c.charAt(0).toUpperCase() + c.slice(1))
 
-  const filtered = inventory.filter(item => {
+  const filtered = mappedInventory.filter(item => {
     const matchSearch = !search || item.name.toLowerCase().includes(search.toLowerCase()) || String(item.id).includes(search)
     let matchStatus = true
-    if (statusFilter === "Active")       matchStatus = item.stock > (item.reorder_point || 10)
-    if (statusFilter === "Low Stock")    matchStatus = item.stock > 0 && item.stock <= (item.reorder_point || 10)
-    if (statusFilter === "Out of Stock") matchStatus = item.stock <= 0
+    if (statusFilter === "Active")        matchStatus = item.displayStock > (item.reorder_point || 10)
+    if (statusFilter === "Low Stock")     matchStatus = item.displayStock > 0 && item.displayStock <= (item.reorder_point || 10)
+    if (statusFilter === "Out of Stock")  matchStatus = item.displayStock <= 0
     const matchCat = !category || item.category?.toLowerCase() === category.toLowerCase()
 
     let matchBranch = true;
@@ -843,8 +887,8 @@ export default function AdminInventory() {
 
     return matchSearch && matchStatus && matchCat && matchBranch
   }).sort((a, b) => {
-    if (stockSort === "asc") return a.stock - b.stock;
-    if (stockSort === "desc") return b.stock - a.stock;
+    if (stockSort === "asc") return a.displayStock - b.displayStock;
+    if (stockSort === "desc") return b.displayStock - a.displayStock;
     return 0;
   })
   
@@ -876,23 +920,28 @@ export default function AdminInventory() {
 
   useEffect(() => { fetchInventory() }, [fetchInventory])
 
-  const totalItems = inventory.length
-  const totalValue = inventory.reduce((s, i) => {
-  const cost = parseFloat(i.cost_per_unit || 0);
-  const stock = parseInt(i.stock || 0); return s + (cost * stock); }, 0);
-  const lowStockCount = inventory.filter(i => i.stock > 0 && i.stock <= (i.reorder_point || 10)).length
-  const outOfStockCount = inventory.filter(i => i.stock <= 0).length
-
-  const totalUnits = inventory.reduce((s, i) => s + (parseInt(i.stock || 0) || 0), 0)
+  // 🚀 SUMMARY METRICS NOW REACT TO THE FILTER
+  const totalItems = filtered.length;
+  const totalValue = filtered.reduce((s, i) => {
+      const cost = parseFloat(i.cost_per_unit || 0);
+      const stock = parseInt(i.displayStock || 0); 
+      return s + (cost * stock); 
+  }, 0);
+  
+  const lowStockCount = filtered.filter(i => i.displayStock > 0 && i.displayStock <= (i.reorder_point || 10)).length
+  const outOfStockCount = filtered.filter(i => i.displayStock <= 0).length
+  const totalUnits = filtered.reduce((s, i) => s + (parseInt(i.displayStock || 0) || 0), 0)
   const reorderNeeded = lowStockCount + outOfStockCount
-  const categoryCount = new Set(inventory.map(i => (i.category || "").toLowerCase()).filter(Boolean)).size
-  const avgCost = inventory.length
-    ? inventory.reduce((s, i) => s + (parseFloat(i.cost_per_unit || 0) || 0), 0) / inventory.length
+  
+  const categoryCount = new Set(filtered.map(i => (i.category || "").toLowerCase()).filter(Boolean)).size
+  const avgCost = filtered.length
+    ? filtered.reduce((s, i) => s + (parseFloat(i.cost_per_unit || 0) || 0), 0) / filtered.length
     : 0
-  const activeCount = Math.max(0, totalItems - lowStockCount - outOfStockCount)
+    
+  const activeCount = Math.max(0, totalItems - lowStockCount - outOfStockCount) 
   const pct = n => (totalItems ? (n / totalItems) * 100 : 0)
 
-  const statusOf = it => it.stock <= 0 ? "Out of Stock" : it.stock <= (it.reorder_point || 10) ? "Low Stock" : "Active"
+  const statusOf = it => it.displayStock <= 0 ? "Out of Stock" : it.displayStock <= (it.reorder_point || 10) ? "Low Stock" : "Active"
 
   const printGroups = (() => {
     const map = new Map()
@@ -906,12 +955,13 @@ export default function AdminInventory() {
       .map(([key, items]) => ({
         label: key.charAt(0).toUpperCase() + key.slice(1),
         items,
-        units: items.reduce((s, i) => s + (parseInt(i.stock || 0) || 0), 0),
-        value: items.reduce((s, i) => s + (parseFloat(i.cost_per_unit || 0) || 0) * (parseInt(i.stock || 0) || 0), 0),
+        units: items.reduce((s, i) => s + (parseInt(i.displayStock || 0) || 0), 0),
+        value: items.reduce((s, i) => s + (parseFloat(i.cost_per_unit || 0) || 0) * (parseInt(i.displayStock || 0) || 0), 0),
       }))
   })()
-  const filteredUnits = filtered.reduce((s, i) => s + (parseInt(i.stock || 0) || 0), 0)
-  const filteredValue = filtered.reduce((s, i) => s + (parseFloat(i.cost_per_unit || 0) || 0) * (parseInt(i.stock || 0) || 0), 0)
+  
+  const filteredUnits = filtered.reduce((s, i) => s + (parseInt(i.displayStock || 0) || 0), 0)
+  const filteredValue = filtered.reduce((s, i) => s + (parseFloat(i.cost_per_unit || 0) || 0) * (parseInt(i.displayStock || 0) || 0), 0)
 
   const printScope = [
     category ? `Category: ${category}` : "All Categories",
@@ -919,7 +969,7 @@ export default function AdminInventory() {
     branchFilter ? `Branch: ${branchFilter}` : "All Branches",
     search ? `Search: "${search}"` : null,
     stockSort === "asc" ? "Sorted by Stock (Low to High)" : stockSort === "desc" ? "Sorted by Stock (High to Low)" : null,
-    `${filtered.length} of ${totalItems} items`,
+    `${filtered.length} of ${inventory.length} total items`,
   ].filter(Boolean).join("   ·   ")
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
@@ -948,9 +998,9 @@ export default function AdminInventory() {
   const handleCSV = () => {
     const headers = ["Item Name", "Category", "Unit", "Current Stock", "Reorder Point", "Cost per Unit (₱)", "Status", "Branches"]
     const rows = filtered.map(item => {
-      const st = item.stock <= 0 ? "Out of Stock" : item.stock <= (item.reorder_point || 10) ? "Low Stock" : "Active"
+      const st = statusOf(item)
       const br = item.branches ? item.branches.join(", ") : "Unassigned"
-      return [item.name, item.category || "—", item.unit_type || "piece", item.stock, item.reorder_point || 10, item.cost_per_unit || "0.00", st, br]
+      return [item.name, item.category || "—", item.unit_type || "piece", item.displayStock, item.reorder_point || 10, item.cost_per_unit || "0.00", st, br]
     })
     const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(",")).join("\n")
     const a = Object.assign(document.createElement("a"), {
@@ -1146,7 +1196,7 @@ export default function AdminInventory() {
             if (updatedItems && updatedItems.length > 0) {
               setInventory(prev => prev.map(p => {
                 const match = updatedItems.find(u => String(u.id) === String(p.id));
-                return match ? { ...p, stock: match.newStock } : p;
+                return match ? { ...p, stock_manila: match.stock_manila, stock_pampanga: match.stock_pampanga, stock: match.stock } : p;
               }));
             }
             
@@ -1169,10 +1219,11 @@ export default function AdminInventory() {
         <div className="rounded-xl p-4 sm:p-5 flex flex-col justify-between relative overflow-hidden"
           style={{ background: "linear-gradient(135deg,#0a4a34 0%,#1a7040 60%,#2E8B34 100%)", boxShadow: "0 4px 16px rgba(12,87,62,0.25)" }}>
           <div>
-            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.65)" }}>Total Items</p>
+            <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.65)" }}>
+               {branchFilter && branchFilter !== "All Branches" && branchFilter !== "Unassigned" ? `${branchFilter} Items` : "Total Items"}
+            </p>
             <p className="text-2xl sm:text-3xl font-bold text-white mt-2 leading-tight break-words">{totalItems}</p>
           </div>
-          {/* Add Item Button Removed */}
         </div>
         {[
           { label: "Est. Inventory Value", val: `₱${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, accent: "#3b82f6" },
@@ -1300,7 +1351,6 @@ export default function AdminInventory() {
                     <option value="All Branches">All Branches</option>
                     <option value="Manila">Manila</option>
                     <option value="Pampanga">Pampanga</option>
-                    <option value="Unassigned">Unassigned</option>
                   </select>
                   <svg className="w-3.5 h-3.5 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
@@ -1334,13 +1384,12 @@ export default function AdminInventory() {
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Current Stock</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Cost per Unit</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Status</th>
-                  <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Branch</th>
                   <th className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr><td colSpan={8} className="px-5 py-12 text-center text-sm" style={{ color: d.subC }}>Loading inventory...</td></tr>
+                  <tr><td colSpan={7} className="px-5 py-12 text-center text-sm" style={{ color: d.subC }}>Loading inventory...</td></tr>
                 ) : paginated.length > 0 ? paginated.map((item, idx) => {
                   const invStatus = statusOf(item)
                   return (
@@ -1349,34 +1398,33 @@ export default function AdminInventory() {
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.04)" : "#f8fffe"}
                       onMouseLeave={e => e.currentTarget.style.backgroundColor = isDark ? (idx % 2 === 0 ? "#1a2332" : "#111827") : "white"}>
                       <td className="px-4 py-3 align-top">
-                        <span className="font-medium block leading-snug break-words" style={{ color: d.cellTxt }}>{item.name}</span>
+                        <div className="flex flex-col gap-1 sm:flex-row sm:items-center">
+                          <span className="font-medium leading-snug break-words" style={{ color: d.cellTxt }}>{item.name}</span>
+                          
+                          {/* 🚀 Dynamic Branch Label directly beside the name */}
+                          {branchFilter && branchFilter !== "All Branches" && branchFilter !== "Unassigned" && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider self-start" 
+                              style={{ 
+                                backgroundColor: isDark ? "rgba(59,130,246,0.15)" : "#eff6ff", 
+                                color: isDark ? "#60a5fa" : "#2563eb", 
+                                border: `1px solid ${isDark ? "rgba(59,130,246,0.3)" : "#bfdbfe"}` 
+                              }}>
+                              {branchFilter}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-3 align-top"><span className="capitalize break-words" style={{ color: d.subC }}>{item.category || "—"}</span></td>
                       <td className="px-4 py-3 align-top"><span style={{ color: d.subC }}>{item.unit_type || "piece"}</span></td>
                       <td className="px-4 py-3 align-top whitespace-nowrap">
                         <span className="font-semibold"
-                          style={{ color: item.stock <= 0 ? (isDark ? "#f87171" : "#dc2626") : item.stock <= (item.reorder_point || 10) ? (isDark ? "#fbbf24" : "#d97706") : (isDark ? "#4ade80" : "#16a34a") }}>
-                          {item.stock}
+                          style={{ color: item.displayStock <= 0 ? (isDark ? "#f87171" : "#dc2626") : item.displayStock <= (item.reorder_point || 10) ? (isDark ? "#fbbf24" : "#d97706") : (isDark ? "#4ade80" : "#16a34a") }}>
+                          {item.displayStock}
                         </span>
                       </td>
                       <td className="px-4 py-3 align-top whitespace-nowrap" style={{ color: d.subC }}>₱{item.cost_per_unit || "0.00"}</td>
                       <td className="px-4 py-3 align-top">
                         <InvStatusBadge status={invStatus} isDark={isDark} />
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                        {Array.isArray(item.branches) && item.branches.length > 0 ? (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider" 
-                            style={{ 
-                              backgroundColor: isDark ? "rgba(255,255,255,0.05)" : "#f3f4f6", 
-                              color: d.subC, border: `1px solid ${isDark ? "#374151" : "#e5e7eb"}`
-                            }}>
-                            {item.branches.join(", ")}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-gray-100 text-gray-500">
-                            Unassigned
-                          </span>
-                        )}
                       </td>
                       <td className="px-4 py-3 align-top">
                         <ActionBtns 
@@ -1388,7 +1436,7 @@ export default function AdminInventory() {
                     </tr>
                   )
                 }) : (
-                  <tr><td colSpan={8} className="px-5 py-12 text-center text-sm" style={{ color: d.subC }}>No inventory items found.</td></tr>
+                  <tr><td colSpan={7} className="px-5 py-12 text-center text-sm" style={{ color: d.subC }}>No inventory items found.</td></tr>
                 )}
               </tbody>
             </table>
@@ -1436,13 +1484,18 @@ export default function AdminInventory() {
                         n += 1
                         const st = statusOf(item)
                         const pillCls = st === "Out of Stock" ? "out" : st === "Low Stock" ? "low" : "active"
-                        const stockValue = (parseFloat(item.cost_per_unit || 0) || 0) * (parseInt(item.stock || 0) || 0)
+                        const stockValue = (parseFloat(item.cost_per_unit || 0) || 0) * (parseInt(item.displayStock || 0) || 0)
                         return (
                           <tr key={item.id} className={i % 2 === 1 ? "alt" : ""}>
                             <td className="num nowrap muted">{n}</td>
-                            <td><span className="item-name">{item.name}</span></td>
+                            <td>
+                              <span className="item-name">{item.name}</span>
+                              {branchFilter && branchFilter !== "All Branches" && branchFilter !== "Unassigned" && (
+                                <span style={{ color: "#6b7280", fontSize: "8px", marginLeft: "4px" }}>({branchFilter})</span>
+                              )}
+                            </td>
                             <td className="muted">{item.unit_type || "piece"}</td>
-                            <td className="num nowrap"><span className={`stk ${pillCls}`}>{item.stock}</span></td>
+                            <td className="num nowrap"><span className={`stk ${pillCls}`}>{item.displayStock}</span></td>
                             <td className="num nowrap muted">{item.reorder_point || 10}</td>
                             <td className="num nowrap muted">₱{(parseFloat(item.cost_per_unit || 0) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                             <td className="num nowrap">₱{stockValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>

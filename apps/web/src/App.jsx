@@ -79,6 +79,19 @@ function AppContent() {
   const pageRef = useRef(page);
 
   useEffect(() => {
+    const fetchGlobalSettings = async () => {
+      try {
+        const data = await api.isCustomizationEnabled();
+        // Update the state with the real database value
+        setIsCustomizationEnabled(data.enabled);
+      } catch (err) {
+        console.error("Failed to fetch AI Customization setting:", err);
+      }
+    };
+    fetchGlobalSettings();
+  }, []);
+
+  useEffect(() => {
     const handleLocationChange = () => {
       const path = window.location.pathname;
       const hasCode = new URLSearchParams(window.location.search).has("code");

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, Fragment } from "react"
 import { createPortal } from "react-dom"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
@@ -248,7 +248,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
   const [form, setForm] = useState({ 
     name:"", group:"floral", category:"", productType:"", 
     price:"", 
-    basePrice: "", markupPercentage: "10", 
+    basePrice: "", laborCost: "", markupPercentage: "10", 
     availability:"Available", 
     status:"Active", description:"", image_url:"", 
     season_key:"", limited_start_at:"", limited_end_at:"",
@@ -260,22 +260,50 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     tags: "" 
   })
 
-  // 🚀 Auto-compute pricing logic
+  // 🚀 Auto-compute pricing logic (Base + Labor)
   const handlePricingChange = (field, value) => {
     setForm(prev => {
       const next = { ...prev, [field]: value };
-      const base = parseFloat(next.basePrice);
-      const markup = parseFloat(next.markupPercentage);
-      const final = parseFloat(next.price);
+      const base = parseFloat(next.basePrice) || 0;
+      const labor = parseFloat(next.laborCost) || 0;
+      const markup = parseFloat(next.markupPercentage) || 0;
+      const final = parseFloat(next.price) || 0;
+      const totalCost = base + labor;
 
-      if (field === 'basePrice' || field === 'markupPercentage') {
-         if (!isNaN(base) && !isNaN(markup)) {
-           next.price = (base + (base * (markup / 100))).toFixed(2);
-         }
+      if (field === 'basePrice' || field === 'markupPercentage' || field === 'laborCost') {
+         next.price = (totalCost + (totalCost * (markup / 100))).toFixed(2);
       } else if (field === 'price') {
-         if (!isNaN(base) && base > 0 && !isNaN(final)) {
-           next.markupPercentage = (((final - base) / base) * 100).toFixed(2);
+         if (totalCost > 0) {
+           next.markupPercentage = (((final - totalCost) / totalCost) * 100).toFixed(2);
          }
+      }
+      return next;
+    });
+  };
+
+  // 🚀 Centralized Recipe Logic to auto-calculate Base Price based on materials
+  const updateCompositionAndPrice = (newComposition) => {
+    setForm(prev => {
+      let totalMaterialCost = 0;
+      newComposition.forEach(compItem => {
+        const material = products.find(p => p.id === compItem.product_id);
+        const cost = parseFloat(material?.cost_per_unit || material?.base_price || 0);
+        const qty = parseInt(compItem.quantity) || 0;
+        totalMaterialCost += (cost * qty);
+      });
+
+      const next = { ...prev, composition: newComposition };
+      
+      // Auto-update base price and final price if there are items in the recipe
+      if (newComposition.length > 0) {
+        next.basePrice = totalMaterialCost.toFixed(2);
+        
+        const base = totalMaterialCost;
+        const labor = parseFloat(next.laborCost) || 0;
+        const markup = parseFloat(next.markupPercentage) || 0;
+        const totalCost = base + labor;
+        
+        next.price = (totalCost + (totalCost * (markup / 100))).toFixed(2);
       }
       return next;
     });
@@ -354,33 +382,28 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
       alert("This material is already in the recipe!");
       return;
     }
-    setForm(prev => ({
-      ...prev,
-      composition: [
-        ...prev.composition, 
-        { product_id: material.id, name: material.name, quantity: compQty }
-      ]
-    }));
+    
+    const newComp = [
+      ...form.composition, 
+      { product_id: material.id, name: material.name, quantity: compQty }
+    ];
+    updateCompositionAndPrice(newComp);
     setCompSelection("");
     setCompQty(1);
   };
 
   const handleRemoveCompositionItem = (idToRemove) => {
-    setForm(prev => ({
-      ...prev,
-      composition: prev.composition.filter(item => item.product_id !== idToRemove)
-    }));
+    const newComp = form.composition.filter(item => item.product_id !== idToRemove);
+    updateCompositionAndPrice(newComp);
   };
 
   const handleUpdateCompositionQty = (productId, newQty) => {
-    setForm(prev => ({
-      ...prev,
-      composition: prev.composition.map(item => 
-        item.product_id === productId 
-          ? { ...item, quantity: newQty === "" ? "" : parseInt(newQty) } 
-          : item
-      )
-    }));
+    const newComp = form.composition.map(item => 
+      item.product_id === productId 
+        ? { ...item, quantity: newQty === "" ? "" : parseInt(newQty) } 
+        : item
+    );
+    updateCompositionAndPrice(newComp);
   };
 
   const handleUpload = async (e) => {
@@ -409,6 +432,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
       
       fd.append("price", String(form.price));
       fd.append("base_price", String(form.basePrice || 0));
+      fd.append("labor_cost", String(form.laborCost || 0)); // 🚀 Sending Labor Cost
       fd.append("markup_percentage", String(form.markupPercentage || 0));
 
       fd.append("status", form.status.toLowerCase());
@@ -435,6 +459,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
       const newProduct = {
         ...(res.product || res.data || res),
         base_price: form.basePrice,
+        labor_cost: form.laborCost,
         markup_percentage: form.markupPercentage,
         price: form.price
       };
@@ -485,7 +510,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
       style={{ backgroundColor:d.overlayBg, backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)", zIndex:9999, top:0, left:0, width:"100vw", height:"100vh" }}
       onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
       <div className="rounded-xl w-full overflow-hidden flex flex-col"
-        style={{ maxWidth:"640px", maxHeight:"90vh", boxShadow:"0 24px 64px rgba(0,0,0,0.5)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
+        style={{ maxWidth:"700px", maxHeight:"90vh", boxShadow:"0 24px 64px rgba(0,0,0,0.5)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
 
         <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
           style={{ borderBottom:`1px solid ${d.modalHdrBdr}`, background:d.modalHdr }}>
@@ -589,8 +614,9 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             <p className="text-[10px] mt-1" style={{ color: d.subC }}>Words entered here help customers find this product via search.</p>
           </div>
 
+          {/* 🚀 EXPANDED PRICING GRID (Base + Labor) */}
           <div className="p-4 rounded-xl mb-4" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
                 <MLabel d={d}>Base Cost (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
                 <MInput 
@@ -598,6 +624,16 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
                   value={form.basePrice} 
                   onChange={(val) => handlePricingChange('basePrice', val)} 
                   placeholder="e.g. 500" 
+                  d={d}
+                />
+              </div>
+              <div>
+                <MLabel d={d}>Labor Cost (₱)</MLabel>
+                <MInput 
+                  type="number" 
+                  value={form.laborCost} 
+                  onChange={(val) => handlePricingChange('laborCost', val)} 
+                  placeholder="e.g. 150" 
                   d={d}
                 />
               </div>
@@ -612,7 +648,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
                 />
               </div>
               <div>
-                <MLabel d={d}>Final Selling Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
+                <MLabel d={d}>Final Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
                 <MInput 
                   type="number" 
                   value={form.price} 
@@ -672,6 +708,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             </div>
           </div>
 
+          {/* OCCASIONS SELECTION GRID */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {[
               "Anniversary", "Birthday", "Congratulation", "Get Well", 
@@ -695,6 +732,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             ))}
           </div>
 
+          {/* BRANCHES SELECTION GRID */}
           <div className="mt-4 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
             <MLabel d={d}>Available Branches <span style={{ color:"#f87171" }}>*</span></MLabel>
             <p className="text-xs mb-3" style={{ color: d.subC }}>
@@ -726,7 +764,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
           <div className="mt-6 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
             <MLabel d={d}>Arrangement Recipe (Optional)</MLabel>
             <p className="text-xs mb-4" style={{ color: d.subC }}>
-              If this product is made of other items (like stems and vases), add them here so inventory updates automatically when purchased.
+              If this product is made of other items (like stems and vases), add them here. <strong>Base Cost will automatically calculate.</strong>
             </p>
 
             <div className="flex items-start gap-2 mb-4">
@@ -858,7 +896,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
           <button type="button" onClick={handleSave} disabled={isUploading || isSaving || form.branches.length === 0}
             className="flex items-center gap-1.5 px-5 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
             style={{ background:`linear-gradient(135deg,${DG},${G})` }}>
-            {isSaving ? "Saving..." : "Save Changes"}
+            {isSaving ? "Saving..." : "Add Product"}
           </button>
         </div>
       </div>
@@ -886,6 +924,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     price: product.price ? String(product.price) : "",
     
     basePrice: product.base_price ?? "", 
+    laborCost: product.labor_cost ?? "", 
     markupPercentage: product.markup_percentage ?? "10",
     
     availability: !product.is_available ? "Out of Stock" : product.stock <= (product.reorder_point || 10) ? "Limited" : "Available",
@@ -903,22 +942,50 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     tags: Array.isArray(product.tags) ? product.tags.join(", ") : (product.tags || "")
   })
 
-  // 🚀 Auto-compute pricing logic
+  // 🚀 Auto-compute pricing logic (Base + Labor)
   const handlePricingChange = (field, value) => {
     setForm(prev => {
       const next = { ...prev, [field]: value };
-      const base = parseFloat(next.basePrice);
-      const markup = parseFloat(next.markupPercentage);
-      const final = parseFloat(next.price);
+      const base = parseFloat(next.basePrice) || 0;
+      const labor = parseFloat(next.laborCost) || 0;
+      const markup = parseFloat(next.markupPercentage) || 0;
+      const final = parseFloat(next.price) || 0;
+      const totalCost = base + labor;
 
-      if (field === 'basePrice' || field === 'markupPercentage') {
-         if (!isNaN(base) && !isNaN(markup)) {
-           next.price = (base + (base * (markup / 100))).toFixed(2);
-         }
+      if (field === 'basePrice' || field === 'markupPercentage' || field === 'laborCost') {
+         next.price = (totalCost + (totalCost * (markup / 100))).toFixed(2);
       } else if (field === 'price') {
-         if (!isNaN(base) && base > 0 && !isNaN(final)) {
-           next.markupPercentage = (((final - base) / base) * 100).toFixed(2);
+         if (totalCost > 0) {
+           next.markupPercentage = (((final - totalCost) / totalCost) * 100).toFixed(2);
          }
+      }
+      return next;
+    });
+  };
+
+  // 🚀 Centralized Recipe Logic to auto-calculate Base Price based on materials
+  const updateCompositionAndPrice = (newComposition) => {
+    setForm(prev => {
+      let totalMaterialCost = 0;
+      newComposition.forEach(compItem => {
+        const material = products.find(p => p.id === compItem.product_id);
+        const cost = parseFloat(material?.cost_per_unit || material?.base_price || 0);
+        const qty = parseInt(compItem.quantity) || 0;
+        totalMaterialCost += (cost * qty);
+      });
+
+      const next = { ...prev, composition: newComposition };
+      
+      // Auto-update base price and final price if there are items in the recipe
+      if (newComposition.length > 0) {
+        next.basePrice = totalMaterialCost.toFixed(2);
+        
+        const base = totalMaterialCost;
+        const labor = parseFloat(next.laborCost) || 0;
+        const markup = parseFloat(next.markupPercentage) || 0;
+        const totalCost = base + labor;
+        
+        next.price = (totalCost + (totalCost * (markup / 100))).toFixed(2);
       }
       return next;
     });
@@ -998,33 +1065,28 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
       alert("This material is already in the recipe!");
       return;
     }
-    setForm(prev => ({
-      ...prev,
-      composition: [
-        ...prev.composition, 
-        { product_id: material.id, name: material.name, quantity: compQty }
-      ]
-    }));
+    
+    const newComp = [
+      ...form.composition, 
+      { product_id: material.id, name: material.name, quantity: compQty }
+    ];
+    updateCompositionAndPrice(newComp);
     setCompSelection("");
     setCompQty(1);
   };
 
   const handleRemoveCompositionItem = (idToRemove) => {
-    setForm(prev => ({
-      ...prev,
-      composition: prev.composition.filter(item => item.product_id !== idToRemove)
-    }));
+    const newComp = form.composition.filter(item => item.product_id !== idToRemove);
+    updateCompositionAndPrice(newComp);
   };
 
   const handleUpdateCompositionQty = (productId, newQty) => {
-    setForm(prev => ({
-      ...prev,
-      composition: prev.composition.map(item => 
-        item.product_id === productId 
-          ? { ...item, quantity: newQty === "" ? "" : parseInt(newQty) } 
-          : item
-      )
-    }));
+    const newComp = form.composition.map(item => 
+      item.product_id === productId 
+        ? { ...item, quantity: newQty === "" ? "" : parseInt(newQty) } 
+        : item
+    );
+    updateCompositionAndPrice(newComp);
   };
 
   const handleUpload = async (e) => {
@@ -1053,6 +1115,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
       
       fd.append("price", String(form.price));
       fd.append("base_price", String(form.basePrice || 0));
+      fd.append("labor_cost", String(form.laborCost || 0)); // 🚀 Sending Labor Cost
       fd.append("markup_percentage", String(form.markupPercentage || 0));
 
       fd.append("status", (form.status || "active").toLowerCase());
@@ -1124,7 +1187,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
       style={{ backgroundColor:d.overlayBg, backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)", zIndex:9999, top:0, left:0, width:"100vw", height:"100vh" }}
       onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
       <div className="rounded-xl w-full overflow-hidden flex flex-col"
-        style={{ maxWidth:"640px", maxHeight:"90vh", boxShadow:"0 24px 64px rgba(0,0,0,0.5)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
+        style={{ maxWidth:"700px", maxHeight:"90vh", boxShadow:"0 24px 64px rgba(0,0,0,0.5)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
 
         <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
           style={{ borderBottom:`1px solid ${d.modalHdrBdr}`, background:d.modalHdr }}>
@@ -1216,8 +1279,9 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             <MSel value={form.status} onChange={set("status")} options={["Active", "Inactive", "On Sale"]} d={d}/>
           </div>
 
+          {/* 🚀 EXPANDED PRICING GRID (Base + Labor) */}
           <div className="p-4 rounded-xl mb-4" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
                 <MLabel d={d}>Base Cost (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
                 <MInput 
@@ -1225,6 +1289,16 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
                   value={form.basePrice} 
                   onChange={(val) => handlePricingChange('basePrice', val)} 
                   placeholder="e.g. 500" 
+                  d={d}
+                />
+              </div>
+              <div>
+                <MLabel d={d}>Labor Cost (₱)</MLabel>
+                <MInput 
+                  type="number" 
+                  value={form.laborCost} 
+                  onChange={(val) => handlePricingChange('laborCost', val)} 
+                  placeholder="e.g. 150" 
                   d={d}
                 />
               </div>
@@ -1239,7 +1313,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
                 />
               </div>
               <div>
-                <MLabel d={d}>Final Selling Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
+                <MLabel d={d}>Final Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
                 <MInput 
                   type="number" 
                   value={form.price} 
@@ -1353,7 +1427,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
           <div className="mt-6 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
             <MLabel d={d}>Arrangement Recipe (Optional)</MLabel>
             <p className="text-xs mb-4" style={{ color: d.subC }}>
-              If this product is made of other items (like stems and vases), add them here so inventory updates automatically when purchased.
+              If this product is made of other items (like stems and vases), add them here. <strong>Base Cost will automatically calculate.</strong>
             </p>
 
             <div className="flex items-start gap-2 mb-4">

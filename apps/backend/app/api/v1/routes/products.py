@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Body, Request 
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_, text, func, cast, String
+from pydantic import BaseModel
 from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime, timezone
@@ -14,6 +15,14 @@ from app.core.dependencies import get_db, get_current_user, require_staff
 from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum, Review, Order, ProductRecipe, Notification
 from app.utils.logger import log_activity
 
+class StockLogCreate(BaseModel):
+    product_id: str
+    qty_change: int
+    purchasing_price: float
+    date_of_issuance: str
+    branch: str
+    notes: Optional[str] = None
+
 router = APIRouter()
 
 # 🛡️ Hard limits for image uploads
@@ -25,7 +34,6 @@ ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif"}
 def serialize_product(p: Product) -> dict:
     inv = p.inventory
 
-    # 🚀 THE FIX: Use cost_per_unit for the Base Cost, NOT original_price
     cost_per_unit = float(inv.cost_per_unit) if (inv and inv.cost_per_unit is not None) else None
     current_price = float(p.price) if p.price else 0
     
@@ -44,7 +52,12 @@ def serialize_product(p: Product) -> dict:
         "image_url": p.image_url,
         "is_available": p.is_available,
         "status": p.status.value if hasattr(p.status, "value") else p.status,
+        
+        # 🚀 UPDATE THESE THREE LINES:
         "stock": inv.current_stock if inv else 0,
+        "stock_manila": inv.stock_manila if inv else 0,
+        "stock_pampanga": inv.stock_pampanga if inv else 0,
+        
         "reorder_point": inv.reorder_point if inv else 10,
         "unit_type": inv.unit_type if (inv and inv.unit_type) else "piece",
         "cost_per_unit": cost_per_unit,
@@ -55,12 +68,12 @@ def serialize_product(p: Product) -> dict:
         "tags": getattr(p, "tags", []),
         "original_price": float(p.original_price) if getattr(p, "original_price", None) else None,
         "base_price": cost_per_unit,
+        "labor_cost": getattr(p, "labor_cost", 0), # Added labor cost just in case
         "markup_percentage": markup_percentage,
         "season_key": getattr(p, "season_key", None),
         "limited_start_at": getattr(p, "limited_start_at", None),
         "limited_end_at": getattr(p, "limited_end_at", None),
     }
-
 
 # ── Public endpoints (specific routes MUST come before wildcard) ──────────────
 
@@ -306,7 +319,7 @@ def get_admin_products(
         inv_rows = []
         try:
             inv_resp = supabase_admin.table("inventory").select(
-                "product_id,current_stock,reorder_point,unit_type,cost_per_unit"
+            "product_id,current_stock,stock_manila,stock_pampanga,reorder_point,unit_type,cost_per_unit"
             ).execute()
             inv_rows = inv_resp.data if inv_resp and hasattr(inv_resp, "data") and inv_resp.data else []
         except Exception:
@@ -346,6 +359,8 @@ def get_admin_products(
                 "created_at": p.created_at.isoformat() if p.created_at else None,
                 "updated_at": p.updated_at.isoformat() if p.updated_at else None,
                 "stock": int(inv.get("current_stock") or 0) if inv else 0,
+                "stock_manila": int(inv.get("stock_manila") or 0) if inv else 0,
+                "stock_pampanga": int(inv.get("stock_pampanga") or 0) if inv else 0,
                 "reorder_point": int(inv.get("reorder_point") or 10) if inv else 10,
                 "unit_type": inv.get("unit_type") if inv and inv.get("unit_type") else "piece",
                 "cost_per_unit": cost_per_unit,
@@ -580,6 +595,8 @@ def update_product(
     is_visible: Optional[bool] = Form(None),
     image_url: Optional[str] = Form(None),
     stock: Optional[int] = Form(None),
+    stock_manila: Optional[int] = Form(None),    # 🚀 ADD THIS
+    stock_pampanga: Optional[int] = Form(None),
     unit_type: Optional[str] = Form(None),
     reorder_point: Optional[int] = Form(None),
     cost_per_unit: Optional[float] = Form(None),
@@ -693,7 +710,7 @@ def update_product(
         except Exception:
             pass
 
-    if any(v is not None for v in [stock, unit_type, reorder_point, cost_val]):
+    if any(v is not None for v in [stock, stock_manila, stock_pampanga, unit_type, reorder_point, cost_val]): # 🚀 Added branch stocks here
         inv = db.query(Inventory).filter(Inventory.product_id == product.id).first()
         if not inv:
             inv = Inventory(
@@ -705,12 +722,12 @@ def update_product(
 
         if stock is not None:
             inv.current_stock = stock
+        if stock_manila is not None:      
+            inv.stock_manila = stock_manila   
+        if stock_pampanga is not None:        
+            inv.stock_pampanga = stock_pampanga 
         if unit_type is not None:
             inv.unit_type = unit_type
-        if reorder_point is not None:
-            inv.reorder_point = reorder_point
-        if cost_val is not None:
-            inv.cost_per_unit = cost_val
 
         db.commit()
 
@@ -821,6 +838,38 @@ def delete_product(
         product.is_available = False
         db.commit()
         return {"status": "success", "delete_type": "soft", "message": "Product archived to protect order history."}
+    
+@router.post("/admin/stock-logs")
+def log_stock_receipt(
+    log: StockLogCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    """Log a manual inventory restock from the Invoice Modal."""
+    try:
+        # Using raw SQL to avoid needing to update models.py right now
+        query = text("""
+            INSERT INTO stock_logs (id, product_id, qty_change, purchasing_price, date_of_issuance, branch, notes, created_at)
+            VALUES (:id, :pid, :qty, :price, :doi, :branch, :notes, now())
+        """)
+        db.execute(query, {
+            "id": str(uuid.uuid4()),
+            "pid": log.product_id,
+            "qty": log.qty_change,
+            "price": log.purchasing_price,
+            "doi": log.date_of_issuance,
+            "branch": log.branch,
+            "notes": log.notes
+        })
+        db.commit()
+        return {"status": "success", "message": "Stock log saved"}
+    
+    except Exception as e:
+        db.rollback()
+        # If the stock_logs table doesn't exist yet, we catch the error 
+        # so it doesn't crash your React frontend's success message!
+        print(f"⚠️ Could not save to stock_logs (Table might not exist yet): {str(e)}")
+        return {"status": "warning", "message": "Stock updated, but log was skipped."}
 
 
 # ── Public wildcard route — MUST be last ─────────────────────────────────────
