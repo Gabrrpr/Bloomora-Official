@@ -101,7 +101,7 @@ function toDatetimeLocalValue(d) {
   return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`
 }
 
-function AdminCampaignsModal({ mode, campaign, onClose, onSaved, allProducts, isDark }) {
+function AdminCampaignsModal({ mode, campaign, onClose, onSaved, allProducts, isDark, products }) {
   const inputBg  = isDark ? "#0f172a" : "white"
   const inputBdr = isDark ? "#475569" : "#dde3ec"
   const inputTxt = isDark ? "#f1f5f9" : "#111827"
@@ -133,9 +133,10 @@ function AdminCampaignsModal({ mode, campaign, onClose, onSaved, allProducts, is
 
   // Extract unique categories dynamically from the inventory
   const uniqueCategories = useMemo(() => {
-    const categories = allProducts.map(p => p.category).filter(Boolean);
+    // Make sure we are pulling from the 'products' state
+    const categories = products.map(p => p.category).filter(Boolean);
     return Array.from(new Set(categories)).sort();
-  }, [allProducts]);
+  }, [products]); // Dependency must be 'products'
 
   const validate = () => {
     const errs = {}
@@ -418,6 +419,7 @@ export default function AdminCampaigns() {
         id: p.id, 
         name: p.name, 
         branches: p.branches || [],
+        // Ensure category is explicitly mapped
         category: p.category ? p.category.charAt(0).toUpperCase() + p.category.slice(1) : "Uncategorized" 
       })))
     } catch (e) {
@@ -453,6 +455,7 @@ export default function AdminCampaigns() {
           onClose={() => setShowModal(false)}
           onSaved={() => fetchCampaigns()}
           allProducts={products}
+          products={products}
           isDark={isDark}
         />
       )}

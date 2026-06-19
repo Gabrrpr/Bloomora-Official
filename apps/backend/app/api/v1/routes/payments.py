@@ -23,15 +23,12 @@ from app.services.paymongo_service import PayMongoError, create_checkout_session
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
-
 class PayMongoCheckoutRequest(BaseModel):
     order_ids: list[str] = Field(..., min_length=1)
     payment_method_types: list[str] | None = None
 
-
 def _order_number(order: Order) -> str:
     return f"ORD-{order.id.hex[:8].upper()}"
-
 
 def _line_item_name(order: Order) -> str:
     if order.product_id and getattr(order, "product", None):
@@ -44,7 +41,6 @@ def _line_item_name(order: Order) -> str:
             suffix = f" + {len(order.items) - 1} more" if len(order.items) > 1 else ""
             return f"{first_item.product.name}{suffix}"
     return f"Bloomora order {_order_number(order)}"
-
 
 def _get_owned_orders(db: Session, order_ids: list[str], user: User) -> list[Order]:
     parsed_ids = []
@@ -70,7 +66,6 @@ def _get_owned_orders(db: Session, order_ids: list[str], user: User) -> list[Ord
 
     return orders
 
-
 @router.post("/paymongo/checkout", response_model=dict)
 async def create_paymongo_checkout(
     payload: PayMongoCheckoutRequest,
@@ -80,15 +75,18 @@ async def create_paymongo_checkout(
     orders = _get_owned_orders(db, payload.order_ids, current_user)
     reference_number = f"PMO-{secrets.token_hex(6).upper()}"
 
-    line_items = [
-        {
+    line_items = []
+    for order in orders:
+        # 🚀 DEBUG PRINT: This will appear in your Python Terminal/Logs
+        print(f"DEBUG: Processing order {order.id} | total_amount: {order.total_amount}")
+        
+        amount_val = order.total_amount or 0
+        line_items.append({
             "name": _line_item_name(order),
-            "amount": to_paymongo_amount(Decimal(order.total_amount)),
+            "amount": to_paymongo_amount(Decimal(amount_val)),
             "currency": "PHP",
             "quantity": 1,
-        }
-        for order in orders
-    ]
+        })
 
     if any(item["amount"] <= 0 for item in line_items):
         raise HTTPException(status_code=400, detail="PayMongo checkout amount must be greater than zero.")
@@ -132,7 +130,6 @@ async def create_paymongo_checkout(
         "order_ids": [str(order.id) for order in orders],
     }
 
-
 @router.get("/paymongo/status/{order_id}", response_model=dict)
 def get_paymongo_payment_status(
     order_id: str,
@@ -151,7 +148,6 @@ def get_paymongo_payment_status(
         "paid_at": order.transaction.paid_at.isoformat() if order.transaction.paid_at else None,
     }
 
-
 def _parse_signature_header(signature_header: str) -> dict[str, str]:
     parts = {}
     for part in signature_header.split(","):
@@ -159,7 +155,6 @@ def _parse_signature_header(signature_header: str) -> dict[str, str]:
             key, value = part.split("=", 1)
             parts[key.strip()] = value.strip()
     return parts
-
 
 def _verify_paymongo_signature(raw_body: bytes, signature_header: str | None) -> None:
     if not settings.PAYMONGO_WEBHOOK_SECRET:
@@ -186,7 +181,6 @@ def _verify_paymongo_signature(raw_body: bytes, signature_header: str | None) ->
     if not hmac.compare_digest(computed_signature, expected_signature):
         raise HTTPException(status_code=401, detail="Invalid PayMongo signature.")
 
-
 def _datetime_from_unix(value: Any) -> datetime | None:
     if value is None:
         return None
@@ -194,7 +188,6 @@ def _datetime_from_unix(value: Any) -> datetime | None:
         return datetime.fromtimestamp(int(value), tz=timezone.utc)
     except (TypeError, ValueError):
         return None
-
 
 @router.post("/paymongo/webhook", response_model=dict)
 async def paymongo_webhook(
