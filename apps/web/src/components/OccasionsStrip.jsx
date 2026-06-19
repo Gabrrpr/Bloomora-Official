@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTheme } from "../context/ThemeContext"
 import birthdayImg    from "../assets/occasions/Birthday.png"
 import anniversaryImg from "../assets/occasions/Anniversary.png"
@@ -44,7 +44,7 @@ function useReveal(ref, delay = 0) {
   }, [])
 }
 
-function OccasionCard({ label, img, onNavigate, delay, labelColor, accentG, mobileOnly }) {
+function OccasionCard({ label, img, onNavigate, delay, labelColor, accentG, mobileOnly, active }) {
   const ref = useRef(null)
   useReveal(ref, delay)
 
@@ -56,29 +56,30 @@ function OccasionCard({ label, img, onNavigate, delay, labelColor, accentG, mobi
     >
       <button
         onClick={() => onNavigate?.("occasions")}
-        className="group flex flex-col items-center gap-3 w-full focus:outline-none"
+        className="group flex flex-col items-center gap-5 w-full focus:outline-none"
       >
         {/* Ring wrapper: the colored ring fades via opacity instead of swapping
             border color, so there's no hard pop. The image scales on the same
-            easing curve as the ring + shadow for one unified motion. */}
+            easing curve as the ring + shadow for one unified motion.
+            `active` drives the same look as hover for the auto-cycling zoom. */}
         <div className="relative w-full aspect-square">
           {/* Soft glow / shadow layer */}
           <div
-            className="absolute inset-0 rounded-full opacity-0 transition-opacity duration-300 ease-out group-hover:opacity-100"
+            className={`absolute inset-0 rounded-full transition-opacity duration-300 ease-out group-hover:opacity-100 ${active ? "opacity-100" : "opacity-0"}`}
             style={{ boxShadow: `0 12px 28px -6px ${accentG}55` }}
           />
           {/* Colored ring — sits OUTSIDE the image via negative inset, so the
               full stroke is beyond the image edge (not overlapping it). */}
           <div
-            className="absolute -inset-[3px] rounded-full border-[3px] opacity-0 transition-opacity duration-300 ease-out group-hover:opacity-100 z-10 pointer-events-none"
+            className={`absolute -inset-[7px] rounded-full border-[3px] transition-opacity duration-300 ease-out group-hover:opacity-100 z-10 pointer-events-none ${active ? "opacity-100" : "opacity-0"}`}
             style={{ borderColor: accentG }}
           />
           {/* Image */}
-          <div className="absolute inset-0 rounded-full overflow-hidden transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04]">
+          <div className={`absolute inset-0 rounded-full overflow-hidden transition-transform duration-[650ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04] ${active ? "scale-[1.04]" : ""}`}>
             <img
               src={img}
               alt={label}
-              className="w-full h-full object-cover transition-transform duration-[450ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.08]"
+              className={`w-full h-full object-cover transition-transform duration-[800ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.08] ${active ? "scale-[1.08]" : ""}`}
             />
           </div>
         </div>
@@ -99,6 +100,16 @@ export default function OccasionsStrip({ onNavigate }) {
   const { isDark } = useTheme()
   const headingRef = useRef(null)
   useReveal(headingRef, 0)
+
+  // Auto-cycling zoom: one occasion is "active" at a time, advancing every
+  // second and looping back to the first — a continuous spotlight across cards.
+  const [activeIdx, setActiveIdx] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => {
+      setActiveIdx(i => (i + 1) % VISIBLE.length)
+    }, 1000)
+    return () => clearInterval(id)
+  }, [])
 
   const accentG   = isDark ? "#4ade80" : G
   const sectionBg = isDark ? "#111827" : "white"
@@ -153,6 +164,7 @@ export default function OccasionsStrip({ onNavigate }) {
               labelColor={labelC}
               accentG={accentG}
               mobileOnly={mobileOnly}
+              active={i === activeIdx}
             />
           ))}
         </div>

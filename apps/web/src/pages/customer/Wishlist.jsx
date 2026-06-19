@@ -8,13 +8,14 @@ const MOCK_WISHLIST = [
 export default function Wishlist({ onNavigate }) {
   return (
     <div className="min-h-screen bg-gray-50">
+      <style>{`@keyframes pageRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}`}</style>
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-10">
-        <button onClick={() => onNavigate("home")} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6 transition">
+        <button onClick={() => onNavigate("home")} style={{ animation:"pageRise 0.5s ease 0.05s both" }} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6 transition">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
           Back
         </button>
 
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6" style={{ animation:"pageRise 0.5s ease 0.14s both" }}>
           <div>
             <h1 className="text-2xl font-bold text-gray-800">My Wishlist</h1>
             <p className="text-sm text-gray-400 mt-0.5">{MOCK_WISHLIST.length} saved items</p>
@@ -23,7 +24,7 @@ export default function Wishlist({ onNavigate }) {
         </div>
 
         {MOCK_WISHLIST.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-16 text-center">
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-16 text-center" style={{ animation:"pageRise 0.5s ease 0.22s both" }}>
             <div className="text-5xl mb-4">🤍</div>
             <h3 className="font-semibold text-gray-700 mb-2">Your wishlist is empty</h3>
             <p className="text-sm text-gray-400 mb-5">Save your favorite arrangements here to buy later.</p>
@@ -31,8 +32,8 @@ export default function Wishlist({ onNavigate }) {
           </div>
         ) : (
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            {MOCK_WISHLIST.map(item => (
-              <div key={item.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow group">
+            {MOCK_WISHLIST.map((item, i) => (
+              <div key={item.id} style={{ animation:`pageRise 0.5s ease ${0.22 + i * 0.07}s both` }} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow group">
                 <div className="relative h-40 bg-gradient-to-br from-pink-50 to-rose-50 flex items-center justify-center text-5xl">
                   {item.emoji}
                   {item.tag && (

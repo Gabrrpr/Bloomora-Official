@@ -89,10 +89,12 @@ export default function AIGalleryPage({ onNavigate }) {
   return (
     <>
       <style>{`
+        @keyframes agFadeIn { from { opacity: 0; } to { opacity: 1; } }
         .ag-root {
           position: fixed; top: ${NAVBAR_H}px; left: 0; right: 0; bottom: 0;
           display: flex; flex-direction: row; overflow: hidden;
           background: ${bg}; z-index: 10;
+          animation: agFadeIn 0.6s ease both;
         }
         .ag-image-panel {
           width: 55%; position: relative; overflow: hidden;

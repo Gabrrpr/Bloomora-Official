@@ -897,13 +897,13 @@ export default function AccountPage({ onNavigate }) {
 
   return (
     <>
-      <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}`}</style>
+      <style>{`@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}@keyframes pageRise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}`}</style>
       <div className="min-h-screen" style={{ backgroundColor:pageBg }}>
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
           <div className="flex gap-6 lg:gap-7 items-start">
 
             {/* Sidebar */}
-            <aside className="w-52 flex-shrink-0 hidden md:flex flex-col gap-1 sticky top-28">
+            <aside className="w-52 flex-shrink-0 hidden md:flex flex-col gap-1 sticky top-28" style={{ animation: "pageRise 0.5s ease 0.05s both" }}>
               <div className="px-4 py-3 mb-1">
                 <p className="text-xs font-bold uppercase tracking-wider" style={{ color:sidebarLblC }}>Account</p>
                 <p className="text-sm font-bold truncate mt-0.5" style={{ color:sidebarNameC }}>{user?.firstName} {user?.lastName}</p>
@@ -946,7 +946,7 @@ export default function AccountPage({ onNavigate }) {
             {/* Content */}
             <main className="flex-1 min-w-0">
               {/* Mobile tab strip */}
-              <div className="md:hidden mb-4 overflow-x-auto flex gap-2 pb-1">
+              <div className="md:hidden mb-4 overflow-x-auto flex gap-2 pb-1" style={{ animation: "pageRise 0.5s ease 0.05s both" }}>
                 {MENU_ITEMS.map(item => (
                   <button key={item.id} onClick={() => setPanel(item.id)}
                     className="flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-bold transition-all"
@@ -964,8 +964,8 @@ export default function AccountPage({ onNavigate }) {
                 </button>
               </div>
 
-              <div className="rounded-xl p-5 sm:p-8"
-                style={{ backgroundColor:contentBg, border:`1px solid ${contentBdr}` }}>
+              <div key={panel} className="rounded-xl p-5 sm:p-8"
+                style={{ backgroundColor:contentBg, border:`1px solid ${contentBdr}`, animation:"pageRise 0.45s ease 0.12s both" }}>
                 {renderPanel()}
               </div>
             </main>

@@ -56,9 +56,10 @@ export default function ReturnPolicy({ onNavigate }) {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: pageBg }}>
+      <style>{`@keyframes pageRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}`}</style>
 
       {/* Hero */}
-      <div className="relative overflow-hidden" style={{ minHeight:"280px" }}>
+      <div className="relative overflow-hidden" style={{ minHeight:"280px", animation:"pageRise 0.6s ease 0.05s both" }}>
         <img src={pageBg5} alt="" className="absolute inset-0 w-full h-full object-cover"/>
         <div className="absolute inset-0"
           style={{ background:"linear-gradient(to right,rgba(12,87,62,0.92) 0%,rgba(12,87,62,0.72) 55%,rgba(12,87,62,0.38) 100%)" }}/>
@@ -77,7 +78,7 @@ export default function ReturnPolicy({ onNavigate }) {
 
         {/* Quick summary */}
         <div className="rounded-2xl p-5 sm:p-6 mb-10 flex items-start gap-4"
-          style={{ backgroundColor: summaryBg, border:`1.5px solid ${summaryBdr}` }}>
+          style={{ backgroundColor: summaryBg, border:`1.5px solid ${summaryBdr}`, animation:"pageRise 0.6s ease 0.16s both" }}>
           <div className="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0"
             style={{ backgroundColor: iconBg, color: iconC }}>
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
@@ -93,7 +94,7 @@ export default function ReturnPolicy({ onNavigate }) {
         </div>
 
         {/* Sections */}
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-5" style={{ animation:"pageRise 0.6s ease 0.27s both" }}>
           {SECTIONS.map((section, i) => (
             <div key={i} className="rounded-2xl p-5 sm:p-7"
               style={{ backgroundColor: cardBg, border:`1.5px solid ${cardBdr}` }}>
@@ -132,7 +133,7 @@ export default function ReturnPolicy({ onNavigate }) {
 
         {/* CTA */}
         <div className="mt-12 rounded-3xl p-7 sm:p-8 text-center"
-          style={{ background:`linear-gradient(135deg,${DG} 0%,${G} 100%)` }}>
+          style={{ background:`linear-gradient(135deg,${DG} 0%,${G} 100%)`, animation:"pageRise 0.6s ease 0.38s both" }}>
           <h3 className="text-xl font-bold text-white mb-2">Have a concern about your order?</h3>
           <p className="text-sm mb-6" style={{ color:"rgba(255,255,255,0.72)" }}>
             Our team is here to help resolve any issues quickly and fairly.

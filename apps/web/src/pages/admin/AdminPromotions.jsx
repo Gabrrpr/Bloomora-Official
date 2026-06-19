@@ -92,15 +92,17 @@ export default function AdminPromotions() {
   const annIsEditing = annEditingId !== null
   const annFileRef = useRef(null)
 
-  // 🚀 ── Flash Sales State ──
+  // Flash sale state
   const [products, setProducts] = useState([])
   const [promoCategory, setPromoCategory] = useState("All")
   const [selectedPromoIds, setSelectedPromoIds] = useState([])
   const [flashDiscount, setFlashDiscount] = useState("")
-  
+
   const [flashSaleLoading, setFlashSaleLoading] = useState(false)
   const [flashSaleError, setFlashSaleError] = useState("")
   const [flashSaleSuccess, setFlashSaleSuccess] = useState("")
+  // Drives the one-time entrance animation; removed after it plays so it never replays.
+  const [entered, setEntered] = useState(false)
 
   useEffect(() => {
     api.getAdminProducts()
@@ -108,13 +110,19 @@ export default function AdminPromotions() {
        .catch(err => console.error("Failed to load products for flash sale", err))
   }, [])
 
-  // 🚀 Derived Data for the Filter
+  // Play the entrance animation once on mount, then turn it off.
+  useEffect(() => {
+    const t = setTimeout(() => setEntered(true), 1500)
+    return () => clearTimeout(t)
+  }, [])
+
+  // Category options for the filter dropdown
   const promoCategories = ["All", ...Array.from(new Set(products.map(p => {
     const c = p.category?.trim().toLowerCase();
     return c ? c.charAt(0).toUpperCase() + c.slice(1) : "";
   }).filter(Boolean)))];
 
-  // 🚀 The Magic Filter: Only show products matching the Branch AND the Category
+  // Show only products that match the selected branch and category
   const filteredPromoProducts = products.filter(p => {
     const matchesBranch = p.branches?.includes(branch);
     const matchesCategory = promoCategory === "All" || p.category?.trim().toLowerCase() === promoCategory.toLowerCase();
@@ -232,7 +240,7 @@ export default function AdminPromotions() {
   const onBlurBorder  = (e) => { e.target.style.borderColor = inputBdr; e.target.style.boxShadow = "none" }
 
 
-  // 🚀 ── Handle Multi-Product Select Logic ──
+  // Add or remove a product from the selection
   const togglePromoProduct = (id) => {
     setSelectedPromoIds(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
   }
@@ -248,7 +256,7 @@ export default function AdminPromotions() {
     }
   }
 
-  // 🚀 ── Handle the Bulk Flash Sale Submission ──
+  // Apply the discount to every selected product
   const handleApplyFlashSale = async () => {
     if (selectedPromoIds.length === 0) {
       setFlashSaleError("Please select at least one product.");
@@ -304,8 +312,14 @@ export default function AdminPromotions() {
 
   return (
     <div className="space-y-5">
-      {/* ── Page header ── */}
-      <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+      {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
+      <style>{`
+        @keyframes promoRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .promo-rise { animation: promoRise 0.85s ease-out both; }
+      `}</style>
+
+      {/* Page header */}
+      <div className={`flex flex-col md:flex-row md:items-end justify-between gap-4 ${entered ? "" : "promo-rise"}`}>
         <div>
           <h1 className="text-xl font-bold" style={{ color: bodyTxt }}>Promotions & Flash Sales</h1>
           <p className="text-sm mt-0.5" style={{ color: subTxt }}>
@@ -313,7 +327,7 @@ export default function AdminPromotions() {
           </p>
         </div>
         
-        {/* 🚀 Branch Selector UI */}
+        {/* Branch selector */}
         <div className="flex gap-2">
           {["Manila", "Pampanga"].map(b => (
             <button 
@@ -335,9 +349,9 @@ export default function AdminPromotions() {
         </div>
       </div>
 
-      {/* ── Create / edit promo code ── */}
-      <div className="rounded-xl overflow-hidden"
-        style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
+      {/* Create / edit promo code */}
+      <div className={`rounded-xl overflow-hidden ${entered ? "" : "promo-rise"}`}
+        style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)", animationDelay: "0.1s" }}>
         <div className="px-5 py-3.5" style={{ borderBottom: `1px solid ${headerBdr}`, backgroundColor: headerBg }}>
           <p className="text-sm font-semibold" style={{ color: bodyTxt }}>
             {isEditing ? `Edit promo code · ${editingCode}` : "Create a promo code"}
@@ -442,9 +456,9 @@ export default function AdminPromotions() {
         </div>
       </div>
 
-      {/* ── 🚀 NEW: Multi-Select Flash Sales (Now Branch-Aware) ── */}
-      <div className="rounded-xl overflow-hidden"
-        style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
+      {/* Flash sales: pick products and apply a discount per branch */}
+      <div className={`rounded-xl overflow-hidden ${entered ? "" : "promo-rise"}`}
+        style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)", animationDelay: "0.2s" }}>
         <div className="px-5 py-3.5 flex items-center justify-between" style={{ borderBottom: `1px solid ${headerBdr}`, backgroundColor: headerBg }}>
           <div>
             <p className="text-sm font-semibold flex items-center gap-2" style={{ color: bodyTxt }}>
@@ -554,9 +568,9 @@ export default function AdminPromotions() {
         </div>
       </div>
 
-      {/* ── Existing promo codes ── */}
-      <div className="rounded-xl overflow-hidden"
-        style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
+      {/* Existing promo codes */}
+      <div className={`rounded-xl overflow-hidden ${entered ? "" : "promo-rise"}`}
+        style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)", animationDelay: "0.3s" }}>
         <div className="flex items-center justify-between px-5 py-3.5" style={{ borderBottom: `1px solid ${headerBdr}`, backgroundColor: headerBg }}>
           <p className="text-sm font-semibold" style={{ color: bodyTxt }}>
             Promo codes <span className="ml-2 text-xs font-normal" style={{ color: mutedTxt }}>{vouchers.length} total</span>
@@ -655,9 +669,9 @@ export default function AdminPromotions() {
         )}
       </div>
 
-      {/* ── Customer notifications ── */}
-      <div className="rounded-xl overflow-hidden"
-        style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
+      {/* Customer notifications */}
+      <div className={`rounded-xl overflow-hidden ${entered ? "" : "promo-rise"}`}
+        style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)", animationDelay: "0.4s" }}>
         <div className="px-5 py-3.5" style={{ borderBottom: `1px solid ${headerBdr}`, backgroundColor: headerBg }}>
           <p className="text-sm font-semibold" style={{ color: bodyTxt }}>Customer notifications</p>
           <p className="text-xs mt-0.5" style={{ color: mutedTxt }}>

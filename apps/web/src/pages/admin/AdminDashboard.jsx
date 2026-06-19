@@ -479,7 +479,7 @@ function RevenueChart({ branch }) {
         </div>
       </div>
 
-      <div className="flex gap-2" style={{ height: "184px" }}>
+      <div className="flex gap-2" style={{ height: "184px", opacity: loading ? 0.35 : 1, transition: "opacity 0.4s ease" }}>
         <div className="flex flex-col justify-between flex-shrink-0 text-right" style={{ width: "40px", paddingBottom: "24px" }}>
           {display.yAxis.map((l, idx) => (
             <span key={`y-${l}-${idx}`} className="text-[10px] leading-none" style={{ color: t.textMuted }}>{l}</span>
@@ -796,13 +796,56 @@ function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading, tren
   )
 }
 
+// ─── Flower Loader ────────────────────────────────────────────────────────────
+// Animated flower shown while the dashboard data is still loading.
+function FlowerLoader({ message = "Loading...", isDark = false }) {
+  const petals = [
+    { angle: 0,   color: "#f48fb1" },
+    { angle: 60,  color: "#ec407a" },
+    { angle: 120, color: "#e91e63" },
+    { angle: 180, color: "#f06292" },
+    { angle: 240, color: "#c2185b" },
+    { angle: 300, color: "#f48fb1" },
+  ]
+  return (
+    <>
+      <style>{`
+        @keyframes adminPetalBloom {
+          0%, 100% { opacity: 0.2; }
+          50%       { opacity: 1;   }
+        }
+      `}</style>
+      <div className="flex flex-col items-center justify-center rounded-xl"
+        style={{ minHeight: "60vh", backgroundColor: isDark ? "#0f172a" : "transparent" }}>
+        <svg width="120" height="120" viewBox="0 0 100 100">
+          {petals.map(({ angle, color }, i) => (
+            <g key={i} transform={`rotate(${angle} 50 50)`}>
+              <ellipse cx="50" cy="27" rx="9.5" ry="21" fill={color}
+                style={{ animation: `adminPetalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`, animationFillMode: "both" }} />
+            </g>
+          ))}
+          <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+          <circle cx="50" cy="50" r="7"  fill="#f9c6d0" />
+          <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+        </svg>
+        <p className="mt-4 text-sm font-medium tracking-wide" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{message}</p>
+      </div>
+    </>
+  )
+}
+
 // ─── Dashboard Panel ──────────────────────────────────────────────────────────
 function DashboardPanel({ user }) {
   const { isDark } = useTheme();
   const t = useTokens(isDark);
   
   const [branch, setBranch] = useState("all");
-  
+
+  // Full-screen flower loader on first load only; later branch switches refresh in place.
+  const [initialLoading, setInitialLoading] = useState(true);
+  // One-time entrance animation; dropped after it plays so it never replays.
+  const [entered, setEntered] = useState(false);
+
   const [lowStock, setLowStock] = useState([]);
   const [lowStockCount, setLowStockCount] = useState(0);
   const [ordersToday, setOrdersToday] = useState(0);
@@ -815,10 +858,10 @@ function DashboardPanel({ user }) {
   const [trending, setTrending] = useState([]);
 
   useEffect(() => {
-    const branchParam = branch === "all" ? "All Branches" : branch; 
+    const branchParam = branch === "all" ? "All Branches" : branch;
 
     // Fetch Summary
-    api.get(`/dashboard/summary?branch=${branch}`)
+    const pSummary = api.get(`/dashboard/summary?branch=${branch}`)
       .then(d => {
         setRevenueToday(d?.revenue_today || 0);
         setOrdersToday(d?.orders_today || 0);
@@ -828,23 +871,23 @@ function DashboardPanel({ user }) {
 
     // Fetch Recent Orders
     setRecentLoading(true);
-    api.getAdminOrders({ branch: branchParam, limit: 5 })
+    const pRecent = api.getAdminOrders({ branch: branchParam, limit: 5 })
       .then(data => {
         setRecentOrders(Array.isArray(data) ? data.slice(0, 5) : []);
       })
       .catch(err => console.error("Recent Orders Fetch Error:", err))
       .finally(() => setRecentLoading(false));
-      
+
     // Fetch Low Stock (Add branch filter here if your backend supports it)
-    api.get(`/products/low-stock?branch=${branchParam}`)
-      .then(d => { 
-        setLowStock(d || []); 
-        setLowStockCount(d?.length || 0); 
+    const pLow = api.get(`/products/low-stock?branch=${branchParam}`)
+      .then(d => {
+        setLowStock(d || []);
+        setLowStockCount(d?.length || 0);
       })
       .catch(() => {});
 
     // 🚀 NEW: Fetch Trending Products
-    api.get(`/dashboard/trending?branch=${branchParam}`)
+    const pTrending = api.get(`/dashboard/trending?branch=${branchParam}`)
       .then(data => setTrending(Array.isArray(data) ? data : []))
       .catch(() => {
         // Fallback mock data in case your backend endpoint isn't built yet!
@@ -856,8 +899,20 @@ function DashboardPanel({ user }) {
           { id: 5, name: "Spring Mixed Box", sold: 28 },
         ]);
       });
-      
+
+    // Clear the first-load flower only after every section has settled.
+    Promise.allSettled([pSummary, pRecent, pLow, pTrending])
+      .finally(() => setInitialLoading(false));
+
   }, [branch]);
+
+  // Play the entrance animation once the first load finishes, then turn it off
+  // so it never replays on later re-renders.
+  useEffect(() => {
+    if (initialLoading) return;
+    const t = setTimeout(() => setEntered(true), 1300);
+    return () => clearTimeout(t);
+  }, [initialLoading]);
 
   const branchLabel = branch === "all" ? "All Branches" : branch.charAt(0).toUpperCase() + branch.slice(1);
 
@@ -884,6 +939,21 @@ function DashboardPanel({ user }) {
     `${lowStock.length} low-stock item${lowStock.length === 1 ? "" : "s"}`,
   ].join("   ·   ")
 
+  // First load: show the flower loader instead of an empty dashboard.
+  if (initialLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: t.textPrimary }}>Dashboard Overview</h1>
+          <p className="text-sm mt-1" style={{ color: t.textSecondary }}>
+            Welcome back, {user?.firstName || "Admin"}.
+          </p>
+        </div>
+        <FlowerLoader message="Loading dashboard..." isDark={isDark} />
+      </div>
+    )
+  }
+
   return (
     <div>
 
@@ -895,6 +965,10 @@ function DashboardPanel({ user }) {
           4 restock urgency bar  5 low-stock detail table  6 footer/signatures */}
       <style>{`
         .print-only { display: none; }
+
+        /* Gentle fade + rise so content eases in once loaded instead of flashing. */
+        @keyframes dashRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .dash-rise { animation: dashRise 0.85s ease-out both; }
 
         @media print {
           @page { margin: 12mm 10mm; }
@@ -1004,6 +1078,18 @@ function DashboardPanel({ user }) {
           .print-detail th.col-reo    { width: 12%; }
           .print-detail th.col-stock  { width: 12%; }
           .print-detail th.col-status { width: 12%; }
+          /* recent orders columns */
+          .print-detail th.ro-id     { width: 16%; }
+          .print-detail th.ro-cust   { width: 30%; }
+          .print-detail th.ro-branch { width: 13%; }
+          .print-detail th.ro-status { width: 19%; }
+          .print-detail th.ro-total  { width: 17%; }
+          /* demand forecast columns */
+          .print-detail th.tr-rank { width: 12%; }
+          .print-detail th.tr-name { width: 68%; }
+          .print-detail th.tr-sold { width: 20%; }
+          .print-detail .mono { font-family: "Courier New", Courier, monospace; font-size: 8.5px; }
+          .print-detail .cap { text-transform: capitalize; }
           .print-detail td {
             border-bottom: 1px solid #eef1f4; padding: 6.5px 7px;
             font-size: 9.5px; color: #1f2937 !important; vertical-align: top;
@@ -1048,7 +1134,7 @@ function DashboardPanel({ user }) {
       {/* ── Screen dashboard (never printed) ── */}
       <div className="no-print space-y-6">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${entered ? "" : "dash-rise"}`}>
           <div>
             <h1 className="text-2xl font-bold" style={{ color: t.textPrimary }}>Dashboard Overview</h1>
             <p className="text-sm mt-1" style={{ color: t.textSecondary }}>
@@ -1078,7 +1164,7 @@ function DashboardPanel({ user }) {
         </div>
 
         {/* Top Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 ${entered ? "" : "dash-rise"}`} style={{ animationDelay: "0.18s" }}>
           <GreenCard 
             label="Total Revenue Today" 
             value={`₱${revenueToday.toLocaleString("en-PH", { minimumFractionDigits: 2 })}`} 
@@ -1106,7 +1192,7 @@ function DashboardPanel({ user }) {
         </div>
 
         {/* Main Content Area */}
-        <div className="space-y-6">
+        <div className={`space-y-6 ${entered ? "" : "dash-rise"}`} style={{ animationDelay: "0.36s" }}>
           {/* Revenue Chart takes full width or adjusts to your layout */}
           <RevenueChart branch={branch} />
           
@@ -1225,6 +1311,72 @@ function DashboardPanel({ user }) {
             </table>
           </div>
         </div>
+
+        {/* ── Print 5b: recent orders ── */}
+        {recentOrders.length > 0 && (
+          <div className="print-only print-detail" style={{ marginTop: "14px" }}>
+            <div className="print-section-head">
+              <p className="print-section-title">Recent Orders</p>
+              <p className="print-section-sub">Latest {recentOrders.length} order{recentOrders.length === 1 ? "" : "s"} · {branchLabel}</p>
+            </div>
+            <div className="twrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th className="col-idx num">#</th>
+                    <th className="ro-id">Order ID</th>
+                    <th className="ro-cust">Customer</th>
+                    <th className="ro-branch">Branch</th>
+                    <th className="ro-status">Status</th>
+                    <th className="ro-total num">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {recentOrders.map((o, i) => (
+                    <tr key={o.id || i} className={i % 2 === 1 ? "alt" : ""}>
+                      <td className="num nowrap muted">{i + 1}</td>
+                      <td className="mono">{o.order_number || "—"}</td>
+                      <td><span className="item-name">{o.customer_name || "—"}</span></td>
+                      <td className="muted cap">{String(o.branch || o.branch_name || "—").toLowerCase()}</td>
+                      <td className="muted cap">{String(o.status || "—").replace(/_/g, " ")}</td>
+                      <td className="num nowrap">₱{Number(o.total_amount || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── Print 5c: demand forecast (top sellers) ── */}
+        {trending.length > 0 && (
+          <div className="print-only print-detail" style={{ marginTop: "14px" }}>
+            <div className="print-section-head">
+              <p className="print-section-title">Demand Forecast</p>
+              <p className="print-section-sub">Top sellers by units sold · {branchLabel}</p>
+            </div>
+            <div className="twrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th className="tr-rank num">Rank</th>
+                    <th className="tr-name">Product</th>
+                    <th className="tr-sold num">Units Sold</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {trending.slice(0, 5).map((item, i) => (
+                    <tr key={item.id || i} className={i % 2 === 1 ? "alt" : ""}>
+                      <td className="num nowrap muted">{i + 1}</td>
+                      <td><span className="item-name">{item.name}</span></td>
+                      <td className="num nowrap">{item.sold ?? 0}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {/* ── Print 6: footer + signature lines ── */}
         <div className="print-only print-footer">
@@ -1895,7 +2047,7 @@ export default function AdminDashboard({ onNavigate }) {
     switch (active) {
       case "Dashboard":      return <DashboardPanel user={user} />
       case "Orders":         return <AdminOrders />
-      case "Products":       return <AdminProducts />
+      case "Products":       return <AdminProducts onNavigate={goTo} />
       case "Inventory":      return <AdminInventory />
       case "Staffs":         return <AdminStaff />
       case "Customers":      return <AdminCustomers />

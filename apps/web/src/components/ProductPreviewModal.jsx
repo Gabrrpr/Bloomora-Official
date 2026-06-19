@@ -1392,7 +1392,6 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
 
   /* Mount */
   useEffect(() => {
-    setColor(colors[0])
     requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)))
     document.body.style.overflow = "hidden"
 
@@ -1440,7 +1439,6 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
 
   const validate = () => {
     const e = {}
-    if (!color)   e.color = true
     if (!qty)     e.qty   = true
     if (!delivType || (delivType==="custom" && !customDate)) e.date = true
     setErrors(e)
@@ -1539,7 +1537,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
       </svg>
       <p className="text-xs font-medium text-red-500">
-        Please select: {[errors.color&&"color", errors.qty&&"size", errors.date&&"delivery date"].filter(Boolean).join(", ")}
+        Please select: {[errors.qty&&"size", errors.date&&"delivery date"].filter(Boolean).join(", ")}
       </p>
     </div>
   )
@@ -1569,7 +1567,6 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
       {tab === "details" && (
         <div className="pb-4 space-y-5">
           <DescriptionSection product={product} isDark={isDark}/>
-          <ColorSection {...colorProps}/>
           {/* ✅ FIX: pass `similar` prop matching SuggestionsSection's expected prop name */}
           <SuggestionsSection 
              suggestions={suggestedProducts} 
@@ -1840,13 +1837,13 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
           style={{ background: modalBg, boxShadow: `0 4px 24px ${cardBdr}` }}>
 
           {isCard && (
-            <div key="d-card" className="pm-step-anim w-full h-full">
+            <div key="d-card" className="pm-step-anim w-full h-full rounded-2xl overflow-hidden">
               <CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate}/>
             </div>
           )}
 
           {isQuote && (
-            <div key="d-quote" className="pm-step-anim w-full h-full">
+            <div key="d-quote" className="pm-step-anim w-full h-full rounded-2xl overflow-hidden">
               <QuoteStep
                 product={product} color={color} sizeLabel={qty}
                 addOnObjects={quoteAddOnObjects} addOnTotal={addOnTotal}

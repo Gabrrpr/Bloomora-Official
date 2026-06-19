@@ -6,6 +6,9 @@ import { Pagination } from "./_adminShared"
 import estingsWordmark from "../../assets/Estings.svg"
 
 const ORDER_STATUSES = ["All", "Pending", "Preparing", "Out for Delivery", "Delivered", "Cancelled"]
+
+// Example values cycled through the search box as an animated, typewriter-style hint.
+const SEARCH_SAMPLES = ["John Dela Cruz", "ORD-5FA237AC", "Maria Santos", "ORD-9C4E1B07"]
 const BRANCHES       = ["All Branches", "Manila", "Pampanga"]
 const DATE_RANGES    = ["All Time", "Today", "This Week", "This Month", "Last 30 Days"]
 
@@ -127,6 +130,10 @@ export default function AdminOrders() {
   const [error, setError]           = useState(null)
   const [viewingOrder, setViewingOrder] = useState(null)
   const [page, setPage] = useState(1);
+  // One-time entrance animation; dropped once it plays so it never replays.
+  const [entered, setEntered] = useState(false)
+  // Animated placeholder text for the search box (typewriter hint).
+  const [phText, setPhText] = useState("")
 
   const fetchOrders = useCallback(async () => {
     setLoading(true); setError(null)
@@ -138,6 +145,30 @@ export default function AdminOrders() {
   }, [statusFilter, search, branch, dateRange])
 
   useEffect(() => { fetchOrders() }, [fetchOrders])
+
+  // Play the entrance animation once the data has loaded, then turn it off.
+  useEffect(() => {
+    if (loading) { setEntered(false); return }
+    const t = setTimeout(() => setEntered(true), 1300)
+    return () => clearTimeout(t)
+  }, [loading])
+
+  // Typewriter hint in the search box: types a sample, pauses, deletes, then the
+  // next one — looping forever while the box is empty. Stops once the user types.
+  useEffect(() => {
+    if (search) { setPhText(""); return }
+    let sample = 0, ch = 0, deleting = false, timer
+    const tick = () => {
+      const full = SEARCH_SAMPLES[sample]
+      ch += deleting ? -1 : 1
+      setPhText(full.slice(0, ch))
+      if (!deleting && ch === full.length) { deleting = true; timer = setTimeout(tick, 1400); return }
+      if (deleting && ch === 0) { deleting = false; sample = (sample + 1) % SEARCH_SAMPLES.length }
+      timer = setTimeout(tick, deleting ? 55 : 110)
+    }
+    timer = setTimeout(tick, 500)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const counts = {
     "Out for Delivery": orders.filter(o => formatStatus(o.status) === "Out For Delivery").length,
@@ -290,6 +321,10 @@ export default function AdminOrders() {
           4 status distribution bar  5 grouped detail table  6 footer/signatures */}
       <style>{`
         .print-only { display: none; }
+
+        /* Gentle fade + rise so content eases in once loaded instead of flashing. */
+        @keyframes ordersRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .orders-rise { animation: ordersRise 0.85s ease-out both; }
 
         @media print {
           @page { margin: 12mm 10mm; }
@@ -612,7 +647,7 @@ export default function AdminOrders() {
       )}
 
       {/* ── Heading ── */}
-      <div className="no-print flex items-center justify-between flex-wrap gap-3">
+      <div className={`no-print flex items-center justify-between flex-wrap gap-3 ${entered ? "" : "orders-rise"}`}>
         <div>
           <p className="text-sm font-medium" style={{ color: subTxt }}>Your total orders</p>
           <div className="flex items-baseline gap-3 mt-0.5">
@@ -627,17 +662,15 @@ export default function AdminOrders() {
       </div>
 
       {/* ── Stat cards ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 no-print">
+      <div className={`grid grid-cols-2 lg:grid-cols-4 gap-3 no-print ${entered ? "" : "orders-rise"}`} style={{ animationDelay: "0.18s" }}>
         {STAT_CARDS.map(c => (
           <button key={c.key} onClick={() => setStatus(statusFilter === c.key ? "All" : c.key)}
-            className="rounded-xl p-4 sm:p-5 text-left transition-all duration-200"
+            className="rounded-xl p-4 sm:p-5 text-left transition-all duration-200 hover:scale-[1.03]"
             style={{
               background: c.green ? "linear-gradient(135deg,#0a4a34 0%,#1a7040 60%,#2E8B34 100%)" : isDark ? "#1a2332" : "white",
               border: c.green ? "none" : statusFilter === c.key ? `2px solid ${isDark ? "#4ade80" : DG}` : `1px solid ${isDark ? "#2d3748" : "#e8edf2"}`,
               boxShadow: c.green ? "0 4px 16px rgba(12,87,62,0.25)" : statusFilter === c.key ? `0 0 0 3px rgba(74,222,128,0.15)` : isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)",
-            }}
-            onMouseEnter={e => e.currentTarget.style.transform = "translateY(-1px)"}
-            onMouseLeave={e => { if (statusFilter !== c.key || c.green) e.currentTarget.style.transform = "" }}>
+            }}>
             <p className="text-xs font-semibold uppercase tracking-wider mb-1"
               style={{ color: c.green ? "rgba(255,255,255,0.65)" : c.red ? "#f87171" : isDark ? "#64748b" : "#94a3b8" }}>{c.label}</p>
             <p className="text-xs mb-2"
@@ -750,8 +783,8 @@ export default function AdminOrders() {
         )}
 
         {/* ── Screen table card (interactive; never printed) ── */}
-        <div className="no-print rounded-xl overflow-hidden"
-          style={{ border: `1px solid ${isDark ? "#1e293b" : "#e8edf2"}`, backgroundColor: isDark ? "#1a2332" : "white", boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
+        <div className={`no-print rounded-xl overflow-hidden ${entered ? "" : "orders-rise"}`}
+          style={{ border: `1px solid ${isDark ? "#1e293b" : "#e8edf2"}`, backgroundColor: isDark ? "#1a2332" : "white", boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)", animationDelay: "0.36s" }}>
 
           {/* Toolbar */}
           <div className="p-3 sm:p-4" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
@@ -763,7 +796,8 @@ export default function AdminOrders() {
                 <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
                 </svg>
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Order ID or customer name"
+                <input value={search} onChange={e => setSearch(e.target.value)}
+                  placeholder={search ? "" : `${phText}|`}
                   className="w-full pl-9 pr-4 py-2 text-sm border rounded-md outline-none transition-all"
                   style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}
                   onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}

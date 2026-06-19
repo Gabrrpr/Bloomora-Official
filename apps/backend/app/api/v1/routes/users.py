@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
@@ -276,17 +276,25 @@ def activate_staff_account(payload: StaffActivateRequest, db: Session = Depends(
 
 @router.get("/activity-logs")
 def get_activity_logs(db: Session = Depends(get_db)):
-    # Fetch all logs, ordered by newest first
-    logs = db.query(ActivityLog).order_by(ActivityLog.created_at.desc()).all()
+    # Fetch all logs, newest first. Load each log's user in the same query
+    # so we can read their branch without an extra lookup per row.
+    logs = (
+        db.query(ActivityLog)
+        .options(joinedload(ActivityLog.user))
+        .order_by(ActivityLog.created_at.desc())
+        .all()
+    )
     
-    # Format them cleanly for the frontend
+    # Format them cleanly for the frontend.
+    # Branch comes from the user who performed the action, since the log
+    # itself doesn't store one.
     return [
         {
             "id": str(log.id),
             "user_id": str(log.user_id) if log.user_id else None,
             "role": log.role,
             "action": log.action,
-            "ip_address": log.ip_address,
+            "branch": getattr(log.user.branch, "value", log.user.branch) if log.user and log.user.branch else None,
             "created_at": log.created_at.isoformat() if log.created_at else None
         }
         for log in logs

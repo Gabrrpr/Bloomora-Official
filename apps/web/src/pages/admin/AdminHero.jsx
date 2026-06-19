@@ -11,6 +11,43 @@ import heroBg4 from "../../assets/hero/HeroBG4.png"
 const DG = "#0C573E"
 const G  = "#2E8B34"
 
+// Animated flower shown while the hero slides are still loading.
+function FlowerLoader({ message = "Loading...", isDark = false }) {
+  const petals = [
+    { angle: 0,   color: "#f48fb1" },
+    { angle: 60,  color: "#ec407a" },
+    { angle: 120, color: "#e91e63" },
+    { angle: 180, color: "#f06292" },
+    { angle: 240, color: "#c2185b" },
+    { angle: 300, color: "#f48fb1" },
+  ]
+  return (
+    <>
+      <style>{`
+        @keyframes adminPetalBloom {
+          0%, 100% { opacity: 0.2; }
+          50%       { opacity: 1;   }
+        }
+      `}</style>
+      <div className="flex flex-col items-center justify-center rounded-xl"
+        style={{ minHeight: "60vh", backgroundColor: isDark ? "#0f172a" : "transparent" }}>
+        <svg width="120" height="120" viewBox="0 0 100 100">
+          {petals.map(({ angle, color }, i) => (
+            <g key={i} transform={`rotate(${angle} 50 50)`}>
+              <ellipse cx="50" cy="27" rx="9.5" ry="21" fill={color}
+                style={{ animation: `adminPetalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`, animationFillMode: "both" }} />
+            </g>
+          ))}
+          <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+          <circle cx="50" cy="50" r="7"  fill="#f9c6d0" />
+          <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+        </svg>
+        <p className="mt-4 text-sm font-medium tracking-wide" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{message}</p>
+      </div>
+    </>
+  )
+}
+
 const IMAGE_OPTIONS = [
   { label: "HeroBG1.png", value: "HeroBG1.png" },
   { label: "HeroBG2.png", value: "HeroBG2.png" },
@@ -214,6 +251,8 @@ export default function AdminHero() {
   const [slides,    setSlides]    = useState([])
   const [activeIdx, setActiveIdx] = useState(0)
   const [loading,   setLoading]   = useState(true)
+  // One-time entrance animation; dropped once it plays so it never replays.
+  const [entered,   setEntered]   = useState(false)
   const [saving,    setSaving]    = useState(false)
   const [saved,     setSaved]     = useState(false)
   const [error,     setError]     = useState("")
@@ -249,6 +288,13 @@ export default function AdminHero() {
       .catch(() => setSlides(DEFAULT_SLIDES))
       .finally(() => setLoading(false))
   }, [])
+
+  // Play the entrance animation once the slides have loaded, then turn it off.
+  useEffect(() => {
+    if (loading) { setEntered(false); return }
+    const t = setTimeout(() => setEntered(true), 1500)
+    return () => clearTimeout(t)
+  }, [loading])
 
   const updateSlide = (field, value) => {
     setSlides(prev => prev.map((s, i) => i === activeIdx ? { ...s, [field]: value } : s))
@@ -312,11 +358,7 @@ export default function AdminHero() {
     return (
       <div className="space-y-5">
         <h1 className="text-xl font-bold" style={{ color: bodyTxt }}>Hero Section</h1>
-        <div className="rounded-xl p-10 text-center" style={{ backgroundColor:cardBg, border:`1px solid ${cardBdr}` }}>
-          <div className="w-8 h-8 border-2 rounded-full animate-spin mx-auto mb-3"
-            style={{ borderColor:isDark?"#334155":"#e5e7eb", borderTopColor:isDark?"#4ade80":"#16a34a" }} />
-          <p className="text-sm" style={{ color:subTxt }}>Loading hero slides...</p>
-        </div>
+        <FlowerLoader message="Loading hero slides..." isDark={isDark} />
       </div>
     )
   }
@@ -326,9 +368,14 @@ const isCustomImageActive = activeSlide.image === "custom" || activeSlide.image?
 
   return (
     <div className="space-y-5">
+      {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
+      <style>{`
+        @keyframes heroRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .hero-rise { animation: heroRise 0.85s ease-out both; }
+      `}</style>
 
       {/* Page header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className={`flex items-center justify-between flex-wrap gap-3 ${entered ? "" : "hero-rise"}`}>
         <div>
           <h1 className="text-xl font-bold" style={{ color:bodyTxt }}>Hero Section</h1>
           <p className="text-sm mt-0.5" style={{ color:subTxt }}>Edit and preview hero slides in real time</p>
@@ -357,7 +404,7 @@ const isCustomImageActive = activeSlide.image === "custom" || activeSlide.image?
       )}
 
       {/* Slide tabs */}
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className={`flex items-center gap-2 flex-wrap ${entered ? "" : "hero-rise"}`} style={{ animationDelay: "0.12s" }}>
         {slides.map((slide, idx) => {
           const isActive = idx === activeIdx
           return (
@@ -389,8 +436,8 @@ const isCustomImageActive = activeSlide.image === "custom" || activeSlide.image?
       </div>
 
       {/* Live preview */}
-      <div className="rounded-xl overflow-hidden"
-        style={{ border:`1px solid ${cardBdr}`, boxShadow:isDark?"none":"0 2px 12px rgba(0,0,0,0.08)" }}>
+      <div className={`rounded-xl overflow-hidden ${entered ? "" : "hero-rise"}`}
+        style={{ border:`1px solid ${cardBdr}`, boxShadow:isDark?"none":"0 2px 12px rgba(0,0,0,0.08)", animationDelay: "0.24s" }}>
         <div className="flex items-center justify-between px-4 py-3"
           style={{ borderBottom:`1px solid ${headerBdr}`, backgroundColor:headerBg }}>
           <div className="flex items-center gap-2">
@@ -405,8 +452,8 @@ const isCustomImageActive = activeSlide.image === "custom" || activeSlide.image?
       </div>
 
       {/* Falling Roses toggle */}
-      <div className="rounded-xl overflow-hidden"
-        style={{ backgroundColor:cardBg, border:`1px solid ${cardBdr}`, boxShadow:isDark?"none":"0 1px 3px rgba(0,0,0,0.04)" }}>
+      <div className={`rounded-xl overflow-hidden ${entered ? "" : "hero-rise"}`}
+        style={{ backgroundColor:cardBg, border:`1px solid ${cardBdr}`, boxShadow:isDark?"none":"0 1px 3px rgba(0,0,0,0.04)", animationDelay: "0.36s" }}>
 
         <div className="flex items-center gap-3 px-5 py-4"
           style={{ borderBottom:`1px solid ${headerBdr}`, backgroundColor:headerBg }}>
@@ -447,12 +494,12 @@ const isCustomImageActive = activeSlide.image === "custom" || activeSlide.image?
       </div>
 
       {/* Edit form for active slide */}
-      <div className="rounded-xl overflow-hidden"
-        style={{ backgroundColor:cardBg, border:`1px solid ${cardBdr}`, boxShadow:isDark?"none":"0 1px 3px rgba(0,0,0,0.04)" }}>
+      <div className={`rounded-xl overflow-hidden ${entered ? "" : "hero-rise"}`}
+        style={{ backgroundColor:cardBg, border:`1px solid ${cardBdr}`, boxShadow:isDark?"none":"0 1px 3px rgba(0,0,0,0.04)", animationDelay: "0.48s" }}>
 
         <div className="flex items-center gap-3 px-5 py-4"
           style={{ borderBottom:`1px solid ${headerBdr}`, backgroundColor:headerBg }}>
-          
+
           <div className="flex-1 flex items-center gap-3">
             <div className="w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
               style={{ background:`linear-gradient(135deg,${DG},${G})` }}>

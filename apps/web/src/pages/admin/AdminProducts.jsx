@@ -9,7 +9,10 @@ const PLACEHOLDER_IMAGE = new URL("../../assets/default-img/ImageNotFound.webp",
 const AVAILABILITIES = ["Available", "Limited", "Out of Stock"]
 const STATUSES       = ["Active", "Inactive", "On Sale"]
 
-// 🚀 OCCASIONS LIST
+// Example product names cycled through the search box as an animated, typewriter-style hint.
+const SEARCH_SAMPLES = ["Dozen Red Ecuador Roses", "Mix Tulips", "Spring Flowers Pink Wrapper", "3pcs Sunflower"]
+
+// Occasions a customer can shop a product for
 const OCCASIONS_LIST = [
   "Anniversary", "Birthday", "Congratulation", "Get Well", 
   "Graduation", "I am Sorry", "Love & Romance", "Mother's Day", 
@@ -262,7 +265,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
 
   const [branchWarning, setBranchWarning] = useState(false);
 
-  // 🚀 Auto-compute pricing logic (Base + Labor)
+  // Recalculate the final price whenever base cost, labor, or markup changes
   const handlePricingChange = (field, value) => {
     setForm(prev => {
       const next = { ...prev, [field]: value };
@@ -619,51 +622,9 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             <p className="text-[10px] mt-1" style={{ color: d.subC }}>Words entered here help customers find this product via search.</p>
           </div>
 
-          <div className="p-4 rounded-xl mb-4" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              <div>
-                <MLabel d={d}>Base Cost (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <MInput 
-                  type="number" 
-                  value={form.basePrice} 
-                  onChange={(val) => handlePricingChange('basePrice', val)} 
-                  placeholder="e.g. 500" 
-                  d={d}
-                />
-              </div>
-              <div>
-                <MLabel d={d}>Labor Cost (₱)</MLabel>
-                <MInput 
-                  type="number" 
-                  value={form.laborCost} 
-                  onChange={(val) => handlePricingChange('laborCost', val)} 
-                  placeholder="e.g. 150" 
-                  d={d}
-                />
-              </div>
-              <div>
-                <MLabel d={d}>Markup (%) <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <MInput 
-                  type="number" 
-                  value={form.markupPercentage} 
-                  onChange={(val) => handlePricingChange('markupPercentage', val)} 
-                  placeholder="e.g. 50" 
-                  d={d}
-                />
-              </div>
-              <div>
-                <MLabel d={d}>Final Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <MInput 
-                  type="number" 
-                  value={form.price} 
-                  onChange={(val) => handlePricingChange('price', val)} 
-                  placeholder="0.00" 
-                  error={errors.price} 
-                  d={d}
-                />
-              </div>
-            </div>
-            {errors.price && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.price}</p>}
+          <div>
+            <MLabel d={d}>Description <span style={{ color: d.subC, fontWeight: 400 }}>(optional)</span></MLabel>
+            <MTextarea value={form.description} onChange={set("description")} placeholder="Brief description..." d={d}/>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -783,7 +744,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
                   )}
                 </div>
                 
-                {/* 🚀 FIXED: Alert UX removed, inline warning added */}
+                {/* Show an inline warning instead of a popup when no branch is selected yet */}
                 <div onClick={() => {
                     if (form.branches.length === 0) {
                         setBranchWarning(true);
@@ -902,9 +863,51 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             )}
           </div>
 
-          <div>
-            <MLabel d={d}>Description <span style={{ color: d.subC, fontWeight: 400 }}>(optional)</span></MLabel>
-            <MTextarea value={form.description} onChange={set("description")} placeholder="Brief description..." d={d}/>
+          <div className="p-4 rounded-xl mb-4" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div>
+                <MLabel d={d}>Base Cost (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
+                <MInput
+                  type="number"
+                  value={form.basePrice}
+                  onChange={(val) => handlePricingChange('basePrice', val)}
+                  placeholder="e.g. 500"
+                  d={d}
+                />
+              </div>
+              <div>
+                <MLabel d={d}>Labor Cost (₱)</MLabel>
+                <MInput
+                  type="number"
+                  value={form.laborCost}
+                  onChange={(val) => handlePricingChange('laborCost', val)}
+                  placeholder="e.g. 150"
+                  d={d}
+                />
+              </div>
+              <div>
+                <MLabel d={d}>Markup (%) <span style={{ color:"#f87171" }}>*</span></MLabel>
+                <MInput
+                  type="number"
+                  value={form.markupPercentage}
+                  onChange={(val) => handlePricingChange('markupPercentage', val)}
+                  placeholder="e.g. 50"
+                  d={d}
+                />
+              </div>
+              <div>
+                <MLabel d={d}>Final Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
+                <MInput
+                  type="number"
+                  value={form.price}
+                  onChange={(val) => handlePricingChange('price', val)}
+                  placeholder="0.00"
+                  error={errors.price}
+                  d={d}
+                />
+              </div>
+            </div>
+            {errors.price && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.price}</p>}
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 px-6 py-5 flex-shrink-0"
@@ -965,7 +968,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
 
   const [branchWarning, setBranchWarning] = useState(false);
 
-  // 🚀 Auto-compute pricing logic (Base + Labor)
+  // Recalculate the final price whenever base cost, labor, or markup changes
   const handlePricingChange = (field, value) => {
     setForm(prev => {
       const next = { ...prev, [field]: value };
@@ -1302,55 +1305,13 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
           </div>
 
           <div>
-            <MLabel d={d}>Status</MLabel>
-            <MSel value={form.status} onChange={set("status")} options={["Active", "Inactive", "On Sale"]} d={d}/>
+            <MLabel d={d}>Description <span style={{ color: d.subC, fontWeight: 400 }}>(optional)</span></MLabel>
+            <MTextarea value={form.description} onChange={set("description")} placeholder="Brief description..." d={d}/>
           </div>
 
-          <div className="p-4 rounded-xl mb-4" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
-              <div>
-                <MLabel d={d}>Base Cost (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <MInput 
-                  type="number" 
-                  value={form.basePrice} 
-                  onChange={(val) => handlePricingChange('basePrice', val)} 
-                  placeholder="e.g. 500" 
-                  d={d}
-                />
-              </div>
-              <div>
-                <MLabel d={d}>Labor Cost (₱)</MLabel>
-                <MInput 
-                  type="number" 
-                  value={form.laborCost} 
-                  onChange={(val) => handlePricingChange('laborCost', val)} 
-                  placeholder="e.g. 150" 
-                  d={d}
-                />
-              </div>
-              <div>
-                <MLabel d={d}>Markup (%) <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <MInput 
-                  type="number" 
-                  value={form.markupPercentage} 
-                  onChange={(val) => handlePricingChange('markupPercentage', val)} 
-                  placeholder="e.g. 50" 
-                  d={d}
-                />
-              </div>
-              <div>
-                <MLabel d={d}>Final Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <MInput 
-                  type="number" 
-                  value={form.price} 
-                  onChange={(val) => handlePricingChange('price', val)} 
-                  placeholder="0.00" 
-                  error={errors.price} 
-                  d={d}
-                />
-              </div>
-            </div>
-            {errors.price && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.price}</p>}
+          <div>
+            <MLabel d={d}>Status</MLabel>
+            <MSel value={form.status} onChange={set("status")} options={["Active", "Inactive", "On Sale"]} d={d}/>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -1468,7 +1429,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
                   )}
                 </div>
                 
-                {/* 🚀 FIXED: Alert UX removed, inline warning added */}
+                {/* Show an inline warning instead of a popup when no branch is selected yet */}
                 <div onClick={() => {
                     if (form.branches.length === 0) {
                         setBranchWarning(true);
@@ -1587,9 +1548,51 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             )}
           </div>
 
-          <div>
-            <MLabel d={d}>Description <span style={{ color: d.subC, fontWeight: 400 }}>(optional)</span></MLabel>
-            <MTextarea value={form.description} onChange={set("description")} placeholder="Brief description..." d={d}/>
+          <div className="p-4 rounded-xl mb-4" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+              <div>
+                <MLabel d={d}>Base Cost (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
+                <MInput
+                  type="number"
+                  value={form.basePrice}
+                  onChange={(val) => handlePricingChange('basePrice', val)}
+                  placeholder="e.g. 500"
+                  d={d}
+                />
+              </div>
+              <div>
+                <MLabel d={d}>Labor Cost (₱)</MLabel>
+                <MInput
+                  type="number"
+                  value={form.laborCost}
+                  onChange={(val) => handlePricingChange('laborCost', val)}
+                  placeholder="e.g. 150"
+                  d={d}
+                />
+              </div>
+              <div>
+                <MLabel d={d}>Markup (%) <span style={{ color:"#f87171" }}>*</span></MLabel>
+                <MInput
+                  type="number"
+                  value={form.markupPercentage}
+                  onChange={(val) => handlePricingChange('markupPercentage', val)}
+                  placeholder="e.g. 50"
+                  d={d}
+                />
+              </div>
+              <div>
+                <MLabel d={d}>Final Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
+                <MInput
+                  type="number"
+                  value={form.price}
+                  onChange={(val) => handlePricingChange('price', val)}
+                  placeholder="0.00"
+                  error={errors.price}
+                  d={d}
+                />
+              </div>
+            </div>
+            {errors.price && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.price}</p>}
           </div>
         </div>
         <div className="flex items-center justify-end gap-2 px-6 py-5 flex-shrink-0"
@@ -1621,24 +1624,28 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
 // ── View Product Modal ────────────────────────────────────────────────────────
 function ViewProductModal({ product, onClose }) {
   const d = useAdminTokens()
-  const rows = [
-    { label:"Product Name", value:product.name },
-    { label:"Category",     value:product.category, capitalize:true },
-    { label:"Status",       value:product.status,   capitalize:true },
-    { label:"Price",        value:`₱${(+product.price).toLocaleString()}` },
-    { label:"Stock",        value:product.stock },
-    { label:"Search Tags",  value:product.tags?.length > 0 ? (Array.isArray(product.tags) ? product.tags.join(", ") : product.tags) : "—" }, 
-    { label:"Description",  value:product.description || "—" },
-    { label:"Occasions",    value:product.occasions?.length > 0 ? product.occasions.join(", ") : "—" }, 
-    { label:"Branches",     value:product.branches?.length > 0 ? product.branches.join(", ") : "—" },
+
+  // Short fields go in the two-column grid; longer text fields stack full width below.
+  const metaRows = [
+    { label:"Category", value:product.category || "—", capitalize:true },
+    { label:"Stock",    value:product.stock ?? "—" },
+    { label:"Branches", value:product.branches?.length > 0 ? product.branches.join(", ") : "—" },
+    { label:"Product Type", value:product.product_type || "—", capitalize:true },
   ]
+  const longRows = [
+    { label:"Search Tags", value:product.tags?.length > 0 ? (Array.isArray(product.tags) ? product.tags.join(", ") : product.tags) : "—" },
+    { label:"Occasions",   value:product.occasions?.length > 0 ? product.occasions.join(", ") : "—" },
+    { label:"Description", value:product.description || "—" },
+  ]
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ backgroundColor:d.overlayBg, backdropFilter:"blur(4px)" }}
       onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
-      <div className="rounded-xl w-full overflow-hidden"
-        style={{ maxWidth:"420px", boxShadow:"0 24px 64px rgba(0,0,0,0.5)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
-        <div className="flex items-center justify-between px-6 py-4"
+      <div className="rounded-xl w-full overflow-hidden flex flex-col"
+        style={{ maxWidth:"680px", maxHeight:"90vh", boxShadow:"0 24px 64px rgba(0,0,0,0.5)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
+
+        <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
           style={{ borderBottom:`1px solid ${d.modalHdrBdr}`, background:d.modalHdr }}>
           <p className="text-base font-bold" style={{ color:d.headC }}>Product Details</p>
           <button onClick={onClose} className="p-2 rounded-lg transition-all" style={{ color:d.subC }}
@@ -1646,18 +1653,43 @@ function ViewProductModal({ product, onClose }) {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
         </div>
-        <div className="p-6 space-y-4">
-          <FallbackImage src={getProductImage(product)} alt={product.name}
-            className="w-full h-48 object-cover rounded-lg"
-            style={{ border:`1px solid ${d.cardBdr}` }} fallbackSrc={PLACEHOLDER_IMAGE}/>
-          {rows.map(row => (
-            <div key={row.label}>
-              <p className="text-xs font-bold uppercase tracking-wider mb-0.5" style={{ color:d.labelC }}>{row.label}</p>
-              <p className="text-sm font-semibold" style={{ color:d.cellC, textTransform: row.capitalize ? 'capitalize' : 'none' }}>{row.value}</p>
+
+        <div className="p-6 overflow-y-auto flex flex-col sm:flex-row gap-6">
+          {/* Left: full image (not cropped) plus the headline details */}
+          <div className="sm:w-[240px] flex-shrink-0">
+            <div className="rounded-xl overflow-hidden flex items-center justify-center"
+              style={{ border:`1px solid ${d.cardBdr}`, backgroundColor: d.isDark ? "#0f172a" : "#f8fafc", aspectRatio:"1 / 1" }}>
+              <FallbackImage src={getProductImage(product)} alt={product.name}
+                className="w-full h-full object-contain"
+                fallbackSrc={PLACEHOLDER_IMAGE}/>
             </div>
-          ))}
+            <p className="mt-3 text-base font-bold leading-snug" style={{ color:d.headC }}>{product.name}</p>
+            <p className="mt-1 text-2xl font-bold" style={{ color:d.priceG }}>₱{(+product.price).toLocaleString()}</p>
+            <div className="mt-2"><StatusBadge status={product.status}/></div>
+          </div>
+
+          {/* Right: the rest of the details */}
+          <div className="flex-1 min-w-0 space-y-4">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+              {metaRows.map(row => (
+                <div key={row.label}>
+                  <p className="text-[11px] font-bold uppercase tracking-wider mb-0.5" style={{ color:d.labelC }}>{row.label}</p>
+                  <p className="text-sm font-semibold break-words" style={{ color:d.cellC, textTransform: row.capitalize ? 'capitalize' : 'none' }}>{row.value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="space-y-3 pt-1" style={{ borderTop:`1px solid ${d.divider}` }}>
+              {longRows.map(row => (
+                <div key={row.label} className="pt-1">
+                  <p className="text-[11px] font-bold uppercase tracking-wider mb-0.5" style={{ color:d.labelC }}>{row.label}</p>
+                  <p className="text-sm font-semibold break-words whitespace-pre-line" style={{ color:d.cellC }}>{row.value}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
-        <div className="flex items-center justify-end gap-2 px-6 py-4"
+
+        <div className="flex items-center justify-end gap-2 px-6 py-4 flex-shrink-0"
           style={{ borderTop:`1px solid ${d.modalFtrBdr}`, backgroundColor:d.modalFtr }}>
           <button onClick={onClose} className="px-4 py-2 text-sm font-semibold border rounded-md transition-all"
             style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}>
@@ -1714,7 +1746,7 @@ function DeleteProductModal({ product, onClose, onConfirm, isDeleting }) {
 }
 
 // ── Main page ─────────────────────────────────────────────────────────────────
-export default function AdminProducts() {
+export default function AdminProducts({ onNavigate }) {
   const d = useAdminTokens()
   const { isDark } = d
   const PAGE_SIZE = 35
@@ -1735,6 +1767,10 @@ export default function AdminProducts() {
   const [totalCount, setTotalCount]       = useState(0)
   const [lowCount, setLowCount]           = useState(0)
   const [loading, setLoading]             = useState(true)
+  // Controls the one-time entrance animation; dropped once it plays so it never replays.
+  const [entered, setEntered]             = useState(false)
+  // Animated placeholder text for the search box (typewriter hint).
+  const [phText, setPhText]               = useState("")
 
   const fetchProducts = useCallback(async () => {
     setLoading(true)
@@ -1754,6 +1790,30 @@ export default function AdminProducts() {
   useEffect(() => { fetchProducts() }, [fetchProducts])
   
   useEffect(() => { setPage(1) }, [search,category,status,priceSort,branchFilter])
+
+  // Play the entrance animation once the data has loaded, then turn it off.
+  useEffect(() => {
+    if (loading) { setEntered(false); return }
+    const t = setTimeout(() => setEntered(true), 1300)
+    return () => clearTimeout(t)
+  }, [loading])
+
+  // Typewriter hint in the search box: types a sample product name, pauses, deletes,
+  // then the next one — looping forever while the box is empty. Stops once the user types.
+  useEffect(() => {
+    if (search) { setPhText(""); return }
+    let sample = 0, ch = 0, deleting = false, timer
+    const tick = () => {
+      const full = SEARCH_SAMPLES[sample]
+      ch += deleting ? -1 : 1
+      setPhText(full.slice(0, ch))
+      if (!deleting && ch === full.length) { deleting = true; timer = setTimeout(tick, 1400); return }
+      if (deleting && ch === 0) { deleting = false; sample = (sample + 1) % SEARCH_SAMPLES.length }
+      timer = setTimeout(tick, deleting ? 55 : 110)
+    }
+    timer = setTimeout(tick, 500)
+    return () => clearTimeout(timer)
+  }, [search])
 
   const handleSave     = p => { setProducts(prev=>[p,...prev]); setTotalCount(c=>c+1) }
   const handleEditSave = p => { setProducts(prev=>prev.map(x=>x.id===p.id?p:x)); setEditingProduct(null) }
@@ -1831,10 +1891,17 @@ export default function AdminProducts() {
       {editingProduct && <EditProductModal product={editingProduct} onClose={()=>setEditingProduct(null)} onSave={handleEditSave} categories={dynamicCategories} products={products}/>}
       {viewingProduct && <ViewProductModal product={viewingProduct} onClose={()=>setViewingProduct(null)}/>}
       {deletingProduct && <DeleteProductModal product={deletingProduct} onClose={()=>setDeletingProduct(null)} onConfirm={handleConfirmDelete} isDeleting={isDeleting}/>}
-      <h1 className="text-xl font-bold" style={{ color:d.headC }}>Products</h1>
+
+      {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
+      <style>{`
+        @keyframes productsRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .products-rise { animation: productsRise 0.85s ease-out both; }
+      `}</style>
+
+      <h1 className={`text-xl font-bold ${entered ? "" : "products-rise"}`} style={{ color:d.headC }}>Products</h1>
 
       {/* Stat cards */}
-      <div className="flex flex-wrap gap-3 items-stretch">
+      <div className={`flex flex-wrap gap-3 items-stretch ${entered ? "" : "products-rise"}`} style={{ animationDelay: "0.18s" }}>
         <div className="rounded-xl p-5 relative overflow-hidden flex flex-col justify-between transition-all duration-200"
           style={{ flex:"1 0 200px", maxWidth:"300px", background:"linear-gradient(135deg,#0a4a34 0%,#1a7040 60%,#2E8B34 100%)", boxShadow:"0 4px 16px rgba(12,87,62,0.28)" }}
           onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(12,87,62,0.36)"}}
@@ -1862,14 +1929,15 @@ export default function AdminProducts() {
             <p className="text-3xl font-bold mt-2" style={{ color:isDark?"#f87171":"#ef4444" }}>{lowCount}</p>
             <p className="text-xs mt-1.5 font-semibold" style={{ color:"#f87171" }}>+0 this week</p>
           </div>
-          <button className="text-xs font-semibold hover:underline mt-3 self-start" style={{ color:d.accentG }}>
+          <button onClick={() => onNavigate?.("Inventory")}
+            className="text-xs font-semibold hover:underline mt-3 self-start" style={{ color:d.accentG }}>
             Review Inventory
           </button>
         </div>
       </div>
 
       {/* Table card */}
-      <div className="rounded-xl overflow-hidden" style={{ border:`1px solid ${d.cardBdr}`, backgroundColor:d.cardBg, boxShadow:d.cardShdw }}>
+      <div className={`rounded-xl overflow-hidden ${entered ? "" : "products-rise"}`} style={{ border:`1px solid ${d.cardBdr}`, backgroundColor:d.cardBg, boxShadow:d.cardShdw, animationDelay: "0.36s" }}>
         {/* Toolbar */}
         <div className="p-3 sm:p-4" style={{ borderBottom:`1px solid ${d.hdrBdr}`, backgroundColor:d.hdrBg }}>
           <div className="flex items-center gap-2 flex-wrap">
@@ -1900,7 +1968,7 @@ export default function AdminProducts() {
               <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color:d.subC }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
               </svg>
-              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search product name"
+              <input value={search} onChange={e=>setSearch(e.target.value)} placeholder={search ? "" : `${phText}|`}
                 className="w-full pl-9 pr-4 py-2 text-sm border rounded-md outline-none transition-all"
                 style={selStyle}
                 onFocus={e=>{e.target.style.borderColor="#4ade80";e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)"}}
@@ -1917,7 +1985,7 @@ export default function AdminProducts() {
           <table className="w-full" style={{ minWidth:"700px" }}>
             <thead style={{ borderBottom:`1px solid ${d.hdrBdr}`, backgroundColor:d.hdrBg }}>
               <tr>
-                {["Image","Product Name","Category","Price","Status","Availability","Branches","Action"].map(h => (
+                {["Branches","Image","Product Name","Category","Price","Status","Availability","Action"].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color:d.subC }}>{h}</th>
                 ))}
               </tr>
@@ -1932,6 +2000,15 @@ export default function AdminProducts() {
                     style={{ borderBottom:`1px solid ${d.divider}`, backgroundColor:idx%2===0?d.rowEven:d.rowOdd }}
                     onMouseEnter={e=>e.currentTarget.style.backgroundColor=d.rowHov}
                     onMouseLeave={e=>e.currentTarget.style.backgroundColor=idx%2===0?d.rowEven:d.rowOdd}>
+                    <td className="px-4 py-3">
+                      {Array.isArray(p.branches) && p.branches.length > 0 ? (
+                        <span className="text-xs font-semibold" style={{ color:d.subC }}>
+                          {p.branches.join(", ")}
+                        </span>
+                      ) : (
+                        <span className="text-xs" style={{ color:d.subC }}>—</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <FallbackImage src={getProductImage(p)} alt={p.name} className="w-10 h-10 rounded-lg object-cover"
                         style={{ border:`1px solid ${d.cardBdr}` }} fallbackSrc={PLACEHOLDER_IMAGE}/>
@@ -1950,15 +2027,6 @@ export default function AdminProducts() {
                     </td>
                     <td className="px-4 py-3"><StatusBadge status={p.status}/></td>
                     <td className="px-4 py-3"><StatusBadge status={avail}/></td>
-                    <td className="px-4 py-3">
-                      {Array.isArray(p.branches) && p.branches.length > 0 ? (
-                        <span className="text-xs font-semibold" style={{ color:d.subC }}>
-                          {p.branches.join(", ")}
-                        </span>
-                      ) : (
-                        <span className="text-xs" style={{ color:d.subC }}>—</span>
-                      )}
-                    </td>
                     <td className="px-4 py-3">
                       <ActionBtns onEdit={()=>setEditingProduct(p)} onView={()=>setViewingProduct(p)} onDelete={()=>setDeletingProduct(p)}/>
                     </td>

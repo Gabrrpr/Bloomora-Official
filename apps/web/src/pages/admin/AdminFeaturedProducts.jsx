@@ -1207,16 +1207,16 @@ export default function AdminFeaturedProducts() {
   const { isDark } = useTheme()
   const t = useTokens(isDark)
 
-  // 🚀 Added Branch Context hooks
+  // Branch context
   const { branch, setBranch } = useBranch()
 
-  // 🚀 Keep track of all layouts across both branches
+  // Keep the saved layouts for both branches together
   const [allData, setAllData] = useState({
     Manila: DEFAULT_DATA,
     Pampanga: DEFAULT_DATA
   })
 
-  // 🚀 Derive current branch's data, tab IDs, and active tab safely
+  // Current branch's data and its tab ids
   const data = allData[branch] || DEFAULT_DATA
   const tabIds = Object.keys(data)
 
@@ -1234,13 +1234,15 @@ export default function AdminFeaturedProducts() {
   const [dirty, setDirty]   = useState(false)
   const [saved, setSaved]   = useState(false)
   const [saving, setSaving] = useState(false)
+  // Drives the one-time entrance animation; removed after it plays so it never replays.
+  const [entered, setEntered] = useState(false)
 
   // Modal State
   const [modal, setModal] = useState({ isOpen: false, type: null, input: '', error: '' })
 
   const isCarousel = id => id === CAROUSEL_ID || data[id]?.__type === "carousel"
 
-  // 🚀 Helper to ensure old DB versions map to the new formatting seamlessly
+  // Upgrade older saved data to the current format
   const formatSettings = (parsed) => {
     const upgradedData = {}
     const savedCarousel = parsed[CAROUSEL_ID] || Object.values(parsed).find(s => s?.__type === "carousel")
@@ -1258,7 +1260,7 @@ export default function AdminFeaturedProducts() {
     api.get("/products/admin/settings/homepage")
       .then(parsed => {
         if (parsed && Object.keys(parsed).length > 0) {
-          // 🚀 Check if DB has migrated to branch-aware format
+          // Use the branch-aware format if the saved data already has it
           if (parsed.Manila || parsed.Pampanga) {
             setAllData({
               Manila: parsed.Manila ? formatSettings(parsed.Manila) : DEFAULT_DATA,
@@ -1279,7 +1281,7 @@ export default function AdminFeaturedProducts() {
   useEffect(() => {
     let cancelled = false
     setLoading(true)
-    api.getAdminProducts() // 🚀 Using admin product list
+    api.getAdminProducts()
       .then(rows => {
         if (cancelled) return
         const normalized = (Array.isArray(rows.data || rows) ? (rows.data || rows) : []).map(p => ({
@@ -1289,7 +1291,7 @@ export default function AdminFeaturedProducts() {
           image: p.image || p.image_url || null,
           category: p.category || null,
           ribbon: p.ribbon || null,
-          branches: p.branches || [], // 🚀 Ensure branches are mapped
+          branches: p.branches || [],
         }))
         setProds(normalized)
       })
@@ -1301,9 +1303,15 @@ export default function AdminFeaturedProducts() {
     return () => { cancelled = true }
   }, [])
 
+  // Play the entrance animation once on mount, then turn it off.
+  useEffect(() => {
+    const timer = setTimeout(() => setEntered(true), 1300)
+    return () => clearTimeout(timer)
+  }, [])
+
   const currentData = data[activeTab] || generateBlankSection(activeTab || "New")
   
-  // 🚀 Safely update ONLY the current branch's layout
+  // Update only the current branch's layout
   const setCurrentData = next => {
     setAllData(prev => ({
       ...prev,
@@ -1375,8 +1383,8 @@ export default function AdminFeaturedProducts() {
   const handleSave = async () => {
     setSaving(true)
     try {
-      // 🚀 Save the massive multi-branch JSON blob to the DB
-      await api.post("/products/admin/settings/homepage", allData) 
+      // Save both branches' layouts to the database
+      await api.post("/products/admin/settings/homepage", allData)
       setDirty(false)
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
@@ -1415,28 +1423,34 @@ export default function AdminFeaturedProducts() {
 
   const activeIsCarousel = isCarousel(activeTab)
 
-  // 🚀 Ensure picker only displays products physically at the current branch
+  // Only show products that exist at the current branch
   const branchProducts = products.filter(p => p.branches?.includes(branch));
 
   return (
     <div className="space-y-5">
+      {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
+      <style>{`
+        @keyframes featRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .feat-rise { animation: featRise 0.85s ease-out both; }
+      `}</style>
+
       {/* header */}
-      <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
+      <div className={`flex flex-col sm:flex-row sm:items-end justify-between gap-4 ${entered ? "" : "feat-rise"}`}>
         <div>
           <h1 className="text-2xl font-bold" style={{ color: t.textPrimary }}>Featured Products</h1>
           <p className="text-sm mt-1" style={{ color: t.textSecondary }}>
             Curate which products appear in the homepage Featured sections for each branch.
           </p>
         </div>
-        <div className="flex flex-col items-end gap-3">
-          
-          {/* 🚀 Branch Selector UI */}
+        <div className="flex flex-col items-stretch sm:items-end gap-3 w-full sm:w-auto">
+
+          {/* Branch selector */}
           <div className="flex gap-2">
             {["Manila", "Pampanga"].map(b => (
-              <button 
-                key={b} 
+              <button
+                key={b}
                 onClick={() => setBranch(b)}
-                className="px-6 py-2 rounded-md font-bold transition-all text-sm"
+                className="flex-1 sm:flex-none px-4 sm:px-6 py-2 rounded-md font-bold transition-all text-sm"
                 style={{
                   backgroundColor: branch === b ? DG : "transparent",
                   color: branch === b ? "white" : t.textSecondary,
@@ -1475,15 +1489,15 @@ export default function AdminFeaturedProducts() {
       </div>
 
       {/* internal tabs and section controls */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div className="inline-flex p-1 rounded-lg flex-wrap gap-1" style={{ backgroundColor: t.badgeBg, border: `1px solid ${t.cardBorder}` }}>
+      <div className={`flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 ${entered ? "" : "feat-rise"}`} style={{ animationDelay: "0.12s" }}>
+        <div className="flex flex-nowrap p-1 rounded-lg gap-1 overflow-x-auto max-w-full" style={{ backgroundColor: t.badgeBg, border: `1px solid ${t.cardBorder}` }}>
           {tabIds.map(id => {
             const on = activeTab === id
             const carousel = isCarousel(id)
             return (
               <button key={id}
                 onClick={() => setActiveTab(id)}
-                className="px-4 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5"
+                className="px-4 py-1.5 rounded-md text-xs font-semibold transition-all flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap"
                 style={{
                   backgroundColor: on ? t.surfaceBg : "transparent",
                   color: on ? (isDark ? "#4ade80" : DG) : t.textSecondary,
@@ -1498,8 +1512,8 @@ export default function AdminFeaturedProducts() {
               </button>
             )
           })}
-          <button onClick={() => openModal('add')} 
-            className="px-3 py-1.5 rounded-md text-xs font-bold text-white transition-all hover:opacity-90"
+          <button onClick={() => openModal('add')}
+            className="px-3 py-1.5 rounded-md text-xs font-bold text-white transition-all hover:opacity-90 flex-shrink-0 whitespace-nowrap"
             style={{ backgroundColor: G }}>
             + Add Section
           </button>
@@ -1536,14 +1550,14 @@ export default function AdminFeaturedProducts() {
       </div>
 
       {/* split layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_1fr] gap-5">
+      <div className={`grid grid-cols-1 xl:grid-cols-[1.3fr_1fr] gap-5 ${entered ? "" : "feat-rise"}`} style={{ animationDelay: "0.24s" }}>
         {/* editor */}
         <div>
           {activeIsCarousel ? (
             <CarouselEditor
               data={currentData}
               onChange={setCurrentData}
-              products={branchProducts} // 🚀 Pass branch-filtered products
+              products={branchProducts}
               loading={loading}
               t={t}
               isDark={isDark}
@@ -1552,7 +1566,7 @@ export default function AdminFeaturedProducts() {
             <TabEditor
               data={currentData}
               onChange={setCurrentData}
-              products={branchProducts} // 🚀 Pass branch-filtered products
+              products={branchProducts}
               loading={loading}
               t={t}
               isDark={isDark}

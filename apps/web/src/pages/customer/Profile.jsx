@@ -340,10 +340,12 @@ export default function Profile({ onNavigate }) {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#F7F8FA" }}>
+      <style>{`@keyframes profileRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}`}</style>
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-10">
         <button
           onClick={setupMode ? undefined : () => onNavigate("home")}
           disabled={setupMode}
+          style={{ animation: "profileRise 0.4s ease 0.02s both" }}
           className={`flex items-center gap-2 text-sm mb-6 transition ${setupMode ? "text-gray-300 cursor-not-allowed" : "text-gray-500 hover:text-gray-700"}`}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -370,7 +372,7 @@ export default function Profile({ onNavigate }) {
           </div>
         )}
 
-        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-5">
+        <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-5" style={{ animation: "profileRise 0.5s ease 0.08s both" }}>
           <div className="h-24" style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }} />
           <div className="px-6 pb-6">
             <div className="flex items-end justify-between -mt-12 mb-4">
@@ -417,7 +419,7 @@ export default function Profile({ onNavigate }) {
           </div>
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5">
+        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5" style={{ animation: "profileRise 0.5s ease 0.16s both" }}>
           <h3 className="text-sm font-semibold text-gray-700 mb-5">Personal Information</h3>
           <div className="grid sm:grid-cols-2 gap-4">
             {FIELDS.map(({ label, key, type = "text", placeholder, multiline, span }) => (
@@ -468,7 +470,7 @@ export default function Profile({ onNavigate }) {
         </div>
 
         {/* Address Book */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5">
+        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5" style={{ animation: "profileRise 0.5s ease 0.24s both" }}>
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-sm font-semibold text-gray-700">Address Book</h3>
@@ -530,7 +532,7 @@ export default function Profile({ onNavigate }) {
           )}
         </div>
                 {/* Preferences */}
-        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5">
+        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5" style={{ animation: "profileRise 0.5s ease 0.32s both" }}>
           <h3 className="text-sm font-semibold text-gray-700 mb-1">Preferences</h3>
           <p className="text-xs text-gray-400 mb-5">Manage your theme and notification settings</p>
 
@@ -595,7 +597,7 @@ export default function Profile({ onNavigate }) {
           )}
         </div>
 
-        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5">
+        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5" style={{ animation: "profileRise 0.5s ease 0.40s both" }}>
           <div className="flex items-start justify-between mb-4">
             <div>
               <h3 className="text-sm font-semibold text-gray-700">Password & Security</h3>
@@ -664,7 +666,7 @@ export default function Profile({ onNavigate }) {
           )}
         </div>
 
-        <div className="bg-white border border-red-100 rounded-xl p-6">
+        <div className="bg-white border border-red-100 rounded-xl p-6" style={{ animation: "profileRise 0.5s ease 0.48s both" }}>
           <h3 className="text-sm font-semibold text-red-500 mb-1">Danger Zone</h3>
           <p className="text-xs text-gray-400 mb-4">Permanently delete your account. This cannot be undone.</p>
           <button className="px-5 py-2 text-sm font-semibold text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition">

@@ -124,9 +124,10 @@ export default function FAQ({ onNavigate }) {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: pageBg }}>
+      <style>{`@keyframes pageRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}`}</style>
 
       {/* Hero */}
-      <div className="relative overflow-hidden" style={{ minHeight:"280px" }}>
+      <div className="relative overflow-hidden" style={{ minHeight:"280px", animation:"pageRise 0.6s ease 0.05s both" }}>
         <img src={pageBg5} alt="" className="absolute inset-0 w-full h-full object-cover"/>
         <div className="absolute inset-0"
           style={{ background:"linear-gradient(to right,rgba(12,87,62,0.92) 0%,rgba(12,87,62,0.72) 55%,rgba(12,87,62,0.38) 100%)" }}/>
@@ -143,7 +144,7 @@ export default function FAQ({ onNavigate }) {
 
       {/* Content */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-10 py-12 sm:py-16">
-        <div className="flex flex-col gap-10 sm:gap-12">
+        <div className="flex flex-col gap-10 sm:gap-12" style={{ animation:"pageRise 0.6s ease 0.16s both" }}>
           {FAQ_CATEGORIES.map(cat => (
             <div key={cat.category}>
               {/* Category heading */}
@@ -178,7 +179,7 @@ export default function FAQ({ onNavigate }) {
 
         {/* CTA */}
         <div className="mt-12 sm:mt-16 rounded-3xl p-7 sm:p-8 text-center"
-          style={{ background:`linear-gradient(135deg,${DG} 0%,${G} 100%)` }}>
+          style={{ background:`linear-gradient(135deg,${DG} 0%,${G} 100%)`, animation:"pageRise 0.6s ease 0.3s both" }}>
           <h3 className="text-xl font-bold text-white mb-2">Still have questions?</h3>
           <p className="text-sm mb-6" style={{ color:"rgba(255,255,255,0.72)" }}>
             Our team is happy to help. Reach out to us anytime.

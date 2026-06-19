@@ -144,6 +144,8 @@ export default function AdminAdvertisements() {
   const [uploadError, setUploadError] = useState("")
   const [renaming, setRenaming] = useState(null)   // ad being renamed, or null
   const [renameValue, setRenameValue] = useState("")
+  // Drives the one-time entrance animation; removed after it plays so it never replays.
+  const [entered, setEntered] = useState(false)
 
   const fileInputRef    = useRef(null)
   const uploadTargetRef = useRef(null) // null = add new ad, number = replace that ad's image
@@ -151,6 +153,12 @@ export default function AdminAdvertisements() {
   useEffect(() => {
     const t = setTimeout(() => setGridReady(true), 80)
     return () => clearTimeout(t)
+  }, [])
+
+  // Play the entrance animation once on mount, then turn it off.
+  useEffect(() => {
+    const timer = setTimeout(() => setEntered(true), 1300)
+    return () => clearTimeout(timer)
   }, [])
 
   const cardBg    = isDark ? "#1e293b" : "white"
@@ -256,13 +264,17 @@ export default function AdminAdvertisements() {
 
   return (
     <div className="space-y-5">
-      <style>{`@keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`}</style>
+      <style>{`
+        @keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
+        @keyframes adRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .ad-rise { animation: adRise 0.85s ease-out both; }
+      `}</style>
 
       {/* Hidden file input drives every upload / replace action */}
       <input ref={fileInputRef} type="file" accept="image/*" onChange={handleFile} style={{ display: "none" }} />
 
       {/* ── Page header ── */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className={`flex items-center justify-between flex-wrap gap-3 ${entered ? "" : "ad-rise"}`}>
         <div>
           <h1 className="text-xl font-bold" style={{ color: bodyTxt }}>Pop-up Advertisements</h1>
           <p className="text-sm mt-0.5" style={{ color: subTxt }}>
@@ -299,8 +311,8 @@ export default function AdminAdvertisements() {
       )}
 
       {/* ── Active ad panel ── */}
-      <div className="rounded-xl overflow-hidden"
-        style={{ border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 2px 8px rgba(0,0,0,0.06)" }}>
+      <div className={`rounded-xl overflow-hidden ${entered ? "" : "ad-rise"}`}
+        style={{ border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 2px 8px rgba(0,0,0,0.06)", animationDelay: "0.18s" }}>
 
         <div className="flex items-center justify-between px-5 py-2.5"
           style={{ background: `linear-gradient(90deg, ${DG}, #1a6b4a)` }}>
@@ -398,8 +410,8 @@ export default function AdminAdvertisements() {
       </div>
 
       {/* ── All ads grid ── */}
-      <div className="rounded-xl overflow-hidden"
-        style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
+      <div className={`rounded-xl overflow-hidden ${entered ? "" : "ad-rise"}`}
+        style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)", animationDelay: "0.36s" }}>
 
         <div className="flex items-center justify-between px-5 py-3.5"
           style={{ borderBottom: `1px solid ${headerBdr}`, backgroundColor: headerBg }}>

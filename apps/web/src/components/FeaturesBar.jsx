@@ -65,7 +65,7 @@ function FeatureItem({ Icon, title, text, accentG, titleC, textC, iconBg, idx })
   return (
     <div
       ref={ref}
-      className="flex items-start gap-3.5 sm:gap-4 px-2 sm:px-5"
+      className="flex items-start gap-3 px-1.5 sm:px-2.5 lg:px-3"
       style={{
         opacity: 0,
         transform: "translateY(20px)",
@@ -73,10 +73,10 @@ function FeatureItem({ Icon, title, text, accentG, titleC, textC, iconBg, idx })
       }}
     >
       <span
-        className="shrink-0 flex items-center justify-center rounded-full w-12 h-12 sm:w-14 sm:h-14"
+        className="shrink-0 flex items-center justify-center rounded-full w-11 h-11 sm:w-12 sm:h-12"
         style={{ color: accentG, backgroundColor: iconBg }}
       >
-        <Icon className="w-6 h-6 sm:w-7 sm:h-7" />
+        <Icon className="w-5 h-5 sm:w-6 sm:h-6" />
       </span>
       <div className="min-w-0">
         <h3
@@ -85,7 +85,12 @@ function FeatureItem({ Icon, title, text, accentG, titleC, textC, iconBg, idx })
         >
           {title}
         </h3>
-        <p className="text-xs sm:text-[13px] leading-snug" style={{ color: textC }}>
+        {/* Clamp to 2 lines and reserve that height so every card matches and the
+            bar never grows a 3rd row on narrower laptops. */}
+        <p
+          className="text-xs sm:text-[13px] leading-snug line-clamp-2"
+          style={{ color: textC, minHeight: "2.6em" }}
+        >
           {text}
         </p>
       </div>
@@ -104,8 +109,9 @@ export default function FeaturesBar() {
   const iconBg   = isDark ? "rgba(74,222,128,0.12)" : "rgba(46,139,52,0.10)"
 
   return (
-    // Negative top margin overlaps the hero on sm+; flush below it on mobile.
-    <div className="relative z-20 px-4 sm:px-6 lg:px-8 mt-10 sm:-mt-10 lg:-mt-14 mb-2 sm:mb-0">
+    // Sits just below the hero with only a gentle overlap so it never covers the
+    // hero text/buttons. Overlap scales up slightly on larger laptops/desktops.
+    <div className="relative z-20 px-4 sm:px-6 lg:px-8 mt-8 sm:-mt-4 md:-mt-5 lg:-mt-7 xl:-mt-9 mb-2 sm:mb-0">
       <div className="max-w-6xl mx-auto">
         <div
           className="rounded-2xl shadow-lg border"

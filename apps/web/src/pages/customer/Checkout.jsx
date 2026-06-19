@@ -6,6 +6,7 @@ import { validateVoucher, computeDiscount } from "../../utils/vouchers.js"
 import { API_BASE } from "../../config/api.js"
 
 const G = "#2E8B34"
+const DG = "#0C573E"
 
 export default function Checkout({ onNavigate }) {
   const { user } = useAuth()
@@ -18,6 +19,12 @@ export default function Checkout({ onNavigate }) {
   const [voucherMsg, setVoucherMsg] = useState(null) // { type: "error" | "success", text }
   const [placing, setPlacing] = useState(false)
   const [error, setError] = useState("")
+
+  // Delivery date: "tomorrow" default, or a custom date picked from the calendar
+  const [deliveryMode, setDeliveryMode] = useState("tomorrow") // "tomorrow" | "custom"
+  const [deliveryDate, setDeliveryDate] = useState(() => {
+    const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + 1); return d
+  })
 
   // Special Instructions
   const [orderNote, setOrderNote] = useState("")
@@ -103,7 +110,7 @@ export default function Checkout({ onNavigate }) {
   const subtotal = cartItems.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0)
   const shipping = cartItems.length > 0 ? 100 : 0
 
-  // ── Voucher discount (validated via shared util — honors admin-created codes) ──
+  // ── Voucher discount (validated via shared util; honors admin-created codes) ──
   const discount = computeDiscount(appliedVoucher, subtotal)
   const total = Math.max(0, subtotal + shipping - discount)
 
@@ -123,6 +130,7 @@ export default function Checkout({ onNavigate }) {
   const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
   const fmt = (d) => d.toLocaleDateString("en-PH", { month: "long", day: "numeric" })
   const fmtDay = (d) => d.toLocaleDateString("en-PH", { weekday: "long" })
+  const toInputDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
 
   const fullName = customer
     ? `${customer.first_name || ""} ${customer.last_name || ""}`.trim()
@@ -187,7 +195,7 @@ export default function Checkout({ onNavigate }) {
     total,
     deliveryTime,
     deliveryAddress: deliveryDetails.address,
-    scheduledDate: fmt(tomorrow),
+    scheduledDate: fmt(deliveryDate),
     placedAt: new Date().toISOString(),
     special_note: orderNote.trim() || null,
   })
@@ -245,7 +253,7 @@ export default function Checkout({ onNavigate }) {
         })),
         delivery_address: deliveryDetails.address,
         delivery_notes: buildDeliveryNotes(),
-        scheduled_at: tomorrow.toISOString(),
+        scheduled_at: deliveryDate.toISOString(),
         payment_method: paymentMethod,
         payment_reference: referenceNumber.trim(),
         special_note: orderNote.trim() || null
@@ -326,7 +334,7 @@ export default function Checkout({ onNavigate }) {
         })),
         delivery_address: deliveryDetails.address,
         delivery_notes: buildDeliveryNotes(),
-        scheduled_at: tomorrow.toISOString(),
+        scheduled_at: deliveryDate.toISOString(),
         payment_method: paymentMethod,
         payment_reference: referenceNumber.trim(),
         special_note: orderNote.trim() || null
@@ -356,6 +364,7 @@ export default function Checkout({ onNavigate }) {
 
   return (
     <div className="min-h-screen bg-[#F7F8FA]">
+      <style>{`@keyframes coRise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}`}</style>
       {branchConfirmOpen && needsBranchConfirm && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -389,18 +398,51 @@ export default function Checkout({ onNavigate }) {
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
 
-        <h1 className="text-lg sm:text-xl font-semibold text-gray-800 mb-5 sm:mb-6">Checkout</h1>
+        {/* Header */}
+        <div className="mb-5 sm:mb-6" style={{ animation: "coRise 0.5s ease 0.05s both" }}>
+          <button
+            onClick={() => onNavigate("cart")}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-[#2E8B34] transition mb-3"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+            Back to cart
+          </button>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Checkout</h1>
+          <p className="text-sm text-gray-500 mt-1">Review your details and complete your order.</p>
+
+          {/* Step indicator */}
+          <div className="flex items-center gap-2 mt-4 text-xs font-semibold">
+            <span className="inline-flex items-center gap-1.5 text-[#2E8B34]">
+              <span className="w-5 h-5 rounded-full bg-[#2E8B34] text-white flex items-center justify-center">
+                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
+              </span>
+              <span className="hidden sm:inline">Cart</span>
+            </span>
+            <span className="w-5 sm:w-8 h-px bg-[#2E8B34]/40" />
+            <span className="inline-flex items-center gap-1.5 text-[#2E8B34]">
+              <span className="w-5 h-5 rounded-full bg-[#2E8B34] text-white flex items-center justify-center text-[10px]">2</span>
+              Checkout
+            </span>
+            <span className="w-5 sm:w-8 h-px bg-gray-200" />
+            <span className="inline-flex items-center gap-1.5 text-gray-400">
+              <span className="w-5 h-5 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center text-[10px]">3</span>
+              <span className="hidden sm:inline">Confirmation</span>
+            </span>
+          </div>
+        </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-4 lg:gap-5 items-start">
 
           {/* ── Left ── */}
-          <div className="space-y-4 min-w-0">
+          <div className="space-y-4 min-w-0" style={{ animation: "coRise 0.5s ease 0.15s both" }}>
 
             {/* Shipping Address */}
-            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                <h2 className="text-sm font-semibold text-gray-700">Shipping Address</h2>
+            <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-5 shadow-sm">
+              <div className="flex items-center gap-2.5 mb-4">
+                <span className="w-7 h-7 rounded-lg bg-[#F0F7F1] flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4 text-[#2E8B34]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                </span>
+                <h2 className="text-sm font-bold text-gray-800">Shipping Address</h2>
               </div>
 
               {/* Recipient type toggle */}
@@ -454,7 +496,7 @@ export default function Checkout({ onNavigate }) {
                                   <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded text-white bg-[#2E8B34]">Default</span>
                                 )}
                               </div>
-                              <p className="text-xs text-gray-700">{addr.recipient_name} — {addr.phone}</p>
+                              <p className="text-xs text-gray-700">{addr.recipient_name} · {addr.phone}</p>
                               <p className="text-xs text-gray-500 truncate">
                                 {addr.street}{addr.barangay ? `, ${addr.barangay}` : ""}, {addr.city}, {addr.province}
                               </p>
@@ -504,7 +546,7 @@ export default function Checkout({ onNavigate }) {
             </div>
 
             {/* Package */}
-            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
+            <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-5 shadow-sm">
               <p className="text-xs text-gray-400 font-medium mb-4">Package 1 of 1</p>
 
               {/* Delivery option */}
@@ -518,7 +560,7 @@ export default function Checkout({ onNavigate }) {
                     <span className="text-sm font-semibold text-[#2E8B34]">₱100.00</span>
                   </div>
                   <p className="text-xs font-medium text-gray-700">Standard</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Guaranteed by {fmt(tomorrow)}<br />TOMORROW (Anytime)</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Guaranteed by {fmt(deliveryDate)}<br />{fmtDay(deliveryDate).toUpperCase()} (Anytime)</p>
                 </div>
                 <div className="border border-gray-200 rounded-lg p-3.5 opacity-50 cursor-not-allowed">
                   <div className="flex items-center gap-2 mb-1">
@@ -569,28 +611,64 @@ export default function Checkout({ onNavigate }) {
           </div>
 
           {/* ── Right: delivery date + payment + summary ── */}
-          <div className="space-y-4 min-w-0">
+          <div className="space-y-4 min-w-0" style={{ animation: "coRise 0.5s ease 0.25s both" }}>
 
             {/* Delivery date */}
-            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                <h2 className="text-sm font-semibold text-gray-700">Select delivery date</h2>
+            <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-5 shadow-sm">
+              <div className="flex items-center gap-2.5 mb-4">
+                <span className="w-7 h-7 rounded-lg bg-[#F0F7F1] flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4 text-[#2E8B34]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                </span>
+                <h2 className="text-sm font-bold text-gray-800">Select delivery date</h2>
               </div>
 
-              {/* Date row */}
-              <div className="flex gap-2 mb-3">
-                <div className="flex-1 border border-gray-200 rounded-lg p-2.5 text-center opacity-50">
-                  <p className="text-xs text-gray-400">Unavailable</p>
+              {/* Date row: all three boxes share one fixed height and center their content */}
+              <div className="grid grid-cols-3 gap-2 mb-3">
+                {/* Today (unavailable) */}
+                <div className="h-[64px] flex flex-col items-center justify-center text-center border border-gray-200 rounded-lg p-2 opacity-50">
                   <p className="text-xs font-medium text-gray-500">{fmt(today)}</p>
-                  <p className="text-xs text-gray-400">TODAY</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">Today · Unavailable</p>
                 </div>
-                <div className="flex-1 border-2 border-[#2E8B34] rounded-lg p-2.5 text-center cursor-pointer">
-                  <p className="text-xs font-semibold text-[#2E8B34]">{fmt(tomorrow)}</p>
-                  <p className="text-xs font-medium text-gray-600">{fmtDay(tomorrow).toUpperCase()}</p>
-                </div>
-                <div className="flex-1 border border-gray-200 rounded-lg p-2.5 flex items-center justify-center cursor-pointer hover:bg-gray-50 transition">
-                  <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+
+                {/* Tomorrow */}
+                <button
+                  type="button"
+                  onClick={() => { setDeliveryMode("tomorrow"); setDeliveryDate(tomorrow) }}
+                  className={`h-[64px] flex flex-col items-center justify-center text-center rounded-lg p-2 transition ${deliveryMode === "tomorrow" ? "border-2 border-[#2E8B34] bg-[#F0F7F1]" : "border border-gray-200 hover:border-gray-300"}`}
+                >
+                  <p className={`text-xs font-semibold ${deliveryMode === "tomorrow" ? "text-[#2E8B34]" : "text-gray-700"}`}>{fmt(tomorrow)}</p>
+                  <p className="text-[10px] font-medium text-gray-500 mt-0.5">{fmtDay(tomorrow).toUpperCase()}</p>
+                </button>
+
+                {/* Custom date: clicking anywhere opens the native date picker */}
+                <div
+                  className={`relative h-[64px] flex flex-col items-center justify-center text-center rounded-lg p-2 transition cursor-pointer ${deliveryMode === "custom" ? "border-2 border-[#2E8B34] bg-[#F0F7F1]" : "border border-gray-200 hover:border-gray-300 hover:bg-gray-50"}`}
+                >
+                  {deliveryMode === "custom" ? (
+                    <>
+                      <p className="text-xs font-semibold text-[#2E8B34]">{fmt(deliveryDate)}</p>
+                      <p className="text-[10px] font-medium text-gray-500 mt-0.5">{fmtDay(deliveryDate).toUpperCase()}</p>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                      <p className="text-[10px] text-gray-400 mt-0.5">Pick a date</p>
+                    </>
+                  )}
+                  <input
+                    type="date"
+                    min={toInputDate(tomorrow)}
+                    value={deliveryMode === "custom" ? toInputDate(deliveryDate) : ""}
+                    onChange={e => {
+                      if (!e.target.value) return
+                      const [y, m, d] = e.target.value.split("-").map(Number)
+                      const picked = new Date(y, m - 1, d); picked.setHours(0, 0, 0, 0)
+                      setDeliveryDate(picked)
+                      setDeliveryMode("custom")
+                    }}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    aria-label="Pick a custom delivery date"
+                  />
                 </div>
               </div>
 
@@ -602,7 +680,7 @@ export default function Checkout({ onNavigate }) {
 
               {/* Delivery window note + 🚀 NEW DISCLAIMER */}
               <p className="text-xs text-gray-500 leading-relaxed mb-3">
-                Delivered anytime on <span className="font-semibold text-gray-700">{fmt(tomorrow)}</span> during business hours (9 AM – 6 PM). Our team coordinates the exact timing with the recipient.
+                Delivered anytime on <span className="font-semibold text-gray-700">{fmt(deliveryDate)}</span> during business hours (9 AM to 6 PM). Our team coordinates the exact timing with the recipient.
               </p>
               
               <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 mt-2">
@@ -614,10 +692,12 @@ export default function Checkout({ onNavigate }) {
             </div>
 
             {/* Payment method */}
-            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
-                <h2 className="text-sm font-semibold text-gray-700">Select payment method</h2>
+            <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-5 shadow-sm">
+              <div className="flex items-center gap-2.5 mb-4">
+                <span className="w-7 h-7 rounded-lg bg-[#F0F7F1] flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4 text-[#2E8B34]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                </span>
+                <h2 className="text-sm font-bold text-gray-800">Select payment method</h2>
               </div>
               
               <div className="space-y-3">
@@ -707,7 +787,7 @@ export default function Checkout({ onNavigate }) {
             </div>
 
             {/* Special Instructions */}
-            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
+            <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-5 shadow-sm">
               <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Special Instructions
               </label>
@@ -724,7 +804,8 @@ export default function Checkout({ onNavigate }) {
             </div>
 
             {/* Summary + Place Order */}
-            <div className="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
+            <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-5 shadow-sm">
+              <h2 className="text-sm font-bold text-gray-800 mb-4">Order Summary</h2>
               <div className="space-y-2.5 text-sm mb-4">
                 <div className="flex justify-between text-gray-500"><span>Subtotal ({cartItems.length} item{cartItems.length !== 1 ? "s" : ""})</span><span className="font-medium text-gray-700">₱{subtotal.toLocaleString()}.00</span></div>
                 <div className="flex justify-between text-gray-500"><span>Shipping Fee</span><span className="font-medium text-gray-700">₱{shipping}.00</span></div>
@@ -735,16 +816,34 @@ export default function Checkout({ onNavigate }) {
                   </div>
                 )}
                 <div className="h-px bg-gray-100" />
-                <div className="flex justify-between font-semibold text-gray-800"><span>Order total</span><span className="text-[#2E8B34]">₱{total.toLocaleString()}.00</span></div>
+                <div className="flex justify-between items-baseline pt-1">
+                  <span className="font-bold text-gray-800">Order total</span>
+                  <span className="text-xl font-extrabold text-[#2E8B34]">₱{total.toLocaleString()}.00</span>
+                </div>
                 <p className="text-xs text-gray-400">VAT included, where applicable</p>
               </div>
               <button
                 onClick={handlePlaceOrder}
                 disabled={placing || cartItems.length === 0}
-                className="w-full py-2.5 text-sm font-semibold text-white rounded-lg bg-[#2E8B34] transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-50"
+                className="w-full py-3.5 text-sm font-bold text-white rounded-xl transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
+                style={{ background: `linear-gradient(135deg, ${DG}, ${G})`, boxShadow: "0 8px 20px rgba(46,139,52,0.22)" }}
               >
-                {placing ? "Placing order..." : "PLACE ORDER NOW"}
+                {placing ? (
+                  <>
+                    <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" /></svg>
+                    Placing order...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                    Place Order
+                  </>
+                )}
               </button>
+              <p className="flex items-center justify-center gap-1.5 text-[11px] text-gray-400 mt-3">
+                <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
+                Secure checkout · your payment details are encrypted
+              </p>
             </div>
           </div>
         </div>

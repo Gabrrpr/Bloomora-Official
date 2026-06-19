@@ -6,19 +6,55 @@ import { useTheme } from "../../context/ThemeContext"
 const G  = "#2E8B34"
 const DG = "#0C573E"
 
-// 1. STEPS: Combined Vase and Wrapping into "Container"
+// 1. STEPS: 4-phase flow — Arrangement → Flowers → Wrapper → Accessory
 const STEPS = [
-  { label: "Flowers", icon: "flower" },
-  { label: "Container", icon: "box" }, // Now handles both Vase and Wrapping
-  { label: "Accessories", icon: "extra" },
+  { label: "Arrangement", icon: "box" },   // bouquet / box / vase presentation
+  { label: "Flowers", icon: "flower" },     // flowers (with stem counter) + fillers
+  { label: "Wrapper", icon: "wrap" },       // wrapping paper
+  { label: "Accessory", icon: "extra" },    // finishing ribbon
 ]
 
-// 2. Category Map matching the 3-step flow
-const CATEGORY_MAP = {
-  0: "flower",
-  1: "container", // sub-choice (vase vs wrap) handled in component state
-  2: "accessory",
-}
+// Short per-step helper copy shown under the step heading.
+const STEP_HINTS = [
+  "Pick how you'd like your flowers presented.",
+  "Choose your flowers and how many stems, then add any fillers.",
+  "Select the wrapping for your arrangement.",
+  "Add a finishing ribbon or accessory.",
+]
+
+// Phase 1 presentation types. These are styles (not stock items), so they feed
+// the AI prompt rather than a product id.
+// `image` is null for now (drop a URL/import in later); the icon is the placeholder.
+// `maxStems` caps how many stems fit that presentation — enforced in phase 2.
+const ARRANGEMENTS = [
+  {
+    key: "bouquet",
+    label: "Bouquet",
+    desc: "Hand-tied & wrapped",
+    promptText: "arranged as a hand-tied bouquet",
+    image: null,
+    maxStems: 24,
+    path: "M12 3c2.5 2 2.5 5 0 7-2.5-2-2.5-5 0-7Zm6 3c.8 2.8-.8 5.3-3.6 6.1.8-2.8 2.4-5.3 3.6-6.1ZM6 6c1.2.8 2.8 3.3 3.6 6.1C6.8 11.3 5.2 8.8 6 6Zm6 7 4 8H8l4-8Z",
+  },
+  {
+    key: "box",
+    label: "Box",
+    desc: "Arranged in a gift box",
+    promptText: "arranged neatly inside a gift box",
+    image: null,
+    maxStems: 18,
+    path: "M3 8h18v3H3V8Zm1 3h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9Zm8-7 3 4H9l3-4Z",
+  },
+  {
+    key: "vase",
+    label: "Vase",
+    desc: "Arranged in a vase",
+    promptText: "arranged in an elegant vase",
+    image: null,
+    maxStems: 15,
+    path: "M8 3h8l-1 4c2 1.5 3 4 3 7 0 4-3 7-6 7s-6-3-6-7c0-3 1-5.5 3-7L8 3Z",
+  },
+]
 
 // Fun facts cycled through while the AI generates the arrangement.
 const FLOWER_FACTS = [
@@ -89,6 +125,66 @@ function ProductCard({ product, selected, onClick, disabled, tokens }) {
   )
 }
 
+// ── Flower tile with a +/- stem stepper (dark-mode aware) ──
+function FlowerCard({ product, qty, onInc, onDec, disabled, incDisabled, tokens }) {
+  const { accentG, tileBdr, tileBg, tileSelBg, tilePlaceBg, subHeadC, mutedC, isDark } = tokens
+  const selected = qty > 0
+
+  return (
+    <div
+      className="flex flex-col gap-2 p-3 rounded-xl border-2 transition-all duration-200 relative text-left"
+      style={{
+        borderColor: selected ? accentG : tileBdr,
+        backgroundColor: selected ? tileSelBg : disabled ? (isDark ? "#0f172a" : "#fafafa") : tileBg,
+        opacity: disabled ? 0.6 : 1,
+      }}
+    >
+      <div className="w-full aspect-square rounded-lg overflow-hidden relative" style={{ backgroundColor: tilePlaceBg }}>
+        {product.image_url ? (
+          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-xs" style={{ color: mutedC }}>No image</div>
+        )}
+        {selected && (
+          <div className="absolute top-2 right-2 min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center text-[11px] font-bold" style={{ backgroundColor: accentG, color: isDark ? "#08120c" : "#ffffff" }}>
+            {qty}
+          </div>
+        )}
+      </div>
+      <div className="w-full">
+        <p className="text-xs font-semibold leading-tight truncate" style={{ color: subHeadC }}>{product.name}</p>
+        <p className="text-[10px] mt-0.5" style={{ color: mutedC }}>₱{(+product.price).toLocaleString()}</p>
+        <div className="mt-1.5"><StockBadge status={product.stock_status} isDark={isDark} /></div>
+      </div>
+
+      {/* Stem stepper */}
+      <div className="flex items-center justify-between mt-1 rounded-lg border" style={{ borderColor: tileBdr }}>
+        <button
+          type="button"
+          onClick={onDec}
+          disabled={qty <= 0}
+          className="w-8 h-8 flex items-center justify-center text-lg font-bold rounded-l-lg transition disabled:opacity-30"
+          style={{ color: accentG }}
+          aria-label={`Remove a stem of ${product.name}`}
+        >
+          −
+        </button>
+        <span className="text-sm font-semibold tabular-nums" style={{ color: subHeadC }}>{qty}</span>
+        <button
+          type="button"
+          onClick={onInc}
+          disabled={disabled || incDisabled}
+          className="w-8 h-8 flex items-center justify-center text-lg font-bold rounded-r-lg transition disabled:opacity-30"
+          style={{ color: accentG }}
+          aria-label={`Add a stem of ${product.name}`}
+        >
+          +
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Step indicator (dark-mode aware) ──
 function StepDots({ current, tokens }) {
   const { accentG, subHeadC, mutedC, faintC, tileBdr, tileBg, isDark } = tokens
@@ -132,10 +228,15 @@ export default function MixAndMatch({ onNavigate }) {
   const [products, setProducts] = useState([])
   const [loading, setLoading] = useState(true)
 
-  // 3. Tracks if they want a Vase or Wrapping for Step 2
-  const [containerType, setContainerType] = useState("vase") // 'vase' or 'wrapping'
+  // Phase 1: presentation style (bouquet / box / vase)
+  const [arrangementType, setArrangementType] = useState(null)
 
-  const [selections, setSelections] = useState({ flower: null, vase: null, wrapping: null, accessory: null })
+  // Phase 2: flowers keyed by product id → stem count; fillers are a set of ids (no qty)
+  const [flowerQty, setFlowerQty] = useState({})   // { [productId]: number }
+  const [fillerIds, setFillerIds] = useState([])   // [productId, ...]
+
+  // Phases 3 & 4: single-select wrapper + accessory
+  const [selections, setSelections] = useState({ wrapping: null, accessory: null })
   const [completed, setCompleted] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [result, setResult] = useState(null)
@@ -235,24 +336,63 @@ export default function MixAndMatch({ onNavigate }) {
   const getByCategory = (cat) => products.filter(p => p.category === cat)
   const selProd = (cat) => products.find(p => p.id === selections[cat])
 
+  // Fillers may live in their own category or inside "flower" — detect by name/category.
+  const isFiller = (p) => {
+    const c = (p.category || "").toLowerCase()
+    const n = (p.name || "").toLowerCase()
+    return c.includes("filler") || n.includes("filler")
+  }
+  const flowerList = products.filter(p => p.category === "flower" && !isFiller(p))
+  const fillerList = products.filter(isFiller)
+
+  const selectedFlowers = flowerList.filter(p => (flowerQty[p.id] || 0) > 0)
+  const totalStems = selectedFlowers.reduce((sum, p) => sum + (flowerQty[p.id] || 0), 0)
+
+  // Each presentation caps the total stems (a vase holds fewer than a bouquet).
+  const maxStems = ARRANGEMENTS.find(a => a.key === arrangementType)?.maxStems ?? 24
+  const atStemLimit = totalStems >= maxStems
+
+  // Flower stem stepper (phase 2). qty 0 = not selected.
+  const incFlower = (p) => {
+    if (p.stock_status === "out_of_stock") return
+    if (atStemLimit) {                                 // arrangement is full
+      const label = ARRANGEMENTS.find(a => a.key === arrangementType)?.label || "arrangement"
+      setError(`A ${label.toLowerCase()} fits up to ${maxStems} stems. Remove a stem to add a different flower.`)
+      return
+    }
+    setFlowerQty(prev => {
+      const cur = prev[p.id] || 0
+      if (p.stock && cur >= p.stock) return prev      // don't exceed stock on hand
+      return { ...prev, [p.id]: cur + 1 }
+    })
+    setError("")
+  }
+  const decFlower = (p) => {
+    setFlowerQty(prev => {
+      const cur = prev[p.id] || 0
+      if (cur <= 1) { const { [p.id]: _, ...rest } = prev; return rest }
+      return { ...prev, [p.id]: cur - 1 }
+    })
+    setError("")
+  }
+
+  const toggleFiller = (id) => {
+    setFillerIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+    setError("")
+  }
+
+  // Single-select toggle for wrapper / accessory.
   const toggleProduct = (cat, id) => {
-    setSelections(prev => {
-      const newSelections = { ...prev };
-
-      // In the Container step, clear the opposite choice (mutually exclusive)
-      if (cat === 'vase') newSelections.wrapping = null;
-      if (cat === 'wrapping') newSelections.vase = null;
-
-      newSelections[cat] = prev[cat] === id ? null : id;
-      return newSelections;
-    });
+    setSelections(prev => ({ ...prev, [cat]: prev[cat] === id ? null : id }))
     setError("")
   }
 
   const canProceed = () => {
-    if (step === 0) return !!selections.flower;
-    if (step === 1) return !!selections.vase || !!selections.wrapping;
-    if (step === 2) return !!selections.accessory;
+    if (step === 0) return !!arrangementType;
+    if (step === 1) return selectedFlowers.length > 0;
+    // Allow passing the wrapper step when no wrapping products exist yet.
+    if (step === 2) return !!selections.wrapping || getByCategory("wrapping").length === 0;
+    if (step === 3) return !!selections.accessory;
     return false;
   }
 
@@ -271,20 +411,38 @@ export default function MixAndMatch({ onNavigate }) {
       return
     }
     setGenerating(true); setError(""); setUnavailableItems([])
-    const parts = []
-    const flower = selProd("flower"), vase = selProd("vase"), wrapping = selProd("wrapping"), accessory = selProd("accessory")
 
-    if (flower) parts.push(`${flower.attrs?.quantity || 1} ${flower.attrs?.color || ""} ${flower.attrs?.style || ""} ${flower.name}`)
-    if (vase) parts.push(`in a ${vase.attrs?.material || ""} ${vase.attrs?.style || ""} vase`)
-    if (wrapping) parts.push(`wrapped with ${wrapping.attrs?.color || ""} ${wrapping.attrs?.style || ""} paper`)
-    if (accessory) parts.push(`with ${accessory.attrs?.name || accessory.name}`)
+    const arrangement = ARRANGEMENTS.find(a => a.key === arrangementType)
+    const wrapping  = selProd("wrapping")
+    const accessory = selProd("accessory")
+    const fillers   = fillerList.filter(p => fillerIds.includes(p.id))
+
+    // Describe every selected flower with its chosen stem count so the AI image
+    // (and Gemini's price extraction) reflect the full bouquet.
+    const flowerDesc = selectedFlowers.map(p => {
+      const qty = flowerQty[p.id]
+      return `${qty} ${p.attrs?.color || ""} ${p.attrs?.style || ""} ${p.name}`.replace(/\s+/g, " ").trim()
+    })
+
+    const parts = []
+    if (flowerDesc.length) parts.push(flowerDesc.join(", "))
+    if (arrangement) parts.push(arrangement.promptText)
+    if (fillers.length) parts.push(`accented with ${fillers.map(p => p.name).join(", ")}`)
+    if (wrapping) parts.push(`wrapped with ${wrapping.attrs?.color || ""} ${wrapping.attrs?.style || ""} paper`.replace(/\s+/g, " ").trim())
+    if (accessory) parts.push(`finished with ${accessory.attrs?.name || accessory.name}`)
 
     const promptText = parts.length > 0 ? `A custom floral arrangement: ${parts.join(", ")}` : "A beautiful custom floral arrangement"
+
+    // Send the most-used flower as the explicit flower_id for the stock check.
+    const primaryFlower = selectedFlowers.reduce(
+      (best, p) => (best && (flowerQty[best.id] || 0) >= (flowerQty[p.id] || 0) ? best : p),
+      null
+    )
+
     try {
       const data = await api.checkAndGenerate({
         prompt_text: promptText,
-        flower_id: selections.flower || undefined,
-        vase_id: selections.vase || undefined,
+        flower_id: primaryFlower?.id || undefined,
         wrapping_id: selections.wrapping || undefined,
         accessory_id: selections.accessory || undefined,
       })
@@ -308,7 +466,13 @@ export default function MixAndMatch({ onNavigate }) {
   }
 
   const handleTryAlt = (field, id) => {
-    const m = { flower_id: "flower", vase_id: "vase", wrapping_id: "wrapping", accessory_id: "accessory" }
+    if (field === "flower_id") {
+      // Swap the unavailable flower for the suggested alternative, keeping 1 stem.
+      setFlowerQty(prev => ({ ...prev, [id]: prev[id] || 1 }))
+      setUnavailableItems([])
+      return
+    }
+    const m = { wrapping_id: "wrapping", accessory_id: "accessory" }
     if (m[field]) { setSelections(p => ({ ...p, [m[field]]: id })); setUnavailableItems([]) }
   }
 
@@ -323,14 +487,6 @@ export default function MixAndMatch({ onNavigate }) {
     })
     onNavigate("cart")
   }
-
-  // Determine what category to show based on the current step
-  let displayCategory = CATEGORY_MAP[step];
-  if (step === 1) {
-    displayCategory = containerType;
-  }
-
-  const curProds = getByCategory(displayCategory);
 
   const arrangementDesc = result
     ? `A custom arrangement featuring ${result.price_breakdown?.items?.map(i => i.product_name).join(", ") || "your selected materials"}.`
@@ -373,7 +529,10 @@ export default function MixAndMatch({ onNavigate }) {
                   <span className="text-sm" style={{ color: mutedC }}>AI preview</span>
                 </div>
                 <button
-                  onClick={() => { setCompleted(false); setResult(null); setStep(0); setUnavailableItems([]) }}
+                  onClick={() => {
+                    setCompleted(false); setResult(null); setStep(0); setUnavailableItems([])
+                    setArrangementType(null); setFlowerQty({}); setFillerIds([]); setSelections({ wrapping: null, accessory: null })
+                  }}
                   className="px-3 py-1.5 rounded-lg transition text-sm"
                   style={{ color: mutedC }}
                 >
@@ -537,7 +696,7 @@ export default function MixAndMatch({ onNavigate }) {
       <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
 
         {/* Page heading */}
-        <div className="text-center mb-6">
+        <div className="text-center mb-6" style={{ animation: "mmEnter 0.6s ease 0.05s both" }}>
           <p className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold tracking-[0.2em] uppercase mb-2" style={{ color: accentG }}>
             <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#f472b6" }} />
             Make It Personal
@@ -553,7 +712,7 @@ export default function MixAndMatch({ onNavigate }) {
 
         {/* Steps card */}
         <div className="backdrop-blur-sm border rounded-3xl p-6 sm:p-7 mb-5"
-          style={{ backgroundColor: cardBg, borderColor: cardBdr, boxShadow: cardShadow }}>
+          style={{ backgroundColor: cardBg, borderColor: cardBdr, boxShadow: cardShadow, animation: "mmEnter 0.6s ease 0.18s both" }}>
           <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
             <div className="flex items-center gap-2.5">
               <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: iconCircleBg, color: accentG }}>
@@ -633,45 +792,15 @@ export default function MixAndMatch({ onNavigate }) {
 
         {/* Selection card */}
         <div className="backdrop-blur-sm border rounded-3xl p-6 sm:p-7"
-          style={{ backgroundColor: cardBg, borderColor: cardBdr, boxShadow: cardShadow }}>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-5 gap-3">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0" style={{ backgroundColor: accentG, color: isDark ? "#08120c" : "#ffffff" }}>
-                  {step + 1}
-                </span>
-                <h2 className="text-base font-bold" style={{ color: headingC }}>Choose your {STEPS[step].label.toLowerCase()}</h2>
-              </div>
-              <p className="text-sm ml-8" style={{ color: mutedC }}>Select from available {STEPS[step].label.toLowerCase()} in stock.</p>
+          style={{ backgroundColor: cardBg, borderColor: cardBdr, boxShadow: cardShadow, animation: "mmEnter 0.6s ease 0.3s both" }}>
+          <div className="mb-5">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0" style={{ backgroundColor: accentG, color: isDark ? "#08120c" : "#ffffff" }}>
+                {step + 1}
+              </span>
+              <h2 className="text-base font-bold" style={{ color: headingC }}>Choose your {STEPS[step].label.toLowerCase()}</h2>
             </div>
-
-            {/* Toggle (only on Step 1: Container) */}
-            {step === 1 && (
-              <div className="flex p-1 rounded-lg ml-8 sm:ml-0" style={{ backgroundColor: toggleTrackBg }}>
-                <button
-                  onClick={() => setContainerType("vase")}
-                  className="px-4 py-1.5 text-xs font-semibold rounded-md transition-all"
-                  style={{
-                    backgroundColor: containerType === "vase" ? toggleActiveBg : "transparent",
-                    color: containerType === "vase" ? (isDark ? "#f1f5f9" : "#1f2937") : mutedC,
-                    boxShadow: containerType === "vase" ? (isDark ? "0 1px 4px rgba(0,0,0,0.4)" : "0 1px 3px rgba(0,0,0,0.08)") : "none",
-                  }}
-                >
-                  Vase
-                </button>
-                <button
-                  onClick={() => setContainerType("wrapping")}
-                  className="px-4 py-1.5 text-xs font-semibold rounded-md transition-all"
-                  style={{
-                    backgroundColor: containerType === "wrapping" ? toggleActiveBg : "transparent",
-                    color: containerType === "wrapping" ? (isDark ? "#f1f5f9" : "#1f2937") : mutedC,
-                    boxShadow: containerType === "wrapping" ? (isDark ? "0 1px 4px rgba(0,0,0,0.4)" : "0 1px 3px rgba(0,0,0,0.08)") : "none",
-                  }}
-                >
-                  Wrapping
-                </button>
-              </div>
-            )}
+            <p className="text-sm ml-8" style={{ color: mutedC }}>{STEP_HINTS[step]}</p>
           </div>
 
           {loading ? (
@@ -679,29 +808,157 @@ export default function MixAndMatch({ onNavigate }) {
               <div className="w-8 h-8 border-2 rounded-full animate-spin mr-3" style={{ borderColor: tileBdr, borderTopColor: accentG }} />
               <p className="text-sm" style={{ color: mutedC }}>Loading products...</p>
             </div>
-          ) : curProds.length === 0 ? (
-            <div className="text-center py-10">
-              <p className="text-sm" style={{ color: mutedC }}>No {displayCategory}s available right now.</p>
-            </div>
           ) : (
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
-              {curProds.map(p => (
-                <ProductCard
-                  key={p.id}
-                  product={p}
-                  selected={selections[displayCategory] === p.id}
-                  onClick={() => toggleProduct(displayCategory, p.id)}
-                  disabled={p.stock_status === "out_of_stock"}
-                  tokens={tokens}
-                />
-              ))}
+            <div key={step} style={{ animation: "mmFade 0.4s ease both" }}>
+              {/* ── Phase 1: Arrangement type ── */}
+              {step === 0 && (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {ARRANGEMENTS.map(a => {
+                    const sel = arrangementType === a.key
+                    return (
+                      <button
+                        key={a.key}
+                        onClick={() => { setArrangementType(a.key); setError("") }}
+                        className="flex flex-col items-center gap-3 p-4 rounded-2xl border-2 transition-all hover:brightness-[1.02]"
+                        style={{ borderColor: sel ? accentG : tileBdr, backgroundColor: sel ? tileSelBg : tileBg }}
+                      >
+                        {/* Image placeholder — swap in a.image when artwork is ready */}
+                        <div className="w-full aspect-[4/3] rounded-xl overflow-hidden flex items-center justify-center relative" style={{ backgroundColor: tilePlaceBg }}>
+                          {a.image ? (
+                            <img src={a.image} alt={a.label} className="w-full h-full object-cover" />
+                          ) : (
+                            <svg className="w-12 h-12" viewBox="0 0 24 24" fill="currentColor" style={{ color: sel ? accentG : faintC }}><path d={a.path} /></svg>
+                          )}
+                          {sel && (
+                            <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: accentG }}>
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke={isDark ? "#08120c" : "#ffffff"}>
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-center">
+                          <span className="block text-sm font-bold" style={{ color: sel ? accentG : subHeadC }}>{a.label}</span>
+                          <span className="block text-xs mt-0.5" style={{ color: mutedC }}>{a.desc}</span>
+                          <span className="block text-[11px] mt-1" style={{ color: mutedC }}>Up to {a.maxStems} stems</span>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
+              {/* ── Phase 2: Flowers (stem stepper) + Fillers ── */}
+              {step === 1 && (
+                <div className="space-y-6">
+                  <div>
+                    <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
+                      <p className="text-sm font-semibold" style={{ color: subHeadC }}>
+                        Flowers <span className="font-normal" style={{ color: mutedC }}>— use + / − to set how many stems</span>
+                      </p>
+                      <span
+                        className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                        style={{
+                          backgroundColor: atStemLimit ? (isDark ? "rgba(245,158,11,0.16)" : "#fffbeb") : tileSelBg,
+                          color: atStemLimit ? (isDark ? "#fcd34d" : "#b45309") : accentG,
+                        }}
+                      >
+                        {totalStems} / {maxStems} stems
+                      </span>
+                    </div>
+                    {atStemLimit && (
+                      <p className="text-xs mb-3" style={{ color: isDark ? "#fcd34d" : "#b45309" }}>
+                        You've reached the maximum for a {ARRANGEMENTS.find(a => a.key === arrangementType)?.label.toLowerCase()}. Remove a stem to add more.
+                      </p>
+                    )}
+                    {flowerList.length === 0 ? (
+                      <p className="text-sm py-6 text-center" style={{ color: mutedC }}>No flowers available right now.</p>
+                    ) : (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        {flowerList.map(p => (
+                          <FlowerCard
+                            key={p.id}
+                            product={p}
+                            qty={flowerQty[p.id] || 0}
+                            onInc={() => incFlower(p)}
+                            onDec={() => decFlower(p)}
+                            disabled={p.stock_status === "out_of_stock"}
+                            incDisabled={atStemLimit}
+                            tokens={tokens}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {fillerList.length > 0 && (
+                    <div className="pt-5 border-t" style={{ borderColor: dividerC }}>
+                      <p className="text-sm font-semibold mb-3" style={{ color: subHeadC }}>
+                        Fillers <span className="font-normal" style={{ color: mutedC }}>(optional)</span>
+                      </p>
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                        {fillerList.map(p => (
+                          <ProductCard
+                            key={p.id}
+                            product={p}
+                            selected={fillerIds.includes(p.id)}
+                            onClick={() => toggleFiller(p.id)}
+                            disabled={p.stock_status === "out_of_stock"}
+                            tokens={tokens}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ── Phase 3: Wrapper / Phase 4: Accessory ── */}
+              {(step === 2 || step === 3) && (() => {
+                const cat = step === 2 ? "wrapping" : "accessory"
+                const list = getByCategory(cat)
+                return list.length === 0 ? (
+                  <div className="text-center py-10">
+                    <p className="text-sm" style={{ color: mutedC }}>No {cat === "wrapping" ? "wrappers" : "accessories"} available right now.</p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                    {list.map(p => (
+                      <ProductCard
+                        key={p.id}
+                        product={p}
+                        selected={selections[cat] === p.id}
+                        onClick={() => toggleProduct(cat, p.id)}
+                        disabled={p.stock_status === "out_of_stock"}
+                        tokens={tokens}
+                      />
+                    ))}
+                  </div>
+                )
+              })()}
             </div>
           )}
 
-          {selections[displayCategory] && selProd(displayCategory) && (
+          {/* Selection summary (per step) */}
+          {step === 0 && arrangementType && (
             <div className="mt-4 px-4 py-2.5 rounded-xl text-sm" style={{ backgroundColor: tileSelBg }}>
               <span className="font-medium" style={{ color: accentG }}>
-                Selected: {selProd(displayCategory).name} — ₱{(+selProd(displayCategory).price).toLocaleString()}
+                Arrangement: {ARRANGEMENTS.find(a => a.key === arrangementType)?.label}
+              </span>
+            </div>
+          )}
+          {step === 1 && selectedFlowers.length > 0 && (
+            <div className="mt-4 px-4 py-2.5 rounded-xl text-sm" style={{ backgroundColor: tileSelBg }}>
+              <span className="font-medium" style={{ color: accentG }}>
+                {totalStems} stem{totalStems !== 1 ? "s" : ""} across {selectedFlowers.length} flower{selectedFlowers.length !== 1 ? "s" : ""}
+                {fillerIds.length > 0 ? ` · ${fillerIds.length} filler${fillerIds.length !== 1 ? "s" : ""}` : ""}
+              </span>
+            </div>
+          )}
+          {(step === 2 || step === 3) && selProd(step === 2 ? "wrapping" : "accessory") && (
+            <div className="mt-4 px-4 py-2.5 rounded-xl text-sm" style={{ backgroundColor: tileSelBg }}>
+              <span className="font-medium" style={{ color: accentG }}>
+                Selected: {selProd(step === 2 ? "wrapping" : "accessory").name} — ₱{(+selProd(step === 2 ? "wrapping" : "accessory").price).toLocaleString()}
               </span>
             </div>
           )}
@@ -836,6 +1093,7 @@ export default function MixAndMatch({ onNavigate }) {
     {/* Keyframes for the loading overlay animations */}
     <style>{`
       @keyframes mmPop  { from { opacity:0; transform:scale(0.94) translateY(10px); } to { opacity:1; transform:scale(1) translateY(0); } }
+      @keyframes mmEnter { from { opacity:0; transform:translateY(16px); } to { opacity:1; transform:translateY(0); } }
       @keyframes mmFade { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
       @keyframes mmSpin { to { transform:rotate(360deg); } }
       @keyframes mmBob  { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-3px); } }

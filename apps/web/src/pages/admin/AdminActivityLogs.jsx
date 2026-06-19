@@ -1,11 +1,29 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, Fragment } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { DG, G } from "./_adminShared"
 import { api } from "../../services/api.js"
+import estingsWordmark from "../../assets/Estings.svg"
 
 const ACTION_OPTIONS = ["All Actions", "Login", "Logout", "Create Record", "Update Record", "Delete Record", "Export Data", "Password Change", "Failed Login"]
 const USER_OPTIONS   = ["All Users", "Admins only", "Staff only", "Delivery Staff only"]
 const DATE_OPTIONS   = ["Date Range: All", "Today", "Yesterday", "This week", "This month", "Last 3 months"]
+
+// Example action types / branches cycled through the search box as an animated, typewriter-style hint.
+const SEARCH_SAMPLES = ["Login", "Update Record", "Manila", "Failed Login", "Pampanga"]
+
+// Action types used by the printed report. Order matters: a log is matched
+// against the first key its text contains, so "Failed Login" is checked
+// before "Login". Each entry carries the color used in the distribution bar.
+const PRINT_ACTION_META = [
+  { key: "Failed Login",    label: "Failed Login",    cls: "a-failed", dot: "#b91c1c" },
+  { key: "Login",           label: "Login",           cls: "a-login",  dot: "#16a34a" },
+  { key: "Logout",          label: "Logout",          cls: "a-logout", dot: "#64748b" },
+  { key: "Create Record",   label: "Create",          cls: "a-create", dot: "#2563eb" },
+  { key: "Update Record",   label: "Update",          cls: "a-update", dot: "#d97706" },
+  { key: "Delete Record",   label: "Delete",          cls: "a-delete", dot: "#dc2626" },
+  { key: "Export Data",     label: "Export",          cls: "a-export", dot: "#7c3aed" },
+  { key: "Password Change", label: "Password Change", cls: "a-pass",   dot: "#ea580c" },
+]
 
 function PrintBtn({ onClick, isDark }) {
   return (
@@ -70,7 +88,7 @@ function ActionBadge({ action, isDark }) {
     "Failed Login":    { bg: isDark ? "rgba(248,113,113,0.12)" : "#fee2e2", color: isDark ? "#f87171" : "#dc2626" },
   }
   
-  // Smart matching: If the action string contains the key, style it accordingly.
+  // Find the first action type whose name appears in the action text, and use its colors.
   const matchedKey = Object.keys(cfg).find(k => action?.toLowerCase().includes(k.toLowerCase()))
   const s = cfg[matchedKey] || { bg: isDark ? "rgba(148,163,184,0.10)" : "#f1f5f9", color: isDark ? "#94a3b8" : "#475569" }
   
@@ -92,7 +110,44 @@ function RoleBadge({ role, isDark }) {
   return <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: s.color }}>{s.label}</span>
 }
 
-const COLS = ["Timestamp", "User ID", "Role", "Action Type", "IP Address", "Details"]
+// Animated flower shown while the logs are still loading.
+function FlowerLoader({ message = "Loading...", isDark = false }) {
+  const petals = [
+    { angle: 0,   color: "#f48fb1" },
+    { angle: 60,  color: "#ec407a" },
+    { angle: 120, color: "#e91e63" },
+    { angle: 180, color: "#f06292" },
+    { angle: 240, color: "#c2185b" },
+    { angle: 300, color: "#f48fb1" },
+  ]
+  return (
+    <>
+      <style>{`
+        @keyframes adminPetalBloom {
+          0%, 100% { opacity: 0.2; }
+          50%       { opacity: 1;   }
+        }
+      `}</style>
+      <div className="flex flex-col items-center justify-center rounded-xl"
+        style={{ minHeight: "60vh", backgroundColor: isDark ? "#0f172a" : "transparent" }}>
+        <svg width="120" height="120" viewBox="0 0 100 100">
+          {petals.map(({ angle, color }, i) => (
+            <g key={i} transform={`rotate(${angle} 50 50)`}>
+              <ellipse cx="50" cy="27" rx="9.5" ry="21" fill={color}
+                style={{ animation: `adminPetalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`, animationFillMode: "both" }} />
+            </g>
+          ))}
+          <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+          <circle cx="50" cy="50" r="7"  fill="#f9c6d0" />
+          <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+        </svg>
+        <p className="mt-4 text-sm font-medium tracking-wide" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{message}</p>
+      </div>
+    </>
+  )
+}
+
+const COLS = ["Timestamp", "User ID", "Role", "Action Type", "Branch", "Details"]
 const PAGE_SIZE = 20
 
 export default function AdminActivityLogs() {
@@ -105,6 +160,11 @@ export default function AdminActivityLogs() {
   const [actionFilter, setActionFilter] = useState("All Actions")
   const [userFilter, setUserFilter]     = useState("All Users")
   const [dateFilter, setDateFilter]     = useState("Date Range: All")
+  // Controls the one-time entrance animation. Once the content has eased in we
+  // drop the animation class so it never replays (e.g. after the print dialog).
+  const [entered, setEntered] = useState(false)
+  // Animated placeholder text for the search box (typewriter hint).
+  const [phText, setPhText] = useState("")
 
   const subTxt     = isDark ? "#94a3b8" : "#64748b"
   const toolbarBg  = isDark ? "#111827" : "#fafbfc"
@@ -116,11 +176,10 @@ export default function AdminActivityLogs() {
   const cardBdr    = isDark ? "#1e293b" : "#e8edf2"
   const cellTxt    = isDark ? "#e2e8f0" : "#1e293b"
 
-  // Fetch logs from your backend
+  // Load the activity logs from the server.
   const fetchLogs = useCallback(async () => {
     setLoading(true)
     try {
-      // 🚀 THE FIX: Point to the new users.py route!
       const data = await api.get("/users/activity-logs")
       setLogs(Array.isArray(data) ? data : [])
     } catch (e) {
@@ -132,24 +191,49 @@ export default function AdminActivityLogs() {
 
   useEffect(() => { fetchLogs() }, [fetchLogs])
 
-  // Filter Logic
+  // Play the entrance animation once the data has loaded, then turn it off so it
+  // can't restart when the page repaints (such as returning from the print dialog).
+  useEffect(() => {
+    if (loading) { setEntered(false); return }
+    const t = setTimeout(() => setEntered(true), 1300)
+    return () => clearTimeout(t)
+  }, [loading])
+
+  // Typewriter hint in the search box: types a sample action type / branch, pauses,
+  // deletes, then the next one — looping while the box is empty. Stops once the user types.
+  useEffect(() => {
+    if (search) { setPhText(""); return }
+    let sample = 0, ch = 0, deleting = false, timer
+    const tick = () => {
+      const full = SEARCH_SAMPLES[sample]
+      ch += deleting ? -1 : 1
+      setPhText(full.slice(0, ch))
+      if (!deleting && ch === full.length) { deleting = true; timer = setTimeout(tick, 1400); return }
+      if (deleting && ch === 0) { deleting = false; sample = (sample + 1) % SEARCH_SAMPLES.length }
+      timer = setTimeout(tick, deleting ? 55 : 110)
+    }
+    timer = setTimeout(tick, 500)
+    return () => clearTimeout(timer)
+  }, [search])
+
+  // Apply the search box and the three dropdown filters to the logs.
   const filtered = logs.filter(log => {
-    // 1. Search Filter (matches ID, Action text, or IP)
-    const matchSearch = !search || 
-      log.action?.toLowerCase().includes(search.toLowerCase()) || 
-      log.ip_address?.toLowerCase().includes(search.toLowerCase()) ||
+    // Match the search box against the user ID, action text, or branch.
+    const matchSearch = !search ||
+      log.action?.toLowerCase().includes(search.toLowerCase()) ||
+      log.branch?.toLowerCase().includes(search.toLowerCase()) ||
       log.user_id?.toLowerCase().includes(search.toLowerCase())
 
-    // 2. Action Filter
+    // Match the selected action type.
     const matchAction = actionFilter === "All Actions" || log.action?.toLowerCase().includes(actionFilter.toLowerCase())
 
-    // 3. User Role Filter
+    // Match the selected role.
     let matchRole = true
     if (userFilter === "Admins only") matchRole = log.role?.toLowerCase() === "admin"
     if (userFilter === "Staff only") matchRole = log.role?.toLowerCase() === "staff"
     if (userFilter === "Delivery Staff only") matchRole = log.role?.toLowerCase() === "delivery"
 
-    // 4. Date Filter Math
+    // Match the selected date range.
     let matchDate = true
     if (dateFilter !== "Date Range: All" && log.created_at) {
       const logDate = new Date(log.created_at)
@@ -176,9 +260,9 @@ export default function AdminActivityLogs() {
     }
 
     return matchSearch && matchAction && matchRole && matchDate
-  }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) // Sort newest first
+  }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) // Newest first
 
-  // Pagination Logic
+  // Show one page of results at a time.
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageSafe = Math.min(page, totalPages)
   const paginated = filtered.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE)
@@ -187,16 +271,67 @@ export default function AdminActivityLogs() {
 
   const handlePrint = () => window.print()
   const printDate   = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
+  const printTime   = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })
+
+  // Everything below feeds the printed report only; the on-screen table is untouched.
+
+  // Sort each log into a known action type (or "Other").
+  const classifyAction = a => PRINT_ACTION_META.find(m => a?.toLowerCase().includes(m.key.toLowerCase()))?.key || "Other"
+
+  // Count how many logs fall into each action type.
+  const actionCounts = filtered.reduce((m, log) => {
+    const k = classifyAction(log.action)
+    m[k] = (m[k] || 0) + 1
+    return m
+  }, {})
+  const knownTotal = PRINT_ACTION_META.reduce((s, m) => s + (actionCounts[m.key] || 0), 0)
+  const otherCount = Math.max(0, filtered.length - knownTotal)
+  const pct = n => (filtered.length ? (n / filtered.length) * 100 : 0)
+
+  // Headline numbers shown in the summary cards.
+  const loginCount  = actionCounts["Login"] || 0
+  const failedCount = actionCounts["Failed Login"] || 0
+  const dataChanges = (actionCounts["Create Record"] || 0) + (actionCounts["Update Record"] || 0)
+    + (actionCounts["Delete Record"] || 0) + (actionCounts["Export Data"] || 0)
+
+  // Group the logs by action type, in the order defined above, for the printed table.
+  const printGroups = (() => {
+    const map = new Map()
+    filtered.forEach(log => {
+      const k = classifyAction(log.action)
+      if (!map.has(k)) map.set(k, [])
+      map.get(k).push(log)
+    })
+    const orderOf = k => {
+      const i = PRINT_ACTION_META.findIndex(m => m.key === k)
+      return i === -1 ? 99 : i
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => orderOf(a[0]) - orderOf(b[0]) || a[0].localeCompare(b[0]))
+      .map(([key, items]) => ({
+        label: PRINT_ACTION_META.find(m => m.key === key)?.label || key,
+        items,
+      }))
+  })()
+
+  // One-line summary of the filters in effect, printed under the title.
+  const printScope = [
+    actionFilter !== "All Actions" ? `Action: ${actionFilter}` : "All Actions",
+    userFilter !== "All Users" ? userFilter : "All Users",
+    dateFilter !== "Date Range: All" ? dateFilter : "All Dates",
+    search ? `Search: "${search}"` : null,
+    `${filtered.length} entr${filtered.length === 1 ? "y" : "ies"}`,
+  ].filter(Boolean).join("   ·   ")
 
   const handleCSV = () => {
-    const headers = ["ID", "Timestamp", "User ID", "Role", "Action", "IP Address"]
+    const headers = ["ID", "Timestamp", "User ID", "Role", "Action", "Branch"]
     const rows = filtered.map(log => [
       log.id,
       new Date(log.created_at).toLocaleString("en-PH"),
       log.user_id || "System",
       log.role || "N/A",
       log.action,
-      log.ip_address || "N/A"
+      log.branch || "N/A"
     ])
     const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(",")).join("\n")
     const a = Object.assign(document.createElement("a"), {
@@ -206,26 +341,195 @@ export default function AdminActivityLogs() {
     a.click(); URL.revokeObjectURL(a.href)
   }
 
+  // While the first fetch is running, show the flower loader instead of an empty table.
+  if (loading) {
+    return (
+      <div className="space-y-5">
+        <h1 className="text-xl font-bold" style={{ color: isDark ? "#e2e8f0" : "#0f172a" }}>Activity Logs</h1>
+        <FlowerLoader message="Loading activity logs..." isDark={isDark} />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
+      {/* Print styles. The screen UI is hidden on paper (.no-print) and the
+          .print-only blocks render only when printing. Sections in order:
+          1 letterhead  2 title + scope  3 summary cards
+          4 action distribution  5 grouped detail table  6 footer/signatures */}
       <style>{`
+        .print-only { display: none; }
+
+        /* Gentle fade + rise so content eases in once loaded instead of flashing. */
+        @keyframes actlogsRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .actlogs-rise { animation: actlogsRise 0.85s ease-out both; }
+
         @media print {
+          @page { margin: 12mm 10mm; }
           body * { visibility: hidden !important; }
           #actlogs-print-area, #actlogs-print-area * { visibility: visible !important; }
-          #actlogs-print-area { position: absolute; top: 0; left: 0; width: 100%; padding: 24px; font-family: sans-serif; }
+          #actlogs-print-area {
+            position: absolute; top: 0; left: 0; width: 100%;
+            font-family: "Helvetica Neue", Arial, sans-serif; color: #1f2937;
+          }
           .no-print { display: none !important; }
           .print-only { display: block !important; }
-          #actlogs-print-area table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-          #actlogs-print-area th { background: #f0fdf4 !important; color: #0C573E !important; border: 1px solid #d1d5db; padding: 8px 10px; text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
-          #actlogs-print-area td { border: 1px solid #e5e7eb; padding: 8px 10px; font-size: 12px; color: #111827; }
-          #actlogs-print-area tr:nth-child(even) td { background: #f9fafb !important; }
-          .print-footer { margin-top: 20px; font-size: 11px; color: #6b7280; border-top: 1px solid #e5e7eb; padding-top: 10px; }
+          .print-letterhead, .print-doc-title, .print-summary, .print-health { break-inside: avoid; page-break-inside: avoid; }
+
+          /* 1. Letterhead: brand band */
+          .print-letterhead {
+            display: flex !important; align-items: center; justify-content: space-between; gap: 16px;
+            padding: 13px 18px; border-radius: 12px;
+            background: linear-gradient(135deg,#0C573E 0%,#15724B 55%,#2E8B34 100%) !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-logo-word {
+            height: 34px; width: auto; max-width: 240px; display: block;
+            object-fit: contain; filter: brightness(0) invert(1);
+          }
+          .print-tagline {
+            margin: 5px 0 0; font-size: 8px; font-weight: 700;
+            letter-spacing: 0.3em; text-transform: uppercase; color: rgba(255,255,255,0.82) !important;
+          }
+          .print-meta { text-align: right; flex-shrink: 0; }
+          .print-meta .ref {
+            display: inline-block; margin: 0; padding: 3px 10px; border-radius: 9999px;
+            border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.12) !important;
+            color: #ffffff !important; font-size: 8.5px; font-weight: 700;
+            letter-spacing: 0.12em; text-transform: uppercase;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-meta .gen { margin: 6px 0 0; font-size: 9px; color: rgba(255,255,255,0.85) !important; }
+          .print-meta .gen strong { color: #ffffff !important; font-weight: 700; }
+
+          /* 2. Document title + report scope */
+          .print-doc-title { display: flex !important; flex-direction: column; align-items: center; margin: 16px 0 2px; }
+          .print-doc-title .t {
+            margin: 0; font-size: 15px; font-weight: 800;
+            letter-spacing: 0.3em; text-transform: uppercase; color: #0C573E !important;
+          }
+          .print-doc-title .rule {
+            width: 54px; height: 3px; border-radius: 9999px; margin: 7px 0 6px;
+            background: linear-gradient(90deg,#0C573E,#2E8B34) !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-doc-title .scope { margin: 0; font-size: 9px; color: #6b7280 !important; letter-spacing: 0.02em; text-align: center; }
+
+          /* 3. Summary cards */
+          .print-summary { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 0; }
+          .print-summary-card {
+            border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px;
+            background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-summary-card.c-total { border-top-color: #0C573E !important; }
+          .print-summary-card.c-login { border-top-color: #2E8B34 !important; }
+          .print-summary-card.c-fail  { border-top-color: #dc2626 !important; }
+          .print-summary-card.c-data  { border-top-color: #d97706 !important; }
+          .print-summary-card .label { margin: 0; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9ca3af !important; }
+          .print-summary-card .value { margin: 3px 0 0; font-size: 19px; font-weight: 800; color: #111827 !important; }
+          .print-summary-card .value.green { color: #16a34a !important; }
+          .print-summary-card .value.amber { color: #d97706 !important; }
+          .print-summary-card .value.red   { color: #dc2626 !important; }
+          .print-summary-card .cap { margin: 3px 0 0; font-size: 8px; color: #9ca3af !important; }
+
+          /* 4. Action distribution */
+          .print-health {
+            margin: 10px 0 0; border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 12px 11px;
+            background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-health .head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; }
+          .print-health .hk { margin: 0; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9ca3af !important; }
+          .print-health .hv { margin: 0; font-size: 8.5px; color: #6b7280 !important; }
+          .print-health .bar {
+            display: flex; height: 10px; border-radius: 9999px; overflow: hidden;
+            background: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-health .seg { display: block; height: 100%; }
+          .print-health .a-failed { background: #b91c1c !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .a-login  { background: #16a34a !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .a-logout { background: #64748b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .a-create { background: #2563eb !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .a-update { background: #d97706 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .a-delete { background: #dc2626 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .a-export { background: #7c3aed !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .a-pass   { background: #ea580c !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .a-other  { background: #94a3b8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .legend { display: flex; flex-wrap: wrap; gap: 12px 16px; margin: 7px 0 0; }
+          .print-health .li { display: flex; align-items: center; gap: 5px; font-size: 8.5px; color: #374151 !important; }
+          .print-health .dot { width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; }
+
+          /* 5. Detail table (grouped by action type) */
+          .print-detail { display: block !important; margin-top: 14px; }
+          .print-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; padding: 0 2px; }
+          .print-section-title { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #0C573E !important; }
+          .print-section-sub { margin: 0; font-size: 8.5px; color: #9ca3af !important; }
+          .print-detail .twrap { border: 1px solid #dbe3df; border-radius: 10px; overflow: hidden; }
+          .print-detail table { width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; }
+          .print-detail thead { display: table-header-group; }
+          .print-detail tr { page-break-inside: avoid; }
+          .print-detail th {
+            background: #0C573E !important; color: #ffffff !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            border: none; padding: 7px; text-align: left;
+            font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; line-height: 1.25;
+          }
+          .print-detail th.col-idx    { width: 4%; }
+          .print-detail th.col-time   { width: 15%; }
+          .print-detail th.col-user   { width: 14%; }
+          .print-detail th.col-role   { width: 10%; }
+          .print-detail th.col-branch { width: 10%; }
+          .print-detail th.col-action { width: 47%; }
+          .print-detail td {
+            border-bottom: 1px solid #eef1f4; padding: 6.5px 7px;
+            font-size: 9.5px; color: #1f2937 !important; vertical-align: top;
+            word-break: break-word; overflow-wrap: anywhere;
+          }
+          .print-detail .num { text-align: right; }
+          .print-detail .center { text-align: center; }
+          .print-detail .nowrap { white-space: nowrap !important; }
+          .print-detail .muted { color: #6b7280 !important; }
+          .print-detail .mono { font-family: "Courier New", Courier, monospace; font-size: 8.5px; }
+          .print-detail .cap { text-transform: capitalize; }
+          .print-detail tr.alt td { background: #f7faf8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-detail tbody tr:last-child td { border-bottom: none; }
+
+          /* action section rows */
+          .print-detail tr.cat-row { page-break-after: avoid; break-after: avoid; }
+          .print-detail tr.cat-row td {
+            background: #eaf5ee !important; color: #0C573E !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            border-top: 1px solid #d8ebdd; border-bottom: 1px solid #d8ebdd;
+            padding: 6px 8px; font-size: 8.5px; font-weight: 800;
+            letter-spacing: 0.08em; text-transform: uppercase;
+          }
+          .print-detail tr.cat-row .cat-meta {
+            float: right; font-weight: 600; letter-spacing: 0;
+            text-transform: none; color: #15724B !important;
+          }
+
+          /* report total row */
+          .print-detail tr.grand td {
+            background: #0C573E !important; color: #ffffff !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            border: none; padding: 8px 7px; font-size: 9.5px; font-weight: 800;
+          }
+
+          /* 6. Footer + signatures */
+          .print-footer {
+            display: flex !important; align-items: flex-end; justify-content: space-between; gap: 24px;
+            margin-top: 20px; padding-top: 11px; border-top: 2px solid #e5e7eb;
+          }
+          .print-footer .note { margin: 0; font-size: 8.5px; color: #9ca3af !important; max-width: 46%; line-height: 1.55; }
+          .print-footer .note strong { color: #6b7280 !important; }
+          .print-signs { display: flex; gap: 34px; }
+          .print-sign { text-align: center; }
+          .print-sign .line { width: 170px; border-top: 1px solid #6b7280; margin: 20px 0 5px; }
+          .print-sign .cap { margin: 0; font-size: 8.5px; color: #6b7280 !important; text-transform: uppercase; letter-spacing: 0.1em; }
         }
-        .print-only { display: none; }
       `}</style>
 
       {/* Heading row with Export + Print */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className={`flex items-center justify-between flex-wrap gap-3 ${entered ? "" : "actlogs-rise"}`}>
         <h1 className="text-xl font-bold" style={{ color: isDark ? "#e2e8f0" : "#0f172a" }}>Activity Logs</h1>
         <div className="flex items-center gap-2">
           <ExportCSVBtn onClick={handleCSV} isDark={isDark} />
@@ -234,8 +538,8 @@ export default function AdminActivityLogs() {
       </div>
 
       {/* Info strip */}
-      <div className="flex items-center gap-3 px-4 py-3 rounded-xl"
-        style={{ backgroundColor: isDark ? "rgba(74,222,128,0.06)" : "#f0fdf4", border: `1px solid ${isDark ? "rgba(74,222,128,0.20)" : "#bbf7d0"}` }}>
+      <div className={`flex items-center gap-3 px-4 py-3 rounded-xl ${entered ? "" : "actlogs-rise"}`}
+        style={{ backgroundColor: isDark ? "rgba(74,222,128,0.06)" : "#f0fdf4", border: `1px solid ${isDark ? "rgba(74,222,128,0.20)" : "#bbf7d0"}`, animationDelay: "0.18s" }}>
         <svg className="w-4 h-4 flex-shrink-0" style={{ color: isDark ? "#4ade80" : DG }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
@@ -247,24 +551,80 @@ export default function AdminActivityLogs() {
       {/* Printable area */}
       <div id="actlogs-print-area">
 
-        {/* Print header */}
-        <div className="print-only" style={{ marginBottom: "16px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <h1 style={{ fontSize: "18px", fontWeight: 700, color: "#0C573E", margin: 0 }}>Esting's Flower International Inc.</h1>
-              <h2 style={{ fontSize: "14px", fontWeight: 600, color: "#374151", margin: "4px 0 0" }}>Activity Logs Report</h2>
-            </div>
-            <div style={{ textAlign: "right", fontSize: "11px", color: "#6b7280" }}>
-              <p style={{ margin: 0 }}>Generated: {printDate}</p>
-              <p style={{ margin: "2px 0 0" }}>Action: {actionFilter} | Users: {userFilter} | {dateFilter}</p>
-            </div>
+        {/* Print 1: letterhead brand band */}
+        <div className="print-only print-letterhead">
+          <div>
+            <img className="print-logo-word" src={estingsWordmark} alt="Esting's Flower International Inc." />
+            <p className="print-tagline">Flower International Inc.</p>
           </div>
-          <div style={{ height: "2px", background: "linear-gradient(90deg,#0C573E,#2E8B34)", marginTop: "12px", borderRadius: "2px" }} />
+          <div className="print-meta">
+            <p className="ref">Ref: LOG-{new Date().toISOString().slice(0,10).replace(/-/g,"")}</p>
+            <p className="gen">Generated <strong>{printDate}</strong> at <strong>{printTime}</strong></p>
+          </div>
         </div>
 
-        {/* Table */}
-        <div className="rounded-xl overflow-hidden"
-          style={{ border: `1px solid ${cardBdr}`, backgroundColor: cardBg, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
+        {/* Print 2: document title + report scope */}
+        <div className="print-only print-doc-title">
+          <p className="t">Activity Logs Report</p>
+          <span className="rule" />
+          <p className="scope">{printScope}</p>
+        </div>
+
+        {/* Print 3: summary cards (current view) */}
+        <div className="print-only print-summary">
+          <div className="print-summary-card c-total">
+            <p className="label">Total Entries</p>
+            <p className="value">{filtered.length}</p>
+            <p className="cap">Across {dateFilter === "Date Range: All" ? "all dates" : dateFilter.toLowerCase()}</p>
+          </div>
+          <div className="print-summary-card c-login">
+            <p className="label">Logins</p>
+            <p className="value green">{loginCount}</p>
+            <p className="cap">Successful sign-ins</p>
+          </div>
+          <div className="print-summary-card c-fail">
+            <p className="label">Failed Logins</p>
+            <p className="value red">{failedCount}</p>
+            <p className="cap">Rejected sign-in attempts</p>
+          </div>
+          <div className="print-summary-card c-data">
+            <p className="label">Data Changes</p>
+            <p className="value amber">{dataChanges}</p>
+            <p className="cap">Create, update, delete, export</p>
+          </div>
+        </div>
+
+        {/* Print 4: action distribution */}
+        {filtered.length > 0 && (
+          <div className="print-only print-health">
+            <div className="head">
+              <p className="hk">Action Distribution</p>
+              <p className="hv">{printGroups.length} action type{printGroups.length === 1 ? "" : "s"}</p>
+            </div>
+            <div className="bar">
+              {PRINT_ACTION_META.map(m => {
+                const n = actionCounts[m.key] || 0
+                return n > 0 ? <span key={m.key} className={`seg ${m.cls}`} style={{ width: `${pct(n)}%` }} /> : null
+              })}
+              {otherCount > 0 && <span className="seg a-other" style={{ width: `${pct(otherCount)}%` }} />}
+            </div>
+            <div className="legend">
+              {PRINT_ACTION_META.map(m => {
+                const n = actionCounts[m.key] || 0
+                return n > 0 ? (
+                  <span key={m.key} className="li"><span className="dot" style={{ backgroundColor: m.dot }} />{m.label} · {n} ({pct(n).toFixed(0)}%)</span>
+                ) : null
+              })}
+              {otherCount > 0 && (
+                <span className="li"><span className="dot" style={{ backgroundColor: "#94a3b8" }} />Other · {otherCount} ({pct(otherCount).toFixed(0)}%)</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Screen table card (interactive; never printed) */}
+        <div className={`no-print rounded-xl overflow-hidden ${entered ? "" : "actlogs-rise"}`}
+          style={{ border: `1px solid ${cardBdr}`, backgroundColor: cardBg, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)", animationDelay: "0.36s" }}>
 
           {/* Toolbar */}
           <div className="p-3 sm:p-4 no-print" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
@@ -277,7 +637,7 @@ export default function AdminActivityLogs() {
                   style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
                 </svg>
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search ID, Action, or IP..."
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder={search ? "" : `${phText}|`}
                   className="w-full pl-9 pr-4 py-2 text-sm border rounded-md outline-none transition-all"
                   style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}
                   onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = "0 0 0 2px rgba(74,222,128,0.18)" }}
@@ -343,12 +703,12 @@ export default function AdminActivityLogs() {
                         <ActionBadge action={log.action} isDark={isDark} />
                       </td>
 
-                      {/* IP Address */}
+                      {/* Branch */}
                       <td className="px-4 py-3 align-top">
-                        <span className="text-xs font-mono text-gray-500">{log.ip_address || "N/A"}</span>
+                        <span className="text-xs font-semibold capitalize" style={{ color: cellTxt }}>{log.branch || "N/A"}</span>
                       </td>
 
-                      {/* Details (Full Action Text) */}
+                      {/* Full action text */}
                       <td className="px-4 py-3 align-top">
                         <span className="text-sm leading-snug break-words block max-w-xs" style={{ color: subTxt }}>
                           {log.action}
@@ -388,8 +748,80 @@ export default function AdminActivityLogs() {
           </div>
         </div>
 
+        {/* Print 5: full detail table, grouped by action type.
+            Prints EVERY filtered log, organized into sections with a report total row. */}
+        <div className="print-only print-detail">
+          <div className="print-section-head">
+            <p className="print-section-title">Activity Detail</p>
+            <p className="print-section-sub">Grouped by action type · newest first within each group</p>
+          </div>
+          <div className="twrap">
+            <table>
+              <thead>
+                <tr>
+                  <th className="col-idx num">#</th>
+                  <th className="col-time">Timestamp</th>
+                  <th className="col-user">User ID</th>
+                  <th className="col-role">Role</th>
+                  <th className="col-branch">Branch</th>
+                  <th className="col-action">Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={6} style={{ textAlign: "center", padding: "18px 8px" }}>No logs match the current filters.</td></tr>
+                ) : (() => {
+                  let n = 0
+                  return printGroups.map(g => (
+                    <Fragment key={g.label}>
+                      <tr className="cat-row">
+                        <td colSpan={6}>
+                          <span>{g.label}</span>
+                          <span className="cat-meta">{g.items.length} entr{g.items.length === 1 ? "y" : "ies"}</span>
+                        </td>
+                      </tr>
+                      {g.items.map((log, i) => {
+                        n += 1
+                        return (
+                          <tr key={log.id} className={i % 2 === 1 ? "alt" : ""}>
+                            <td className="num nowrap muted">{n}</td>
+                            <td className="nowrap">{log.created_at ? new Date(log.created_at).toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
+                            <td className="mono">{log.user_id ? log.user_id.slice(0, 8) + "…" : "System"}</td>
+                            <td className="cap">{log.role || "System"}</td>
+                            <td className="cap muted">{log.branch || "—"}</td>
+                            <td>{log.action || "—"}</td>
+                          </tr>
+                        )
+                      })}
+                    </Fragment>
+                  ))
+                })()}
+                {filtered.length > 0 && (
+                  <tr className="grand">
+                    <td colSpan={5}>Report Total · all action types</td>
+                    <td className="num nowrap">{filtered.length} entr{filtered.length === 1 ? "y" : "ies"}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Print 6: footer + signature lines */}
         <div className="print-only print-footer">
-          <p>Esting's Flower International Inc. — Confidential. For internal use only.</p>
+          <p className="note">
+            <strong>Esting's Flower International Inc.</strong> Confidential. This report is generated for internal use only and reflects activity log records as of the date and time indicated above. Entries are based on the filters applied at the time of printing.
+          </p>
+          <div className="print-signs">
+            <div className="print-sign">
+              <div className="line" />
+              <p className="cap">Prepared by</p>
+            </div>
+            <div className="print-sign">
+              <div className="line" />
+              <p className="cap">Reviewed by</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import ProductPreviewModal from "../../components/ProductPreviewModal.jsx"
 import Footer from "../../components/Footer.jsx"
 import FallbackImage from "../../components/FallbackImage.jsx"
@@ -506,17 +507,46 @@ function MobileFilterDrawer({ open, onClose, products, activeCategory, setActive
 }
 
 const VIEW_ALL = [
-  { key:"list",  mobileVisible:true,  icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg> },
-  { key:"grid2", mobileVisible:true,  icon:<svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor"><rect x="0" y="0" width="7" height="7" rx="1"/><rect x="9" y="0" width="7" height="7" rx="1"/><rect x="0" y="9" width="7" height="7" rx="1"/><rect x="9" y="9" width="7" height="7" rx="1"/></svg> },
-  { key:"grid3", mobileVisible:false, icon:<svg className="w-4 h-4" viewBox="0 0 15 15" fill="currentColor"><rect x="0" y="0" width="4" height="6" rx="0.8"/><rect x="5.5" y="0" width="4" height="6" rx="0.8"/><rect x="11" y="0" width="4" height="6" rx="0.8"/><rect x="0" y="8" width="4" height="7" rx="0.8"/><rect x="5.5" y="8" width="4" height="7" rx="0.8"/><rect x="11" y="8" width="4" height="7" rx="0.8"/></svg> },
-  { key:"grid4", mobileVisible:false, icon:<svg className="w-4 h-4" viewBox="0 0 18 15" fill="currentColor"><rect x="0" y="0" width="3.5" height="6" rx="0.6"/><rect x="4.8" y="0" width="3.5" height="6" rx="0.6"/><rect x="9.6" y="0" width="3.5" height="6" rx="0.6"/><rect x="14.5" y="0" width="3.5" height="6" rx="0.6"/><rect x="0" y="8" width="3.5" height="7" rx="0.6"/><rect x="4.8" y="8" width="3.5" height="7" rx="0.6"/><rect x="9.6" y="8" width="3.5" height="7" rx="0.6"/><rect x="14.5" y="8" width="3.5" height="7" rx="0.6"/></svg> },
+  { key:"list",  label:"List view",  mobileVisible:true,  icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg> },
+  { key:"grid2", label:"2 per row",  mobileVisible:true,  icon:<svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor"><rect x="0" y="0" width="7" height="7" rx="1"/><rect x="9" y="0" width="7" height="7" rx="1"/><rect x="0" y="9" width="7" height="7" rx="1"/><rect x="9" y="9" width="7" height="7" rx="1"/></svg> },
+  { key:"grid3", label:"3 per row",  mobileVisible:false, icon:<svg className="w-4 h-4" viewBox="0 0 15 15" fill="currentColor"><rect x="0" y="0" width="4" height="6" rx="0.8"/><rect x="5.5" y="0" width="4" height="6" rx="0.8"/><rect x="11" y="0" width="4" height="6" rx="0.8"/><rect x="0" y="8" width="4" height="7" rx="0.8"/><rect x="5.5" y="8" width="4" height="7" rx="0.8"/><rect x="11" y="8" width="4" height="7" rx="0.8"/></svg> },
+  { key:"grid4", label:"4 per row",  mobileVisible:false, icon:<svg className="w-4 h-4" viewBox="0 0 18 15" fill="currentColor"><rect x="0" y="0" width="3.5" height="6" rx="0.6"/><rect x="4.8" y="0" width="3.5" height="6" rx="0.6"/><rect x="9.6" y="0" width="3.5" height="6" rx="0.6"/><rect x="14.5" y="0" width="3.5" height="6" rx="0.6"/><rect x="0" y="8" width="3.5" height="7" rx="0.6"/><rect x="4.8" y="8" width="3.5" height="7" rx="0.6"/><rect x="9.6" y="8" width="3.5" height="7" rx="0.6"/><rect x="14.5" y="8" width="3.5" height="7" rx="0.6"/></svg> },
 ]
+
+// ── Flower petal loader (matches DynamicFeaturedSection) ─────────────────────
+function ShopLoader() {
+  const petals = [
+    { angle: 0,   color: "#f48fb1" },
+    { angle: 60,  color: "#ec407a" },
+    { angle: 120, color: "#e91e63" },
+    { angle: 180, color: "#f06292" },
+    { angle: 240, color: "#c2185b" },
+    { angle: 300, color: "#f48fb1" },
+  ]
+  return (
+    <div className="w-full py-24 flex flex-col items-center justify-center gap-4">
+      <svg width="100" height="100" viewBox="0 0 100 100">
+        {petals.map(({ angle, color }, i) => (
+          <g key={i} transform={`rotate(${angle} 50 50)`}>
+            <ellipse cx="50" cy="27" rx="9.5" ry="21" fill={color}
+              style={{ animation: `shopPetalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`, animationFillMode: "both" }} />
+          </g>
+        ))}
+        <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+        <circle cx="50" cy="50" r="7" fill="#f9c6d0" />
+        <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+      </svg>
+      <p className="text-sm font-medium tracking-wide" style={{ color: "#6b7280" }}>Loading products...</p>
+    </div>
+  )
+}
 
 export default function Shop({ onNavigate, initialCategory }) {
   const width    = useWidth()
   const isMobile = width < 768  
 
   const [products, setProducts]               = useState([])
+  const [productsLoading, setProductsLoading] = useState(true)
   const [viewAs, setViewAs]                   = useState("grid3")
   const [sortBy, setSortBy]                   = useState("best-selling")
   const [activeCategory, setActiveCategory]   = useState("All")
@@ -535,6 +565,7 @@ export default function Shop({ onNavigate, initialCategory }) {
   const [filterOpen, setFilterOpen]           = useState(false)
   const [previewProduct, setPreviewProduct]   = useState(null)
   const sortRef = useRef(null)
+  const sortMenuRef = useRef(null)
 
   // Initialize searchQuery (read from URL search param handled below)
 
@@ -610,19 +641,36 @@ export default function Shop({ onNavigate, initialCategory }) {
       .catch(err => {
         console.error("Failed to load products", err);
         setProducts([]);
-      });
+      })
+      .finally(() => setProductsLoading(false));
   }, []);
   useEffect(() => {
     if (isMobile && (viewAs === "grid3" || viewAs === "grid4")) setViewAs("grid2")
   }, [isMobile])
 
   useEffect(() => {
-    const h = e => { if (sortRef.current && !sortRef.current.contains(e.target)) setSortOpen(false) }
+    const h = e => {
+      if (sortRef.current?.contains(e.target)) return
+      if (sortMenuRef.current?.contains(e.target)) return
+      setSortOpen(false)
+    }
     document.addEventListener("mousedown", h)
     return () => document.removeEventListener("mousedown", h)
   }, [])
 
-  const toggleWishlist = id => setWishlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
+  // Toast shown when a product is added to / removed from the wishlist
+  const [toast, setToast] = useState(null) // { msg, added, key }
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 2000)
+    return () => clearTimeout(t)
+  }, [toast])
+
+  const toggleWishlist = id => {
+    const has = wishlist.includes(id)
+    setWishlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
+    setToast({ msg: has ? "Removed from wishlist" : "Added to wishlist", added: !has, key: Date.now() })
+  }
   const normalizeCat = (s) => (s || "").toString().trim().toLowerCase();
 
   const getSidebarCategories = () => {
@@ -760,6 +808,7 @@ export default function Shop({ onNavigate, initialCategory }) {
 
   return (
     <div className="min-h-screen bg-white">
+      <style>{`@keyframes shopRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes shopPetalBloom{0%,100%{opacity:0.2}50%{opacity:1}}@keyframes shopToast{from{opacity:0;transform:translate(-50%,14px)}to{opacity:1;transform:translate(-50%,0)}}`}</style>
       <MobileFilterDrawer
         open={filterOpen}
         onClose={() => setFilterOpen(false)}
@@ -779,8 +828,8 @@ export default function Shop({ onNavigate, initialCategory }) {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-8">
         <div className="flex gap-6 lg:gap-8">
 
-          <aside className="w-48 hidden lg:block flex-shrink-0">
-            <SidebarContent 
+          <aside className="w-48 hidden lg:block flex-shrink-0" style={{ animation:"shopRise 0.5s ease 0.05s both" }}>
+            <SidebarContent
               products={products} 
               activeCategory={activeCategory} 
               setActiveCategory={setActiveCategory}
@@ -796,7 +845,7 @@ export default function Shop({ onNavigate, initialCategory }) {
           </aside>
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2 mb-4 pb-4" style={{ borderBottom:"1px solid #f0f0f0" }}>
+            <div className="flex items-center justify-between gap-2 mb-4 pb-4" style={{ borderBottom:"1px solid #f0f0f0", animation:"shopRise 0.5s ease 0.12s both" }}>
               <div className="flex items-center gap-2">
                 <button onClick={() => setFilterOpen(true)}
                   className="lg:hidden flex items-center gap-1.5 border rounded-lg text-sm text-gray-700 transition-all hover:border-green-400 relative"
@@ -812,21 +861,35 @@ export default function Shop({ onNavigate, initialCategory }) {
                   )}
                 </button>
 
-                <div className="flex items-center border rounded-lg overflow-hidden" style={{ borderColor:"#e5e7eb" }}>
-                  {visibleViews.map(({ key, icon }, idx) => (
-                    <button key={key} onClick={() => setViewAs(key)}
-                      style={{ width:"32px", height:"32px", display:"flex", alignItems:"center", justifycontent:"center", flexShrink:0, backgroundColor:viewAs===key?G:"white", color:viewAs===key?"white":"#6b7280", borderRight:idx<visibleViews.length-1?"1px solid #e5e7eb":"none", cursor:"pointer", outline:"none", border:"none", transition:"background 0.15s" }}>
-                      {icon}
-                    </button>
-                  ))}
+                <div className="flex items-center gap-0.5 rounded-xl" style={{ backgroundColor:"#f3f4f6", border:"1px solid #e5e7eb", padding:"3px" }}>
+                  {visibleViews.map(({ key, label, icon }) => {
+                    const active = viewAs === key
+                    return (
+                      <button key={key} onClick={() => setViewAs(key)}
+                        title={label} aria-label={label} aria-pressed={active}
+                        onMouseEnter={e => { if (!active) e.currentTarget.style.backgroundColor = "#e5e7eb" }}
+                        onMouseLeave={e => { if (!active) e.currentTarget.style.backgroundColor = "transparent" }}
+                        style={{
+                          width:"30px", height:"28px", display:"flex", alignItems:"center", justifyContent:"center",
+                          flexShrink:0, borderRadius:"8px", cursor:"pointer", outline:"none", border:"none",
+                          backgroundColor: active ? G : "transparent",
+                          color: active ? "white" : "#6b7280",
+                          boxShadow: active ? "0 1px 3px rgba(12,87,62,0.35)" : "none",
+                          transform: active ? "scale(1)" : "scale(0.96)",
+                          transition:"background 0.18s ease, color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease",
+                        }}>
+                        {icon}
+                      </button>
+                    )
+                  })}
                 </div>
                 <span className="text-xs text-gray-400">{filtered.length} items</span>
               </div>
 
-              <div className="relative" ref={sortRef}>
+              <div className="relative z-50" ref={sortRef}>
                 <button onClick={() => setSortOpen(p => !p)}
                   className="flex items-center gap-2 border rounded-lg text-sm text-gray-700 transition-all hover:border-green-400"
-                  style={{ borderColor:sortOpen?G:"#e5e7eb", padding:"6px 10px", height:"32px", minWidth:isMobile?"120px":"140px", justifycontent:"space-between" }}>
+                  style={{ borderColor:sortOpen?G:"#e5e7eb", padding:"6px 10px", height:"32px", minWidth:isMobile?"120px":"140px", justifyContent:"space-between" }}>
                   <span className="text-xs sm:text-sm truncate">{currentSortLabel}</span>
                   <svg className="w-3 h-3 text-gray-400 flex-shrink-0 transition-transform" style={{ transform:sortOpen?"rotate(180deg)":"rotate(0)" }}
                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -834,9 +897,20 @@ export default function Shop({ onNavigate, initialCategory }) {
                   </svg>
                 </button>
 
-                {sortOpen && (
-                  <div className={isMobile ? "fixed bg-white z-[100] shadow-2xl overflow-hidden" : "absolute top-full right-0 mt-1 bg-white z-30 w-48 overflow-hidden shadow-lg"}
-                    style={isMobile ? { top: sortRef.current ? sortRef.current.getBoundingClientRect().bottom + 4 : 80, right: 16, width:"200px", border:"1px solid #e5e7eb", borderRadius:"12px" } : { border:"1px solid #e5e7eb", borderRadius:"10px" }}>
+                {sortOpen && createPortal(
+                  // Portaled to <body> + fixed positioning so no transformed ancestor
+                  // or stacking context can offset, clip, or cover the menu.
+                  <div
+                    ref={sortMenuRef}
+                    className="fixed bg-white z-[9999] shadow-2xl overflow-hidden"
+                    style={(() => {
+                      const rect = sortRef.current?.getBoundingClientRect()
+                      const top = rect ? rect.bottom + 4 : 80
+                      return isMobile
+                        ? { top, right: 16, width: 200, border: "1px solid #e5e7eb", borderRadius: 12 }
+                        : { top, left: rect ? rect.left : undefined, width: rect ? Math.max(rect.width, 160) : 180, border: "1px solid #e5e7eb", borderRadius: 10 }
+                    })()}
+                  >
                     {SORT_OPTIONS.map(opt => (
                       <button key={opt.value} onClick={() => { setSortBy(opt.value); setSortOpen(false) }}
                         className="w-full text-left px-4 py-2.5 text-sm transition-all"
@@ -844,7 +918,8 @@ export default function Shop({ onNavigate, initialCategory }) {
                         {opt.label}
                       </button>
                     ))}
-                  </div>
+                  </div>,
+                  document.body
                 )}
               </div>
             </div>
@@ -885,7 +960,9 @@ export default function Shop({ onNavigate, initialCategory }) {
               </div>
             )}
 
-            {filtered.length === 0 ? (
+            {(productsLoading || searchLoading) ? (
+              <ShopLoader />
+            ) : filtered.length === 0 ? (
               <div className="text-center py-20">
                 <p className="text-gray-400 text-sm mb-3">No products match your filters.</p>
                 <button onClick={() => { setActiveCategory("All"); setSelectedOccasions([]); setPriceRange([0, 999999]); }}
@@ -893,10 +970,12 @@ export default function Shop({ onNavigate, initialCategory }) {
               </div>
             ) : (
               <div style={getGridStyle()}>
-                {filtered.map(product => (
-                  viewAs === "list" 
-                    ? (isMobile ? <ListCardMobile key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/> : <ListCardDesktop key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/>)
-                    : <GridCard key={product.id} product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/>
+                {filtered.map((product, idx) => (
+                  <div key={product.id} style={{ animation:`shopRise 0.45s ease ${0.16 + Math.min(idx, 16) * 0.04}s both` }}>
+                    {viewAs === "list"
+                      ? (isMobile ? <ListCardMobile product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/> : <ListCardDesktop product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/>)
+                      : <GridCard product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/>}
+                  </div>
                 ))}
               </div>
             )}
@@ -906,6 +985,20 @@ export default function Shop({ onNavigate, initialCategory }) {
 
       <Footer onNavigate={onNavigate}/>
       {previewProduct && <ProductPreviewModal product={{ ...previewProduct, _ribbonColor: RIBBON_COLORS[previewProduct.ribbon] }} onClose={() => setPreviewProduct(null)} onNavigate={onNavigate}/>}
+
+      {/* Wishlist toast */}
+      {toast && (
+        <div
+          key={toast.key}
+          className="fixed left-1/2 bottom-6 z-[120] flex items-center gap-2 px-4 py-2.5 rounded-full text-sm font-semibold text-white shadow-xl"
+          style={{ background: toast.added ? G : "#374151", animation: "shopToast 0.3s ease both" }}
+        >
+          <svg className="w-4 h-4" fill={toast.added ? "currentColor" : "none"} stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
+          </svg>
+          {toast.msg}
+        </div>
+      )}
     </div>
   )
 }

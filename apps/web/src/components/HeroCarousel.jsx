@@ -138,7 +138,7 @@ export default function HeroCarousel({ onNavigate }) {
 
   return (
     <div
-      className="relative w-full overflow-hidden"
+      className="relative w-full max-w-[1600px] mx-auto overflow-hidden"
       style={{ height: "clamp(560px, 70vh, 720px)" }}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
@@ -173,12 +173,12 @@ export default function HeroCarousel({ onNavigate }) {
 
       {/* Content — vertically centered; reduced side padding on mobile gives the
           text real room between the arrows. Bottom padding leaves space for dots. */}
-      <div className="relative z-20 h-full flex items-center py-12 pb-20 sm:py-16">
+      <div className="relative z-20 h-full flex items-center pt-12 pb-24 sm:pt-16 sm:pb-28">
         <div className="w-full max-w-7xl mx-auto px-12 sm:px-24 lg:px-28">
-          <div className="w-full max-w-xl">
+          <div className="relative w-full max-w-xl">
             {animating && prevHero && (
-              <div key={`prev-${prev}`} className="absolute"
-                style={{ animation: "slideOutLeft 0.55s cubic-bezier(0.4,0,0.2,1) forwards" }}>
+              <div key={`prev-${prev}`} className="absolute top-0 left-0 right-0"
+                style={{ animation: "slideOutLeft 0.6s cubic-bezier(0.22,1,0.36,1) forwards" }}>
                 <span className="inline-flex items-center self-start max-w-[calc(100vw-6rem)] sm:max-w-max text-[10px] sm:text-xs font-bold tracking-[0.08em] sm:tracking-[0.2em] uppercase px-2.5 sm:px-3 py-1 rounded-full mb-3 sm:mb-4 text-white truncate"
                   style={{ backgroundColor: prevHero.accent + "55", border: `1px solid ${prevHero.accent}99` }}>
                   {prevHero.tag}
@@ -191,7 +191,7 @@ export default function HeroCarousel({ onNavigate }) {
             )}
 
             <div key={`curr-${current}`}
-              style={{ animation: animating ? "slideInRight 0.6s cubic-bezier(0.4,0,0.2,1) forwards" : "none", opacity: animating ? 0 : 1 }}>
+              style={{ animation: animating ? "slideInRight 0.6s cubic-bezier(0.22,1,0.36,1) forwards" : "none", opacity: animating ? 0 : 1 }}>
               <span className="inline-flex items-center self-start max-w-[calc(100vw-6rem)] sm:max-w-max text-[10px] sm:text-xs font-bold tracking-[0.08em] sm:tracking-[0.2em] uppercase px-2.5 sm:px-3 py-1 rounded-full mb-3 sm:mb-5 text-white truncate"
                 style={{ backgroundColor: hero.accent + "55", border: `1px solid ${hero.accent}99` }}>
                 {hero.tag}
@@ -236,12 +236,12 @@ export default function HeroCarousel({ onNavigate }) {
 
       <style>{`
         @keyframes slideOutLeft {
-          0%   { opacity: 1; transform: translateX(0) scale(1); }
-          100% { opacity: 0; transform: translateX(-80px) scale(0.97); }
+          0%   { opacity: 1; transform: translateX(0); }
+          100% { opacity: 0; transform: translateX(-44px); }
         }
         @keyframes slideInRight {
-          0%   { opacity: 0; transform: translateX(60px) scale(0.97); }
-          100% { opacity: 1; transform: translateX(0) scale(1); }
+          0%   { opacity: 0; transform: translateX(44px); }
+          100% { opacity: 1; transform: translateX(0); }
         }
 
         /* Rotating gradient border for the hero CTAs. The beam color follows

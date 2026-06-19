@@ -282,9 +282,10 @@ export default function WorldClock({ onNavigate }) {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: pageBg }}>
+      <style>{`@keyframes pageRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}`}</style>
 
       {/* Hero */}
-      <div className="relative overflow-hidden" style={{ minHeight:"280px" }}>
+      <div className="relative overflow-hidden" style={{ minHeight:"280px", animation:"pageRise 0.6s ease 0.05s both" }}>
         <img src={pageBg5} alt="" className="absolute inset-0 w-full h-full object-cover"/>
         <div className="absolute inset-0"
           style={{ background:"linear-gradient(to right,rgba(12,87,62,0.92) 0%,rgba(12,87,62,0.72) 55%,rgba(12,87,62,0.38) 100%)" }}/>
@@ -299,7 +300,7 @@ export default function WorldClock({ onNavigate }) {
 
       {/* Clock section */}
       <div style={{ backgroundColor: sectionBg }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-10 py-10 sm:py-14">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-10 py-10 sm:py-14" style={{ animation:"pageRise 0.6s ease 0.16s both" }}>
 
           {/* PH banner */}
           <PHBanner isDark={isDark}/>

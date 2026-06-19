@@ -5,6 +5,9 @@ import { api } from "../../services/api.js"
 import { DG, G, ActionBtns } from "./_adminShared"
 import estingsWordmark from "../../assets/Estings.svg"
 
+// Example item names cycled through the search box as an animated, typewriter-style hint.
+const SEARCH_SAMPLES = ["Red Roses", "Baby's Breath", "Floral Foam", "Satin Ribbon"]
+
 // ── Flower petal loader ──
 function FlowerLoader({ message = "Loading...", isDark = false }) {
   const petals = [
@@ -140,17 +143,19 @@ function ViewInventoryModal({ item, onClose, isDark }) {
     inputBdr: isDark ? "#374151" : "#dde3ec",
   }
 
-  const rows = [
-    { label: "Item Name", value: item.name },
+  const statusLabel = item.status === "inactive" ? "Discontinued" : "Active"
+
+  // Stock numbers get their own highlighted tiles; everything else goes in the detail grid.
+  const stockTiles = [
+    { label: "Manila", value: item.stock_manila ?? 0 },
+    { label: "Pampanga", value: item.stock_pampanga ?? 0 },
+    { label: "Total Stock", value: item.stock ?? 0, highlight: true },
+  ]
+  const details = [
     { label: "Branch", value: item.displayBranch, capitalize: true },
-    { label: "Category", value: item.category || "—", capitalize: true },
     { label: "Unit Type", value: item.unit_type || "piece" },
-    { label: "Manila Stock", value: item.stock_manila ?? 0 },
-    { label: "Pampanga Stock", value: item.stock_pampanga ?? 0 },
-    { label: "Total Shared Stock", value: item.stock ?? 0 },
     { label: "Reorder Point", value: item.reorder_point ?? 10 },
     { label: "Cost per Unit", value: `₱${parseFloat(item.cost_per_unit || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}` },
-    { label: "Status", value: item.status === "inactive" ? "Discontinued" : "Active" },
   ]
 
   return createPortal(
@@ -158,7 +163,7 @@ function ViewInventoryModal({ item, onClose, isDark }) {
       style={{ backgroundColor: d.overlayBg, backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: 9999, top: 0, left: 0, width: "100vw", height: "100vh" }}
       onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="rounded-xl w-full overflow-hidden flex flex-col"
-        style={{ maxWidth: "420px", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${d.modalBdr}`, backgroundColor: d.modalBg }}>
+        style={{ maxWidth: "560px", maxHeight: "90vh", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${d.modalBdr}`, backgroundColor: d.modalBg }}>
 
         <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
           style={{ borderBottom: `1px solid ${d.modalHdrBdr}`, background: d.modalHdr }}>
@@ -166,19 +171,50 @@ function ViewInventoryModal({ item, onClose, isDark }) {
             <p className="text-base font-bold" style={{ color: d.headC }}>Inventory Details</p>
           </div>
           <button onClick={onClose} className="p-2 rounded-lg transition-all" style={{ color: d.subC }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "#f1f5f9"} 
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "#f1f5f9"}
             onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
-          {rows.map(row => (
-            <div key={row.label}>
-              <p className="text-xs font-bold uppercase tracking-wider mb-0.5" style={{ color: d.labelC }}>{row.label}</p>
-              <p className="text-sm font-semibold" style={{ color: d.cellC, textTransform: row.capitalize ? 'capitalize' : 'none' }}>{row.value}</p>
+        <div className="p-6 space-y-5 overflow-y-auto">
+          {/* Item name, category and status */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-lg font-bold leading-snug" style={{ color: d.headC }}>{item.name}</p>
+              <p className="text-xs mt-0.5 capitalize" style={{ color: d.subC }}>{item.category || "Uncategorized"}</p>
             </div>
-          ))}
+            <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-md whitespace-nowrap flex-shrink-0"
+              style={ statusLabel === "Active"
+                ? { backgroundColor: isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4", color: isDark ? "#4ade80" : "#16a34a" }
+                : { backgroundColor: isDark ? "rgba(148,163,184,0.12)" : "#f1f5f9", color: isDark ? "#94a3b8" : "#64748b" } }>
+              {statusLabel}
+            </span>
+          </div>
+
+          {/* Stock per branch + total */}
+          <div className="grid grid-cols-3 gap-3">
+            {stockTiles.map(t => (
+              <div key={t.label} className="rounded-lg p-3 text-center"
+                style={{
+                  backgroundColor: t.highlight ? (isDark ? "rgba(74,222,128,0.10)" : "#f0fdf4") : (isDark ? "#111827" : "#f9fafb"),
+                  border: `1px solid ${t.highlight ? (isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0") : d.inputBdr}`,
+                }}>
+                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: d.labelC }}>{t.label}</p>
+                <p className="text-xl font-bold mt-1" style={{ color: t.highlight ? (isDark ? "#4ade80" : DG) : d.cellC }}>{t.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Remaining details */}
+          <div className="grid grid-cols-2 gap-x-4 gap-y-3 pt-1" style={{ borderTop: `1px solid ${d.modalHdrBdr}` }}>
+            {details.map(row => (
+              <div key={row.label} className="pt-1">
+                <p className="text-[11px] font-bold uppercase tracking-wider mb-0.5" style={{ color: d.labelC }}>{row.label}</p>
+                <p className="text-sm font-semibold break-words" style={{ color: d.cellC, textTransform: row.capitalize ? 'capitalize' : 'none' }}>{row.value}</p>
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="flex items-center justify-end gap-2 px-6 py-4 flex-shrink-0"
@@ -821,7 +857,11 @@ export default function AdminInventory() {
   const [inventory, setInventory] = useState([])
   const [loading, setLoading]     = useState(true)
   const [page, setPage]           = useState(1)
-  
+  // Controls the one-time entrance animation; dropped once it plays so it never replays.
+  const [entered, setEntered]     = useState(false)
+  // Animated placeholder text for the search box (typewriter hint).
+  const [phText, setPhText]       = useState("")
+
   const [search, setSearch]       = useState("")
   const [branchFilter, setBranchFilter] = useState("") 
   const [statusFilter, setStatus] = useState("")
@@ -919,6 +959,31 @@ export default function AdminInventory() {
   }, [])
 
   useEffect(() => { fetchInventory() }, [fetchInventory])
+
+  // Play the entrance animation once the data has loaded, then turn it off
+  // so it can't restart on later re-renders or after the print dialog.
+  useEffect(() => {
+    if (loading) { setEntered(false); return }
+    const t = setTimeout(() => setEntered(true), 1300)
+    return () => clearTimeout(t)
+  }, [loading])
+
+  // Typewriter hint in the search box: types a sample item name, pauses, deletes,
+  // then the next one — looping forever while the box is empty. Stops once the user types.
+  useEffect(() => {
+    if (search) { setPhText(""); return }
+    let sample = 0, ch = 0, deleting = false, timer
+    const tick = () => {
+      const full = SEARCH_SAMPLES[sample]
+      ch += deleting ? -1 : 1
+      setPhText(full.slice(0, ch))
+      if (!deleting && ch === full.length) { deleting = true; timer = setTimeout(tick, 1400); return }
+      if (deleting && ch === 0) { deleting = false; sample = (sample + 1) % SEARCH_SAMPLES.length }
+      timer = setTimeout(tick, deleting ? 55 : 110)
+    }
+    timer = setTimeout(tick, 500)
+    return () => clearTimeout(timer)
+  }, [search])
 
   // 🚀 SUMMARY METRICS NOW REACT TO THE FILTER
   const totalItems = filtered.length;
@@ -1046,6 +1111,11 @@ export default function AdminInventory() {
     <div className="space-y-5">
       <style>{`
         .print-only { display: none; }
+
+        /* Gentle fade + rise so content eases in once loaded instead of flashing. */
+        @keyframes invRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .inv-rise { animation: invRise 0.85s ease-out both; }
+
         @media print {
           @page { margin: 12mm 10mm; }
           body * { visibility: hidden !important; }
@@ -1206,7 +1276,7 @@ export default function AdminInventory() {
         />
       )}
 
-      <div className="no-print flex items-center justify-between flex-wrap gap-3">
+      <div className={`no-print flex items-center justify-between flex-wrap gap-3 ${entered ? "" : "inv-rise"}`}>
         <h1 className="text-xl font-bold" style={{ color: d.headingC }}>Inventory Management</h1>
         <div className="flex items-center gap-2">
           <InvoiceBtn onClick={() => setShowInvoice(true)} isDark={isDark} />
@@ -1215,8 +1285,8 @@ export default function AdminInventory() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 no-print">
-        <div className="rounded-xl p-4 sm:p-5 flex flex-col justify-between relative overflow-hidden"
+      <div className={`grid grid-cols-2 lg:grid-cols-4 gap-3 no-print ${entered ? "" : "inv-rise"}`} style={{ animationDelay: "0.18s" }}>
+        <div className="rounded-xl p-4 sm:p-5 flex flex-col justify-between relative overflow-hidden transition-transform duration-200 hover:scale-[1.02]"
           style={{ background: "linear-gradient(135deg,#0a4a34 0%,#1a7040 60%,#2E8B34 100%)", boxShadow: "0 4px 16px rgba(12,87,62,0.25)" }}>
           <div>
             <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: "rgba(255,255,255,0.65)" }}>
@@ -1230,7 +1300,7 @@ export default function AdminInventory() {
           { label: "Low Stock Items",      val: lowStockCount,    accent: "#f59e0b", action: () => setStatus("Low Stock"),    actionLabel: "Review Needs" },
           { label: "Out of Stock Items",   val: outOfStockCount,  accent: "#ef4444", action: () => setStatus("Out of Stock"), actionLabel: "Action Required", red: true },
         ].map(({ label, val, accent, action, actionLabel, red }) => (
-          <div key={label} className="rounded-xl p-4 sm:p-5 flex flex-col justify-between relative overflow-hidden"
+          <div key={label} className="rounded-xl p-4 sm:p-5 flex flex-col justify-between relative overflow-hidden transition-transform duration-200 hover:scale-[1.02]"
             style={{ backgroundColor: d.cardBg, border: `1px solid ${d.cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
             <div className="absolute top-0 left-0 right-0 h-0.5 rounded-t-xl" style={{ backgroundColor: accent, opacity: 0.7 }} />
             <div className="min-w-0">
@@ -1307,8 +1377,8 @@ export default function AdminInventory() {
           </div>
         )}
 
-        <div className="no-print rounded-xl overflow-hidden"
-          style={{ border: `1px solid ${d.cardBdr}`, backgroundColor: d.cardBg, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
+        <div className={`no-print rounded-xl overflow-hidden ${entered ? "" : "inv-rise"}`}
+          style={{ border: `1px solid ${d.cardBdr}`, backgroundColor: d.cardBg, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)", animationDelay: "0.36s" }}>
 
           <div className="p-3 sm:p-4" style={{ borderBottom: `1px solid ${d.toolbarBdr}`, backgroundColor: d.toolbarBg }}>
             <div className="flex items-center gap-2 flex-wrap">
@@ -1362,9 +1432,9 @@ export default function AdminInventory() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
                   </svg>
                   <input 
-                    value={search} 
-                    onChange={e => setSearch(e.target.value)} 
-                    placeholder="Search item name or ID..."
+                    value={search}
+                    onChange={e => setSearch(e.target.value)}
+                    placeholder={search ? "" : `${phText}|`}
                     className="w-full pl-9 pr-3 py-2 text-sm outline-none bg-transparent"
                     style={{ color: d.inputTxt }}
                   />

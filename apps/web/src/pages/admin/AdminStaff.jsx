@@ -3,6 +3,46 @@ import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
 import { DG, G, Pagination } from "./_adminShared"
 
+// Example user IDs cycled through the search box as an animated, typewriter-style hint.
+const SEARCH_SAMPLES = ["a3f9c2b1", "7d4e8f02", "c4e71a05", "5fa237ac"]
+
+// Animated flower shown while the staff list is loading.
+function FlowerLoader({ message = "Loading...", isDark = false }) {
+  const petals = [
+    { angle: 0,   color: "#f48fb1" },
+    { angle: 60,  color: "#ec407a" },
+    { angle: 120, color: "#e91e63" },
+    { angle: 180, color: "#f06292" },
+    { angle: 240, color: "#c2185b" },
+    { angle: 300, color: "#f48fb1" },
+  ]
+  return (
+    <>
+      <style>{`
+        @keyframes adminPetalBloom {
+          0%, 100% { opacity: 0.2; }
+          50%       { opacity: 1;   }
+        }
+      `}</style>
+      <div className="flex flex-col items-center justify-center rounded-xl"
+        style={{ minHeight: "60vh", backgroundColor: isDark ? "#0f172a" : "transparent" }}>
+        <svg width="120" height="120" viewBox="0 0 100 100">
+          {petals.map(({ angle, color }, i) => (
+            <g key={i} transform={`rotate(${angle} 50 50)`}>
+              <ellipse cx="50" cy="27" rx="9.5" ry="21" fill={color}
+                style={{ animation: `adminPetalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`, animationFillMode: "both" }} />
+            </g>
+          ))}
+          <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+          <circle cx="50" cy="50" r="7"  fill="#f9c6d0" />
+          <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+        </svg>
+        <p className="mt-4 text-sm font-medium tracking-wide" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{message}</p>
+      </div>
+    </>
+  )
+}
+
 
 // ── Dark token hook ───────────────────────────────────────────────────────────
 function useDark() {
@@ -686,8 +726,12 @@ export default function AdminStaff() {
   const [roleFilter, setRole]         = useState("")
   const [staff, setStaff]             = useState([])
   const [total, setTotal]             = useState(0)
-  const [loading, setLoading]         = useState(false)
+  const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState(null)
+  // One-time entrance animation; dropped once it plays so it never replays.
+  const [entered, setEntered]         = useState(false)
+  // Animated placeholder text for the search box (typewriter hint).
+  const [phText, setPhText]           = useState("")
   const [viewingStaff, setViewing]    = useState(null)
   const [editingStaff, setEditing]    = useState(null)
   const [deactivating, setDeactivating] = useState(null)
@@ -710,6 +754,30 @@ export default function AdminStaff() {
 
   useEffect(() => { fetchStaff() }, [fetchStaff])
 
+  // Play the entrance animation once the data has loaded, then turn it off.
+  useEffect(() => {
+    if (loading) { setEntered(false); return }
+    const t = setTimeout(() => setEntered(true), 1300)
+    return () => clearTimeout(t)
+  }, [loading])
+
+  // Typewriter hint in the search box: types a sample user ID, pauses, deletes,
+  // then the next one — looping forever while the box is empty. Stops once the user types.
+  useEffect(() => {
+    if (search) { setPhText(""); return }
+    let sample = 0, ch = 0, deleting = false, timer
+    const tick = () => {
+      const full = SEARCH_SAMPLES[sample]
+      ch += deleting ? -1 : 1
+      setPhText(full.slice(0, ch))
+      if (!deleting && ch === full.length) { deleting = true; timer = setTimeout(tick, 1400); return }
+      if (deleting && ch === 0) { deleting = false; sample = (sample + 1) % SEARCH_SAMPLES.length }
+      timer = setTimeout(tick, deleting ? 55 : 110)
+    }
+    timer = setTimeout(tick, 500)
+    return () => clearTimeout(timer)
+  }, [search])
+
   const adminCount    = staff.filter(s => s.role==="admin").length
   const staffCount    = staff.filter(s => s.role==="staff").length
   const deliveryCount = staff.filter(s => s.role==="delivery").length
@@ -723,6 +791,16 @@ export default function AdminStaff() {
 
   if (showForm) return <AddStaffForm onBack={() => setShowForm(false)} onCreated={fetchStaff}/>
 
+  // While a fetch is running, show the flower loader instead of an empty table.
+  if (loading) {
+    return (
+      <div className="space-y-5">
+        <h1 className="text-xl font-bold" style={{ color:d.headC }}>Staffs</h1>
+        <FlowerLoader message="Loading staff..." isDark={isDark} />
+      </div>
+    )
+  }
+
   // Select style shorthand
   const sel = { borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }
 
@@ -732,10 +810,16 @@ export default function AdminStaff() {
       {editingStaff  && <EditStaffModal staff={editingStaff} onClose={()=>setEditing(null)} onSaved={fetchStaff}/>}
       {deactivating  && <DeactivateModal staff={deactivating} onClose={()=>setDeactivating(null)} onConfirm={confirmDeactivate}/>}
 
-      <h1 className="text-xl font-bold" style={{ color:d.headC }}>Staffs</h1>
+      {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
+      <style>{`
+        @keyframes staffRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .staff-rise { animation: staffRise 0.85s ease-out both; }
+      `}</style>
+
+      <h1 className={`text-xl font-bold ${entered ? "" : "staff-rise"}`} style={{ color:d.headC }}>Staffs</h1>
 
       {/* ── Stat cards ── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className={`grid grid-cols-2 lg:grid-cols-4 gap-3 ${entered ? "" : "staff-rise"}`} style={{ animationDelay: "0.18s" }}>
         {/* Green */}
         <div className="rounded-xl p-4 sm:p-5 relative overflow-hidden flex flex-col justify-between transition-all duration-200"
           style={{ background:"linear-gradient(135deg,#0a4a34 0%,#1a7040 60%,#2E8B34 100%)", boxShadow:"0 4px 16px rgba(12,87,62,0.25)" }}>
@@ -771,8 +855,8 @@ export default function AdminStaff() {
       </div>
 
       {/* ── Table card ── */}
-      <div className="rounded-xl overflow-hidden"
-        style={{ border:`1px solid ${d.cardBdr}`, backgroundColor:d.cardBg, boxShadow:d.cardShdw }}>
+      <div className={`rounded-xl overflow-hidden ${entered ? "" : "staff-rise"}`}
+        style={{ border:`1px solid ${d.cardBdr}`, backgroundColor:d.cardBg, boxShadow:d.cardShdw, animationDelay: "0.36s" }}>
 
         {/* Toolbar */}
         <div className="p-3 sm:p-4" style={{ borderBottom:`1px solid ${d.hdrBdr}`, backgroundColor:d.hdrBg }}>
@@ -805,7 +889,7 @@ export default function AdminStaff() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
               </svg>
               <input value={search} onChange={e=>setSearch(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")fetchStaff()}}
-                placeholder="User ID or username"
+                placeholder={search ? "" : `${phText}|`}
                 className="w-full pl-9 pr-4 py-2 text-sm border rounded-md outline-none transition-all"
                 style={sel}
                 onFocus={e=>{e.target.style.borderColor="#4ade80";e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)"}}

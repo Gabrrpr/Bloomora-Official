@@ -8,6 +8,43 @@ import UnsendModal from "../../components/UnsendModal"
 const DG = "#0C573E"
 const G = "#2E8B34"
 
+// Animated flower shown while the chat is loading.
+function FlowerLoader({ message = "Loading...", isDark = false }) {
+  const petals = [
+    { angle: 0,   color: "#f48fb1" },
+    { angle: 60,  color: "#ec407a" },
+    { angle: 120, color: "#e91e63" },
+    { angle: 180, color: "#f06292" },
+    { angle: 240, color: "#c2185b" },
+    { angle: 300, color: "#f48fb1" },
+  ]
+  return (
+    <>
+      <style>{`
+        @keyframes adminPetalBloom {
+          0%, 100% { opacity: 0.2; }
+          50%       { opacity: 1;   }
+        }
+      `}</style>
+      <div className="flex flex-col items-center justify-center rounded-xl"
+        style={{ minHeight: "60vh", backgroundColor: isDark ? "#0f172a" : "transparent" }}>
+        <svg width="120" height="120" viewBox="0 0 100 100">
+          {petals.map(({ angle, color }, i) => (
+            <g key={i} transform={`rotate(${angle} 50 50)`}>
+              <ellipse cx="50" cy="27" rx="9.5" ry="21" fill={color}
+                style={{ animation: `adminPetalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`, animationFillMode: "both" }} />
+            </g>
+          ))}
+          <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+          <circle cx="50" cy="50" r="7"  fill="#f9c6d0" />
+          <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+        </svg>
+        <p className="mt-4 text-sm font-medium tracking-wide" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{message}</p>
+      </div>
+    </>
+  )
+}
+
 const QUICK_REPLIES = [
   "Thank you for reaching out! How can I help you today?",
   "Your order is being prepared and will be delivered soon.",
@@ -168,6 +205,9 @@ export default function AdminChat() {
   const [typing, setTyping] = useState(false)
   const [enlargedImage, setEnlargedImage] = useState(null);
   const [previewProduct, setPreviewProduct] = useState(null);
+  // Full-page flower loader on first load, then a gentle ease-in (played once).
+  const [initialLoading, setInitialLoading] = useState(true);
+  const [entered, setEntered] = useState(false);
   
   // 🚀 NEW: State for products to perform the lookup
   const [allProducts, setAllProducts] = useState([]);
@@ -274,13 +314,26 @@ export default function AdminChat() {
     try {
       const data = await api.getConversations()
       setConversations(data.conversations || [])
-    } finally { setLoadingConvos(false) }
+    } finally { setLoadingConvos(false); setInitialLoading(false) }
   }, [])
 
   // ── Effects ──
   useEffect(() => { if (activeId) loadMessages(activeId) }, [activeId, loadMessages])
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }) }, [messages])
   useEffect(() => { if (user) loadConversations() }, [loadConversations, user])
+
+  // Safety net: never leave the flower loader up for more than a moment.
+  useEffect(() => {
+    const t = setTimeout(() => setInitialLoading(false), 1500)
+    return () => clearTimeout(t)
+  }, [])
+
+  // Play the entrance animation once loaded, then turn it off so it never replays.
+  useEffect(() => {
+    if (initialLoading) return
+    const t = setTimeout(() => setEntered(true), 1100)
+    return () => clearTimeout(t)
+  }, [initialLoading])
 
   // WebSocket Logic
   useEffect(() => {
@@ -354,13 +407,29 @@ export default function AdminChat() {
       return dateB - dateA;
     });
 
+  // While conversations are loading for the first time, show the flower loader.
+  if (initialLoading) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-xl font-bold" style={{ color: bodyTxt }}>Messages</h1>
+        <FlowerLoader message="Loading messages..." isDark={isDark} />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-4">
-      <h1 className="text-xl font-bold" style={{ color: bodyTxt }}>Messages</h1>
-      <div className="flex rounded-xl overflow-hidden" style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, height: "calc(100vh - 180px)" }}>
+      {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
+      <style>{`
+        @keyframes chatRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .chat-rise { animation: chatRise 0.85s ease-out both; }
+      `}</style>
+
+      <h1 className={`text-xl font-bold ${entered ? "" : "chat-rise"}`} style={{ color: bodyTxt }}>Messages</h1>
+      <div className={`flex rounded-xl overflow-hidden ${entered ? "" : "chat-rise"}`} style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, height: "calc(100vh - 180px)", animationDelay: "0.18s" }}>
         
-        {/* Sidebar */}
-        <div className="w-72 border-r flex flex-col" style={{ borderColor: sidebarBdr }}>
+        {/* Sidebar — full width on mobile, hidden once a conversation is open */}
+        <div className={`${activeId ? "hidden sm:flex" : "flex"} w-full sm:w-72 border-r flex-col`} style={{ borderColor: sidebarBdr }}>
           <input 
             className="m-3 p-2 text-xs border rounded outline-none" 
             style={{ backgroundColor: searchBg, borderColor: searchBdr, color: bodyTxt }} 
@@ -387,11 +456,19 @@ export default function AdminChat() {
           </div>
         </div>
 
-        {/* Chat Area */}
-        <div className="flex-1 flex flex-col min-w-0">
+        {/* Chat Area — hidden on mobile until a conversation is selected */}
+        <div className={`${activeId ? "flex" : "hidden sm:flex"} flex-1 flex-col min-w-0`}>
           {activeId ? (
             <>
-              <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4" style={{ backgroundColor: msgAreaBg }}>
+              {/* Mobile-only header with a back button to the conversation list */}
+              <div className="sm:hidden flex items-center gap-2 px-3 py-2.5 border-b flex-shrink-0" style={{ borderColor: headerBdr, backgroundColor: headerBg }}>
+                <button onClick={() => setActiveId(null)} aria-label="Back to conversations" className="p-1.5 rounded-md" style={{ color: subTxt }}>
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                </button>
+                <Avatar name={activeConvo?.user_name || "Customer"} imageUrl={activeConvo?.user_avatar || activeConvo?.profile_picture} size={30} />
+                <span className="text-sm font-semibold truncate" style={{ color: bodyTxt }}>{activeConvo?.user_name || "Customer"}</span>
+              </div>
+              <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-4" style={{ backgroundColor: msgAreaBg }}>
                 {messages.map((msg) => {
                   const isStaff = msg.sender === "staff";
                   return (

@@ -12,6 +12,7 @@ import openingsImg    from "../../assets/occasions/Openings.png"
 import getWellSoonImg from "../../assets/occasions/GetWellSoon.png"
 
 const G = "#2E8B34"
+const DG = "#0C573E"
 
 const OCCASIONS = [
   {
@@ -61,8 +62,9 @@ export default function AllOccasions({ onNavigate }) {
 
   return (
     <div className={`min-h-screen ${isDark ? "bg-gray-900" : "bg-white"}`}>
+      <style>{`@keyframes pageRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}`}</style>
       {/* Hero */}
-      <div className="relative overflow-hidden" style={{ minHeight: "280px" }}>
+      <div className="relative overflow-hidden" style={{ minHeight: "280px", animation:"pageRise 0.6s ease 0.05s both" }}>
         <img src={pageBg5} alt="" className="absolute inset-0 w-full h-full object-cover" />
         <div
           className="absolute inset-0"
@@ -84,12 +86,13 @@ export default function AllOccasions({ onNavigate }) {
       {/* Occasions grid */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-10 py-12 sm:py-16">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
-          {OCCASIONS.map(occ => (
+          {OCCASIONS.map((occ, i) => (
             <OccasionCard
               key={occ.label}
               occ={occ}
               isDark={isDark}
               onNavigate={onNavigate}
+              idx={i}
             />
           ))}
         </div>
@@ -100,7 +103,7 @@ export default function AllOccasions({ onNavigate }) {
   )
 }
 
-function OccasionCard({ occ, isDark, onNavigate }) {
+function OccasionCard({ occ, isDark, onNavigate, idx = 0 }) {
   // 🚀 INTER-PAGE STATE DISPATCH ROUTER
   const handleOccasionClick = () => {
     localStorage.setItem("bloomora_active_occasion", occ.label);
@@ -109,6 +112,7 @@ function OccasionCard({ occ, isDark, onNavigate }) {
 
   return (
     <div
+      style={{ animation: `pageRise 0.5s ease ${0.16 + idx * 0.06}s both` }}
       className={`
         group flex flex-col items-center text-center rounded-2xl border
         transition-all duration-200 hover:shadow-xl hover:-translate-y-1
@@ -122,7 +126,7 @@ function OccasionCard({ occ, isDark, onNavigate }) {
       <div className="mt-7 mb-4 flex-shrink-0">
         <div
           className={`
-            overflow-hidden rounded-full transition-all duration-300 group-hover:scale-105
+            overflow-hidden rounded-full
             ${isDark
               ? "border-2 border-green-400 shadow-[0_4px_16px_rgba(74,222,128,0.15)]"
               : "border-2 border-[#2E8B34] shadow-[0_4px_16px_rgba(46,139,52,0.13)]"}
@@ -151,7 +155,7 @@ function OccasionCard({ occ, isDark, onNavigate }) {
       <button
         onClick={handleOccasionClick}
         className="mt-5 px-7 py-2 rounded-full text-sm font-semibold text-white transition-all duration-200 hover:opacity-90 active:scale-95"
-        style={{ backgroundColor: G }}
+        style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}
       >
         Shop Now
       </button>

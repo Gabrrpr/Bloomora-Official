@@ -90,6 +90,7 @@ export default function TermsAndConditions({ onNavigate, onBack }) {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor:pageBg }}>
+      <style>{`@keyframes pageRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}`}</style>
 
       {/* Sticky top bar */}
       <div className="sticky top-0 z-10" style={{ backgroundColor:headerBg, borderBottom:`1px solid ${headerBdr}` }}>
@@ -115,7 +116,7 @@ export default function TermsAndConditions({ onNavigate, onBack }) {
       {/* Content */}
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         <div className="rounded-2xl overflow-hidden"
-          style={{ backgroundColor:cardBg, border:`1px solid ${cardBdr}`, boxShadow:cardShadow }}>
+          style={{ backgroundColor:cardBg, border:`1px solid ${cardBdr}`, boxShadow:cardShadow, animation:"pageRise 0.6s ease 0.1s both" }}>
 
           {/* Hero band */}
           <div style={{ background:`linear-gradient(135deg,${DG} 0%,${G} 100%)`, padding:"clamp(28px,6vw,48px) clamp(20px,5vw,40px)" }}>

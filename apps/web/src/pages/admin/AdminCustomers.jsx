@@ -7,6 +7,9 @@ const STATUS_OPTIONS = ["All", "Active", "Inactive", "Blocked", "Unverified"]
 const ORDERS_OPTIONS = ["All Orders", "No orders yet", "1–5 orders", "6–20 orders", "21–50 orders", "50+ orders"]
 const DATE_OPTIONS   = ["Last Order: Any", "Today", "This week", "This month", "Last 3 months", "Inactive 90+ days"]
 
+// Example names/emails cycled through the search box as an animated, typewriter-style hint.
+const SEARCH_SAMPLES = ["John Dela Cruz", "maria@gmail.com", "Anna Reyes", "paolo@email.com"]
+
 function SelectFilter({ value, onChange, options, minWidth = "130px", isDark }) {
   const bg  = isDark ? "#1e293b" : "white"
   const bdr = isDark ? "#374151" : "#dde3ec"
@@ -33,6 +36,43 @@ function getName(c) {
   return `${c.first_name || ""} ${c.last_name || ""}`.trim() || c.username || c.email || "Unknown"
 }
 
+// Animated flower shown while the customers are still loading.
+function FlowerLoader({ message = "Loading...", isDark = false }) {
+  const petals = [
+    { angle: 0,   color: "#f48fb1" },
+    { angle: 60,  color: "#ec407a" },
+    { angle: 120, color: "#e91e63" },
+    { angle: 180, color: "#f06292" },
+    { angle: 240, color: "#c2185b" },
+    { angle: 300, color: "#f48fb1" },
+  ]
+  return (
+    <>
+      <style>{`
+        @keyframes adminPetalBloom {
+          0%, 100% { opacity: 0.2; }
+          50%       { opacity: 1;   }
+        }
+      `}</style>
+      <div className="flex flex-col items-center justify-center rounded-xl"
+        style={{ minHeight: "60vh", backgroundColor: isDark ? "#0f172a" : "transparent" }}>
+        <svg width="120" height="120" viewBox="0 0 100 100">
+          {petals.map(({ angle, color }, i) => (
+            <g key={i} transform={`rotate(${angle} 50 50)`}>
+              <ellipse cx="50" cy="27" rx="9.5" ry="21" fill={color}
+                style={{ animation: `adminPetalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`, animationFillMode: "both" }} />
+            </g>
+          ))}
+          <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+          <circle cx="50" cy="50" r="7"  fill="#f9c6d0" />
+          <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+        </svg>
+        <p className="mt-4 text-sm font-medium tracking-wide" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{message}</p>
+      </div>
+    </>
+  )
+}
+
 export default function AdminCustomers() {
   const { isDark } = useTheme()
 
@@ -41,8 +81,13 @@ export default function AdminCustomers() {
   const [ordersFilter, setOrdersFilter] = useState("All Orders")
   const [dateFilter, setDateFilter]     = useState("Last Order: Any")
   const [customers, setCustomers]       = useState([])
-  const [loading, setLoading]           = useState(false)
+  const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState(null)
+  // Controls the one-time entrance animation. Once the content has eased in we
+  // drop the animation class so it never replays on later re-renders.
+  const [entered, setEntered]           = useState(false)
+  // Animated placeholder text for the search box (typewriter hint).
+  const [phText, setPhText]             = useState("")
 
   // ── colour tokens (mirrors AdminOrders pattern) ──────────────────────────
   const subTxt     = isDark ? "#94a3b8" : "#64748b"
@@ -77,6 +122,31 @@ export default function AdminCustomers() {
 
   useEffect(() => { fetchCustomers() }, [fetchCustomers])
 
+  // Play the entrance animation once the data has loaded, then turn it off so it
+  // doesn't replay on later re-renders. Resets while loading so refreshing re-animates.
+  useEffect(() => {
+    if (loading) { setEntered(false); return }
+    const t = setTimeout(() => setEntered(true), 1300)
+    return () => clearTimeout(t)
+  }, [loading])
+
+  // Typewriter hint in the search box: types a sample name/email, pauses, deletes,
+  // then the next one — looping forever while the box is empty. Stops once the user types.
+  useEffect(() => {
+    if (search) { setPhText(""); return }
+    let sample = 0, ch = 0, deleting = false, timer
+    const tick = () => {
+      const full = SEARCH_SAMPLES[sample]
+      ch += deleting ? -1 : 1
+      setPhText(full.slice(0, ch))
+      if (!deleting && ch === full.length) { deleting = true; timer = setTimeout(tick, 1400); return }
+      if (deleting && ch === 0) { deleting = false; sample = (sample + 1) % SEARCH_SAMPLES.length }
+      timer = setTimeout(tick, deleting ? 55 : 110)
+    }
+    timer = setTimeout(tick, 500)
+    return () => clearTimeout(timer)
+  }, [search])
+
   const total       = customers.length
   const activeCount = customers.filter(c => c.is_active && c.is_verified).length
   const inactive    = customers.filter(c => !c.is_active).length
@@ -103,11 +173,29 @@ export default function AdminCustomers() {
     { label: "Unverified",         sub: "Pending email verify",value: unverified,  amber: true  },
   ]
 
+  // While a fetch is running (initial load or Refresh), show the flower loader.
+  if (loading) {
+    return (
+      <div className="space-y-5">
+        <div>
+          <p className="text-sm font-medium" style={{ color: subTxt }}>Total registered customers</p>
+          <span className="text-4xl font-bold" style={{ color: isDark ? "#4ade80" : DG }}>—</span>
+        </div>
+        <FlowerLoader message="Loading customers..." isDark={isDark} />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
+      {/* Entrance animation: plays once after load, removed afterward via `entered`. */}
+      <style>{`
+        @keyframes custRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .cust-rise { animation: custRise 0.85s ease-out both; }
+      `}</style>
 
       {/* Heading */}
-      <div>
+      <div className={entered ? "" : "cust-rise"}>
         <p className="text-sm font-medium" style={{ color: subTxt }}>Total registered customers</p>
         <div className="flex items-baseline gap-3 mt-0.5">
           <span className="text-4xl font-bold" style={{ color: isDark ? "#4ade80" : DG }}>{total}</span>
@@ -116,7 +204,7 @@ export default function AdminCustomers() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className={`grid grid-cols-2 lg:grid-cols-4 gap-3 ${entered ? "" : "cust-rise"}`} style={{ animationDelay: "0.18s" }}>
         {STAT_CARDS.map(c => {
           const isSelected = statusFilter === c.label
           return (
@@ -185,8 +273,8 @@ export default function AdminCustomers() {
       )}
 
       {/* Table */}
-      <div className="rounded-xl overflow-hidden"
-        style={{ border: `1px solid ${cardBdr}`, backgroundColor: cardBg, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
+      <div className={`rounded-xl overflow-hidden ${entered ? "" : "cust-rise"}`}
+        style={{ border: `1px solid ${cardBdr}`, backgroundColor: cardBg, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)", animationDelay: "0.36s" }}>
 
         {/* Toolbar */}
         <div className="p-3 sm:p-4" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
@@ -202,7 +290,7 @@ export default function AdminCustomers() {
               </svg>
               <input value={search} onChange={e => setSearch(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && fetchCustomers()}
-                placeholder="Name or email"
+                placeholder={search ? "" : `${phText}|`}
                 className="w-full pl-9 pr-4 py-2 text-sm border rounded-md outline-none transition-all"
                 style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}
                 onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = "0 0 0 2px rgba(74,222,128,0.18)" }}

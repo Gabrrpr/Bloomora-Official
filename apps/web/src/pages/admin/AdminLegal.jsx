@@ -311,6 +311,8 @@ export default function AdminLegal() {
   const [dirty, setDirty]   = useState(false)
   const [saved, setSaved]   = useState(false)
   const [saving, setSaving] = useState(false)
+  // Drives the one-time entrance animation; removed after it plays so it never replays.
+  const [entered, setEntered] = useState(false)
 
   // load existing settings; pull out the two legal keys, remember the rest
   useEffect(() => {
@@ -325,6 +327,12 @@ export default function AdminLegal() {
       })
       .catch(err => console.error("Failed to load legal settings:", err))
     return () => { cancelled = true }
+  }, [])
+
+  // Play the entrance animation once on mount, then turn it off.
+  useEffect(() => {
+    const timer = setTimeout(() => setEntered(true), 1300)
+    return () => clearTimeout(timer)
   }, [])
 
   const updateTerms = next => { setTerms(next); setDirty(true); setSaved(false) }
@@ -363,8 +371,14 @@ export default function AdminLegal() {
 
   return (
     <div className="space-y-5">
+      {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
+      <style>{`
+        @keyframes legalRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .legal-rise { animation: legalRise 0.85s ease-out both; }
+      `}</style>
+
       {/* header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${entered ? "" : "legal-rise"}`}>
         <div>
           <h1 className="text-2xl font-bold" style={{ color: t.textPrimary }}>Legal</h1>
           <p className="text-sm mt-1" style={{ color: t.textSecondary }}>
@@ -391,7 +405,7 @@ export default function AdminLegal() {
       </div>
 
       {/* tabs */}
-      <div className="inline-flex p-1 rounded-lg gap-1" style={{ backgroundColor: t.badgeBg, border: `1px solid ${t.cardBorder}` }}>
+      <div className={`inline-flex p-1 rounded-lg gap-1 ${entered ? "" : "legal-rise"}`} style={{ backgroundColor: t.badgeBg, border: `1px solid ${t.cardBorder}`, animationDelay: "0.18s" }}>
         {TABS.map(tab => {
           const on = activeTab === tab.id
           return (
@@ -405,7 +419,7 @@ export default function AdminLegal() {
       </div>
 
       {/* split layout */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1.3fr_1fr] gap-5">
+      <div className={`grid grid-cols-1 xl:grid-cols-[1.3fr_1fr] gap-5 ${entered ? "" : "legal-rise"}`} style={{ animationDelay: "0.36s" }}>
         <div>
           <DocEditor doc={currentDoc} onChange={setCurrentDoc} t={t} isDark={isDark} />
         </div>

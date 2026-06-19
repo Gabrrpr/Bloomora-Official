@@ -1,12 +1,25 @@
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, Fragment } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
 import { DG, G, StatusBadge, ActionBtns } from "./_adminShared"
+import estingsWordmark from "../../assets/Estings.svg"
 
 const DATE_OPTIONS   = ["All Time", "Today", "Yesterday", "This Week", "This Month"]
 const TYPE_OPTIONS   = ["Type: All", "Sale", "Refund", "Void"]
 const METHOD_OPTIONS = ["Method: All", "Cash", "GCash", "Maya", "Credit Card", "Bank Transfer"]
 const STATUS_OPTIONS = ["Status: All", "Paid", "Pending", "Failed", "Refunded"]
+
+// Example customer names cycled through the search box as an animated, typewriter-style hint.
+const SEARCH_SAMPLES = ["John Dela Cruz", "Maria Santos", "Carlo Ramos", "Angela Cruz"]
+
+// Payment statuses used by the printed report, in display order, each with the
+// color used in the distribution bar. payment_status is already normalized to these.
+const PRINT_STATUS_META = [
+  { key: "Paid",     label: "Paid",     cls: "s-paid",     dot: "#16a34a" },
+  { key: "Pending",  label: "Pending",  cls: "s-pending",  dot: "#d97706" },
+  { key: "Failed",   label: "Failed",   cls: "s-failed",   dot: "#dc2626" },
+  { key: "Refunded", label: "Refunded", cls: "s-refunded", dot: "#7c3aed" },
+]
 
 function SelectFilter({ value, onChange, options, minWidth = "130px", isDark, icon }) {
   const bg  = isDark ? "#1e293b" : "white"
@@ -73,6 +86,43 @@ const CalendarIcon = (
   </svg>
 )
 
+// Animated flower shown while the transactions are still loading.
+function FlowerLoader({ message = "Loading...", isDark = false }) {
+  const petals = [
+    { angle: 0,   color: "#f48fb1" },
+    { angle: 60,  color: "#ec407a" },
+    { angle: 120, color: "#e91e63" },
+    { angle: 180, color: "#f06292" },
+    { angle: 240, color: "#c2185b" },
+    { angle: 300, color: "#f48fb1" },
+  ]
+  return (
+    <>
+      <style>{`
+        @keyframes adminPetalBloom {
+          0%, 100% { opacity: 0.2; }
+          50%       { opacity: 1;   }
+        }
+      `}</style>
+      <div className="flex flex-col items-center justify-center rounded-xl"
+        style={{ minHeight: "60vh", backgroundColor: isDark ? "#0f172a" : "transparent" }}>
+        <svg width="120" height="120" viewBox="0 0 100 100">
+          {petals.map(({ angle, color }, i) => (
+            <g key={i} transform={`rotate(${angle} 50 50)`}>
+              <ellipse cx="50" cy="27" rx="9.5" ry="21" fill={color}
+                style={{ animation: `adminPetalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`, animationFillMode: "both" }} />
+            </g>
+          ))}
+          <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+          <circle cx="50" cy="50" r="7"  fill="#f9c6d0" />
+          <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+        </svg>
+        <p className="mt-4 text-sm font-medium tracking-wide" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{message}</p>
+      </div>
+    </>
+  )
+}
+
 export default function AdminTransactions() {
   const { isDark } = useTheme()
   const [transactions, setTransactions] = useState([])
@@ -83,6 +133,11 @@ export default function AdminTransactions() {
   const [typeFilter, setTypeFilter]     = useState("Type: All")
   const [methodFilter, setMethodFilter] = useState("Method: All")
   const [statusFilter, setStatusFilter] = useState("Status: All")
+  // Controls the one-time entrance animation. Once the content has eased in we
+  // drop the animation class so it never replays (e.g. after the print dialog).
+  const [entered, setEntered] = useState(false)
+  // Animated placeholder text for the search box (typewriter hint).
+  const [phText, setPhText] = useState("")
 
   const subTxt     = isDark ? "#94a3b8" : "#64748b"
   const toolbarBg  = isDark ? "#111827" : "#fafbfc"
@@ -160,6 +215,31 @@ export default function AdminTransactions() {
 
   useEffect(() => { fetchTransactions() }, []);
 
+  // Play the entrance animation once the data has loaded, then turn it off so it
+  // can't restart when the page repaints (such as returning from the print dialog).
+  useEffect(() => {
+    if (loading) { setEntered(false); return }
+    const t = setTimeout(() => setEntered(true), 1300)
+    return () => clearTimeout(t)
+  }, [loading]);
+
+  // Typewriter hint in the search box: types a sample customer name, pauses, deletes,
+  // then the next one — looping forever while the box is empty. Stops once the user types.
+  useEffect(() => {
+    if (search) { setPhText(""); return }
+    let sample = 0, ch = 0, deleting = false, timer
+    const tick = () => {
+      const full = SEARCH_SAMPLES[sample]
+      ch += deleting ? -1 : 1
+      setPhText(full.slice(0, ch))
+      if (!deleting && ch === full.length) { deleting = true; timer = setTimeout(tick, 1400); return }
+      if (deleting && ch === 0) { deleting = false; sample = (sample + 1) % SEARCH_SAMPLES.length }
+      timer = setTimeout(tick, deleting ? 55 : 110)
+    }
+    timer = setTimeout(tick, 500)
+    return () => clearTimeout(timer)
+  }, [search]);
+
   // 🚀 Calculate Live Revenue Stats
   const stats = useMemo(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
@@ -226,6 +306,55 @@ export default function AdminTransactions() {
 
   const handlePrint = () => window.print()
   const printDate   = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
+  const printTime   = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })
+
+  // Everything below feeds the printed report only; the on-screen view is untouched.
+  const peso = n => `₱${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+  // Count and total the filtered transactions by payment status.
+  const statusCounts = filtered.reduce((m, t) => {
+    m[t.payment_status] = (m[t.payment_status] || 0) + 1
+    return m
+  }, {})
+  const valueOf = status => filtered.filter(t => t.payment_status === status).reduce((s, t) => s + (Number(t.total_price) || 0), 0)
+  const paidValue     = valueOf("Paid")
+  const pendingValue  = valueOf("Pending")
+  const refundedValue = valueOf("Refunded")
+  const grossValue    = filtered.reduce((s, t) => s + (Number(t.total_price) || 0), 0)
+  const knownTotal = PRINT_STATUS_META.reduce((s, m) => s + (statusCounts[m.key] || 0), 0)
+  const otherCount = Math.max(0, filtered.length - knownTotal)
+  const pct = n => (filtered.length ? (n / filtered.length) * 100 : 0)
+
+  // Group the filtered transactions by payment status, in the order above,
+  // with a value subtotal per group, for the printed table.
+  const printGroups = (() => {
+    const map = new Map()
+    filtered.forEach(t => {
+      const k = t.payment_status
+      if (!map.has(k)) map.set(k, [])
+      map.get(k).push(t)
+    })
+    const orderOf = k => {
+      const i = PRINT_STATUS_META.findIndex(m => m.key === k)
+      return i === -1 ? 99 : i
+    }
+    return Array.from(map.entries())
+      .sort((a, b) => orderOf(a[0]) - orderOf(b[0]) || a[0].localeCompare(b[0]))
+      .map(([key, items]) => ({
+        label: PRINT_STATUS_META.find(m => m.key === key)?.label || key,
+        items,
+        value: items.reduce((s, t) => s + (Number(t.total_price) || 0), 0),
+      }))
+  })()
+
+  // One-line summary of the filters actually applied, printed under the title.
+  const printScope = [
+    dateFilter !== "All Time" ? `Period: ${dateFilter}` : "All Time",
+    methodFilter !== "Method: All" ? `Method: ${methodFilter}` : "All Methods",
+    statusFilter !== "Status: All" ? `Status: ${statusFilter}` : "All Statuses",
+    search ? `Search: "${search}"` : null,
+    `${filtered.length} transaction${filtered.length === 1 ? "" : "s"}`,
+  ].filter(Boolean).join("   ·   ")
 
   const handleCSV = () => {
     const headers = COLS.slice(0, -1); // Exclude "Action"
@@ -240,33 +369,194 @@ export default function AdminTransactions() {
     a.click(); URL.revokeObjectURL(a.href)
   }
 
+  // While the first fetch is running, show the flower loader instead of an empty table.
+  if (loading) {
+    return (
+      <div className="space-y-5">
+        <div>
+          <p className="text-sm font-medium" style={{ color: subTxt }}>Revenue overview</p>
+          <span className="text-4xl font-bold" style={{ color: isDark ? "#4ade80" : DG }}>—</span>
+        </div>
+        <FlowerLoader message="Loading transactions..." isDark={isDark} />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
-      {/* ── Print styles ── */}
+      {/* Print styles. The screen UI is hidden on paper (.no-print) and the
+          .print-only blocks render only when printing. Sections in order:
+          1 letterhead  2 title + scope  3 summary cards
+          4 status distribution  5 grouped detail table  6 footer/signatures */}
       <style>{`
+        .print-only { display: none; }
+
+        /* Gentle fade + rise so content eases in once loaded instead of flashing.
+           Not reset for print, so returning from the print dialog never replays it. */
+        @keyframes txnRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .txn-rise { animation: txnRise 0.85s ease-out both; }
+
         @media print {
+          @page { margin: 12mm 10mm; }
           body * { visibility: hidden !important; }
           #transactions-print-area, #transactions-print-area * { visibility: visible !important; }
           #transactions-print-area {
-            position: absolute; top: 0; left: 0; width: 100%; padding: 24px; font-family: sans-serif;
+            position: absolute; top: 0; left: 0; width: 100%;
+            font-family: "Helvetica Neue", Arial, sans-serif; color: #1f2937;
           }
           .no-print { display: none !important; }
           .print-only { display: block !important; }
-          #transactions-print-area table { width: 100%; border-collapse: collapse; margin-top: 16px; }
-          #transactions-print-area th {
-            background: #f0fdf4 !important; color: #0C573E !important;
-            border: 1px solid #d1d5db; padding: 8px 10px;
-            text-align: left; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em;
+          .print-letterhead, .print-doc-title, .print-summary, .print-health { break-inside: avoid; page-break-inside: avoid; }
+
+          /* 1. Letterhead: brand band */
+          .print-letterhead {
+            display: flex !important; align-items: center; justify-content: space-between; gap: 16px;
+            padding: 13px 18px; border-radius: 12px;
+            background: linear-gradient(135deg,#0C573E 0%,#15724B 55%,#2E8B34 100%) !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
           }
-          #transactions-print-area td { border: 1px solid #e5e7eb; padding: 8px 10px; font-size: 12px; color: #111827; }
-          #transactions-print-area tr:nth-child(even) td { background: #f9fafb !important; }
-          .print-footer { margin-top: 20px; font-size: 11px; color: #6b7280; border-top: 1px solid #e5e7eb; padding-top: 10px; }
+          .print-logo-word {
+            height: 34px; width: auto; max-width: 240px; display: block;
+            object-fit: contain; filter: brightness(0) invert(1);
+          }
+          .print-tagline {
+            margin: 5px 0 0; font-size: 8px; font-weight: 700;
+            letter-spacing: 0.3em; text-transform: uppercase; color: rgba(255,255,255,0.82) !important;
+          }
+          .print-meta { text-align: right; flex-shrink: 0; }
+          .print-meta .ref {
+            display: inline-block; margin: 0; padding: 3px 10px; border-radius: 9999px;
+            border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.12) !important;
+            color: #ffffff !important; font-size: 8.5px; font-weight: 700;
+            letter-spacing: 0.12em; text-transform: uppercase;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-meta .gen { margin: 6px 0 0; font-size: 9px; color: rgba(255,255,255,0.85) !important; }
+          .print-meta .gen strong { color: #ffffff !important; font-weight: 700; }
+
+          /* 2. Document title + report scope */
+          .print-doc-title { display: flex !important; flex-direction: column; align-items: center; margin: 16px 0 2px; }
+          .print-doc-title .t {
+            margin: 0; font-size: 15px; font-weight: 800;
+            letter-spacing: 0.3em; text-transform: uppercase; color: #0C573E !important;
+          }
+          .print-doc-title .rule {
+            width: 54px; height: 3px; border-radius: 9999px; margin: 7px 0 6px;
+            background: linear-gradient(90deg,#0C573E,#2E8B34) !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-doc-title .scope { margin: 0; font-size: 9px; color: #6b7280 !important; letter-spacing: 0.02em; text-align: center; }
+
+          /* 3. Summary cards */
+          .print-summary { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 0; }
+          .print-summary-card {
+            border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px;
+            background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-summary-card.c-total   { border-top-color: #0C573E !important; }
+          .print-summary-card.c-paid    { border-top-color: #2E8B34 !important; }
+          .print-summary-card.c-pending { border-top-color: #d97706 !important; }
+          .print-summary-card.c-refund  { border-top-color: #dc2626 !important; }
+          .print-summary-card .label { margin: 0; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9ca3af !important; }
+          .print-summary-card .value { margin: 3px 0 0; font-size: 18px; font-weight: 800; color: #111827 !important; }
+          .print-summary-card .value.green { color: #16a34a !important; }
+          .print-summary-card .value.amber { color: #d97706 !important; }
+          .print-summary-card .value.red   { color: #dc2626 !important; }
+          .print-summary-card .cap { margin: 3px 0 0; font-size: 8px; color: #9ca3af !important; }
+
+          /* 4. Status distribution */
+          .print-health {
+            margin: 10px 0 0; border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 12px 11px;
+            background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-health .head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; }
+          .print-health .hk { margin: 0; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9ca3af !important; }
+          .print-health .hv { margin: 0; font-size: 8.5px; color: #6b7280 !important; }
+          .print-health .bar {
+            display: flex; height: 10px; border-radius: 9999px; overflow: hidden;
+            background: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-health .seg { display: block; height: 100%; }
+          .print-health .s-paid     { background: #16a34a !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .s-pending  { background: #d97706 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .s-failed   { background: #dc2626 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .s-refunded { background: #7c3aed !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .s-other    { background: #94a3b8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-health .legend { display: flex; flex-wrap: wrap; gap: 12px 16px; margin: 7px 0 0; }
+          .print-health .li { display: flex; align-items: center; gap: 5px; font-size: 8.5px; color: #374151 !important; }
+          .print-health .dot { width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; }
+
+          /* 5. Detail table (grouped by payment status) */
+          .print-detail { display: block !important; margin-top: 14px; }
+          .print-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; padding: 0 2px; }
+          .print-section-title { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #0C573E !important; }
+          .print-section-sub { margin: 0; font-size: 8.5px; color: #9ca3af !important; }
+          .print-detail .twrap { border: 1px solid #dbe3df; border-radius: 10px; overflow: hidden; }
+          .print-detail table { width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; }
+          .print-detail thead { display: table-header-group; }
+          .print-detail tr { page-break-inside: avoid; }
+          .print-detail th {
+            background: #0C573E !important; color: #ffffff !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            border: none; padding: 7px; text-align: left;
+            font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; line-height: 1.25;
+          }
+          .print-detail th.col-idx    { width: 4%; }
+          .print-detail th.col-id     { width: 12%; }
+          .print-detail th.col-cust   { width: 22%; }
+          .print-detail th.col-ref    { width: 18%; }
+          .print-detail th.col-method { width: 12%; }
+          .print-detail th.col-date   { width: 18%; }
+          .print-detail th.col-total  { width: 14%; }
+          .print-detail td {
+            border-bottom: 1px solid #eef1f4; padding: 6.5px 7px;
+            font-size: 9.5px; color: #1f2937 !important; vertical-align: top;
+            word-break: break-word; overflow-wrap: anywhere;
+          }
+          .print-detail .num { text-align: right; }
+          .print-detail .nowrap { white-space: nowrap !important; }
+          .print-detail .muted { color: #6b7280 !important; }
+          .print-detail .mono { font-family: "Courier New", Courier, monospace; font-size: 8.5px; }
+          .print-detail tr.alt td { background: #f7faf8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-detail tbody tr:last-child td { border-bottom: none; }
+
+          /* status section rows */
+          .print-detail tr.cat-row { page-break-after: avoid; break-after: avoid; }
+          .print-detail tr.cat-row td {
+            background: #eaf5ee !important; color: #0C573E !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            border-top: 1px solid #d8ebdd; border-bottom: 1px solid #d8ebdd;
+            padding: 6px 8px; font-size: 8.5px; font-weight: 800;
+            letter-spacing: 0.08em; text-transform: uppercase;
+          }
+          .print-detail tr.cat-row .cat-meta {
+            float: right; font-weight: 600; letter-spacing: 0;
+            text-transform: none; color: #15724B !important;
+          }
+
+          /* report total row */
+          .print-detail tr.grand td {
+            background: #0C573E !important; color: #ffffff !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            border: none; padding: 8px 7px; font-size: 9.5px; font-weight: 800;
+          }
+
+          /* 6. Footer + signatures */
+          .print-footer {
+            display: flex !important; align-items: flex-end; justify-content: space-between; gap: 24px;
+            margin-top: 20px; padding-top: 11px; border-top: 2px solid #e5e7eb;
+          }
+          .print-footer .note { margin: 0; font-size: 8.5px; color: #9ca3af !important; max-width: 46%; line-height: 1.55; }
+          .print-footer .note strong { color: #6b7280 !important; }
+          .print-signs { display: flex; gap: 34px; }
+          .print-sign { text-align: center; }
+          .print-sign .line { width: 170px; border-top: 1px solid #6b7280; margin: 20px 0 5px; }
+          .print-sign .cap { margin: 0; font-size: 8.5px; color: #6b7280 !important; text-transform: uppercase; letter-spacing: 0.1em; }
         }
-        .print-only { display: none; }
       `}</style>
 
       {/* ── Heading ── */}
-      <div className="no-print flex items-center justify-between flex-wrap gap-3">
+      <div className={`no-print flex items-center justify-between flex-wrap gap-3 ${entered ? "" : "txn-rise"}`}>
         <div>
           <p className="text-sm font-medium" style={{ color: subTxt }}>Revenue overview</p>
           <div className="flex items-baseline gap-3 mt-0.5">
@@ -281,9 +571,9 @@ export default function AdminTransactions() {
       </div>
 
       {/* ── Stat cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 no-print">
+      <div className={`grid grid-cols-1 sm:grid-cols-3 gap-3 no-print ${entered ? "" : "txn-rise"}`} style={{ animationDelay: "0.18s" }}>
         {STAT_CARDS.map(c => (
-          <div key={c.label} className="rounded-xl p-4 sm:p-5 transition-all"
+          <div key={c.label} className="rounded-xl p-4 sm:p-5 transition-transform duration-200 hover:scale-[1.02]"
             style={{
               background: c.green ? "linear-gradient(135deg,#0a4a34 0%,#1a7040 60%,#2E8B34 100%)" : isDark ? "#1a2332" : "white",
               border: c.green ? "none" : `1px solid ${isDark ? "#2d3748" : "#e8edf2"}`,
@@ -305,24 +595,81 @@ export default function AdminTransactions() {
 
       {/* ── Printable area ── */}
       <div id="transactions-print-area">
-        <div className="print-only" style={{ marginBottom: "16px" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <h1 style={{ fontSize: "18px", fontWeight: 700, color: "#0C573E", margin: 0 }}>Esting's Flower International Inc.</h1>
-              <h2 style={{ fontSize: "14px", fontWeight: 600, color: "#374151", margin: "4px 0 0" }}>Transactions Report</h2>
-            </div>
-            <div style={{ textAlign: "right", fontSize: "11px", color: "#6b7280" }}>
-              <p style={{ margin: 0 }}>Generated: {printDate}</p>
-              <p style={{ margin: "2px 0 0" }}>Period: {dateFilter} | Type: {typeFilter} | Method: {methodFilter}</p>
-              <p style={{ margin: "2px 0 0" }}>Status: {statusFilter}</p>
-            </div>
+
+        {/* Print 1: letterhead brand band */}
+        <div className="print-only print-letterhead">
+          <div>
+            <img className="print-logo-word" src={estingsWordmark} alt="Esting's Flower International Inc." />
+            <p className="print-tagline">Flower International Inc.</p>
           </div>
-          <div style={{ height: "2px", background: "linear-gradient(90deg,#0C573E,#2E8B34)", marginTop: "12px", borderRadius: "2px" }} />
+          <div className="print-meta">
+            <p className="ref">Ref: TXN-{new Date().toISOString().slice(0,10).replace(/-/g,"")}</p>
+            <p className="gen">Generated <strong>{printDate}</strong> at <strong>{printTime}</strong></p>
+          </div>
         </div>
 
-        {/* Table card */}
-        <div className="rounded-xl overflow-hidden"
-          style={{ border: `1px solid ${cardBdr}`, backgroundColor: cardBg, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
+        {/* Print 2: document title + report scope */}
+        <div className="print-only print-doc-title">
+          <p className="t">Transactions Report</p>
+          <span className="rule" />
+          <p className="scope">{printScope}</p>
+        </div>
+
+        {/* Print 3: summary cards (current view) */}
+        <div className="print-only print-summary">
+          <div className="print-summary-card c-total">
+            <p className="label">Total Transactions</p>
+            <p className="value">{filtered.length}</p>
+            <p className="cap">Across {dateFilter === "All Time" ? "all time" : dateFilter.toLowerCase()}</p>
+          </div>
+          <div className="print-summary-card c-paid">
+            <p className="label">Total Collected</p>
+            <p className="value green">{peso(paidValue)}</p>
+            <p className="cap">{statusCounts["Paid"] || 0} paid</p>
+          </div>
+          <div className="print-summary-card c-pending">
+            <p className="label">Pending</p>
+            <p className="value amber">{peso(pendingValue)}</p>
+            <p className="cap">{statusCounts["Pending"] || 0} awaiting payment</p>
+          </div>
+          <div className="print-summary-card c-refund">
+            <p className="label">Refunded</p>
+            <p className="value red">{peso(refundedValue)}</p>
+            <p className="cap">{statusCounts["Refunded"] || 0} reversed</p>
+          </div>
+        </div>
+
+        {/* Print 4: payment status distribution */}
+        {filtered.length > 0 && (
+          <div className="print-only print-health">
+            <div className="head">
+              <p className="hk">Payment Status Distribution</p>
+              <p className="hv">{peso(grossValue)} gross value</p>
+            </div>
+            <div className="bar">
+              {PRINT_STATUS_META.map(m => {
+                const n = statusCounts[m.key] || 0
+                return n > 0 ? <span key={m.key} className={`seg ${m.cls}`} style={{ width: `${pct(n)}%` }} /> : null
+              })}
+              {otherCount > 0 && <span className="seg s-other" style={{ width: `${pct(otherCount)}%` }} />}
+            </div>
+            <div className="legend">
+              {PRINT_STATUS_META.map(m => {
+                const n = statusCounts[m.key] || 0
+                return n > 0 ? (
+                  <span key={m.key} className="li"><span className="dot" style={{ backgroundColor: m.dot }} />{m.label} · {n} ({pct(n).toFixed(0)}%)</span>
+                ) : null
+              })}
+              {otherCount > 0 && (
+                <span className="li"><span className="dot" style={{ backgroundColor: "#94a3b8" }} />Other · {otherCount} ({pct(otherCount).toFixed(0)}%)</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Screen table card (interactive; never printed) */}
+        <div className={`no-print rounded-xl overflow-hidden ${entered ? "" : "txn-rise"}`}
+          style={{ border: `1px solid ${cardBdr}`, backgroundColor: cardBg, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)", animationDelay: "0.36s" }}>
 
           {/* Toolbar */}
           <div className="p-3 sm:p-4 no-print" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
@@ -335,7 +682,7 @@ export default function AdminTransactions() {
                 <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
                 </svg>
-                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search Reference or Customer"
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder={search ? "" : `${phText}|`}
                   className="w-full pl-9 pr-4 py-2 text-sm border rounded-md outline-none transition-all"
                   style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}
                   onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = "0 0 0 2px rgba(74,222,128,0.18)" }}
@@ -400,6 +747,84 @@ export default function AdminTransactions() {
           <div className="flex items-center justify-between px-4 sm:px-5 py-3 flex-wrap gap-2 no-print"
             style={{ borderTop: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
             <span className="text-sm" style={{ color: subTxt }}>Showing {filtered.length} transactions</span>
+          </div>
+        </div>
+
+        {/* Print 5: full detail table, grouped by payment status.
+            Prints EVERY filtered transaction, with per-status subtotals and a report total. */}
+        <div className="print-only print-detail">
+          <div className="print-section-head">
+            <p className="print-section-title">Transaction Detail</p>
+            <p className="print-section-sub">Grouped by payment status · totals include all listed transactions</p>
+          </div>
+          <div className="twrap">
+            <table>
+              <thead>
+                <tr>
+                  <th className="col-idx num">#</th>
+                  <th className="col-id">Transaction ID</th>
+                  <th className="col-cust">Customer</th>
+                  <th className="col-ref">Reference</th>
+                  <th className="col-method">Method</th>
+                  <th className="col-date">Date &amp; Time</th>
+                  <th className="col-total num">Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr><td colSpan={7} style={{ textAlign: "center", padding: "18px 8px" }}>No transactions match the current filters.</td></tr>
+                ) : (() => {
+                  let n = 0
+                  return printGroups.map(g => (
+                    <Fragment key={g.label}>
+                      <tr className="cat-row">
+                        <td colSpan={7}>
+                          <span>{g.label} ({g.items.length})</span>
+                          <span className="cat-meta">{peso(g.value)}</span>
+                        </td>
+                      </tr>
+                      {g.items.map((t, i) => {
+                        n += 1
+                        return (
+                          <tr key={t.id} className={i % 2 === 1 ? "alt" : ""}>
+                            <td className="num nowrap muted">{n}</td>
+                            <td className="mono">#{String(t.id).slice(0, 8)}</td>
+                            <td>{t.customer_name || "—"}</td>
+                            <td className="mono muted">{t.payment_reference || "—"}</td>
+                            <td className="muted">{t.payment_method}</td>
+                            <td className="muted nowrap">{new Date(t.created_at).toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
+                            <td className="num nowrap">{peso(t.total_price)}</td>
+                          </tr>
+                        )
+                      })}
+                    </Fragment>
+                  ))
+                })()}
+                {filtered.length > 0 && (
+                  <tr className="grand">
+                    <td colSpan={6}>Report Total · {filtered.length} transaction{filtered.length === 1 ? "" : "s"} (all statuses)</td>
+                    <td className="num nowrap">{peso(grossValue)}</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Print 6: footer + signature lines */}
+        <div className="print-only print-footer">
+          <p className="note">
+            <strong>Esting's Flower International Inc.</strong> Confidential. This report is generated for internal use only and reflects transaction records as of the date and time indicated above. Figures are based on the filters applied at the time of printing.
+          </p>
+          <div className="print-signs">
+            <div className="print-sign">
+              <div className="line" />
+              <p className="cap">Prepared by</p>
+            </div>
+            <div className="print-sign">
+              <div className="line" />
+              <p className="cap">Reviewed by</p>
+            </div>
           </div>
         </div>
       </div>

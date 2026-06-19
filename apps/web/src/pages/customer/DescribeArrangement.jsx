@@ -371,7 +371,7 @@ export default function DescribeArrangement({ onNavigate }) {
     <div className="min-h-screen flex items-start justify-center" style={{ background: pageBg }}>
       <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
 
-        <div className="text-center mb-6">
+        <div className="text-center mb-6" style={{ animation: "daRise 0.6s ease 0.05s both" }}>
           <p className="inline-flex items-center gap-2 text-xs sm:text-sm font-bold tracking-[0.2em] uppercase mb-2" style={{ color: accentG }}>
             <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#f472b6" }} />
             Make It Personal
@@ -388,7 +388,7 @@ export default function DescribeArrangement({ onNavigate }) {
         <div className="grid lg:grid-cols-[1fr_320px] gap-6">
 
           {/* ── Left column ── */}
-          <div className="space-y-5">
+          <div className="space-y-5" style={{ animation: "daRise 0.6s ease 0.16s both" }}>
             <div className="backdrop-blur-sm border rounded-3xl p-6 sm:p-7"
               style={{ backgroundColor: cardBg, borderColor: cardBdr, boxShadow: cardShadow }}>
               <div className="flex items-center gap-2.5 mb-1.5">
@@ -951,7 +951,7 @@ export default function DescribeArrangement({ onNavigate }) {
 
           {/* Prompt Tips Sidebar */}
           <div className="backdrop-blur-sm border rounded-3xl p-7 self-start"
-            style={{ backgroundColor: cardBg, borderColor: cardBdr, boxShadow: isDark ? "0 12px 40px rgba(0,0,0,0.4)" : "0 12px 40px rgba(12,87,62,0.06)" }}>
+            style={{ backgroundColor: cardBg, borderColor: cardBdr, boxShadow: isDark ? "0 12px 40px rgba(0,0,0,0.4)" : "0 12px 40px rgba(12,87,62,0.06)", animation: "daRise 0.6s ease 0.26s both" }}>
             <div className="flex items-center gap-2.5 mb-5">
               <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: iconCircleBg, color: accentG }}>
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round">
@@ -1044,6 +1044,7 @@ export default function DescribeArrangement({ onNavigate }) {
 
     <style>{`
       @keyframes daPop  { from { opacity:0; transform:scale(0.94) translateY(10px); } to { opacity:1; transform:scale(1) translateY(0); } }
+      @keyframes daRise { from { opacity:0; transform:translateY(18px); } to { opacity:1; transform:translateY(0); } }
       @keyframes daFade { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
       @keyframes daSpin { to { transform:rotate(360deg); } }
       @keyframes daBob  { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-3px); } }

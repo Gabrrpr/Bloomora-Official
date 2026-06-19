@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 
 export default function AdPopup({ onClose }) {
   const [hiding, setHiding] = useState(false)
+  const [visible, setVisible] = useState(false)
   const [imageSrc, setImageSrc] = useState(null)
 
   useEffect(() => {
@@ -17,34 +18,40 @@ export default function AdPopup({ onClose }) {
     }
   }, [])
 
+  // Trigger the entrance transition on the next frame so it eases in from hidden
+  // (a value set on first mount won't animate).
+  useEffect(() => {
+    if (!imageSrc) return
+    const id = requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)))
+    return () => cancelAnimationFrame(id)
+  }, [imageSrc])
+
   const dismiss = () => {
     setHiding(true)
     setTimeout(() => {
       if (onClose) onClose();
-    }, 350)
+    }, 500)
   }
 
   if (!imageSrc) return null // Don't render until we know what image to show
 
   return (
     <div
-      className="fixed inset-0 z-[200] flex items-center justify-center px-4"
+      className="fixed inset-0 z-[200] flex items-center justify-center px-4 pt-20 sm:pt-28"
       style={{
-        backgroundColor: hiding ? "rgba(0,0,0,0)" : "rgba(0,0,0,0.6)",
-        backdropFilter:  hiding ? "blur(0px)" : "blur(4px)",
-        transition: "background-color 0.35s ease, backdrop-filter 0.35s ease",
+        backgroundColor:        (visible && !hiding) ? "rgba(0,0,0,0.6)" : "rgba(0,0,0,0)",
+        backdropFilter:         (visible && !hiding) ? "blur(4px)" : "blur(0px)",
+        WebkitBackdropFilter:   (visible && !hiding) ? "blur(4px)" : "blur(0px)",
+        transition: "background-color 0.5s ease, backdrop-filter 0.5s ease, -webkit-backdrop-filter 0.5s ease",
       }}
       onClick={dismiss}
     >
-      <style>{`
-        @keyframes adFadeIn  { from { opacity:0; transform:scale(0.92) translateY(20px); } to { opacity:1; transform:scale(1) translateY(0); } }
-        @keyframes adFadeOut { from { opacity:1; transform:scale(1); } to { opacity:0; transform:scale(0.94); } }
-      `}</style>
-
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          animation: hiding ? "adFadeOut 0.35s ease forwards" : "adFadeIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards",
+          opacity: (visible && !hiding) ? 1 : 0,
+          transform: (visible && !hiding) ? "scale(1) translateY(0)" : "scale(0.96) translateY(16px)",
+          transition: "opacity 0.5s ease, transform 0.55s cubic-bezier(0.22,1,0.36,1)",
           position: "relative",
           maxWidth: "680px",
           width: "100%",

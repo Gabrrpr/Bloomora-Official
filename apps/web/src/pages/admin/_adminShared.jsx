@@ -75,7 +75,7 @@ export function ExportBtn({ onClick }) {
 export function StatCard({ label, value, sub, trend, trendValue, alert }) {
   const t = useTokens()
   return (
-    <div className="p-5 rounded-xl border shadow-sm transition-all relative"
+    <div className="p-5 rounded-xl border shadow-sm transition-all duration-200 hover:scale-[1.02] relative"
       style={{ backgroundColor: t.cardBg, borderColor: alert ? "#fca5a5" : t.cardBorder, boxShadow: t.cardShadow }}>
       <div className="flex justify-between items-start">
         <div>
@@ -104,7 +104,7 @@ export function GreenCard({ label, sublabel, value, prefix = "", sub, subColor, 
   return (
     <div className="rounded-xl p-5 relative overflow-hidden transition-all duration-200 cursor-default select-none"
       style={{ background: "linear-gradient(135deg,#0a4a34 0%,#1a7040 60%,#2E8B34 100%)", boxShadow: "0 4px 16px rgba(12,87,62,0.30)" }}
-      onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(12,87,62,0.38)" }}
+      onMouseEnter={e => { e.currentTarget.style.transform = "scale(1.02)"; e.currentTarget.style.boxShadow = "0 8px 24px rgba(12,87,62,0.38)" }}
       onMouseLeave={e => { e.currentTarget.style.transform = ""; e.currentTarget.style.boxShadow = "0 4px 16px rgba(12,87,62,0.30)" }}>
       <div className="absolute inset-0 opacity-5" style={{ backgroundImage: "radial-gradient(circle at 80% 20%,white 1px,transparent 1px)", backgroundSize: "20px 20px" }} />
       <div className="relative">

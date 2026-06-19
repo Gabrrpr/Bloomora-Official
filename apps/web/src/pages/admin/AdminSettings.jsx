@@ -57,14 +57,15 @@ function useTokens() {
   }
 }
 
-function SectionCard({ title, subtitle, icon, children, danger }) {
+function SectionCard({ title, subtitle, icon, children, danger, className = "", style }) {
   const t = useTokens()
   return (
-    <div className="rounded-xl overflow-hidden"
+    <div className={`rounded-xl overflow-hidden ${className}`}
       style={{
         backgroundColor: danger ? (t.isDark ? "#1a0f0f" : "#ffffff") : t.cardBg,
         border: `1px solid ${danger ? (t.isDark ? "#7f1d1d" : "#fecaca") : t.cardBdr}`,
         boxShadow: t.cardShadow,
+        ...style,
       }}>
       <div className="flex items-center gap-3 px-5 py-4"
         style={{
@@ -177,10 +178,12 @@ function SaveBtn({ onClick, saved }) {
 
 export default function AdminSettings() {
   const t = useTokens()
+  // Drives the one-time entrance animation; removed after it plays so it never replays.
+  const [entered, setEntered] = useState(false)
 
   const [storeName, setStoreName]   = useState("Esting's Flower International Inc.")
   const [storeEmail, setStoreEmail] = useState("estings@gmail.com")
-  const [storePhone, setStorePhone] = useState("+63 9XX XXX XXXX")
+  const [storePhone, setStorePhone] = useState("")
   const [branch, setBranch]         = useState("Manila")
   const [storeSaved, setStoreSaved] = useState(false)
 
@@ -230,6 +233,12 @@ export default function AdminSettings() {
       .catch(() => setCustomizationEnabled(true))
   }, [])
 
+  // Play the entrance animation once on mount, then turn it off.
+  useEffect(() => {
+    const timer = setTimeout(() => setEntered(true), 1500)
+    return () => clearTimeout(timer)
+  }, [])
+
   const handleToggleCustomization = async () => {
     setToggleLoading(true)
     try {
@@ -246,9 +255,15 @@ export default function AdminSettings() {
 
   return (
     <div className="space-y-5">
-      <h1 className="text-xl font-bold" style={{ color: t.bodyTxt }}>Settings</h1>
+      {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
+      <style>{`
+        @keyframes settingsRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .settings-rise { animation: settingsRise 0.85s ease-out both; }
+      `}</style>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
+      <h1 className={`text-xl font-bold ${entered ? "" : "settings-rise"}`} style={{ color: t.bodyTxt }}>Settings</h1>
+
+      <div className={`grid grid-cols-1 xl:grid-cols-2 gap-5 ${entered ? "" : "settings-rise"}`} style={{ animationDelay: "0.12s" }}>
 
         {/* Store Information */}
         <SectionCard title="Store Information" subtitle="Basic details about your business"
@@ -261,7 +276,7 @@ export default function AdminSettings() {
               <Input type="email" value={storeEmail} onChange={setStoreEmail} />
             </Field>
             <Field label="Contact Phone">
-              <Input value={storePhone} onChange={setStorePhone} />
+              <Input value={storePhone} onChange={setStorePhone} placeholder="+63 9XX XXX XXXX" />
             </Field>
           </div>
           <Field label="Primary Branch">
@@ -270,12 +285,9 @@ export default function AdminSettings() {
           <Field label="Additional Branches">
             <div className="flex flex-wrap gap-2">
               {["Manila","Pampanga"].map(b => (
-                <span key={b} className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md"
+                <span key={b} className="px-3 py-1.5 text-xs font-semibold rounded-md"
                   style={{ backgroundColor: t.tagBg, color: t.tagTxt, border: `1px solid ${t.tagBdr}` }}>
                   {b}
-                  <button className="w-3 h-3 transition-colors" style={{ color: t.isDark ? "#4ade80" : "#86efac" }}
-                    onMouseEnter={e => e.currentTarget.style.color = "#f87171"}
-                    onMouseLeave={e => e.currentTarget.style.color = t.isDark ? "#4ade80" : "#86efac"}>×</button>
                 </span>
               ))}
             </div>
@@ -365,6 +377,7 @@ export default function AdminSettings() {
 
       {/* Site Features */}
       <SectionCard title="Site Features" subtitle="Control which features are available to customers"
+        className={entered ? "" : "settings-rise"} style={{ animationDelay: "0.24s" }}
         icon="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z">
         <Toggle
           checked={customizationEnabled}
@@ -379,6 +392,7 @@ export default function AdminSettings() {
 
       {/* Account Security */}
       <SectionCard title="Account Security" subtitle="Update your password to keep your account secure"
+        className={entered ? "" : "settings-rise"} style={{ animationDelay: "0.36s" }}
         icon="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Field label="Current Password">
@@ -399,7 +413,7 @@ export default function AdminSettings() {
             {pwdError}
           </p>
         )}
-        <div className="flex items-center justify-between pt-1">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
           <p className="text-sm" style={{ color: t.subTxt }}>Use at least 8 characters with letters and numbers.</p>
           <SaveBtn onClick={savePassword} saved={pwdSaved} />
         </div>
@@ -407,6 +421,7 @@ export default function AdminSettings() {
 
       {/* Danger Zone */}
       <SectionCard danger title="Danger Zone" subtitle="These actions are irreversible. Please proceed with caution."
+        className={entered ? "" : "settings-rise"} style={{ animationDelay: "0.48s" }}
         icon="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z">
         <div className="flex items-center justify-between">
           <div>

@@ -15,8 +15,8 @@ export default function Settings({ onNavigate }) {
     </button>
   )
 
-  const Section = ({ title, children }) => (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-4">
+  const Section = ({ title, children, delay = 0 }) => (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 mb-4" style={{ animation: `pageRise 0.5s ease ${delay}s both` }}>
       <h3 className="font-bold text-gray-800 mb-4">{title}</h3>
       <div className="space-y-4">{children}</div>
     </div>
@@ -34,15 +34,16 @@ export default function Settings({ onNavigate }) {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      <style>{`@keyframes pageRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}`}</style>
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-10">
-        <button onClick={() => onNavigate("home")} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6 transition">
+        <button onClick={() => onNavigate("home")} style={{ animation:"pageRise 0.5s ease 0.05s both" }} className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-6 transition">
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
           Back
         </button>
 
-        <h1 className="text-2xl font-bold text-gray-800 mb-6">Settings</h1>
+        <h1 className="text-2xl font-bold text-gray-800 mb-6" style={{ animation:"pageRise 0.5s ease 0.12s both" }}>Settings</h1>
 
-        <Section title="Notifications">
+        <Section title="Notifications" delay={0.18}>
           <Row label="Email Notifications" desc="Receive order confirmations and updates via email">
             <Toggle checked={notifications.email} onChange={v => setNotifications({...notifications, email: v})} />
           </Row>
@@ -57,7 +58,7 @@ export default function Settings({ onNavigate }) {
           </Row>
         </Section>
 
-        <Section title="Privacy">
+        <Section title="Privacy" delay={0.28}>
           <Row label="Public Profile" desc="Allow others to see your profile and flower collections">
             <Toggle checked={privacy.publicProfile} onChange={v => setPrivacy({...privacy, publicProfile: v})} />
           </Row>
@@ -66,7 +67,7 @@ export default function Settings({ onNavigate }) {
           </Row>
         </Section>
 
-        <Section title="Account">
+        <Section title="Account" delay={0.38}>
           <Row label="Change Password" desc="Update your account password">
             <button onClick={() => onNavigate("forgot-password")} className="text-sm font-semibold px-4 py-1.5 rounded-lg border transition hover:bg-gray-50" style={{ borderColor: G, color: G }}>Change</button>
           </Row>
@@ -78,7 +79,7 @@ export default function Settings({ onNavigate }) {
           </Row>
         </Section>
 
-        <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-6">
+        <div className="bg-white rounded-2xl border border-red-100 shadow-sm p-6" style={{ animation:"pageRise 0.5s ease 0.48s both" }}>
           <h3 className="font-bold text-red-500 mb-1">Danger Zone</h3>
           <p className="text-sm text-gray-400 mb-4">These actions are permanent and cannot be undone.</p>
           <div className="flex gap-3 flex-wrap">

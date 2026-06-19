@@ -16,18 +16,18 @@ function formatStatus(s) {
   return s.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
 }
 
-function OrderCard({ order, onNavigate }) {
+function OrderCard({ order, onNavigate, idx = 0 }) {
   const statusKey = (order.status || "pending").toLowerCase()
   const statusColor = STATUS_COLOR[statusKey] || STATUS_COLOR.pending
   const dateStr = order.created_at
     ? new Date(order.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })
-    : "—"
+    : "N/A"
   const isPending = ["pending", "preparing"].includes(statusKey)
   const isDelivered = statusKey === "delivered"
   const isOutForDelivery = statusKey === "out_for_delivery"
 
   return (
-    <div className="bg-white border border-gray-200 rounded-md mb-3 overflow-hidden">
+    <div className="bg-white border border-gray-200 rounded-md mb-3 overflow-hidden" style={{ animation: `ordersRise 0.5s ease ${0.14 + idx * 0.07}s both` }}>
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
         <div className="flex items-center gap-2">
@@ -152,10 +152,11 @@ export default function Orders({ onNavigate }) {
 
   return (
     <div className="min-h-screen bg-gray-100">
+      <style>{`@keyframes ordersRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}`}</style>
       <div className="max-w-3xl mx-auto px-4 py-6">
 
         {/* Tabs */}
-        <div className="bg-white border border-gray-200 rounded-md flex mb-4 overflow-hidden">
+        <div className="bg-white border border-gray-200 rounded-md flex mb-4 overflow-hidden" style={{ animation:"ordersRise 0.5s ease 0.05s both" }}>
           {TABS.map(t => (
             <button
               key={t}
@@ -193,8 +194,8 @@ export default function Orders({ onNavigate }) {
             </button>
           </div>
         ) : (
-          filtered.map(order => (
-            <OrderCard key={order.id} order={order} onNavigate={onNavigate} />
+          filtered.map((order, idx) => (
+            <OrderCard key={order.id} order={order} onNavigate={onNavigate} idx={idx} />
           ))
         )}
 

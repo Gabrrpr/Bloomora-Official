@@ -274,8 +274,10 @@ export default function AdminFAQ() {
   const [dirty, setDirty]             = useState(false)
   const [saved, setSaved]             = useState(false)
   const [editingCatName, setEditingCatName] = useState(false)
+  // Drives the one-time entrance animation; removed after it plays so it never replays.
+  const [entered, setEntered] = useState(false)
 
-  // ─── load + persist ──
+  // Load saved FAQs from local storage on first render.
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
@@ -283,7 +285,13 @@ export default function AdminFAQ() {
         const parsed = JSON.parse(raw)
         if (Array.isArray(parsed) && parsed.length > 0) setFaqs(parsed)
       }
-    } catch { /* ignore */ }
+    } catch { /* ignore bad saved data */ }
+  }, [])
+
+  // Play the entrance animation once on mount, then turn it off.
+  useEffect(() => {
+    const t = setTimeout(() => setEntered(true), 1100)
+    return () => clearTimeout(t)
   }, [])
 
   const activeCat = faqs[activeCatIdx]
@@ -384,11 +392,16 @@ export default function AdminFAQ() {
     markDirty()
   }
 
-  // ─── render ──
   return (
     <div className="space-y-5">
+      {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
+      <style>{`
+        @keyframes faqRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .faq-rise { animation: faqRise 0.85s ease-out both; }
+      `}</style>
+
       {/* header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+      <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${entered ? "" : "faq-rise"}`}>
         <div>
           <h1 className="text-2xl font-bold" style={{ color: t.textPrimary }}>FAQ Editor</h1>
           <p className="text-sm mt-1" style={{ color: t.textSecondary }}>
@@ -424,7 +437,7 @@ export default function AdminFAQ() {
       </div>
 
       {/* main split */}
-      <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_1fr] gap-5">
+      <div className={`grid grid-cols-1 xl:grid-cols-[1.1fr_1fr] gap-5 ${entered ? "" : "faq-rise"}`} style={{ animationDelay: "0.18s" }}>
 
         {/* ── editor column ── */}
         <div className="space-y-4">

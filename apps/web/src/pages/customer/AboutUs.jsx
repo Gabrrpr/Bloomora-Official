@@ -71,9 +71,10 @@ export default function AboutUs({ onNavigate }) {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: pageBg }}>
+      <style>{`@keyframes pageRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}`}</style>
 
-      {/* Hero — image-based, always looks good */}
-      <div className="relative overflow-hidden" style={{ minHeight:"280px" }}>
+      {/* Hero - image-based, always looks good */}
+      <div className="relative overflow-hidden" style={{ minHeight:"280px", animation:"pageRise 0.6s ease 0.05s both" }}>
         <img src={pageBg5} alt="" className="absolute inset-0 w-full h-full object-cover"/>
         <div className="absolute inset-0" style={{ background:"linear-gradient(to right,rgba(12,87,62,0.88) 0%,rgba(12,87,62,0.65) 60%,rgba(12,87,62,0.3) 100%)" }}/>
         <div className="relative z-10 max-w-5xl mx-auto px-6 sm:px-10 py-20">
@@ -90,7 +91,7 @@ export default function AboutUs({ onNavigate }) {
       </div>
 
       {/* Stats bar */}
-      <div style={{ borderBottom:`1px solid ${statsBdr}` }}>
+      <div style={{ borderBottom:`1px solid ${statsBdr}`, animation:"pageRise 0.6s ease 0.16s both" }}>
         <div className="max-w-5xl mx-auto px-6 sm:px-10">
           <div className="grid grid-cols-2 sm:grid-cols-4" style={{ borderBottom:"none" }}>
             {STATS.map(({ num, label }, i) => (
@@ -105,7 +106,7 @@ export default function AboutUs({ onNavigate }) {
       </div>
 
       {/* Story section */}
-      <div className="max-w-5xl mx-auto px-6 sm:px-10 py-20">
+      <div className="max-w-5xl mx-auto px-6 sm:px-10 py-20" style={{ animation:"pageRise 0.6s ease 0.27s both" }}>
         <div className="grid md:grid-cols-2 gap-16 items-start">
 
           {/* Text */}
@@ -117,7 +118,7 @@ export default function AboutUs({ onNavigate }) {
             <div className="space-y-4 text-sm leading-relaxed" style={{ color: bodyC }}>
               <p>Esting's Flower International Inc. started in 1959 in San Fernando, Pampanga, with a simple goal of bringing fresh, meaningful flowers to life's everyday moments.</p>
               <p>Over the years, we were able to serve as concessionaires at the US bases in Clark and Subic, which helped us grow and reach more people. As the business expanded, we also had branches in Angeles and Dolores, along with San Fernando and Manila, each one carrying the same care and dedication that started in our very first shop.</p>
-              <p>Today, the business is being carried forward by the children of the original owners, continuing what was built with love and consistency through the years. Every arrangement is still made by our team with the same attention and care we've always had — fresh flowers, honest craftsmanship, and service people can rely on.</p>
+              <p>Today, the business is being carried forward by the children of the original owners, continuing what was built with love and consistency through the years. Every arrangement is still made by our team with the same attention and care we've always had: fresh flowers, honest craftsmanship, and service people can rely on.</p>
             </div>
           </div>
 
@@ -155,7 +156,7 @@ export default function AboutUs({ onNavigate }) {
       </div>
 
       {/* Values */}
-      <div style={{ backgroundColor: valuesBg }}>
+      <div style={{ backgroundColor: valuesBg, animation:"pageRise 0.6s ease 0.38s both" }}>
         <div className="max-w-5xl mx-auto px-6 sm:px-10 py-20">
           <p className="text-xs font-bold tracking-widest uppercase mb-3" style={{ color: accentG }}>What we stand for</p>
           <h2 className="text-2xl font-bold mb-10" style={{ color: headingC }}>Our values</h2>

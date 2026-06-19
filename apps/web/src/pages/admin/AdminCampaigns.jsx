@@ -5,6 +5,43 @@ import { DG, G, WhiteCard, ActionBtns, EmptyRow, TableWrap, TH, TD } from "./_ad
 
 const PAGE_SIZE = 10
 
+// Animated flower shown while the campaigns are still loading.
+function FlowerLoader({ message = "Loading...", isDark = false }) {
+  const petals = [
+    { angle: 0,   color: "#f48fb1" },
+    { angle: 60,  color: "#ec407a" },
+    { angle: 120, color: "#e91e63" },
+    { angle: 180, color: "#f06292" },
+    { angle: 240, color: "#c2185b" },
+    { angle: 300, color: "#f48fb1" },
+  ]
+  return (
+    <>
+      <style>{`
+        @keyframes adminPetalBloom {
+          0%, 100% { opacity: 0.2; }
+          50%       { opacity: 1;   }
+        }
+      `}</style>
+      <div className="flex flex-col items-center justify-center rounded-xl"
+        style={{ minHeight: "60vh", backgroundColor: isDark ? "#0f172a" : "transparent" }}>
+        <svg width="120" height="120" viewBox="0 0 100 100">
+          {petals.map(({ angle, color }, i) => (
+            <g key={i} transform={`rotate(${angle} 50 50)`}>
+              <ellipse cx="50" cy="27" rx="9.5" ry="21" fill={color}
+                style={{ animation: `adminPetalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`, animationFillMode: "both" }} />
+            </g>
+          ))}
+          <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+          <circle cx="50" cy="50" r="7"  fill="#f9c6d0" />
+          <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+        </svg>
+        <p className="mt-4 text-sm font-medium tracking-wide" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{message}</p>
+      </div>
+    </>
+  )
+}
+
 function FInput({ label, value, onChange, placeholder, type = "text", disabled, isDark, inputBg, inputBdr, inputTxt }) {
   return (
     <div>
@@ -377,6 +414,8 @@ export default function AdminCampaigns() {
   const { isDark } = useTheme()
   const [campaigns, setCampaigns] = useState([])
   const [loading, setLoading]     = useState(true)
+  // One-time entrance animation; dropped once it plays so it never replays.
+  const [entered, setEntered]     = useState(false)
   const [showModal, setShowModal] = useState(false)
   const [modalMode, setModalMode] = useState("create")
   const [activeCampaign, setActiveCampaign] = useState(null)
@@ -430,6 +469,13 @@ export default function AdminCampaigns() {
 
   useEffect(() => { fetchCampaigns(); fetchProducts() }, [])
 
+  // Play the entrance animation once the data has loaded, then turn it off.
+  useEffect(() => {
+    if (loading) { setEntered(false); return }
+    const t = setTimeout(() => setEntered(true), 1300)
+    return () => clearTimeout(t)
+  }, [loading])
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     return campaigns.filter(c => {
@@ -446,8 +492,24 @@ export default function AdminCampaigns() {
 
   useEffect(() => { setPage(1) }, [search, statusFilter])
 
+  // While campaigns are loading, show the flower loader instead of the table.
+  if (loading) {
+    return (
+      <div className="space-y-5">
+        <h1 className="text-xl font-bold" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>Campaigns</h1>
+        <FlowerLoader message="Loading campaigns..." isDark={isDark} />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
+      {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
+      <style>{`
+        @keyframes campRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .camp-rise { animation: campRise 0.85s ease-out both; }
+      `}</style>
+
       {showModal && (
         <AdminCampaignsModal
           mode={modalMode}
@@ -461,7 +523,7 @@ export default function AdminCampaigns() {
       )}
 
       {/* Page header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className={`flex items-center justify-between flex-wrap gap-3 ${entered ? "" : "camp-rise"}`}>
         <h1 className="text-xl font-bold" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>Campaigns</h1>
         <button
           onClick={() => { setModalMode("create"); setActiveCampaign(null); setShowModal(true) }}
@@ -475,7 +537,7 @@ export default function AdminCampaigns() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+      <div className={`grid grid-cols-1 lg:grid-cols-4 gap-3 ${entered ? "" : "camp-rise"}`} style={{ animationDelay: "0.18s" }}>
         <WhiteCard label="Total Campaigns"   value={campaigns.length}                        accentColor="#3b82f6" />
         <WhiteCard label="Active"            value={campaigns.filter(c => c.is_active).length}  accentColor="#22c55e" />
         <WhiteCard label="Inactive"          value={campaigns.filter(c => !c.is_active).length} accentColor="#ef4444" />
@@ -483,8 +545,8 @@ export default function AdminCampaigns() {
       </div>
 
       {/* Table */}
-      <div className="rounded-xl overflow-hidden"
-        style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
+      <div className={`rounded-xl overflow-hidden ${entered ? "" : "camp-rise"}`}
+        style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)", animationDelay: "0.36s" }}>
 
         {/* Toolbar */}
         <div className="p-4" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
