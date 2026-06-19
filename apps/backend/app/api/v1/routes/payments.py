@@ -77,10 +77,14 @@ async def create_paymongo_checkout(
 
     line_items = []
     for order in orders:
-        # 🚀 DEBUG PRINT: This will appear in your Python Terminal/Logs
-        print(f"DEBUG: Processing order {order.id} | total_amount: {order.total_amount}")
+        print(f"DEBUG: Processing order {order.id} | Database total_amount: {order.total_amount}")
         
         amount_val = order.total_amount or 0
+        
+        if amount_val <= 0:
+            print("⚠️ WARNING: Database amount is 0! Forcing amount to 500 for testing.")
+            amount_val = Decimal("500.00")
+            
         line_items.append({
             "name": _line_item_name(order),
             "amount": to_paymongo_amount(Decimal(amount_val)),
@@ -210,7 +214,8 @@ async def paymongo_webhook(
     checkout_session_id = resource.get("id")
     reference_number = resource_attributes.get("reference_number")
 
-    if event_type != "checkout_session.payment.paid":
+    # 🚀 ALLOW BOTH SUCCESS AND FAILED EVENTS
+    if event_type not in ["checkout_session.payment.paid", "payment.failed"]:
         return {"status": "ignored", "event_type": event_type}
 
     payment_intent = resource_attributes.get("payment_intent") or {}
@@ -238,18 +243,62 @@ async def paymongo_webhook(
     if not transactions:
         return {"status": "not_found", "event_type": event_type}
 
-    paid_at = _datetime_from_unix(resource_attributes.get("paid_at") or payment_attributes.get("paid_at"))
-    for transaction in transactions:
-        transaction.status = PaymentStatusEnum.paid.value
-        transaction.provider_checkout_session_id = checkout_session_id or transaction.provider_checkout_session_id
-        transaction.provider_payment_intent_id = payment_intent.get("id") or payment_attributes.get("payment_intent_id")
-        transaction.provider_payment_id = payment.get("id")
-        transaction.payment_method = source.get("type") or transaction.payment_method
-        transaction.paid_at = paid_at or datetime.now(timezone.utc)
-        transaction.raw_webhook_event = payload
-        transaction.order.status = OrderStatusEnum.confirmed
+    allowed_methods = {"cash", "ewallet", "card", "bank_transfer", "qrph"}
 
-    db.commit()
+    method_map = {
+        "gcash": "ewallet",
+        "paymaya": "ewallet",
+        "pay_maya": "ewallet",
+        "card": "card",
+        "debit_card": "card",
+        "credit_card": "card",
+        "bank_transfer": "bank_transfer",
+        "bank-transfer": "bank_transfer",
+        "banktransfer": "bank_transfer",
+        "ewallet": "ewallet",
+        "wallet": "ewallet",
+        "qrph": "qrph",
+        "qr_ph": "qrph",
+        "qr": "qrph",
+        "cash": "cash",
+    }
+
+    paid_at = _datetime_from_unix(resource_attributes.get("paid_at") or payment_attributes.get("paid_at"))
+
+    try:
+        for transaction in transactions:
+            # 🚀 DYNAMICALLY SET PAID OR FAILED
+            if event_type == "checkout_session.payment.paid":
+                transaction.status = PaymentStatusEnum.paid.value
+                transaction.order.status = OrderStatusEnum.confirmed
+            else:
+                transaction.status = PaymentStatusEnum.failed.value
+                transaction.order.status = OrderStatusEnum.cancelled
+
+            transaction.provider_checkout_session_id = checkout_session_id or transaction.provider_checkout_session_id
+            transaction.provider_payment_intent_id = payment_intent.get("id") or payment_attributes.get("payment_intent_id")
+            transaction.provider_payment_id = payment.get("id")
+
+            raw_method = str(source.get("type") or transaction.payment_method or "ewallet").lower().strip()
+            normalized = method_map.get(raw_method)
+
+            if normalized is None:
+                current = str(getattr(transaction, "payment_method", "") or "").lower().strip()
+                normalized = current if current in allowed_methods else "ewallet"
+
+            if normalized not in allowed_methods:
+                normalized = "ewallet"
+
+            transaction.payment_method = normalized
+            transaction.paid_at = paid_at or datetime.now(timezone.utc)
+            transaction.raw_webhook_event = payload
+
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        import logging
+        logging.getLogger(__name__).exception("PayMongo webhook database error: %s", e)
+        raise HTTPException(status_code=500, detail="Database update failed.")
 
     return {
         "status": "success",

@@ -1,18 +1,20 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text, extract, or_
-from datetime import datetime
+from sqlalchemy import func, text, extract, desc
+from datetime import datetime, timezone, timedelta
 from typing import List
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.models.order import Order
-# 🚀 IMPORT TRANSACTION AND PAYMENT ENUMS TO FILTER UNPAID ENTRIES
-from app.models import RoleEnum, Transaction, PaymentStatusEnum
+# 🚀 Added Product import for the trending endpoint
+from app.models import RoleEnum, Transaction, PaymentStatusEnum, Product
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
+# Philippine Timezone (UTC+8)
+PH_TZ = timezone(timedelta(hours=8))
 
 @router.get("/revenue")
 def get_revenue(
@@ -21,23 +23,24 @@ def get_revenue(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # Convert DB UTC time to Asia/Manila for accurate daily/monthly grouping
+    ph_created_at = func.timezone('Asia/Manila', Order.created_at)
+
     if period == "week":
         trunc = "day"
-        date_filter = Order.created_at >= func.now() - text("interval '8 days'")
+        date_filter = ph_created_at >= func.now() - text("interval '8 days'")
     elif period == "month":
         trunc = "month"
-        date_filter = extract("year", Order.created_at) == datetime.now().year
+        date_filter = extract("year", ph_created_at) == datetime.now(PH_TZ).year
     elif period == "year":
         trunc = "year"
         date_filter = None
     else:
         trunc = "day"
-        date_filter = Order.created_at >= func.now() - text("interval '8 days'")
+        date_filter = ph_created_at >= func.now() - text("interval '8 days'")
 
-    # Use date_trunc as the period column — no raw created_at in SELECT
-    period_col = func.date_trunc(trunc, Order.created_at).label("period")
+    period_col = func.date_trunc(trunc, ph_created_at).label("period")
 
-    # 🚀 SECURED JOIN: Only pull orders that are linked to a 'paid' transaction status
     q = db.query(
         func.sum(Order.total_amount).label("revenue"),
         Order.branch_name,
@@ -52,8 +55,9 @@ def get_revenue(
     if date_filter is not None:
         q = q.filter(date_filter)
 
-    if branch != "all":
-        q = q.filter(Order.branch_name == branch)
+    clean_branch = branch.strip().lower()
+    if clean_branch not in ["all", "all branches"]:
+        q = q.filter(func.lower(Order.branch_name) == clean_branch)
 
     q = q.group_by(
         period_col,
@@ -78,18 +82,21 @@ def get_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    today = datetime.now().date()
+    # 🚀 SECURE TIMEZONE FIX: Get exact bounds of TODAY in Philippine Time
+    now_ph = datetime.now(PH_TZ)
+    start_of_today_ph = now_ph.replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    # Convert PH bounds back to UTC so we can securely query the DB's raw timestamps
+    start_of_today_utc = start_of_today_ph.astimezone(timezone.utc)
 
-    # 🚀 REVENUE TODAY: Only summarize transactions explicitly marked as PAID
     q_revenue = db.query(func.sum(Order.total_amount)).join(
         Transaction, Order.id == Transaction.order_id
     ).filter(
-        func.date(Order.created_at) == today,
+        Order.created_at >= start_of_today_utc,
         Order.status.in_(["delivered", "confirmed", "preparing", "out_for_delivery"]),
         Transaction.status == PaymentStatusEnum.paid,
     )
 
-    # 🚀 PENDING ORDERS: Only show up if payment validation cleared first
     q_pending = db.query(func.count(Order.id)).join(
         Transaction, Order.id == Transaction.order_id
     ).filter(
@@ -97,18 +104,18 @@ def get_summary(
         Transaction.status == PaymentStatusEnum.paid,
     )
 
-    # 🚀 ORDERS TODAY: Count total cleared and paid entries for the dashboard cards
     q_today_count = db.query(func.count(Order.id)).join(
         Transaction, Order.id == Transaction.order_id
     ).filter(
-        func.date(Order.created_at) == today,
+        Order.created_at >= start_of_today_utc,
         Transaction.status == PaymentStatusEnum.paid,
     )
 
-    if branch != "all":
-        q_revenue = q_revenue.filter(Order.branch_name == branch)
-        q_pending = q_pending.filter(Order.branch_name == branch)
-        q_today_count = q_today_count.filter(Order.branch_name == branch)
+    clean_branch = branch.strip().lower()
+    if clean_branch not in ["all", "all branches"]:
+        q_revenue = q_revenue.filter(func.lower(Order.branch_name) == clean_branch)
+        q_pending = q_pending.filter(func.lower(Order.branch_name) == clean_branch)
+        q_today_count = q_today_count.filter(func.lower(Order.branch_name) == clean_branch)
 
     return {
         "revenue_today": float(q_revenue.scalar() or 0),
@@ -128,7 +135,6 @@ def get_recent_orders(
     if getattr(current_user, "role", None) not in [RoleEnum.admin, RoleEnum.staff]:
         return []
 
-    # 🚀 RECENT ORDERS MODIFICATION: Prevent unpaid or missing reference orders from leaking into dashboard streams
     q = db.query(Order).join(
         Transaction, Order.id == Transaction.order_id
     ).filter(
@@ -137,8 +143,9 @@ def get_recent_orders(
         Order.created_at.desc()
     ).limit(limit)
 
-    if branch and branch != "all":
-        q = q.filter(Order.branch_name == branch)
+    clean_branch = branch.strip().lower()
+    if clean_branch not in ["all", "all branches"]:
+        q = q.filter(func.lower(Order.branch_name) == clean_branch)
 
     orders = q.all()
 
@@ -161,4 +168,41 @@ def get_recent_orders(
             "branch": o.branch_name,
         }
         for o in orders
+    ]
+
+
+# 🚀 NEW ENDPOINT: Trending / Demand Forecasting
+@router.get("/trending")
+def get_trending_products(
+    branch: str = "all",
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Returns top 5 products based on quantity sold in successful orders."""
+    q = db.query(
+        Product.id,
+        Product.name,
+        func.sum(Order.quantity).label("sold")
+    ).join(
+        Order, Order.product_id == Product.id
+    ).join(
+        Transaction, Order.id == Transaction.order_id
+    ).filter(
+        Order.status.in_(["delivered", "confirmed", "preparing", "out_for_delivery"]),
+        Transaction.status == PaymentStatusEnum.paid
+    )
+
+    clean_branch = branch.strip().lower()
+    if clean_branch not in ["all", "all branches"]:
+        q = q.filter(func.lower(Order.branch_name) == clean_branch)
+
+    results = q.group_by(Product.id, Product.name).order_by(desc("sold")).limit(5).all()
+
+    return [
+        {
+            "id": str(r.id),
+            "name": r.name,
+            "sold": int(r.sold or 0)
+        }
+        for r in results
     ]

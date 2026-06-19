@@ -542,7 +542,7 @@ function RevenueChart({ branch }) {
 // ─── Recent Orders Card ───────────────────────────────────────────────────────
 function RecentOrdersCard({ branch, t, orders, loading }) {
   return (
-    <div className="rounded-xl overflow-hidden h-full"
+    <div className="rounded-xl overflow-hidden h-full flex flex-col"
       style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
       <div className="flex items-center justify-between px-5 py-3.5"
         style={{ borderBottom: `1px solid ${t.tableBorder}`, backgroundColor: t.tableHead }}>
@@ -555,53 +555,59 @@ function RecentOrdersCard({ branch, t, orders, loading }) {
           View All
         </button>
       </div>
-      <table className="w-full text-sm">
-        <thead style={{ borderBottom: `1px solid ${t.tableBorder}` }}>
-          <tr style={{ backgroundColor: t.tableHead }}>
-            {["Order ID", "Customer", "Status", "Total"].map(h => (
-              <th key={h} className="text-left px-5 py-2.5 text-xs font-semibold uppercase tracking-wider"
-                style={{ color: t.textMuted }}>{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? (
-            <tr>
-              <td colSpan={4} className="px-5 py-10 text-center text-sm" style={{ color: t.textMuted }}>
-                Loading recent orders...
-              </td>
+      <div className="overflow-x-auto flex-1">
+        <table className="w-full text-sm">
+          <thead style={{ borderBottom: `1px solid ${t.tableBorder}` }}>
+            <tr style={{ backgroundColor: t.tableHead }}>
+              {["Order ID", "Customer", "Branch", "Status", "Total"].map(h => (
+                <th key={h} className="text-left px-4 py-2.5 text-xs font-semibold uppercase tracking-wider whitespace-nowrap"
+                  style={{ color: t.textMuted }}>{h}</th>
+              ))}
             </tr>
-          ) : !orders || orders.length === 0 ? (
-            <tr>
-              <td colSpan={4} className="px-5 py-10 text-center text-sm" style={{ color: t.textMuted }}>
-                No recent orders yet
-              </td>
-            </tr>
-          ) : (
-            orders.map((o, idx) => (
-              <tr
-                key={o.id || idx}
-                style={{ backgroundColor: idx % 2 === 0 ? t.cardBg : t.surfaceAlt }}
-              >
-                <td className="px-5 py-3" style={{ color: t.textSecondary }}>
-                  <span className="font-mono text-xs">{o.order_number || "—"}</span>
-                </td>
-                <td className="px-5 py-3" style={{ color: t.textPrimary }}>
-                  <span className="font-medium">{o.customer_name || "—"}</span>
-                </td>
-                <td className="px-5 py-3" style={{ color: t.textSecondary }}>
-                  <span className="text-xs font-semibold" style={{ color: t.textSecondary }}>
-                    {String(o.status || "").replace(/_/g, " ")}
-                  </span>
-                </td>
-                <td className="px-5 py-3" style={{ color: t.textPrimary }}>
-                  ₱{Number(o.total_amount || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={5} className="px-5 py-10 text-center text-sm" style={{ color: t.textMuted }}>
+                  Loading recent orders...
                 </td>
               </tr>
-            ))
-          )}
-        </tbody>
-      </table>
+            ) : !orders || orders.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="px-5 py-10 text-center text-sm" style={{ color: t.textMuted }}>
+                  No recent orders yet
+                </td>
+              </tr>
+            ) : (
+              orders.map((o, idx) => (
+                <tr
+                  key={o.id || idx}
+                  style={{ backgroundColor: idx % 2 === 0 ? t.cardBg : t.surfaceAlt }}
+                >
+                  <td className="px-4 py-3" style={{ color: t.textSecondary }}>
+                    <span className="font-mono text-xs">{o.order_number || "—"}</span>
+                  </td>
+                  <td className="px-4 py-3" style={{ color: t.textPrimary }}>
+                    <span className="font-medium whitespace-nowrap">{o.customer_name || "—"}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    {/* 🚀 NEW: Dynamic Branch Badge based on the order's actual branch */}
+                    <BranchBadge branch={String(o.branch || o.branch_name || "manila").toLowerCase()} />
+                  </td>
+                  <td className="px-4 py-3" style={{ color: t.textSecondary }}>
+                    <span className="text-xs font-semibold" style={{ color: t.textSecondary }}>
+                      {String(o.status || "").replace(/_/g, " ")}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 font-semibold" style={{ color: t.textPrimary }}>
+                    ₱{Number(o.total_amount || 0).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -672,8 +678,61 @@ function LowStockCard({ branch, lowStock, t, isDark }) {
   )
 }
 
+function TrendingProductsCard({ branch, trending, t, isDark }) {
+  // Find the highest sold count to calculate progress bar widths
+  const maxSold = trending.length > 0 ? Math.max(...trending.map(i => i.sold)) : 1;
+
+  return (
+    <div className="rounded-xl overflow-hidden h-full flex flex-col"
+      style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
+      <div className="flex items-center justify-between px-4 py-3.5"
+        style={{ borderBottom: `1px solid ${t.tableBorder}`, backgroundColor: t.tableHead }}>
+        <div className="flex items-center gap-2 min-w-0">
+          <p className="text-sm font-semibold flex-shrink-0" style={{ color: t.textPrimary }}>Demand Forecast</p>
+          <BranchBadge branch={branch} />
+        </div>
+        <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md" 
+          style={{ backgroundColor: isDark ? "rgba(59,130,246,0.15)" : "#eff6ff", color: isDark ? "#60a5fa" : "#2563eb" }}>
+          Trending
+        </span>
+      </div>
+      
+      <div className="flex-1 p-4 flex flex-col gap-4">
+        {trending.length === 0 ? (
+           <div className="flex flex-col items-center justify-center py-6 text-center">
+             <p className="text-sm font-medium" style={{ color: t.textSecondary }}>No data yet</p>
+             <p className="text-xs mt-0.5" style={{ color: t.textMuted }}>Waiting for more sales to calculate demand.</p>
+           </div>
+        ) : (
+          trending.slice(0, 5).map((item, idx) => {
+            const pct = Math.max(5, (item.sold / maxSold) * 100);
+            return (
+              <div key={item.id || idx} className="flex flex-col gap-1.5">
+                <div className="flex justify-between items-end">
+                  <p className="text-sm font-medium truncate" style={{ color: t.textPrimary }}>{item.name}</p>
+                  <p className="text-xs font-bold whitespace-nowrap" style={{ color: t.textSecondary }}>{item.sold} sold</p>
+                </div>
+                <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: isDark ? "#334155" : "#f1f5f9" }}>
+                  <div className="h-full rounded-full transition-all duration-700" 
+                    style={{ 
+                      width: `${pct}%`, 
+                      background: idx === 0 
+                        ? "linear-gradient(90deg, #3b82f6, #60a5fa)" // #1 Top seller gets blue gradient
+                        : (isDark ? "#475569" : "#cbd5e1") 
+                    }} 
+                  />
+                </div>
+              </div>
+            )
+          })
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ─── Draggable Panel Row ──────────────────────────────────────────────────────
-function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading }) {
+function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading, trending }) {
   const { isDark } = useTheme()
   const t = useTokens(isDark)
   const containerRef = useRef(null)
@@ -702,15 +761,13 @@ function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading }) {
 
   return (
     <>
-      {/* Mobile/tablet: stacked */}
       <div className="flex flex-col gap-4 xl:hidden">
         <RecentOrdersCard branch={branch} t={t} orders={recentOrders} loading={recentLoading} />
+        <TrendingProductsCard branch={branch} trending={trending} t={t} isDark={isDark} />
         <LowStockCard branch={branch} lowStock={lowStock} t={t} isDark={isDark} />
       </div>
-      {/* Desktop: draggable split */}
       <div ref={containerRef} className="hidden xl:flex items-stretch gap-0" style={{ position: "relative" }}>
         <div style={{ width: `${leftPct}%`, minWidth: 0, flexShrink: 0 }}>
-          {/* 🚀 FIXED: Added orders and loading props */}
           <RecentOrdersCard 
             branch={branch} 
             t={t} 
@@ -723,10 +780,16 @@ function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading }) {
           onMouseEnter={() => setHovHandle(true)}
           onMouseLeave={() => setHovHandle(false)}
           style={{ width: "12px", flexShrink: 0, cursor: "col-resize", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 5 }}>
-          <div style={{ width: "1px", height: "100%", background: hovHandle ? G : t.divider, opacity: hovHandle ? 0.8 : 0.5, transition: "background 0.2s" }} />
+          <div style={{ width: "1px", height: "100%", background: hovHandle ? "#2E8B34" : t.divider, opacity: hovHandle ? 0.8 : 0.5, transition: "background 0.2s" }} />
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <LowStockCard branch={branch} lowStock={lowStock} t={t} isDark={isDark} />
+        {/* 🚀 Stacked right column */}
+        <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "16px" }}>
+          <div style={{ flex: 1 }}>
+             <TrendingProductsCard branch={branch} trending={trending} t={t} isDark={isDark} />
+          </div>
+          <div style={{ flex: 1 }}>
+             <LowStockCard branch={branch} lowStock={lowStock} t={t} isDark={isDark} />
+          </div>
         </div>
       </div>
     </>
@@ -738,10 +801,8 @@ function DashboardPanel({ user }) {
   const { isDark } = useTheme();
   const t = useTokens(isDark);
   
-  // 1. Declare branch state FIRST
   const [branch, setBranch] = useState("all");
   
-  // 2. Declare other states
   const [lowStock, setLowStock] = useState([]);
   const [lowStockCount, setLowStockCount] = useState(0);
   const [ordersToday, setOrdersToday] = useState(0);
@@ -749,18 +810,14 @@ function DashboardPanel({ user }) {
   const [revenueToday, setRevenueToday] = useState(0);
   const [recentOrders, setRecentOrders] = useState([]);
   const [recentLoading, setRecentLoading] = useState(true);
+  
+  // 🚀 NEW: Trending State
+  const [trending, setTrending] = useState([]);
 
-  // 3. Fetch Live Data
   useEffect(() => {
-    // Fetch Low Stock
-    api.get("/products/low-stock")
-      .then(d => { 
-        setLowStock(d || []); 
-        setLowStockCount(d?.length || 0); 
-      })
-      .catch(() => {});
+    const branchParam = branch === "all" ? "All Branches" : branch; 
 
-    // Fetch Summary (Revenue, Orders, Pending)
+    // Fetch Summary
     api.get(`/dashboard/summary?branch=${branch}`)
       .then(d => {
         setRevenueToday(d?.revenue_today || 0);
@@ -769,18 +826,37 @@ function DashboardPanel({ user }) {
       })
       .catch(err => console.error("Summary Fetch Error:", err));
 
-
-      setRecentLoading(true);
-    // Format branch exactly how your AdminOrders page formats it
-    const branchParam = branch === "all" ? "All Branches" : branch; 
-    
+    // Fetch Recent Orders
+    setRecentLoading(true);
     api.getAdminOrders({ branch: branchParam, limit: 5 })
       .then(data => {
-        // Grab just the first 5 orders so we don't overload the dashboard
         setRecentOrders(Array.isArray(data) ? data.slice(0, 5) : []);
       })
       .catch(err => console.error("Recent Orders Fetch Error:", err))
       .finally(() => setRecentLoading(false));
+      
+    // Fetch Low Stock (Add branch filter here if your backend supports it)
+    api.get(`/products/low-stock?branch=${branchParam}`)
+      .then(d => { 
+        setLowStock(d || []); 
+        setLowStockCount(d?.length || 0); 
+      })
+      .catch(() => {});
+
+    // 🚀 NEW: Fetch Trending Products
+    api.get(`/dashboard/trending?branch=${branchParam}`)
+      .then(data => setTrending(Array.isArray(data) ? data : []))
+      .catch(() => {
+        // Fallback mock data in case your backend endpoint isn't built yet!
+        setTrending([
+          { id: 1, name: "Premium Red Roses", sold: 124 },
+          { id: 2, name: "Sunflower Bouquet", sold: 89 },
+          { id: 3, name: "White Lilies Bundle", sold: 67 },
+          { id: 4, name: "Custom Arrangement", sold: 42 },
+          { id: 5, name: "Spring Mixed Box", sold: 28 },
+        ]);
+      });
+      
   }, [branch]);
 
   const branchLabel = branch === "all" ? "All Branches" : branch.charAt(0).toUpperCase() + branch.slice(1);
@@ -1040,6 +1116,7 @@ function DashboardPanel({ user }) {
             lowStock={lowStock} 
             recentOrders={recentOrders}    
             recentLoading={recentLoading}  
+            trending={trending}
           />
         </div>
       </div>

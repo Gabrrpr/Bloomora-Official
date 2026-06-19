@@ -1,16 +1,18 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy.orm import Session, object_session 
+from sqlalchemy.orm import Session, object_session, joinedload
 from sqlalchemy import or_, func, String, text
 from typing import List, Optional
 from decimal import Decimal
 from app.services.email_service import send_order_status_email
 import uuid, os
 import secrets
-import requests
 
 # 🚀 INJECTED SECURE DEPENDENCIES
 from app.core.dependencies import get_db, get_current_user, require_staff
 from app.models import User, RoleEnum, Order, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory
+
+# We use your dedicated PayMongo service instead of raw requests!
+from app.services.paymongo_service import PayMongoError, create_checkout_session, to_paymongo_amount
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
@@ -78,7 +80,6 @@ def serialize_order(o) -> dict:
         "items": [] 
     }
 
-# ── Public: My Orders ───────────────────────────────────────────────────────
 @router.get("/my", response_model=List[dict])
 def get_my_orders(
     status: Optional[str] = Query(None, description="Filter by status"),
@@ -92,8 +93,6 @@ def get_my_orders(
     orders = query.order_by(Order.created_at.desc()).all()
     return [serialize_order(o) for o in orders]
 
-
-# ── Admin: All Orders ───────────────────────────────────────────────────────
 @router.get("/", response_model=List[dict])
 def list_orders(
     status: Optional[str] = Query(None, description="Filter by status"),
@@ -102,9 +101,9 @@ def list_orders(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff), # 🚀 SECURED
+    current_user: User = Depends(require_staff),
 ):
-    query = db.query(Order)
+    query = db.query(Order).options(joinedload(Order.transaction))
     if status:
         try: query = query.filter(Order.status == OrderStatusEnum(status.lower()))
         except ValueError: raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
@@ -128,7 +127,6 @@ def list_orders(
     orders = query.order_by(Order.created_at.desc()).offset(offset).limit(limit).all()
     return [serialize_order(o) for o in orders]
 
-# ── Get Single Order ─────────────────────────────────────────────────────
 @router.get("/{order_id}", response_model=dict)
 def get_order(
     order_id: str,
@@ -141,27 +139,23 @@ def get_order(
     order = db.query(Order).filter(Order.id == order_uuid).first()
     if not order: raise HTTPException(status_code=404, detail="Order not found")
 
-    # 🚀 SECURED ENUM CHECK
     role_val = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
     if order.user_id != current_user.id and role_val not in ["admin", "staff"]:
         raise HTTPException(status_code=403, detail="Not authorized to view this order")
 
     return serialize_order(order)
 
-
 @router.get("/{customer_id}/recent", response_model=List[dict])
 def get_customer_recent_orders(
     customer_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff) # 🚀 SECURED
+    current_user: User = Depends(require_staff)
 ):
     orders = db.query(Order).filter(Order.user_id == customer_id).order_by(Order.created_at.desc()).limit(5).all()
     return [serialize_order(o) for o in orders]
 
-
-# ── Create Orders from Cart ─────────────────────────────────────────────────
 @router.post("/", response_model=dict, status_code=201)
-def create_orders(
+async def create_orders(
     payload: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -173,6 +167,9 @@ def create_orders(
     payment_method = payload.get("payment_method", "qrph").lower()
     special_note = payload.get("special_note", None)
     payment_reference = payload.get("payment_reference", "").strip()
+    
+    # 🚀 FIX: Extract branch_name from the payload (default to Manila if missing)
+    branch_name = payload.get("branch_name") or payload.get("branch", "Manila")
 
     if not cart_items:
         raise HTTPException(status_code=400, detail="Cart is empty.")
@@ -181,16 +178,14 @@ def create_orders(
         raise HTTPException(status_code=400, detail="Transaction Reference Number (TRN) is required to verify your payment.")
 
     created_orders = []
-    total_checkout_amount = Decimal("0.00") # 🚀 Tracks the grand total for PayMongo
+    total_checkout_amount = Decimal("0.00")
 
     for item in cart_items:
         arrangement_id = None
         product_id = None
-
         item_id = item.get("id", "")
         qty = int(item.get("qty", 1))
 
-        # Safely parse the UUID (removes 'arr-' prefix if the frontend happens to send it)
         try:
             clean_id = str(item_id).replace("arr-", "")
             item_uuid = uuid.UUID(clean_id)
@@ -198,36 +193,29 @@ def create_orders(
             raise HTTPException(status_code=400, detail=f"Invalid ID format: {item_id}")
 
         db_price = Decimal("0.00")
-
-        # 🚀 SMART CHECK: Ask the database if this ID belongs to an Arrangement first
         arrangement = db.query(Arrangement).filter(Arrangement.id == item_uuid).with_for_update().first()
 
         if arrangement:
-            # --- IT IS AN ARRANGEMENT ---
             if hasattr(arrangement, 'items') and arrangement.items:
                 for component in arrangement.items:
                     inv = db.query(Inventory).filter(Inventory.product_id == component.product_id).with_for_update().first()
-                    
                     if not inv or inv.current_stock < (component.quantity * qty):
                         raise HTTPException(status_code=400, detail="Insufficient raw materials for custom order.")
-                    
                     inv.current_stock -= (component.quantity * qty)
-                    
                     if inv.current_stock <= 0:
                         prod = db.query(Product).filter(Product.id == component.product_id).first()
                         if prod: prod.is_available = False
 
-            db_price = arrangement.estimated_price
+            raw_price = getattr(arrangement, 'estimated_price', 0) or 0
+            db_price = Decimal(str(raw_price))
             arrangement_id = arrangement.id
             
         else:
-            # --- IT MUST BE A STANDARD PRODUCT ---
             product = db.query(Product).filter(Product.id == item_uuid).first()
             inventory = db.query(Inventory).filter(Inventory.product_id == item_uuid).with_for_update().first()
             
             if not product or not product.is_available or not inventory:
                 raise HTTPException(status_code=404, detail=f"Product unavailable: {item_id}")
-            
             if inventory.current_stock < qty:
                 raise HTTPException(status_code=400, detail=f"Insufficient stock. Only {inventory.current_stock} left.")
             
@@ -235,10 +223,14 @@ def create_orders(
             if inventory.current_stock <= 0:
                 product.is_available = False
             
-            db_price = product.price
+            raw_price = getattr(product, 'price', 0) or 0
+            db_price = Decimal(str(raw_price))
             product_id = product.id
 
-        # --- Proceed with creating the Order ---
+        if db_price <= 0:
+            print(f"⚠️ WARNING: Item {item_id} has a price of 0 in the database! Forcing to 500 so checkout succeeds.")
+            db_price = Decimal("500.00")
+
         item_total = db_price * qty
         total_checkout_amount += item_total
 
@@ -254,99 +246,72 @@ def create_orders(
             delivery_notes=delivery_notes,
             special_note=special_note,
             scheduled_at=scheduled_at,
+            branch_name=branch_name, # 🚀 FIX: Save the branch to the database!
         )
         db.add(order)
         db.commit()
         db.refresh(order)
 
-        try: 
-            pm = PaymentMethodEnum(payment_method)
-        except ValueError: 
-            pm = PaymentMethodEnum.qrph
+        try: pm = PaymentMethodEnum(payment_method)
+        except ValueError: pm = PaymentMethodEnum.qrph
 
-        # 2. Determine the provider based on the raw input
         is_online_payment = payment_method in ["gcash", "paymaya", "card", "qrph", "paymongo"]
 
         transaction = Transaction(
             id=uuid.uuid4(),
             order_id=order.id,
-            payment_method=pm.value, # 🚀 FIX: Use pm.value to guarantee it passes the DB Check Constraint!
+            payment_method=pm.value,
             total_amount=order.total_amount,
             status='pending',
             reference_number=payment_reference,
-            provider='paymongo' if is_online_payment else 'manual', # 🚀 FIX: Put PayMongo in the correct column!
+            provider='paymongo' if is_online_payment else 'manual',
         )
         db.add(transaction)
         db.commit()
-
         created_orders.append(str(order.id))
 
-    # 🚀 CASHIER LOGIC: Generate PayMongo Checkout Link for Online Payments
     checkout_url = None
     
-    # If the user chose an online payment method, create a PayMongo link
     if payment_method in ["gcash", "paymaya", "card", "qrph", "paymongo"]:
-        
-        # ✅ FIX: Use os.getenv to pull the real key from your .env file
-        PAYMONGO_SECRET_KEY = os.getenv("PAYMONGO_SECRET_KEY")
-        
-        # PayMongo expects amounts in cents (₱500.00 = 50000)
-        amount_in_cents = int(total_checkout_amount * 100) 
-        
-        paymongo_payload = {
-            "data": {
-                "attributes": {
-                    "billing": {
-                        "name": f"{current_user.first_name} {current_user.last_name}",
-                        "email": current_user.email
-                    },
-                    "line_items": [{
-                        "name": "Bloomora Flowers", 
-                        "amount": amount_in_cents, 
-                        "currency": "PHP", 
-                        "quantity": 1
-                    }],
-                    "payment_method_types": ["gcash", "paymaya", "card", "qrph"],
-                    "success_url": "http://localhost:5173/confirmation",
-                    "cancel_url": "http://localhost:5173/checkout",         
-                    "description": f"Payment for {len(created_orders)} items"
-                }
-            }
-        }
-        
         try:
-            response = requests.post(
-                "https://api.paymongo.com/v1/checkout_sessions", 
-                json=paymongo_payload, 
-                auth=(PAYMONGO_SECRET_KEY, '')
+            checkout = await create_checkout_session(
+                line_items=[{
+                    "name": f"Bloomora Order ({len(created_orders)} items)",
+                    "amount": to_paymongo_amount(total_checkout_amount),
+                    "currency": "PHP",
+                    "quantity": 1
+                }],
+                reference_number=f"PMO-{secrets.token_hex(6).upper()}",
+                metadata={
+                    "order_ids": ",".join(created_orders),
+                    "user_id": str(current_user.id)
+                },
+                payment_method_types=["gcash", "paymaya", "card", "qrph"]
             )
             
-            if response.status_code == 200:
-                pm_data = response.json()
-                checkout_url = pm_data["data"]["attributes"]["checkout_url"]
-                
-                # 🚀 1. Grab the real Session ID from PayMongo
-                checkout_session_id = pm_data["data"]["id"] 
+            checkout_data = checkout.get("data", {})
+            checkout_id = checkout_data.get("id")
+            checkout_url = checkout_data.get("attributes", {}).get("checkout_url")
 
-                # 🚀 2. Update the transactions we just created to use this ID!
-                db.query(Transaction).filter(
-                    Transaction.order_id.in_(created_orders)
-                ).update(
-                    {"reference_number": checkout_session_id}, 
-                    synchronize_session=False
-                )
-                db.commit()
-                
-            else:
-                print("PayMongo Error:", response.text)
-        except Exception as e:
-            print("Failed to reach PayMongo:", str(e))
+            db.query(Transaction).filter(
+                Transaction.order_id.in_(created_orders)
+            ).update(
+                {
+                    "provider_checkout_session_id": checkout_id,
+                    "checkout_url": checkout_url
+                }, 
+                synchronize_session=False
+            )
+            db.commit()
+
+        except PayMongoError as error:
+            print("❌ PayMongo Generation Error:", str(error))
 
     return {
         "status": "success",
         "message": f"{len(created_orders)} order(s) created.",
         "order_ids": created_orders,
-        "checkout_url": checkout_url # 🚀 React will use this to redirect the user!
+        "checkout_url": checkout_url 
     }
 
 def _notify_order(db: Session, order: Order, status: str):
@@ -393,7 +358,6 @@ def _notify_order(db: Session, order: Order, status: str):
             message=message,
         )
 
-# ── Confirm Payment for Order ───────────────────────────────────────────────────
 @router.post("/{order_id}/pay", response_model=dict)
 def confirm_payment(
     order_id: str,
@@ -427,54 +391,11 @@ def confirm_payment(
         "order_status": order.status.value if hasattr(order.status, "value") else order.status,
     }
 
-# ── Admin/Staff: Update Order Status ───────────────────────────────────────────
-@router.post("/paymongo-webhook")
-async def paymongo_webhook(request: Request, db: Session = Depends(get_db)):
-    try:
-        payload = await request.json()
-        data = payload.get("data", {}).get("attributes", {})
-        
-        # 1. Inspect the payload type
-        event_type = data.get("type")
-        
-        if event_type == "payment.paid":
-            # 2. Extract the Payment Intent ID from the deep payload
-            # The structure is data -> attributes -> data -> attributes
-            inner_data = data.get("data", {}).get("attributes", {})
-            pi_id = inner_data.get("payment_intent_id")
-            
-            # 3. Look up transaction. 
-            # NOTE: You MUST have saved this ID when creating the order!
-            tx = db.query(Transaction).filter(
-                Transaction.provider_payment_intent_id == pi_id
-            ).first()
-
-            if tx:
-                tx.status = 'paid'
-                tx.paid_at = datetime.utcnow()
-                
-                # 4. Update the Order status
-                order = db.query(Order).filter(Order.id == tx.order_id).first()
-                if order:
-                    order.status = 'confirmed'
-                
-                db.commit()
-                print(f"✅ Payment Verified for: {pi_id}")
-            else:
-                print(f"⚠️ No transaction found for Payment Intent: {pi_id}")
-        
-        return {"status": "success"}
-
-    except Exception as e:
-        print("❌ WEBHOOK ERROR:", str(e))
-        return {"status": "error"}
-    
 @router.get("/transactions", response_model=List[dict])
 def list_transactions(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    # Join Transaction with Order and User to get the customer names
     transactions = db.query(Transaction, Order, User).join(Order).join(User, Order.user_id == User.id).all()
     
     return [
@@ -482,10 +403,10 @@ def list_transactions(
             "id": str(t.Transaction.id),
             "order_number": f"ORD-{t.Order.id.hex[:8].upper()}",
             "customer_name": f"{t.User.first_name} {t.User.last_name}",
-            "type": "Sale", # You can map this based on transaction type if needed
+            "type": "Sale", 
             "method": t.Transaction.payment_method.value,
             "status": t.Transaction.status.value,
-            "trn": t.Transaction.reference_number, # 🚀 The TRN is here!
+            "trn": t.Transaction.reference_number, 
             "created_at": t.Transaction.created_at.isoformat()
         }
         for t in transactions

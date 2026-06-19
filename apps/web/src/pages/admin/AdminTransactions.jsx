@@ -100,6 +100,7 @@ export default function AdminTransactions() {
     try {
       const res = await api.getAdminOrders();
       console.log("📦 Raw API Response:", res); // Check your F12 Console if it's still blank!
+      console.log("DEBUG: First item status value:", res[0].payment_status);
       
       let rawData = res.data || res;
       let rawList = Array.isArray(rawData) ? rawData : (rawData.orders || rawData.transactions || rawData.data || []);
@@ -116,24 +117,29 @@ export default function AdminTransactions() {
 
         // 2. Hunt for the Price
         const price = Number(t.total_price || t.total_amount || t.amount || t.grand_total || t.total || 0);
+        // 3. 🚀 Normalize payment status (support both admin listing formats)
+        // Admin listing endpoint: uses `status` (enum string) and `trn` for reference
+        const rawStatusRaw = t.payment_status ?? t.status ?? t.checkout_status ?? "pending";
+        const rawStatus = String(rawStatusRaw).toLowerCase();
 
-        // 3. 🚀 NEW: Aggressively hunt for the Success/Paid Status
-        const rawStatus = String(t.payment_status || t.status || t.checkout_status || "pending").toLowerCase();
         let cleanStatus = "Pending";
-        
-        if (rawStatus.includes("paid") || rawStatus.includes("success") || rawStatus.includes("complete")) {
+        if (rawStatus === "paid" || rawStatus === "success" || rawStatus === "confirmed") {
           cleanStatus = "Paid";
-        } else if (rawStatus.includes("fail") || rawStatus.includes("cancel")) {
+        } else if (rawStatus === "pending") {
+          cleanStatus = "Pending";
+        } else if (rawStatus === "failed" || rawStatus.includes("fail") || rawStatus.includes("cancel")) {
           cleanStatus = "Failed";
-        } else if (rawStatus.includes("refund")) {
+        } else if (rawStatus === "refunded" || rawStatus.includes("refund")) {
           cleanStatus = "Refunded";
+        } else if (rawStatus.includes("paid") || rawStatus.includes("success") || rawStatus.includes("complete")) {
+          cleanStatus = "Paid";
         }
 
         // 4. Map everything together
         return {
           id: t.id || t.order_id || `txn_${Math.floor(Math.random()*10000)}`,
           customer_name: t.customer_name || t.customer?.name || t.user?.name || t.billing_name || "Guest",
-          payment_reference: t.payment_reference || t.reference_number || t.reference || t.transaction_id || "",
+          payment_reference: t.payment_reference || t.reference_number || t.reference || t.trn || t.transaction_id || "",
           payment_method: cleanMethod,
           total_price: price,
           payment_status: cleanStatus,
