@@ -66,6 +66,8 @@ class Inventory(Base):
     product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False, unique=True)
     current_stock = Column(Integer, default=0, nullable=False)
     reorder_point = Column(Integer, default=10, nullable=False)
+    stock_manila = Column(Integer, default=0)
+    stock_pampanga = Column(Integer, default=0)
     unit_type = Column(String(50), nullable=True)       # e.g. "stems", "pieces", "meters"
     cost_per_unit = Column(Numeric(10, 2), nullable=True)
     last_restocked_at = Column(DateTime(timezone=True), nullable=True)

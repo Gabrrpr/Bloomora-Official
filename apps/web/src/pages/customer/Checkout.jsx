@@ -329,7 +329,6 @@ export default function Checkout({ onNavigate }) {
           desc: i.desc,
           price: i.price,
           qty: i.qty,
-          // ✅ THIS CATCHES THE AI GENERATED IMAGES:
           img: i.img || i.image || i.image_url || i.generated_image_url || "",
         })),
         delivery_address: deliveryDetails.address,
@@ -337,7 +336,8 @@ export default function Checkout({ onNavigate }) {
         scheduled_at: deliveryDate.toISOString(),
         payment_method: paymentMethod,
         payment_reference: referenceNumber.trim(),
-        special_note: orderNote.trim() || null
+        special_note: orderNote.trim() || null,
+        branch_name: selectedStoreBranch || "Manila"
       })
 
       const orderIds = res.order_ids || []

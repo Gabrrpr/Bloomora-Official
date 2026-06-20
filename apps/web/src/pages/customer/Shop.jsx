@@ -739,7 +739,20 @@ export default function Shop({ onNavigate, initialCategory }) {
   const baseList = (searchResults !== null ? searchResults : products)
 
   const filtered = baseList
-
+    .map(p => {
+      let branchStock = p.stock;
+      const locs = selectedLocations.map(l => (l || "").toLowerCase().trim());
+      
+      if (locs.includes("pampanga") && !locs.includes("manila")) {
+        // 🚀 FALLBACK: Use stock_pampanga, but if it's undefined or null, fall back to global stock
+        branchStock = p.stock_pampanga !== undefined && p.stock_pampanga !== null ? p.stock_pampanga : p.stock;
+      } else if (locs.includes("manila") && !locs.includes("pampanga")) {
+        // 🚀 FALLBACK: Use stock_manila, but if it's undefined or null, fall back to global stock
+        branchStock = p.stock_manila !== undefined && p.stock_manila !== null ? p.stock_manila : p.stock;
+      }
+      
+      return { ...p, stock: branchStock };
+    })
     .filter(p => normalizeCat(p.category) !== 'add-on' && normalizeCat(p.category) !== 'addon')
     .filter(p => {
       const activeNorm = normalizeCat(activeCategory);
@@ -755,17 +768,23 @@ export default function Shop({ onNavigate, initialCategory }) {
       if (!activeTypes || activeTypes.length === 0) return true;
       return activeTypes.map(normalizeCat).includes(normalizeCat(p.product_type || ""));
     })
+    // 🚀 THE FIX: Strictly filter out products not designated for the selected branch!
     .filter(p => {
       if (!selectedLocations || selectedLocations.length === 0) return true;
       const selectedLocsNorm = selectedLocations.map(normalizeCat);
-      const branches = Array.isArray(p.branches) ? p.branches : [];
-      const shippedFrom = p.shipped_from || "";
-      const productLocations = [...branches, shippedFrom].map(normalizeCat);
-      return selectedLocsNorm.some(loc => productLocations.includes(loc));
-    })
+      
+      // Get explicitly assigned branches
+      const branches = Array.isArray(p.branches) ? p.branches.map(normalizeCat) : [];
+      
+      // 🚨 CRITICAL FIX: If a product has NO branch assigned, default it to Manila.
+      // Do NOT make it available everywhere automatically.
+      if (branches.length === 0) {
+         branches.push("manila");
+      }
+      // Only show the product if the selected branch is in the product's branch list
+      return selectedLocsNorm.some(loc => branches.includes(loc));
+      })
     .filter(p => p.price >= priceRange[0] && p.price <= priceRange[1])
-    
-    // 🚀 ADD THIS: The Global Search Filter
     .filter(p => {
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase().trim();
@@ -779,13 +798,11 @@ export default function Shop({ onNavigate, initialCategory }) {
       if (Array.isArray(rawTags)) {
         matchTags = rawTags.some(tag => (tag || "").toLowerCase().includes(q));
       } else if (typeof rawTags === "string") {
-        // Handle comma-separated string format e.g. "roses,red,valentines"
         matchTags = rawTags.split(",").some(tag => tag.trim().toLowerCase().includes(q));
       }
 
       return matchName || matchCat || matchDesc || matchTags;
     })
-    
     .sort((a, b) => {
       if (sortBy === "price-asc")  return a.price - b.price;
       if (sortBy === "price-desc") return b.price - a.price;

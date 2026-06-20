@@ -25,12 +25,9 @@ class StockLogCreate(BaseModel):
 
 router = APIRouter()
 
-# 🛡️ Hard limits for image uploads
 MAX_FILE_SIZE = 5 * 1024 * 1024
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif"}
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
 def serialize_product(p: Product) -> dict:
     inv = p.inventory
 
@@ -53,10 +50,9 @@ def serialize_product(p: Product) -> dict:
         "is_available": p.is_available,
         "status": p.status.value if hasattr(p.status, "value") else p.status,
         
-        # 🚀 UPDATE THESE THREE LINES:
         "stock": inv.current_stock if inv else 0,
-        "stock_manila": inv.stock_manila if inv else 0,
-        "stock_pampanga": inv.stock_pampanga if inv else 0,
+        "stock_manila": getattr(inv, "stock_manila", 0) if inv else 0,
+        "stock_pampanga": getattr(inv, "stock_pampanga", 0) if inv else 0,
         
         "reorder_point": inv.reorder_point if inv else 10,
         "unit_type": inv.unit_type if (inv and inv.unit_type) else "piece",
@@ -68,18 +64,15 @@ def serialize_product(p: Product) -> dict:
         "tags": getattr(p, "tags", []),
         "original_price": float(p.original_price) if getattr(p, "original_price", None) else None,
         "base_price": cost_per_unit,
-        "labor_cost": getattr(p, "labor_cost", 0), # Added labor cost just in case
+        "labor_cost": getattr(p, "labor_cost", 0), 
         "markup_percentage": markup_percentage,
         "season_key": getattr(p, "season_key", None),
         "limited_start_at": getattr(p, "limited_start_at", None),
         "limited_end_at": getattr(p, "limited_end_at", None),
     }
 
-# ── Public endpoints (specific routes MUST come before wildcard) ──────────────
-
 @router.get("/flash-sales", response_model=List[dict])
 def get_flash_sales(db: Session = Depends(get_db)):
-    """Fetch only items that are currently marked down."""
     try:
         products = (
             db.query(Product)
@@ -92,19 +85,12 @@ def get_flash_sales(db: Session = Depends(get_db)):
         print("CRITICAL ERROR IN FLASH SALES ROUTE:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @router.get("/search", response_model=List[dict])
 def search_products(q: str = "", db: Session = Depends(get_db)):
-    """Smart Content-Based Search Algorithm."""
     if not q or not q.strip():
         return []
 
     search_term = f"%{q.lower().strip()}%"
-
-    # DEBUG — paste this terminal output here
-    sample = db.query(Product).limit(5).all()
-    for p in sample:
-        print(f"[DEBUG] {p.name} | tags={p.tags} | desc_snippet={str(p.description or '')[:40]}")
 
     results = (
         db.query(Product)
@@ -113,26 +99,20 @@ def search_products(q: str = "", db: Session = Depends(get_db)):
             or_(
                 func.lower(Product.name).ilike(search_term),
                 func.lower(Product.category).ilike(search_term),
-                # ✅ Guard against NULL description
                 and_(
                     Product.description.isnot(None),
                     func.lower(Product.description).ilike(search_term),
                 ),
-                # ✅ Proper JSONB array search — each element individually
                 Product.tags.cast(String).ilike(search_term),
             )
         )
         .all()
     )
 
-    print(f"[SEARCH] q='{q}' | hits={len(results)} | names={[r.name for r in results]}")
-
     return [serialize_product(p) for p in results]
-
 
 @router.get("/customization/all", response_model=List[dict])
 def get_customization_products(db: Session = Depends(get_db)):
-    """Get all available products with customization attributes for Mix & Match."""
     products = (
         db.query(Product)
         .filter(Product.is_available == True, Product.is_visible == True)
@@ -199,10 +179,8 @@ def get_customization_products(db: Session = Depends(get_db)):
 
     return result
 
-
 @router.get("/categories/hierarchy", response_model=List[dict])
 def get_category_hierarchy(db: Session = Depends(get_db)):
-    """Get dynamic category hierarchy grouped by Floral/Non-Floral for Navbars."""
     products = db.query(Product).filter(Product.is_available == True).all()
     hierarchy_dict = {}
     NON_FLORAL_CATS = ["wrapping", "accessory", "vase", "tools", "pot", "pot fillers", "candles"]
@@ -237,10 +215,8 @@ def get_category_hierarchy(db: Session = Depends(get_db)):
     )
     return result
 
-
 @router.get("/{product_id}/reviews", response_model=List[dict])
 def get_product_reviews(product_id: str, db: Session = Depends(get_db)):
-    """Fetch all reviews for a specific product."""
     reviews = (
         db.query(Review, User)
         .join(User, Review.user_id == User.id)
@@ -260,7 +236,6 @@ def get_product_reviews(product_id: str, db: Session = Depends(get_db)):
         }
         for r in reviews
     ]
-
 
 @router.get("/", response_model=List[dict])
 def get_products(db: Session = Depends(get_db)):
@@ -282,16 +257,18 @@ def get_products(db: Session = Depends(get_db)):
             "id": str(p.id),
             "name": p.name,
             "price": float(p.price) if p.price else 0,
-            
-            # 🚀 THE FIX: Safely extract the string value before calling .lower()
             "category": (p.category.value if hasattr(p.category, "value") else str(p.category)).lower().strip() if p.category else "",
-            
             "product_group": p.product_group.lower().strip() if p.product_group else "floral",
             "product_type": p.product_type.lower().strip() if p.product_type else "",
             "original_price": float(p.original_price) if getattr(p, "original_price", None) else None,
             "image_url": p.image_url,
             "is_available": p.is_available,
             "stock": p.inventory.current_stock if p.inventory else 0,
+            
+            # 🚀 EXPOSE BRANCH STOCK TO FRONTEND
+            "stock_manila": getattr(p.inventory, "stock_manila", 0) if p.inventory else 0,
+            "stock_pampanga": getattr(p.inventory, "stock_pampanga", 0) if p.inventory else 0,
+            
             "season_key": p.season_key,
             "limited_start_at": p.limited_start_at.isoformat() if p.limited_start_at else None,
             "limited_end_at": p.limited_end_at.isoformat() if p.limited_end_at else None,
@@ -302,14 +279,11 @@ def get_products(db: Session = Depends(get_db)):
         for p in products
     ]
 
-# ── Admin endpoints ───────────────────────────────────────────────────────────
-
 @router.get("/admin/all", response_model=List[dict])
 def get_admin_products(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    """Get all products including inactive for admin panel."""
     try:
         if not settings.SUPABASE_SERVICE_KEY:
             raise HTTPException(status_code=500, detail="Supabase Service Key is not configured.")
@@ -339,7 +313,6 @@ def get_admin_products(
             pid = str(p.id)
             inv = inv_by_product_id.get(pid)
             
-            # 🚀 THE FIX: Calculate Base Cost and Markup dynamically for the Admin Grid
             cost_per_unit = float(inv.get("cost_per_unit")) if inv and inv.get("cost_per_unit") is not None else None
             current_price = float(p.price) if p.price else 0
             
@@ -381,14 +354,12 @@ def get_admin_products(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load admin inventory from Supabase: {str(e)}")
 
-
 @router.get("/low-stock", response_model=List[dict])
 def get_low_stock(
     limit: int = 5,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    """Get low stock products. Admin/Staff only."""
     products = (
         db.query(Product)
         .outerjoin(Inventory, Product.id == Inventory.product_id)
@@ -405,15 +376,11 @@ def get_low_stock(
     )
     return [serialize_product(p) for p in products]
 
-
-# ── Admin Image Upload ────────────────────────────────────────────────────────
-
 @router.post("/admin/upload-image", response_model=dict)
 async def upload_product_image(
     file: UploadFile = File(...),
     current_user: User = Depends(require_staff),
 ):
-    """Upload product image to Supabase Storage safely."""
     if not settings.SUPABASE_SERVICE_KEY:
         raise HTTPException(status_code=500, detail="Supabase Service Key is not configured.")
 
@@ -453,9 +420,6 @@ async def upload_product_image(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Image upload failed: {str(e)}")
 
-
-# ── Admin CRUD ────────────────────────────────────────────────────────────────
-
 @router.post("/admin", response_model=dict, status_code=201)
 def create_product(
     name: str = Form(...),
@@ -480,7 +444,6 @@ def create_product(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    """Create a new product. Admin/Staff only."""
     try:
         status_enum = ProductStatusEnum(status.lower())
     except ValueError:
@@ -512,7 +475,6 @@ def create_product(
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid branches JSON.")
 
-    # 🚀 THE FIX: Parse tags safely into a list
     parsed_tags = []
     if tags:
         try:
@@ -527,7 +489,7 @@ def create_product(
         product_group=group.lower().strip(),
         description=description,
         price=price_val,
-        original_price=None, # Leave Flash Sale blank on creation
+        original_price=None, 
         category=category.lower().strip(),
         product_type=product_type.lower().strip() if product_type else None,
         status=status_enum,
@@ -557,7 +519,6 @@ def create_product(
                 )
                 db.add(new_recipe_link)
 
-    # 🚀 THE FIX: Store Base Price safely inside Inventory
     cost_val = 0.0
     if base_price:
         try:
@@ -577,7 +538,6 @@ def create_product(
 
     return {"status": "success", "product": serialize_product(new_product)}
 
-
 @router.put("/admin/{product_id}", response_model=dict)
 def update_product(
     product_id: str,
@@ -595,7 +555,7 @@ def update_product(
     is_visible: Optional[bool] = Form(None),
     image_url: Optional[str] = Form(None),
     stock: Optional[int] = Form(None),
-    stock_manila: Optional[int] = Form(None),    # 🚀 ADD THIS
+    stock_manila: Optional[int] = Form(None),
     stock_pampanga: Optional[int] = Form(None),
     unit_type: Optional[str] = Form(None),
     reorder_point: Optional[int] = Form(None),
@@ -610,7 +570,6 @@ def update_product(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    """Update an existing product. Admin/Staff only."""
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -681,7 +640,6 @@ def update_product(
         except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid branches JSON format.")
 
-    # 🚀 THE FIX: Parse Tags correctly
     if tags is not None:
         try:
             product.tags = json.loads(tags)
@@ -699,10 +657,9 @@ def update_product(
         action=f"Update Record: Staff/Admin updated details for product '{product.name}'",
         user_id=str(current_user.id), 
         role=current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
-        ip_address=request.client.host # Captures the user's IP
+        ip_address=request.client.host
     )
 
-    # 🚀 THE FIX: Map Base Price over to Inventory Cost properly
     cost_val = cost_per_unit
     if base_price is not None:
         try:
@@ -710,7 +667,7 @@ def update_product(
         except Exception:
             pass
 
-    if any(v is not None for v in [stock, stock_manila, stock_pampanga, unit_type, reorder_point, cost_val]): # 🚀 Added branch stocks here
+    if any(v is not None for v in [stock, stock_manila, stock_pampanga, unit_type, reorder_point, cost_val]):
         inv = db.query(Inventory).filter(Inventory.product_id == product.id).first()
         if not inv:
             inv = Inventory(
@@ -733,10 +690,8 @@ def update_product(
 
     return {"status": "success", "product": serialize_product(product)}
 
-
 @router.get("/admin/settings/homepage")
 def get_homepage_layout(db: Session = Depends(get_db)):
-    """Fetch the live homepage layout configuration."""
     query = text("SELECT setting_value FROM store_settings WHERE setting_key = 'homepage_layout'")
     result = db.execute(query).fetchone()
 
@@ -744,14 +699,12 @@ def get_homepage_layout(db: Session = Depends(get_db)):
         return result[0]
     return {}
 
-
 @router.post("/admin/settings/homepage")
 def save_homepage_layout(
     layout: dict = Body(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    """Save the homepage layout configuration. Admin/Staff only."""
     layout_json = json.dumps(layout)
 
     query = text("""
@@ -765,7 +718,6 @@ def save_homepage_layout(
 
     return {"status": "success", "message": "Homepage layout updated live."}
 
-
 @router.post("/admin/{product_id}/promote", response_model=dict)
 def apply_promotion(
     product_id: str,
@@ -773,7 +725,6 @@ def apply_promotion(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    """Apply a direct discount to a product and broadcast a global notification."""
     product = db.query(Product).filter(Product.id == product_id).first()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
@@ -809,14 +760,12 @@ def apply_promotion(
         "product": serialize_product(product),
     }
 
-
 @router.delete("/admin/{product_id}", response_model=dict)
 def delete_product(
     product_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    """Smart-delete a product. Admin/Staff only."""
     try:
         prod_uuid = uuid.UUID(product_id)
     except ValueError:
@@ -845,9 +794,7 @@ def log_stock_receipt(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff)
 ):
-    """Log a manual inventory restock from the Invoice Modal."""
     try:
-        # Using raw SQL to avoid needing to update models.py right now
         query = text("""
             INSERT INTO stock_logs (id, product_id, qty_change, purchasing_price, date_of_issuance, branch, notes, created_at)
             VALUES (:id, :pid, :qty, :price, :doi, :branch, :notes, now())
@@ -866,17 +813,11 @@ def log_stock_receipt(
     
     except Exception as e:
         db.rollback()
-        # If the stock_logs table doesn't exist yet, we catch the error 
-        # so it doesn't crash your React frontend's success message!
         print(f"⚠️ Could not save to stock_logs (Table might not exist yet): {str(e)}")
         return {"status": "warning", "message": "Stock updated, but log was skipped."}
 
-
-# ── Public wildcard route — MUST be last ─────────────────────────────────────
-
 @router.get("/{product_id}", response_model=dict)
 def get_product(product_id: str, db: Session = Depends(get_db)):
-    """Get single product details."""
     try:
         prod_uuid = uuid.UUID(product_id)
     except ValueError:
