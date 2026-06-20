@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, Fragment } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { useBranch } from "../../context/BranchContext" 
 import { api } from "../../services/api.js"
@@ -17,6 +17,53 @@ import BackToTop from "../../components/BackToTop.jsx"
 import ProductPreviewModal from "../../components/ProductPreviewModal.jsx" 
 import AdPopup from "../../components/AdPopup.jsx" 
 import GridCard from "../../components/GridCard.jsx"
+
+// ── Live countdown for the flash sale (only renders when there's a real end time) ──
+function FlashCountdown({ endTime, isDark }) {
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(t)
+  }, [])
+
+  const diff = new Date(endTime) - now
+  if (!endTime || isNaN(diff) || diff <= 0) return null
+
+  const totalSec = Math.floor(diff / 1000)
+  const days  = Math.floor(totalSec / 86400)
+  const hours = Math.floor((totalSec % 86400) / 3600)
+  const mins  = Math.floor((totalSec % 3600) / 60)
+  const secs  = totalSec % 60
+
+  const units = [
+    ...(days > 0 ? [{ v: days, l: "Days" }] : []),
+    { v: hours, l: "Hrs" },
+    { v: mins, l: "Min" },
+    { v: secs, l: "Sec" },
+  ]
+
+  const pad = n => String(n).padStart(2, "0")
+
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className="text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>
+        Ends in
+      </span>
+      <div className="flex items-center gap-1">
+        {units.map((u, i) => (
+          <Fragment key={u.l}>
+            {i > 0 && <span className="text-sm font-bold" style={{ color: isDark ? "#f87171" : "#ef4444" }}>:</span>}
+            <div className="flex flex-col items-center justify-center min-w-[38px] px-1.5 py-1 rounded-lg"
+              style={{ backgroundColor: isDark ? "rgba(239,68,68,0.12)" : "#fff1f2", border: `1px solid ${isDark ? "rgba(239,68,68,0.3)" : "#fecaca"}` }}>
+              <span className="text-sm font-extrabold tabular-nums leading-none" style={{ color: isDark ? "#fca5a5" : "#dc2626" }}>{pad(u.v)}</span>
+              <span className="text-[8px] font-bold uppercase tracking-wide mt-0.5" style={{ color: isDark ? "#94a3b8" : "#9ca3af" }}>{u.l}</span>
+            </div>
+          </Fragment>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 export default function Home({ onNavigate, isCustomizationEnabled }) {
   const { isDark } = useTheme()
@@ -38,9 +85,17 @@ export default function Home({ onNavigate, isCustomizationEnabled }) {
   }, []);
 
   // 🚀 Filter the flash sales to ONLY show products physically in this branch
-  const branchFlashSales = flashSales.filter(product => 
+  const branchFlashSales = flashSales.filter(product =>
     product.branches?.includes(branch)
   );
+
+  // Soonest upcoming end time across the active flash deals (drives the countdown)
+  const flashEndsAt = branchFlashSales
+    .map(p => p.limited_end_at)
+    .filter(Boolean)
+    .map(d => new Date(d))
+    .filter(d => !isNaN(d) && d > new Date())
+    .sort((a, b) => a - b)[0] || null;
 
   const toggleWishlist = (id) => console.log("Toggle wishlist", id);
 
@@ -58,20 +113,35 @@ export default function Home({ onNavigate, isCustomizationEnabled }) {
       {/* 🚀 Map over the branch-filtered flash sales */}
       {branchFlashSales.length > 0 && (
         <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold flex items-center gap-2" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>
-              🔥 Flash Sale
-            </h2>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-7">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center justify-center w-11 h-11 rounded-2xl flex-shrink-0"
+                style={{ background: "linear-gradient(135deg, #fb923c, #ef4444)", boxShadow: "0 6px 16px rgba(239,68,68,0.35)" }}>
+                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M12.832 2.072c.55-.348 1.27.041 1.27.69 0 1.65.61 3.61 1.93 4.93 1.04 1.04 1.97 2.42 1.97 4.31a6 6 0 11-10.83-3.56c.27-.36.83-.27.99.15.27.71.74 1.34 1.46 1.66.04-1.62.5-3.78 1.86-5.62.66-.9 1.42-1.69 2.18-2.27.35-.27.7-.55 1-.85.04-.05.07-.1.1-.15z" />
+                </svg>
+              </span>
+              <div>
+                <h2 className="text-2xl font-bold leading-tight" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>
+                  Flash Sale
+                </h2>
+                <p className="text-sm" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>
+                  Limited-time deals, grab them before they're gone
+                </p>
+              </div>
+            </div>
+            {flashEndsAt && <FlashCountdown endTime={flashEndsAt} isDark={isDark} />}
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="flex flex-wrap justify-center gap-4">
             {branchFlashSales.map(product => (
-              <GridCard 
-                key={product.id} 
-                product={product} 
-                wishlist={[]} 
-                toggleWishlist={toggleWishlist} 
-                onPreview={setPreviewProduct}
-              />
+              <div key={product.id} className="w-[calc(50%-0.5rem)] sm:w-[230px]">
+                <GridCard
+                  product={product}
+                  wishlist={[]}
+                  toggleWishlist={toggleWishlist}
+                  onPreview={setPreviewProduct}
+                />
+              </div>
             ))}
           </div>
         </section>

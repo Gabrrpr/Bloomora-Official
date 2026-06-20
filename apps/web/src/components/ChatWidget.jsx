@@ -135,6 +135,20 @@ export default function ChatWidget() {
     return () => window.removeEventListener("bloomora:open-chat", handleOpenChat)
   }, [])
 
+  // Hide the floating launcher while a full-screen modal (e.g. product preview) is
+  // open, so the bubble doesn't cover the modal's bottom CTAs (Buy Now).
+  const [modalOpen, setModalOpen] = useState(false)
+  useEffect(() => {
+    const onOpen  = () => setModalOpen(true)
+    const onClose = () => setModalOpen(false)
+    window.addEventListener("bloomora:modal-open", onOpen)
+    window.addEventListener("bloomora:modal-close", onClose)
+    return () => {
+      window.removeEventListener("bloomora:modal-open", onOpen)
+      window.removeEventListener("bloomora:modal-close", onClose)
+    }
+  }, [])
+
   const createSession = useCallback(async () => {
     if (!user) return
     try {
@@ -411,7 +425,7 @@ export default function ChatWidget() {
               </button>
             </div>
           </div>
-        ) : (
+        ) : modalOpen ? null : (
           <button onClick={() => setOpen(true)} className="group flex items-center justify-center sm:justify-start gap-0 sm:gap-3 p-0 sm:px-4 sm:py-3.5 w-14 h-14 sm:w-auto sm:h-auto text-white rounded-full sm:rounded-2xl transition-all duration-300 hover:scale-105 hover:shadow-2xl cursor-pointer border-none" style={{ background: `linear-gradient(135deg,${DG} 0%,${G} 100%)`, boxShadow: "0 8px 32px rgba(12,87,62,0.35)", border: "1px solid rgba(255,255,255,0.15)" }}>
             <div className="w-11 h-11 rounded-full sm:rounded-xl flex items-center justify-center flex-shrink-0 transition-all group-hover:scale-110 overflow-hidden bg-white">
               <img src={estingsLogo} alt="Esting's" style={{ width: "28px", height: "28px", objectFit: "contain" }} />

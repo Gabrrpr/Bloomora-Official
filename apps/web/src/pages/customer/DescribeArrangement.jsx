@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react"
+import { createPortal } from "react-dom"
 import { api } from "../../services/api.js"
 import { addToCart } from "../../utils/cart.js"
 import { useTheme } from "../../context/ThemeContext"
@@ -38,6 +39,43 @@ const FLOWER_FACTS = [
   "Adding a little sugar to the vase water can help cut flowers stay fresh longer.",
   "Baby's breath symbolizes everlasting love, which is why it pairs so well with roses.",
 ]
+
+// ── Flower petal loader (matches the admin pages for a coherent loading look) ──
+function FlowerLoader({ message = "Loading...", isDark = false, size = 120, minHeight = "60vh" }) {
+  const petals = [
+    { angle: 0,   color: "#f48fb1" },
+    { angle: 60,  color: "#ec407a" },
+    { angle: 120, color: "#e91e63" },
+    { angle: 180, color: "#f06292" },
+    { angle: 240, color: "#c2185b" },
+    { angle: 300, color: "#f48fb1" },
+  ]
+  return (
+    <>
+      <style>{`
+        @keyframes flrPetalBloom {
+          0%, 100% { opacity: 0.2; }
+          50%      { opacity: 1;   }
+        }
+      `}</style>
+      <div className="flex flex-col items-center justify-center rounded-xl w-full"
+        style={{ minHeight, backgroundColor: "transparent" }}>
+        <svg width={size} height={size} viewBox="0 0 100 100">
+          {petals.map(({ angle, color }, i) => (
+            <g key={i} transform={`rotate(${angle} 50 50)`}>
+              <ellipse cx="50" cy="27" rx="9.5" ry="21" fill={color}
+                style={{ animation: `flrPetalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`, animationFillMode: "both" }} />
+            </g>
+          ))}
+          <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+          <circle cx="50" cy="50" r="7"  fill="#f9c6d0" />
+          <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+        </svg>
+        <p className="mt-3 text-sm font-medium tracking-wide" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{message}</p>
+      </div>
+    </>
+  )
+}
 
 export default function DescribeArrangement({ onNavigate }) {
   const { isDark } = useTheme()
@@ -95,6 +133,7 @@ export default function DescribeArrangement({ onNavigate }) {
   const tileBg       = isDark ? "#1e293b" : "white"
   const tileSelBg    = isDark ? "rgba(74,222,128,0.12)" : "#F0F7F1"
   const tileBdr      = isDark ? "#334155" : "#e5e7eb"
+  const softBdr      = isDark ? "rgba(255,255,255,0.06)" : "rgba(0,0,0,0.04)"
   const tilePlaceBg  = isDark ? "#0f172a" : "#f3f4f6"
   const dividerC     = isDark ? "#334155" : "#f3f4f6"
   const iconCircleBg = isDark ? "rgba(74,222,128,0.12)" : "rgba(46,139,52,0.1)"
@@ -126,6 +165,11 @@ export default function DescribeArrangement({ onNavigate }) {
     }
     load()
   }, [])
+
+  useEffect(() => {
+    document.body.style.overflow = lightboxOpen ? "hidden" : ""
+    return () => { document.body.style.overflow = "" }
+  }, [lightboxOpen])
 
   useEffect(() => {
     if (prompt || promptFocused) { setTypedPlaceholder(""); return }
@@ -362,9 +406,16 @@ export default function DescribeArrangement({ onNavigate }) {
   }
 
   const arrangementName = result?.price_breakdown?.items?.[0]?.product_name || "AI Arrangement"
-  const arrangementDesc = result
-    ? `A custom arrangement featuring ${result.price_breakdown?.items?.map(i => `${i.quantity}x ${i.product_name}`).join(", ") || "your selected materials"}.`
-    : ""
+  const cleanProductName = (name) => (name || "").replace(/\s*-\s*[^-]+$/, "").trim()
+  const arrangementDesc = (() => {
+    if (!result) return ""
+    const parts = (result.price_breakdown?.items || []).map(i => `${i.quantity} ${cleanProductName(i.product_name)}`)
+    if (parts.length === 0) return "A custom arrangement featuring your selected materials."
+    const list = parts.length === 1
+      ? parts[0]
+      : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`
+    return `A custom arrangement featuring ${list}.`
+  })()
 
   return (
     <>
@@ -578,7 +629,7 @@ export default function DescribeArrangement({ onNavigate }) {
                   {unavailableItems.map(item => (
                     <div key={item.field} className="border rounded-xl p-4" style={{ borderColor: dividerC }}>
                       <p className="text-sm mb-1" style={{ color: bodyC }}>
-                        <span className="font-medium" style={{ color: subHeadC }}>{item.product_name}</span> — {item.reason}
+                        <span className="font-medium" style={{ color: subHeadC }}>{item.product_name}</span>: {item.reason}
                       </p>
                       {item.alternatives && item.alternatives.length > 0 && (
                         <div className="mt-2.5">
@@ -617,7 +668,7 @@ export default function DescribeArrangement({ onNavigate }) {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
                     <span className="text-base font-bold" style={{ color: subHeadC }}>Your arrangement</span>
-                    <span className="text-sm" style={{ color: mutedC }}>— preview & order</span>
+                    <span className="text-sm" style={{ color: mutedC }}>(preview & order)</span>
                   </div>
                   <button onClick={resetAll} className="px-3 py-1.5 rounded-lg text-sm transition hover:bg-gray-100 dark:hover:bg-slate-800" style={{ color: mutedC }}>
                     Reset
@@ -625,22 +676,23 @@ export default function DescribeArrangement({ onNavigate }) {
                 </div>
 
                 {/* ── Top zone: image + meta ── */}
-                <div className="px-7 grid grid-cols-1 sm:grid-cols-[200px_1fr] gap-6 mb-0">
+                <div className="px-7 grid grid-cols-1 md:grid-cols-[380px_1fr] gap-6 mb-0">
                   {/* Image */}
                   <div
-                    className="relative w-full sm:w-[200px] h-[220px] rounded-2xl overflow-hidden border flex-shrink-0 cursor-pointer group"
-                    style={{ borderColor: dividerC, backgroundColor: tilePlaceBg }}
+                    className="relative w-full h-[340px] md:h-[420px] rounded-2xl overflow-hidden border flex-shrink-0 cursor-zoom-in group"
+                    style={{ borderColor: dividerC, backgroundColor: tilePlaceBg, boxShadow: cardShadow }}
                     onClick={() => result.generated_image_url && setLightboxOpen(true)}
                   >
                     {result.generated_image_url ? (
                       <>
-                        <img src={result.generated_image_url} alt={arrangementName} className="w-full h-full object-cover" />
-                        <div className="absolute bottom-0 left-0 right-0 px-3 py-2 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition"
-                          style={{ background: "linear-gradient(to top, rgba(0,0,0,0.5), transparent)" }}>
-                          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <img src={result.generated_image_url} alt={arrangementName} className="w-full h-full object-cover transition-transform duration-[600ms] ease-out group-hover:scale-[1.06]" />
+                        {/* Always-visible zoom pill */}
+                        <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full backdrop-blur-md transition-all opacity-90 group-hover:opacity-100 group-hover:scale-105"
+                          style={{ backgroundColor: "rgba(0,0,0,0.45)", boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }}>
+                          <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                           </svg>
-                          <span className="text-[11px] text-white/90">Tap to zoom</span>
+                          <span className="text-[11px] font-semibold text-white">Click to zoom</span>
                         </div>
                       </>
                     ) : (
@@ -652,7 +704,7 @@ export default function DescribeArrangement({ onNavigate }) {
                   </div>
 
                   {/* Right meta */}
-                  <div className="flex flex-col gap-3 pt-1">
+                  <div className="flex flex-col gap-5 pt-1">
                     <div>
                       <label className="text-[11px] font-semibold uppercase tracking-wider block mb-1.5" style={{ color: mutedC }}>Arrangement name</label>
                       <input
@@ -670,17 +722,20 @@ export default function DescribeArrangement({ onNavigate }) {
                     {result.price_breakdown?.items?.length > 0 && (
                       <div>
                         <label className="text-[11px] font-semibold uppercase tracking-wider block mb-1.5" style={{ color: mutedC }}>Materials used</label>
-                        <div className="flex flex-wrap gap-1.5 p-3 rounded-xl border" style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>
+                        <div className="grid gap-x-3 gap-y-1.5 p-3 rounded-xl border text-xs" style={{ gridTemplateColumns: "auto 1fr auto", borderColor: softBdr, backgroundColor: subtleBoxBg }}>
                           {result.price_breakdown.items.map((item, idx) => (
-                            <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full border text-xs"
-                              style={{ borderColor: tileBdr, backgroundColor: isDark ? "#0f172a" : "white" }}>
-                              <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: accentG }} />
-                              <span className="font-semibold" style={{ color: subHeadC }}>{item.material_type}:</span>
-                              <span style={{ color: bodyC }}>{item.product_name}</span>
-                              {item.quantity > 1 && (
-                                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md" style={{ color: mutedC, backgroundColor: isDark ? "#1e293b" : "#f3f4f6" }}>×{item.quantity}</span>
-                              )}
-                            </span>
+                            <div key={idx} className="contents">
+                              <span className="inline-flex items-center gap-1.5 font-semibold whitespace-nowrap self-center" style={{ color: subHeadC }}>
+                                <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: accentG }} />
+                                {item.material_type}
+                              </span>
+                              <span className="min-w-0 truncate self-center" style={{ color: bodyC }}>{item.product_name}</span>
+                              <span className="self-center text-right">
+                                {item.quantity > 1 && (
+                                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md whitespace-nowrap" style={{ color: mutedC, backgroundColor: isDark ? "#1e293b" : "#f3f4f6" }}>×{item.quantity}</span>
+                                )}
+                              </span>
+                            </div>
                           ))}
                         </div>
                       </div>
@@ -706,8 +761,8 @@ export default function DescribeArrangement({ onNavigate }) {
                 </div>
 
                 {/* ── Sections ── */}
-                <div className="px-7 pb-2 mt-3 flex flex-col divide-y" style={{ borderColor: dividerC }}>
-                  <div style={{ borderTopColor: dividerC, borderTopWidth: 1 }} />
+                <div className="px-7 pb-2 mt-3 flex flex-col divide-y" style={{ borderColor: softBdr }}>
+                  <div style={{ borderTopColor: softBdr, borderTopWidth: 1 }} />
 
                   {/* Add-ons */}
                   <div className="py-5">
@@ -773,7 +828,7 @@ export default function DescribeArrangement({ onNavigate }) {
                       </p>
                       <button onClick={() => setShowAIPanel(!showAIPanel)} className="text-xs font-semibold flex items-center gap-1 hover:underline" style={{ color: accentG }}>
                         <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                         </svg>
                         {showAIPanel ? "Write it myself" : "Use AI writer"}
                       </button>
@@ -831,12 +886,18 @@ export default function DescribeArrangement({ onNavigate }) {
                             style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }} />
                         </div>
                         {cardError && <p className="text-xs text-red-500 mb-3">{cardError}</p>}
-                        <button onClick={handleGenerateCard} disabled={generatingCard}
-                          className="w-full py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 border-none text-white cursor-pointer hover:opacity-90 transition"
-                          style={{ background: generatingCard ? (isDark ? "#475569" : "#d1d5db") : `linear-gradient(135deg,${DG},${G})` }}>
-                          {generatingCard ? "Writing..." : "Generate message"}
-                        </button>
-                        {generatedCardMsg && (
+                        {generatingCard ? (
+                          <div className="w-full rounded-lg border" style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>
+                            <FlowerLoader message="Writing your message..." isDark={isDark} size={58} minHeight="130px" />
+                          </div>
+                        ) : (
+                          <button onClick={handleGenerateCard}
+                            className="w-full py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 border-none text-white cursor-pointer hover:opacity-90 transition"
+                            style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+                            Generate message
+                          </button>
+                        )}
+                        {!generatingCard && generatedCardMsg && (
                           <div className="mt-4 border rounded-xl overflow-hidden" style={{ borderColor: isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0" }}>
                             <div className="p-3" style={{ backgroundColor: isDark ? "rgba(74,222,128,0.06)" : "#f0fdf4" }}>
                               <p className="text-sm italic leading-relaxed" style={{ color: subHeadC }}>"{generatedCardMsg}"</p>
@@ -929,13 +990,19 @@ export default function DescribeArrangement({ onNavigate }) {
                 {/* ── CTA buttons ── */}
                 <div className="flex gap-3 px-7 pb-6 mt-1">
                   <button onClick={() => handleAddToCart("cart")}
-                    className="flex-1 py-3.5 text-sm font-bold rounded-xl transition-all"
-                    style={{ border: `2px solid ${accentG}`, color: accentG, backgroundColor: "transparent" }}>
+                    className="flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-bold text-white rounded-xl transition-all hover:brightness-110 active:scale-[0.98]"
+                    style={{ background: `linear-gradient(135deg, ${DG}, ${G})`, boxShadow: "0 6px 18px rgba(46,139,52,0.32)" }}>
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
                     Add to cart
                   </button>
                   <button onClick={() => handleAddToCart("checkout")}
-                    className="flex-1 py-3.5 text-sm font-bold text-white rounded-xl transition-all hover:brightness-105 active:scale-[0.98]"
-                    style={{ backgroundColor: accentG, boxShadow: "0 4px 14px rgba(46,139,52,0.25)" }}>
+                    className="flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-bold rounded-xl transition-all hover:brightness-105 active:scale-[0.98]"
+                    style={{ border: `2px solid ${accentG}`, color: accentG, backgroundColor: isDark ? "rgba(74,222,128,0.06)" : "transparent" }}>
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007z" />
+                    </svg>
                     Buy now
                   </button>
                 </div>
@@ -1031,15 +1098,53 @@ export default function DescribeArrangement({ onNavigate }) {
       </div>
     )}
 
-    {lightboxOpen && result?.generated_image_url && (
-      <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" onClick={() => setLightboxOpen(false)}>
-        <button className="absolute top-4 right-4 text-white/80 hover:text-white transition" onClick={() => setLightboxOpen(false)}>
-          <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    {result?.generated_image_url && createPortal(
+      <div
+        className="fixed inset-0 flex items-center justify-center p-3 sm:p-6"
+        style={{
+          top: 0, left: 0, width: "100vw", height: "100vh",
+          zIndex: 99999,
+          backgroundColor: "rgba(0,0,0,0.85)",
+          backdropFilter: "blur(6px)",
+          WebkitBackdropFilter: "blur(6px)",
+          opacity: lightboxOpen ? 1 : 0,
+          pointerEvents: lightboxOpen ? "auto" : "none",
+          transition: "opacity 0.35s ease",
+        }}
+        onClick={() => setLightboxOpen(false)}
+      >
+        <button
+          aria-label="Close"
+          className="absolute z-10 flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-full text-white transition active:scale-95"
+          style={{
+            top: "max(0.75rem, env(safe-area-inset-top))",
+            right: "max(0.75rem, env(safe-area-inset-right))",
+            backgroundColor: "rgba(0,0,0,0.5)",
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+            border: "1px solid rgba(255,255,255,0.2)",
+            opacity: lightboxOpen ? 1 : 0,
+            transition: "opacity 0.35s ease 0.05s, transform 0.1s ease",
+          }}
+          onClick={() => setLightboxOpen(false)}
+        >
+          <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
         </button>
-        <img src={result.generated_image_url} alt={arrangementName} className="max-w-full max-h-[85vh] rounded-xl shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
-      </div>
+        <img
+          src={result.generated_image_url}
+          alt={arrangementName}
+          className="max-w-full max-h-[85vh] sm:max-h-[88vh] w-auto h-auto rounded-xl sm:rounded-2xl shadow-2xl object-contain"
+          style={{
+            transform: lightboxOpen ? "scale(1)" : "scale(0.9)",
+            opacity: lightboxOpen ? 1 : 0,
+            transition: "transform 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease",
+          }}
+          onClick={e => e.stopPropagation()}
+        />
+      </div>,
+      document.body
     )}
 
     <style>{`

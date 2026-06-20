@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { createPortal } from "react-dom"
 import { api } from "../../services/api.js"
 import { addToCart } from "../../utils/cart.js"
 import { useTheme } from "../../context/ThemeContext"
@@ -245,6 +246,11 @@ export default function MixAndMatch({ onNavigate }) {
   const [aiUsage, setAiUsage] = useState(null)
   const [customName, setCustomName] = useState("")
   const [lightboxOpen, setLightboxOpen] = useState(false)
+
+  useEffect(() => {
+    document.body.style.overflow = lightboxOpen ? "hidden" : ""
+    return () => { document.body.style.overflow = "" }
+  }, [lightboxOpen])
 
   const [customizationEnabled, setCustomizationEnabled] = useState(true)
 
@@ -543,13 +549,25 @@ export default function MixAndMatch({ onNavigate }) {
               <div className="px-7 pb-7 flex flex-col sm:flex-row gap-6">
                 {/* AI Generated Image */}
                 <div
-                  className="w-full sm:w-52 h-64 rounded-2xl flex-shrink-0 flex items-center justify-center border overflow-hidden cursor-pointer hover:opacity-90 transition"
+                  className="relative w-full sm:w-52 h-64 rounded-2xl flex-shrink-0 flex items-center justify-center border overflow-hidden cursor-zoom-in group"
                   style={{ borderColor: dividerC, backgroundColor: tilePlaceBg }}
                   onClick={() => result.generated_image_url && setLightboxOpen(true)}
                   title="Click for a closer look"
                 >
                   {result.generated_image_url
-                    ? <img src={result.generated_image_url} alt={arrangementName} className="w-full h-full object-cover" />
+                    ? (
+                      <>
+                        <img src={result.generated_image_url} alt={arrangementName} className="w-full h-full object-cover transition-transform duration-[600ms] ease-out group-hover:scale-[1.06]" />
+                        {/* Always-visible zoom pill */}
+                        <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full backdrop-blur-md transition-all opacity-90 group-hover:opacity-100 group-hover:scale-105"
+                          style={{ backgroundColor: "rgba(0,0,0,0.45)", boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }}>
+                          <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                          </svg>
+                          <span className="text-[11px] font-semibold text-white">Click to zoom</span>
+                        </div>
+                      </>
+                    )
                     : (
                       <div className="text-center px-3">
                         <p className="text-sm mb-1" style={{ color: faintC }}>No image generated</p>
@@ -662,26 +680,53 @@ export default function MixAndMatch({ onNavigate }) {
         </div>
 
         {/* Lightbox modal for closer look */}
-        {lightboxOpen && result?.generated_image_url && (
+        {result?.generated_image_url && createPortal(
           <div
-            className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            className="fixed inset-0 flex items-center justify-center p-3 sm:p-6"
+            style={{
+              top: 0, left: 0, width: "100vw", height: "100vh",
+              zIndex: 99999,
+              backgroundColor: "rgba(0,0,0,0.85)",
+              backdropFilter: "blur(6px)",
+              WebkitBackdropFilter: "blur(6px)",
+              opacity: lightboxOpen ? 1 : 0,
+              pointerEvents: lightboxOpen ? "auto" : "none",
+              transition: "opacity 0.35s ease",
+            }}
             onClick={() => setLightboxOpen(false)}
           >
             <button
-              className="absolute top-4 right-4 text-white/80 hover:text-white transition"
+              aria-label="Close"
+              className="absolute z-10 flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-full text-white transition active:scale-95"
+              style={{
+                top: "max(0.75rem, env(safe-area-inset-top))",
+                right: "max(0.75rem, env(safe-area-inset-right))",
+                backgroundColor: "rgba(0,0,0,0.5)",
+                backdropFilter: "blur(4px)",
+                WebkitBackdropFilter: "blur(4px)",
+                border: "1px solid rgba(255,255,255,0.2)",
+                opacity: lightboxOpen ? 1 : 0,
+                transition: "opacity 0.35s ease 0.05s, transform 0.1s ease",
+              }}
               onClick={() => setLightboxOpen(false)}
             >
-              <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-5 h-5 sm:w-6 sm:h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </button>
             <img
               src={result.generated_image_url}
               alt={arrangementName}
-              className="max-w-full max-h-[85vh] rounded-xl shadow-2xl object-contain"
+              className="max-w-full max-h-[85vh] sm:max-h-[88vh] w-auto h-auto rounded-xl sm:rounded-2xl shadow-2xl object-contain"
+              style={{
+                transform: lightboxOpen ? "scale(1)" : "scale(0.9)",
+                opacity: lightboxOpen ? 1 : 0,
+                transition: "transform 0.4s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s ease",
+              }}
               onClick={e => e.stopPropagation()}
             />
-          </div>
+          </div>,
+          document.body
         )}
       </>
     )

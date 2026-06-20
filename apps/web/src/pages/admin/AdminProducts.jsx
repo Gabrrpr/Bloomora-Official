@@ -208,7 +208,7 @@ function ExportProductsBtn({ data=[], d }) {
       const avail = !p.is_available?"Out of stock":(p.stock??0)<=(p.reorder_point??10)?"Low stock":"In stock"
       return [p.id??"",p.name??"",p.category??"",p.status??"",avail,p.price??0,p.original_price??"",p.stock??0,p.reorder_point??10]
         .map(v => { const s=String(v??""); return (s.includes(",")||s.includes("\n")||s.includes('"'))?`"${s.replace(/"/g,'""')}"`:s }).join(",")
-    }) : [headers.map(()=>"—").join(",")]
+    }) : [headers.map(()=>"N/A").join(",")]
     const csv=[headers.join(","),...rows].join("\n")
     const blob=new Blob([csv],{type:"text/csv"}),url=URL.createObjectURL(blob),a=document.createElement("a")
     a.href=url; a.download=`products_report_${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(url)
@@ -252,8 +252,8 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     name:"", group:"floral", category:"", productType:"", 
     price:"", 
     basePrice: "", laborCost: "", markupPercentage: "10", 
-    availability:"Available", 
-    status:"Active", description:"", image_url:"", 
+    availability:"Available",
+    status:"Active", description:"", careGuide:[], image_url:"",
     season_key:"", limited_start_at:"", limited_end_at:"",
     stock: 0,          
     is_visible: true,
@@ -319,7 +319,16 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
   const [lightboxSrc, setLightboxSrc] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isCustomCategory, setIsCustomCategory] = useState(false)
+  const [careTipInput, setCareTipInput] = useState("")
   const set = key => val => setForm(f => ({...f,[key]:val}))
+
+  const addCareTip = () => {
+    const t = careTipInput.trim()
+    if (!t) return
+    setForm(f => ({ ...f, careGuide: [...f.careGuide, t] }))
+    setCareTipInput("")
+  }
+  const removeCareTip = idx => setForm(f => ({ ...f, careGuide: f.careGuide.filter((_, i) => i !== idx) }))
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -441,6 +450,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
       fd.append("status", form.status.toLowerCase());
       fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false");
       if (form.description) fd.append("description", form.description.trim());
+      if (form.careGuide.length > 0) fd.append("care_guide", form.careGuide.join("\n"));
       if (form.image_url) fd.append("image_url", form.image_url);
       fd.append("stock", String(form.stock));
       fd.append("is_visible", form.is_visible ? "true" : "false");
@@ -625,6 +635,50 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
           <div>
             <MLabel d={d}>Description <span style={{ color: d.subC, fontWeight: 400 }}>(optional)</span></MLabel>
             <MTextarea value={form.description} onChange={set("description")} placeholder="Brief description..." d={d}/>
+          </div>
+
+          {/* CARE GUIDE: shown in the product's "Care Guide" tab on the storefront */}
+          <div className="p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
+            <div className="flex items-center gap-2 mb-1.5">
+              <svg className="w-4 h-4" style={{ color: d.accentG }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
+              </svg>
+              <MLabel d={d}>Care Guide <span style={{ color: d.subC, fontWeight: 400 }}>(optional)</span></MLabel>
+            </div>
+            <p className="text-xs mb-3" style={{ color: d.subC }}>
+              Add care tips one at a time. Each tip appears as its own card under the <strong>Care Guide</strong> tab on the product page.
+            </p>
+            <div className="flex items-start gap-2">
+              <input type="text" value={careTipInput} onChange={e => setCareTipInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCareTip() } }}
+                placeholder="e.g. Replace water every 1-2 days"
+                className="flex-1 px-3 py-2.5 text-sm border rounded-md outline-none transition-all"
+                style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }}
+                onFocus={e => { e.target.style.borderColor="#4ade80"; e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)" }}
+                onBlur={e => { e.target.style.borderColor=d.inputBdr; e.target.style.boxShadow="none" }}/>
+              <button type="button" onClick={addCareTip} disabled={!careTipInput.trim()}
+                className="px-4 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                style={{ background:`linear-gradient(135deg,${DG},${G})` }}>
+                Add
+              </button>
+            </div>
+            {form.careGuide.length > 0 && (
+              <div className="space-y-2 mt-3">
+                {form.careGuide.map((tip, idx) => (
+                  <div key={idx} className="flex items-center justify-between gap-2 p-2.5 rounded-lg border" style={{ backgroundColor: d.cardBg, borderColor: d.cardBdr }}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <svg className="w-4 h-4 flex-shrink-0" style={{ color: d.accentG }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/>
+                      </svg>
+                      <span className="text-sm truncate" style={{ color: d.cellC }}>{tip}</span>
+                    </div>
+                    <button type="button" onClick={() => removeCareTip(idx)} className="p-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors flex-shrink-0">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -953,9 +1007,12 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     
     availability: !product.is_available ? "Out of Stock" : product.stock <= (product.reorder_point || 10) ? "Limited" : "Available",
     status: product.status === "active" || product.status === "Active" ? "Active" : "Inactive",
-    description: product.description || "", 
+    description: product.description || "",
+    careGuide: typeof product.care_guide === "string" && product.care_guide.trim()
+      ? product.care_guide.split("\n").map(t => t.trim()).filter(Boolean)
+      : (Array.isArray(product.care_guide) ? product.care_guide : []),
     image_url: product.image_url || "",
-    season_key: product.season_key || "", 
+    season_key: product.season_key || "",
     limited_start_at: product.limited_start_at || "", 
     limited_end_at: product.limited_end_at || "",
     stock: product.stock ?? 0,
@@ -1023,7 +1080,16 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
   const [lightboxSrc, setLightboxSrc] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isCustomCategory, setIsCustomCategory] = useState(false)
+  const [careTipInput, setCareTipInput] = useState("")
   const set = key => val => setForm(f=>({...f,[key]:val}))
+
+  const addCareTip = () => {
+    const t = careTipInput.trim()
+    if (!t) return
+    setForm(f => ({ ...f, careGuide: [...f.careGuide, t] }))
+    setCareTipInput("")
+  }
+  const removeCareTip = idx => setForm(f => ({ ...f, careGuide: f.careGuide.filter((_, i) => i !== idx) }))
 
   useEffect(() => {
     document.body.style.overflow = "hidden";
@@ -1146,6 +1212,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
       fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false");
       fd.append("branches", JSON.stringify(form.branches));
       if (form.description) fd.append("description", form.description.trim());
+      if (form.careGuide.length > 0) fd.append("care_guide", form.careGuide.join("\n"));
       if (form.image_url) fd.append("image_url", form.image_url);
       fd.append("stock", String(form.stock));
       fd.append("is_visible", form.is_visible ? "true" : "false");
@@ -1307,6 +1374,50 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
           <div>
             <MLabel d={d}>Description <span style={{ color: d.subC, fontWeight: 400 }}>(optional)</span></MLabel>
             <MTextarea value={form.description} onChange={set("description")} placeholder="Brief description..." d={d}/>
+          </div>
+
+          {/* CARE GUIDE: shown in the product's "Care Guide" tab on the storefront */}
+          <div className="p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
+            <div className="flex items-center gap-2 mb-1.5">
+              <svg className="w-4 h-4" style={{ color: d.accentG }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"/>
+              </svg>
+              <MLabel d={d}>Care Guide <span style={{ color: d.subC, fontWeight: 400 }}>(optional)</span></MLabel>
+            </div>
+            <p className="text-xs mb-3" style={{ color: d.subC }}>
+              Add care tips one at a time. Each tip appears as its own card under the <strong>Care Guide</strong> tab on the product page.
+            </p>
+            <div className="flex items-start gap-2">
+              <input type="text" value={careTipInput} onChange={e => setCareTipInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addCareTip() } }}
+                placeholder="e.g. Replace water every 1-2 days"
+                className="flex-1 px-3 py-2.5 text-sm border rounded-md outline-none transition-all"
+                style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }}
+                onFocus={e => { e.target.style.borderColor="#4ade80"; e.target.style.boxShadow="0 0 0 2px rgba(74,222,128,0.18)" }}
+                onBlur={e => { e.target.style.borderColor=d.inputBdr; e.target.style.boxShadow="none" }}/>
+              <button type="button" onClick={addCareTip} disabled={!careTipInput.trim()}
+                className="px-4 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+                style={{ background:`linear-gradient(135deg,${DG},${G})` }}>
+                Add
+              </button>
+            </div>
+            {form.careGuide.length > 0 && (
+              <div className="space-y-2 mt-3">
+                {form.careGuide.map((tip, idx) => (
+                  <div key={idx} className="flex items-center justify-between gap-2 p-2.5 rounded-lg border" style={{ backgroundColor: d.cardBg, borderColor: d.cardBdr }}>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <svg className="w-4 h-4 flex-shrink-0" style={{ color: d.accentG }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/>
+                      </svg>
+                      <span className="text-sm truncate" style={{ color: d.cellC }}>{tip}</span>
+                    </div>
+                    <button type="button" onClick={() => removeCareTip(idx)} className="p-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors flex-shrink-0">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
@@ -1627,15 +1738,15 @@ function ViewProductModal({ product, onClose }) {
 
   // Short fields go in the two-column grid; longer text fields stack full width below.
   const metaRows = [
-    { label:"Category", value:product.category || "—", capitalize:true },
-    { label:"Stock",    value:product.stock ?? "—" },
-    { label:"Branches", value:product.branches?.length > 0 ? product.branches.join(", ") : "—" },
-    { label:"Product Type", value:product.product_type || "—", capitalize:true },
+    { label:"Category", value:product.category || "N/A", capitalize:true },
+    { label:"Stock",    value:product.stock ?? "N/A" },
+    { label:"Branches", value:product.branches?.length > 0 ? product.branches.join(", ") : "N/A" },
+    { label:"Product Type", value:product.product_type || "N/A", capitalize:true },
   ]
   const longRows = [
-    { label:"Search Tags", value:product.tags?.length > 0 ? (Array.isArray(product.tags) ? product.tags.join(", ") : product.tags) : "—" },
-    { label:"Occasions",   value:product.occasions?.length > 0 ? product.occasions.join(", ") : "—" },
-    { label:"Description", value:product.description || "—" },
+    { label:"Search Tags", value:product.tags?.length > 0 ? (Array.isArray(product.tags) ? product.tags.join(", ") : product.tags) : "N/A" },
+    { label:"Occasions",   value:product.occasions?.length > 0 ? product.occasions.join(", ") : "N/A" },
+    { label:"Description", value:product.description || "N/A" },
   ]
 
   return (
@@ -1704,10 +1815,10 @@ function ViewProductModal({ product, onClose }) {
 // ── Delete Product Modal ──────────────────────────────────────────────────────
 function DeleteProductModal({ product, onClose, onConfirm, isDeleting }) {
   const d = useAdminTokens()
-  
-  return (
+
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
-      style={{ backgroundColor: d.overlayBg, backdropFilter: "blur(4px)" }}
+      style={{ backgroundColor: d.overlayBg, backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: 9999, top: 0, left: 0, width: "100vw", height: "100vh" }}
       onClick={e => { if (e.target === e.currentTarget && !isDeleting) onClose() }}>
       <div className="rounded-xl w-full overflow-hidden transform transition-all"
         style={{ maxWidth: "400px", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${d.modalBdr}`, backgroundColor: d.modalBg }}>
@@ -1741,7 +1852,8 @@ function DeleteProductModal({ product, onClose, onConfirm, isDeleting }) {
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
@@ -1799,7 +1911,7 @@ export default function AdminProducts({ onNavigate }) {
   }, [loading])
 
   // Typewriter hint in the search box: types a sample product name, pauses, deletes,
-  // then the next one — looping forever while the box is empty. Stops once the user types.
+  // then the next one, looping forever while the box is empty. Stops once the user types.
   useEffect(() => {
     if (search) { setPhText(""); return }
     let sample = 0, ch = 0, deleting = false, timer
@@ -2006,7 +2118,7 @@ export default function AdminProducts({ onNavigate }) {
                           {p.branches.join(", ")}
                         </span>
                       ) : (
-                        <span className="text-xs" style={{ color:d.subC }}>—</span>
+                        <span className="text-xs" style={{ color:d.subC }}>N/A</span>
                       )}
                     </td>
                     <td className="px-4 py-3">

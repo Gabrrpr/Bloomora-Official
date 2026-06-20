@@ -48,30 +48,36 @@ function useIsMobile(breakpoint = 900) {
 }
 
 /* ── Mini Calendar ── */
+const MAX_ORDER_DAYS = 30 // Customers can't schedule beyond this — flower prices fluctuate (e.g. holidays)
+
 function MiniCalendar({ selected, onSelect }) {
   const now = todayD()
+  const max = (() => { const d = todayD(); d.setDate(d.getDate() + MAX_ORDER_DAYS); return d })()
   const [vd, setVd] = useState({ y: now.getFullYear(), m: now.getMonth() })
   const first = new Date(vd.y, vd.m, 1).getDay()
   const dim   = new Date(vd.y, vd.m+1, 0).getDate()
   const cells = [...Array(first).fill(null), ...Array.from({ length: dim }, (_, i) => i+1)]
-  const cd  = d => new Date(vd.y, vd.m, d)
+  const cd   = d => new Date(vd.y, vd.m, d)
   const past = d => cd(d) < now
+  const far  = d => cd(d) > max
   const tod  = d => cd(d).toDateString() === now.toDateString()
   const sel  = d => {
     if (!selected) return false
     const [y,m,dd] = selected.split("-").map(Number)
     return cd(d).toDateString() === new Date(y,m-1,dd).toDateString()
   }
+  const canPrev = !(vd.y === now.getFullYear() && vd.m === now.getMonth())
+  const canNext = new Date(vd.y, vd.m+1, 1) <= max
   return (
     <div className="mt-2 border border-gray-200 rounded-xl overflow-hidden bg-white">
       <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b border-gray-100">
-        <button onClick={() => setVd(v => v.m===0 ? {y:v.y-1,m:11} : {...v,m:v.m-1})}
-          className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 cursor-pointer">
+        <button onClick={() => canPrev && setVd(v => v.m===0 ? {y:v.y-1,m:11} : {...v,m:v.m-1})} disabled={!canPrev}
+          className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 cursor-pointer disabled:opacity-30 disabled:cursor-default">
           <svg width="10" height="10" fill="none" stroke="#6b7280" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7"/></svg>
         </button>
         <span className="text-sm font-semibold text-gray-800">{MONTHS[vd.m]} {vd.y}</span>
-        <button onClick={() => setVd(v => v.m===11 ? {y:v.y+1,m:0} : {...v,m:v.m+1})}
-          className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 cursor-pointer">
+        <button onClick={() => canNext && setVd(v => v.m===11 ? {y:v.y+1,m:0} : {...v,m:v.m+1})} disabled={!canNext}
+          className="w-7 h-7 flex items-center justify-center border border-gray-200 rounded-lg bg-white hover:bg-gray-50 cursor-pointer disabled:opacity-30 disabled:cursor-default">
           <svg width="10" height="10" fill="none" stroke="#6b7280" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
         </button>
       </div>
@@ -82,13 +88,15 @@ function MiniCalendar({ selected, onSelect }) {
         <div className="grid grid-cols-7 gap-0.5">
           {cells.map((d,i) => {
             if (!d) return <div key={i}/>
-            const p = past(d), t = tod(d), s = sel(d)
+            const p = past(d), f = far(d), t = tod(d), s = sel(d)
+            const disabled = p || f
             return (
-              <button key={i} onClick={() => !p && onSelect(toStr(cd(d)))} disabled={p}
+              <button key={i} onClick={() => !disabled && onSelect(toStr(cd(d)))} disabled={disabled}
+                title={f ? `Orders can only be scheduled within ${MAX_ORDER_DAYS} days` : undefined}
                 className="h-8 rounded-lg text-xs transition-all"
                 style={{
-                  cursor: p ? "default" : "pointer",
-                  color: s ? "white" : p ? "#d1d5db" : t ? G : "#374151",
+                  cursor: disabled ? "default" : "pointer",
+                  color: s ? "white" : disabled ? "#d1d5db" : t ? G : "#374151",
                   background: s ? G : t ? "#f0fdf4" : "transparent",
                   fontWeight: s || t ? 600 : 400,
                   outline: t && !s ? `2px solid ${G}` : "none",
@@ -98,6 +106,12 @@ function MiniCalendar({ selected, onSelect }) {
               </button>
             )
           })}
+        </div>
+        <div className="flex items-start gap-1.5 mt-2.5 pt-2.5 border-t border-gray-100">
+          <svg width="13" height="13" fill="none" stroke="#9ca3af" strokeWidth={2} viewBox="0 0 24 24" className="flex-shrink-0 mt-px"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          <p className="text-[10px] leading-snug text-gray-400 m-0">
+            Orders can be scheduled up to {MAX_ORDER_DAYS} days ahead. Beyond that, flower prices may change (e.g. holiday seasons).
+          </p>
         </div>
       </div>
     </div>
@@ -168,8 +182,12 @@ function AIPanel({ onUse, onBack, isMobile }) {
   const generate = async () => {
     if (!relationship || !occasion) { setErr("Please select a relationship and occasion."); return }
     setErr(""); setLoading(true); setGenerated("")
+    const start = Date.now()
     try {
       const text = await generateCardMessage({ relationship, occasion, tone, extra })
+      const elapsed = Date.now() - start
+      // keep the flower loader on screen long enough to read, so it never just flashes
+      if (elapsed < 1000) await new Promise(r => setTimeout(r, 1000 - elapsed))
       setGenerated(text)
     } catch (e) {
       setErr("Could not generate message. Please try again.")
@@ -178,7 +196,7 @@ function AIPanel({ onUse, onBack, isMobile }) {
   }
 
   return (
-    <div className={`pms-scroll flex-1 overflow-y-auto flex flex-col gap-4 ${isMobile ? "px-4 py-5" : "px-7 py-6"}`}>
+    <div className={`pms-scroll pm-stagger flex-1 overflow-y-auto flex flex-col gap-4 ${isMobile ? "px-4 py-5" : "px-7 py-6"}`}>
       <div>
         <button onClick={onBack}
           className="flex items-center gap-1.5 text-sm text-gray-400 hover:text-gray-600 cursor-pointer bg-transparent border-none mb-4 p-0">
@@ -266,8 +284,23 @@ function AIPanel({ onUse, onBack, isMobile }) {
         )}
       </button>
 
-      {generated && (
-        <div className="border rounded-xl overflow-hidden" style={{ borderColor: `${G}30` }}>
+      {loading && (
+        <div className="flex flex-col items-center justify-center text-center py-8" style={{ animationDelay: "0s" }}>
+          <div style={{ animation: "qPulse 1.4s ease-in-out infinite" }}>
+            <svg viewBox="0 0 64 64" className="w-14 h-14" style={{ animation: "qSpin 3.2s linear infinite", transformOrigin: "center" }}>
+              {[0, 72, 144, 216, 288].map(a => (
+                <ellipse key={a} cx="32" cy="17" rx="8.5" ry="13" fill={G} opacity="0.85" transform={`rotate(${a} 32 32)`}/>
+              ))}
+              <circle cx="32" cy="32" r="7.5" fill="#facc15"/>
+            </svg>
+          </div>
+          <p className="text-sm font-semibold mt-4 mb-0.5 text-gray-700">Writing your message…</p>
+          <p className="text-xs text-gray-400 m-0">Crafting something heartfelt</p>
+        </div>
+      )}
+
+      {generated && !loading && (
+        <div className="border rounded-xl overflow-hidden" style={{ borderColor: `${G}30`, animationDelay: "0s" }}>
           <div className="px-4 py-2.5 border-b" style={{ background: "#f0fdf4", borderColor: `${G}20` }}>
             <p className="text-xs font-semibold uppercase tracking-widest m-0" style={{ color: G }}>Generated Message</p>
           </div>
@@ -414,7 +447,7 @@ function CardStep({ delivLabel, dest, onClose, onNavigate, isMobile }) {
           onBack={() => setShowAI(false)}/>
       </div>
     ) : (
-      <div key="form" className={`pm-step-anim pm-scroll flex-1 overflow-y-auto flex flex-col ${isMobile ? "px-4 py-5" : "px-6 py-6"}`}>
+      <div key="form" className={`pm-step-anim pm-stagger pm-scroll flex-1 overflow-y-auto flex flex-col ${isMobile ? "px-4 py-5" : "px-6 py-6"}`}>
         <p className="text-xl font-bold text-gray-900 mb-1">Write your greeting card</p>
         <p className="text-sm text-gray-400 mb-4">All fields are required.</p>
 
@@ -561,8 +594,15 @@ function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark
     const date = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
     setMeta({ qty: n, ref, date })
     setErr("")
-    setPhase("report")
+    setPhase("loading")
   }
+
+  // After the flower loader plays, reveal the quotation
+  useEffect(() => {
+    if (phase !== "loading") return
+    const t = setTimeout(() => setPhase("report"), 1600)
+    return () => clearTimeout(t)
+  }, [phase])
 
   const grand = unitPrice * meta.qty
   const quoteSummary = `${product.name} · ${meta.qty.toLocaleString()} pcs · ₱${grand.toLocaleString()}`
@@ -615,20 +655,20 @@ function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark
   return (
     <div className={`pm-quote-form w-full h-full flex overflow-hidden ${isMobile ? "flex-col" : "flex-row"}`}>
       {!isMobile && (
-        <div className="pm-quote-img flex-shrink-0 overflow-hidden flex items-center justify-center"
+        <div className="pm-quote-img flex-shrink-0 overflow-hidden flex items-center justify-center p-6"
           style={{ width: "50%", background: isDark ? "#0f172a" : "#f3f4f6" }}>
-          <img src={product.image} alt={product.name} className="w-full h-full object-cover"
+          <img src={product.image} alt={product.name} className="max-w-full max-h-full object-contain"
             onError={e => { e.target.style.display="none" }}/>
         </div>
       )}
 
-      <div className={`pm-quote-right flex flex-col ${isMobile ? "overflow-y-auto" : "overflow-hidden"}`}
+      <div className={`pm-quote-right flex flex-col ${isMobile ? "overflow-y-auto" : "overflow-y-auto"}`}
         style={{ width: isMobile ? "100%" : "50%", flex: isMobile ? "1 1 auto" : undefined, minHeight: 0, background: panelBg }}>
-        <div className={`flex flex-col rounded-2xl overflow-hidden ${isMobile ? "m-2" : "flex-1 m-4"}`}
+        <div className={`flex flex-col rounded-2xl overflow-hidden ${isMobile ? "m-2" : "m-4 my-auto"}`}
           style={{ background: docBg, boxShadow: "0 2px 16px rgba(0,0,0,0.08)" }}>
 
           {phase === "input" ? (
-            <div className={`pm-scroll px-6 py-6 flex flex-col ${isMobile ? "" : "flex-1 overflow-y-auto"}`}>
+            <div className={`pm-scroll px-6 py-6 flex flex-col ${isMobile ? "" : "overflow-y-auto"}`}>
               <button onClick={onBack}
                 className="flex items-center gap-1.5 text-sm cursor-pointer bg-transparent border-none mb-4 p-0"
                 style={{ color: faint }}>
@@ -698,7 +738,6 @@ function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark
               </div>
 
               {err && <p className="text-xs text-red-500 mt-2">{err}</p>}
-              {!isMobile && <div className="flex-1"/>}
 
               <button onClick={generate}
                 className={`w-full py-3.5 rounded-xl text-sm font-semibold text-white border-none cursor-pointer flex items-center justify-center gap-2 ${isMobile ? "mt-6" : "mt-4"}`}
@@ -707,8 +746,33 @@ function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark
                 Generate Quotation
               </button>
             </div>
+          ) : phase === "loading" ? (
+            <div className="px-6 py-16 flex flex-col items-center justify-center text-center" style={{ minHeight: 280 }}>
+              <div style={{ animation: "qPulse 1.4s ease-in-out infinite" }}>
+                <svg viewBox="0 0 64 64" className="w-20 h-20" style={{ animation: "qSpin 3.2s linear infinite", transformOrigin: "center" }}>
+                  {[0, 72, 144, 216, 288].map(a => (
+                    <ellipse key={a} cx="32" cy="17" rx="8.5" ry="13" fill={accent} opacity="0.85"
+                      transform={`rotate(${a} 32 32)`}/>
+                  ))}
+                  <circle cx="32" cy="32" r="7.5" fill={isDark ? "#fde047" : "#facc15"}/>
+                </svg>
+              </div>
+              <p className="text-base font-semibold mt-6 mb-1" style={{ color: txt }}>Preparing your quotation…</p>
+              <p className="text-xs" style={{ color: faint }}>Crunching the numbers for {qtyStr} pcs</p>
+              <style>{`
+                @keyframes qSpin{to{transform:rotate(360deg)}}
+                @keyframes qPulse{0%,100%{transform:scale(0.92)}50%{transform:scale(1.08)}}
+                @keyframes qFade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+                .q-report>*{animation:qFade 0.55s cubic-bezier(0.22,0.61,0.36,1) both}
+                .q-report>*:nth-child(1){animation-delay:.05s}
+                .q-report>*:nth-child(2){animation-delay:.22s}
+                .q-report>*:nth-child(3){animation-delay:.42s}
+                .q-report>*:nth-child(4){animation-delay:.6s}
+                @media(prefers-reduced-motion:reduce){.q-report>*{animation:none}}
+              `}</style>
+            </div>
           ) : (
-            <div className={`pm-scroll px-6 py-6 ${isMobile ? "" : "flex-1 overflow-y-auto"}`}>
+            <div className="pm-scroll px-6 py-6 q-report">
               <button onClick={() => setPhase("input")}
                 className="flex items-center gap-1.5 text-sm cursor-pointer bg-transparent border-none mb-4 p-0"
                 style={{ color: faint }}>
@@ -768,7 +832,7 @@ function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark
                 style={{ background: isDark ? "rgba(245,158,11,0.13)" : "#fffbeb", border: `1px solid ${isDark ? "rgba(245,158,11,0.35)" : "#fde68a"}` }}>
                 <svg width="14" height="14" fill="none" stroke={isDark ? "#fbbf24" : "#d97706"} strokeWidth={2} viewBox="0 0 24 24" className="flex-shrink-0 mt-0.5"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                 <p className="text-xs leading-relaxed m-0" style={{ color: isDark ? "#fde68a" : "#92400e" }}>
-                  This is a standard-rate estimate — bulk discounts aren't applied automatically. Message us to discuss a better rate for this quantity.
+                  This is a standard-rate estimate. Bulk discounts aren't applied automatically. Message us to discuss a better rate for this quantity.
                 </p>
               </div>
 
@@ -851,10 +915,17 @@ function ImgZoom({ product, isDark }) {
       )}
 
       {active && (
-        <div className="absolute top-3 right-3 bg-black/45 text-white text-[10px] font-bold px-2.5 py-1 rounded-full pointer-events-none z-10 backdrop-blur-sm">
+        <div className="absolute bottom-3 right-3 bg-black/45 text-white text-[10px] font-bold px-2.5 py-1 rounded-full pointer-events-none z-10 backdrop-blur-sm">
           ZOOM
         </div>
       )}
+
+      {/* Persistent hint so users know the image is zoomable; fades out while hovering */}
+      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 text-white text-[11px] font-semibold px-3 py-1.5 rounded-full pointer-events-none z-10 backdrop-blur-sm transition-opacity duration-300 whitespace-nowrap"
+        style={{ background: "rgba(0,0,0,0.5)", opacity: active ? 0 : 1 }}>
+        <svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        Hover to zoom
+      </div>
     </div>
   )
 }
@@ -968,9 +1039,11 @@ function ColorSection({ colors, color, errors, setColor, setErrors, isDark }) {
   )
 }
 
-function QtySection({ qty, errors, setQty, setErrors, isDark }) {
+function QtySection({ qty, errors, setQty, setErrors, isDark, onBulk }) {
   const G = "#2E8B34";
   const MAX_QTY = 99; // Prevents customers from accidentally ordering 10,000 items
+  const BULK_HINT = 10; // Suggest a bulk quotation at/above this quantity
+  const showBulkHint = Number(qty) >= BULK_HINT;
 
   const handleDecrement = () => {
     if (qty > 1) {
@@ -1058,6 +1131,36 @@ function QtySection({ qty, errors, setQty, setErrors, isDark }) {
           </svg>
         </button>
       </div>
+
+      {showBulkHint && (
+        <div className="flex items-center gap-3 mt-3 p-3 rounded-xl"
+          style={{
+            background: isDark ? "rgba(236,72,153,0.12)" : "#fdf2f8",
+            border: `1px solid ${isDark ? "rgba(236,72,153,0.3)" : "#fbcfe8"}`
+          }}>
+          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+            style={{ background: isDark ? "rgba(236,72,153,0.18)" : "#fce7f3" }}>
+            <svg width="17" height="17" fill="none" stroke={isDark ? "#f9a8d4" : "#db2777"} strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-xs font-semibold leading-snug m-0" style={{ color: isDark ? "#fbcfe8" : "#9d174d" }}>
+              Buying {qty}+ pieces?
+            </p>
+            <p className="text-[11px] leading-snug m-0 mt-0.5" style={{ color: isDark ? "#f9a8d4" : "#be185d" }}>
+              Get a bulk quotation for better rates.
+            </p>
+          </div>
+          {onBulk && (
+            <button onClick={onBulk}
+              className="flex-shrink-0 text-xs font-bold text-white px-3 py-2 rounded-lg cursor-pointer border-none transition-opacity hover:opacity-90 whitespace-nowrap"
+              style={{ background: "linear-gradient(135deg,#ec4899,#db2777)" }}>
+              Get quote
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -1090,7 +1193,7 @@ function AddOnsSection({ loadingAddOns, liveAddOns, visibleAddons, addOns, toggl
                   opacity: isUnavailable ? 0.5 : 1,
                   filter: isUnavailable ? "grayscale(100%)" : "none",
                   cursor: isUnavailable ? "not-allowed" : "pointer",
-                  boxShadow: on && isDark ? "0 0 8px rgba(74,222,128,0.15)" : "none"
+                  boxShadow: "none"
                 }}
                 onMouseEnter={e => { if (!on && !isUnavailable) e.currentTarget.style.borderColor = isDark ? "#334155" : "#d1d5db" }}
                 onMouseLeave={e => { if (!on && !isUnavailable) e.currentTarget.style.borderColor = isDark ? "#1e293b" : "#e5e7eb" }}>
@@ -1170,7 +1273,7 @@ function DeliverySection({ delivType, customDate, showCal, todayOk, errors, setD
               opacity: btn.disabled ? 0.45 : 1,
               border: `1.5px solid ${delivType===btn.key ? (isDark ? "#4ade80" : G) : isDark ? "#334155" : "#e5e7eb"}`,
               background: delivType===btn.key ? (isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4") : isDark ? "#0f172a" : "white",
-              boxShadow: delivType===btn.key && isDark ? "0 0 8px rgba(74,222,128,0.2)" : "none"
+              boxShadow: "none"
             }}>
             <p className="text-sm font-semibold m-0"
               style={{ color: delivType===btn.key ? (isDark ? "#4ade80" : DG) : isDark ? "#e2e8f0" : "#374151" }}>
@@ -1188,7 +1291,7 @@ function DeliverySection({ delivType, customDate, showCal, todayOk, errors, setD
           style={{
             border: `1.5px solid ${delivType==="custom" ? (isDark ? "#4ade80" : G) : isDark ? "#334155" : "#e5e7eb"}`,
             background: delivType==="custom" ? (isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4") : isDark ? "#0f172a" : "white",
-            boxShadow: delivType==="custom" && isDark ? "0 0 8px rgba(74,222,128,0.2)" : "none"
+            boxShadow: "none"
           }}>
           <svg width="13" height="13" fill="none" stroke={delivType==="custom" ? (isDark ? "#4ade80" : DG) : isDark ? "#64748b" : "#6b7280"} strokeWidth={1.8} viewBox="0 0 24 24" className="flex-shrink-0">
             <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
@@ -1280,7 +1383,34 @@ function ReviewsSection({ reviews, isDark }) {
   )
 }
 
-function CareSection({ isDark }) {
+function CareSection({ isDark, product }) {
+  // Admin-authored care guide (one tip per line) shown when provided.
+  const customTips = (product?.care_guide || "")
+    .split("\n")
+    .map(t => t.trim())
+    .filter(Boolean)
+
+  if (customTips.length > 0) {
+    return (
+      <div className="pb-4 space-y-2.5">
+        <p className="text-sm leading-relaxed mb-2" style={{ color: isDark ? "#64748b" : "#6b7280" }}>
+          Proper care significantly extends the life of your arrangement.
+        </p>
+        {customTips.map((tip, i) => (
+          <div key={i} className="flex gap-3 p-3.5 rounded-xl items-start"
+            style={{ background: isDark ? "rgba(74,222,128,0.06)" : "#f0fdf4", border: `1px solid ${isDark ? "rgba(74,222,128,0.2)" : "#bbf7d0"}` }}>
+            <div className="flex-shrink-0 mt-0.5">
+              <svg width="17" height="17" fill="none" stroke={isDark ? "#4ade80" : "#10b981"} strokeWidth={1.8} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
+              </svg>
+            </div>
+            <p className="text-sm leading-snug m-0" style={{ color: isDark ? "#e2e8f0" : "#111827" }}>{tip}</p>
+          </div>
+        ))}
+      </div>
+    )
+  }
+
   const tips = [
     {
       lightBg:"#eff6ff", lightBdr:"#bfdbfe", darkBg:"rgba(59,130,246,0.08)", darkBdr:"rgba(59,130,246,0.2)",
@@ -1348,7 +1478,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   const cardBdr = isDark ? "rgba(0,255,136,0.08)" : "rgba(0,0,0,0.08)"
   const colors  = CATEGORY_COLORS[product.category] || CATEGORY_COLORS.Roses
 
-  // ✅ FIX: similarProducts derived directly from the products prop — no missing state, no dead API call
+  // ✅ FIX: similarProducts derived directly from the products prop, no missing state, no dead API call
   const suggestedProducts = products
     .filter(p => {
       if (p.id === product.id) return false;
@@ -1394,35 +1524,53 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   useEffect(() => {
     requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)))
     document.body.style.overflow = "hidden"
+    // Tell the floating chat launcher to hide so it doesn't cover the Buy Now button
+    window.dispatchEvent(new Event("bloomora:modal-open"))
 
     if (!document.getElementById("bloomora-pm-step-css")) {
       const s = document.createElement("style")
       s.id = "bloomora-pm-step-css"
-      s.textContent = `@keyframes pmStepIn{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}.pm-step-anim{animation:pmStepIn 0.32s cubic-bezier(0.22,0.61,0.36,1) both}@media(prefers-reduced-motion:reduce){.pm-step-anim{animation:none}}`
+      s.textContent = `@keyframes pmStepIn{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:translateY(0)}}.pm-step-anim{animation:pmStepIn 0.32s cubic-bezier(0.22,0.61,0.36,1) both}@keyframes pmFadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}.pm-stagger>*{animation:pmFadeUp 0.5s cubic-bezier(0.22,0.61,0.36,1) both}.pm-stagger>*:nth-child(1){animation-delay:.05s}.pm-stagger>*:nth-child(2){animation-delay:.13s}.pm-stagger>*:nth-child(3){animation-delay:.21s}.pm-stagger>*:nth-child(4){animation-delay:.29s}.pm-stagger>*:nth-child(5){animation-delay:.37s}.pm-stagger>*:nth-child(6){animation-delay:.45s}.pm-stagger>*:nth-child(7){animation-delay:.53s}.pm-stagger>*:nth-child(8){animation-delay:.61s}.pm-stagger>*:nth-child(9){animation-delay:.69s}@keyframes qSpin{to{transform:rotate(360deg)}}@keyframes qPulse{0%,100%{transform:scale(0.92)}50%{transform:scale(1.08)}}@media(prefers-reduced-motion:reduce){.pm-step-anim,.pm-stagger>*{animation:none}}`
       document.head.appendChild(s)
     }
 
     const measureNav = () => {
-      const candidates = Array.from(document.querySelectorAll("nav, header, [data-navbar]"))
+      const candidates = Array.from(document.querySelectorAll(
+        "nav, header, [data-navbar], [class*='navbar' i], [class*='header' i]"
+      ))
       let h = 0
       for (const el of candidates) {
         const cs = window.getComputedStyle(el)
-        const r  = el.getBoundingClientRect()
-        if ((cs.position === "fixed" || cs.position === "sticky") && r.top <= 4 && r.height > 0) {
-          h = Math.max(h, r.height)
+        if (cs.display === "none" || cs.visibility === "hidden" || parseFloat(cs.opacity || "1") === 0) continue
+        const r = el.getBoundingClientRect()
+        // Anything pinned to the top of the viewport that could overlap the modal,
+        // regardless of CSS position (fixed/sticky/relative all count if visually at top).
+        if (r.top <= 4 && r.bottom > 24 && r.bottom < 200) {
+          h = Math.max(h, r.bottom)
         }
       }
-      setNavH(h > 0 && h < 200 ? Math.round(h) : (isMobile ? 64 : 80))
+      // small buffer so the modal (and the image's "ZOOM" badge) clears the navbar edge
+      setNavH(h > 0 ? Math.round(h) + 4 : (isMobile ? 64 : 80))
     }
     measureNav()
+    // Re-measure after paint + settle (logo/fonts can grow the navbar after first frame)
+    const raf = requestAnimationFrame(() => requestAnimationFrame(measureNav))
+    const t1 = setTimeout(measureNav, 150)
+    const t2 = setTimeout(measureNav, 450)
     window.addEventListener("resize", measureNav)
+    window.addEventListener("scroll", measureNav, { passive: true })
 
     const esc = e => { if (e.key==="Escape") close() }
     document.addEventListener("keydown", esc)
     return () => {
       document.removeEventListener("keydown", esc)
       window.removeEventListener("resize", measureNav)
+      window.removeEventListener("scroll", measureNav)
+      cancelAnimationFrame(raf)
+      clearTimeout(t1)
+      clearTimeout(t2)
       document.body.style.overflow = ""
+      window.dispatchEvent(new Event("bloomora:modal-close"))
     }
   }, [])
 
@@ -1441,6 +1589,12 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
     const e = {}
     if (!qty)     e.qty   = true
     if (!delivType || (delivType==="custom" && !customDate)) e.date = true
+    // Reject custom dates beyond the booking window (prices may change too far out)
+    if (delivType==="custom" && customDate) {
+      const max = todayD(); max.setDate(max.getDate() + MAX_ORDER_DAYS)
+      const [y,m,d] = customDate.split("-").map(Number)
+      if (new Date(y, m-1, d) > max) e.date = true
+    }
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -1496,7 +1650,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
 
   /* Shared prop bundles */
   const colorProps    = { colors, color, errors, setColor, setErrors, isDark }
-  const qtyProps      = { qty, errors, setQty, setErrors, isDark }
+  const qtyProps      = { qty, errors, setQty, setErrors, isDark, onBulk: () => setStep("quote") }
   const addOnProps    = { loadingAddOns, liveAddOns, visibleAddons, addOns, toggleAddOn, showAllAddons, setShowAllAddons, isDark }
   const deliveryProps = { delivType, customDate, showCal, todayOk, errors, setDelivType, setShowCal, setCustDate, setErrors, isDark }
 
@@ -1516,13 +1670,13 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
     <div className="flex items-center gap-2 flex-shrink-0">
       <button onClick={() => setStep("quote")}
         className="flex items-center gap-1.5 rounded-full font-bold text-white transition-all cursor-pointer border-none"
-        style={{ padding: compact ? "8px 12px" : "6px 14px", fontSize: compact ? 13 : 12, background: `linear-gradient(135deg,${DG},${G})`, boxShadow: "0 3px 10px rgba(46,139,52,0.3)" }}>
+        style={{ padding: compact ? "8px 12px" : "6px 14px", fontSize: compact ? 13 : 12, background: "linear-gradient(135deg,#ec4899,#db2777)", boxShadow: "0 1px 3px rgba(0,0,0,0.12)" }}>
         <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         Quote
       </button>
       <button onClick={openChatWithProduct}
         className="flex items-center gap-1.5 rounded-full font-bold text-white transition-all cursor-pointer border-none"
-        style={{ padding: compact ? "8px 12px" : "6px 14px", fontSize: compact ? 13 : 12, background: "linear-gradient(135deg,#25d366,#128c48)", boxShadow: "0 3px 10px rgba(37,211,102,0.35)" }}>
+        style={{ padding: compact ? "8px 12px" : "6px 14px", fontSize: compact ? 13 : 12, background: "linear-gradient(135deg,#f59e0b,#d97706)", boxShadow: "0 1px 3px rgba(0,0,0,0.12)" }}>
         <svg width="13" height="13" fill="currentColor" viewBox="0 0 448 512"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg>
         Ask us
       </button>
@@ -1579,12 +1733,9 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
             <AddOnsSection {...addOnProps}/>
           </div>
           <DeliverySection {...deliveryProps}/>
-          <p className="text-sm leading-relaxed" style={{ color: isDark ? "#64748b" : "#6b7280" }}>
-            Hand-arranged by our skilled florists using the freshest blooms. Each arrangement is made to order.
-          </p>
         </div>
       )}
-      {tab === "care"    && <CareSection isDark={isDark}/>}
+      {tab === "care"    && <CareSection isDark={isDark} product={product}/>}
       {tab === "reviews" && <ReviewsSection reviews={reviews} isDark={isDark}/>}
     </div>
   )
@@ -1594,7 +1745,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
     <div className="flex items-center gap-2 flex-wrap mb-5 pb-5"
       style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
       <span className="text-3xl font-bold tracking-tight"
-        style={{ color: isDark ? "#00ff88" : "#111827", textShadow: isDark ? "0 0 20px rgba(0,255,136,0.4)" : "none" }}>
+        style={{ color: isDark ? "#4ade80" : "#111827", textShadow: "none" }}>
         ₱{total.toLocaleString()}
       </span>
       {hasDisc && (
@@ -1620,7 +1771,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   const MetaRow = () => (
     <div className="flex items-center gap-1.5 mb-3 flex-wrap">
       <Stars/>
-      <span className="text-sm font-medium" style={{ color: isDark ? "#cbd5e1" : "#374151" }}>{product.rating || "—"}</span>
+      <span className="text-sm font-medium" style={{ color: isDark ? "#cbd5e1" : "#374151" }}>{product.rating || "N/A"}</span>
       <span style={{ color: isDark ? "#334155" : "#e5e7eb", margin:"0 2px" }}>·</span>
       <span className="text-sm" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>{((product.reviews||0)*2).toLocaleString()} sold</span>
       <span style={{ color: isDark ? "#334155" : "#e5e7eb", margin:"0 2px" }}>·</span>
@@ -1661,7 +1812,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
             border: `2px solid ${isDark ? "#4ade80" : G}`,
             background: isDark ? "rgba(74,222,128,0.05)" : "white",
             color: isDark ? "#4ade80" : G,
-            boxShadow: isDark ? "0 0 10px rgba(74,222,128,0.15)" : "none"
+            boxShadow: "none"
           }}>
           <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/>
@@ -1670,10 +1821,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
         </button>
         <button onClick={() => startFlow("checkout")}
           className="flex-1 py-3.5 rounded-xl text-sm font-semibold text-white flex items-center justify-center gap-2 transition-all cursor-pointer border-none"
-          style={{ background: `linear-gradient(135deg,${DG},${G})`, boxShadow: isDark ? "0 0 20px rgba(0,255,136,0.3)" : "none" }}>
-          <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/>
-          </svg>
+          style={{ background: `linear-gradient(135deg,${DG},${G})`, boxShadow: "none" }}>
           Buy Now
         </button>
       </div>
@@ -1681,7 +1829,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   }
 
   /* ══════════════════════════════════════════════
-     MOBILE — FULL-PAGE SHEET
+     MOBILE: FULL-PAGE SHEET
      ══════════════════════════════════════════════ */
   if (isMobile) {
     const pageBg = isDark ? "#0f172a" : "#ffffff"
@@ -1774,7 +1922,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
                 )}
               </div>
 
-              <div className="px-4 pt-4">
+              <div className="px-4 pt-4 pm-stagger">
                 <p className="text-xs mb-1.5" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>
                   {product.category}
                   <span style={{ color: isDark ? "#334155" : "#d1d5db", margin:"0 4px" }}>/</span>
@@ -1817,13 +1965,14 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   }
 
   /* ══════════════════════════════════════════════
-     DESKTOP — FULL-PAGE CANVAS
+     DESKTOP: FULL-PAGE CANVAS
      ══════════════════════════════════════════════ */
   return (
     <>
       <style>{`
         .pm-scroll::-webkit-scrollbar{width:4px}
-        .pm-scroll::-webkit-scrollbar-thumb{background:${isDark?"#334155":"#e5e7eb"};border-radius:4px}
+        .pm-scroll::-webkit-scrollbar-thumb{background:${isDark?"#4ade80":G};border-radius:4px}
+        .pm-scroll::-webkit-scrollbar-thumb:hover{background:${isDark?"#22c55e":DG}}
       `}</style>
 
       <div className="pm-page fixed left-0 right-0 bottom-0 z-[40] flex flex-col box-border"
@@ -1833,17 +1982,17 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
           transition: "opacity 0.25s ease"
         }}>
 
-        <div className="pm-wrap relative flex flex-row overflow-hidden flex-1 min-h-0 mx-4 mb-4 rounded-2xl"
+        <div className="pm-wrap relative flex flex-row overflow-hidden flex-1 min-h-0 mx-4 mb-4"
           style={{ background: modalBg, boxShadow: `0 4px 24px ${cardBdr}` }}>
 
           {isCard && (
-            <div key="d-card" className="pm-step-anim w-full h-full rounded-2xl overflow-hidden">
+            <div key="d-card" className="pm-step-anim w-full h-full overflow-hidden">
               <CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate}/>
             </div>
           )}
 
           {isQuote && (
-            <div key="d-quote" className="pm-step-anim w-full h-full rounded-2xl overflow-hidden">
+            <div key="d-quote" className="pm-step-anim w-full h-full overflow-hidden">
               <QuoteStep
                 product={product} color={color} sizeLabel={qty}
                 addOnObjects={quoteAddOnObjects} addOnTotal={addOnTotal}
@@ -1858,14 +2007,13 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
 
               <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: cardBg }}>
                 <div className="pm-right flex-1 flex flex-col overflow-hidden">
-                  <div className="pm-scroll pm-right-scroll flex-1 overflow-y-auto px-6 pt-8 pb-0">
+                  <div className="pm-scroll pm-right-scroll pm-stagger flex-1 overflow-y-auto px-6 pt-12 pb-0">
 
                     <div className="flex items-center justify-end mb-4">
-                      <button onClick={close}
-                        className="flex items-center gap-1.5 text-sm font-medium cursor-pointer bg-transparent border-none p-0"
-                        style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>
-                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7"/></svg>
-                        Back to shop
+                      <button onClick={close} aria-label="Close"
+                        className="w-9 h-9 rounded-full flex items-center justify-center cursor-pointer border-none transition-colors"
+                        style={{ background: isDark ? "#1e293b" : "#f3f4f6", color: isDark ? "#e2e8f0" : "#374151" }}>
+                        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12"/></svg>
                       </button>
                     </div>
 
