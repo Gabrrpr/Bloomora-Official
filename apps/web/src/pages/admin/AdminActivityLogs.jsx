@@ -95,7 +95,7 @@ function ActionBadge({ action, isDark }) {
   return (
     <span className="inline-block px-2.5 py-0.5 rounded-md text-xs font-bold whitespace-nowrap"
       style={{ backgroundColor: s.bg, color: s.color }}>
-      {matchedKey || "System Action"}
+      {matchedKey || action || "System Action"}
     </span>
   )
 }
@@ -147,7 +147,7 @@ function FlowerLoader({ message = "Loading...", isDark = false }) {
   )
 }
 
-const COLS = ["Timestamp", "User ID", "Role", "Action Type", "Branch", "Details"]
+const COLS = ["Timestamp", "Staff Name", "Role", "Action Type", "Branch", "Details"]
 const PAGE_SIZE = 20
 
 export default function AdminActivityLogs() {
@@ -160,10 +160,8 @@ export default function AdminActivityLogs() {
   const [actionFilter, setActionFilter] = useState("All Actions")
   const [userFilter, setUserFilter]     = useState("All Users")
   const [dateFilter, setDateFilter]     = useState("Date Range: All")
-  // Controls the one-time entrance animation. Once the content has eased in we
-  // drop the animation class so it never replays (e.g. after the print dialog).
+  
   const [entered, setEntered] = useState(false)
-  // Animated placeholder text for the search box (typewriter hint).
   const [phText, setPhText] = useState("")
 
   const subTxt     = isDark ? "#94a3b8" : "#64748b"
@@ -176,7 +174,6 @@ export default function AdminActivityLogs() {
   const cardBdr    = isDark ? "#1e293b" : "#e8edf2"
   const cellTxt    = isDark ? "#e2e8f0" : "#1e293b"
 
-  // Load the activity logs from the server.
   const fetchLogs = useCallback(async () => {
     setLoading(true)
     try {
@@ -191,16 +188,12 @@ export default function AdminActivityLogs() {
 
   useEffect(() => { fetchLogs() }, [fetchLogs])
 
-  // Play the entrance animation once the data has loaded, then turn it off so it
-  // can't restart when the page repaints (such as returning from the print dialog).
   useEffect(() => {
     if (loading) { setEntered(false); return }
     const t = setTimeout(() => setEntered(true), 1300)
     return () => clearTimeout(t)
   }, [loading])
 
-  // Typewriter hint in the search box: types a sample action type / branch, pauses,
-  // deletes, then the next one — looping while the box is empty. Stops once the user types.
   useEffect(() => {
     if (search) { setPhText(""); return }
     let sample = 0, ch = 0, deleting = false, timer
@@ -216,24 +209,20 @@ export default function AdminActivityLogs() {
     return () => clearTimeout(timer)
   }, [search])
 
-  // Apply the search box and the three dropdown filters to the logs.
   const filtered = logs.filter(log => {
-    // Match the search box against the user ID, action text, or branch.
     const matchSearch = !search ||
       log.action?.toLowerCase().includes(search.toLowerCase()) ||
       log.branch?.toLowerCase().includes(search.toLowerCase()) ||
-      log.user_id?.toLowerCase().includes(search.toLowerCase())
+      log.staff_name?.toLowerCase().includes(search.toLowerCase()) ||
+      log.details?.toLowerCase().includes(search.toLowerCase())
 
-    // Match the selected action type.
     const matchAction = actionFilter === "All Actions" || log.action?.toLowerCase().includes(actionFilter.toLowerCase())
 
-    // Match the selected role.
     let matchRole = true
     if (userFilter === "Admins only") matchRole = log.role?.toLowerCase() === "admin"
     if (userFilter === "Staff only") matchRole = log.role?.toLowerCase() === "staff"
     if (userFilter === "Delivery Staff only") matchRole = log.role?.toLowerCase() === "delivery"
 
-    // Match the selected date range.
     let matchDate = true
     if (dateFilter !== "Date Range: All" && log.created_at) {
       const logDate = new Date(log.created_at)
@@ -260,9 +249,8 @@ export default function AdminActivityLogs() {
     }
 
     return matchSearch && matchAction && matchRole && matchDate
-  }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) // Newest first
+  }).sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
 
-  // Show one page of results at a time.
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const pageSafe = Math.min(page, totalPages)
   const paginated = filtered.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE)
@@ -273,28 +261,23 @@ export default function AdminActivityLogs() {
   const printDate   = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
   const printTime   = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })
 
-  // Everything below feeds the printed report only; the on-screen table is untouched.
-
-  // Sort each log into a known action type (or "Other").
   const classifyAction = a => PRINT_ACTION_META.find(m => a?.toLowerCase().includes(m.key.toLowerCase()))?.key || "Other"
 
-  // Count how many logs fall into each action type.
   const actionCounts = filtered.reduce((m, log) => {
     const k = classifyAction(log.action)
     m[k] = (m[k] || 0) + 1
     return m
   }, {})
+  
   const knownTotal = PRINT_ACTION_META.reduce((s, m) => s + (actionCounts[m.key] || 0), 0)
   const otherCount = Math.max(0, filtered.length - knownTotal)
   const pct = n => (filtered.length ? (n / filtered.length) * 100 : 0)
 
-  // Headline numbers shown in the summary cards.
   const loginCount  = actionCounts["Login"] || 0
   const failedCount = actionCounts["Failed Login"] || 0
   const dataChanges = (actionCounts["Create Record"] || 0) + (actionCounts["Update Record"] || 0)
     + (actionCounts["Delete Record"] || 0) + (actionCounts["Export Data"] || 0)
 
-  // Group the logs by action type, in the order defined above, for the printed table.
   const printGroups = (() => {
     const map = new Map()
     filtered.forEach(log => {
@@ -314,7 +297,6 @@ export default function AdminActivityLogs() {
       }))
   })()
 
-  // One-line summary of the filters in effect, printed under the title.
   const printScope = [
     actionFilter !== "All Actions" ? `Action: ${actionFilter}` : "All Actions",
     userFilter !== "All Users" ? userFilter : "All Users",
@@ -324,14 +306,15 @@ export default function AdminActivityLogs() {
   ].filter(Boolean).join("   ·   ")
 
   const handleCSV = () => {
-    const headers = ["ID", "Timestamp", "User ID", "Role", "Action", "Branch"]
+    const headers = ["ID", "Timestamp", "Staff Name", "Role", "Action", "Branch", "Details"]
     const rows = filtered.map(log => [
       log.id,
       new Date(log.created_at).toLocaleString("en-PH"),
-      log.user_id || "System",
+      log.staff_name || "System",
       log.role || "N/A",
       log.action,
-      log.branch || "N/A"
+      log.branch || "N/A",
+      log.details || ""
     ])
     const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(",")).join("\n")
     const a = Object.assign(document.createElement("a"), {
@@ -341,7 +324,6 @@ export default function AdminActivityLogs() {
     a.click(); URL.revokeObjectURL(a.href)
   }
 
-  // While the first fetch is running, show the flower loader instead of an empty table.
   if (loading) {
     return (
       <div className="space-y-5">
@@ -353,14 +335,9 @@ export default function AdminActivityLogs() {
 
   return (
     <div className="space-y-5">
-      {/* Print styles. The screen UI is hidden on paper (.no-print) and the
-          .print-only blocks render only when printing. Sections in order:
-          1 letterhead  2 title + scope  3 summary cards
-          4 action distribution  5 grouped detail table  6 footer/signatures */}
       <style>{`
         .print-only { display: none; }
 
-        /* Gentle fade + rise so content eases in once loaded instead of flashing. */
         @keyframes actlogsRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
         .actlogs-rise { animation: actlogsRise 0.85s ease-out both; }
 
@@ -376,7 +353,6 @@ export default function AdminActivityLogs() {
           .print-only { display: block !important; }
           .print-letterhead, .print-doc-title, .print-summary, .print-health { break-inside: avoid; page-break-inside: avoid; }
 
-          /* 1. Letterhead: brand band */
           .print-letterhead {
             display: flex !important; align-items: center; justify-content: space-between; gap: 16px;
             padding: 13px 18px; border-radius: 12px;
@@ -402,7 +378,6 @@ export default function AdminActivityLogs() {
           .print-meta .gen { margin: 6px 0 0; font-size: 9px; color: rgba(255,255,255,0.85) !important; }
           .print-meta .gen strong { color: #ffffff !important; font-weight: 700; }
 
-          /* 2. Document title + report scope */
           .print-doc-title { display: flex !important; flex-direction: column; align-items: center; margin: 16px 0 2px; }
           .print-doc-title .t {
             margin: 0; font-size: 15px; font-weight: 800;
@@ -415,7 +390,6 @@ export default function AdminActivityLogs() {
           }
           .print-doc-title .scope { margin: 0; font-size: 9px; color: #6b7280 !important; letter-spacing: 0.02em; text-align: center; }
 
-          /* 3. Summary cards */
           .print-summary { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 0; }
           .print-summary-card {
             border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px;
@@ -432,7 +406,6 @@ export default function AdminActivityLogs() {
           .print-summary-card .value.red   { color: #dc2626 !important; }
           .print-summary-card .cap { margin: 3px 0 0; font-size: 8px; color: #9ca3af !important; }
 
-          /* 4. Action distribution */
           .print-health {
             margin: 10px 0 0; border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 12px 11px;
             background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
@@ -458,7 +431,6 @@ export default function AdminActivityLogs() {
           .print-health .li { display: flex; align-items: center; gap: 5px; font-size: 8.5px; color: #374151 !important; }
           .print-health .dot { width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; }
 
-          /* 5. Detail table (grouped by action type) */
           .print-detail { display: block !important; margin-top: 14px; }
           .print-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; padding: 0 2px; }
           .print-section-title { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #0C573E !important; }
@@ -493,7 +465,6 @@ export default function AdminActivityLogs() {
           .print-detail tr.alt td { background: #f7faf8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-detail tbody tr:last-child td { border-bottom: none; }
 
-          /* action section rows */
           .print-detail tr.cat-row { page-break-after: avoid; break-after: avoid; }
           .print-detail tr.cat-row td {
             background: #eaf5ee !important; color: #0C573E !important;
@@ -507,14 +478,12 @@ export default function AdminActivityLogs() {
             text-transform: none; color: #15724B !important;
           }
 
-          /* report total row */
           .print-detail tr.grand td {
             background: #0C573E !important; color: #ffffff !important;
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
             border: none; padding: 8px 7px; font-size: 9.5px; font-weight: 800;
           }
 
-          /* 6. Footer + signatures */
           .print-footer {
             display: flex !important; align-items: flex-end; justify-content: space-between; gap: 24px;
             margin-top: 20px; padding-top: 11px; border-top: 2px solid #e5e7eb;
@@ -686,10 +655,10 @@ export default function AdminActivityLogs() {
                         </span>
                       </td>
 
-                      {/* User ID */}
+                      {/* Staff Name (Replaced User ID) */}
                       <td className="px-4 py-3 align-top">
-                        <span className="text-xs font-mono bg-gray-100 dark:bg-slate-800 px-2 py-1 rounded" style={{ color: cellTxt }}>
-                          {log.user_id ? log.user_id.slice(0, 8) + "..." : "System"}
+                        <span className="text-sm font-semibold" style={{ color: cellTxt }}>
+                          {log.staff_name || "System"}
                         </span>
                       </td>
 
@@ -703,15 +672,23 @@ export default function AdminActivityLogs() {
                         <ActionBadge action={log.action} isDark={isDark} />
                       </td>
 
-                      {/* Branch */}
+                      {/* Branch (Replaced IP Address) */}
                       <td className="px-4 py-3 align-top">
-                        <span className="text-xs font-semibold capitalize" style={{ color: cellTxt }}>{log.branch || "N/A"}</span>
+                        <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold capitalize ${
+                          log.branch?.toLowerCase() === "pampanga" 
+                            ? "bg-purple-100 text-purple-700" 
+                            : log.branch?.toLowerCase() === "manila"
+                            ? "bg-emerald-100 text-emerald-700"
+                            : "bg-gray-100 text-gray-700"
+                        }`}>
+                          {log.branch || "—"}
+                        </span>
                       </td>
 
-                      {/* Full action text */}
+                      {/* Details (Replaced full action text column) */}
                       <td className="px-4 py-3 align-top">
                         <span className="text-sm leading-snug break-words block max-w-xs" style={{ color: subTxt }}>
-                          {log.action}
+                          {log.details || "—"}
                         </span>
                       </td>
                     </tr>
@@ -748,8 +725,7 @@ export default function AdminActivityLogs() {
           </div>
         </div>
 
-        {/* Print 5: full detail table, grouped by action type.
-            Prints EVERY filtered log, organized into sections with a report total row. */}
+        {/* Print 5: full detail table, grouped by action type. */}
         <div className="print-only print-detail">
           <div className="print-section-head">
             <p className="print-section-title">Activity Detail</p>
@@ -761,10 +737,10 @@ export default function AdminActivityLogs() {
                 <tr>
                   <th className="col-idx num">#</th>
                   <th className="col-time">Timestamp</th>
-                  <th className="col-user">User ID</th>
+                  <th className="col-user">Staff Name</th>
                   <th className="col-role">Role</th>
                   <th className="col-branch">Branch</th>
-                  <th className="col-action">Details</th>
+                  <th className="col-action">Action & Details</th>
                 </tr>
               </thead>
               <tbody>
@@ -786,10 +762,13 @@ export default function AdminActivityLogs() {
                           <tr key={log.id} className={i % 2 === 1 ? "alt" : ""}>
                             <td className="num nowrap muted">{n}</td>
                             <td className="nowrap">{log.created_at ? new Date(log.created_at).toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
-                            <td className="mono">{log.user_id ? log.user_id.slice(0, 8) + "…" : "System"}</td>
+                            <td className="mono">{log.staff_name || "System"}</td>
                             <td className="cap">{log.role || "System"}</td>
                             <td className="cap muted">{log.branch || "—"}</td>
-                            <td>{log.action || "—"}</td>
+                            <td>
+                              <span className="font-semibold">{log.action || "—"}</span>
+                              {log.details && <span className="block mt-0.5 text-[8px] text-gray-500">{log.details}</span>}
+                            </td>
                           </tr>
                         )
                       })}

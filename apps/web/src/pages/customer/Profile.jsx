@@ -35,6 +35,7 @@ const EMPTY_ADDRESS = {
 export default function Profile({ onNavigate }) {
   const { user, updateUserContext } = useAuth();
 
+  const [pwdStep, setPwdStep] = useState(1);
   const setupMode = user && !user.is_profile_complete;
   const [editing, setEditing] = useState(setupMode);
   const [saved, setSaved] = useState(false);
@@ -59,8 +60,47 @@ export default function Profile({ onNavigate }) {
 
   const [savedForm, setSavedForm] = useState({ ...form });
 
+  // Password & Security state (fixes runtime ReferenceError: pwdStep is not defined)
+  const [pwdLoading, setPwdLoading] = useState(false);
+  const [pwdOtp, setPwdOtp] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+
+  const requestPasswordOTP = async () => {
+    try {
+      setPwdLoading(true);
+      setPwdOtp("");
+      // expects backend to start reset/verification flow
+      await api.requestPasswordOTP?.();
+      setPwdStep(2);
+    } catch (e) {
+      console.error("Failed to request password OTP", e);
+      alert(e?.message || "Failed to send code.");
+    } finally {
+      setPwdLoading(false);
+    }
+  };
+
+  const confirmAndChangePassword = async () => {
+    try {
+      setPwdLoading(true);
+      await api.confirmAndChangePassword?.({
+        otp: pwdOtp,
+        new_password: newPassword,
+      });
+      setPwdStep(1);
+      alert("Password updated successfully.");
+    } catch (e) {
+      console.error("Failed to confirm password change", e);
+      alert(e?.message || "Failed to update password.");
+    } finally {
+      setPwdLoading(false);
+    }
+  };
+
   // Address book state
   const [addresses, setAddresses] = useState([]);
+
+
   const [loadingAddresses, setLoadingAddresses] = useState(true);
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [editingAddress, setEditingAddress] = useState(null);
@@ -622,7 +662,8 @@ export default function Profile({ onNavigate }) {
           ) : (
             <div className="p-4 border border-green-200 bg-green-50 rounded-lg space-y-4">
               <p className="text-sm font-medium text-green-800">
-                Code sent! Please check your email inbox (and spam folder).
+              Code sent! Please check your email inbox (and spam folder).
+
               </p>
               <div className="grid grid-cols-2 gap-4">
                 <div>

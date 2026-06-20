@@ -53,6 +53,11 @@ def serialize_order(o) -> dict:
         total_qty = sum(item.quantity for item in o.items)
         is_custom = False
 
+    # 🚀 SMART REFERENCE EXTRACTION
+    payment_ref = None
+    if hasattr(o, 'transaction') and o.transaction:
+        payment_ref = getattr(o.transaction, 'provider_checkout_session_id', None) or getattr(o.transaction, 'reference_number', None)
+
     return {
         "id": str(o.id),
         "order_number": f"ORD-{o.id.hex[:8].upper()}",
@@ -72,7 +77,10 @@ def serialize_order(o) -> dict:
         "delivery_notes": o.delivery_notes,
         "scheduled_at": o.scheduled_at.isoformat() if getattr(o, 'scheduled_at', None) else None,
         "payment_status": o.transaction.status.value if hasattr(o, 'transaction') and o.transaction and hasattr(o.transaction.status, "value") else "pending",
-        "payment_reference": o.transaction.reference_number if hasattr(o, 'transaction') and o.transaction else None,
+        
+        # 🚀 UPDATED: Now it grabs PayMongo IDs too!
+        "payment_reference": payment_ref,
+        
         "can_review": getattr(o, 'can_review', False),
         "has_reviewed": getattr(o, 'has_reviewed', False),
         "created_at": o.created_at.isoformat() if getattr(o, 'created_at', None) else None,
@@ -104,17 +112,18 @@ def list_orders(
     current_user: User = Depends(require_staff),
 ):
     query = db.query(Order).options(joinedload(Order.transaction))
+    
     if status:
         try: query = query.filter(Order.status == OrderStatusEnum(status.lower()))
         except ValueError: raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
 
+    # 🚀 THE SILVER BULLET: Filter by the Order's delivery branch, NOT the User's profile!
     if branch:
-        from app.models import BranchEnum
-        try: query = query.join(User).filter(User.branch == BranchEnum(branch.lower()))
-        except ValueError: raise HTTPException(status_code=400, detail=f"Invalid branch: {branch}")
+        query = query.filter(func.lower(Order.branch_name) == branch.lower())
 
     if search:
         search_term = f"%{search}%"
+        # We still join User here so we can search by customer name/email
         query = query.join(User).filter(
             or_(
                 func.cast(Order.id, String).ilike(search_term),
@@ -167,9 +176,22 @@ async def create_orders(
     payment_method = payload.get("payment_method", "qrph").lower()
     special_note = payload.get("special_note", None)
     payment_reference = payload.get("payment_reference", "").strip()
+
+    # 🚀 THE TROJAN HORSE EXTRACTION
+    # 1. Try to get it normally
+    raw_branch = payload.get("branch_name") or payload.get("branch")
     
-    # 🚀 FIX: Extract branch_name from the payload (default to Manila if missing)
-    branch_name = payload.get("branch_name") or payload.get("branch", "Manila")
+    # 2. If api.js stripped it out, catch it from the delivery notes!
+    if not raw_branch:
+        if "[BRANCH:Pampanga]" in delivery_notes:
+            raw_branch = "Pampanga"
+        elif "[BRANCH:Manila]" in delivery_notes:
+            raw_branch = "Manila"
+        else:
+            raw_branch = "Manila"
+
+    # Ensures it saves cleanly as 'Pampanga' or 'Manila'
+    final_branch_name = raw_branch.strip().title()
 
     if not cart_items:
         raise HTTPException(status_code=400, detail="Cart is empty.")
@@ -228,12 +250,12 @@ async def create_orders(
             product_id = product.id
 
         if db_price <= 0:
-            print(f"⚠️ WARNING: Item {item_id} has a price of 0 in the database! Forcing to 500 so checkout succeeds.")
             db_price = Decimal("500.00")
 
         item_total = db_price * qty
         total_checkout_amount += item_total
 
+        # 🚀 SAVING THE BRANCH CORRECTLY (NO CRASHES!)
         order = Order(
             id=uuid.uuid4(),
             user_id=current_user.id,
@@ -246,7 +268,7 @@ async def create_orders(
             delivery_notes=delivery_notes,
             special_note=special_note,
             scheduled_at=scheduled_at,
-            branch_name=branch_name, # 🚀 FIX: Save the branch to the database!
+            branch_name=final_branch_name, 
         )
         db.add(order)
         db.commit()
@@ -404,9 +426,12 @@ def list_transactions(
             "order_number": f"ORD-{t.Order.id.hex[:8].upper()}",
             "customer_name": f"{t.User.first_name} {t.User.last_name}",
             "type": "Sale", 
-            "method": t.Transaction.payment_method.value,
-            "status": t.Transaction.status.value,
-            "trn": t.Transaction.reference_number, 
+            "method": t.Transaction.payment_method.value if hasattr(t.Transaction.payment_method, 'value') else t.Transaction.payment_method,
+            "status": t.Transaction.status.value if hasattr(t.Transaction.status, 'value') else t.Transaction.status,
+            
+            # 🚀 UPDATED: Prioritizes PayMongo ID, falls back to manual reference
+            "trn": getattr(t.Transaction, 'provider_checkout_session_id', None) or t.Transaction.reference_number, 
+            
             "created_at": t.Transaction.created_at.isoformat()
         }
         for t in transactions

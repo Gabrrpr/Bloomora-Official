@@ -16,29 +16,24 @@ export default function Checkout({ onNavigate }) {
   const [referenceNumber, setReferenceNumber] = useState("")
   const [voucher, setVoucher] = useState("")
   const [appliedVoucher, setAppliedVoucher] = useState(null)
-  const [voucherMsg, setVoucherMsg] = useState(null) // { type: "error" | "success", text }
+  const [voucherMsg, setVoucherMsg] = useState(null)
   const [placing, setPlacing] = useState(false)
   const [error, setError] = useState("")
 
-  // Delivery date: "tomorrow" default, or a custom date picked from the calendar
-  const [deliveryMode, setDeliveryMode] = useState("tomorrow") // "tomorrow" | "custom"
+  const [deliveryMode, setDeliveryMode] = useState("tomorrow")
   const [deliveryDate, setDeliveryDate] = useState(() => {
     const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + 1); return d
   })
 
-  // Special Instructions
   const [orderNote, setOrderNote] = useState("")
-
   const [customer, setCustomer] = useState(null)
   const [loadingProfile, setLoadingProfile] = useState(true)
 
-  // ── Recipient type & addresses ────────────────────────────────────────────
-  const [recipientType, setRecipientType] = useState("myself") // "myself" | "someone_else"
+  const [recipientType, setRecipientType] = useState("myself")
   const [addresses, setAddresses] = useState([])
   const [selectedAddressId, setSelectedAddressId] = useState(null)
   const [loadingAddresses, setLoadingAddresses] = useState(true)
 
-  // Manual address form for "someone else"
   const [showManualModal, setShowManualModal] = useState(false)
   const [saveAddressToBook, setSaveAddressToBook] = useState(false)
   const [manualForm, setManualForm] = useState({
@@ -80,7 +75,6 @@ export default function Checkout({ onNavigate }) {
     fetchProfile()
   }, [])
 
-  // Load saved addresses
   useEffect(() => {
     async function loadAddresses() {
       const token = localStorage.getItem("access_token")
@@ -109,8 +103,6 @@ export default function Checkout({ onNavigate }) {
 
   const subtotal = cartItems.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0)
   const shipping = cartItems.length > 0 ? 100 : 0
-
-  // ── Voucher discount (validated via shared util; honors admin-created codes) ──
   const discount = computeDiscount(appliedVoucher, subtotal)
   const total = Math.max(0, subtotal + shipping - discount)
 
@@ -149,7 +141,6 @@ export default function Checkout({ onNavigate }) {
           address: [selectedAddress.street, selectedAddress.barangay, selectedAddress.city, selectedAddress.province, selectedAddress.zip_code].filter(Boolean).join(", "),
         }
       }
-      // fallback to legacy profile address
       return {
         name: fullName,
         phone: customer?.phone_number || user?.phoneNumber || "",
@@ -166,24 +157,26 @@ export default function Checkout({ onNavigate }) {
 
   const deliveryDetails = getDeliveryDetails()
 
-  // ── Store-branch vs address-province confirmation ────────────────────────
-  const selectedStoreBranch = localStorage.getItem("bloomora_selected_branch") // "Manila" | "Pampanga"
+  // ── 🚀 THE FIX: SMART BRANCH MATCHING & AREA RESTRICTION ──
+  const rawStoreBranch = localStorage.getItem("bloomora_active_branch") || "Manila";
+  const selectedStoreBranch = rawStoreBranch.charAt(0).toUpperCase() + rawStoreBranch.slice(1).toLowerCase();
 
   const provinceToBranch = (province) => {
     const p = (province || "").toLowerCase()
     if (!p) return null
-    if (p.includes("pampanga") || p.includes("angeles") || p.includes("mabalacat")) return "Pampanga"
-    if (p.includes("manila") || p.includes("quezon")) return "Manila"
+    if (p.includes("pampanga") || p.includes("angeles") || p.includes("mabalacat") || p.includes("san fernando")) return "Pampanga"
+    if (p.includes("manila") || p.includes("ncr") || p.includes("quezon") || p.includes("makati") || p.includes("pasig") || p.includes("taguig")) return "Manila"
     return null
   }
 
   const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddress?.province : manualForm.province)
-  const needsBranchConfirm = selectedStoreBranch && addressBranch && selectedStoreBranch !== addressBranch
-
+  
+  // Case-insensitive comparison prevents false-positive mismatches!
+  const needsBranchConfirm = selectedStoreBranch && addressBranch && (selectedStoreBranch.toLowerCase() !== addressBranch.toLowerCase())
   const [branchConfirmOpen, setBranchConfirmOpen] = useState(false)
 
   const buildDeliveryNotes = () =>
-    `Delivery time: ${deliveryTime} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone})${appliedVoucher ? ` | Voucher: ${appliedVoucher.code}` : ""}`
+    `[BRANCH:${addressBranch || "Manila"}] Delivery time: ${deliveryTime} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone})${appliedVoucher ? ` | Voucher: ${appliedVoucher.code}` : ""}`
 
   const buildOrderData = (orderIds) => ({
     orderIds,
@@ -201,105 +194,25 @@ export default function Checkout({ onNavigate }) {
   })
 
   const proceedAfterBranchConfirm = async () => {
-    setBranchConfirmOpen(false)
+    setBranchConfirmOpen(false);
 
     if (cartItems.length === 0) {
-      setError("Your cart is empty.")
-      return
-    }
-    if (!deliveryDetails.address || !deliveryDetails.phone) {
-      setError("Please provide a complete delivery address and phone number before placing an order.")
-      return
-    }
-
-    setPlacing(true)
-    setError("")
-    try {
-      if (
-        saveAddressToBook &&
-        recipientType === "someone_else" &&
-        manualForm.recipient_name &&
-        manualForm.phone &&
-        manualForm.street
-      ) {
-        try {
-          await api.createAddress({
-            label: `To: ${manualForm.recipient_name}`,
-            recipient_name: manualForm.recipient_name,
-            phone: manualForm.phone,
-            street: manualForm.street,
-            barangay: manualForm.barangay || "",
-            city: manualForm.city,
-            province: manualForm.province,
-            zip_code: manualForm.zip || "",
-            is_default: false,
-          })
-          const res = await api.getAddresses()
-          setAddresses(res.addresses || [])
-        } catch (addrErr) {
-          console.error("Failed to save address to book:", addrErr)
-        }
-      }
-
-      const res = await api.createOrder({
-        items: cartItems.map(i => ({
-          id: i.id,
-          group: i.group,
-          name: i.name,
-          desc: i.desc,
-          price: i.price,
-          qty: i.qty,
-          img: i.img || i.image || i.image_url || i.generated_image_url || "",
-        })),
-        delivery_address: deliveryDetails.address,
-        delivery_notes: buildDeliveryNotes(),
-        scheduled_at: deliveryDate.toISOString(),
-        payment_method: paymentMethod,
-        payment_reference: referenceNumber.trim(),
-        special_note: orderNote.trim() || null
-      })
-
-      const orderIds = res.order_ids || []
-      
-      // Save data and clear cart BEFORE we leave the page
-      localStorage.setItem("bloomora_last_order", JSON.stringify(buildOrderData(orderIds)))
-      clearCart()
-
-      // 🚀 NEW PAYMONGO REDIRECT LOGIC
-      if (res.checkout_url) {
-        window.location.href = res.checkout_url
-      } else {
-        // Safe Fallback for QRPh / Manual Methods: 
-        // Do NOT auto-confirm. Leave it as "Pending" and just show the success page!
-        onNavigate("confirmation")
-      }
-
-    } catch (e) {
-      setError(e.message || "Failed to place order. Please try again.")
-    } finally {
-      setPlacing(false)
-    }
-  }
-
-  const handlePlaceOrder = async () => {
-    if (paymentMethod === "qrph" && !referenceNumber.trim()) {
-      setError("Please enter your Transaction Reference Number (TRN) to verify your payment.");
+      setError("Your cart is empty.");
       return;
     }
-    if (needsBranchConfirm) {
-      setBranchConfirmOpen(true)
-      return
-    }
-    if (cartItems.length === 0) {
-      setError("Your cart is empty.")
-      return
-    }
     if (!deliveryDetails.address || !deliveryDetails.phone) {
-      setError("Please provide a complete delivery address and phone number before placing an order.")
-      return
+      setError("Please provide a complete delivery address and phone number before placing an order.");
+      return;
     }
-    setPlacing(true)
-    setError("")
+
+    if (!addressBranch) {
+      setError("Sorry, we currently only deliver to Metro Manila and Pampanga areas. Please provide a valid address within our coverage.");
+      return;
+    }
+
+    setPlacing(true);
+    setError("");
+
     try {
       if (saveAddressToBook && recipientType === "someone_else" && manualForm.recipient_name && manualForm.phone && manualForm.street) {
         try {
@@ -313,11 +226,11 @@ export default function Checkout({ onNavigate }) {
             province: manualForm.province,
             zip_code: manualForm.zip || "",
             is_default: false,
-          })
-          const res = await api.getAddresses()
-          setAddresses(res.addresses || [])
+          });
+          const res = await api.getAddresses();
+          setAddresses(res.addresses || []);
         } catch (addrErr) {
-          console.error("Failed to save address to book:", addrErr)
+          console.error("Failed to save address to book:", addrErr);
         }
       }
 
@@ -337,34 +250,124 @@ export default function Checkout({ onNavigate }) {
         payment_method: paymentMethod,
         payment_reference: referenceNumber.trim(),
         special_note: orderNote.trim() || null,
-        branch_name: selectedStoreBranch || "Manila"
-      })
+        
+        // 🚀 FORCE BACKEND TO USE THE ADDRESS BRANCH
+        branch_name: addressBranch,
+        branch: addressBranch
+      });
 
-      const orderIds = res.order_ids || []
-      
-      // Save data and clear cart BEFORE we leave the page
-      localStorage.setItem("bloomora_last_order", JSON.stringify(buildOrderData(orderIds)))
-      clearCart()
+      const orderIds = res.order_ids || [];
+      localStorage.setItem("bloomora_last_order", JSON.stringify(buildOrderData(orderIds)));
+      clearCart();
 
-      // 🚀 NEW PAYMONGO REDIRECT LOGIC
       if (res.checkout_url) {
-        window.location.href = res.checkout_url
+        window.location.href = res.checkout_url;
       } else {
-        // Safe Fallback for QRPh / Manual Methods: 
-        // Do NOT auto-confirm. Leave it as "Pending" and just show the success page!
-        onNavigate("confirmation")
+        onNavigate("confirmation");
+      }
+    } catch (e) {
+      setError(e.message || "Failed to place order. Please try again.");
+    } finally {
+      setPlacing(false);
+    }
+  };
+
+  const handlePlaceOrder = async () => {
+    if (!user) {
+      onNavigate("login");
+      return;
+    }
+    if (paymentMethod === "qrph" && !referenceNumber.trim()) {
+      setError("Please enter your Transaction Reference Number (TRN) to verify your payment.");
+      return;
+    }
+    if (cartItems.length === 0) {
+      setError("Your cart is empty.");
+      return;
+    }
+    if (!deliveryDetails.address || !deliveryDetails.phone) {
+      setError("Please provide a complete delivery address and phone number.");
+      return;
+    }
+
+    // 🚀 STRICT BRANCH & AREA VALIDATION
+    if (!addressBranch) {
+      setError("Sorry, we currently only deliver to Metro Manila and Pampanga areas. Please provide a valid address within our coverage.");
+      return;
+    }
+
+    if (needsBranchConfirm) {
+      setBranchConfirmOpen(true);
+      return;
+    }
+
+    setPlacing(true);
+    setError("");
+
+    try {
+      if (saveAddressToBook && recipientType === "someone_else" && manualForm.recipient_name && manualForm.phone && manualForm.street) {
+        try {
+          await api.createAddress({
+            label: `To: ${manualForm.recipient_name}`,
+            recipient_name: manualForm.recipient_name,
+            phone: manualForm.phone,
+            street: manualForm.street,
+            barangay: manualForm.barangay || "",
+            city: manualForm.city,
+            province: manualForm.province,
+            zip_code: manualForm.zip || "",
+            is_default: false,
+          });
+          const res = await api.getAddresses();
+          setAddresses(res.addresses || []);
+        } catch (addrErr) {
+          console.error("Failed to save address to book:", addrErr);
+        }
       }
 
+      const res = await api.createOrder({
+        items: cartItems.map(i => ({
+          id: i.id,
+          group: i.group,
+          name: i.name,
+          desc: i.desc,
+          price: i.price,
+          qty: i.qty,
+          img: i.img || i.image || i.image_url || i.generated_image_url || "",
+        })),
+        delivery_address: deliveryDetails.address,
+        delivery_notes: buildDeliveryNotes(),
+        scheduled_at: deliveryDate.toISOString(),
+        payment_method: paymentMethod,
+        payment_reference: referenceNumber.trim(),
+        special_note: orderNote.trim() || null,
+        
+        // 🚀 FORCE BACKEND TO USE THE ADDRESS BRANCH
+        branch_name: addressBranch,
+        branch: addressBranch
+      });
+
+      const orderIds = res.order_ids || [];
+      localStorage.setItem("bloomora_last_order", JSON.stringify(buildOrderData(orderIds)));
+      clearCart();
+
+      if (res.checkout_url) {
+        window.location.href = res.checkout_url;
+      } else {
+        onNavigate("confirmation");
+      }
     } catch (e) {
-      setError(e.message || "Failed to place order. Please try again.")
+      setError(e.message || "Failed to place order. Please try again.");
     } finally {
-      setPlacing(false)
+      setPlacing(false);
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-[#F7F8FA]">
       <style>{`@keyframes coRise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}`}</style>
+      
+      {/* Branch Confirmation Modal */}
       {branchConfirmOpen && needsBranchConfirm && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -375,8 +378,8 @@ export default function Checkout({ onNavigate }) {
           <div className="bg-white rounded-xl w-full max-w-md p-5 sm:p-6 shadow-xl">
             <h3 className="text-lg font-semibold text-gray-800 mb-2">Confirm your order branch</h3>
             <p className="text-sm text-gray-600 mb-4">
-              You selected <b>{selectedStoreBranch}</b> branch, but the delivery address appears to be in <b>{addressBranch}</b>.
-              Are you sure you want to proceed?
+              You were shopping in the <b>{selectedStoreBranch}</b> store, but your delivery address is in <b>{addressBranch}</b>. 
+              We will process this order under our <b>{addressBranch}</b> branch. Are you sure you want to proceed?
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               <button
@@ -622,15 +625,12 @@ export default function Checkout({ onNavigate }) {
                 <h2 className="text-sm font-bold text-gray-800">Select delivery date</h2>
               </div>
 
-              {/* Date row: all three boxes share one fixed height and center their content */}
               <div className="grid grid-cols-3 gap-2 mb-3">
-                {/* Today (unavailable) */}
                 <div className="h-[64px] flex flex-col items-center justify-center text-center border border-gray-200 rounded-lg p-2 opacity-50">
                   <p className="text-xs font-medium text-gray-500">{fmt(today)}</p>
                   <p className="text-[10px] text-gray-400 mt-0.5">Today · Unavailable</p>
                 </div>
 
-                {/* Tomorrow */}
                 <button
                   type="button"
                   onClick={() => { setDeliveryMode("tomorrow"); setDeliveryDate(tomorrow) }}
@@ -640,7 +640,6 @@ export default function Checkout({ onNavigate }) {
                   <p className="text-[10px] font-medium text-gray-500 mt-0.5">{fmtDay(tomorrow).toUpperCase()}</p>
                 </button>
 
-                {/* Custom date: clicking anywhere opens the native date picker */}
                 <div
                   className={`relative h-[64px] flex flex-col items-center justify-center text-center rounded-lg p-2 transition cursor-pointer ${deliveryMode === "custom" ? "border-2 border-[#2E8B34] bg-[#F0F7F1]" : "border border-gray-200 hover:border-gray-300 hover:bg-gray-50"}`}
                 >
@@ -672,13 +671,11 @@ export default function Checkout({ onNavigate }) {
                 </div>
               </div>
 
-              {/* Timezone note */}
               <div className="flex items-center gap-1.5 mb-3 px-2.5 py-1.5 rounded-lg bg-[#F0F7F1]">
                 <svg className="w-3.5 h-3.5 flex-shrink-0 text-[#2E8B34]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 <span className="text-xs text-gray-600">Delivery time zone: Philippine Time (GMT+8)</span>
               </div>
 
-              {/* Delivery window note + 🚀 NEW DISCLAIMER */}
               <p className="text-xs text-gray-500 leading-relaxed mb-3">
                 Delivered anytime on <span className="font-semibold text-gray-700">{fmt(deliveryDate)}</span> during business hours (9 AM to 6 PM). Our team coordinates the exact timing with the recipient.
               </p>
@@ -701,7 +698,6 @@ export default function Checkout({ onNavigate }) {
               </div>
               
               <div className="space-y-3">
-                {/* 🚀 PayMongo Option */}
                 <div 
                   onClick={() => { setPaymentMethod("paymongo"); setReferenceNumber(""); }} 
                   className={`border-2 rounded-lg p-3 flex items-center gap-3 cursor-pointer transition-colors ${paymentMethod === "paymongo" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200"}`}
@@ -715,7 +711,6 @@ export default function Checkout({ onNavigate }) {
                   </div>
                 </div>
 
-                {/* 🚀 Manual QR Option */}
                 <div 
                   onClick={() => setPaymentMethod("qrph")} 
                   className={`border-2 rounded-lg p-3 flex items-center gap-3 cursor-pointer transition-colors ${paymentMethod === "qrph" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200"}`}
@@ -730,7 +725,6 @@ export default function Checkout({ onNavigate }) {
                 </div>
               </div>
 
-              {/* 🚀 TRN Input Box for Manual Payment */}
               {paymentMethod === "qrph" && (
                 <div className="mt-3 p-3.5 bg-gray-50 border border-gray-200 rounded-lg">
                   <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
@@ -935,8 +929,6 @@ export default function Checkout({ onNavigate }) {
                   />
                 </div>
               </div>
-
-              {/* Save to address book checkbox */}
               <div className="flex items-center gap-2 pt-2">
                 <input
                   type="checkbox"
@@ -949,7 +941,6 @@ export default function Checkout({ onNavigate }) {
                   Save to my address book for future orders
                 </label>
               </div>
-
               <div className="flex flex-col sm:flex-row gap-3 pt-3">
                 <button
                   type="button"

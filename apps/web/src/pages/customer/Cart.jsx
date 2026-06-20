@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { getCart, setCart, removeFromCart, getCartCount } from "../../utils/cart.js"
 import { validateVoucher, computeDiscount } from "../../utils/vouchers.js"
+import { useAuth } from "../../context/AuthContext"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -25,6 +26,7 @@ function QtyControl({ qty, onDecrease, onIncrease, isDark }) {
 
 export default function Cart({ onNavigate, cartCount, setCartCount }) {
   const { isDark } = useTheme()
+  const { user } = useAuth()
   const [items, setItems]         = useState([])
   const [selectAll, setSelectAll] = useState(false)
   const [catalogOpen, setCatalogOpen] = useState(false)
@@ -275,8 +277,16 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
               <p className="text-xs" style={{ color:subC }}>VAT included, where applicable</p>
             </div>
 
+            {/* 🚀 UPDATED CHECKOUT BUTTON */}
             <button
-              onClick={() => onNavigate("checkout")}
+              onClick={() => {
+                if (!user) {
+                  alert("Please log in or create an account to proceed to checkout.");
+                  onNavigate("login"); 
+                } else {
+                  onNavigate("checkout");
+                }
+              }}
               disabled={checkedItems.length===0}
               className="w-full mt-5 py-2.5 text-sm font-bold text-white rounded-lg transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ backgroundColor:G }}>

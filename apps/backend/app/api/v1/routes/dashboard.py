@@ -8,7 +8,6 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.models.order import Order
-# 🚀 Added Product import for the trending endpoint
 from app.models import RoleEnum, Transaction, PaymentStatusEnum, Product
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
@@ -23,7 +22,6 @@ def get_revenue(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # Convert DB UTC time to Asia/Manila for accurate daily/monthly grouping
     ph_created_at = func.timezone('Asia/Manila', Order.created_at)
 
     if period == "week":
@@ -82,11 +80,8 @@ def get_summary(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # 🚀 SECURE TIMEZONE FIX: Get exact bounds of TODAY in Philippine Time
     now_ph = datetime.now(PH_TZ)
     start_of_today_ph = now_ph.replace(hour=0, minute=0, second=0, microsecond=0)
-    
-    # Convert PH bounds back to UTC so we can securely query the DB's raw timestamps
     start_of_today_utc = start_of_today_ph.astimezone(timezone.utc)
 
     q_revenue = db.query(func.sum(Order.total_amount)).join(
@@ -97,11 +92,9 @@ def get_summary(
         Transaction.status == PaymentStatusEnum.paid,
     )
 
-    q_pending = db.query(func.count(Order.id)).join(
-        Transaction, Order.id == Transaction.order_id
-    ).filter(
-        Order.status == "pending",
-        Transaction.status == PaymentStatusEnum.paid,
+    # 🚀 THE FIX: Removed the requirement for pending orders to be 'paid'
+    q_pending = db.query(func.count(Order.id)).filter(
+        Order.status == "pending"
     )
 
     q_today_count = db.query(func.count(Order.id)).join(
@@ -131,7 +124,6 @@ def get_recent_orders(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return the most recent cleared orders for dashboard cards."""
     if getattr(current_user, "role", None) not in [RoleEnum.admin, RoleEnum.staff]:
         return []
 
@@ -171,14 +163,12 @@ def get_recent_orders(
     ]
 
 
-# 🚀 NEW ENDPOINT: Trending / Demand Forecasting
 @router.get("/trending")
 def get_trending_products(
     branch: str = "all",
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Returns top 5 products based on quantity sold in successful orders."""
     q = db.query(
         Product.id,
         Product.name,

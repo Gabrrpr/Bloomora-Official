@@ -1770,7 +1770,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   /* ── Meta row ── */
   const MetaRow = () => (
     <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-      <Stars/>
+      {Stars({})}
       <span className="text-sm font-medium" style={{ color: isDark ? "#cbd5e1" : "#374151" }}>{product.rating || "N/A"}</span>
       <span style={{ color: isDark ? "#334155" : "#e5e7eb", margin:"0 2px" }}>·</span>
       <span className="text-sm" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>{((product.reviews||0)*2).toLocaleString()} sold</span>
@@ -1874,11 +1874,11 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
         )}
 
         {isCard ? (
-          <div key="m-card" className="pm-step-anim flex-1 min-h-0 overflow-hidden">
+          <div className="pm-step-anim flex-1 min-h-0 overflow-hidden">
             <CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate} isMobile/>
           </div>
         ) : isQuote ? (
-          <div key="m-quote" className="pm-step-anim flex-1 min-h-0 overflow-hidden">
+          <div className="pm-step-anim flex-1 min-h-0 overflow-hidden">
             <QuoteStep
               product={product} color={color} sizeLabel={qty}
               addOnObjects={quoteAddOnObjects} addOnTotal={addOnTotal}
@@ -1886,7 +1886,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
               onOpenChat={openChatWithQuote} isMobile/>
           </div>
         ) : (
-          <div key="m-product" className="flex-1 min-h-0 flex flex-col">
+          <div className="flex-1 min-h-0 flex flex-col">
             <div className="flex-shrink-0 flex items-center justify-between px-3"
               style={{ height: 48, background: isDark ? "#0f172a" : "#ffffff", borderBottom: `1px solid ${isDark ? "#1e293b" : "#f1f5f9"}` }}>
               <button onClick={close}
@@ -1931,11 +1931,11 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
                 <h2 className="text-2xl font-bold leading-tight mb-3" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>
                   {product.name}
                 </h2>
-                <div className="mb-4"><ActionPills compact/></div>
-                <MetaRow/>
-                <PriceBlock/>
-                <div className="mb-5"><Tabs/></div>
-                <TabBody/>
+                <div className="mb-4">{ActionPills({ compact: true })}</div>
+                {MetaRow()}
+                {PriceBlock()}
+                <div className="mb-5">{Tabs()}</div>
+                {TabBody()}
               </div>
               <div style={{ height: 8 }}/>
             </div>
@@ -1954,7 +1954,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
                 </div>
               )}
               {errorBanner && <div className="mb-2.5">{errorBanner}</div>}
-              <FooterCTAs/>
+              {FooterCTAs()}
             </div>
           </div>
         )}
@@ -1986,13 +1986,13 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
           style={{ background: modalBg, boxShadow: `0 4px 24px ${cardBdr}` }}>
 
           {isCard && (
-            <div key="d-card" className="pm-step-anim w-full h-full overflow-hidden">
+            <div className="pm-step-anim w-full h-full overflow-hidden">
               <CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate}/>
             </div>
           )}
 
           {isQuote && (
-            <div key="d-quote" className="pm-step-anim w-full h-full overflow-hidden">
+            <div className="pm-step-anim w-full h-full overflow-hidden">
               <QuoteStep
                 product={product} color={color} sizeLabel={qty}
                 addOnObjects={quoteAddOnObjects} addOnTotal={addOnTotal}
@@ -2002,7 +2002,8 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
           )}
 
           {!isCard && !isQuote && (
-            <div key="d-product" className="flex flex-row w-full h-full">
+            <div className="flex flex-row w-full h-full">
+
               <ImgZoom product={product} isDark={isDark}/>
 
               <div className="flex-1 flex flex-col min-w-0 overflow-hidden" style={{ background: cardBg }}>
@@ -2027,11 +2028,11 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
                       <h2 className="text-2xl font-bold leading-tight flex-1" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>
                         {product.name}
                       </h2>
-                      <ActionPills/>
+                      {ActionPills({})}
                     </div>
 
-                    <MetaRow/>
-                    <PriceBlock/>
+                    {MetaRow()}
+                    {PriceBlock()}
 
                     <div className="flex mb-5" style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
                       {[["details","Details"],["care","Care Guide"],["reviews","Reviews"]].map(([k,l]) => (
@@ -2049,7 +2050,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
                       ))}
                     </div>
 
-                    <TabBody/>
+                    {TabBody()}
                   </div>
 
                   {Object.values(errors).some(Boolean) && (
@@ -2064,7 +2065,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
                         <span className="text-sm font-bold" style={{ color: DG }}>Total ₱{total.toLocaleString()}</span>
                       </div>
                     )}
-                    <FooterCTAs/>
+                    {FooterCTAs()}
                   </div>
                 </div>
               </div>

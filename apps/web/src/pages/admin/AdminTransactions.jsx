@@ -8,12 +8,10 @@ const DATE_OPTIONS   = ["All Time", "Today", "Yesterday", "This Week", "This Mon
 const TYPE_OPTIONS   = ["Type: All", "Sale", "Refund", "Void"]
 const METHOD_OPTIONS = ["Method: All", "Cash", "GCash", "Maya", "Credit Card", "Bank Transfer"]
 const STATUS_OPTIONS = ["Status: All", "Paid", "Pending", "Failed", "Refunded"]
+const ITEMS_PER_PAGE = 35 // 🚀 Added Pagination Limit
 
-// Example customer names cycled through the search box as an animated, typewriter-style hint.
 const SEARCH_SAMPLES = ["John Dela Cruz", "Maria Santos", "Carlo Ramos", "Angela Cruz"]
 
-// Payment statuses used by the printed report, in display order, each with the
-// color used in the distribution bar. payment_status is already normalized to these.
 const PRINT_STATUS_META = [
   { key: "Paid",     label: "Paid",     cls: "s-paid",     dot: "#16a34a" },
   { key: "Pending",  label: "Pending",  cls: "s-pending",  dot: "#d97706" },
@@ -86,7 +84,6 @@ const CalendarIcon = (
   </svg>
 )
 
-// Animated flower shown while the transactions are still loading.
 function FlowerLoader({ message = "Loading...", isDark = false }) {
   const petals = [
     { angle: 0,   color: "#f48fb1" },
@@ -133,10 +130,11 @@ export default function AdminTransactions() {
   const [typeFilter, setTypeFilter]     = useState("Type: All")
   const [methodFilter, setMethodFilter] = useState("Method: All")
   const [statusFilter, setStatusFilter] = useState("Status: All")
-  // Controls the one-time entrance animation. Once the content has eased in we
-  // drop the animation class so it never replays (e.g. after the print dialog).
+  
+  // 🚀 New Pagination State
+  const [currentPage, setCurrentPage]   = useState(1)
+
   const [entered, setEntered] = useState(false)
-  // Animated placeholder text for the search box (typewriter hint).
   const [phText, setPhText] = useState("")
 
   const subTxt     = isDark ? "#94a3b8" : "#64748b"
@@ -149,31 +147,24 @@ export default function AdminTransactions() {
   const cardBdr    = isDark ? "#1e293b" : "#e8edf2"
   const rowHover   = isDark ? "rgba(74,222,128,0.04)" : "#f8fffe"
 
-  // 🚀 Fetch and NORMALIZE real transaction data
   const fetchTransactions = async () => {
     setLoading(true);
     try {
       const res = await api.getAdminOrders();
-      console.log("📦 Raw API Response:", res); // Check your F12 Console if it's still blank!
-      console.log("DEBUG: First item status value:", res[0].payment_status);
-      
       let rawData = res.data || res;
       let rawList = Array.isArray(rawData) ? rawData : (rawData.orders || rawData.transactions || rawData.data || []);
 
       const normalizedList = rawList.map(t => {
-        // 1. Aggressively clean up the Payment Method
         const rawMethod = String(t.payment_method || t.method || t.payment_type || "N/A").toLowerCase();
         let cleanMethod = "Other";
         if (rawMethod.includes("maya")) cleanMethod = "Maya";
         else if (rawMethod.includes("gcash")) cleanMethod = "GCash";
-        else if (rawMethod.includes("card") || rawMethod.includes("credit") || rawMethod.includes("debit")) cleanMethod = "Credit Card";
-        else if (rawMethod.includes("bank") || rawMethod.includes("transfer")) cleanMethod = "Bank Transfer";
+        else if (rawMethod.includes("card") || rawMethod.includes("credit") || rawMethod.includes("debit") || rawMethod.includes("paymongo")) cleanMethod = "Online Payment";
+        else if (rawMethod.includes("bank") || rawMethod.includes("transfer") || rawMethod.includes("qrph")) cleanMethod = "QRPh / Bank";
         else if (rawMethod.includes("cash")) cleanMethod = "Cash";
 
-        // 2. Hunt for the Price
         const price = Number(t.total_price || t.total_amount || t.amount || t.grand_total || t.total || 0);
-        // 3. 🚀 Normalize payment status (support both admin listing formats)
-        // Admin listing endpoint: uses `status` (enum string) and `trn` for reference
+        
         const rawStatusRaw = t.payment_status ?? t.status ?? t.checkout_status ?? "pending";
         const rawStatus = String(rawStatusRaw).toLowerCase();
 
@@ -190,11 +181,21 @@ export default function AdminTransactions() {
           cleanStatus = "Paid";
         }
 
-        // 4. Map everything together
+        // 🚀 THE FIX: Dig deeper to find the PayMongo Session ID if the regular reference is empty
+        const referenceValue = t.transaction?.provider_checkout_session_id || 
+                               t.transaction?.reference_number || 
+                               t.provider_checkout_session_id ||
+                               t.payment_reference || 
+                               t.reference_number || 
+                               t.reference || 
+                               t.trn || 
+                               t.transaction_id || 
+                               "";
+
         return {
           id: t.id || t.order_id || `txn_${Math.floor(Math.random()*10000)}`,
           customer_name: t.customer_name || t.customer?.name || t.user?.name || t.billing_name || "Guest",
-          payment_reference: t.payment_reference || t.reference_number || t.reference || t.trn || t.transaction_id || "",
+          payment_reference: referenceValue, // 🚀 Uses the new truffle-pig extraction method
           payment_method: cleanMethod,
           total_price: price,
           payment_status: cleanStatus,
@@ -202,9 +203,7 @@ export default function AdminTransactions() {
         };
       });
 
-      // Sort newest first
       normalizedList.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-      
       setTransactions(normalizedList);
     } catch (e) {
       console.error("Failed to load transactions", e);
@@ -215,16 +214,17 @@ export default function AdminTransactions() {
 
   useEffect(() => { fetchTransactions() }, []);
 
-  // Play the entrance animation once the data has loaded, then turn it off so it
-  // can't restart when the page repaints (such as returning from the print dialog).
+  // 🚀 Reset pagination to page 1 whenever any filter changes!
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, dateFilter, typeFilter, methodFilter, statusFilter]);
+
   useEffect(() => {
     if (loading) { setEntered(false); return }
     const t = setTimeout(() => setEntered(true), 1300)
     return () => clearTimeout(t)
   }, [loading]);
 
-  // Typewriter hint in the search box: types a sample customer name, pauses, deletes,
-  // then the next one — looping forever while the box is empty. Stops once the user types.
   useEffect(() => {
     if (search) { setPhText(""); return }
     let sample = 0, ch = 0, deleting = false, timer
@@ -240,16 +240,12 @@ export default function AdminTransactions() {
     return () => clearTimeout(timer)
   }, [search]);
 
-  // 🚀 Calculate Live Revenue Stats
   const stats = useMemo(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
-    
-    // Filter for successful payments today
     const todayTransactions = transactions.filter(t => 
       t.created_at.startsWith(todayStr) && 
       (t.payment_status.toLowerCase() === "paid" || t.payment_status.toLowerCase() === "success")
     );
-
     const todayRevenue = todayTransactions.reduce((sum, t) => sum + t.total_price, 0);
     
     return {
@@ -267,26 +263,19 @@ export default function AdminTransactions() {
 
   const COLS = ["Transaction ID", "Customer", "Reference", "Method", "Total", "Status", "Date & Time", "Action"]
 
-  // 🚀 Advanced Filter Logic
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    
-    // Date Helpers
     const today = new Date();
     const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
     const todayStr = today.toISOString().slice(0, 10);
     const yesterdayStr = yesterday.toISOString().slice(0, 10);
 
     return transactions.filter(t => {
-      // 1. Search Filter
       const matchSearch = !q || t.id.toLowerCase().includes(q) || t.payment_reference.toLowerCase().includes(q) || t.customer_name.toLowerCase().includes(q);
-      
-      // 2. Status & Method Filters
       const matchStatus = statusFilter === "Status: All" || t.payment_status.toLowerCase() === statusFilter.replace("Status: ", "").toLowerCase();
       const cleanFilterMethod = methodFilter.replace("Method: ", "");
       const matchMethod = methodFilter === "Method: All" || t.payment_method.includes(cleanFilterMethod);
       
-      // 3. Date Filter
       let matchDate = true;
       const tDateStr = t.created_at.slice(0, 10);
       
@@ -304,14 +293,20 @@ export default function AdminTransactions() {
     });
   }, [transactions, search, statusFilter, methodFilter, dateFilter]);
 
+  // 🚀 Paginate the filtered data
+  const paginatedData = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filtered.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filtered, currentPage]);
+
+  const totalPages = Math.ceil(filtered.length / ITEMS_PER_PAGE);
+
   const handlePrint = () => window.print()
   const printDate   = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
   const printTime   = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })
 
-  // Everything below feeds the printed report only; the on-screen view is untouched.
   const peso = n => `₱${Number(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
-  // Count and total the filtered transactions by payment status.
   const statusCounts = filtered.reduce((m, t) => {
     m[t.payment_status] = (m[t.payment_status] || 0) + 1
     return m
@@ -325,8 +320,6 @@ export default function AdminTransactions() {
   const otherCount = Math.max(0, filtered.length - knownTotal)
   const pct = n => (filtered.length ? (n / filtered.length) * 100 : 0)
 
-  // Group the filtered transactions by payment status, in the order above,
-  // with a value subtotal per group, for the printed table.
   const printGroups = (() => {
     const map = new Map()
     filtered.forEach(t => {
@@ -347,7 +340,6 @@ export default function AdminTransactions() {
       }))
   })()
 
-  // One-line summary of the filters actually applied, printed under the title.
   const printScope = [
     dateFilter !== "All Time" ? `Period: ${dateFilter}` : "All Time",
     methodFilter !== "Method: All" ? `Method: ${methodFilter}` : "All Methods",
@@ -357,7 +349,7 @@ export default function AdminTransactions() {
   ].filter(Boolean).join("   ·   ")
 
   const handleCSV = () => {
-    const headers = COLS.slice(0, -1); // Exclude "Action"
+    const headers = COLS.slice(0, -1);
     const rows = filtered.map(t => [
       t.id, t.customer_name, t.payment_reference || "N/A", t.payment_method, t.total_price, t.payment_status, new Date(t.created_at).toLocaleString()
     ]);
@@ -369,7 +361,6 @@ export default function AdminTransactions() {
     a.click(); URL.revokeObjectURL(a.href)
   }
 
-  // While the first fetch is running, show the flower loader instead of an empty table.
   if (loading) {
     return (
       <div className="space-y-5">
@@ -384,18 +375,10 @@ export default function AdminTransactions() {
 
   return (
     <div className="space-y-5">
-      {/* Print styles. The screen UI is hidden on paper (.no-print) and the
-          .print-only blocks render only when printing. Sections in order:
-          1 letterhead  2 title + scope  3 summary cards
-          4 status distribution  5 grouped detail table  6 footer/signatures */}
       <style>{`
         .print-only { display: none; }
-
-        /* Gentle fade + rise so content eases in once loaded instead of flashing.
-           Not reset for print, so returning from the print dialog never replays it. */
         @keyframes txnRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
         .txn-rise { animation: txnRise 0.85s ease-out both; }
-
         @media print {
           @page { margin: 12mm 10mm; }
           body * { visibility: hidden !important; }
@@ -407,8 +390,6 @@ export default function AdminTransactions() {
           .no-print { display: none !important; }
           .print-only { display: block !important; }
           .print-letterhead, .print-doc-title, .print-summary, .print-health { break-inside: avoid; page-break-inside: avoid; }
-
-          /* 1. Letterhead: brand band */
           .print-letterhead {
             display: flex !important; align-items: center; justify-content: space-between; gap: 16px;
             padding: 13px 18px; border-radius: 12px;
@@ -433,8 +414,6 @@ export default function AdminTransactions() {
           }
           .print-meta .gen { margin: 6px 0 0; font-size: 9px; color: rgba(255,255,255,0.85) !important; }
           .print-meta .gen strong { color: #ffffff !important; font-weight: 700; }
-
-          /* 2. Document title + report scope */
           .print-doc-title { display: flex !important; flex-direction: column; align-items: center; margin: 16px 0 2px; }
           .print-doc-title .t {
             margin: 0; font-size: 15px; font-weight: 800;
@@ -446,8 +425,6 @@ export default function AdminTransactions() {
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
           }
           .print-doc-title .scope { margin: 0; font-size: 9px; color: #6b7280 !important; letter-spacing: 0.02em; text-align: center; }
-
-          /* 3. Summary cards */
           .print-summary { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 0; }
           .print-summary-card {
             border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px;
@@ -463,8 +440,6 @@ export default function AdminTransactions() {
           .print-summary-card .value.amber { color: #d97706 !important; }
           .print-summary-card .value.red   { color: #dc2626 !important; }
           .print-summary-card .cap { margin: 3px 0 0; font-size: 8px; color: #9ca3af !important; }
-
-          /* 4. Status distribution */
           .print-health {
             margin: 10px 0 0; border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 12px 11px;
             background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
@@ -485,8 +460,6 @@ export default function AdminTransactions() {
           .print-health .legend { display: flex; flex-wrap: wrap; gap: 12px 16px; margin: 7px 0 0; }
           .print-health .li { display: flex; align-items: center; gap: 5px; font-size: 8.5px; color: #374151 !important; }
           .print-health .dot { width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; }
-
-          /* 5. Detail table (grouped by payment status) */
           .print-detail { display: block !important; margin-top: 14px; }
           .print-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; padding: 0 2px; }
           .print-section-title { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #0C573E !important; }
@@ -519,8 +492,6 @@ export default function AdminTransactions() {
           .print-detail .mono { font-family: "Courier New", Courier, monospace; font-size: 8.5px; }
           .print-detail tr.alt td { background: #f7faf8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-detail tbody tr:last-child td { border-bottom: none; }
-
-          /* status section rows */
           .print-detail tr.cat-row { page-break-after: avoid; break-after: avoid; }
           .print-detail tr.cat-row td {
             background: #eaf5ee !important; color: #0C573E !important;
@@ -533,15 +504,11 @@ export default function AdminTransactions() {
             float: right; font-weight: 600; letter-spacing: 0;
             text-transform: none; color: #15724B !important;
           }
-
-          /* report total row */
           .print-detail tr.grand td {
             background: #0C573E !important; color: #ffffff !important;
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
             border: none; padding: 8px 7px; font-size: 9.5px; font-weight: 800;
           }
-
-          /* 6. Footer + signatures */
           .print-footer {
             display: flex !important; align-items: flex-end; justify-content: space-between; gap: 24px;
             margin-top: 20px; padding-top: 11px; border-top: 2px solid #e5e7eb;
@@ -711,8 +678,8 @@ export default function AdminTransactions() {
                       Loading transactions...
                     </td>
                   </tr>
-                ) : filtered.length > 0 ? (
-                  filtered.map((t, idx) => (
+                ) : paginatedData.length > 0 ? (
+                  paginatedData.map((t, idx) => (
                     <tr key={t.id} style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: idx % 2 === 0 ? cardBg : (isDark ? "#111827" : "#f9fafb") }}
                         onMouseEnter={e => e.currentTarget.style.backgroundColor = rowHover}
                         onMouseLeave={e => e.currentTarget.style.backgroundColor = idx % 2 === 0 ? cardBg : (isDark ? "#111827" : "#f9fafb")}>
@@ -743,15 +710,39 @@ export default function AdminTransactions() {
             </table>
           </div>
 
-          {/* Pagination */}
           <div className="flex items-center justify-between px-4 sm:px-5 py-3 flex-wrap gap-2 no-print"
             style={{ borderTop: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
-            <span className="text-sm" style={{ color: subTxt }}>Showing {filtered.length} transactions</span>
+            <span className="text-sm" style={{ color: subTxt }}>
+              Showing {paginatedData.length > 0 ? (currentPage - 1) * ITEMS_PER_PAGE + 1 : 0} to {Math.min(currentPage * ITEMS_PER_PAGE, filtered.length)} of {filtered.length} transactions
+            </span>
+            
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-3 py-1.5 text-xs font-semibold border rounded-md disabled:opacity-50 transition-colors"
+                  style={{ borderColor: inputBdr, color: inputTxt, backgroundColor: inputBg }}
+                >
+                  Previous
+                </button>
+                <span className="text-xs font-semibold px-2" style={{ color: subTxt }}>
+                  Page {currentPage} of {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-3 py-1.5 text-xs font-semibold border rounded-md disabled:opacity-50 transition-colors"
+                  style={{ borderColor: inputBdr, color: inputTxt, backgroundColor: inputBg }}
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Print 5: full detail table, grouped by payment status.
-            Prints EVERY filtered transaction, with per-status subtotals and a report total. */}
+        {/* Print 5: full detail table, grouped by payment status. */}
         <div className="print-only print-detail">
           <div className="print-section-head">
             <p className="print-section-title">Transaction Detail</p>
