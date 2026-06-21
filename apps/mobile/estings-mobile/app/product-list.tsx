@@ -1,10 +1,11 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
-import { ArrowLeft } from 'lucide-react-native';
+import { ArrowLeft, ChevronDown, Search, X } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AppBrandHeader } from '@/components/app-brand-header';
 import { EmptyState } from '@/components/bloom-ui';
 import { ProductCard } from '@/components/product-card';
 import { occasionAssets, type OccasionAsset } from '@/constants/occasion-assets';
@@ -22,6 +23,21 @@ type ProductSectionKind =
   | 'non-floral-products';
 const pageBackground = '#F5F5F5';
 const softText = '#2F3A34';
+const outlineColor = 'rgba(31, 42, 36, 0.11)';
+type SortOption = 'all' | 'latest' | 'price-asc' | 'price-desc';
+type BudgetOption = 'all' | 'under-1000' | '1000-2000' | 'over-2000';
+const sortOptions: { label: string; value: SortOption }[] = [
+  { label: 'All', value: 'all' },
+  { label: 'Latest', value: 'latest' },
+  { label: 'Price: Low to High', value: 'price-asc' },
+  { label: 'Price: High to Low', value: 'price-desc' },
+];
+const budgetOptions: { label: string; value: BudgetOption }[] = [
+  { label: 'Any', value: 'all' },
+  { label: 'Lower than 1000', value: 'under-1000' },
+  { label: '1000-2000', value: '1000-2000' },
+  { label: '2000 above', value: 'over-2000' },
+];
 
 export default function ProductListScreen() {
   const insets = useSafeAreaInsets();
@@ -34,7 +50,11 @@ export default function ProductListScreen() {
   const seed = useRef(createRecommendationSeed()).current;
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [openFilter, setOpenFilter] = useState<'sort' | 'budget' | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [query, setQuery] = useState('');
+  const [selectedBudget, setSelectedBudget] = useState<BudgetOption>('all');
+  const [selectedSort, setSelectedSort] = useState<SortOption>('all');
 
   const title = typeof params.title === 'string' && params.title.trim() ? params.title : 'Products';
   const category = typeof params.category === 'string' ? params.category : '';
@@ -59,7 +79,7 @@ export default function ProductListScreen() {
     void loadProducts();
   }, [loadProducts]);
 
-  const visibleProducts = useMemo(() => {
+  const baseProducts = useMemo(() => {
     const orderedProducts = buildDiscoveryProductOrder({ products, seed });
 
     if (section) {
@@ -72,26 +92,103 @@ export default function ProductListScreen() {
 
     return orderedProducts;
   }, [category, products, section, seed]);
+  const normalizedQuery = query.trim();
+  const visibleProducts = useMemo(() => {
+    const normalizedSearch = normalizedQuery.toLowerCase();
+    const filteredProducts = baseProducts.filter((product) => {
+      const price = product.priceCents / 100;
+      const searchableText = [
+        product.name,
+        product.description,
+        product.categoryName,
+        product.productGroup,
+        product.productType,
+        product.tag,
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase();
+
+      return (!normalizedSearch || searchableText.includes(normalizedSearch)) && matchesBudget(price, selectedBudget);
+    });
+
+    return sortProducts(filteredProducts, selectedSort);
+  }, [baseProducts, normalizedQuery, selectedBudget, selectedSort]);
   const productColumns = splitIntoColumns(visibleProducts);
   const occasionColumns = splitIntoColumns(occasionAssets);
+  const scopeLabel = isOccasionIndex ? 'Occasions' : title;
+  const resultTitle = normalizedQuery ? `"${normalizedQuery}"` : title;
+  const resultContext = normalizedQuery ? `Searching in ${scopeLabel}` : `Browsing ${scopeLabel}`;
+  const resultCountLabel = isOccasionIndex
+    ? `${occasionAssets.length} moments`
+    : `${visibleProducts.length} ${visibleProducts.length === 1 ? 'product' : 'products'}`;
 
   return (
     <View style={styles.screen}>
-      <View style={[styles.header, { paddingTop: insets.top + theme.spacing.sm }]}>
-        <Pressable accessibilityLabel="Go back" accessibilityRole="button" onPress={() => router.back()} style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
-          <ArrowLeft size={22} color={theme.colors.primary} strokeWidth={2.4} />
-        </Pressable>
-        <View style={styles.headerCopy}>
-          <Text numberOfLines={1} style={styles.title}>{title}</Text>
-          <Text style={styles.subtitle}>
-            {isOccasionIndex
-              ? `${occasionAssets.length} moments`
-              : `${visibleProducts.length} ${visibleProducts.length === 1 ? 'product' : 'products'}`}
-          </Text>
+      <View style={styles.stickyHeader}>
+        <AppBrandHeader showSearchAction={false} />
+
+        <View style={styles.searchRow}>
+          <Pressable
+            accessibilityLabel="Go back"
+            accessibilityRole="button"
+            onPress={() => router.back()}
+            style={({ pressed }) => [styles.backButton, pressed && styles.pressed]}>
+            <ArrowLeft size={24} color={theme.colors.primary} strokeWidth={2.4} />
+          </Pressable>
+          <View style={styles.searchBox}>
+            <Search size={theme.icon.sm} color={theme.colors.textMuted} />
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              onChangeText={setQuery}
+              placeholder={`Search in ${scopeLabel}`}
+              placeholderTextColor={theme.colors.textMuted}
+              returnKeyType="search"
+              style={styles.searchInput}
+              value={query}
+            />
+            {query ? (
+              <Pressable accessibilityLabel="Clear search" accessibilityRole="button" hitSlop={8} onPress={() => setQuery('')}>
+                <X size={theme.icon.sm} color={theme.colors.textMuted} />
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+
+        <View style={styles.filterRow}>
+          <FilterDropdown
+            isOpen={openFilter === 'sort'}
+            options={sortOptions}
+            selectedValue={selectedSort}
+            onSelect={(value) => {
+              setSelectedSort(value);
+              setOpenFilter(null);
+            }}
+            onToggle={() => setOpenFilter((current) => (current === 'sort' ? null : 'sort'))}
+          />
+          <FilterDropdown
+            isOpen={openFilter === 'budget'}
+            options={budgetOptions}
+            selectedValue={selectedBudget}
+            onSelect={(value) => {
+              setSelectedBudget(value);
+              setOpenFilter(null);
+            }}
+            onToggle={() => setOpenFilter((current) => (current === 'budget' ? null : 'budget'))}
+          />
         </View>
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 36 }]}>
+        <View style={styles.resultsHeader}>
+          <View style={styles.scopePill}>
+            <Text numberOfLines={1} style={styles.scopePillText}>{resultContext}</Text>
+          </View>
+          <Text numberOfLines={2} style={styles.title}>{resultTitle}</Text>
+          <Text style={styles.subtitle}>{resultCountLabel}</Text>
+        </View>
+
         {isLoading ? (
           <View style={styles.loadingState}>
             <ActivityIndicator color={theme.colors.primary} />
@@ -133,6 +230,49 @@ export default function ProductListScreen() {
           <EmptyState title="No products found" description="Try another category or section." />
         )}
       </ScrollView>
+    </View>
+  );
+}
+
+function FilterDropdown<TValue extends string>({
+  isOpen,
+  onSelect,
+  options,
+  selectedValue,
+  onToggle,
+}: {
+  isOpen: boolean;
+  onSelect: (value: TValue) => void;
+  options: { label: string; value: TValue }[];
+  selectedValue: TValue;
+  onToggle: () => void;
+}) {
+  const selectedOption = options.find((option) => option.value === selectedValue) ?? options[0];
+
+  return (
+    <View style={styles.filterDropdown}>
+      <Pressable accessibilityRole="button" style={styles.filterButton} onPress={onToggle}>
+        <Text numberOfLines={1} style={styles.filterValue}>{selectedOption.label}</Text>
+        <ChevronDown size={16} color={theme.colors.primary} strokeWidth={2.4} />
+      </Pressable>
+      {isOpen ? (
+        <View style={styles.filterMenu}>
+          {options.map((option) => {
+            const isSelected = option.value === selectedValue;
+
+            return (
+              <Pressable
+                key={option.value}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isSelected }}
+                style={[styles.filterOption, isSelected && styles.filterOptionSelected]}
+                onPress={() => onSelect(option.value)}>
+                <Text style={[styles.filterOptionText, isSelected && styles.filterOptionTextSelected]}>{option.label}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -255,6 +395,45 @@ function splitIntoColumns<T>(items: T[]) {
   ];
 }
 
+function matchesBudget(price: number, budget: BudgetOption) {
+  if (budget === 'under-1000') {
+    return price < 1000;
+  }
+
+  if (budget === '1000-2000') {
+    return price >= 1000 && price <= 2000;
+  }
+
+  if (budget === 'over-2000') {
+    return price > 2000;
+  }
+
+  return true;
+}
+
+function sortProducts(products: Product[], sort: SortOption) {
+  const sortedProducts = [...products];
+
+  if (sort === 'latest') {
+    return sortedProducts.sort((first, second) => {
+      const firstTime = first.createdAt ? new Date(first.createdAt).getTime() : 0;
+      const secondTime = second.createdAt ? new Date(second.createdAt).getTime() : 0;
+
+      return secondTime - firstTime;
+    });
+  }
+
+  if (sort === 'price-asc') {
+    return sortedProducts.sort((first, second) => first.priceCents - second.priceCents);
+  }
+
+  if (sort === 'price-desc') {
+    return sortedProducts.sort((first, second) => second.priceCents - first.priceCents);
+  }
+
+  return sortedProducts;
+}
+
 function getStableRandomValue(value: string) {
   let hash = 2166136261;
 
@@ -275,25 +454,134 @@ const styles = StyleSheet.create({
     backgroundColor: pageBackground,
     flex: 1,
   },
-  header: {
-    alignItems: 'center',
+  stickyHeader: {
     backgroundColor: theme.colors.white,
     borderBottomColor: 'rgba(31, 42, 36, 0.08)',
     borderBottomWidth: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
+    elevation: 4,
+    gap: theme.spacing.md,
     paddingBottom: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
+    shadowColor: '#1F2A24',
+    shadowOffset: { height: 4, width: 0 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    zIndex: 20,
   },
   backButton: {
     alignItems: 'center',
-    height: 42,
+    backgroundColor: theme.colors.surface,
+    borderColor: outlineColor,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    height: 44,
     justifyContent: 'center',
-    width: 42,
+    width: 44,
   },
-  headerCopy: {
+  searchRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  searchBox: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.white,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borderWidth,
     flex: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    minHeight: 50,
     minWidth: 0,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  searchInput: {
+    color: softText,
+    flex: 1,
+    fontSize: 15,
+    minWidth: 0,
+    paddingVertical: theme.spacing.sm,
+  },
+  filterRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+    zIndex: 30,
+  },
+  filterDropdown: {
+    flex: 1,
+    position: 'relative',
+    zIndex: 30,
+  },
+  filterButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.sm,
+    borderWidth: theme.borderWidth,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    justifyContent: 'center',
+    minHeight: 36,
+    paddingHorizontal: theme.spacing.md,
+  },
+  filterValue: {
+    color: softText,
+    flex: 1,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 12,
+    lineHeight: 15,
+    minWidth: 0,
+  },
+  filterMenu: {
+    backgroundColor: theme.colors.white,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    borderWidth: theme.borderWidth,
+    left: 0,
+    overflow: 'hidden',
+    position: 'absolute',
+    right: 0,
+    top: 42,
+    zIndex: 40,
+  },
+  filterOption: {
+    justifyContent: 'center',
+    minHeight: 38,
+    paddingHorizontal: theme.spacing.md,
+  },
+  filterOptionSelected: {
+    backgroundColor: theme.colors.greenSoft,
+  },
+  filterOptionText: {
+    color: softText,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 12,
+  },
+  filterOptionTextSelected: {
+    color: theme.colors.primary,
+    fontFamily: Fonts.sansSemiBold,
+  },
+  resultsHeader: {
+    alignItems: 'flex-start',
+    gap: theme.spacing.xs,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  scopePill: {
+    backgroundColor: theme.colors.greenSoft,
+    borderColor: 'rgba(46, 139, 52, 0.16)',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    maxWidth: '100%',
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 4,
+  },
+  scopePillText: {
+    color: theme.colors.primary,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 11,
+    lineHeight: 14,
   },
   title: {
     color: softText,

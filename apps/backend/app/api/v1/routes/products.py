@@ -245,7 +245,8 @@ def get_products(db: Session = Depends(get_db)):
         .filter(
             and_(
                 Product.is_available == True,
-                or_(Product.is_visible == True, Product.category == "advertisement"),
+                Product.is_visible == True,
+                Product.status == ProductStatusEnum.active,
             )
         )
         .options(joinedload(Product.inventory))
@@ -263,6 +264,8 @@ def get_products(db: Session = Depends(get_db)):
             "original_price": float(p.original_price) if getattr(p, "original_price", None) else None,
             "image_url": p.image_url,
             "is_available": p.is_available,
+            "is_visible": p.is_visible,
+            "status": p.status.value if hasattr(p.status, "value") else p.status,
             "stock": p.inventory.current_stock if p.inventory else 0,
             
             # 🚀 EXPOSE BRANCH STOCK TO FRONTEND

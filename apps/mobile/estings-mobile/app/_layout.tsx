@@ -24,6 +24,7 @@ import 'react-native-reanimated';
 
 import { ChatFloatingBubble } from '@/components/chat-floating-bubble';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { scheduleAppOpenCreateReminder } from '@/utils/push-notifications';
 import '@/utils/register-svg-layout-event';
 
 export const unstable_settings = {
@@ -53,6 +54,10 @@ export default function RootLayout() {
 
     void NavigationBar.setVisibilityAsync('visible').catch(() => {});
     void NavigationBar.setButtonStyleAsync('dark').catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    void scheduleAppOpenCreateReminder().catch(() => {});
   }, []);
 
   if (!fontsLoaded) {

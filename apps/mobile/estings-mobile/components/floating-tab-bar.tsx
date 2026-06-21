@@ -16,7 +16,8 @@ import Reanimated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts, theme } from '@/constants/theme';
-import { addCartUpdatedListener, getGuestCartItems } from '@/services/guest-cart';
+import { getCartItems } from '@/services/cart-storage';
+import { addCartUpdatedListener } from '@/services/guest-cart';
 
 type FloatingTabRoute = 'index' | 'categories' | 'generate' | 'cart' | 'me';
 
@@ -44,7 +45,7 @@ export function FloatingTabBar({ descriptors, navigation, state }: BottomTabBarP
   const [cartCount, setCartCount] = useState(0);
 
   const refreshCartCount = useCallback(() => {
-    getGuestCartItems()
+    getCartItems()
       .then((items) => {
         setCartCount(items.reduce((total, item) => total + item.quantity, 0));
       })

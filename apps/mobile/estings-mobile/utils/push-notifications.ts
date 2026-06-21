@@ -22,6 +22,8 @@ export type PushRegistrationResult =
       reason: string;
     };
 
+let hasScheduledAppOpenCreateReminder = false;
+
 function getProjectId() {
   return (
     Constants.easConfig?.projectId ??
@@ -114,4 +116,89 @@ export async function registerForPushNotifications(): Promise<PushRegistrationRe
       reason: getErrorMessage(error),
     };
   }
+}
+
+export async function showLocalChatNotification({
+  body,
+  conversationId,
+  messageId,
+  title = "Esting's Support",
+}: {
+  body: string;
+  conversationId?: string;
+  messageId?: string;
+  title?: string;
+}) {
+  if (Platform.OS === 'web') {
+    return false;
+  }
+
+  await configureAndroidNotificationChannel();
+
+  const existingPermission = await Notifications.getPermissionsAsync();
+  let finalStatus = existingPermission.status;
+
+  if (existingPermission.status !== 'granted') {
+    const requestedPermission = await Notifications.requestPermissionsAsync();
+    finalStatus = requestedPermission.status;
+  }
+
+  if (finalStatus !== 'granted') {
+    return false;
+  }
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      body,
+      data: {
+        conversationId,
+        messageId,
+        route: '/live-chat',
+      },
+      sound: true,
+      title,
+    },
+    trigger: null,
+  });
+
+  return true;
+}
+
+export async function scheduleAppOpenCreateReminder() {
+  if (hasScheduledAppOpenCreateReminder || Platform.OS === 'web') {
+    return false;
+  }
+
+  await configureAndroidNotificationChannel();
+
+  const existingPermission = await Notifications.getPermissionsAsync();
+  let finalStatus = existingPermission.status;
+
+  if (existingPermission.status !== 'granted') {
+    const requestedPermission = await Notifications.requestPermissionsAsync();
+    finalStatus = requestedPermission.status;
+  }
+
+  if (finalStatus !== 'granted') {
+    return false;
+  }
+
+  hasScheduledAppOpenCreateReminder = true;
+
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      body: 'Describe your dream arrangement or build one with Mix & Match.',
+      data: {
+        route: '/(tabs)/generate',
+      },
+      sound: true,
+      title: 'Make it personal',
+    },
+    trigger: {
+      seconds: 60,
+      type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
+    },
+  });
+
+  return true;
 }

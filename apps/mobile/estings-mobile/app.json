@@ -47,6 +47,14 @@
           "faceIDPermission": "Allow Esting's to use Face ID to protect your account and confirm sensitive actions."
         }
       ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Esting's to use the microphone for voice prompts.",
+          "speechRecognitionPermission": "Allow Esting's to turn your voice into bouquet prompt text.",
+          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+        }
+      ],
       "expo-notifications",
       [
         "expo-splash-screen",

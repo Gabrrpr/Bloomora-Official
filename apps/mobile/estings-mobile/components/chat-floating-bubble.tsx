@@ -1,9 +1,11 @@
 import { Image } from 'expo-image';
-import { router, usePathname } from 'expo-router';
+import { usePathname } from 'expo-router';
 import { MessageCircle, X } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated as RNAnimated,
+  Modal,
+  Pressable,
   StyleSheet,
   Text,
   useWindowDimensions,
@@ -19,6 +21,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { theme } from '@/constants/theme';
+import LiveChatScreen from '@/app/(support)/live-chat';
 import { createChatSession, getChatHistory, getChatWebSocketUrl, type BackendChatMessage } from '@/services/chat-api';
 import { getAuthSession, type AuthSession } from '@/services/auth-session';
 
@@ -31,6 +34,7 @@ const previewVisibleMs = 5600;
 const removeDropDistance = removeTargetSize * 0.82;
 const removeMagnetDistance = 148;
 const chatHistoryPollMs = 5000;
+const defaultBubbleYRatio = 0.52;
 
 type BubblePosition = {
   x: number;
@@ -42,7 +46,7 @@ export function ChatFloatingBubble() {
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const initialPosition = useMemo(
-    () => ({ x: width - bubbleSize - sideInset, y: height * 0.66 }),
+    () => ({ x: width - bubbleSize - sideInset, y: height * defaultBubbleYRatio }),
     [height, width],
   );
   const translateX = useSharedValue(initialPosition.x);
@@ -53,11 +57,11 @@ export function ChatFloatingBubble() {
   const isOverRemoveTargetValue = useSharedValue(false);
   const previewAnim = useRef(new RNAnimated.Value(0)).current;
   const removeTargetAnim = useRef(new RNAnimated.Value(0)).current;
-  const positionRef = useRef<BubblePosition>({ x: width - bubbleSize - sideInset, y: height * 0.66 });
+  const positionRef = useRef<BubblePosition>({ x: width - bubbleSize - sideInset, y: height * defaultBubbleYRatio });
   const wsRef = useRef<WebSocket | null>(null);
   const previewHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dragStartRef = useRef<BubblePosition>({ x: width - bubbleSize - sideInset, y: height * 0.66 });
-  const liveDragPositionRef = useRef<BubblePosition>({ x: width - bubbleSize - sideInset, y: height * 0.66 });
+  const dragStartRef = useRef<BubblePosition>({ x: width - bubbleSize - sideInset, y: height * defaultBubbleYRatio });
+  const liveDragPositionRef = useRef<BubblePosition>({ x: width - bubbleSize - sideInset, y: height * defaultBubbleYRatio });
   const isOverRemoveTargetRef = useRef(false);
   const lastStaffMessageIdRef = useRef<string | null>(null);
   const [chatSession, setChatSession] = useState<{ session: AuthSession; userId: string } | null>(null);
@@ -68,17 +72,13 @@ export function ChatFloatingBubble() {
   const [isSnappedLeft, setIsSnappedLeft] = useState(false);
   const [isOverRemoveTarget, setIsOverRemoveTarget] = useState(false);
   const [isAuthChecked, setIsAuthChecked] = useState(false);
+  const [isChatOverlayVisible, setIsChatOverlayVisible] = useState(false);
   const isDraggingRef = useRef(false);
 
   const isLiveChatRoute = pathname.includes('/live-chat');
   const isAuthRoute = pathname.includes('/login') || pathname.includes('/sign-up') || pathname.includes('/forgot-password');
   const shouldMount = isAuthChecked && Boolean(chatSession) && !isLiveChatRoute && !isAuthRoute;
   const previewMaxWidth = Math.min(238, width - bubbleSize - sideInset * 2 - 24);
-  const previewBubbleWidth = Math.min(
-    previewMaxWidth,
-    Math.max(96, latestPreview.length * 6.8 + theme.spacing.md * 2),
-  );
-
   const bounds = useMemo(
     () => ({
       maxX: width - bubbleSize - sideInset,
@@ -147,7 +147,7 @@ export function ChatFloatingBubble() {
     setUnreadCount(0);
     hidePreviewBubble(true);
     setLatestPreview('');
-    router.push('/live-chat');
+    setIsChatOverlayVisible(true);
   }, [hidePreviewBubble]);
 
   const placeBubbleOnNearestSide = useCallback(
@@ -388,8 +388,8 @@ export function ChatFloatingBubble() {
   );
 
   const bubbleGesture = useMemo(
-    () =>
-      Gesture.Pan()
+    () => {
+      const panGesture = Gesture.Pan()
         .manualActivation(false)
         .onBegin(() => {
           gestureStartX.value = translateX.value;
@@ -484,7 +484,19 @@ export function ChatFloatingBubble() {
         .onFinalize(() => {
           hasDraggedValue.value = false;
           isOverRemoveTargetValue.value = false;
-        }),
+        });
+      const tapGesture = Gesture.Tap()
+        .maxDistance(tapSlop)
+        .onEnd(() => {
+          hasDraggedValue.value = false;
+          isOverRemoveTargetValue.value = false;
+          runOnJS(setDragActive)(false);
+          runOnJS(setRemoveTargetActive)(false);
+          runOnJS(openChat)();
+        });
+
+      return Gesture.Race(tapGesture, panGesture);
+    },
     [
       bounds,
       finishDrag,
@@ -550,7 +562,7 @@ export function ChatFloatingBubble() {
 
       <GestureDetector gesture={bubbleGesture}>
       <Animated.View
-        pointerEvents={isHidden ? 'none' : 'auto'}
+        pointerEvents={isHidden || isChatOverlayVisible ? 'none' : 'auto'}
         style={[
           styles.bubbleWrap,
           isOverRemoveTarget && styles.bubbleWrapRemoveReady,
@@ -563,7 +575,7 @@ export function ChatFloatingBubble() {
             style={[
               styles.messagePreview,
               isSnappedLeft ? styles.messagePreviewLeft : styles.messagePreviewRight,
-              { maxWidth: previewMaxWidth, width: previewBubbleWidth },
+              { maxWidth: previewMaxWidth },
               {
                 opacity: previewAnim,
                 transform: [
@@ -608,6 +620,24 @@ export function ChatFloatingBubble() {
         </View>
       </Animated.View>
       </GestureDetector>
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={isChatOverlayVisible}
+        onRequestClose={() => setIsChatOverlayVisible(false)}>
+        <View style={styles.chatOverlay}>
+          <Pressable
+            accessibilityLabel="Close chat"
+            accessibilityRole="button"
+            style={styles.chatOverlayBackdrop}
+            onPress={() => setIsChatOverlayVisible(false)}
+          />
+          <View style={[styles.chatOverlayPanel, { maxHeight: height - insets.top - insets.bottom - 42 }]}>
+            <LiveChatScreen onRequestClose={() => setIsChatOverlayVisible(false)} />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -691,11 +721,13 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.primary,
     borderRadius: 7,
     justifyContent: 'center',
-    minHeight: 34,
+    maxWidth: 238,
+    minHeight: 30,
+    minWidth: 42,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: 7,
+    paddingVertical: 6,
     position: 'absolute',
-    top: 10,
+    top: 13,
   },
   messagePreviewLeft: {
     left: bubbleSize + 12,
@@ -708,7 +740,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     lineHeight: 17,
-    textAlign: 'left',
+    textAlign: 'center',
   },
   messagePreviewTail: {
     backgroundColor: theme.colors.primary,
@@ -719,10 +751,10 @@ const styles = StyleSheet.create({
     width: 16,
   },
   messagePreviewTailLeft: {
-    left: -6,
+    left: -5,
   },
   messagePreviewTailRight: {
-    right: -6,
+    right: -5,
   },
   bubble: {
     alignItems: 'center',
@@ -794,5 +826,22 @@ const styles = StyleSheet.create({
   removeTargetReady: {
     backgroundColor: theme.colors.white,
     borderColor: 'rgba(31, 42, 36, 0.22)',
+  },
+  chatOverlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.38)',
+    flex: 1,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 12,
+    paddingTop: 24,
+  },
+  chatOverlayBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  chatOverlayPanel: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 12,
+    height: '86%',
+    marginBottom: 12,
+    overflow: 'hidden',
   },
 });

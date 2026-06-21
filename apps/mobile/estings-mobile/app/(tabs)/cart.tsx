@@ -1,6 +1,5 @@
-import { router, useFocusEffect, type Href } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
-import * as WebBrowser from 'expo-web-browser';
 import { ArrowRight, Check, ChevronRight, ChevronUp, Flower2, Gift, Minus, Plus, ShoppingBag, Sparkles, Trash2 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -24,8 +23,12 @@ import { formatPhp, getCartSummary, type CartItem, type Product } from '@/consta
 import { Fonts, theme } from '@/constants/theme';
 import { ApiError } from '@/services/api-client';
 import { clearAuthSession, getAuthSession, type AuthSession } from '@/services/auth-session';
-import { getGuestCartItems, removeGuestCartItem, setGuestCartItems, updateGuestCartItemQuantity } from '@/services/guest-cart';
-import { createOrdersFromCart, createPayMongoCheckout } from '@/services/payments-api';
+import {
+  getCartItems,
+  removeCartItem,
+  setCartItems as persistCartItems,
+  updateCartItemQuantity,
+} from '@/services/cart-storage';
 import { shopApi } from '@/services/shop-api';
 import { buildCartProductRecommendations, createRecommendationSeed } from '@/utils/product-recommendations';
 
@@ -33,9 +36,6 @@ const outlineColor = 'rgba(31, 42, 36, 0.11)';
 const hairlineColor = 'rgba(31, 42, 36, 0.09)';
 const pageBackground = '#F5F5F5';
 const floatingCheckoutOffset = 92;
-const paymentCancelRoute = '/payment/cancel' as Href;
-const paymentSuccessRoute = '/payment/success' as Href;
-
 export default function CartScreen() {
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
@@ -54,6 +54,7 @@ export default function CartScreen() {
   const [isAppendingRecommendations, setIsAppendingRecommendations] = useState(false);
   const [isRecommendationLoading, setIsRecommendationLoading] = useState(false);
   const [visibleRecommendationCount, setVisibleRecommendationCount] = useState(4);
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const selectedCartItems = useMemo(
     () => cartItems.filter((item) => selectedProductIds.has(item.product.id)),
     [cartItems, selectedProductIds],
@@ -66,14 +67,15 @@ export default function CartScreen() {
   const selectedItemCount = selectedCartItems.reduce((total, item) => total + item.quantity, 0);
   const isSignedIn = Boolean(session);
   const isAllSelected = cartItems.length > 0 && selectedProductIds.size === cartItems.length;
+  const productsForRecommendations = recommendedProducts.length > 0 ? recommendedProducts : catalogProducts;
   const rankedRecommendations = useMemo(
     () =>
       buildCartProductRecommendations({
         cartItems,
-        products: recommendedProducts,
+        products: productsForRecommendations,
         seed: recommendationSeed,
       }),
-    [cartItems, recommendedProducts, recommendationSeed],
+    [cartItems, productsForRecommendations, recommendationSeed],
   );
   const visibleRecommendations = rankedRecommendations.slice(0, visibleRecommendationCount);
   const recommendationCap = rankedRecommendations.length;
@@ -83,16 +85,18 @@ export default function CartScreen() {
     setIsLoading(true);
 
     try {
-      const storedItems = await getGuestCartItems();
+      const storedItems = await getCartItems();
 
       setCartItems(storedItems);
       setSelectedProductIds(new Set(storedItems.map((item) => item.product.id)));
 
-      const liveProducts = await shopApi.getProducts();
+      const catalog = await shopApi.getCatalog();
+      const liveProducts = catalog.products;
+      setCatalogProducts(liveProducts);
       const nextItems = hydrateCartItemsFromInventory(storedItems, liveProducts);
 
       if (!areCartItemsEquivalent(storedItems, nextItems)) {
-        await setGuestCartItems(nextItems);
+        await persistCartItems(nextItems);
       }
 
       setCartItems(nextItems);
@@ -100,7 +104,7 @@ export default function CartScreen() {
     } catch (error) {
       console.warn('Failed to load cart items.', error);
       try {
-        const fallbackItems = await getGuestCartItems();
+        const fallbackItems = await getCartItems();
 
         setCartItems(fallbackItems);
         setSelectedProductIds(new Set(fallbackItems.map((item) => item.product.id)));
@@ -136,11 +140,11 @@ export default function CartScreen() {
   );
 
   const handleUpdateQuantity = useCallback(async (productId: string, quantity: number) => {
-    setCartItems(await updateGuestCartItemQuantity(productId, quantity));
+    setCartItems(await updateCartItemQuantity(productId, quantity));
   }, []);
 
   const handleRemoveItem = useCallback(async (productId: string) => {
-    setCartItems(await removeGuestCartItem(productId));
+    setCartItems(await removeCartItem(productId));
     setSelectedProductIds((current) => {
       const next = new Set(current);
       next.delete(productId);
@@ -217,26 +221,8 @@ export default function CartScreen() {
         return;
       }
 
-      const orderResponse = await createOrdersFromCart({
-        items: hydratedSelectedItems,
-        session,
-      });
-      const checkout = await createPayMongoCheckout({
-        orderIds: orderResponse.order_ids,
-        session,
-      });
-      const browserResult = await WebBrowser.openAuthSessionAsync(
-        checkout.checkout_url,
-        'bloomoramobile://payment',
-      );
-
-      if (browserResult.type === 'success') {
-        if (browserResult.url.includes('/payment/cancel')) {
-          router.push(paymentCancelRoute);
-        } else {
-          router.push(paymentSuccessRoute);
-        }
-      }
+      const checkoutQuery = hydratedSelectedItems.map((item) => item.product.id).join(',');
+      router.push(`/checkout?ids=${encodeURIComponent(checkoutQuery)}`);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         await clearAuthSession();
@@ -250,7 +236,7 @@ export default function CartScreen() {
         return;
       }
 
-      const message = error instanceof Error ? error.message : 'Unable to start PayMongo checkout.';
+      const message = error instanceof Error ? error.message : 'Unable to prepare checkout.';
       Alert.alert('Checkout unavailable', message);
     } finally {
       setIsCheckingOut(false);
@@ -266,10 +252,11 @@ export default function CartScreen() {
     setIsRecommendationLoading(true);
 
     shopApi
-      .getProducts()
+      .getCatalog()
       .then((products) => {
         if (isActive) {
-          setRecommendedProducts(products);
+          setRecommendedProducts(products.products);
+          setCatalogProducts(products.products);
         }
       })
       .catch((error) => {
@@ -375,7 +362,7 @@ export default function CartScreen() {
                 ))}
               </View>
 
-              {!isSignedIn ? <PriceBreakdown summary={cartSummary} /> : null}
+              <PriceBreakdown summary={cartSummary} />
 
               {!isSignedIn ? <GuestCheckoutPrompt /> : null}
 
@@ -713,7 +700,7 @@ function CheckoutBar({
           accessibilityRole="button"
           style={({ pressed }) => [styles.checkoutTotalTextButton, pressed && styles.pressed]}
           onPress={() => setIsBreakdownOpen((current) => !current)}>
-          <Text style={styles.checkoutTotalValue}>{formatPhp(summary.totalCents)}</Text>
+          <Text style={styles.checkoutTotalValue}>{formatPhp(summary.subtotalCents)}</Text>
           <ChevronUp
             size={16}
             color={theme.colors.primary}
@@ -881,9 +868,8 @@ function PriceBreakdown({
   return (
     <View style={[styles.summaryPanel, compact && styles.summaryPanelCompact]}>
       <SummaryRow label="Subtotal" value={formatPhp(summary.subtotalCents)} />
-      <SummaryRow label="Estimated delivery" value={formatPhp(summary.deliveryCents)} />
       <View style={styles.summaryDivider} />
-      <SummaryRow isTotal label="Total" value={formatPhp(summary.totalCents)} />
+      <SummaryRow isTotal label="Total" value={formatPhp(summary.subtotalCents)} />
     </View>
   );
 }

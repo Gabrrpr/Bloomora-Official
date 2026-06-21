@@ -53,6 +53,10 @@ function dispatchCartUpdated() {
   globalThis.dispatchEvent?.(new Event(cartUpdatedEventName));
 }
 
+export function notifyCartUpdated() {
+  dispatchCartUpdated();
+}
+
 export function addCartUpdatedListener(listener: () => void) {
   globalThis.addEventListener?.(cartUpdatedEventName, listener);
 

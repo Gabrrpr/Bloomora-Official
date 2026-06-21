@@ -12,9 +12,9 @@ import {
   samplePromos,
 } from '@/constants/shop';
 import { ApiError, apiFetch } from '@/services/api-client';
-import { getGuestCartItems } from '@/services/guest-cart';
+import { getCartItems } from '@/services/cart-storage';
 
-type BackendProduct = {
+export type BackendProduct = {
   branch?: string | null;
   branch_name?: string | null;
   category?: string | null;
@@ -23,6 +23,7 @@ type BackendProduct = {
   id: string;
   image_url?: string | null;
   is_available?: boolean | null;
+  is_visible?: boolean | null;
   is_flash_sale?: boolean | null;
   is_promoted?: boolean | null;
   name: string;
@@ -31,6 +32,7 @@ type BackendProduct = {
   price: number;
   product_group?: string | null;
   product_type?: string | null;
+  status?: string | null;
   stock?: number | null;
 };
 
@@ -167,7 +169,7 @@ function mapBackendProductReview(review: BackendProductReview): ProductReview {
   };
 }
 
-function mapBackendProduct(product: BackendProduct): Product {
+export function mapBackendProduct(product: BackendProduct): Product {
   const category = product.category || 'Flowers';
   const productGroup = product.product_group || undefined;
   const branch = normalizeBranch(product.branch_name ?? product.branch);
@@ -193,6 +195,18 @@ function mapBackendProduct(product: BackendProduct): Product {
     stock: Number(product.stock ?? 0),
     tag: toTitleCase(category),
   };
+}
+
+function isCustomerCatalogProduct(product: BackendProduct) {
+  const category = product.category?.trim().toLowerCase();
+  const status = product.status?.trim().toLowerCase();
+
+  return (
+    product.is_available !== false &&
+    product.is_visible !== false &&
+    category !== 'advertisement' &&
+    status !== 'inactive'
+  );
 }
 
 function getCategoriesFromProducts(products: Product[]): Category[] {
@@ -232,6 +246,7 @@ function buildCatalogPath(options: CatalogRequestOptions = {}) {
 async function fetchBackendProducts(options: CatalogRequestOptions = {}) {
   const products = await apiFetch<BackendProduct[]>(buildCatalogPath(options));
   return products
+    .filter(isCustomerCatalogProduct)
     .map(mapBackendProduct)
     .sort((first, second) => {
       const imagePriority = Number(Boolean(second.imageUrl)) - Number(Boolean(first.imageUrl));
@@ -365,7 +380,7 @@ export const shopApi = {
     }
   },
   async getCart() {
-    const items = await getGuestCartItems();
+    const items = await getCartItems();
 
     return {
       items,

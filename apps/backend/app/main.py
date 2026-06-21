@@ -15,8 +15,9 @@ from app.services.currencyService import get_latest_rates
 from app.utils.scheduler import start_scheduler
 
 from app.api.v1.routes import (
-    addresses,  
+    addresses,
     auth,
+    cart,
     campaigns,
     chats,
     customization,
@@ -117,6 +118,7 @@ app.include_router(payments.router, prefix="/api/v1", tags=["payments"])
 app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
 app.include_router(site_customization.router, prefix="/api/v1", tags=["site-customization"])
 app.include_router(addresses.router, prefix="/api/v1", tags=["addresses"])
+app.include_router(cart.router, prefix="/api/v1", tags=["cart"])
 app.include_router(reviews.router, prefix="/api/v1", tags=["Reviews"])
 app.include_router(vases.router, prefix="/api/v1/vases", tags=["Vases"])
 app.include_router(campaigns.router, prefix="/api/v1", tags=["campaigns"])

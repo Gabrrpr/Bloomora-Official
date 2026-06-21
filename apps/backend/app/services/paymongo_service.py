@@ -19,10 +19,12 @@ def to_paymongo_amount(amount: Decimal) -> int:
 
 async def create_checkout_session(
     *,
+    cancel_url: str | None = None,
     line_items: list[dict[str, Any]],
     reference_number: str,
     metadata: dict[str, Any],
     payment_method_types: list[str] | None = None,
+    success_url: str | None = None,
 ) -> dict[str, Any]:
     if not settings.PAYMONGO_SECRET_KEY:
         raise PayMongoError("PayMongo secret key is not configured.")
@@ -32,8 +34,8 @@ async def create_checkout_session(
             "attributes": {
                 "line_items": line_items,
                 "payment_method_types": payment_method_types or ["card", "gcash", "qrph"],
-                "success_url": settings.PAYMONGO_SUCCESS_URL,
-                "cancel_url": settings.PAYMONGO_CANCEL_URL,
+                "success_url": success_url or settings.PAYMONGO_SUCCESS_URL,
+                "cancel_url": cancel_url or settings.PAYMONGO_CANCEL_URL,
                 "reference_number": reference_number,
                 "send_email_receipt": True,
                 "metadata": metadata,
@@ -53,5 +55,26 @@ async def create_checkout_session(
 
     if response.status_code >= 400:
         raise PayMongoError(f"PayMongo checkout failed with status {response.status_code}: {response.text}")
+
+    return response.json()
+
+
+async def retrieve_checkout_session(checkout_session_id: str) -> dict[str, Any]:
+    if not settings.PAYMONGO_SECRET_KEY:
+        raise PayMongoError("PayMongo secret key is not configured.")
+
+    url = f"{settings.PAYMONGO_BASE_URL.rstrip('/')}/v2/checkout_sessions/{checkout_session_id}"
+
+    async with httpx.AsyncClient(timeout=20) as client:
+        response = await client.get(
+            url,
+            auth=(settings.PAYMONGO_SECRET_KEY, ""),
+            headers={"Accept": "application/json"},
+        )
+
+    if response.status_code >= 400:
+        raise PayMongoError(
+            f"PayMongo checkout lookup failed with status {response.status_code}: {response.text}"
+        )
 
     return response.json()

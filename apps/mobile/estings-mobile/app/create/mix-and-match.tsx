@@ -1,8 +1,19 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { ArrowLeft, ArrowRight, Check, ChevronDown, LoaderCircle, RotateCcw, ShoppingCart, Shuffle, Sparkles } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, Check, LoaderCircle, RotateCcw, ShoppingCart, Shuffle, Sparkles } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
@@ -33,7 +44,7 @@ const imageNotFound = require('@/assets/images/default-img/ImageNotFound.webp');
 type StepKey = 'arrangement' | 'flowers' | 'container' | 'accessories';
 type ContainerMode = 'vase' | 'wrapping';
 
-const STEPS: Array<{ description: string; key: StepKey; label: string; title: string }> = [
+const STEPS: { description: string; key: StepKey; label: string; title: string }[] = [
   {
     description: 'Choose the base look and presentation for your custom arrangement.',
     key: 'arrangement',
@@ -107,6 +118,7 @@ export default function MixAndMatchScreen() {
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [progress, setProgress] = useState(0);
   const [factIdx, setFactIdx] = useState(0);
+  const [isHeaderSolid, setIsHeaderSolid] = useState(false);
   const [selectedArrangement, setSelectedArrangement] = useState(ARRANGEMENT_OPTIONS[0].id);
   const [selectedFlowerId, setSelectedFlowerId] = useState<string | null>(null);
   const [selectedVaseId, setSelectedVaseId] = useState<string | null>(null);
@@ -127,6 +139,11 @@ export default function MixAndMatchScreen() {
   const selectedContainer = selectedVase ?? selectedWrapping;
   const canGenerate = Boolean(selectedFlowerId && (selectedVaseId || selectedWrappingId) && selectedAccessoryId);
   const showResult = Boolean(result?.success);
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const shouldShowSolidHeader = event.nativeEvent.contentOffset.y > 12;
+    setIsHeaderSolid((current) => (current === shouldShowSolidHeader ? current : shouldShowSolidHeader));
+  };
 
   useEffect(() => {
     let isActive = true;
@@ -329,7 +346,12 @@ export default function MixAndMatchScreen() {
 
   return (
     <View style={styles.screen}>
-      <AppBrandHeader absolute onSearchPress={() => setIsSearchOpen(true)} showSearchAction />
+      <AppBrandHeader
+        absolute
+        onSearchPress={() => setIsSearchOpen(true)}
+        showSearchAction
+        style={isHeaderSolid && styles.floatingHeaderSolid}
+      />
 
       <ScrollView
         ref={scrollRef}
@@ -343,6 +365,8 @@ export default function MixAndMatchScreen() {
           },
         ]}
         contentInsetAdjustmentBehavior="never"
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}>
         <Pressable accessibilityLabel="Back to Create" accessibilityRole="button" onPress={() => router.back()} style={styles.backLink}>
           <ArrowLeft color="#6A706B" size={18} strokeWidth={2.4} />
@@ -369,7 +393,7 @@ export default function MixAndMatchScreen() {
               <View style={styles.progressHeader}>
                 <View style={styles.progressTitleRow}>
                   <View style={styles.iconFrame}>
-                    <Shuffle color={theme.colors.primary} size={20} strokeWidth={2.4} />
+                    <Shuffle color="#4B5563" size={20} strokeWidth={2.4} />
                   </View>
                   <View style={styles.progressCopy}>
                     <Text style={styles.progressTitle}>Mix and Match</Text>
@@ -465,13 +489,6 @@ export default function MixAndMatchScreen() {
                 </>
               )}
 
-              <View style={styles.selectionSummary}>
-                <SummaryPill label="Style" value={selectedArrangementOption.label} />
-                <SummaryPill label="Flower" value={selectedFlower?.name ?? 'Not selected'} />
-                <SummaryPill label="Container" value={selectedContainer?.name ?? 'Not selected'} />
-                <SummaryPill label="Accessory" value={selectedAccessory?.name ?? 'Not selected'} />
-              </View>
-
               <View style={styles.cardFooter}>
                 <Pressable
                   accessibilityRole="button"
@@ -533,7 +550,7 @@ function ChoiceCard({ description, label, onPress, selected }: { description: st
   return (
     <Pressable onPress={onPress} style={({ pressed }) => [styles.choiceCard, selected && styles.choiceCardSelected, pressed && styles.pressed]}>
       <View style={[styles.choiceIcon, selected && styles.choiceIconSelected]}>
-        {selected ? <Check color="#FFFFFF" size={16} strokeWidth={2.8} /> : <Sparkles color={theme.colors.primary} size={16} strokeWidth={2.2} />}
+        {selected ? <Check color="#FFFFFF" size={16} strokeWidth={2.8} /> : <Sparkles color="#6B7280" size={16} strokeWidth={2.2} />}
       </View>
       <Text style={styles.choiceTitle}>{label}</Text>
       <Text style={styles.choiceText}>{description}</Text>
@@ -570,15 +587,6 @@ function InventoryCard({ onPress, product, selected }: { onPress: () => void; pr
         </Text>
       </View>
     </Pressable>
-  );
-}
-
-function SummaryPill({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.summaryPill}>
-      <Text style={styles.summaryPillLabel}>{label}</Text>
-      <Text numberOfLines={1} style={styles.summaryPillValue}>{value}</Text>
-    </View>
   );
 }
 
@@ -718,11 +726,17 @@ const softOutline = 'rgba(218, 222, 218, 0.72)';
 
 const styles = StyleSheet.create({
   screen: {
-    backgroundColor: '#FBFCFA',
+    backgroundColor: '#FAFAFA',
     flex: 1,
   },
   content: {
     gap: theme.spacing.lg,
+  },
+  floatingHeaderSolid: {
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderBottomColor: 'rgba(218, 222, 218, 0.72)',
+    borderBottomWidth: 1,
+    boxShadow: '0 10px 26px rgba(31, 42, 36, 0.08)',
   },
   backLink: {
     alignItems: 'center',
@@ -768,7 +782,7 @@ const styles = StyleSheet.create({
     borderColor: softOutline,
     borderRadius: 24,
     borderWidth: 1,
-    boxShadow: '0 18px 42px rgba(46, 139, 52, 0.08)',
+    boxShadow: '0 18px 42px rgba(31, 42, 36, 0.08)',
     gap: 22,
     padding: theme.spacing.lg,
   },
@@ -782,7 +796,7 @@ const styles = StyleSheet.create({
   },
   iconFrame: {
     alignItems: 'center',
-    backgroundColor: '#EEF7EF',
+    backgroundColor: '#F3F4F6',
     borderRadius: theme.radius.pill,
     height: 42,
     justifyContent: 'center',
@@ -827,7 +841,7 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   stepLine: {
-    backgroundColor: '#E1E5E1',
+    backgroundColor: '#E5E7EB',
     height: 1.4,
     left: '-50%',
     position: 'absolute',
@@ -835,12 +849,12 @@ const styles = StyleSheet.create({
     top: 18,
   },
   stepLineActive: {
-    backgroundColor: '#BDE9C1',
+    backgroundColor: theme.colors.primary,
   },
   stepCircle: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
-    borderColor: '#DEE4DE',
+    borderColor: '#E5E7EB',
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     height: 36,
@@ -894,7 +908,7 @@ const styles = StyleSheet.create({
     borderColor: softOutline,
     borderRadius: 24,
     borderWidth: 1,
-    boxShadow: '0 18px 42px rgba(46, 139, 52, 0.08)',
+    boxShadow: '0 18px 42px rgba(31, 42, 36, 0.08)',
     gap: theme.spacing.lg,
     padding: theme.spacing.lg,
   },
@@ -948,8 +962,8 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   choiceCard: {
-    backgroundColor: '#FBFCFA',
-    borderColor: '#E2E7E2',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#E5E7EB',
     borderRadius: 16,
     borderWidth: 1,
     gap: 5,
@@ -961,7 +975,7 @@ const styles = StyleSheet.create({
   },
   choiceIcon: {
     alignItems: 'center',
-    backgroundColor: '#EEF7EF',
+    backgroundColor: '#F3F4F6',
     borderRadius: theme.radius.pill,
     height: 28,
     justifyContent: 'center',
@@ -982,7 +996,7 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   segmentedControl: {
-    backgroundColor: '#F4F7F4',
+    backgroundColor: '#F3F4F6',
     borderRadius: 15,
     flexDirection: 'row',
     padding: 4,
@@ -1014,7 +1028,7 @@ const styles = StyleSheet.create({
   },
   productCard: {
     backgroundColor: '#FFFFFF',
-    borderColor: '#E2E7E2',
+    borderColor: '#E5E7EB',
     borderRadius: 16,
     borderWidth: 1,
     overflow: 'hidden',
@@ -1030,7 +1044,7 @@ const styles = StyleSheet.create({
   },
   productImageWrap: {
     aspectRatio: 1,
-    backgroundColor: '#F1F4F1',
+    backgroundColor: '#F3F4F6',
     borderRadius: 12,
     overflow: 'hidden',
     position: 'relative',
@@ -1066,7 +1080,7 @@ const styles = StyleSheet.create({
   },
   stockBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#F0FDF4',
+    backgroundColor: '#F3F4F6',
     borderRadius: theme.radius.pill,
     marginTop: 6,
     paddingHorizontal: 7,
@@ -1079,7 +1093,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FEF2F2',
   },
   stockText: {
-    color: '#16A34A',
+    color: '#6B7280',
     fontFamily: Fonts.sansBold,
     fontSize: 10,
   },
@@ -1094,28 +1108,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sansSemiBold,
     fontSize: 13,
     textAlign: 'center',
-  },
-  selectionSummary: {
-    gap: theme.spacing.sm,
-  },
-  summaryPill: {
-    backgroundColor: '#F8FAF8',
-    borderColor: '#EDF0ED',
-    borderRadius: 13,
-    borderWidth: 1,
-    gap: 2,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 9,
-  },
-  summaryPillLabel: {
-    color: theme.colors.textMuted,
-    fontFamily: Fonts.sansSemiBold,
-    fontSize: 10,
-  },
-  summaryPillValue: {
-    color: theme.colors.text,
-    fontFamily: Fonts.sansBold,
-    fontSize: 12,
   },
   cardFooter: {
     alignItems: 'center',

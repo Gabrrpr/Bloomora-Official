@@ -21,7 +21,7 @@ import { EstingsLogo } from '@/components/estings-logo';
 import { ProductRecommendationGallery } from '@/components/product-recommendation-gallery';
 import { formatPhp, type Product, type ProductColor } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
-import { addGuestCartItem, getGuestCartItems } from '@/services/guest-cart';
+import { addCartItem, getCartItems } from '@/services/cart-storage';
 import { shopApi, type ProductRatingSummary, type ProductReview } from '@/services/shop-api';
 import { buildRelatedProductRecommendations, createRecommendationSeed } from '@/utils/product-recommendations';
 
@@ -153,7 +153,7 @@ export default function ProductDetailsScreen() {
   const soldCount = getProductSoldCount(product);
 
   const loadCartItemCount = useCallback(async () => {
-    const items = await getGuestCartItems();
+    const items = await getCartItems();
     setCartItemCount(items.reduce((total, item) => total + item.quantity, 0));
   }, []);
 
@@ -171,7 +171,7 @@ export default function ProductDetailsScreen() {
       return;
     }
 
-    const nextItems = await addGuestCartItem(product, quantity);
+    const nextItems = await addCartItem(product, quantity);
     setIsAdded(true);
     setShowAddedToast(true);
     setCartItemCount(nextItems.reduce((total, item) => total + item.quantity, 0));
@@ -206,7 +206,7 @@ export default function ProductDetailsScreen() {
       return;
     }
 
-    const nextItems = await addGuestCartItem(product, quantity);
+    const nextItems = await addCartItem(product, quantity);
     setIsAdded(true);
     setCartItemCount(nextItems.reduce((total, item) => total + item.quantity, 0));
     router.push(`/checkout?ids=${encodeURIComponent(product.id)}` as Href);

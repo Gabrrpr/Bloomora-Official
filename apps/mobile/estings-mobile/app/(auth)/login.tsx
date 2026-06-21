@@ -224,7 +224,7 @@ export default function LoginScreen() {
 
           <PrimaryButton
             disabled={isSubmitting || cooldownSeconds > 0}
-            label={cooldownSeconds > 0 ? `Try again in ${cooldownSeconds}s` : isSubmitting ? 'Signing in...' : 'Sign In'}
+            label={cooldownSeconds > 0 ? `Try again in ${cooldownSeconds}s` : isSubmitting ? 'Logging in...' : 'Log in'}
             onPress={handleSignIn}
           />
 
@@ -507,7 +507,7 @@ const styles = StyleSheet.create({
   primaryButton: {
     alignItems: 'center',
     backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.pill,
+    borderRadius: 10,
     justifyContent: 'center',
     minHeight: 56,
     paddingHorizontal: theme.spacing.lg,

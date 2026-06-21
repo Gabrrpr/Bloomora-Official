@@ -13,9 +13,10 @@ import {
   Sparkles,
   Truck,
   UserRound,
+  WalletCards,
 } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   interpolate,
@@ -26,6 +27,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { Fonts, theme } from '@/constants/theme';
 import { getAuthSession, type AuthSession } from '@/services/auth-session';
@@ -46,6 +48,7 @@ export default function MeScreen() {
   const insets = useSafeAreaInsets();
   const topPadding = insets.top + theme.spacing.lg;
   const [session, setSession] = useState<AuthSession | null>(null);
+  const [isWalletInfoOpen, setIsWalletInfoOpen] = useState(false);
   const user = session?.user;
   const displayName = getDisplayName(user);
 
@@ -136,6 +139,38 @@ export default function MeScreen() {
         </View>
       )}
 
+      <View style={styles.walletCard}>
+        <View style={styles.walletCardTopRow}>
+          <View>
+            <View style={styles.walletLabelRow}>
+              <Text style={styles.walletCardLabel}>Wallet Balance</Text>
+              <Pressable
+                accessibilityLabel="Wallet balance info"
+                accessibilityRole="button"
+                onPress={() => setIsWalletInfoOpen(true)}
+                style={({ pressed }) => [styles.walletInfoButton, pressed && styles.pressed]}>
+                <Info size={11} color={theme.colors.white} strokeWidth={2.8} />
+              </Pressable>
+            </View>
+            <Text style={styles.walletCardAmount}>₱0.00</Text>
+          </View>
+          <View style={styles.walletBadge}>
+            <WalletCards size={24} color={theme.colors.white} strokeWidth={2} />
+          </View>
+        </View>
+        <Text style={styles.walletCardName}>{displayName}</Text>
+        <Text style={styles.walletCardSubtitle}>Store credits, refunds, and future wallet funds</Text>
+        <Svg height={92} style={styles.walletWatermark} viewBox="0 0 320 92" width="100%">
+          <Defs>
+            <LinearGradient id="walletCardGradient" x1="0" x2="1" y1="0" y2="1">
+              <Stop offset="0" stopColor="#4FB35A" />
+              <Stop offset="1" stopColor="#236B28" />
+            </LinearGradient>
+          </Defs>
+          <Rect fill="url(#walletCardGradient)" height="92" opacity={0.12} rx="18" width="320" />
+        </Svg>
+      </View>
+
       <View style={styles.benefitGrid}>
         {accountBenefits.map((benefit) => (
           <View key={benefit.label} style={styles.benefitCell}>
@@ -158,7 +193,7 @@ export default function MeScreen() {
         <Divider />
         <AccountRow icon={HelpCircle} title="Contact us" detail="Branches and support" onPress={() => router.push('/contact')} />
         <Divider />
-        <AccountRow icon={Info} title="About Esting's" detail="Our story" onPress={() => router.push('/about')} />
+        <AccountRow icon={Info} title={"About Esting's"} detail="Our story" onPress={() => router.push('/about')} />
       </View>
 
       <SectionHeader title="Information" />
@@ -167,6 +202,21 @@ export default function MeScreen() {
         <Divider />
         <AccountRow icon={PackageCheck} title="Return Policy" onPress={() => router.push('/return-policy')} />
       </View>
+
+      <Modal animationType="fade" transparent visible={isWalletInfoOpen} onRequestClose={() => setIsWalletInfoOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.infoSheet}>
+            <Text style={styles.sheetTitle}>Wallet Balance</Text>
+            <Text style={styles.sheetBody}>Store credits can be used for future purchases and refunded order balances.</Text>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setIsWalletInfoOpen(false)}
+              style={({ pressed }) => [styles.sheetButton, pressed && styles.pressed]}>
+              <Text style={styles.sheetButtonText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -476,6 +526,69 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     textAlign: 'center',
   },
+  walletCard: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: 22,
+    overflow: 'hidden',
+    padding: theme.spacing.lg,
+    shadowColor: '#145122',
+    shadowOffset: { height: 10, width: 0 },
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
+  },
+  walletCardTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+  },
+  walletLabelRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  walletCardLabel: {
+    color: 'rgba(255,255,255,0.88)',
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 13,
+  },
+  walletInfoButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 999,
+    height: 18,
+    justifyContent: 'center',
+    width: 18,
+  },
+  walletCardAmount: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 28,
+    letterSpacing: 0,
+    marginTop: 6,
+  },
+  walletBadge: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    borderRadius: 18,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
+  },
+  walletCardName: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansBold,
+    fontSize: 16,
+    marginTop: 12,
+  },
+  walletCardSubtitle: {
+    color: 'rgba(255,255,255,0.82)',
+    fontFamily: Fonts.sansMedium,
+    fontSize: 12,
+    marginTop: 3,
+  },
+  walletWatermark: {
+    marginTop: 10,
+  },
   sectionHeader: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -534,6 +647,46 @@ const styles = StyleSheet.create({
     backgroundColor: hairlineColor,
     height: 1,
     marginLeft: 72,
+  },
+  modalOverlay: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(18, 24, 20, 0.42)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: theme.spacing.lg,
+  },
+  infoSheet: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: 18,
+    gap: theme.spacing.md,
+    maxWidth: 340,
+    padding: theme.spacing.lg,
+    width: '100%',
+  },
+  sheetTitle: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansBold,
+    fontSize: 18,
+  },
+  sheetBody: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  sheetButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  sheetButtonText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansBold,
+    fontSize: 13,
   },
   pressed: {
     opacity: 0.76,

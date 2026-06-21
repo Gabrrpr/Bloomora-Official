@@ -6,16 +6,22 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts, theme } from '@/constants/theme';
 import { getAuthSession } from '@/services/auth-session';
+import { removeCartItem } from '@/services/cart-storage';
+import { notifyCartUpdated } from '@/services/guest-cart';
 import { getPayMongoPaymentStatus, type PayMongoPaymentStatusResponse } from '@/services/payments-api';
 
 type ConfirmationState = 'checking' | 'confirmed' | 'pending' | 'unavailable';
 
 export default function PaymentSuccessScreen() {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ orderIds?: string }>();
+  const params = useLocalSearchParams<{ ids?: string; orderIds?: string }>();
   const orderIds = useMemo(
     () => (params.orderIds ?? '').split(',').map((id) => id.trim()).filter(Boolean),
     [params.orderIds],
+  );
+  const purchasedIds = useMemo(
+    () => (params.ids ?? '').split(',').map((id) => id.trim()).filter(Boolean),
+    [params.ids],
   );
   const [confirmationState, setConfirmationState] = useState<ConfirmationState>(orderIds.length > 0 ? 'checking' : 'pending');
   const [statusResult, setStatusResult] = useState<PayMongoPaymentStatusResponse | null>(null);
@@ -46,9 +52,13 @@ export default function PaymentSuccessScreen() {
 
     const allPaid = statuses.every((status) => status.payment_status === 'paid' || status.order?.payment_status === 'paid');
     setConfirmationState(allPaid ? 'confirmed' : 'pending');
+    if (allPaid) {
+      await Promise.all(purchasedIds.map((productId) => removeCartItem(productId)));
+      notifyCartUpdated();
+    }
 
     return allPaid;
-  }, [orderIds]);
+  }, [orderIds, purchasedIds]);
 
   useEffect(() => {
     let isActive = true;
@@ -95,7 +105,9 @@ export default function PaymentSuccessScreen() {
             <Clock3 color={theme.colors.primary} size={42} strokeWidth={2.1} />
           )}
         </View>
-        <Text style={styles.title}>{isConfirmed ? 'Payment confirmed' : 'Payment pending confirmation'}</Text>
+        <Text style={styles.title}>
+          {isConfirmed ? 'Thank you for your purchase!' : 'Payment pending confirmation'}
+        </Text>
         <Text style={styles.body}>{getStatusMessage(confirmationState)}</Text>
         {statusResult?.order?.order_number ? <Text style={styles.referenceText}>{statusResult.order.order_number}</Text> : null}
         <Pressable
@@ -118,7 +130,7 @@ export default function PaymentSuccessScreen() {
 
 function getStatusMessage(state: ConfirmationState) {
   if (state === 'confirmed') {
-    return "Esting's confirmed the payment in the database. Your order is now queued for processing.";
+    return 'Payment successful. Your order is confirmed and is now queued for preparation.';
   }
 
   if (state === 'checking') {

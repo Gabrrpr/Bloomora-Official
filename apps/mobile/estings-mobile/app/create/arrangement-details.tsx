@@ -19,7 +19,7 @@ import { FloatingProductSearch } from '@/components/floating-product-search';
 import type { CartItem } from '@/constants/shop';
 import { formatPhp } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
-import { getGuestCartItems } from '@/services/guest-cart';
+import { getCartItems } from '@/services/cart-storage';
 
 export default function ArrangementDetailsScreen() {
   const insets = useSafeAreaInsets();
@@ -42,7 +42,7 @@ export default function ArrangementDetailsScreen() {
 
     let active = true;
 
-    getGuestCartItems().then((items) => {
+    getCartItems().then((items) => {
       if (!active) return;
 
       const found = items.find((item) => item.id === cartItemId) ?? null;

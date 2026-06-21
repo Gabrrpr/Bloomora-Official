@@ -33,25 +33,52 @@ export type PayMongoPaymentStatusResponse = {
 
 export async function createOrdersFromCart({
   deliveryAddress,
+  deliveryDate,
   deliveryNotes = '',
+  deliveryProvider,
+  fulfillmentMethod = 'delivery',
+  isAnonymous = false,
   items,
+  recipient,
+  recipientType = 'myself',
   session,
+  timeSlot = 'anytime',
 }: {
   deliveryAddress?: string;
+  deliveryDate?: string;
   deliveryNotes?: string;
+  deliveryProvider?: string;
+  fulfillmentMethod?: 'delivery' | 'pickup';
+  isAnonymous?: boolean;
   items: CartItem[];
+  recipient?: {
+    firstName: string;
+    lastName: string;
+    phoneNumber: string;
+  };
+  recipientType?: 'myself' | 'someone';
   session: AuthSession;
+  timeSlot?: string;
 }) {
   return apiFetch<CreateOrdersResponse>('/orders/', {
     body: JSON.stringify({
       delivery_address: deliveryAddress ?? session.user.address ?? '',
+      delivery_date: deliveryDate,
       delivery_notes: deliveryNotes,
+      delivery_provider: deliveryProvider,
+      fulfillment_method: fulfillmentMethod,
+      is_anonymous: isAnonymous,
       items: items.map((item) => ({
         group: item.product.productGroup ?? item.product.categoryName ?? item.product.tag,
         id: item.product.id,
         qty: item.quantity,
       })),
       payment_method: 'ewallet',
+      recipient_first_name: recipient?.firstName,
+      recipient_last_name: recipient?.lastName,
+      recipient_phone_number: recipient?.phoneNumber,
+      recipient_type: recipientType,
+      time_slot: timeSlot,
     }),
     method: 'POST',
     token: session.accessToken,

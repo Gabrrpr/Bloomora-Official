@@ -1,4 +1,5 @@
 import { Image } from 'expo-image';
+import { requireOptionalNativeModule } from 'expo';
 import { router } from 'expo-router';
 import {
   ArrowLeft,
@@ -6,18 +7,22 @@ import {
   ChevronRight,
   Info,
   LoaderCircle,
+  Mic,
   RotateCcw,
   Send,
   ShoppingCart,
   Sparkles,
   Star,
   Heart,
+  X,
 } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Pressable,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
   Text,
@@ -40,7 +45,6 @@ import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg'
 
 import { AppBrandHeader, getAppBrandHeaderLayout } from '@/components/app-brand-header';
 import { FloatingProductSearch } from '@/components/floating-product-search';
-import { formatPhp } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { addAiArrangementToCart } from '@/services/guest-cart';
 import {
@@ -50,7 +54,6 @@ import {
   type AiUsage,
   type GenerationResult,
 } from '@/services/customization-api';
-import { getAuthSession } from '@/services/auth-session';
 import { shopApi } from '@/services/shop-api';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -70,18 +73,20 @@ const EXAMPLE_PROMPTS = [
 
 const OBJECT_WORDS = ['bouquet', 'arrangement', 'flower box', 'gift', 'floral base'];
 
-const FLOWER_FACTS = [
-  'Roses can live for over a week with fresh water and a clean stem cut.',
-  'Sunflowers turn to follow the sun across the sky, a habit called heliotropism.',
-  'Tulips were once so prized in the 1600s that their bulbs were worth more than gold.',
-  'Carnations are among the longest-lasting cut flowers, often blooming for two to three weeks.',
-  'The fragrance of a flower is strongest just after it fully opens.',
-  'Lavender has been used for centuries to bring a sense of calm and relaxation.',
-  'Adding a little sugar to the vase water can help cut flowers stay fresh longer.',
-  "Baby's breath symbolizes everlasting love, which is why it pairs so well with roses.",
-];
-
 const MAX_PROMPT_LENGTH = 500;
+
+type SpeechRecognitionModule = {
+  abort: () => void;
+  addListener: (eventName: string, listener: (event: any) => void) => { remove: () => void };
+  isRecognitionAvailable: () => boolean;
+  requestPermissionsAsync: () => Promise<{ granted: boolean }>;
+  start: (options: Record<string, unknown>) => void;
+  stop: () => void;
+};
+
+function getSpeechRecognitionModule(): SpeechRecognitionModule | null {
+  return requireOptionalNativeModule<SpeechRecognitionModule>('ExpoSpeechRecognition');
+}
 
 // ── Main Screen ──────────────────────────────────────────────────────────────
 
@@ -98,16 +103,81 @@ export default function DescribeArrangementScreen() {
   const [customizationEnabled, setCustomizationEnabled] = useState(true);
   const [addingToCart, setAddingToCart] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
-
-  // Loading overlay state
-  const [progress, setProgress] = useState(0);
-  const [factIdx, setFactIdx] = useState(0);
+  const [isListening, setIsListening] = useState(false);
+  const [speechLevel, setSpeechLevel] = useState(0);
+  const [isHeaderSolid, setIsHeaderSolid] = useState(false);
+  const speechPromptBase = useRef('');
 
   const typedPlaceholder = useTypewriterPrompt(PROMPT_SAMPLES);
   const rollingWordIndex = useRollingWordIndex(OBJECT_WORDS);
   const hasPrompt = prompt.trim().length > 0;
+  const promptFocusProgress = useSharedValue(hasPrompt ? 1 : 0);
   const headerLayout = getAppBrandHeaderLayout(width, height, insets.top);
   const side = Math.min(Math.max(width * 0.062, 20), 30);
+
+  useEffect(() => {
+    promptFocusProgress.value = withTiming(hasPrompt ? 1 : 0, {
+      duration: 260,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [hasPrompt, promptFocusProgress]);
+
+  useEffect(() => {
+    const speechModule = getSpeechRecognitionModule();
+    if (!speechModule) {
+      return;
+    }
+
+    const subscriptions = [
+      speechModule.addListener('start', () => {
+        setIsListening(true);
+        setSpeechLevel(0.35);
+      }),
+      speechModule.addListener('end', () => {
+        setIsListening(false);
+        setSpeechLevel(0);
+      }),
+      speechModule.addListener('result', (event) => {
+        const transcript = event.results?.[0]?.transcript?.trim();
+        if (!transcript) {
+          return;
+        }
+
+        const base = speechPromptBase.current.trim();
+        const nextPrompt = base ? `${base} ${transcript}` : transcript;
+        setPrompt(nextPrompt.slice(0, MAX_PROMPT_LENGTH));
+      }),
+      speechModule.addListener('volumechange', (event) => {
+        setSpeechLevel(Math.min(Math.max((event.value + 2) / 12, 0.08), 1));
+      }),
+      speechModule.addListener('error', (event) => {
+        setIsListening(false);
+        setSpeechLevel(0);
+        setError(event.message || 'Voice input could not start. Please try again.');
+      }),
+    ];
+
+    return () => {
+      subscriptions.forEach((subscription) => subscription.remove());
+      speechModule.abort();
+    };
+  }, []);
+
+  const introCopyStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(promptFocusProgress.value, [0, 1], [1, 0], Extrapolation.CLAMP),
+    transform: [
+      { translateY: interpolate(promptFocusProgress.value, [0, 1], [0, -10], Extrapolation.CLAMP) },
+      { scale: interpolate(promptFocusProgress.value, [0, 1], [1, 0.98], Extrapolation.CLAMP) },
+    ],
+  }));
+
+  const focusIconStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(promptFocusProgress.value, [0, 0.55, 1], [0, 0, 1], Extrapolation.CLAMP),
+    transform: [
+      { translateY: interpolate(promptFocusProgress.value, [0, 1], [10, 0], Extrapolation.CLAMP) },
+      { scale: interpolate(promptFocusProgress.value, [0, 1], [0.82, 1], Extrapolation.CLAMP) },
+    ],
+  }));
 
   // Load AI usage and customization status on mount
   useEffect(() => {
@@ -126,31 +196,68 @@ export default function DescribeArrangementScreen() {
     load();
   }, []);
 
-  // Progress bar animation during loading
-  useEffect(() => {
-    if (!isProcessing) {
-      setProgress(0);
-      return;
-    }
-    setProgress(8);
-    setFactIdx(Math.floor(Math.random() * FLOWER_FACTS.length));
-
-    const prog = setInterval(() => {
-      setProgress((p) => (p >= 90 ? 90 : p + Math.max(1, (92 - p) * 0.08)));
-    }, 280);
-    const facts = setInterval(() => {
-      setFactIdx((i) => (i + 1) % FLOWER_FACTS.length);
-    }, 3600);
-
-    return () => {
-      clearInterval(prog);
-      clearInterval(facts);
-    };
-  }, [isProcessing]);
-
   const handleUseExample = () => {
     const randomIndex = Math.floor(Math.random() * EXAMPLE_PROMPTS.length);
     setPrompt(EXAMPLE_PROMPTS[randomIndex]);
+  };
+
+  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const shouldShowSolidHeader = event.nativeEvent.contentOffset.y > 12;
+    setIsHeaderSolid((current) => (current === shouldShowSolidHeader ? current : shouldShowSolidHeader));
+  };
+
+  const handleVoiceInput = async () => {
+    if (isProcessing) {
+      return;
+    }
+
+    const speechModule = getSpeechRecognitionModule();
+    if (!speechModule) {
+      setIsListening(false);
+      setSpeechLevel(0);
+      setError('Voice input needs a rebuilt development app with speech recognition enabled.');
+      return;
+    }
+
+    if (isListening) {
+      try {
+        speechModule.stop();
+      } catch {
+        setIsListening(false);
+        setSpeechLevel(0);
+      }
+      return;
+    }
+
+    try {
+      const permissions = await speechModule.requestPermissionsAsync();
+      if (!permissions.granted) {
+        setError('Microphone and speech recognition permissions are needed for voice input.');
+        return;
+      }
+
+      const available = speechModule.isRecognitionAvailable();
+      if (!available) {
+        setError('Speech recognition is not available on this device.');
+        return;
+      }
+
+      speechPromptBase.current = prompt;
+      setError(null);
+      speechModule.start({
+        continuous: false,
+        interimResults: true,
+        lang: 'en-US',
+        volumeChangeEventOptions: {
+          enabled: true,
+          intervalMillis: 120,
+        },
+      });
+    } catch {
+      setIsListening(false);
+      setSpeechLevel(0);
+      setError('Voice input could not start. Rebuild the app and try again.');
+    }
   };
 
   const handleGenerate = async () => {
@@ -190,7 +297,6 @@ export default function DescribeArrangementScreen() {
       const data = await checkAndGenerate({ prompt_text: superchargedPrompt });
 
       if (data.success) {
-        setProgress(100);
         setResult(data);
         setAiUsage((prev) => (prev ? { ...prev, remaining: data.remaining_generations ?? prev.remaining } : prev));
 
@@ -244,7 +350,6 @@ export default function DescribeArrangementScreen() {
     setError(null);
     setPrompt('');
     setAddedToCart(false);
-    setProgress(0);
   };
 
   const showResults = result && result.success;
@@ -255,7 +360,12 @@ export default function DescribeArrangementScreen() {
         <PromptBackground />
       </View>
 
-      <AppBrandHeader absolute onSearchPress={() => setIsSearchOpen(true)} showSearchAction />
+      <AppBrandHeader
+        absolute
+        onSearchPress={() => setIsSearchOpen(true)}
+        showSearchAction
+        style={isHeaderSolid && styles.floatingHeaderSolid}
+      />
 
       <ScrollView
         ref={scrollRef}
@@ -271,6 +381,8 @@ export default function DescribeArrangementScreen() {
         ]}
         contentInsetAdjustmentBehavior="never"
         keyboardShouldPersistTaps="handled"
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}>
         <Pressable
           accessibilityLabel="Back to Create"
@@ -293,18 +405,27 @@ export default function DescribeArrangementScreen() {
           />
         ) : (
           <>
-            <View style={styles.copy}>
-              <Text style={styles.eyebrow}>Build your bouquet with a prompt.</Text>
-              <View style={styles.titleBlock}>
-                <Text style={styles.title}>Describe your dream</Text>
-                <RollingWord words={OBJECT_WORDS} wordIndex={rollingWordIndex} />
-              </View>
+            <View style={styles.promptIntroFrame}>
+              <Animated.View pointerEvents={hasPrompt ? 'none' : 'auto'} style={[styles.copy, introCopyStyle]}>
+                <Text style={styles.eyebrow}>Build your bouquet with a prompt.</Text>
+                <View style={styles.titleBlock}>
+                  <Text style={styles.title}>Describe your dream</Text>
+                  <RollingWord words={OBJECT_WORDS} wordIndex={rollingWordIndex} />
+                </View>
+              </Animated.View>
+              <Animated.View pointerEvents="none" style={[styles.focusIconPanel, focusIconStyle]}>
+                {isProcessing ? <PromptPetalWind width={width} /> : null}
+                <View style={styles.focusIconHalo}>
+                  <GradientSparkIcon animated={isProcessing} size={40} />
+                </View>
+              </Animated.View>
             </View>
 
-            <View style={styles.promptShell}>
+            <View style={[styles.promptShell, isProcessing && styles.promptShellProcessing]}>
               {isProcessing ? <PromptProcessingGlow /> : null}
               <TextInput
                 editable={!isProcessing}
+                cursorColor="#F36F95"
                 maxLength={MAX_PROMPT_LENGTH}
                 multiline
                 onChangeText={setPrompt}
@@ -327,6 +448,12 @@ export default function DescribeArrangementScreen() {
                     </Text>
                   </View>
                 )}
+                <VoicePromptButton
+                  disabled={isProcessing}
+                  isListening={isListening}
+                  level={speechLevel}
+                  onPress={handleVoiceInput}
+                />
                 <SubmitPromptButton
                   disabled={!hasPrompt || isProcessing || (aiUsage?.remaining === 0)}
                   isProcessing={isProcessing}
@@ -334,13 +461,6 @@ export default function DescribeArrangementScreen() {
                 />
               </View>
             </View>
-
-            {error ? (
-              <View style={styles.errorBanner}>
-                <Info color="#DC2626" size={16} strokeWidth={2} />
-                <Text style={styles.errorText}>{error}</Text>
-              </View>
-            ) : null}
 
             {aiUsage ? (
               <View style={styles.usageRow}>
@@ -351,17 +471,16 @@ export default function DescribeArrangementScreen() {
               </View>
             ) : null}
 
-            <View style={styles.ghostRow}>
-              <View style={styles.ghostChip} />
-              <View style={styles.ghostChipWide} />
-            </View>
           </>
         )}
       </ScrollView>
 
-      {/* Loading overlay */}
-      {isProcessing ? (
-        <LoadingOverlay factIdx={factIdx} progress={progress} />
+      {error ? (
+        <ErrorToast
+          message={error}
+          onClose={() => setError(null)}
+          top={headerLayout.top + headerLayout.height + 8}
+        />
       ) : null}
 
       <FloatingProductSearch onClose={() => setIsSearchOpen(false)} visible={isSearchOpen} />
@@ -562,61 +681,96 @@ function ResultsView({
 
 // ── Loading Overlay ──────────────────────────────────────────────────────────
 
-function LoadingOverlay({ factIdx, progress }: { factIdx: number; progress: number }) {
-  const insets = useSafeAreaInsets();
-  const flowerRotation = useSharedValue(0);
+function GradientSparkIcon({ animated, size }: { animated: boolean; size: number }) {
+  const motion = useSharedValue(0);
 
   useEffect(() => {
-    flowerRotation.value = withRepeat(
-      withTiming(1, { duration: 4000, easing: Easing.linear }),
-      -1,
-      false,
-    );
-  }, [flowerRotation]);
+    motion.value = animated
+      ? withRepeat(withTiming(1, { duration: 1400, easing: Easing.inOut(Easing.cubic) }), -1, true)
+      : withTiming(0, { duration: 220 });
+  }, [animated, motion]);
 
-  const flowerStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${interpolate(flowerRotation.value, [0, 1], [0, 360])}deg` }],
+  const iconStyle = useAnimatedStyle(() => ({
+    transform: [
+      { rotate: `${interpolate(motion.value, [0, 1], [-4, 8])}deg` },
+      { scale: interpolate(motion.value, [0, 1], [1, 1.12]) },
+    ],
   }));
 
   return (
-    <View style={[styles.loadingOverlay, { paddingTop: insets.top + 60 }]}>
-      <View style={styles.loadingCard}>
-        <View style={styles.loadingFlowerContainer}>
-          <Animated.View style={flowerStyle}>
-            <Svg width={48} height={48} viewBox="0 0 48 48" fill="none">
-              {[0, 60, 120, 180, 240, 300].map((deg) => (
-                <Circle
-                  key={deg}
-                  cx={24 + 10 * Math.cos((deg * Math.PI) / 180)}
-                  cy={24 + 10 * Math.sin((deg * Math.PI) / 180)}
-                  r={6}
-                  fill="#F36F95"
-                  opacity={0.85}
-                />
-              ))}
-              <Circle cx={24} cy={24} r={7} fill="#FBB950" />
-              <Circle cx={24} cy={24} r={3.5} fill="#F59E0B" />
-            </Svg>
-          </Animated.View>
-        </View>
+    <Animated.View style={iconStyle}>
+      <Svg width={size} height={size} viewBox="0 0 64 64">
+        <Defs>
+          <LinearGradient id="focusSpark" x1="10" x2="56" y1="8" y2="58">
+            <Stop offset="0" stopColor="#FF8FB2" />
+            <Stop offset="0.5" stopColor="#F36F95" />
+            <Stop offset="1" stopColor={theme.colors.primary} />
+          </LinearGradient>
+        </Defs>
+        <Path
+          d="M31.8 4.6c1.2 0 2.2.8 2.5 2l4.8 17.2c.2.8.9 1.5 1.7 1.7l16.8 4.8c1.1.3 1.9 1.3 1.9 2.5s-.8 2.2-1.9 2.5l-16.8 4.8c-.8.2-1.5.9-1.7 1.7L34.3 59c-.3 1.1-1.3 1.9-2.5 1.9s-2.2-.8-2.5-1.9l-4.8-17.2c-.2-.8-.9-1.5-1.7-1.7L6 35.3c-1.1-.3-1.9-1.3-1.9-2.5s.8-2.2 1.9-2.5l16.8-4.8c.8-.2 1.5-.9 1.7-1.7l4.8-17.2c.3-1.2 1.3-2 2.5-2Z"
+          fill="url(#focusSpark)"
+        />
+        <Path d="M49.5 5.9l1.8 6.4 6.3 1.8-6.3 1.8-1.8 6.4-1.8-6.4-6.3-1.8 6.3-1.8 1.8-6.4Z" fill="#FFB8CB" />
+      </Svg>
+    </Animated.View>
+  );
+}
 
-        <Text style={styles.loadingTitle}>Creating your bouquet</Text>
-        <Text style={styles.loadingSubtitle}>Arranging every petal just for you...</Text>
-
-        {/* Progress bar */}
-        <View style={styles.progressTrack}>
-          <View style={[styles.progressFill, { width: `${progress}%` }]} />
-        </View>
-        <Text style={styles.progressPercent}>{Math.round(progress)}%</Text>
-
-        {/* Flower fact */}
-        <View style={styles.factCard}>
-          <Text style={styles.factLabel}>DID YOU KNOW?</Text>
-          <Text style={styles.factText}>{FLOWER_FACTS[factIdx]}</Text>
-        </View>
-      </View>
+function PromptPetalWind({ width }: { width: number }) {
+  return (
+    <View pointerEvents="none" style={[styles.promptPetalLayer, { marginLeft: -width / 2, width }]}>
+      {PROMPT_PETALS.map((petal, index) => (
+        <PromptWindPetal key={`${petal.top}-${petal.delay}`} index={index} screenWidth={width} {...petal} />
+      ))}
     </View>
   );
+}
+
+const PROMPT_PETALS = [
+  { color: '#F36F95', delay: 0, scale: 1, top: 18 },
+  { color: '#FFC3D0', delay: 0.18, scale: 0.78, top: 48 },
+  { color: '#F8A9BC', delay: 0.38, scale: 1.18, top: 30 },
+  { color: '#FFD7DE', delay: 0.62, scale: 0.9, top: 64 },
+  { color: '#EC5F88', delay: 0.78, scale: 0.72, top: 8 },
+];
+
+function PromptWindPetal({
+  color,
+  delay,
+  index,
+  scale,
+  screenWidth,
+  top,
+}: {
+  color: string;
+  delay: number;
+  index: number;
+  scale: number;
+  screenWidth: number;
+  top: number;
+}) {
+  const progress = useSharedValue(delay);
+
+  useEffect(() => {
+    progress.value = withRepeat(withTiming(1 + delay, { duration: 2100 + index * 170, easing: Easing.linear }), -1, false);
+  }, [delay, index, progress]);
+
+  const petalStyle = useAnimatedStyle(() => {
+    const phase = progress.value % 1;
+
+    return {
+      opacity: interpolate(phase, [0, 0.12, 0.82, 1], [0, 0.9, 0.9, 0], Extrapolation.CLAMP),
+      transform: [
+        { translateX: interpolate(phase, [0, 1], [-48, screenWidth + 48], Extrapolation.CLAMP) },
+        { translateY: interpolate(phase, [0, 0.5, 1], [18, -12 - index * 3, 10], Extrapolation.CLAMP) },
+        { rotate: `${interpolate(phase, [0, 1], [-38 + index * 12, 130 - index * 10], Extrapolation.CLAMP)}deg` },
+        { scale },
+      ],
+    };
+  });
+
+  return <Animated.View style={[styles.promptWindPetal, { backgroundColor: color, top }, petalStyle]} />;
 }
 
 // ── Hooks ────────────────────────────────────────────────────────────────────
@@ -744,6 +898,78 @@ function SubmitPromptButton({
   );
 }
 
+function VoicePromptButton({
+  disabled,
+  isListening,
+  level,
+  onPress,
+}: {
+  disabled: boolean;
+  isListening: boolean;
+  level: number;
+  onPress: () => void;
+}) {
+  const iconColor = disabled ? '#A4AAA5' : isListening ? '#F36F95' : '#3F4741';
+
+  return (
+    <Pressable
+      accessibilityLabel={isListening ? 'Stop voice input' : 'Start voice input'}
+      accessibilityRole="button"
+      accessibilityState={{ busy: isListening, disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.voiceButton,
+        disabled && styles.voiceButtonDisabled,
+        pressed && !disabled && styles.voiceButtonPressed,
+      ]}>
+      {isListening ? <VoiceVisualizer level={level} /> : null}
+      <Mic color={iconColor} size={19} strokeWidth={2.35} />
+    </Pressable>
+  );
+}
+
+function VoiceVisualizer({ level }: { level: number }) {
+  return (
+    <View pointerEvents="none" style={styles.voiceVisualizer}>
+      {[0.45, 0.72, 1, 0.66].map((weight, index) => (
+        <View
+          key={weight}
+          style={[
+            styles.voiceVisualizerBar,
+            {
+              height: 5 + Math.round(level * weight * 18),
+              opacity: 0.48 + level * 0.48,
+              transform: [{ translateY: index % 2 === 0 ? 1 : -1 }],
+            },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+function ErrorToast({ message, onClose, top }: { message: string; onClose: () => void; top: number }) {
+  return (
+    <View pointerEvents="box-none" style={[styles.toastLayer, { top }]}>
+      <View style={styles.errorToast}>
+        <View style={styles.errorToastIcon}>
+          <Info color="#DC2626" size={15} strokeWidth={2.2} />
+        </View>
+        <Text style={styles.errorToastText}>{message}</Text>
+        <Pressable
+          accessibilityLabel="Close error message"
+          accessibilityRole="button"
+          hitSlop={10}
+          onPress={onClose}
+          style={({ pressed }) => [styles.errorToastClose, pressed && styles.errorToastClosePressed]}>
+          <X color="#6A706B" size={16} strokeWidth={2.4} />
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 function LoadingSubmitIcon({ color }: { color: string }) {
   const rotation = useSharedValue(0);
 
@@ -784,32 +1010,14 @@ function PromptProcessingGlow() {
   }, [progress]);
 
   const glowStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(progress.value, [0, 0.5, 1], [0.34, 0.9, 0.34], Extrapolation.CLAMP),
-  }));
-
-  const topGlowStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: interpolate(progress.value, [0, 1], [-80, 340]) }],
-  }));
-
-  const rightGlowStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(progress.value, [0, 1], [-60, 190]) }],
-  }));
-
-  const bottomGlowStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: interpolate(progress.value, [0, 1], [340, -80]) }],
-  }));
-
-  const leftGlowStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(progress.value, [0, 1], [190, -60]) }],
+    opacity: interpolate(progress.value, [0, 0.5, 1], [0.38, 0.78, 0.38], Extrapolation.CLAMP),
+    transform: [{ scale: interpolate(progress.value, [0, 0.5, 1], [1, 1.012, 1], Extrapolation.CLAMP) }],
   }));
 
   return (
     <View pointerEvents="none" style={styles.promptGlowLayer}>
       <Animated.View style={[styles.promptGlowBase, glowStyle]} />
-      <Animated.View style={[styles.promptGlowLine, styles.promptGlowTop, topGlowStyle]} />
-      <Animated.View style={[styles.promptGlowLineVertical, styles.promptGlowRight, rightGlowStyle]} />
-      <Animated.View style={[styles.promptGlowLine, styles.promptGlowBottom, bottomGlowStyle]} />
-      <Animated.View style={[styles.promptGlowLineVertical, styles.promptGlowLeft, leftGlowStyle]} />
+      <Animated.View style={[styles.promptGlowBloom, glowStyle]} />
     </View>
   );
 }
@@ -861,6 +1069,12 @@ const styles = StyleSheet.create({
     right: 0,
     top: 0,
   },
+  floatingHeaderSolid: {
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderBottomColor: 'rgba(218, 222, 218, 0.72)',
+    borderBottomWidth: 1,
+    boxShadow: '0 10px 26px rgba(31, 42, 36, 0.08)',
+  },
   content: {
     justifyContent: 'flex-start',
   },
@@ -879,10 +1093,33 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
   },
+  promptIntroFrame: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 146,
+    position: 'relative',
+  },
   copy: {
     alignItems: 'center',
     gap: theme.spacing.md,
-    marginBottom: 30,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+  },
+  focusIconPanel: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    left: 0,
+    position: 'absolute',
+    right: 0,
+  },
+  focusIconHalo: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 82,
+    justifyContent: 'center',
+    width: 82,
+    zIndex: 2,
   },
   eyebrow: {
     color: theme.colors.primary,
@@ -952,16 +1189,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     boxShadow: '0 16px 36px rgba(31, 42, 36, 0.08)',
     minHeight: 158,
-    overflow: 'hidden',
+    overflow: 'visible',
     padding: theme.spacing.md,
     width: '100%',
+  },
+  promptShellProcessing: {
+    borderColor: 'rgba(243, 111, 149, 0.56)',
   },
   input: {
     color: '#3F4741',
     flex: 1,
     fontFamily: Fonts.sans,
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 16,
+    lineHeight: 24,
     minHeight: 94,
     padding: 0,
   },
@@ -1016,6 +1256,34 @@ const styles = StyleSheet.create({
   submitButtonPressed: {
     opacity: 0.72,
   },
+  voiceButton: {
+    alignItems: 'center',
+    borderRadius: 10,
+    flexDirection: 'row',
+    gap: 5,
+    height: 38,
+    justifyContent: 'center',
+    minWidth: 38,
+    paddingHorizontal: 4,
+  },
+  voiceButtonDisabled: {
+    opacity: 0.42,
+  },
+  voiceButtonPressed: {
+    opacity: 0.72,
+    transform: [{ scale: 0.96 }],
+  },
+  voiceVisualizer: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 2,
+    height: 24,
+  },
+  voiceVisualizerBar: {
+    backgroundColor: '#F36F95',
+    borderRadius: theme.radius.pill,
+    width: 3,
+  },
   processingInlineText: {
     color: '#F36F95',
     flex: 1,
@@ -1024,24 +1292,48 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'right',
   },
-  errorBanner: {
-    alignItems: 'flex-start',
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FECACA',
-    borderRadius: 14,
+  toastLayer: {
+    left: 20,
+    position: 'absolute',
+    right: 20,
+    zIndex: 70,
+  },
+  errorToast: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: 'rgba(220, 38, 38, 0.18)',
+    borderRadius: 16,
     borderWidth: 1,
+    boxShadow: '0 18px 40px rgba(31, 42, 36, 0.14)',
     flexDirection: 'row',
     gap: 10,
-    marginTop: theme.spacing.lg,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
-  errorText: {
-    color: '#DC2626',
+  errorToastIcon: {
+    alignItems: 'center',
+    backgroundColor: '#FEF2F2',
+    borderRadius: theme.radius.pill,
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
+  errorToastText: {
+    color: '#7F1D1D',
     flex: 1,
-    fontFamily: Fonts.sans,
+    fontFamily: Fonts.sansMedium,
     fontSize: 13,
-    lineHeight: 19,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  errorToastClose: {
+    alignItems: 'center',
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
+  errorToastClosePressed: {
+    opacity: 0.58,
   },
   usageRow: {
     alignItems: 'center',
@@ -1055,28 +1347,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sans,
     fontSize: 13,
   },
-  ghostRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    marginTop: theme.spacing.md,
-  },
-  ghostChip: {
-    backgroundColor: '#FFFFFF',
-    borderColor: 'rgba(218, 222, 218, 0.72)',
-    borderRadius: 10,
-    borderWidth: 1,
-    height: 34,
-    width: 96,
-  },
-  ghostChipWide: {
-    backgroundColor: '#FFFFFF',
-    borderColor: 'rgba(218, 222, 218, 0.72)',
-    borderRadius: 10,
-    borderWidth: 1,
-    height: 34,
-    width: 116,
-  },
-
   // ── Results styles ─────────────────────────────────────────────────────────
   resultsContainer: {
     gap: 16,
@@ -1480,50 +1750,51 @@ const styles = StyleSheet.create({
   },
 
   // ── Processing glow (preserved from original) ─────────────────────────────
+  promptPetalLayer: {
+    height: 92,
+    left: '50%',
+    overflow: 'hidden',
+    position: 'absolute',
+    top: 24,
+    zIndex: 1,
+  },
+  promptWindPetal: {
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 6,
+    height: 24,
+    left: 0,
+    position: 'absolute',
+    width: 14,
+  },
   promptGlowLayer: {
     bottom: 0,
     left: 0,
     position: 'absolute',
     right: 0,
     top: 0,
-    zIndex: 0,
+    zIndex: -1,
   },
   promptGlowBase: {
-    borderColor: 'rgba(243, 111, 149, 0.52)',
+    borderColor: 'transparent',
     borderRadius: 18,
-    borderWidth: 1.4,
+    borderWidth: 0,
     bottom: 0,
+    boxShadow: '0 0 24px rgba(243, 111, 149, 0.16)',
     left: 0,
     position: 'absolute',
     right: 0,
     top: 0,
   },
-  promptGlowLine: {
-    backgroundColor: '#F36F95',
-    borderRadius: theme.radius.pill,
-    boxShadow: '0 0 14px rgba(243, 111, 149, 0.88)',
-    height: 2.5,
-    position: 'absolute',
-    width: 92,
-  },
-  promptGlowLineVertical: {
-    backgroundColor: '#F36F95',
-    borderRadius: theme.radius.pill,
-    boxShadow: '0 0 14px rgba(243, 111, 149, 0.88)',
-    height: 74,
-    position: 'absolute',
-    width: 2.5,
-  },
-  promptGlowTop: {
-    top: 0,
-  },
-  promptGlowRight: {
-    right: 0,
-  },
-  promptGlowBottom: {
+  promptGlowBloom: {
+    backgroundColor: 'transparent',
+    borderRadius: 18,
     bottom: 0,
-  },
-  promptGlowLeft: {
+    boxShadow: '0 0 42px rgba(243, 111, 149, 0.22)',
     left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
 });

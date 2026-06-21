@@ -1983,7 +1983,7 @@ export default function AdminProducts({ onNavigate }) {
   const pageSafe    = Math.min(page,totalPages)
   const paginated   = filtered.slice((pageSafe-1)*PAGE_SIZE, pageSafe*PAGE_SIZE)
 
-  const baseCategories     = ["Flower","Vase","Wrapping","Accessory","Arrangement","Add-on"]
+  const baseCategories     = ["Bouquet","Flower","Vase","Wrapping","Accessory","Arrangement","Add-on"]
   const dynamicCategories  = Array.from(new Set([...baseCategories.map(c=>c.toLowerCase()),...products.map(p=>p.category?.toLowerCase()).filter(Boolean)])).map(c=>c.charAt(0).toUpperCase()+c.slice(1))
 
   const selStyle = { borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }

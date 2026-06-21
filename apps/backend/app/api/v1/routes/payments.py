@@ -18,17 +18,27 @@ from app.api.v1.routes.orders import serialize_order
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
-from app.models import Order, OrderStatusEnum, PaymentStatusEnum, Transaction, User
-from app.services.paymongo_service import PayMongoError, create_checkout_session, to_paymongo_amount
+from app.models import CartItem, Order, OrderStatusEnum, PaymentStatusEnum, Transaction, User
+from app.services.paymongo_service import (
+    PayMongoError,
+    create_checkout_session,
+    retrieve_checkout_session,
+    to_paymongo_amount,
+)
 
 router = APIRouter(prefix="/payments", tags=["Payments"])
 
 class PayMongoCheckoutRequest(BaseModel):
     order_ids: list[str] = Field(..., min_length=1)
     payment_method_types: list[str] | None = None
+    success_url: str | None = None
+    cancel_url: str | None = None
 
 def _order_number(order: Order) -> str:
     return f"ORD-{order.id.hex[:8].upper()}"
+
+def _enum_value(value: Any) -> str:
+    return str(value.value if hasattr(value, "value") else value)
 
 def _line_item_name(order: Order) -> str:
     if order.product_id and getattr(order, "product", None):
@@ -42,7 +52,13 @@ def _line_item_name(order: Order) -> str:
             return f"{first_item.product.name}{suffix}"
     return f"Bloomora order {_order_number(order)}"
 
-def _get_owned_orders(db: Session, order_ids: list[str], user: User) -> list[Order]:
+def _get_owned_orders(
+    db: Session,
+    order_ids: list[str],
+    user: User,
+    *,
+    allow_paid: bool = False,
+) -> list[Order]:
     parsed_ids = []
     for order_id in order_ids:
         try:
@@ -61,7 +77,7 @@ def _get_owned_orders(db: Session, order_ids: list[str], user: User) -> list[Ord
             raise HTTPException(status_code=403, detail="Not authorized to pay for one or more orders.")
         if not order.transaction:
             raise HTTPException(status_code=400, detail=f"Order {_order_number(order)} has no transaction.")
-        if str(order.transaction.status) == PaymentStatusEnum.paid.value:
+        if not allow_paid and _enum_value(order.transaction.status) == PaymentStatusEnum.paid.value:
             raise HTTPException(status_code=400, detail=f"Order {_order_number(order)} is already paid.")
 
     return orders
@@ -97,6 +113,7 @@ async def create_paymongo_checkout(
 
     try:
         checkout = await create_checkout_session(
+            cancel_url=payload.cancel_url,
             line_items=line_items,
             reference_number=reference_number,
             metadata={
@@ -104,6 +121,7 @@ async def create_paymongo_checkout(
                 "user_id": str(current_user.id),
             },
             payment_method_types=payload.payment_method_types,
+            success_url=payload.success_url,
         )
     except PayMongoError as error:
         raise HTTPException(status_code=502, detail=str(error))
@@ -134,22 +152,121 @@ async def create_paymongo_checkout(
         "order_ids": [str(order.id) for order in orders],
     }
 
+def _checkout_payment(checkout: dict[str, Any]) -> dict[str, Any]:
+    attributes = checkout.get("data", {}).get("attributes", {})
+    payments = attributes.get("payments") or []
+
+    return payments[-1] if payments else {}
+
+
+def _checkout_is_paid(checkout: dict[str, Any]) -> bool:
+    attributes = checkout.get("data", {}).get("attributes", {})
+    payment = _checkout_payment(checkout)
+    payment_attributes = payment.get("attributes", {})
+    payment_intent = attributes.get("payment_intent") or {}
+    intent_attributes = payment_intent.get("attributes", {})
+    paid_statuses = {"paid", "succeeded"}
+
+    return any(
+        str(status or "").lower() in paid_statuses
+        for status in (
+            attributes.get("payment_status"),
+            attributes.get("status"),
+            payment_attributes.get("status"),
+            intent_attributes.get("status"),
+        )
+    ) or bool(attributes.get("paid_at") or payment_attributes.get("paid_at"))
+
+
+def _reconcile_paid_checkout(
+    db: Session,
+    checkout_session_id: str,
+    checkout: dict[str, Any],
+) -> None:
+    attributes = checkout.get("data", {}).get("attributes", {})
+    payment = _checkout_payment(checkout)
+    payment_attributes = payment.get("attributes", {})
+    payment_intent = attributes.get("payment_intent") or {}
+    source = payment_attributes.get("source") or {}
+    paid_at = _datetime_from_unix(attributes.get("paid_at") or payment_attributes.get("paid_at"))
+    transactions = (
+        db.query(Transaction)
+        .filter(
+            Transaction.provider == "paymongo",
+            Transaction.provider_checkout_session_id == checkout_session_id,
+        )
+        .all()
+    )
+
+    for transaction in transactions:
+        transaction.status = PaymentStatusEnum.paid.value
+        transaction.order.status = OrderStatusEnum.confirmed
+        transaction.provider_payment_intent_id = (
+            payment_intent.get("id") or payment_attributes.get("payment_intent_id")
+        )
+        transaction.provider_payment_id = payment.get("id")
+        transaction.paid_at = paid_at or datetime.now(timezone.utc)
+        transaction.raw_webhook_event = {
+            "source": "checkout_session_reconciliation",
+            "checkout_session": checkout,
+        }
+
+        raw_method = str(source.get("type") or transaction.payment_method or "ewallet").lower()
+        if raw_method in {"card", "qrph"}:
+            transaction.payment_method = raw_method
+        elif raw_method in {"gcash", "paymaya", "pay_maya", "ewallet", "wallet"}:
+            transaction.payment_method = "ewallet"
+
+    paid_product_pairs = {
+        (transaction.order.user_id, transaction.order.product_id)
+        for transaction in transactions
+        if transaction.order.product_id
+    }
+    for user_id, product_id in paid_product_pairs:
+        db.query(CartItem).filter(
+            CartItem.user_id == user_id,
+            CartItem.product_id == product_id,
+        ).delete(synchronize_session=False)
+
+    db.commit()
+
+
 @router.get("/paymongo/status/{order_id}", response_model=dict)
-def get_paymongo_payment_status(
+async def get_paymongo_payment_status(
     order_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    orders = _get_owned_orders(db, [order_id], current_user)
+    orders = _get_owned_orders(db, [order_id], current_user, allow_paid=True)
     order = orders[0]
+    transaction = order.transaction
+
+    if (
+        _enum_value(transaction.status) != PaymentStatusEnum.paid.value
+        and transaction.provider == "paymongo"
+        and transaction.provider_checkout_session_id
+    ):
+        try:
+            checkout = await retrieve_checkout_session(transaction.provider_checkout_session_id)
+            if _checkout_is_paid(checkout):
+                _reconcile_paid_checkout(
+                    db,
+                    transaction.provider_checkout_session_id,
+                    checkout,
+                )
+                db.refresh(order)
+                db.refresh(transaction)
+        except PayMongoError:
+            # Keep the database status available when PayMongo is temporarily unreachable.
+            pass
 
     return {
         "order": serialize_order(order),
-        "provider": order.transaction.provider,
-        "checkout_session_id": order.transaction.provider_checkout_session_id,
-        "checkout_url": order.transaction.checkout_url,
-        "payment_status": order.transaction.status,
-        "paid_at": order.transaction.paid_at.isoformat() if order.transaction.paid_at else None,
+        "provider": transaction.provider,
+        "checkout_session_id": transaction.provider_checkout_session_id,
+        "checkout_url": transaction.checkout_url,
+        "payment_status": transaction.status,
+        "paid_at": transaction.paid_at.isoformat() if transaction.paid_at else None,
     }
 
 def _parse_signature_header(signature_header: str) -> dict[str, str]:
@@ -292,6 +409,12 @@ async def paymongo_webhook(
             transaction.payment_method = normalized
             transaction.paid_at = paid_at or datetime.now(timezone.utc)
             transaction.raw_webhook_event = payload
+
+            if event_type == "checkout_session.payment.paid" and transaction.order.product_id:
+                db.query(CartItem).filter(
+                    CartItem.user_id == transaction.order.user_id,
+                    CartItem.product_id == transaction.order.product_id,
+                ).delete(synchronize_session=False)
 
         db.commit()
     except Exception as e:

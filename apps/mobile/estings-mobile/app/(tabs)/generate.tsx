@@ -76,8 +76,10 @@ export default function GenerateScreen() {
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [showSwipeGuide, setShowSwipeGuide] = useState(false);
+  const [hasReachedFinalFrame, setHasReachedFinalFrame] = useState(false);
   const sceneHeight = Math.max(height - insets.top, 650);
   const side = sidePadding(width);
+  const swipeGuideDelayMs = 3000;
 
   const clearIdleTimer = useCallback(() => {
     if (idleTimer.current) {
@@ -89,17 +91,20 @@ export default function GenerateScreen() {
   const scheduleSwipeGuide = useCallback(
     (offsetY: number) => {
       clearIdleTimer();
-      setShowSwipeGuide(false);
 
-      if (offsetY >= sceneHeight * 2.75) {
+      const reachedFinalFrame = offsetY >= sceneHeight * 2.68;
+      setHasReachedFinalFrame(reachedFinalFrame);
+
+      if (reachedFinalFrame) {
+        setShowSwipeGuide(false);
         return;
       }
 
       idleTimer.current = setTimeout(() => {
-        setShowSwipeGuide(true);
-      }, 1200);
+        setShowSwipeGuide(offsetY < sceneHeight * 2.68);
+      }, swipeGuideDelayMs);
     },
-    [clearIdleTimer, sceneHeight],
+    [clearIdleTimer, sceneHeight, swipeGuideDelayMs],
   );
 
   useEffect(() => {
@@ -153,7 +158,7 @@ export default function GenerateScreen() {
 
       <Animated.View pointerEvents="none" style={[styles.fixedScene, sceneFadeStyle]}>
         <WindPetalScene scrollY={scrollY} sceneHeight={sceneHeight} />
-        <PromptPreviewScene scrollY={scrollY} sceneHeight={sceneHeight} />
+        <PromptPreviewScene scrollY={scrollY} sceneHeight={sceneHeight} width={width} />
         <HandPickScene scrollY={scrollY} sceneHeight={sceneHeight} />
       </Animated.View>
 
@@ -183,7 +188,7 @@ export default function GenerateScreen() {
           />
         ))}
 
-        <View style={[styles.selectionScene, { minHeight: sceneHeight, paddingBottom: insets.bottom + 96, paddingHorizontal: side }]}>
+        <View style={[styles.selectionScene, { minHeight: sceneHeight, paddingBottom: insets.bottom + 140, paddingHorizontal: side }]}>
           <AnimatedSelectionIntro scrollY={scrollY} sceneHeight={sceneHeight} />
           <View style={styles.methodList}>
             {METHOD_CARDS.map((method) => (
@@ -208,7 +213,7 @@ export default function GenerateScreen() {
       <FinalHeader onSearchPress={() => setIsSearchOpen(true)} scrollY={scrollY} sceneHeight={sceneHeight} />
       <FloatingProductSearch onClose={() => setIsSearchOpen(false)} visible={isSearchOpen} />
 
-      {showSwipeGuide ? (
+      {showSwipeGuide && !hasReachedFinalFrame ? (
         <View pointerEvents="none" style={[styles.sideSwipeGuide, { bottom: insets.bottom + 128 }]}>
           <LowFrameSwipeGuide />
         </View>
@@ -268,16 +273,28 @@ function StoryScene({ body, eyebrow, index, sceneHeight, scrollY, side, title }:
   const rollingWordIndex = useRollingWordIndex(OBJECT_WORDS);
   const textStyle = useAnimatedStyle(() => {
     const isPromptPreviewScene = index === 1;
-    const start = isPromptPreviewScene ? sceneHeight * 0.92 : (index - 0.2) * sceneHeight;
-    const fullStart = isPromptPreviewScene ? sceneHeight * 1.06 : index * sceneHeight + sceneHeight * 0.04;
-    const fullEnd = isPromptPreviewScene ? sceneHeight * 1.34 : index * sceneHeight + sceneHeight * 0.34;
+    const isFirstScene = index === 0;
+    const start = isFirstScene ? 0 : isPromptPreviewScene ? sceneHeight * 0.92 : (index - 0.2) * sceneHeight;
+    const fullStart = isFirstScene ? 0 : isPromptPreviewScene ? sceneHeight * 1.06 : index * sceneHeight + sceneHeight * 0.04;
+    const fullEnd = isFirstScene ? sceneHeight * 0.22 : isPromptPreviewScene ? sceneHeight * 1.34 : index * sceneHeight + sceneHeight * 0.34;
     const end = isPromptPreviewScene ? sceneHeight * 1.76 : (index + 0.58) * sceneHeight;
+    const firstSceneOpacity = interpolate(scrollY.value, [0, sceneHeight * 0.08], [1, 0.98], Extrapolation.CLAMP);
 
     return {
-      opacity: interpolate(scrollY.value, [start, fullStart, fullEnd, end], [0, 1, 1, 0], Extrapolation.CLAMP),
+      opacity: isFirstScene
+        ? firstSceneOpacity
+        : interpolate(scrollY.value, [start, fullStart, fullEnd, end], [0, 1, 1, 0], Extrapolation.CLAMP),
       transform: [
-        { translateY: interpolate(scrollY.value, [start, fullStart, end], [42, 0, -58], Extrapolation.CLAMP) },
-        { scale: interpolate(scrollY.value, [start, fullStart, end], [0.95, 1, 0.96], Extrapolation.CLAMP) },
+        {
+          translateY: isFirstScene
+            ? interpolate(scrollY.value, [0, sceneHeight * 0.22], [0, -8], Extrapolation.CLAMP)
+            : interpolate(scrollY.value, [start, fullStart, end], [42, 0, -58], Extrapolation.CLAMP),
+        },
+        {
+          scale: isFirstScene
+            ? interpolate(scrollY.value, [0, sceneHeight * 0.22], [1, 0.995], Extrapolation.CLAMP)
+            : interpolate(scrollY.value, [start, fullStart, end], [0.95, 1, 0.96], Extrapolation.CLAMP),
+        },
       ],
     };
   });
@@ -509,8 +526,12 @@ function LowFrameSwipeGuide() {
   );
 }
 
-function PromptPreviewScene({ sceneHeight, scrollY }: { sceneHeight: number; scrollY: SharedValue<number> }) {
+function PromptPreviewScene({ sceneHeight, scrollY, width }: { sceneHeight: number; scrollY: SharedValue<number>; width: number }) {
   const typedPrompt = useTypewriterPrompt(PROMPT_SAMPLES);
+  const promptMaxWidth = Math.min(340, Math.max(width - 40, 280));
+  const promptFontSize = Math.min(20, Math.max(16, width * 0.05));
+  const promptLineHeight = Math.min(28, Math.max(22, width * 0.07));
+  const chipFontSize = Math.min(12, Math.max(10, width * 0.03));
 
   const promptStyle = useAnimatedStyle(() => ({
     opacity: interpolate(scrollY.value, [0, sceneHeight * 1.05, sceneHeight * 1.32], [1, 1, 0], Extrapolation.CLAMP),
@@ -522,22 +543,22 @@ function PromptPreviewScene({ sceneHeight, scrollY }: { sceneHeight: number; scr
 
   return (
     <View style={styles.aiScene}>
-      <Animated.View style={[styles.promptCard, promptStyle]}>
+      <Animated.View style={[styles.promptCard, { maxWidth: promptMaxWidth }, promptStyle]}>
         <View style={styles.promptGlass}>
           <View style={styles.promptHeader}>
             <View style={styles.aiPill}>
-              <Text style={styles.aiPillText}>Your prompt</Text>
+              <Text style={[styles.aiPillText, { fontSize: chipFontSize }]}>Your prompt</Text>
             </View>
-            <Text style={styles.promptStatus}>example</Text>
+            <Text style={[styles.promptStatus, { fontSize: chipFontSize }]}>example</Text>
           </View>
-          <Text style={styles.promptText}>
+          <Text style={[styles.promptText, { fontSize: promptFontSize, lineHeight: promptLineHeight }]}>
             {typedPrompt}
             <Text style={styles.promptCursor}>|</Text>
           </Text>
           <View style={styles.promptFooter}>
             <View style={styles.promptChipRow}>
-              <Text style={styles.promptChip}>single prompt</Text>
-              <Text style={styles.promptChip}>image concept</Text>
+              <Text style={[styles.promptChip, { fontSize: chipFontSize }]}>single prompt</Text>
+              <Text style={[styles.promptChip, { fontSize: chipFontSize }]}>image concept</Text>
             </View>
             <Pressable accessibilityLabel="Preview prompt example" accessibilityRole="button" onPress={() => {}} style={styles.promptSubmitPreview}>
               <Send color="#1F2A24" size={17} strokeWidth={2.5} />
@@ -747,8 +768,10 @@ const styles = StyleSheet.create({
     zIndex: 0,
   },
   topProgressTrack: {
-    backgroundColor: 'rgba(31, 42, 36, 0.1)',
-    height: 3,
+    backgroundColor: 'rgba(31, 42, 36, 0.16)',
+    borderBottomColor: 'rgba(255, 255, 255, 0.7)',
+    borderBottomWidth: 1,
+    height: 5,
     left: 0,
     overflow: 'hidden',
     position: 'absolute',
@@ -757,10 +780,11 @@ const styles = StyleSheet.create({
     zIndex: 30,
   },
   topProgressFill: {
-    backgroundColor: theme.colors.primary,
+    backgroundColor: '#1F8A3B',
     height: '100%',
     transformOrigin: 'left center',
     width: '100%',
+    boxShadow: '0 0 0 1px rgba(255,255,255,0.24) inset',
   },
   aiScene: {
     bottom: 92,

@@ -57,6 +57,7 @@ import {
   type BackendChatMessage,
 } from '@/services/chat-api';
 import { getAuthSession, type AuthSession } from '@/services/auth-session';
+import { showLocalChatNotification } from '@/utils/push-notifications';
 
 const supportAvatarImage = require('../../assets/images/estings-logo.svg');
 const chatOutlineColor = 'rgba(31, 42, 36, 0.09)';
@@ -163,7 +164,7 @@ const emptySheetContent: Record<
   },
 };
 
-export default function LiveChatScreen() {
+export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: () => void } = {}) {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ productId?: string; productName?: string; productPrice?: string }>();
   const scrollRef = useRef<ScrollView>(null);
@@ -194,6 +195,7 @@ export default function LiveChatScreen() {
   const [visibleDetailsMessageId, setVisibleDetailsMessageId] = useState<string | null>(null);
   const [validationMessage, setValidationMessage] = useState('');
   const sentProductReferenceKey = useRef<string | null>(null);
+  const closeChat = onRequestClose ?? (() => router.back());
 
   const isSignedIn = Boolean(session);
   const productReferenceMessage = useMemo(() => {
@@ -229,7 +231,7 @@ export default function LiveChatScreen() {
   const emptySheet = emptySheetType ? emptySheetContent[emptySheetType] : null;
   const quickReplies = quickReplySets[quickReplySetIndex];
   const latestCustomerMessageId = useMemo(() => getLatestCustomerMessageId(messages), [messages]);
-  const headerTopPadding = insets.top > 0 ? insets.top + theme.spacing.sm : theme.spacing.xxl;
+  const headerTopPadding = insets.top > 0 ? insets.top + 2 : theme.spacing.lg;
   const bottomSystemInset = Math.max(insets.bottom, theme.spacing.sm);
   const composerBottomPadding = bottomSystemInset + theme.spacing.xs;
   const floatingMenuBottom = composerHeight + theme.spacing.sm;
@@ -315,25 +317,34 @@ export default function LiveChatScreen() {
               return;
             }
 
+            let shouldNotify = false;
+            const incomingMessage = mapBackendChatMessage({
+              created_at: data.created_at ?? new Date().toISOString(),
+              id: data.id ?? createId('support-ws'),
+              image_url: data.image_url,
+              is_read: data.is_read ?? 0,
+              message: data.message ?? '',
+              sender: data.sender ?? 'staff',
+              user_id: data.user_id ?? nextChatSession.id,
+            });
+
             setMessages((currentMessages) => {
               if (data.id && currentMessages.some((message) => message.id === data.id)) {
                 return currentMessages;
               }
 
-              return [
-                ...currentMessages,
-                mapBackendChatMessage({
-                  created_at: data.created_at ?? new Date().toISOString(),
-                  id: data.id ?? createId('support-ws'),
-                  image_url: data.image_url,
-                  is_read: data.is_read ?? 0,
-                  message: data.message ?? '',
-                  sender: data.sender ?? 'staff',
-                  user_id: data.user_id ?? nextChatSession.id,
-                }),
-              ];
+              shouldNotify = true;
+
+              return [...currentMessages, incomingMessage];
             });
             void playChatPop();
+            if (shouldNotify) {
+              void showLocalChatNotification({
+                body: getChatNotificationBody(incomingMessage),
+                conversationId: nextChatSession.id,
+                messageId: incomingMessage.id,
+              });
+            }
           } catch {
             // Ignore malformed websocket payloads.
           }
@@ -376,14 +387,14 @@ export default function LiveChatScreen() {
     }
 
     const subscription = BackHandler.addEventListener('hardwareBackPress', () => {
-      router.back();
+      closeChat();
       return true;
     });
 
     return () => {
       subscription.remove();
     };
-  }, []);
+  }, [closeChat]);
 
   useEffect(() => {
     Animated.timing(sendButtonAnim, {
@@ -780,7 +791,7 @@ export default function LiveChatScreen() {
           accessibilityLabel="Go back"
           hitSlop={10}
           style={styles.backButton}
-          onPress={() => router.back()}>
+          onPress={closeChat}>
           <ChevronLeft size={theme.icon.md} color={theme.colors.white} />
         </Pressable>
 
@@ -1131,7 +1142,7 @@ export default function LiveChatScreen() {
         animationType="fade"
         transparent
         visible={isAuthReady && !isSignedIn}
-        onRequestClose={() => router.back()}>
+        onRequestClose={closeChat}>
         <View style={styles.agreementOverlay}>
           <View style={styles.agreementCard}>
             <View style={styles.agreementIcon}>
@@ -1142,7 +1153,7 @@ export default function LiveChatScreen() {
               {"You need to sign in to use Esting's live chat, send messages, and view your chat history."}
             </Text>
             <View style={styles.agreementActions}>
-              <Pressable style={({ pressed }) => [styles.agreementSecondaryButton, pressed && styles.buttonPressed]} onPress={() => router.back()}>
+              <Pressable style={({ pressed }) => [styles.agreementSecondaryButton, pressed && styles.buttonPressed]} onPress={closeChat}>
                 <Text style={styles.agreementSecondaryText}>Back</Text>
               </Pressable>
               <Pressable
@@ -1159,7 +1170,7 @@ export default function LiveChatScreen() {
         animationType="fade"
         transparent
         visible={isSignedIn && isChatAgreementVisible}
-        onRequestClose={() => router.back()}>
+        onRequestClose={closeChat}>
         <View style={styles.agreementOverlay}>
           <View style={styles.agreementCard}>
             <View style={styles.agreementIcon}>
@@ -1174,7 +1185,7 @@ export default function LiveChatScreen() {
               {"By continuing, you agree to use Esting's chat for support-related concerns only."}
             </Text>
             <View style={styles.agreementActions}>
-              <Pressable style={({ pressed }) => [styles.agreementSecondaryButton, pressed && styles.buttonPressed]} onPress={() => router.back()}>
+              <Pressable style={({ pressed }) => [styles.agreementSecondaryButton, pressed && styles.buttonPressed]} onPress={closeChat}>
                 <Text style={styles.agreementSecondaryText}>Back</Text>
               </Pressable>
               <Pressable
@@ -1426,6 +1437,20 @@ function getMessageActionText(message: ChatMessage) {
   return message.text.trim() || (message.attachments?.some((attachment) => attachment.kind === 'image') ? 'Image' : '');
 }
 
+function getChatNotificationBody(message: ChatMessage) {
+  const text = message.text.trim();
+
+  if (text) {
+    return text.length > 120 ? `${text.slice(0, 117)}...` : text;
+  }
+
+  if (message.attachments?.some((attachment) => attachment.kind === 'image')) {
+    return 'Sent an image.';
+  }
+
+  return 'Sent a new message.';
+}
+
 function formatMessageTime(createdAt?: string) {
   if (!createdAt) {
     return '';
@@ -1666,7 +1691,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.sm,
     overflow: 'hidden',
-    paddingBottom: theme.spacing.md,
+    paddingBottom: theme.spacing.sm,
     paddingHorizontal: theme.spacing.lg,
   },
   headerGradient: {
