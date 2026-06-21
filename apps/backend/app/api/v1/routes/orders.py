@@ -8,9 +8,11 @@ from app.services.email_service import send_order_status_email
 import uuid, os
 import secrets
 
+
 # 🚀 INJECTED SECURE DEPENDENCIES
 from app.core.dependencies import get_db, get_current_user, require_staff
 from app.models import User, RoleEnum, Order, OrderItem, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory
+from app.utils.lalamove import book_lalamove_delivery
 
 # We use your dedicated PayMongo service instead of raw requests!
 from app.services.paymongo_service import PayMongoError, create_checkout_session, to_paymongo_amount
@@ -303,6 +305,38 @@ async def create_order(
         db.flush()
 
         db.commit()
+
+        if payload.get("delivery_method") == "lalamove":
+            try:
+                print("Dispatching Lalamove rider...")
+                lalamove_res = book_lalamove_delivery(
+                    customer_name=f"{current_user.first_name} {current_user.last_name}",
+
+                    customer_phone=current_user.phone_number or "09000000000",
+                    dropoff_address=payload.get("delivery_address", ""),
+                    dropoff_lat=str(payload.get("delivery_lat", "14.5995")),
+                    dropoff_lng=str(payload.get("delivery_lng", "120.9842")),
+                )
+
+                # Save the Lalamove IDs back to the order
+                order.delivery_provider = "lalamove"
+                order.lalamove_order_id = lalamove_res["lalamove_order_id"]
+                order.lalamove_share_link = lalamove_res["share_link"]
+                order.status = OrderStatusEnum.preparing
+                db.commit()
+                print(f"Lalamove Order Created: {order.lalamove_order_id}")
+
+            except Exception as e:
+                print(f"❌ Lalamove Booking Failed: {str(e)}")
+                # Even if Lalamove fails, the order is already placed.
+                # You might want to email the staff to book manually.
+
+            return {
+                "status": "success",
+                "message": "Order created.",
+                "order_ids": [str(order.id)],
+                "checkout_url": checkout_url,
+            }
         return {
             "status": "success",
             "message": "Order created.",
@@ -592,3 +626,29 @@ def list_transactions(
         }
         for t in transactions
     ]
+    
+@router.get("/admin/settings/lalamove")
+def get_lalamove_setting(db: Session = Depends(get_db)):
+    query = text("SELECT setting_value FROM store_settings WHERE setting_key = 'lalamove_enabled'")
+    result = db.execute(query).fetchone()
+    # Default to False if not set
+    if result and result[0] == "true":
+        return {"enabled": True}
+    return {"enabled": False}
+
+@router.post("/admin/settings/lalamove")
+def save_lalamove_setting(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    enabled = str(payload.get("enabled", False)).lower()
+    query = text("""
+        INSERT INTO store_settings (setting_key, setting_value, updated_at)
+        VALUES ('lalamove_enabled', :val, now())
+        ON CONFLICT (setting_key) DO UPDATE
+        SET setting_value = EXCLUDED.setting_value, updated_at = now()
+    """)
+    db.execute(query, {"val": enabled})
+    db.commit()
+    return {"status": "success", "enabled": enabled == "true"}

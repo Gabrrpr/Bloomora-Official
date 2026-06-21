@@ -8,6 +8,7 @@ from .base import Base, now_utc
 
 class OrderStatusEnum(str, enum.Enum):
     pending = "pending"
+    pending_payment = "pending_payment"
     confirmed = "confirmed"
     preparing = "preparing"
     out_for_delivery = "out_for_delivery"

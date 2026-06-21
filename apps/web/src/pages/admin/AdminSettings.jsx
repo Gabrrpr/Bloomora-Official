@@ -202,6 +202,10 @@ export default function AdminSettings() {
   const [toggleSaved, setToggleSaved]   = useState(false)
   const [toggleLoading, setToggleLoading] = useState(false)
 
+  const [lalamoveEnabled, setLalamoveEnabled] = useState(false)
+  const [lalamoveLoading, setLalamoveLoading] = useState(false)
+  const [lalamoveSaved, setLalamoveSaved] = useState(false)
+
   const [curPwd, setCurPwd]         = useState("")
   const [newPwd, setNewPwd]         = useState("")
   const [confirmPwd, setConfirmPwd] = useState("")
@@ -228,6 +232,16 @@ export default function AdminSettings() {
   }, [])
 
   useEffect(() => {
+    const token = localStorage.getItem("access_token")
+    fetch(`${API_BASE}/products/admin/settings/lalamove`, {
+        headers: { Authorization: `Bearer ${token}` }
+    })
+    .then(res => res.json())
+    .then(data => setLalamoveEnabled(data.enabled))
+    .catch(console.error)
+  }, [])
+
+  useEffect(() => {
     const timer = setTimeout(() => setEntered(true), 1500)
     return () => clearTimeout(timer)
   }, [])
@@ -243,6 +257,29 @@ export default function AdminSettings() {
       alert("Failed to update toggle: " + e.message)
     } finally {
       setToggleLoading(false)
+    }
+  }
+
+  const handleToggleLalamove = async () => {
+    setLalamoveLoading(true)
+    const token = localStorage.getItem("access_token")
+    try {
+      const newState = !lalamoveEnabled
+      await fetch(`${API_BASE}/products/admin/settings/lalamove`, {
+        method: "POST",
+        headers: { 
+            "Authorization": `Bearer ${token}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ enabled: newState })
+      })
+      setLalamoveEnabled(newState)
+      setLalamoveSaved(true)
+      setTimeout(() => setLalamoveSaved(false), 2000)
+    } catch (e) {
+      alert("Failed to update Lalamove status")
+    } finally {
+      setLalamoveLoading(false)
     }
   }
 
@@ -347,6 +384,13 @@ export default function AdminSettings() {
           onChange={handleToggleCustomization}
           label="AI Customization (Describe & Mix/Match)"
           hint={toggleLoading ? "Saving..." : toggleSaved ? "Saved!" : "Disable during peak seasons to manage workload"}
+        />
+        <Divider />
+        <Toggle
+          checked={lalamoveEnabled}
+          onChange={handleToggleLalamove}
+          label="Lalamove Delivery"
+          hint={lalamoveLoading ? "Saving..." : lalamoveSaved ? "Saved!" : "Enable/Disable Lalamove delivery at checkout"}
         />
         <p className="text-sm mt-2" style={{ color: t.subTxt }}>
           When disabled, customers will see a message and grayed-out buttons on DescribeArrangement and MixAndMatch pages.
