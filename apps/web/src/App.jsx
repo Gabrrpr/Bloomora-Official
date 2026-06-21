@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import { CurrencyProvider } from "./context/CuurencyContext";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
-import { BranchProvider } from './context/branchContext'
+import { BranchProvider } from "./context/BranchContext";
 
 import { api } from "./services/api";
 import Navbar from "./components/Navbar";
