@@ -7,7 +7,7 @@ import HeroCarousel from "../../components/HeroCarousel.jsx"
 import OccasionsStrip from "../../components/OccasionsStrip.jsx"
 import ChooseYourBloom from "../../components/ChooseYourBloom.jsx"
 import DynamicFeaturedSections from "../../components/DynamicFeaturedSection.jsx" 
-import RecommendedProducts from "../../components/recommendations.jsx" // 🚀 IMPORTED HERE
+import RecommendedProducts from "../../components/Recommendations.jsx" // 🚀 IMPORTED HERE
 import CustomizeSection from "../../components/CustomizeSection.jsx"
 import Testimonials from "../../components/Testimonials.jsx"
 import HomeFAQ from "../../components/HomeFAQ.jsx"

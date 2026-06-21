@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react"
 import { addToCart } from "../utils/cart.js"
 import { useTheme } from "../context/ThemeContext"
-import { useBranch } from "../context/branchContext"
+import { useBranch } from "../context/BranchContext";
 import { api } from "../services/api.js"
 import { generateCardMessage, RELATIONSHIP_OPTIONS, OCCASION_OPTIONS, TONE_OPTIONS, getPendingCard, clearPendingCard } from "../utils/cardMessage.js"
 
