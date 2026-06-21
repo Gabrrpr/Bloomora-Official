@@ -7,6 +7,7 @@ import {
   Animated,
   Easing,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -50,6 +51,7 @@ export default function CartScreen() {
   const [selectedProductIds, setSelectedProductIds] = useState<ReadonlySet<string>>(() => new Set());
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
   const [isAppendingRecommendations, setIsAppendingRecommendations] = useState(false);
   const [isRecommendationLoading, setIsRecommendationLoading] = useState(false);
@@ -81,8 +83,10 @@ export default function CartScreen() {
   const recommendationCap = rankedRecommendations.length;
   const canAppendRecommendations = visibleRecommendationCount < recommendationCap;
 
-  const loadCart = useCallback(async () => {
-    setIsLoading(true);
+  const loadCart = useCallback(async (showLoading = true) => {
+    if (showLoading) {
+      setIsLoading(true);
+    }
 
     try {
       const storedItems = await getCartItems();
@@ -112,7 +116,9 @@ export default function CartScreen() {
         console.warn('Failed to load local cart items.', fallbackError);
       }
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        setIsLoading(false);
+      }
     }
 
     try {
@@ -122,6 +128,19 @@ export default function CartScreen() {
       setSession(null);
     }
   }, []);
+
+  const handleRefresh = useCallback(async () => {
+    if (isRefreshing) {
+      return;
+    }
+
+    setIsRefreshing(true);
+    try {
+      await loadCart(false);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [isRefreshing, loadCart]);
 
   useFocusEffect(
     useCallback(() => {
@@ -140,7 +159,14 @@ export default function CartScreen() {
   );
 
   const handleUpdateQuantity = useCallback(async (productId: string, quantity: number) => {
-    setCartItems(await updateCartItemQuantity(productId, quantity));
+    try {
+      setCartItems(await updateCartItemQuantity(productId, quantity));
+    } catch (error) {
+      Alert.alert(
+        'Unable to update quantity',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+    }
   }, []);
 
   const handleRemoveItem = useCallback(async (productId: string) => {
@@ -307,6 +333,15 @@ export default function CartScreen() {
       <AppBrandHeader absolute={true} style={styles.stickyBrandHeader} />
       <ScrollView
         onScroll={handleCartScroll}
+        refreshControl={
+          <RefreshControl
+            colors={[theme.colors.primary]}
+            onRefresh={handleRefresh}
+            progressBackgroundColor={theme.colors.white}
+            refreshing={isRefreshing}
+            tintColor={theme.colors.primary}
+          />
+        }
         scrollEventThrottle={160}
         showsVerticalScrollIndicator={false}
         style={styles.scroll}

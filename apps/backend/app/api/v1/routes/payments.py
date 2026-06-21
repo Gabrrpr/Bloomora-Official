@@ -8,17 +8,16 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
-
 from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.api.v1.routes.orders import serialize_order
+from app.api.v1.routes.orders import _expire_pending_transaction, _release_reserved_stock, serialize_order
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
-from app.models import CartItem, Order, OrderStatusEnum, PaymentStatusEnum, Transaction, User
+from app.models import CartItem, Inventory, Order, OrderStatusEnum, PaymentStatusEnum, StockReservation, Transaction, User
 from app.services.paymongo_service import (
     PayMongoError,
     create_checkout_session,
@@ -33,6 +32,7 @@ class PayMongoCheckoutRequest(BaseModel):
     payment_method_types: list[str] | None = None
     success_url: str | None = None
     cancel_url: str | None = None
+
 
 def _order_number(order: Order) -> str:
     return f"ORD-{order.id.hex[:8].upper()}"
@@ -77,8 +77,15 @@ def _get_owned_orders(
             raise HTTPException(status_code=403, detail="Not authorized to pay for one or more orders.")
         if not order.transaction:
             raise HTTPException(status_code=400, detail=f"Order {_order_number(order)} has no transaction.")
-        if not allow_paid and _enum_value(order.transaction.status) == PaymentStatusEnum.paid.value:
+        _expire_pending_transaction(db, order)
+        payment_status = _enum_value(order.transaction.status)
+        if not allow_paid and payment_status == PaymentStatusEnum.paid.value:
             raise HTTPException(status_code=400, detail=f"Order {_order_number(order)} is already paid.")
+        if not allow_paid and payment_status != PaymentStatusEnum.pending.value:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Order {_order_number(order)} is no longer available for payment.",
+            )
 
     return orders
 
@@ -89,6 +96,19 @@ async def create_paymongo_checkout(
     current_user: User = Depends(get_current_user),
 ):
     orders = _get_owned_orders(db, payload.order_ids, current_user)
+
+    if len(orders) == 1:
+        transaction = orders[0].transaction
+        if transaction.provider_checkout_session_id and transaction.checkout_url:
+            return {
+                "status": "pending",
+                "provider": "paymongo",
+                "checkout_session_id": transaction.provider_checkout_session_id,
+                "checkout_url": transaction.checkout_url,
+                "reference_number": transaction.reference_number,
+                "order_ids": [str(orders[0].id)],
+            }
+
     reference_number = f"PMO-{secrets.token_hex(6).upper()}"
 
     line_items = []
@@ -101,6 +121,13 @@ async def create_paymongo_checkout(
                     "amount": to_paymongo_amount(Decimal(item.price_at_purchase)),
                     "currency": "PHP",
                     "quantity": item.quantity,
+                })
+            if Decimal(order.delivery_fee or 0) > 0:
+                line_items.append({
+                    "name": "Delivery fee",
+                    "amount": to_paymongo_amount(Decimal(order.delivery_fee)),
+                    "currency": "PHP",
+                    "quantity": 1,
                 })
             continue
         print(f"DEBUG: Processing order {order.id} | Database total_amount: {order.total_amount}")
@@ -115,8 +142,15 @@ async def create_paymongo_checkout(
             "name": _line_item_name(order),
             "amount": to_paymongo_amount(Decimal(amount_val)),
             "currency": "PHP",
-            "quantity": 1,
-        })
+                "quantity": 1,
+            })
+        if Decimal(order.delivery_fee or 0) > 0:
+            line_items.append({
+                "name": "Delivery fee",
+                "amount": to_paymongo_amount(Decimal(order.delivery_fee)),
+                "currency": "PHP",
+                "quantity": 1,
+            })
 
     if any(item["amount"] <= 0 for item in line_items):
         raise HTTPException(status_code=400, detail="PayMongo checkout amount must be greater than zero.")
@@ -188,6 +222,24 @@ def _checkout_is_paid(checkout: dict[str, Any]) -> bool:
     ) or bool(attributes.get("paid_at") or payment_attributes.get("paid_at"))
 
 
+def _convert_reservations(db: Session, order: Order):
+    for item in order.items or []:
+        reservation = db.query(StockReservation).filter(
+            StockReservation.order_item_id == item.id,
+            StockReservation.status == "active",
+        ).with_for_update().first()
+        if not reservation:
+            continue
+        inventory = db.query(Inventory).filter(
+            Inventory.product_id == reservation.product_id
+        ).with_for_update().first()
+        if not inventory or inventory.current_stock < reservation.quantity:
+            raise HTTPException(status_code=409, detail="Reserved stock is no longer available.")
+        inventory.current_stock -= reservation.quantity
+        reservation.status = "converted"
+        reservation.converted_at = datetime.now(timezone.utc)
+
+
 def _reconcile_paid_checkout(
     db: Session,
     checkout_session_id: str,
@@ -210,7 +262,7 @@ def _reconcile_paid_checkout(
 
     for transaction in transactions:
         transaction.status = PaymentStatusEnum.paid.value
-        transaction.order.status = OrderStatusEnum.confirmed
+        transaction.order.status = OrderStatusEnum.paid
         transaction.provider_payment_intent_id = (
             payment_intent.get("id") or payment_attributes.get("payment_intent_id")
         )
@@ -220,6 +272,7 @@ def _reconcile_paid_checkout(
             "source": "checkout_session_reconciliation",
             "checkout_session": checkout,
         }
+        _convert_reservations(db, transaction.order)
 
         raw_method = str(source.get("type") or transaction.payment_method or "ewallet").lower()
         if raw_method in {"card", "qrph"}:
@@ -252,6 +305,7 @@ async def get_paymongo_payment_status(
 ):
     orders = _get_owned_orders(db, [order_id], current_user, allow_paid=True)
     order = orders[0]
+    _expire_pending_transaction(db, order)
     transaction = order.transaction
 
     if (
@@ -280,6 +334,8 @@ async def get_paymongo_payment_status(
         "checkout_url": transaction.checkout_url,
         "payment_status": transaction.status,
         "paid_at": transaction.paid_at.isoformat() if transaction.paid_at else None,
+        "expires_at": transaction.expires_at.isoformat() if transaction.expires_at else None,
+        "transaction_id": str(transaction.id),
     }
 
 def _parse_signature_header(signature_header: str) -> dict[str, str]:
@@ -400,10 +456,12 @@ async def paymongo_webhook(
             # 🚀 DYNAMICALLY SET PAID OR FAILED
             if event_type == "checkout_session.payment.paid":
                 transaction.status = PaymentStatusEnum.paid.value
-                transaction.order.status = OrderStatusEnum.confirmed
+                transaction.order.status = OrderStatusEnum.paid
+                _convert_reservations(db, transaction.order)
             else:
                 transaction.status = PaymentStatusEnum.failed.value
-                transaction.order.status = OrderStatusEnum.cancelled
+                transaction.order.status = OrderStatusEnum.payment_failed
+                _release_reserved_stock(db, transaction.order)
 
             transaction.provider_checkout_session_id = checkout_session_id or transaction.provider_checkout_session_id
             transaction.provider_payment_intent_id = payment_intent.get("id") or payment_attributes.get("payment_intent_id")

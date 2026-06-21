@@ -8,5 +8,5 @@ from .campaigns import Campaign, product_campaigns
 from .support import Review, Chat, ActivityLog, SenderEnum, Notification
 from .site_customization import SiteCustomization
 from .ai_usage_log import AIUsageLog
-from .order_item import OrderItem
+from .order_item import OrderItem, StockReservation
 from .cart import CartItem

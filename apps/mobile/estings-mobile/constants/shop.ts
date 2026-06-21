@@ -2,6 +2,7 @@ export type Product = {
   id: string;
   colors?: ProductColor[];
   description?: string;
+  careGuide?: string[];
   name: string;
   originalPriceCents?: number;
   priceCents: number;
@@ -43,7 +44,7 @@ export type Order = {
   id: string;
   productName: string;
   dateLabel: string;
-  status: 'processing' | 'out_for_delivery' | 'delivered';
+  status: 'processing' | 'out_for_delivery' | 'completed';
 };
 
 export type Promo = {
@@ -136,7 +137,7 @@ export const sampleOrders: Order[] = [
     id: 'BLM-0992',
     productName: 'Orchid Table Arrangement',
     dateLabel: 'Apr 22',
-    status: 'delivered',
+    status: 'completed',
   },
 ];
 

@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session, object_session, joinedload
 from sqlalchemy import or_, func, String, text
+from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from decimal import Decimal
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from app.services.email_service import send_order_status_email
 import uuid, os
 import secrets
@@ -11,13 +12,27 @@ import secrets
 
 # 🚀 INJECTED SECURE DEPENDENCIES
 from app.core.dependencies import get_db, get_current_user, require_staff
+<<<<<<< HEAD
 from app.models import User, RoleEnum, Order, OrderItem, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory
 from app.utils.lalamove import book_lalamove_delivery
+=======
+from app.models import User, RoleEnum, Order, OrderItem, StockReservation, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory
+>>>>>>> f22b6e7d367d83249a467e25a0ec9bf06078053b
 
 # We use your dedicated PayMongo service instead of raw requests!
 from app.services.paymongo_service import PayMongoError, create_checkout_session, to_paymongo_amount
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
+
+
+def _created_order_response(order: Order) -> dict:
+    return {
+        "status": "success",
+        "message": "Order created.",
+        "order_ids": [str(order.id)],
+        "checkout_url": order.transaction.checkout_url if order.transaction else None,
+        "order": serialize_order(order),
+    }
 
 def _parse_datetime(value):
     if not value or isinstance(value, datetime):
@@ -28,6 +43,7 @@ def _parse_datetime(value):
         raise HTTPException(status_code=400, detail="Invalid delivery date.")
 
 def serialize_order(o) -> dict:
+    _expire_pending_transaction(object_session(o), o)
     db = object_session(o)
     img_url = ""
     is_custom = False
@@ -102,6 +118,15 @@ def serialize_order(o) -> dict:
         "status": o.status.value if hasattr(o.status, "value") else o.status,
         "delivery_address": o.delivery_address,
         "delivery_notes": o.delivery_notes,
+        "recipient_first_name": o.recipient_first_name,
+        "recipient_last_name": o.recipient_last_name,
+        "recipient_phone": o.recipient_phone,
+        "recipient_type": o.recipient_type,
+        "fulfillment_method": o.fulfillment_method or "delivery",
+        "delivery_provider": o.delivery_provider,
+        "time_slot": o.time_slot,
+        "subtotal_amount": float(o.subtotal_amount or o.total_amount),
+        "delivery_fee": float(o.delivery_fee or 0),
         "scheduled_at": o.scheduled_at.isoformat() if getattr(o, 'scheduled_at', None) else None,
         "payment_status": (
             o.transaction.status.value
@@ -111,6 +136,8 @@ def serialize_order(o) -> dict:
         "payment_provider": payment_provider,
         "checkout_url": checkout_url,
         "paid_at": paid_at.isoformat() if paid_at else None,
+        "transaction_id": str(o.transaction.id) if o.transaction else None,
+        "expires_at": o.transaction.expires_at.isoformat() if o.transaction and o.transaction.expires_at else None,
         
         # 🚀 UPDATED: Now it grabs PayMongo IDs too!
         "payment_reference": payment_ref,
@@ -207,6 +234,15 @@ async def create_order(
     if not cart_items:
         raise HTTPException(status_code=400, detail="Cart is empty.")
 
+    attempt_id = str(payload.get("attemptId") or payload.get("checkout_attempt_id") or "").strip() or None
+    if attempt_id:
+        existing_order = db.query(Order).filter(
+            Order.user_id == current_user.id,
+            Order.checkout_attempt_id == attempt_id,
+        ).first()
+        if existing_order:
+            return _created_order_response(existing_order)
+
     delivery_notes = payload.get("delivery_notes", "")
     raw_branch = payload.get("branch_name") or payload.get("branch")
     if not raw_branch:
@@ -249,11 +285,14 @@ async def create_order(
                 ).with_for_update().first()
                 if not product or not product.is_available or not inventory:
                     raise HTTPException(status_code=404, detail=f"Product unavailable: {item_id}")
-                if inventory.current_stock < quantity:
-                    raise HTTPException(status_code=400, detail=f"Insufficient stock. Only {inventory.current_stock} left.")
-                inventory.current_stock -= quantity
-                if inventory.current_stock <= 0:
-                    product.is_available = False
+                active_reserved = db.query(func.coalesce(func.sum(StockReservation.quantity), 0)).filter(
+                    StockReservation.product_id == item_uuid,
+                    StockReservation.status == "active",
+                    StockReservation.reserved_until > datetime.now(timezone.utc),
+                ).scalar()
+                available = inventory.current_stock - int(active_reserved or 0)
+                if available < quantity:
+                    raise HTTPException(status_code=400, detail=f"Insufficient stock. Only {available} available.")
                 unit_price = Decimal(str(product.price or 0))
                 prepared_items.append(("product", product, quantity, unit_price))
 
@@ -268,24 +307,47 @@ async def create_order(
             arrangement_id=None,
             quantity=sum(item[2] for item in prepared_items),
             total_amount=total_amount,
-            status=OrderStatusEnum.pending,
+            status=OrderStatusEnum.pending_payment,
             delivery_address=payload.get("delivery_address", ""),
             delivery_notes=delivery_notes,
             special_note=payload.get("special_note"),
             scheduled_at=_parse_datetime(payload.get("scheduled_at") or payload.get("delivery_date")),
             branch_name=raw_branch.strip().title(),
+            checkout_attempt_id=attempt_id,
+            recipient_first_name=(payload.get("recipient") or {}).get("firstName") or payload.get("recipient_first_name"),
+            recipient_last_name=(payload.get("recipient") or {}).get("lastName") or payload.get("recipient_last_name"),
+            recipient_phone=(payload.get("recipient") or {}).get("phoneNumber") or payload.get("recipient_phone_number"),
+            recipient_type=payload.get("recipientType") or payload.get("recipient_type"),
+            is_anonymous=bool(payload.get("isAnonymous") or payload.get("is_anonymous")),
+            fulfillment_method=payload.get("fulfillmentMethod") or payload.get("fulfillment_method") or "delivery",
+            delivery_provider=payload.get("deliveryProvider") or payload.get("delivery_provider"),
+            time_slot=payload.get("timeSlot") or payload.get("time_slot") or "anytime",
+            subtotal_amount=total_amount,
+            delivery_fee=Decimal("100.00") if (payload.get("fulfillmentMethod") or payload.get("fulfillment_method") or "delivery") == "delivery" else Decimal("0.00"),
         )
+        order.total_amount = order.subtotal_amount + order.delivery_fee
         db.add(order)
         db.flush()
 
+        reserved_until = datetime.now(timezone.utc) + timedelta(hours=1)
         for item_type, entity, quantity, unit_price in prepared_items:
-            db.add(OrderItem(
+            order_item = OrderItem(
                 order_id=order.id,
                 product_id=entity.id if item_type == "product" else None,
                 arrangement_id=entity.id if item_type == "arrangement" else None,
                 quantity=quantity,
                 price_at_purchase=unit_price,
-            ))
+            )
+            db.add(order_item)
+            db.flush()
+            if item_type == "product":
+                db.add(StockReservation(
+                    order_item_id=order_item.id,
+                    product_id=entity.id,
+                    quantity=quantity,
+                    status="active",
+                    reserved_until=reserved_until,
+                ))
 
         try:
             method_enum = PaymentMethodEnum(payment_method)
@@ -296,8 +358,9 @@ async def create_order(
             id=uuid.uuid4(),
             order_id=order.id,
             payment_method=method_enum.value,
-            total_amount=total_amount,
+            total_amount=order.total_amount,
             status=PaymentStatusEnum.pending.value,
+            expires_at=reserved_until,
             reference_number=payload.get("payment_reference") or None,
             provider="paymongo" if is_online else "manual",
         )
@@ -305,6 +368,7 @@ async def create_order(
         db.flush()
 
         db.commit()
+<<<<<<< HEAD
 
         if payload.get("delivery_method") == "lalamove":
             try:
@@ -343,15 +407,54 @@ async def create_order(
             "order_ids": [str(order.id)],
             "checkout_url": checkout_url,
         }
+=======
+        return _created_order_response(order)
+>>>>>>> f22b6e7d367d83249a467e25a0ec9bf06078053b
     except HTTPException:
         db.rollback()
         raise
     except PayMongoError as error:
         db.rollback()
         raise HTTPException(status_code=502, detail=str(error))
+    except IntegrityError:
+        db.rollback()
+        if attempt_id:
+            existing_order = db.query(Order).filter(
+                Order.user_id == current_user.id,
+                Order.checkout_attempt_id == attempt_id,
+            ).first()
+            if existing_order:
+                return _created_order_response(existing_order)
+        raise
     except Exception:
         db.rollback()
         raise
+
+
+def _release_reserved_stock(db: Session, order: Order):
+    transaction = order.transaction
+    if not transaction or transaction.stock_released_at:
+        return
+    for item in order.items or []:
+        reservation = db.query(StockReservation).filter(
+            StockReservation.order_item_id == item.id,
+            StockReservation.status == "active",
+        ).first()
+        if reservation:
+            reservation.status = "released"
+            reservation.released_at = datetime.now(timezone.utc)
+    transaction.stock_released_at = datetime.now(timezone.utc)
+
+
+def _expire_pending_transaction(db: Session, order: Order):
+    transaction = order.transaction
+    if not db or not transaction or transaction.status != PaymentStatusEnum.pending:
+        return
+    if transaction.expires_at and datetime.now(timezone.utc) >= transaction.expires_at:
+        transaction.status = PaymentStatusEnum.expired
+        order.status = OrderStatusEnum.payment_failed
+        _release_reserved_stock(db, order)
+        db.commit()
 
 
 async def create_orders(

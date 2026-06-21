@@ -13,20 +13,24 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import { ArrowLeft, Check, Heart, MessageCircle, Minus, Package, Plus, Share2, ShoppingBag, Star } from 'lucide-react-native';
+import { ArrowLeft, Check, FileText, Heart, MessageCircle, Minus, Package, Plus, Share2, ShoppingBag, Star } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { BulkQuotationSheet } from '@/components/bulk-quotation-sheet';
 import { EmptyState } from '@/components/bloom-ui';
-import { EstingsLogo } from '@/components/estings-logo';
+import { ProductAddOnSelector } from '@/components/product-add-on-selector';
+import { ProductCareGuideSection } from '@/components/product-care-guide-section';
 import { ProductRecommendationGallery } from '@/components/product-recommendation-gallery';
 import { formatPhp, type Product, type ProductColor } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { addCartItem, getCartItems } from '@/services/cart-storage';
 import { shopApi, type ProductRatingSummary, type ProductReview } from '@/services/shop-api';
+import { getSelectedColorName, isFlowerProduct } from '@/utils/product-helpers';
 import { buildRelatedProductRecommendations, createRecommendationSeed } from '@/utils/product-recommendations';
 
 const cartRoute = '/(tabs)/cart' as Href;
+const bulkQuantityHint = 10;
 const imageNotFound = require('@/assets/images/default-img/ImageNotFound.webp');
 const pageBackground = '#F5F5F5';
 
@@ -47,15 +51,19 @@ export default function ProductDetailsScreen() {
   const [isAppendingRecommendations, setIsAppendingRecommendations] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [productColors, setProductColors] = useState<ProductColor[]>([]);
+  const [addOns, setAddOns] = useState<Product[]>([]);
   const [productRating, setProductRating] = useState<ProductRatingSummary>({ averageRating: 0, reviewCount: 0 });
   const [productReviews, setProductReviews] = useState<ProductReview[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedColorId, setSelectedColorId] = useState<string | null>(null);
+  const [selectedAddOnIds, setSelectedAddOnIds] = useState<ReadonlySet<string>>(() => new Set());
   const [visibleRecommendationCount, setVisibleRecommendationCount] = useState(4);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [showCompactHeader, setShowCompactHeader] = useState(false);
   const [showAddedToast, setShowAddedToast] = useState(false);
+  const [isLoadingAddOns, setIsLoadingAddOns] = useState(false);
+  const [showBulkQuotation, setShowBulkQuotation] = useState(false);
 
   const loadProducts = useCallback(async () => {
     setIsLoading(true);
@@ -85,20 +93,31 @@ export default function ProductDetailsScreen() {
       return undefined;
     }
 
+    setIsLoadingAddOns(true);
+    setSelectedAddOnIds(new Set());
+
     Promise.all([
       shopApi.getProductColors(productId),
+      shopApi.getAddOns(),
       shopApi.getProductRating(productId),
       shopApi.getProductReviews(productId),
-    ]).then(([nextColors, nextRating, nextReviews]) => {
-      if (!isActive) {
-        return;
-      }
+    ])
+      .then(([nextColors, nextAddOns, nextRating, nextReviews]) => {
+        if (!isActive) {
+          return;
+        }
 
-      setProductColors(nextColors);
-      setProductRating(nextRating);
-      setProductReviews(nextReviews);
-      setSelectedColorId(nextColors[0]?.id ?? null);
-    });
+        setProductColors(nextColors);
+        setAddOns(nextAddOns);
+        setProductRating(nextRating);
+        setProductReviews(nextReviews);
+        setSelectedColorId(nextColors[0]?.id ?? null);
+      })
+      .finally(() => {
+        if (isActive) {
+          setIsLoadingAddOns(false);
+        }
+      });
 
     return () => {
       isActive = false;
@@ -152,6 +171,18 @@ export default function ProductDetailsScreen() {
   const canAppendRecommendations = visibleRecommendationCount < recommendationCap;
   const isSoldOut = (product?.stock ?? 0) <= 0;
   const soldCount = getProductSoldCount(product);
+  const selectedAddOns = useMemo(
+    () => addOns.filter((item) => selectedAddOnIds.has(item.id)),
+    [addOns, selectedAddOnIds],
+  );
+  const addOnTotalCents = useMemo(
+    () => selectedAddOns.reduce((total, item) => total + item.priceCents, 0),
+    [selectedAddOns],
+  );
+  const unitTotalCents = (product?.priceCents ?? 0) + addOnTotalCents;
+  const showCareGuide = product ? isFlowerProduct(product) : false;
+  const showBulkHint = quantity >= bulkQuantityHint;
+  const selectedColorName = getSelectedColorName(productColors, selectedColorId);
 
   const loadCartItemCount = useCallback(async () => {
     const items = await getCartItems();
@@ -173,7 +204,10 @@ export default function ProductDetailsScreen() {
     }
 
     try {
-      const nextItems = await addCartItem(product, quantity);
+      let nextItems = await addCartItem(product, quantity);
+      for (const addOn of selectedAddOns) {
+        nextItems = await addCartItem(addOn, 1);
+      }
       setIsAdded(true);
       setShowAddedToast(true);
       setCartItemCount(nextItems.reduce((total, item) => total + item.quantity, 0));
@@ -208,18 +242,41 @@ export default function ProductDetailsScreen() {
       });
       toastTimer.current = null;
     }, 1800);
-  }, [isAdded, isSoldOut, product, quantity, toastProgress]);
+  }, [isAdded, isSoldOut, product, quantity, selectedAddOns, toastProgress]);
 
   const handleBuyNow = useCallback(async () => {
     if (!product || isSoldOut) {
       return;
     }
 
-    const nextItems = await addCartItem(product, quantity);
+    let nextItems = await addCartItem(product, quantity);
+    const checkoutIds = [product.id];
+    for (const addOn of selectedAddOns) {
+      nextItems = await addCartItem(addOn, 1);
+      checkoutIds.push(addOn.id);
+    }
     setIsAdded(true);
     setCartItemCount(nextItems.reduce((total, item) => total + item.quantity, 0));
-    router.push(`/checkout?ids=${encodeURIComponent(product.id)}` as Href);
-  }, [isSoldOut, product, quantity]);
+    router.push(`/checkout?ids=${encodeURIComponent(checkoutIds.join(','))}` as Href);
+  }, [isSoldOut, product, quantity, selectedAddOns]);
+
+  const handleOpenBulkQuotation = useCallback(() => {
+    setShowBulkQuotation(true);
+  }, []);
+
+  const handleOpenChatWithQuote = useCallback(
+    (quoteText: string) => {
+      if (!product) {
+        return;
+      }
+
+      setShowBulkQuotation(false);
+      router.push(
+        `/live-chat?productId=${encodeURIComponent(product.id)}&productName=${encodeURIComponent(product.name)}&productPrice=${encodeURIComponent(formatPhp(unitTotalCents))}&quote=${encodeURIComponent(quoteText)}` as Href,
+      );
+    },
+    [product, unitTotalCents],
+  );
 
   const handleChatAboutProduct = useCallback(() => {
     if (!product) {
@@ -278,6 +335,8 @@ export default function ProductDetailsScreen() {
   useEffect(() => {
     setIsAdded(false);
     setQuantity(1);
+    setSelectedAddOnIds(new Set());
+    setShowBulkQuotation(false);
     setVisibleRecommendationCount(4);
     setIsAppendingRecommendations(false);
     lastRecommendationBatchAt.current = 0;
@@ -451,13 +510,29 @@ export default function ProductDetailsScreen() {
               {/* Rating inline */}
               <RatingInline averageRating={productRating.averageRating} reviewCount={productRating.reviewCount} />
 
-              {/* Description */}
-              <Text style={styles.description}>
-                {product.description || 'Freshly prepared by Esting\u0027s for gifting, celebrations, and everyday moments.'}
-              </Text>
+              <View style={styles.detailSection}>
+                <Text style={styles.sectionTitle}>Description</Text>
+                <Text style={styles.description}>
+                  {product.description || 'No product description has been added yet.'}
+                </Text>
+              </View>
 
               {/* Color selector */}
               <ColorSelector colors={productColors} selectedColorId={selectedColorId} onSelectColor={setSelectedColorId} />
+
+              <ProductAddOnSelector
+                addOns={addOns}
+                isLoading={isLoadingAddOns}
+                selectedIds={selectedAddOnIds}
+                onToggle={(addOnId: string) => {
+                  setSelectedAddOnIds((current) => {
+                    const next = new Set(current);
+                    if (next.has(addOnId)) next.delete(addOnId);
+                    else next.add(addOnId);
+                    return next;
+                  });
+                }}
+              />
 
               {/* Quantity */}
               <View style={styles.quantitySection}>
@@ -487,6 +562,10 @@ export default function ProductDetailsScreen() {
                 </View>
               </View>
 
+              {showBulkHint ? (
+                <BulkOrderHint onGetQuote={handleOpenBulkQuotation} quantity={quantity} />
+              ) : null}
+
               {/* Stock info */}
               {!isSoldOut ? (
                 <View style={styles.stockRow}>
@@ -496,6 +575,13 @@ export default function ProductDetailsScreen() {
               ) : null}
 
               {/* Divider */}
+              {showCareGuide ? (
+                <>
+                  <View style={styles.divider} />
+                  <ProductCareGuideSection entries={product.careGuide ?? []} />
+                </>
+              ) : null}
+
               <View style={styles.divider} />
 
               {/* Reviews section */}
@@ -530,7 +616,18 @@ export default function ProductDetailsScreen() {
           onAddToCart={handleAddToCart}
           onBuyNow={handleBuyNow}
           onChat={handleChatAboutProduct}
-          priceLabel={formatPhp(product.priceCents)}
+          priceLabel={formatPhp(unitTotalCents)}
+        />
+      ) : null}
+
+      {product ? (
+        <BulkQuotationSheet
+          addOns={selectedAddOns}
+          colorName={selectedColorName}
+          onClose={() => setShowBulkQuotation(false)}
+          onOpenChat={handleOpenChatWithQuote}
+          product={product}
+          visible={showBulkQuotation}
         />
       ) : null}
 
@@ -634,6 +731,27 @@ function ProductScrollHeader({
         </View>
       </View>
     </Animated.View>
+  );
+}
+
+// ─── Bulk order hint ───────────────────────────────────────────────────────────
+function BulkOrderHint({ onGetQuote, quantity }: { onGetQuote: () => void; quantity: number }) {
+  return (
+    <View style={styles.bulkHint}>
+      <View style={styles.bulkHintIcon}>
+        <FileText color="#DB2777" size={18} strokeWidth={2.2} />
+      </View>
+      <View style={styles.bulkHintBody}>
+        <Text style={styles.bulkHintTitle}>Buying {quantity}+ pieces?</Text>
+        <Text style={styles.bulkHintText}>Get a bulk quotation for better rates.</Text>
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        onPress={onGetQuote}
+        style={({ pressed }) => [styles.bulkHintButton, pressed && styles.pressed]}>
+        <Text style={styles.bulkHintButtonText}>Get quote</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -1221,6 +1339,9 @@ const styles = StyleSheet.create({
   },
 
   // Description
+  detailSection: {
+    gap: theme.spacing.sm,
+  },
   description: {
     color: theme.colors.textMuted,
     fontFamily: Fonts.sans,
@@ -1334,6 +1455,52 @@ const styles = StyleSheet.create({
   },
   stockTextOut: {
     color: theme.colors.danger,
+  },
+
+  bulkHint: {
+    alignItems: 'center',
+    backgroundColor: '#FDF2F8',
+    borderColor: '#FBCFE8',
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+  },
+  bulkHintIcon: {
+    alignItems: 'center',
+    backgroundColor: '#FCE7F3',
+    borderRadius: theme.radius.sm,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  bulkHintBody: {
+    flex: 1,
+    gap: 2,
+  },
+  bulkHintTitle: {
+    color: '#9D174D',
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 12,
+    lineHeight: 16,
+  },
+  bulkHintText: {
+    color: '#BE185D',
+    fontFamily: Fonts.sans,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  bulkHintButton: {
+    backgroundColor: '#DB2777',
+    borderRadius: theme.radius.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 10,
+  },
+  bulkHintButtonText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansBold,
+    fontSize: 12,
   },
 
   // Divider

@@ -18,6 +18,7 @@ class Product(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     name = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
+    care_guide = Column(Text, nullable=True)
     price = Column(Numeric(10, 2), nullable=False)
     
     
@@ -46,13 +47,12 @@ class Product(Base):
     # Relationships (Unchanged)
     inventory = relationship("Inventory", back_populates="product", uselist=False, cascade="all, delete-orphan")
     reviews = relationship("Review", back_populates="product")
-    order_items = relationship("Order", back_populates="product")
     flower = relationship("Flower", back_populates="product", uselist=False, cascade="all, delete-orphan")
     wrapping = relationship("Wrapping", back_populates="product", uselist=False)
     accessory = relationship("Accessory", back_populates="product", uselist=False)
     discounts = relationship("Discount", back_populates="product")
     campaigns = relationship("Campaign", secondary="product_campaigns", back_populates="products")
-    order_items = relationship("OrderItem", back_populates="product", cascade="all, delete-orphan")
+    order_items = relationship("OrderItem", back_populates="product")
     components = relationship("ProductRecipe", foreign_keys="[ProductRecipe.parent_product_id]", cascade="all, delete-orphan")
     tags = Column(JSONB, default=[])
     original_price = Column(Numeric(10, 2), nullable=True)

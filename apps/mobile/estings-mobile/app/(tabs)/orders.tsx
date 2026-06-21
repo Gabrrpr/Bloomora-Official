@@ -10,6 +10,7 @@ import { formatPhp } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { getAuthSession, type AuthSession } from '@/services/auth-session';
 import { getMyOrders, type CustomerOrder } from '@/services/orders-api';
+import { getPayMongoPaymentStatus } from '@/services/payments-api';
 
 type OrderTab = 'all' | 'to_pay' | 'processing' | 'shipped' | 'completed' | 'failed';
 
@@ -41,7 +42,30 @@ export default function OrdersScreen() {
     try {
       const nextSession = await getAuthSession();
       setSession(nextSession);
-      setOrders(nextSession ? await getMyOrders({ session: nextSession }) : []);
+      if (!nextSession) {
+        setOrders([]);
+        return;
+      }
+      const loaded = await getMyOrders({ session: nextSession });
+
+      // Silently reconcile any pending-payment orders with PayMongo.
+      // This ensures the list stays accurate even without a public webhook URL.
+      const pendingOrders = loaded.filter((o) => o.paymentStatus === 'pending');
+      if (pendingOrders.length > 0) {
+        await Promise.allSettled(
+          pendingOrders.map((o) => {
+            const firstId = o.id.split(',')[0];
+            return firstId
+              ? getPayMongoPaymentStatus({ orderId: firstId, session: nextSession })
+              : Promise.resolve();
+          }),
+        );
+        // Reload orders to pick up any newly-paid statuses
+        setOrders(await getMyOrders({ session: nextSession }));
+      } else {
+        setOrders(loaded);
+      }
+
       setErrorMessage(null);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Orders are unavailable right now.');
@@ -168,7 +192,7 @@ function EmptyState({ action, message, onPress }: { action: string; message: str
 }
 
 export function getOrderTab(order: CustomerOrder): Exclude<OrderTab, 'all'> {
-  if (order.paymentStatus === 'failed' || order.status === 'cancelled') return 'failed';
+  if (order.paymentStatus === 'failed' || order.paymentStatus === 'expired' || order.status === 'cancelled' || order.status === 'payment_failed') return 'failed';
   if (order.paymentStatus !== 'paid') return 'to_pay';
   if (order.status === 'delivered' || order.status === 'completed') return 'completed';
   if (order.status === 'out_for_delivery') return 'shipped';
