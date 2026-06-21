@@ -273,7 +273,6 @@ def get_products(db: Session = Depends(get_db)):
             "status": p.status.value if hasattr(p.status, "value") else p.status,
             "stock": p.inventory.current_stock if p.inventory else 0,
             
-            # 🚀 EXPOSE BRANCH STOCK TO FRONTEND
             "stock_manila": getattr(p.inventory, "stock_manila", 0) if p.inventory else 0,
             "stock_pampanga": getattr(p.inventory, "stock_pampanga", 0) if p.inventory else 0,
             
@@ -587,19 +586,6 @@ def update_product(
         raise HTTPException(status_code=404, detail="Product not found")
 
     try:
-        # 🚀 THE RIBBON/WRAPPER LOGIC: If it's not a flower, ignore exact stock counts!
-        current_group = group.lower().strip() if group else product.product_group
-        is_floral = (current_group == "floral")
-        
-        if not is_floral:
-            # Force high stock for wrappers/ribbons so they never naturally "run out".
-            # The system will now rely entirely on the manual 'is_available' boolean.
-            stock = 999
-            stock_manila = 999
-            stock_pampanga = 999
-            reorder_point = 0
-
-        # --- Standard Updates ---
         if name is not None:
             product.name = name
         if group is not None:
@@ -626,6 +612,7 @@ def update_product(
                 
         if is_available is not None:
             product.is_available = is_available
+            
         if is_visible is not None:
             product.is_visible = is_visible
         if image_url is not None:
@@ -680,7 +667,6 @@ def update_product(
             except Exception:
                 pass
 
-        # Update Inventory
         if any(v is not None for v in [stock, stock_manila, stock_pampanga, unit_type, reorder_point, cost_val]):
             inv = db.query(Inventory).filter(Inventory.product_id == product.id).first()
             if not inv:
@@ -693,11 +679,9 @@ def update_product(
             if unit_type is not None: inv.unit_type = unit_type
             if cost_val is not None: inv.cost_per_unit = cost_val
 
-        # 🚀 COMMIT ALL CHANGES
         db.commit()
         db.refresh(product)
         
-        # Log Activity (only done if the commit succeeds!)
         log_activity(
             db=db,
             action=f"Update Record: Staff/Admin updated details for product '{product.name}'",
@@ -708,15 +692,13 @@ def update_product(
 
         return {"status": "success", "product": serialize_product(product)}
 
-    # 🚀 BULLETPROOF ERROR CATCHER
     except Exception as e:
-        db.rollback() # Undo the broken save
+        db.rollback()
         error_msg = str(e)
         print("CRITICAL DATABASE ERROR DURING SAVE:", error_msg)
-        
-        # Send the exact column missing back to your React console
         raise HTTPException(status_code=500, detail=f"Database Crash: {error_msg}")
-    
+
+
 @router.get("/admin/settings/homepage")
 def get_homepage_layout(db: Session = Depends(get_db)):
     query = text("SELECT setting_value FROM store_settings WHERE setting_key = 'homepage_layout'")
