@@ -168,7 +168,7 @@ function EmptyState({ action, message, onPress }: { action: string; message: str
 }
 
 export function getOrderTab(order: CustomerOrder): Exclude<OrderTab, 'all'> {
-  if (order.paymentStatus === 'failed' || order.status === 'cancelled') return 'failed';
+  if (order.paymentStatus === 'failed' || order.paymentStatus === 'expired' || order.status === 'cancelled' || order.status === 'payment_failed') return 'failed';
   if (order.paymentStatus !== 'paid') return 'to_pay';
   if (order.status === 'delivered' || order.status === 'completed') return 'completed';
   if (order.status === 'out_for_delivery') return 'shipped';

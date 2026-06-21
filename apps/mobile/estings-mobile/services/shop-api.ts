@@ -20,6 +20,7 @@ export type BackendProduct = {
   category?: string | null;
   created_at?: string | null;
   description?: string | null;
+  care_guide?: string | string[] | null;
   id: string;
   image_url?: string | null;
   is_available?: boolean | null;
@@ -118,6 +119,11 @@ function normalizeImageUrl(imageUrl?: string | null) {
   return undefined;
 }
 
+function normalizeCareGuide(value?: string | string[] | null) {
+  const entries = Array.isArray(value) ? value : value?.split(/\r?\n/);
+  return entries?.map((entry) => entry.trim()).filter(Boolean) ?? [];
+}
+
 function normalizeBranch(branch?: string | null) {
   const normalizedBranch = branch?.trim().toLowerCase();
 
@@ -182,6 +188,7 @@ export function mapBackendProduct(product: BackendProduct): Product {
     categoryName: toTitleCase(category),
     createdAt: product.created_at || undefined,
     description: product.description || undefined,
+    careGuide: normalizeCareGuide(product.care_guide),
     id: product.id,
     imageUrl: normalizeImageUrl(product.image_url),
     isActive: product.is_available !== false,
@@ -329,6 +336,13 @@ export const shopApi = {
     } catch {
       return [];
     }
+  },
+  async getAddOns(options?: CatalogRequestOptions) {
+    const products = await getBackendProducts(options);
+    return products.filter((product) => {
+      const category = product.categoryName?.trim().toLowerCase();
+      return category === 'add on' || category === 'add-on' || category === 'addon';
+    });
   },
   async getProductRating(productId: string): Promise<ProductRatingSummary> {
     try {
