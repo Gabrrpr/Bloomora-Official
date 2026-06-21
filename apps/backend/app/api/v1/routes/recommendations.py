@@ -2,13 +2,12 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from typing import List
 from pydantic import BaseModel
-import pandas as pd
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
-
 # Import your database session and models
 from app.core.dependencies import get_db, get_current_user
 from app.models import Product, Order, User
+
+# NOTE: pandas and scikit-learn are imported lazily inside the function
+# to avoid crashing the server at startup when they are not installed.
 
 router = APIRouter(prefix="", tags=["Recommendations"])
 
@@ -26,6 +25,17 @@ async def get_homepage_recommendations(
     current_user: User = Depends(get_current_user)
 ):
     try:
+        # Lazy-import heavy ML dependencies so the server starts even without them
+        try:
+            import pandas as pd
+            from sklearn.feature_extraction.text import TfidfVectorizer
+            from sklearn.metrics.pairwise import cosine_similarity
+        except ImportError:
+            raise HTTPException(
+                status_code=503,
+                detail="Recommendation engine unavailable: pandas/scikit-learn not installed.",
+            )
+
         # 1. Fetch data
         past_orders = db.query(Order).filter(Order.user_id == current_user.id).all()
         active_products = db.query(Product).filter(Product.is_available == True).all()

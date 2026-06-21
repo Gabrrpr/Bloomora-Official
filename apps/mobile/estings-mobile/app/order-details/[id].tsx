@@ -11,6 +11,7 @@ import { formatPhp } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { getAuthSession } from '@/services/auth-session';
 import { getOrderById, type CustomerOrder } from '@/services/orders-api';
+import { getPayMongoPaymentStatus } from '@/services/payments-api';
 
 export default function OrderDetailsScreen() {
   const insets = useSafeAreaInsets();
@@ -34,7 +35,30 @@ export default function OrderDetailsScreen() {
         router.replace('/(auth)/login');
         return;
       }
-      setOrder(await getOrderById({ orderId: id, session }));
+      // Load the order first
+      const loaded = await getOrderById({ orderId: id, session });
+
+      // If still pending payment, silently call the PayMongo status endpoint.
+      // This triggers server-side reconciliation so the order reflects the real
+      // payment state even when running locally without a public webhook URL.
+      if (loaded.paymentStatus === 'pending' && loaded.id) {
+        try {
+          const firstId = loaded.id.split(',')[0];
+          if (firstId) {
+            await getPayMongoPaymentStatus({ orderId: firstId, session });
+            // Reload order with the now-reconciled status
+            setOrder(await getOrderById({ orderId: id, session }));
+          } else {
+            setOrder(loaded);
+          }
+        } catch {
+          // Reconciliation failed — show whatever we have
+          setOrder(loaded);
+        }
+      } else {
+        setOrder(loaded);
+      }
+
       setErrorMessage(null);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Order details are unavailable.');
