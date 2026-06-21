@@ -192,6 +192,7 @@ function startOfDay(date: Date) {
 export default function CheckoutScreen() {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
+  const checkoutAttemptIdRef = useRef(`${Date.now()}-${Math.random().toString(36).slice(2)}`);
   const params = useLocalSearchParams<{ ids?: string }>();
   const selectedIds = useMemo(
     () => new Set((params.ids ?? '').split(',').map((id) => id.trim()).filter(Boolean)),
@@ -407,7 +408,8 @@ export default function CheckoutScreen() {
     setIsPaying(true);
     try {
       const selectedSlot = timeSlots.find((slot) => slot.id === selectedTime);
-      const orderResponse = await createOrdersFromCart({
+      const created = await createOrdersFromCart({
+        attemptId: checkoutAttemptIdRef.current,
         deliveryAddress: fulfillmentMethod === 'delivery' ? deliveryAddress.trim() : '',
         deliveryDate: selectedDate.toISOString(),
         deliveryNotes: specialInstructions.trim(),
@@ -424,9 +426,11 @@ export default function CheckoutScreen() {
         session,
         timeSlot: selectedSlot?.id ?? 'anytime',
       });
-      const paymentHref = `/payment?orderIds=${encodeURIComponent(orderResponse.order_ids.join(','))}&ids=${encodeURIComponent(
-        items.map((item) => item.product.id).join(','),
-      )}&totalCents=${summary.totalCents}&deliveryFeeCents=${summary.feeCents}` as Href;
+      const orderId = created.order_ids[0];
+      if (!orderId) {
+        throw new Error('The backend did not return an order ID.');
+      }
+      const paymentHref = `/payment?orderId=${encodeURIComponent(orderId)}` as Href;
       router.push(paymentHref);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {

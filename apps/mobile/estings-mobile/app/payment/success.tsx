@@ -14,14 +14,10 @@ type ConfirmationState = 'checking' | 'confirmed' | 'pending' | 'unavailable';
 
 export default function PaymentSuccessScreen() {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ ids?: string; orderIds?: string }>();
+  const params = useLocalSearchParams<{ orderIds?: string }>();
   const orderIds = useMemo(
     () => (params.orderIds ?? '').split(',').map((id) => id.trim()).filter(Boolean),
     [params.orderIds],
-  );
-  const purchasedIds = useMemo(
-    () => (params.ids ?? '').split(',').map((id) => id.trim()).filter(Boolean),
-    [params.ids],
   );
   const [confirmationState, setConfirmationState] = useState<ConfirmationState>(orderIds.length > 0 ? 'checking' : 'pending');
   const [statusResult, setStatusResult] = useState<PayMongoPaymentStatusResponse | null>(null);
@@ -53,12 +49,15 @@ export default function PaymentSuccessScreen() {
     const allPaid = statuses.every((status) => status.payment_status === 'paid' || status.order?.payment_status === 'paid');
     setConfirmationState(allPaid ? 'confirmed' : 'pending');
     if (allPaid) {
-      await Promise.all(purchasedIds.map((productId) => removeCartItem(productId)));
+      const purchasedIds = statuses.flatMap((status) =>
+        status.order?.items?.map((item) => item.product_id).filter((id): id is string => Boolean(id)) ?? [],
+      );
+      await Promise.all([...new Set(purchasedIds)].map((productId) => removeCartItem(productId)));
       notifyCartUpdated();
     }
 
     return allPaid;
-  }, [orderIds, purchasedIds]);
+  }, [orderIds]);
 
   useEffect(() => {
     let isActive = true;

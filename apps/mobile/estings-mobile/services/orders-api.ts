@@ -8,6 +8,9 @@ export type CustomerOrder = {
   createdAt?: string | null;
   deliveryAddress?: string | null;
   deliveryNotes?: string | null;
+  deliveryFee: number;
+  deliveryProvider?: string | null;
+  expiresAt?: string | null;
   hasReviewed: boolean;
   id: string;
   imageUrl?: string | null;
@@ -20,8 +23,14 @@ export type CustomerOrder = {
   paymentProvider?: string | null;
   paymentReference?: string | null;
   paymentStatus: string;
+  transactionId?: string | null;
   productName: string;
   quantity: number;
+  recipientName?: string | null;
+  recipientPhone?: string | null;
+  fulfillmentMethod: string;
+  subtotalAmount: number;
+  timeSlot?: string | null;
   scheduledAt?: string | null;
   specialNote?: string | null;
   status: string;
@@ -32,6 +41,7 @@ export type CustomerOrder = {
 export type CustomerOrderItem = {
   id: string;
   imageUrl?: string | null;
+  productId?: string | null;
   productName: string;
   quantity: number;
   totalAmount: number;
@@ -44,6 +54,9 @@ type BackendOrder = {
   created_at?: string | null;
   delivery_address?: string | null;
   delivery_notes?: string | null;
+  delivery_fee?: number | null;
+  delivery_provider?: string | null;
+  expires_at?: string | null;
   has_reviewed?: boolean | null;
   id: string;
   image_url?: string | null;
@@ -54,8 +67,15 @@ type BackendOrder = {
   payment_provider?: string | null;
   payment_reference?: string | null;
   payment_status?: string | null;
+  transaction_id?: string | null;
   product_name?: string | null;
   quantity?: number | null;
+  recipient_first_name?: string | null;
+  recipient_last_name?: string | null;
+  recipient_phone?: string | null;
+  fulfillment_method?: string | null;
+  subtotal_amount?: number | null;
+  time_slot?: string | null;
   scheduled_at?: string | null;
   special_note?: string | null;
   status?: string | null;
@@ -67,6 +87,7 @@ type BackendOrderItem = {
   id: string;
   image_url?: string | null;
   line_total?: number | null;
+  product_id?: string | null;
   product_name?: string | null;
   quantity?: number | null;
 };
@@ -105,6 +126,7 @@ function mapBackendOrder(order: BackendOrder): CustomerOrder {
     ? order.items.map((item) => ({
         id: item.id,
         imageUrl: item.image_url,
+        productId: item.product_id,
         productName: item.product_name || 'Flower order',
         quantity: Number(item.quantity ?? 1),
         totalAmount: Number(item.line_total ?? 0),
@@ -124,6 +146,9 @@ function mapBackendOrder(order: BackendOrder): CustomerOrder {
     createdAt: order.created_at,
     deliveryAddress: order.delivery_address,
     deliveryNotes: order.delivery_notes,
+    deliveryFee: Number(order.delivery_fee ?? 0),
+    deliveryProvider: order.delivery_provider,
+    expiresAt: order.expires_at,
     hasReviewed: order.has_reviewed === true,
     id: order.id,
     imageUrl: order.image_url,
@@ -136,8 +161,14 @@ function mapBackendOrder(order: BackendOrder): CustomerOrder {
     paymentProvider: order.payment_provider,
     paymentReference: order.payment_reference,
     paymentStatus: order.payment_status || 'pending',
+    transactionId: order.transaction_id,
     productName: order.product_name || 'Flower order',
     quantity: Number(order.quantity ?? 1),
+    recipientName: [order.recipient_first_name, order.recipient_last_name].filter(Boolean).join(' ') || null,
+    recipientPhone: order.recipient_phone,
+    fulfillmentMethod: order.fulfillment_method || 'delivery',
+    subtotalAmount: Number(order.subtotal_amount ?? order.total_amount ?? 0),
+    timeSlot: order.time_slot,
     scheduledAt: order.scheduled_at,
     specialNote: order.special_note,
     status: order.status || 'pending',

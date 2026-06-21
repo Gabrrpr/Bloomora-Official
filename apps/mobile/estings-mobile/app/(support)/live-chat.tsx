@@ -166,7 +166,7 @@ const emptySheetContent: Record<
 
 export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: () => void } = {}) {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ productId?: string; productName?: string; productPrice?: string }>();
+  const params = useLocalSearchParams<{ productId?: string; productName?: string; productPrice?: string; quote?: string }>();
   const scrollRef = useRef<ScrollView>(null);
   const chatPopSoundRef = useRef<Audio.Sound | null>(null);
   const chatPopUriRef = useRef<string | null>(null);
@@ -202,6 +202,11 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
     const productId = typeof params.productId === 'string' ? params.productId.trim() : '';
     const productName = typeof params.productName === 'string' ? params.productName.trim() : '';
     const productPrice = typeof params.productPrice === 'string' ? params.productPrice.trim() : '';
+    const quote = typeof params.quote === 'string' ? params.quote.trim() : '';
+
+    if (quote) {
+      return quote;
+    }
 
     if (!productId || !productName) {
       return '';
@@ -215,7 +220,7 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
     ]
       .filter(Boolean)
       .join('\n');
-  }, [params.productId, params.productName, params.productPrice]);
+  }, [params.productId, params.productName, params.productPrice, params.quote]);
   const canSend = useMemo(
     () =>
       isSignedIn &&

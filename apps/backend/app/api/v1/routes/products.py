@@ -12,7 +12,7 @@ from PIL import Image
 from supabase import create_client, Client
 from app.core.config import settings
 from app.core.dependencies import get_db, get_current_user, require_staff
-from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum, Review, Order, ProductRecipe, Notification
+from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum, Review, Order, OrderItem, ProductRecipe, Notification
 from app.utils.logger import log_activity
 
 class StockLogCreate(BaseModel):
@@ -42,6 +42,7 @@ def serialize_product(p: Product) -> dict:
         "id": str(p.id),
         "name": p.name,
         "description": p.description,
+        "care_guide": getattr(p, "care_guide", None),
         "price": current_price,
         "product_group": p.product_group,
         "product_type": p.product_type,
@@ -143,6 +144,8 @@ def get_customization_products(db: Session = Depends(get_db)):
         item = {
             "id": str(p.id),
             "name": p.name,
+            "description": p.description,
+            "care_guide": getattr(p, "care_guide", None),
             "price": float(p.price) if p.price else 0,
             "category": clean_category,
             "image_url": p.image_url,
@@ -257,6 +260,8 @@ def get_products(db: Session = Depends(get_db)):
         {
             "id": str(p.id),
             "name": p.name,
+            "description": p.description,
+            "care_guide": getattr(p, "care_guide", None),
             "price": float(p.price) if p.price else 0,
             "category": (p.category.value if hasattr(p.category, "value") else str(p.category)).lower().strip() if p.category else "",
             "product_group": p.product_group.lower().strip() if p.product_group else "floral",
@@ -327,6 +332,7 @@ def get_admin_products(
                 "id": pid,
                 "name": p.name,
                 "description": p.description,
+                "care_guide": getattr(p, "care_guide", None),
                 "price": current_price,
                 "category": p.category.value if hasattr(p.category, "value") else p.category,
                 "image_url": p.image_url,
@@ -427,6 +433,7 @@ async def upload_product_image(
 def create_product(
     name: str = Form(...),
     description: Optional[str] = Form(None),
+    care_guide: Optional[str] = Form(None),
     group: str = Form(..., alias="group"),
     product_type: str = Form(None),
     price: str = Form(...),
@@ -491,6 +498,7 @@ def create_product(
         name=name,
         product_group=group.lower().strip(),
         description=description,
+        care_guide=care_guide,
         price=price_val,
         original_price=None, 
         category=category.lower().strip(),
@@ -548,6 +556,7 @@ def update_product(
     name: Optional[str] = Form(None),
     group: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
+    care_guide: Optional[str] = Form(None),
     price: Optional[str] = Form(None),
     base_price: Optional[str] = Form(None),
     markup_percentage: Optional[str] = Form(None),
@@ -597,6 +606,8 @@ def update_product(
             product.product_group = group.lower().strip()
         if description is not None:
             product.description = description
+        if care_guide is not None:
+            product.care_guide = care_guide or None
         if price is not None:
             try:
                 product.price = Decimal(price)
@@ -792,8 +803,9 @@ def delete_product(
         raise HTTPException(status_code=404, detail="Product not found")
 
     orders_count = db.query(Order).filter(Order.product_id == prod_uuid).count()
+    order_items_count = db.query(OrderItem).filter(OrderItem.product_id == prod_uuid).count()
 
-    if orders_count == 0:
+    if orders_count == 0 and order_items_count == 0:
         db.query(Inventory).filter(Inventory.product_id == prod_uuid).delete(synchronize_session=False)
         db.delete(product)
         db.commit()
@@ -847,6 +859,7 @@ def get_product(product_id: str, db: Session = Depends(get_db)):
         "id": str(product.id),
         "name": product.name,
         "description": product.description,
+        "care_guide": getattr(product, "care_guide", None),
         "price": float(product.price) if product.price else 0,
         "category": product.category.value if hasattr(product.category, "value") else product.category,
         "image_url": product.image_url,

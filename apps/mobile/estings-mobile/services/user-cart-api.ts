@@ -1,5 +1,5 @@
 import type { CartItem, Product } from '@/constants/shop';
-import { apiFetch } from '@/services/api-client';
+import { ApiError, apiFetch } from '@/services/api-client';
 import type { AuthSession } from '@/services/auth-session';
 import { notifyCartUpdated } from '@/services/guest-cart';
 
@@ -161,9 +161,21 @@ export const userCartApi = {
     const items = await this.get(session);
     const entry = items.find((item) => item.product.id === productId);
     if (!entry) return items;
-    return mutateCart(`/cart/entries/${encodeURIComponent(entry.id)}`, session, {
-      body: JSON.stringify({ quantity }),
-      method: 'PATCH',
-    });
+
+    try {
+      return await mutateCart(`/cart/entries/${encodeURIComponent(entry.id)}`, session, {
+        body: JSON.stringify({ quantity }),
+        method: 'PATCH',
+      });
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 422) {
+        throw error;
+      }
+
+      return mutateCart(`/cart/items/${encodeURIComponent(productId)}`, session, {
+        body: JSON.stringify({ product_id: productId, quantity }),
+        method: 'PATCH',
+      });
+    }
   },
 };

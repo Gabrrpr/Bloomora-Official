@@ -1,4 +1,4 @@
-import { router } from 'expo-router';
+import { router, type Href, useLocalSearchParams } from 'expo-router';
 import { ShoppingBag, XCircle } from 'lucide-react-native';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -7,6 +7,7 @@ import { Fonts, theme } from '@/constants/theme';
 
 export default function PaymentCancelScreen() {
   const insets = useSafeAreaInsets();
+  const { orderId } = useLocalSearchParams<{ orderId?: string }>();
 
   return (
     <ScrollView
@@ -17,13 +18,19 @@ export default function PaymentCancelScreen() {
           <XCircle color={theme.colors.danger} size={42} strokeWidth={2.1} />
         </View>
         <Text style={styles.title}>Payment cancelled</Text>
-        <Text style={styles.body}>No payment was completed. Your cart is still available if you want to try again.</Text>
+        <Text style={styles.body}>No payment was completed. You can retry this order until its payment window expires.</Text>
         <Pressable
           accessibilityRole="button"
-          onPress={() => router.replace('/(tabs)/cart')}
+          onPress={() => {
+            if (orderId) {
+              router.replace(`/payment?orderId=${encodeURIComponent(orderId)}` as Href);
+            } else {
+              router.replace('/(tabs)/cart');
+            }
+          }}
           style={({ pressed }) => [styles.primaryButton, pressed && styles.pressed]}>
           <ShoppingBag color={theme.colors.white} size={18} strokeWidth={2.2} />
-          <Text style={styles.primaryButtonText}>Return to cart</Text>
+          <Text style={styles.primaryButtonText}>{orderId ? 'Retry payment' : 'Return to cart'}</Text>
         </Pressable>
       </View>
     </ScrollView>

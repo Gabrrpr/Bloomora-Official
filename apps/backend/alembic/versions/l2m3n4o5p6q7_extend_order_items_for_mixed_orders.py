@@ -15,7 +15,8 @@ depends_on = None
 
 
 def upgrade():
-    table_exists = True if context.is_offline_mode() else sa.inspect(op.get_bind()).has_table("order_items")
+    inspector = None if context.is_offline_mode() else sa.inspect(op.get_bind())
+    table_exists = True if context.is_offline_mode() else inspector.has_table("order_items")
     if not table_exists:
         op.create_table(
             "order_items",
@@ -47,24 +48,36 @@ def upgrade():
         type_=sa.Numeric(10, 2),
         existing_nullable=False,
     )
-    op.add_column(
-        "order_items",
-        sa.Column("arrangement_id", postgresql.UUID(as_uuid=True), nullable=True),
-    )
-    op.create_foreign_key(
-        "fk_order_items_arrangement_id",
-        "order_items",
-        "arrangements",
-        ["arrangement_id"],
-        ["id"],
-        ondelete="RESTRICT",
-    )
-    op.create_check_constraint(
-        "ck_order_items_exactly_one_item_type",
-        "order_items",
-        "(product_id IS NOT NULL AND arrangement_id IS NULL) OR "
-        "(product_id IS NULL AND arrangement_id IS NOT NULL)",
-    )
+    column_names = set() if inspector is None else {column["name"] for column in inspector.get_columns("order_items")}
+    if inspector is None or "arrangement_id" not in column_names:
+        op.add_column(
+            "order_items",
+            sa.Column("arrangement_id", postgresql.UUID(as_uuid=True), nullable=True),
+        )
+
+    foreign_key_names = set() if inspector is None else {
+        foreign_key["name"] for foreign_key in inspector.get_foreign_keys("order_items")
+    }
+    if inspector is None or "fk_order_items_arrangement_id" not in foreign_key_names:
+        op.create_foreign_key(
+            "fk_order_items_arrangement_id",
+            "order_items",
+            "arrangements",
+            ["arrangement_id"],
+            ["id"],
+            ondelete="RESTRICT",
+        )
+
+    check_names = set() if inspector is None else {
+        check["name"] for check in inspector.get_check_constraints("order_items")
+    }
+    if inspector is None or "ck_order_items_exactly_one_item_type" not in check_names:
+        op.create_check_constraint(
+            "ck_order_items_exactly_one_item_type",
+            "order_items",
+            "(product_id IS NOT NULL AND arrangement_id IS NULL) OR "
+            "(product_id IS NULL AND arrangement_id IS NOT NULL)",
+        )
 
 
 def downgrade():

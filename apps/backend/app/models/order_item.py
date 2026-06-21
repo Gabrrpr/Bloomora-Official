@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import CheckConstraint, Column, ForeignKey, Integer, Numeric
+from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -30,3 +30,16 @@ class OrderItem(Base):
     order = relationship("Order", back_populates="items")
     product = relationship("Product", back_populates="order_items")
     arrangement = relationship("Arrangement", back_populates="order_items")
+
+
+class StockReservation(Base):
+    __tablename__ = "stock_reservations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    order_item_id = Column(UUID(as_uuid=True), ForeignKey("order_items.id", ondelete="CASCADE"), nullable=False, unique=True)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False)
+    quantity = Column(Integer, nullable=False)
+    status = Column(String(20), nullable=False, default="active")
+    reserved_until = Column(DateTime(timezone=True), nullable=False)
+    converted_at = Column(DateTime(timezone=True), nullable=True)
+    released_at = Column(DateTime(timezone=True), nullable=True)

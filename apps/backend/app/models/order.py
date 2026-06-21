@@ -8,11 +8,17 @@ from .base import Base, now_utc
 
 class OrderStatusEnum(str, enum.Enum):
     pending = "pending"
+    pending_payment = "pending_payment"
+    paid = "paid"
     confirmed = "confirmed"
     preparing = "preparing"
+    processing = "processing"
+    ready_for_pickup = "ready_for_pickup"
     out_for_delivery = "out_for_delivery"
     delivered = "delivered"
+    completed = "completed"
     cancelled = "cancelled"
+    payment_failed = "payment_failed"
 
 
 class PaymentMethodEnum(str, enum.Enum):
@@ -27,7 +33,9 @@ class PaymentStatusEnum(str, enum.Enum):
     pending = "pending"
     paid = "paid"
     failed = "failed"
+    expired = "expired"
     refunded = "refunded"
+    credited = "credited"
 
 
 class DeliveryStatusEnum(str, enum.Enum):
@@ -57,6 +65,17 @@ class Order(Base):
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
     branch_name = Column(String(50), nullable=False, default="Manila")
+    checkout_attempt_id = Column(String(64), nullable=True, unique=True, index=True)
+    recipient_first_name = Column(String(120), nullable=True)
+    recipient_last_name = Column(String(120), nullable=True)
+    recipient_phone = Column(String(40), nullable=True)
+    recipient_type = Column(String(20), nullable=True)
+    is_anonymous = Column(Boolean, default=False)
+    fulfillment_method = Column(String(20), nullable=True)
+    delivery_provider = Column(String(50), nullable=True)
+    time_slot = Column(String(50), nullable=True)
+    subtotal_amount = Column(Numeric(10, 2), nullable=True)
+    delivery_fee = Column(Numeric(10, 2), nullable=True)
     # Relationships
     user = relationship("User", back_populates="orders", foreign_keys=[user_id])
     arrangement = relationship("Arrangement", back_populates="orders")
@@ -80,6 +99,8 @@ class Transaction(Base):
     provider_payment_id = Column(String(255), nullable=True)
     checkout_url = Column(Text, nullable=True)
     paid_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    stock_released_at = Column(DateTime(timezone=True), nullable=True)
     raw_webhook_event = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)

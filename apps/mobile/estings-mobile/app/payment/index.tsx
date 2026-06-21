@@ -8,13 +8,12 @@ import {
   Check,
   ChevronRight,
   ChevronUp,
-  Clock3,
   Flower2,
   ShoppingBag,
   Upload,
 } from 'lucide-react-native';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 
@@ -24,15 +23,13 @@ import paymongoLogo from '../../assets/images/payment/paymongo.png';
 import qrphLogo from '../../assets/images/payment/qrph.png';
 import visaLogo from '../../assets/images/payment/visa.png';
 import { AppPageHeader } from '@/components/app-page-header';
-import { formatPhp, type CartItem } from '@/constants/shop';
+import { formatPhp } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { getAuthSession } from '@/services/auth-session';
-import { getCartItems } from '@/services/cart-storage';
+import { getOrderById, type CustomerOrder, type CustomerOrderItem } from '@/services/orders-api';
 import { createPayMongoCheckout } from '@/services/payments-api';
-import { shopApi } from '@/services/shop-api';
 
 type PaymentMethod = 'paymongo' | 'gcash' | 'bank';
-type ScreenState = 'selecting' | 'submitted';
 
 const paymentLogos = {
   gcash: gcashLogo,
@@ -45,53 +42,57 @@ const paymentLogos = {
 export default function PaymentScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
-    deliveryFeeCents?: string;
-    ids?: string;
-    orderIds?: string;
-    totalCents?: string;
+    orderId?: string;
   }>();
-  const selectedIds = useMemo(
-    () => new Set((params.ids ?? '').split(',').map((id) => id.trim()).filter(Boolean)),
-    [params.ids],
-  );
-  const orderIds = useMemo(
-    () => (params.orderIds ?? '').split(',').map((id) => id.trim()).filter(Boolean),
-    [params.orderIds],
-  );
-  const totalCents = Number(params.totalCents ?? 0);
-  const deliveryFeeCents = Number(params.deliveryFeeCents ?? 0);
-  const [items, setItems] = useState<CartItem[]>([]);
+  const orderId = params.orderId?.trim() ?? '';
+  const [order, setOrder] = useState<CustomerOrder | null>(null);
+  const [isLoadingOrder, setIsLoadingOrder] = useState(true);
+  const [orderError, setOrderError] = useState<string | null>(null);
   const [method, setMethod] = useState<PaymentMethod | null>('paymongo');
   const [voucher, setVoucher] = useState('');
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [screenState, setScreenState] = useState<ScreenState>('selecting');
-  const [remainingSeconds, setRemainingSeconds] = useState(30 * 60);
+  const [remainingSeconds, setRemainingSeconds] = useState(0);
 
   useEffect(() => {
     let active = true;
-    Promise.all([getCartItems(), shopApi.getCatalog().catch(() => null)]).then(([cartItems, catalog]) => {
-      if (!active) return;
-      const liveProducts = new Map(catalog?.products.map((product) => [product.id, product]) ?? []);
-      const hydrated = cartItems.map((item) => ({
-        ...item,
-        product: liveProducts.get(item.product.id) ?? item.product,
-      }));
-      setItems(selectedIds.size ? hydrated.filter((item) => selectedIds.has(item.product.id)) : hydrated);
-    });
+    setIsLoadingOrder(true);
+    setOrderError(null);
+    void (async () => {
+      const session = await getAuthSession();
+      if (!session) throw new Error('Your login session has expired. Sign in and try again.');
+      if (!orderId) throw new Error('The order ID is missing. Return to checkout and try again.');
+      return getOrderById({ orderId, session });
+    })()
+      .then((nextOrder) => {
+        if (active) setOrder(nextOrder);
+      })
+      .catch((error) => {
+        if (active) setOrderError(error instanceof Error ? error.message : 'Unable to load this order.');
+      })
+      .finally(() => {
+        if (active) setIsLoadingOrder(false);
+      });
     return () => {
       active = false;
     };
-  }, [selectedIds]);
+  }, [orderId]);
 
   useEffect(() => {
-    if (screenState !== 'selecting') return;
-    const timer = setInterval(() => setRemainingSeconds((current) => Math.max(0, current - 1)), 1000);
+    const updateRemaining = () => {
+      const expiresAt = order?.expiresAt ? new Date(order.expiresAt).getTime() : 0;
+      setRemainingSeconds(expiresAt ? Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000)) : 0);
+    };
+    updateRemaining();
+    const timer = setInterval(updateRemaining, 1000);
     return () => clearInterval(timer);
-  }, [screenState]);
+  }, [order?.expiresAt]);
 
-  const subtotalCents = Math.max(0, totalCents - deliveryFeeCents);
+  const items = order?.items ?? [];
+  const totalCents = Math.round((order?.totalAmount ?? 0) * 100);
+  const deliveryFeeCents = Math.round((order?.deliveryFee ?? 0) * 100);
+  const subtotalCents = Math.round((order?.subtotalAmount ?? 0) * 100);
   const itemQuantity = items.reduce((total, item) => total + item.quantity, 0);
   const timerLabel = `${String(Math.floor(remainingSeconds / 60)).padStart(2, '0')}:${String(remainingSeconds % 60).padStart(2, '0')}`;
 
@@ -112,33 +113,43 @@ export default function PaymentScreen() {
   const handleContinue = async () => {
     if (!method || isProcessing) return;
     if (method !== 'paymongo') {
-      if (!receiptUri) {
-        Alert.alert('Screenshot required', 'Upload your successful payment screenshot before continuing.');
-        return;
-      }
-      setScreenState('submitted');
+      Alert.alert(
+        'Manual payment unavailable',
+        'Receipt submission is not connected to the backend yet. Use PayMongo so your payment can be verified securely.',
+      );
       return;
     }
     const session = await getAuthSession();
-    if (!session || !orderIds.length) {
-      Alert.alert('Payment unavailable', 'Your order session is unavailable. Return to checkout and try again.');
+    if (!session) {
+      Alert.alert('Payment unavailable', 'Your login session has expired. Sign in and try again.');
+      return;
+    }
+    if (!order || !orderId) {
+      Alert.alert('Payment unavailable', 'Your order is unavailable. Return to checkout and try again.');
+      return;
+    }
+    if (remainingSeconds <= 0 || order.paymentStatus === 'expired') {
+      Alert.alert('Payment expired', 'This order is no longer available for payment. Return to your cart and check out again.');
       return;
     }
     setIsProcessing(true);
     try {
-      const purchasedIds = Array.from(selectedIds).join(',');
-      const successHref = `/payment/success?orderIds=${encodeURIComponent(orderIds.join(','))}&ids=${encodeURIComponent(purchasedIds)}` as Href;
       const webOrigin = Platform.OS === 'web' ? globalThis.location.origin : null;
-      const nativeSuccessUrl = `${Linking.createURL('/payment/success')}?orderIds=${encodeURIComponent(orderIds.join(','))}&ids=${encodeURIComponent(purchasedIds)}`;
-      const nativeCancelUrl = Linking.createURL('/payment/cancel');
+      const nativeSuccessUrl = `${Linking.createURL('/payment/success')}?orderIds=${encodeURIComponent(orderId)}`;
+      const nativeCancelUrl = `${Linking.createURL('/payment/cancel')}?orderId=${encodeURIComponent(orderId)}`;
+      const successUrl = webOrigin
+        ? `${webOrigin}/payment/success?orderIds=${encodeURIComponent(orderId)}`
+        : nativeSuccessUrl;
+      const cancelUrl = webOrigin
+        ? `${webOrigin}/payment/cancel?orderId=${encodeURIComponent(orderId)}`
+        : nativeCancelUrl;
       const checkout = await createPayMongoCheckout({
-        cancelUrl: webOrigin ? `${webOrigin}/payment/cancel` : nativeCancelUrl,
-        orderIds,
+        cancelUrl,
+        orderIds: [orderId],
         session,
-        successUrl: webOrigin
-          ? `${webOrigin}${successHref}`
-          : nativeSuccessUrl,
+        successUrl,
       });
+      const successHref = `/payment/success?orderIds=${encodeURIComponent(checkout.order_ids.join(','))}` as Href;
       if (Platform.OS === 'web') {
         globalThis.location.href = checkout.checkout_url;
         return;
@@ -147,7 +158,9 @@ export default function PaymentScreen() {
       if (result.type === 'success') {
         if (result.url.includes('/payment/expired')) router.replace('/payment/expired');
         else if (result.url.includes('/payment/failed')) router.replace('/payment/failed');
-        else if (result.url.includes('/payment/cancel')) router.replace('/payment/cancel');
+        else if (result.url.includes('/payment/cancel')) {
+          router.replace(`/payment/cancel?orderId=${encodeURIComponent(orderId)}` as Href);
+        }
         else router.replace(successHref);
       }
     } catch (error) {
@@ -157,22 +170,27 @@ export default function PaymentScreen() {
     }
   };
 
-  if (screenState === 'submitted') {
+  if (isLoadingOrder) {
     return (
       <View style={styles.screen}>
         <AppPageHeader title="Payment" />
-        <ScrollView contentContainerStyle={[styles.submittedContent, { paddingBottom: insets.bottom + 32 }]}>
-          <AmountCard label="Amount to Pay" status="Payment Under Review" totalCents={totalCents} />
-          <View style={styles.resultCard}>
-            <View style={styles.resultIcon}>
-              <Clock3 color={theme.colors.primary} size={38} />
-            </View>
-            <Text style={styles.resultMutedTitle}>Payment Submitted</Text>
-            <Text style={styles.resultBody}>Your payment proof has been received and is waiting for verification.</Text>
-            <PrimaryButton label="Track my order" onPress={() => router.replace('/(tabs)/orders')} />
-            <SecondaryButton label="Close" onPress={() => router.replace('/(tabs)/cart')} />
-          </View>
-        </ScrollView>
+        <View style={styles.loadingState}>
+          <ActivityIndicator color={theme.colors.primary} size="large" />
+          <Text style={styles.resultBody}>Loading the server-confirmed order total…</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (!order || orderError) {
+    return (
+      <View style={styles.screen}>
+        <AppPageHeader title="Payment" />
+        <View style={styles.loadingState}>
+          <Text style={styles.resultMutedTitle}>Payment unavailable</Text>
+          <Text style={styles.resultBody}>{orderError ?? 'Unable to load this order.'}</Text>
+          <SecondaryButton label="Return to checkout" onPress={() => router.back()} />
+        </View>
       </View>
     );
   }
@@ -204,7 +222,11 @@ export default function PaymentScreen() {
           ) : null}
         </View>
 
-        <AmountCard label="Amount to Pay" status={`Complete payment within ${timerLabel}`} totalCents={totalCents} />
+        <AmountCard
+          label="Amount to Pay"
+          status={remainingSeconds > 0 ? `Complete payment within ${timerLabel}` : 'Payment window expired'}
+          totalCents={totalCents}
+        />
 
         <View style={styles.voucherSection}>
           <Text style={styles.fieldTitle}>Voucher Code</Text>
@@ -247,29 +269,40 @@ export default function PaymentScreen() {
             <ManualPaymentDetails
               method="gcash"
               onUpload={handleUpload}
-              orderIds={orderIds}
+              orderIds={[orderId]}
               receiptUri={receiptUri}
               totalCents={totalCents}
             />
           </PaymentOption>
-          <PaymentOption active={method === 'bank'} label="Bank Transfer" onPress={() => setMethod(method === 'bank' ? null : 'bank')} right={<Banknote color="#AAAAAA" size={23} />}>
+          <PaymentOption
+            active={method === 'bank'}
+            label="Bank Transfer"
+            onPress={() => setMethod(method === 'bank' ? null : 'bank')}
+            right={<Banknote color={method === 'bank' ? theme.colors.primary : '#777777'} size={23} />}>
             <ManualPaymentDetails
               method="bank"
               onUpload={handleUpload}
-              orderIds={orderIds}
+              orderIds={[orderId]}
               receiptUri={receiptUri}
               totalCents={totalCents}
             />
           </PaymentOption>
           <PrimaryButton
-            disabled={!method || (method !== 'paymongo' && !receiptUri)}
-            label={isProcessing ? 'Opening PayMongo…' : method === 'paymongo' ? 'Pay with PayMongo' : 'Continue'}
+            disabled={remainingSeconds <= 0 || !method || (method !== 'paymongo' && !receiptUri)}
+            label={isProcessing ? 'Opening PayMongo…' : getPaymentButtonLabel(method)}
             onPress={handleContinue}
           />
         </View>
       </ScrollView>
     </View>
   );
+}
+
+function getPaymentButtonLabel(method: PaymentMethod | null) {
+  if (method === 'paymongo') return 'Pay with PayMongo';
+  if (method === 'gcash') return 'Pay with E-Wallet';
+  if (method === 'bank') return 'Pay via Bank Transfer';
+  return 'Select a payment method';
 }
 
 function AmountCard({ label, status, totalCents }: { label: string; status: string; totalCents: number }) {
@@ -367,20 +400,19 @@ function ManualPaymentDetails({
   );
 }
 
-function PaymentProduct({ item }: { item: CartItem }) {
+function PaymentProduct({ item }: { item: CustomerOrderItem }) {
   return (
     <View style={styles.productRow}>
-      {item.product.imageUrl ? (
-        <Image contentFit="cover" source={{ uri: item.product.imageUrl }} style={styles.productImage} />
+      {item.imageUrl ? (
+        <Image contentFit="cover" source={{ uri: item.imageUrl }} style={styles.productImage} />
       ) : (
         <View style={styles.productFallback}><Flower2 color={theme.colors.primary} size={24} /></View>
       )}
       <View style={styles.productCopy}>
-        <Text style={styles.productName}>{item.product.name}</Text>
-        <Text style={styles.productMeta}>{item.product.categoryName ?? item.product.tag}</Text>
+        <Text style={styles.productName}>{item.productName}</Text>
         <Text style={styles.productMeta}>Qty: {item.quantity}</Text>
       </View>
-      <Text style={styles.productPrice}>{formatPhp(item.product.priceCents * item.quantity)}</Text>
+      <Text style={styles.productPrice}>{formatPhp(Math.round(item.totalAmount * 100))}</Text>
     </View>
   );
 }
@@ -412,6 +444,7 @@ function SecondaryButton({ label, onPress }: { label: string; onPress: () => voi
 
 const styles = StyleSheet.create({
   screen: { backgroundColor: '#F5F5F5', flex: 1 },
+  loadingState: { alignItems: 'center', flex: 1, gap: 14, justifyContent: 'center', padding: 28 },
   content: { gap: 16, padding: 16 },
   submittedContent: { gap: 18, padding: 16 },
   summaryCard: { backgroundColor: '#FFFFFF', borderColor: '#C5C5C5', borderRadius: theme.radius.md, borderWidth: 1, overflow: 'hidden' },

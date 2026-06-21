@@ -3,6 +3,13 @@ import type { AuthSession } from '@/services/auth-session';
 import type { CartItem } from '@/constants/shop';
 
 type CreateOrdersResponse = {
+  order?: {
+    delivery_fee: number;
+    expires_at?: string | null;
+    id: string;
+    subtotal_amount: number;
+    total_amount: number;
+  };
   order_ids: string[];
   status: string;
 };
@@ -21,6 +28,9 @@ export type PayMongoPaymentStatusResponse = {
   checkout_url?: string | null;
   order?: {
     id: string;
+    items?: {
+      product_id?: string | null;
+    }[];
     order_number?: string;
     order_status?: string;
     payment_status?: string;
@@ -32,6 +42,7 @@ export type PayMongoPaymentStatusResponse = {
 };
 
 export async function createOrdersFromCart({
+  attemptId,
   deliveryAddress,
   deliveryDate,
   deliveryNotes = '',
@@ -44,6 +55,7 @@ export async function createOrdersFromCart({
   session,
   timeSlot = 'anytime',
 }: {
+  attemptId: string;
   deliveryAddress?: string;
   deliveryDate?: string;
   deliveryNotes?: string;
@@ -62,6 +74,7 @@ export async function createOrdersFromCart({
 }) {
   return apiFetch<CreateOrdersResponse>('/orders/', {
     body: JSON.stringify({
+      attemptId,
       delivery_address: deliveryAddress ?? session.user.address ?? '',
       delivery_date: deliveryDate,
       delivery_notes: deliveryNotes,
