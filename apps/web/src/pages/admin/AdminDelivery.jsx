@@ -3,10 +3,8 @@ import { useTheme } from "../../context/ThemeContext"
 import { DG, G, GreenCard, WhiteCard } from "./_adminShared"
 import estingsWordmark from "../../assets/Estings.svg"
 
-// Example rider names cycled through the search box as an animated, typewriter-style hint.
 const SEARCH_SAMPLES = ["Juan Dela Cruz", "Mark Reyes", "Angelo Cruz", "Paolo Ramos"]
 
-// Animated flower shown while the page is loading.
 function FlowerLoader({ message = "Loading...", isDark = false }) {
   const petals = [
     { angle: 0,   color: "#f48fb1" },
@@ -135,30 +133,29 @@ export default function AdminDelivery() {
   const [areaFilter, setAreaFilter]     = useState("")
   const [statusFilter, setStatusFilter] = useState("")
   const [ordersSort, setOrdersSort]     = useState("")
-  // Brief loading state so the page eases in like the other admin pages (no backend yet).
   const [loading, setLoading]           = useState(true)
   const [entered, setEntered]           = useState(false)
-  // Animated placeholder text for the search box (typewriter hint).
   const [phText, setPhText]             = useState("")
 
-  // Delivery rider data — currently empty; wire up to the backend when ready.
+  // 🚀 Integrated Delivery Settings State
+  const [deliveryFee, setDeliveryFee]       = useState("150")
+  const [minOrder, setMinOrder]             = useState("500")
+  const [sameDayCutoff, setSameDayCutoff]   = useState("09:00")
+  const [delivSaved, setDelivSaved]         = useState(false)
+
   const riders = []
 
-  // Simulate the initial load, then reveal the content.
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 600)
     return () => clearTimeout(t)
   }, [])
 
-  // Play the entrance animation once loaded, then turn it off so it never replays.
   useEffect(() => {
     if (loading) { setEntered(false); return }
     const t = setTimeout(() => setEntered(true), 1300)
     return () => clearTimeout(t)
   }, [loading])
 
-  // Typewriter hint in the search box: types a sample rider name, pauses, deletes,
-  // then the next one — looping forever while the box is empty. Stops once the user types.
   useEffect(() => {
     if (search) { setPhText(""); return }
     let sample = 0, ch = 0, deleting = false, timer
@@ -182,24 +179,26 @@ export default function AdminDelivery() {
   const cardBg     = isDark ? "#1a2332" : "white"
   const cardBdr    = isDark ? "#1e293b" : "#e8edf2"
 
+  const saveConfig = () => {
+    setDelivSaved(true);
+    setTimeout(() => setDelivSaved(false), 2000);
+  }
+
   const handlePrint = () => window.print()
   const printDate   = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
   const printTime   = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })
 
-  // Headline numbers (all zero until the backend is connected).
   const deliveriesToday  = 0
   const outForDelivery   = 0
   const availableRiders  = 0
   const failedDeliveries = 0
 
-  // One-line summary of the filters in effect, printed under the title.
   const printScope = [
     areaFilter ? `Area: ${areaFilter.replace(/_/g, " ")}` : "All Areas",
     statusFilter ? `Status: ${statusFilter.replace(/_/g, " ")}` : "All Statuses",
     `${riders.length} rider${riders.length === 1 ? "" : "s"}`,
   ].join("   ·   ")
 
-  // First load: show the flower loader instead of an empty page.
   if (loading) {
     return (
       <div className="space-y-5">
@@ -212,13 +211,9 @@ export default function AdminDelivery() {
   return (
     <div className="space-y-5">
 
-      {/* Print styles. The screen UI is hidden on paper (.no-print) and the
-          .print-only blocks render only when printing. Sections in order:
-          1 letterhead  2 title + scope  3 summary cards  4 rider table  5 footer/signatures */}
       <style>{`
         .print-only { display: none; }
 
-        /* Gentle fade + rise so content eases in once loaded instead of flashing. */
         @keyframes delivRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
         .deliv-rise { animation: delivRise 0.85s ease-out both; }
 
@@ -234,7 +229,6 @@ export default function AdminDelivery() {
           .print-only { display: block !important; }
           .print-letterhead, .print-doc-title, .print-summary { break-inside: avoid; page-break-inside: avoid; }
 
-          /* 1. Letterhead: brand band */
           .print-letterhead {
             display: flex !important; align-items: center; justify-content: space-between; gap: 16px;
             padding: 13px 18px; border-radius: 12px;
@@ -248,13 +242,11 @@ export default function AdminDelivery() {
           .print-meta .gen { margin: 6px 0 0; font-size: 9px; color: rgba(255,255,255,0.85) !important; }
           .print-meta .gen strong { color: #ffffff !important; font-weight: 700; }
 
-          /* 2. Document title + report scope */
           .print-doc-title { display: flex !important; flex-direction: column; align-items: center; margin: 16px 0 2px; }
           .print-doc-title .t { margin: 0; font-size: 15px; font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: #0C573E !important; }
           .print-doc-title .rule { width: 54px; height: 3px; border-radius: 9999px; margin: 7px 0 6px; background: linear-gradient(90deg,#0C573E,#2E8B34) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-doc-title .scope { margin: 0; font-size: 9px; color: #6b7280 !important; letter-spacing: 0.02em; text-align: center; }
 
-          /* 3. Summary cards */
           .print-summary { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 0; }
           .print-summary-card { border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px; background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-summary-card.c-done { border-top-color: #2E8B34 !important; }
@@ -268,7 +260,6 @@ export default function AdminDelivery() {
           .print-summary-card .value.red   { color: #dc2626 !important; }
           .print-summary-card .cap { margin: 3px 0 0; font-size: 8px; color: #9ca3af !important; }
 
-          /* 4. Rider detail table */
           .print-detail { display: block !important; margin-top: 14px; }
           .print-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; padding: 0 2px; }
           .print-section-title { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #0C573E !important; }
@@ -292,7 +283,6 @@ export default function AdminDelivery() {
           .print-detail tr.alt td { background: #f7faf8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-detail tbody tr:last-child td { border-bottom: none; }
 
-          /* 5. Footer + signatures */
           .print-footer {
             display: flex !important; align-items: flex-end; justify-content: space-between; gap: 24px;
             margin-top: 20px; padding-top: 11px; border-top: 2px solid #e5e7eb;
@@ -324,6 +314,79 @@ export default function AdminDelivery() {
         <WhiteCard label="Failed deliveries" sublabel="Review Cases" value={failedDeliveries} sub="↑ +0 vs last week" subRed accentColor="#ef4444">
           <button className="text-xs font-semibold mt-1 text-red-400 hover:underline block">Review Cases</button>
         </WhiteCard>
+      </div>
+
+      {/* 🚀 Delivery Settings Configuration (Moved from AdminSettings) */}
+      <div className={`no-print rounded-xl overflow-hidden ${entered ? "" : "deliv-rise"}`}
+        style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)", animationDelay: "0.27s" }}>
+        <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
+              style={{ background: isDark ? "rgba(34,197,94,0.1)" : "linear-gradient(135deg,#f0fdf4,#dcfce7)" }}>
+              <svg className="w-4 h-4" style={{ color: isDark ? "#4ade80" : DG }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-bold" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>Delivery Configuration</p>
+              <p className="text-xs mt-0.5" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Manage fees, minimums, and cutoffs</p>
+            </div>
+          </div>
+          
+          <button onClick={saveConfig}
+            className="flex items-center gap-1.5 px-4 py-2 text-sm font-semibold text-white rounded-md transition-all hover:opacity-90 active:scale-95"
+            style={{ background: delivSaved ? "#16a34a" : `linear-gradient(135deg, ${DG}, ${G})` }}>
+            {delivSaved
+              ? <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>Saved!</>
+              : <><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" /></svg>Save Changes</>
+            }
+          </button>
+        </div>
+        
+        <div className="p-5 grid grid-cols-1 md:grid-cols-4 gap-5">
+          <div>
+            <label className="block text-sm font-semibold mb-1.5" style={{ color: isDark ? "#e2e8f0" : "#374151" }}>Delivery Fee (₱)</label>
+            <input type="number" value={deliveryFee} onChange={e => setDeliveryFee(e.target.value)} placeholder="150"
+              className="w-full px-3 py-2 text-sm border rounded-md outline-none transition-all"
+              style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}
+              onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
+              onBlur={e => { e.target.style.borderColor = inputBdr; e.target.style.boxShadow = "none" }} />
+            <p className="text-[11px] mt-1.5" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>Standard delivery fee</p>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold mb-1.5" style={{ color: isDark ? "#e2e8f0" : "#374151" }}>Minimum Order (₱)</label>
+            <input type="number" value={minOrder} onChange={e => setMinOrder(e.target.value)} placeholder="500"
+              className="w-full px-3 py-2 text-sm border rounded-md outline-none transition-all"
+              style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}
+              onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
+              onBlur={e => { e.target.style.borderColor = inputBdr; e.target.style.boxShadow = "none" }} />
+            <p className="text-[11px] mt-1.5" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>Minimum order for delivery</p>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold mb-1.5" style={{ color: isDark ? "#e2e8f0" : "#374151" }}>Same-Day Cutoff</label>
+            <input type="time" value={sameDayCutoff} onChange={e => setSameDayCutoff(e.target.value)}
+              className="w-full px-3 py-2 text-sm border rounded-md outline-none transition-all"
+              style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}
+              onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.12)` }}
+              onBlur={e => { e.target.style.borderColor = inputBdr; e.target.style.boxShadow = "none" }} />
+            <p className="text-[11px] mt-1.5" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>Orders placed before this time qualify</p>
+          </div>
+          <div>
+            <label className="block text-sm font-semibold mb-1.5" style={{ color: isDark ? "#e2e8f0" : "#374151" }}>Coverage Areas</label>
+            <div className="flex flex-wrap gap-2 pt-0.5">
+              {["Pampanga"].map(a => (
+                <span key={a} className="px-2.5 py-1.5 text-xs font-semibold rounded-md"
+                  style={{ 
+                    backgroundColor: isDark ? "rgba(34,197,94,0.1)" : "#f0fdf4", 
+                    color: isDark ? "#4ade80" : DG, 
+                    border: `1px solid ${isDark ? "rgba(34,197,94,0.25)" : "#bbf7d0"}` 
+                  }}>
+                  {a}
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Printable area */}
@@ -428,7 +491,7 @@ export default function AdminDelivery() {
                   ))}
                 </tr>
               </thead>
-              <tbody>
+              <tbody style={{ borderTop: `1px solid ${toolbarBdr}` }}>
                 <tr>
                   <td colSpan={7}>
                     <div className="flex flex-col items-center justify-center py-14">

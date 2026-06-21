@@ -577,122 +577,135 @@ def update_product(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    if name is not None:
-        product.name = name
-    if group is not None:
-        product.product_group = group.lower().strip()
-    if description is not None:
-        product.description = description
-    if price is not None:
-        try:
-            product.price = Decimal(price)
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid price value.")
-    if category is not None:
-        product.category = category.lower().strip()
-    if product_type is not None:
-        product.product_type = product_type.lower().strip() if product_type.strip() else None
-    if status is not None:
-        try:
-            product.status = ProductStatusEnum(status.lower())
-        except ValueError:
-            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
-    if is_available is not None:
-        product.is_available = is_available
-    if is_visible is not None:
-        product.is_visible = is_visible
-    if image_url is not None:
-        product.image_url = image_url or None
-    if season_key is not None:
-        product.season_key = season_key or None
-    if limited_start_at is not None:
-        product.limited_start_at = limited_start_at or None
-    if limited_end_at is not None:
-        product.limited_end_at = limited_end_at or None
-    if composition is not None:
-        try:
-            parsed_comp = json.loads(composition)
-            product.composition = parsed_comp
+    try:
+        # 🚀 THE RIBBON/WRAPPER LOGIC: If it's not a flower, ignore exact stock counts!
+        current_group = group.lower().strip() if group else product.product_group
+        is_floral = (current_group == "floral")
+        
+        if not is_floral:
+            # Force high stock for wrappers/ribbons so they never naturally "run out".
+            # The system will now rely entirely on the manual 'is_available' boolean.
+            stock = 999
+            stock_manila = 999
+            stock_pampanga = 999
+            reorder_point = 0
 
-            db.query(ProductRecipe).filter(ProductRecipe.parent_product_id == product.id).delete()
-
-            for item in parsed_comp:
-                comp_id = item.get("id")
-                qty = item.get("qty") or item.get("quantity") or 1
-
-                if comp_id:
-                    new_recipe_link = ProductRecipe(
-                        parent_product_id=product.id,
-                        component_product_id=comp_id,
-                        quantity_required=qty,
-                    )
-                    db.add(new_recipe_link)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid composition JSON format.")
-    
-    if occasions is not None:
-        try:
-            product.occasions = json.loads(occasions)
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid occasions JSON format.")
+        # --- Standard Updates ---
+        if name is not None:
+            product.name = name
+        if group is not None:
+            product.product_group = group.lower().strip()
+        if description is not None:
+            product.description = description
+        if price is not None:
+            try:
+                product.price = Decimal(price)
+            except Exception:
+                raise HTTPException(status_code=400, detail="Invalid price value.")
+        if category is not None:
+            product.category = category.lower().strip()
+        if product_type is not None:
+            product.product_type = product_type.lower().strip() if product_type.strip() else None
+        
+        if status is not None:
+            try:
+                product.status = ProductStatusEnum(status.lower())
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+                
+        if is_available is not None:
+            product.is_available = is_available
+        if is_visible is not None:
+            product.is_visible = is_visible
+        if image_url is not None:
+            product.image_url = image_url or None
+        if season_key is not None:
+            product.season_key = season_key or None
+        if limited_start_at is not None:
+            product.limited_start_at = limited_start_at or None
+        if limited_end_at is not None:
+            product.limited_end_at = limited_end_at or None
             
-    if branches is not None:
-        try:
-            parsed_branches = json.loads(branches)
-            product.branches = parsed_branches
-        except json.JSONDecodeError:
-            raise HTTPException(status_code=400, detail="Invalid branches JSON format.")
+        if composition is not None:
+            try:
+                parsed_comp = json.loads(composition)
+                product.composition = parsed_comp
+                db.query(ProductRecipe).filter(ProductRecipe.parent_product_id == product.id).delete()
+                for item in parsed_comp:
+                    comp_id = item.get("id")
+                    qty = item.get("qty") or item.get("quantity") or 1
+                    if comp_id:
+                        new_recipe_link = ProductRecipe(
+                            parent_product_id=product.id,
+                            component_product_id=comp_id,
+                            quantity_required=qty,
+                        )
+                        db.add(new_recipe_link)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid composition JSON format.")
+        
+        if occasions is not None:
+            try:
+                product.occasions = json.loads(occasions)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid occasions JSON format.")
+                
+        if branches is not None:
+            try:
+                product.branches = json.loads(branches)
+            except json.JSONDecodeError:
+                raise HTTPException(status_code=400, detail="Invalid branches JSON format.")
 
-    if tags is not None:
-        try:
-            product.tags = json.loads(tags)
-        except json.JSONDecodeError:
-            if tags:
-                product.tags = [t.strip() for t in tags.split(",") if t.strip()]
-            else:
-                product.tags = []
+        if tags is not None:
+            try:
+                product.tags = json.loads(tags)
+            except json.JSONDecodeError:
+                product.tags = [t.strip() for t in tags.split(",") if t.strip()] if tags else []
 
-    db.commit()
-    db.refresh(product)
-    
-    log_activity(
-        db=db,
-        action=f"Update Record: Staff/Admin updated details for product '{product.name}'",
-        user_id=str(current_user.id), 
-        role=current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
-        ip_address=request.client.host
-    )
+        cost_val = cost_per_unit
+        if base_price is not None:
+            try:
+                cost_val = float(base_price)
+            except Exception:
+                pass
 
-    cost_val = cost_per_unit
-    if base_price is not None:
-        try:
-            cost_val = float(base_price)
-        except Exception:
-            pass
+        # Update Inventory
+        if any(v is not None for v in [stock, stock_manila, stock_pampanga, unit_type, reorder_point, cost_val]):
+            inv = db.query(Inventory).filter(Inventory.product_id == product.id).first()
+            if not inv:
+                inv = Inventory(product_id=product.id, current_stock=stock or 0, reorder_point=reorder_point or 10)
+                db.add(inv)
 
-    if any(v is not None for v in [stock, stock_manila, stock_pampanga, unit_type, reorder_point, cost_val]):
-        inv = db.query(Inventory).filter(Inventory.product_id == product.id).first()
-        if not inv:
-            inv = Inventory(
-                product_id=product.id,
-                current_stock=stock or 0,
-                reorder_point=reorder_point or 10,
-            )
-            db.add(inv)
+            if stock is not None: inv.current_stock = stock
+            if stock_manila is not None: inv.stock_manila = stock_manila   
+            if stock_pampanga is not None: inv.stock_pampanga = stock_pampanga 
+            if unit_type is not None: inv.unit_type = unit_type
+            if cost_val is not None: inv.cost_per_unit = cost_val
 
-        if stock is not None:
-            inv.current_stock = stock
-        if stock_manila is not None:      
-            inv.stock_manila = stock_manila   
-        if stock_pampanga is not None:        
-            inv.stock_pampanga = stock_pampanga 
-        if unit_type is not None:
-            inv.unit_type = unit_type
-
+        # 🚀 COMMIT ALL CHANGES
         db.commit()
+        db.refresh(product)
+        
+        # Log Activity (only done if the commit succeeds!)
+        log_activity(
+            db=db,
+            action=f"Update Record: Staff/Admin updated details for product '{product.name}'",
+            user_id=str(current_user.id), 
+            role=current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
+            ip_address=request.client.host if request.client else "Unknown"
+        )
 
-    return {"status": "success", "product": serialize_product(product)}
+        return {"status": "success", "product": serialize_product(product)}
 
+    # 🚀 BULLETPROOF ERROR CATCHER
+    except Exception as e:
+        db.rollback() # Undo the broken save
+        error_msg = str(e)
+        print("CRITICAL DATABASE ERROR DURING SAVE:", error_msg)
+        
+        # Send the exact column missing back to your React console
+        raise HTTPException(status_code=500, detail=f"Database Crash: {error_msg}")
+    
 @router.get("/admin/settings/homepage")
 def get_homepage_layout(db: Session = Depends(get_db)):
     query = text("SELECT setting_value FROM store_settings WHERE setting_key = 'homepage_layout'")
@@ -747,7 +760,7 @@ def apply_promotion(
     product.price = base_price * discount_multiplier
 
     alert = Notification(
-        title="🎉 Flash Sale Alert!",
+        title="Flash Sale Alert!",
         message=f"{product.name} is now {discount_percent}% OFF! Shop now.",
         type="promotion",
         is_global=True,

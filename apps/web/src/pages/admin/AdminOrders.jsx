@@ -7,12 +7,10 @@ import estingsWordmark from "../../assets/Estings.svg"
 
 const ORDER_STATUSES = ["All", "Pending", "Preparing", "Out for Delivery", "Delivered", "Cancelled"]
 
-// Example values cycled through the search box as an animated, typewriter-style hint.
 const SEARCH_SAMPLES = ["John Dela Cruz", "ORD-5FA237AC", "Maria Santos", "ORD-9C4E1B07"]
 const BRANCHES       = ["All Branches", "Manila", "Pampanga"]
 const DATE_RANGES    = ["All Time", "Today", "This Week", "This Month", "Last 30 Days"]
 
-// Fixed order + colors for the printed status sections and distribution bar
 const PRINT_STATUS_META = [
   { key: "Pending",          label: "Pending",          cls: "s-pending"   },
   { key: "Confirmed",        label: "Confirmed",        cls: "s-confirmed" },
@@ -22,7 +20,6 @@ const PRINT_STATUS_META = [
   { key: "Cancelled",        label: "Cancelled",        cls: "s-cancelled" },
 ]
 
-// ── Flower petal loader (same bloom animation as the login/register screen) ──
 function FlowerLoader({ message = "Loading...", isDark = false }) {
   const petals = [
     { angle: 0,   color: "#f48fb1" },
@@ -130,10 +127,24 @@ export default function AdminOrders() {
   const [error, setError]           = useState(null)
   const [viewingOrder, setViewingOrder] = useState(null)
   const [page, setPage] = useState(1);
-  // One-time entrance animation; dropped once it plays so it never replays.
   const [entered, setEntered] = useState(false)
-  // Animated placeholder text for the search box (typewriter hint).
   const [phText, setPhText] = useState("")
+
+  // 🚀 WALK-IN POS STATE
+  const [posOpen, setPosOpen] = useState(false)
+  const [posProducts, setPosProducts] = useState([])
+  const [posCart, setPosCart] = useState([])
+  const [posBranch, setPosBranch] = useState("Manila")
+  const [posPayMethod, setPosPayMethod] = useState("cash")
+  const [posRef, setPosRef] = useState("")
+  const [posLoading, setPosLoading] = useState(false)
+  const [posSearch, setPosSearch] = useState("")
+  
+  // 🚀 NEW: POS Category State
+  const [posCategory, setPosCategory] = useState("All")
+  // 🚀 NEW: Inline feedback state (replaces blocking alert() calls)
+  const [posToast, setPosToast] = useState(null)
+  const [posSuccess, setPosSuccess] = useState(false)
 
   const fetchOrders = useCallback(async () => {
     setLoading(true); setError(null)
@@ -146,15 +157,27 @@ export default function AdminOrders() {
 
   useEffect(() => { fetchOrders() }, [fetchOrders])
 
-  // Play the entrance animation once the data has loaded, then turn it off.
+  useEffect(() => {
+    if (posOpen && posProducts.length === 0) {
+      const loadCatalog = async () => {
+        try {
+          const res = await (api.getProducts ? api.getProducts() : api.get("/products/"));
+          let list = Array.isArray(res) ? res : (res.data || []);
+          setPosProducts(list.filter(p => p.is_available !== false));
+        } catch (e) {
+          console.warn("Failed to load POS catalog:", e);
+        }
+      }
+      loadCatalog();
+    }
+  }, [posOpen])
+
   useEffect(() => {
     if (loading) { setEntered(false); return }
     const t = setTimeout(() => setEntered(true), 1300)
     return () => clearTimeout(t)
   }, [loading])
 
-  // Typewriter hint in the search box: types a sample, pauses, deletes, then the
-  // next one — looping forever while the box is empty. Stops once the user types.
   useEffect(() => {
     if (search) { setPhText(""); return }
     let sample = 0, ch = 0, deleting = false, timer
@@ -189,7 +212,6 @@ export default function AdminOrders() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const pageSafe = Math.min(page, totalPages);
-  // 3. THIRD: Slice the final array for the current page
   const paginatedOrders = filtered.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
 
   const subTxt   = isDark ? "#94a3b8" : "#64748b"
@@ -219,12 +241,99 @@ export default function AdminOrders() {
     modalFtrBdr: isDark ? "#1e293b" : "#f1f5f9",
   }
 
+  // 🚀 POS Category & Filter Logic
+  // Extract unique categories dynamically based on the products loaded
+  const posCategories = ["All", ...new Set(posProducts.map(p => {
+    if (!p) return "Other";
+    if (typeof p.category === 'string') return p.category;
+    if (typeof p.category_name === 'string') return p.category_name;
+    if (p.category && p.category.name) return p.category.name;
+    return "Other";
+  }))].filter(Boolean);
+
+  // Filter products by both search query AND category
+  const filteredPosProducts = posProducts.filter(p => {
+    const matchSearch = !posSearch || p.name?.toLowerCase().includes(posSearch.toLowerCase());
+    
+    let pCat = "Other";
+    if (typeof p.category === 'string') pCat = p.category;
+    else if (typeof p.category_name === 'string') pCat = p.category_name;
+    else if (p.category && p.category.name) pCat = p.category.name;
+
+    const matchCategory = posCategory === "All" || pCat === posCategory;
+    
+    return matchSearch && matchCategory;
+  });
+
+  const handleAddToCart = (prod) => {
+    setPosCart(prev => {
+      const existing = prev.find(i => i.id === prod.id);
+      if (existing) return prev.map(i => i.id === prod.id ? { ...i, qty: i.qty + 1 } : i);
+      return [...prev, { id: prod.id, name: prod.name, price: parseFloat(prod.price || 500), qty: 1 }];
+    });
+  }
+
+  const handleUpdateQty = (id, delta) => {
+    setPosCart(prev => prev.map(i => {
+      if (i.id === id) {
+        const newQty = i.qty + delta;
+        return newQty > 0 ? { ...i, qty: newQty } : i;
+      }
+      return i;
+    }));
+  }
+
+  const handleRemoveFromCart = (id) => {
+    setPosCart(prev => prev.filter(i => i.id !== id));
+  }
+
+  const showPosToast = (type, message) => {
+    setPosToast({ type, message })
+    setTimeout(() => setPosToast(null), 3200)
+  }
+
+  const handlePOSCheckout = async () => {
+    if (posCart.length === 0) return showPosToast("warning", "Add at least one item before checking out.");
+    if (posPayMethod === "qrph" && !posRef.trim()) return showPosToast("warning", "Enter the GCash / Bank reference number.");
+
+    setPosLoading(true);
+    try {
+      const payload = {
+        items: posCart.map(i => ({ id: i.id, qty: i.qty })),
+        delivery_address: "Walk-In Customer",
+        delivery_notes: `[BRANCH:${posBranch}] POS Walk-In Transaction`,
+        payment_method: posPayMethod,
+        payment_reference: posPayMethod === "cash" ? "CASH-WALK-IN" : posRef,
+        branch_name: posBranch
+      };
+
+      if (api.createOrder) {
+        await api.createOrder(payload);
+      } else if (api.post) {
+        await api.post("/orders/", payload);
+      } else {
+        await api.request({ method: "POST", url: "/orders/", data: payload });
+      }
+
+      setPosSuccess(true);
+      fetchOrders();
+      setTimeout(() => {
+        setPosCart([]);
+        setPosRef("");
+        setPosSuccess(false);
+        setPosOpen(false);
+      }, 1500);
+    } catch (err) {
+      showPosToast("error", err.message || "Checkout failed. Please try again.");
+    } finally {
+      setPosLoading(false);
+    }
+  }
+
   const handlePrint = () => window.print()
   const printDate   = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
   const printTime   = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })
 
-  // ── Print: derived metrics over the filtered set ──
-  // The screen UI stays untouched; everything below feeds the printed report only.
   const statusCounts = filtered.reduce((m, o) => {
     const k = formatStatus(o.status)
     m[k] = (m[k] || 0) + 1
@@ -241,7 +350,6 @@ export default function AdminOrders() {
   const salesValue      = filtered.filter(o => formatStatus(o.status) !== "Cancelled")
     .reduce((s, o) => s + (parseFloat(o.total_amount || 0) || 0), 0)
 
-  // Full filtered dataset grouped by status, in operational order, with subtotals
   const printGroups = (() => {
     const map = new Map()
     filtered.forEach(o => {
@@ -262,7 +370,6 @@ export default function AdminOrders() {
       }))
   })()
 
-  // Report scope line shown under the printed title
   const printScope = [
     statusFilter !== "All" ? `Status: ${statusFilter}` : "All Statuses",
     branch !== "All Branches" ? `Branch: ${branch}` : "All Branches",
@@ -271,7 +378,6 @@ export default function AdminOrders() {
     `${filtered.length} order${filtered.length === 1 ? "" : "s"}`,
   ].filter(Boolean).join("   ·   ")
 
-  // Payment status pill class for the printed table
   const payPill = p => {
     const v = (p || "pending").toLowerCase()
     if (["paid", "completed", "success", "successful"].includes(v)) return "active"
@@ -297,7 +403,6 @@ export default function AdminOrders() {
     a.click(); URL.revokeObjectURL(a.href)
   }
 
-  // Show the branded flower loader while the first orders fetch is in flight
   if (loading) {
     return (
       <div className="space-y-5">
@@ -312,19 +417,31 @@ export default function AdminOrders() {
 
   return (
     <div className="space-y-5">
-
-      {/* ── Print styles ──
-          The printed report is fully separate from the screen UI:
-          everything in .print-only renders ONLY on paper, and the
-          interactive table card is no-print. Print sections in order:
-          1 letterhead band  2 title + scope  3 summary cards
-          4 status distribution bar  5 grouped detail table  6 footer/signatures */}
       <style>{`
         .print-only { display: none; }
-
-        /* Gentle fade + rise so content eases in once loaded instead of flashing. */
         @keyframes ordersRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
         .orders-rise { animation: ordersRise 0.85s ease-out both; }
+
+        @keyframes posSlideIn {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+        .pos-drawer { animation: posSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+
+        @keyframes posItemIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
+        .pos-item-in { animation: posItemIn 0.25s ease-out both; }
+
+        @keyframes posToastIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+        .pos-toast-in { animation: posToastIn 0.22s ease-out both; }
+
+        @keyframes posFadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .pos-success-in { animation: posFadeIn 0.2s ease-out both; }
+
+        @keyframes posSuccessPop { 0% { transform: scale(0.5); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: scale(1); } }
+        .pos-success-circle { animation: posSuccessPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both; }
+        
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
         @media print {
           @page { margin: 12mm 10mm; }
@@ -337,52 +454,19 @@ export default function AdminOrders() {
           .no-print { display: none !important; }
           .print-only { display: block !important; }
           .print-letterhead, .print-doc-title, .print-summary, .print-health { break-inside: avoid; page-break-inside: avoid; }
-
-          /* ── 1. Letterhead: brand band ── */
-          .print-letterhead {
-            display: flex !important; align-items: center; justify-content: space-between; gap: 16px;
-            padding: 13px 18px; border-radius: 12px;
-            background: linear-gradient(135deg,#0C573E 0%,#15724B 55%,#2E8B34 100%) !important;
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
-          }
-          .print-logo-word {
-            height: 34px; width: auto; max-width: 240px; display: block;
-            object-fit: contain; filter: brightness(0) invert(1);
-          }
-          .print-tagline {
-            margin: 5px 0 0; font-size: 8px; font-weight: 700;
-            letter-spacing: 0.3em; text-transform: uppercase; color: rgba(255,255,255,0.82) !important;
-          }
+          .print-letterhead { display: flex !important; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 18px; border-radius: 12px; background: linear-gradient(135deg,#0C573E 0%,#15724B 55%,#2E8B34 100%) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-logo-word { height: 34px; width: auto; max-width: 240px; display: block; object-fit: contain; filter: brightness(0) invert(1); }
+          .print-tagline { margin: 5px 0 0; font-size: 8px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: rgba(255,255,255,0.82) !important; }
           .print-meta { text-align: right; flex-shrink: 0; }
-          .print-meta .ref {
-            display: inline-block; margin: 0; padding: 3px 10px; border-radius: 9999px;
-            border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.12) !important;
-            color: #ffffff !important; font-size: 8.5px; font-weight: 700;
-            letter-spacing: 0.12em; text-transform: uppercase;
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
-          }
+          .print-meta .ref { display: inline-block; margin: 0; padding: 3px 10px; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.12) !important; color: #ffffff !important; font-size: 8.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-meta .gen { margin: 6px 0 0; font-size: 9px; color: rgba(255,255,255,0.85) !important; }
           .print-meta .gen strong { color: #ffffff !important; font-weight: 700; }
-
-          /* ── 2. Document title + report scope ── */
           .print-doc-title { display: flex !important; flex-direction: column; align-items: center; margin: 16px 0 2px; }
-          .print-doc-title .t {
-            margin: 0; font-size: 15px; font-weight: 800;
-            letter-spacing: 0.3em; text-transform: uppercase; color: #0C573E !important;
-          }
-          .print-doc-title .rule {
-            width: 54px; height: 3px; border-radius: 9999px; margin: 7px 0 6px;
-            background: linear-gradient(90deg,#0C573E,#2E8B34) !important;
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
-          }
+          .print-doc-title .t { margin: 0; font-size: 15px; font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: #0C573E !important; }
+          .print-doc-title .rule { width: 54px; height: 3px; border-radius: 9999px; margin: 7px 0 6px; background: linear-gradient(90deg,#0C573E,#2E8B34) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-doc-title .scope { margin: 0; font-size: 9px; color: #6b7280 !important; letter-spacing: 0.02em; text-align: center; }
-
-          /* ── 3. Summary cards ── */
           .print-summary { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 0; }
-          .print-summary-card {
-            border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px;
-            background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-          }
+          .print-summary-card { border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px; background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-summary-card.c-total { border-top-color: #0C573E !important; }
           .print-summary-card.c-value { border-top-color: #2E8B34 !important; }
           .print-summary-card.c-low   { border-top-color: #d97706 !important; }
@@ -393,19 +477,11 @@ export default function AdminOrders() {
           .print-summary-card .value.amber { color: #d97706 !important; }
           .print-summary-card .value.red   { color: #dc2626 !important; }
           .print-summary-card .cap { margin: 3px 0 0; font-size: 8px; color: #9ca3af !important; }
-
-          /* ── 4. Status distribution ── */
-          .print-health {
-            margin: 10px 0 0; border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 12px 11px;
-            background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-          }
+          .print-health { margin: 10px 0 0; border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 12px 11px; background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-health .head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; }
           .print-health .hk { margin: 0; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9ca3af !important; }
           .print-health .hv { margin: 0; font-size: 8.5px; color: #6b7280 !important; }
-          .print-health .bar {
-            display: flex; height: 10px; border-radius: 9999px; overflow: hidden;
-            background: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-          }
+          .print-health .bar { display: flex; height: 10px; border-radius: 9999px; overflow: hidden; background: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-health .seg { display: block; height: 100%; }
           .print-health .s-pending   { background: #f59e0b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-health .s-confirmed { background: #06b6d4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -417,8 +493,6 @@ export default function AdminOrders() {
           .print-health .legend { display: flex; flex-wrap: wrap; gap: 12px 16px; margin: 7px 0 0; }
           .print-health .li { display: flex; align-items: center; gap: 5px; font-size: 8.5px; color: #374151 !important; }
           .print-health .dot { width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; }
-
-          /* ── 5. Detail table (grouped by status) ── */
           .print-detail { display: block !important; margin-top: 14px; }
           .print-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; padding: 0 2px; }
           .print-section-title { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #0C573E !important; }
@@ -427,12 +501,7 @@ export default function AdminOrders() {
           .print-detail table { width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; }
           .print-detail thead { display: table-header-group; }
           .print-detail tr { page-break-inside: avoid; }
-          .print-detail th {
-            background: #0C573E !important; color: #ffffff !important;
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
-            border: none; padding: 7px; text-align: left;
-            font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; line-height: 1.25;
-          }
+          .print-detail th { background: #0C573E !important; color: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border: none; padding: 7px; text-align: left; font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; line-height: 1.25; }
           .print-detail th.col-idx    { width: 4%; }
           .print-detail th.col-id     { width: 12%; }
           .print-detail th.col-cust   { width: 23%; }
@@ -441,11 +510,7 @@ export default function AdminOrders() {
           .print-detail th.col-pay    { width: 11%; }
           .print-detail th.col-date   { width: 12%; }
           .print-detail th.col-total  { width: 12%; }
-          .print-detail td {
-            border-bottom: 1px solid #eef1f4; padding: 6.5px 7px;
-            font-size: 9.5px; color: #1f2937 !important; vertical-align: top;
-            word-break: break-word; overflow-wrap: anywhere;
-          }
+          .print-detail td { border-bottom: 1px solid #eef1f4; padding: 6.5px 7px; font-size: 9.5px; color: #1f2937 !important; vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
           .print-detail .num { text-align: right; }
           .print-detail .center { text-align: center; }
           .print-detail .nowrap { white-space: nowrap !important; }
@@ -455,44 +520,16 @@ export default function AdminOrders() {
           .print-detail .mono { font-family: "Courier New", Courier, monospace; font-size: 8.5px; }
           .print-detail tr.alt td { background: #f7faf8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-detail tbody tr:last-child td { border-bottom: none; }
-
-          /* status section rows */
           .print-detail tr.cat-row { page-break-after: avoid; break-after: avoid; }
-          .print-detail tr.cat-row td {
-            background: #eaf5ee !important; color: #0C573E !important;
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
-            border-top: 1px solid #d8ebdd; border-bottom: 1px solid #d8ebdd;
-            padding: 6px 8px; font-size: 8.5px; font-weight: 800;
-            letter-spacing: 0.08em; text-transform: uppercase;
-          }
-          .print-detail tr.cat-row .cat-meta {
-            float: right; font-weight: 600; letter-spacing: 0;
-            text-transform: none; color: #15724B !important;
-          }
-
-          /* report total row */
-          .print-detail tr.grand td {
-            background: #0C573E !important; color: #ffffff !important;
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
-            border: none; padding: 8px 7px; font-size: 9.5px; font-weight: 800;
-          }
-
-          /* payment pill on paper */
-          .print-pill {
-            display: inline-block !important; padding: 2px 8px; border-radius: 9999px;
-            font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
-            white-space: nowrap; -webkit-print-color-adjust: exact; print-color-adjust: exact;
-          }
+          .print-detail tr.cat-row td { background: #eaf5ee !important; color: #0C573E !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border-top: 1px solid #d8ebdd; border-bottom: 1px solid #d8ebdd; padding: 6px 8px; font-size: 8.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+          .print-detail tr.cat-row .cat-meta { float: right; font-weight: 600; letter-spacing: 0; text-transform: none; color: #15724B !important; }
+          .print-detail tr.grand td { background: #0C573E !important; color: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border: none; padding: 8px 7px; font-size: 9.5px; font-weight: 800; }
+          .print-pill { display: inline-block !important; padding: 2px 8px; border-radius: 9999px; font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-pill.active  { background: #dcfce7 !important; color: #15803d !important; }
           .print-pill.low     { background: #fef3c7 !important; color: #b45309 !important; }
           .print-pill.out     { background: #fee2e2 !important; color: #b91c1c !important; }
           .print-pill.neutral { background: #e2e8f0 !important; color: #475569 !important; }
-
-          /* ── 6. Footer + signatures ── */
-          .print-footer {
-            display: flex !important; align-items: flex-end; justify-content: space-between; gap: 24px;
-            margin-top: 20px; padding-top: 11px; border-top: 2px solid #e5e7eb;
-          }
+          .print-footer { display: flex !important; align-items: flex-end; justify-content: space-between; gap: 24px; margin-top: 20px; padding-top: 11px; border-top: 2px solid #e5e7eb; }
           .print-footer .note { margin: 0; font-size: 8.5px; color: #9ca3af !important; max-width: 46%; line-height: 1.55; }
           .print-footer .note strong { color: #6b7280 !important; }
           .print-signs { display: flex; gap: 34px; }
@@ -502,7 +539,7 @@ export default function AdminOrders() {
         }
       `}</style>
 
-      {/* ── Order detail modal ── */}
+      {/* ── Order Detail Modal ── */}
       {viewingOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4 no-print"
           style={{ backgroundColor: modalD.overlayBg, backdropFilter: "blur(4px)" }}
@@ -510,9 +547,7 @@ export default function AdminOrders() {
           <div className="rounded-xl w-full overflow-hidden flex flex-col"
             style={{ maxWidth: "560px", maxHeight: "90vh", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${modalD.modalBdr}`, backgroundColor: modalD.modalBg }}>
             
-            {/* Modal Header */}
             <div className="flex items-center justify-between px-6 py-4 flex-shrink-0"
-              
               style={{ borderBottom: `1px solid ${modalD.modalHdrBdr}`, background: modalD.modalHdr }}>
               <div>
                 <p className="text-base font-bold" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>Order Details</p>
@@ -525,9 +560,7 @@ export default function AdminOrders() {
               </button>
             </div>
             
-            {/* Modal Body (Scrollable) */}
             <div className="p-6 space-y-5 overflow-y-auto" style={{ maxHeight: "calc(90vh - 140px)" }}>
-              {/* Customer Info */}
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>Customer</p>
                 <div className="flex justify-between items-start">
@@ -539,7 +572,6 @@ export default function AdminOrders() {
                 </div>
               </div>
 
-              {/* Delivery Info */}
               <div className="p-4 rounded-lg" style={{ backgroundColor: isDark ? "#0f172a" : "#f8fafc", border: `1px solid ${isDark ? "#1e293b" : "#e2e8f0"}` }}>
                 <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>Delivery Address</p>
                 <p className="text-sm font-medium leading-relaxed" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>
@@ -552,7 +584,6 @@ export default function AdminOrders() {
                 )}
               </div>
               
-              {/* Special Instructions */}
               {viewingOrder.special_note && (
                 <div 
                   className="p-4 rounded-lg shadow-sm" 
@@ -577,7 +608,6 @@ export default function AdminOrders() {
                 </div>
               )}
 
-              {/* Order Summary */}
               <div>
                 <p className="text-xs font-bold uppercase tracking-wider mb-2" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>Order Summary</p>
                 <div className="flex justify-between items-center pb-2 border-b" style={{ borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
@@ -590,7 +620,6 @@ export default function AdminOrders() {
                 </div>
               </div>
 
-              {/* Status and Payment */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>Payment</p>
@@ -602,7 +631,6 @@ export default function AdminOrders() {
                 </div>
               </div>
 
-              {/*NEW: Payment Reference Block */}
               <div className="p-3 rounded-lg border mb-3" style={{ backgroundColor: isDark ? "#0f172a" : "#f8fafc", borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
                 <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>Payment Reference (TRN)</p>
                 <p className="text-sm font-mono font-semibold" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>
@@ -610,7 +638,6 @@ export default function AdminOrders() {
                 </p>
               </div>
 
-              {/* Totals and Metadata */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>Total</p>
@@ -628,10 +655,8 @@ export default function AdminOrders() {
                 <p className="text-xs font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>Processing Branch</p>
                 <p className="text-sm font-semibold" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{viewingOrder.branch || "—"}</p>
               </div>
-
             </div>
             
-            {/* Modal Footer */}
             <div className="flex items-center justify-end gap-2 px-6 py-4 flex-shrink-0"
               style={{ borderTop: `1px solid ${modalD.modalFtrBdr}`, backgroundColor: modalD.modalFtr }}>
               <button onClick={() => setViewingOrder(null)}
@@ -641,6 +666,279 @@ export default function AdminOrders() {
                 onMouseLeave={e => e.currentTarget.style.backgroundColor = modalD.modalBg}>
                 Close
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🚀 WALK-IN POS DRAWER */}
+      {posOpen && (
+        <div className="fixed inset-0 z-[60] flex justify-end no-print" style={{ backgroundColor: "rgba(15,23,42,0.6)", backdropFilter: "blur(2px)" }}>
+          <div className="absolute inset-0" onClick={() => setPosOpen(false)} />
+          
+          <div className="relative pos-drawer flex flex-col w-full max-w-6xl h-full shadow-2xl"
+            style={{ backgroundColor: isDark ? "#0f172a" : "#f8fafc", borderLeft: `1px solid ${isDark ? "#334155" : "#e2e8f0"}` }}>
+            
+            <div className="flex items-center justify-between px-6 py-4 flex-shrink-0 border-b"
+              style={{ backgroundColor: isDark ? "#1e293b" : "white", borderColor: isDark ? "#334155" : "#e2e8f0" }}>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
+                  <svg className="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold" style={{ color: isDark ? "#f8fafc" : "#0f172a" }}>Walk-In POS</h2>
+                  <p className="text-xs" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Quick inventory checkout</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {posCart.length > 0 && (
+                  <div className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-bold"
+                    style={{ backgroundColor: isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4", color: isDark ? "#4ade80" : DG, border: `1px solid ${isDark ? "rgba(74,222,128,0.25)" : "#bbf7d0"}` }}>
+                    ₱{posCart.reduce((sum, i) => sum + (i.price * i.qty), 0).toLocaleString()}
+                  </div>
+                )}
+                <button onClick={() => setPosOpen(false)} className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors">
+                  <svg className="w-5 h-5" style={{ color: isDark ? "#94a3b8" : "#64748b" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-1 overflow-hidden">
+              
+              <div className="flex-1 flex flex-col border-r min-w-0" style={{ borderColor: isDark ? "#334155" : "#e2e8f0", backgroundColor: isDark ? "#0f172a" : "#f1f5f9" }}>
+                
+                {/* Search & Branch Bar */}
+                <div className="p-4 flex gap-3 flex-shrink-0 bg-white dark:bg-slate-800 border-b dark:border-slate-700">
+                  <div className="relative flex-1">
+                    <svg className="w-4 h-4 absolute left-3 top-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                    <input type="text" placeholder="Search products..." value={posSearch} onChange={e => setPosSearch(e.target.value)}
+                      className="w-full pl-9 pr-4 py-2 text-sm border rounded-lg outline-none focus:border-green-500 bg-gray-50 dark:bg-slate-900 dark:border-slate-600 dark:text-white" />
+                  </div>
+                  <select value={posBranch} onChange={e => setPosBranch(e.target.value)}
+                    className="px-3 py-2 text-sm font-semibold border rounded-lg bg-gray-50 dark:bg-slate-900 dark:border-slate-600 dark:text-white outline-none">
+                    <option value="Manila">Manila Branch</option>
+                    <option value="Pampanga">Pampanga Branch</option>
+                  </select>
+                </div>
+
+                {/* 🚀 NEW: Categories Scroll Bar */}
+                <div className="px-4 py-3 bg-white dark:bg-slate-800 border-b dark:border-slate-700 overflow-x-auto whitespace-nowrap flex gap-2 no-scrollbar flex-shrink-0">
+                  {posCategories.map(c => (
+                    <button key={c} onClick={() => setPosCategory(c)}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-all border ${
+                        posCategory === c 
+                          ? "bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:border-green-500 dark:text-green-400" 
+                          : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 dark:bg-slate-800 dark:border-slate-600 dark:text-gray-300"
+                      }`}>
+                      {c}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Grid */}
+                <div className="flex-1 overflow-y-auto p-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    {filteredPosProducts.map(p => {
+                      const inCartQty = posCart.find(i => i.id === p.id)?.qty || 0
+                      return (
+                        <button key={p.id} onClick={() => handleAddToCart(p)}
+                          className="relative flex flex-col items-center p-3 rounded-xl border transition-all active:scale-95"
+                          style={{
+                            borderColor: inCartQty > 0 ? (isDark ? "#4ade80" : G) : (isDark ? "#334155" : "#e2e8f0"),
+                            backgroundColor: isDark ? "#1e293b" : "white",
+                            boxShadow: inCartQty > 0 ? `0 0 0 2px ${isDark ? "rgba(74,222,128,0.18)" : "rgba(46,139,52,0.12)"}` : "none",
+                          }}
+                          onMouseEnter={e => { if (!inCartQty) e.currentTarget.style.borderColor = isDark ? "#4ade80" : G }}
+                          onMouseLeave={e => { if (!inCartQty) e.currentTarget.style.borderColor = isDark ? "#334155" : "#e2e8f0" }}>
+                          {inCartQty > 0 && (
+                            <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full text-[11px] font-bold flex items-center justify-center text-white shadow-md z-10"
+                              style={{ background: `linear-gradient(135deg,${DG},${G})` }}>{inCartQty}</span>
+                          )}
+                          <div className="relative w-full aspect-square rounded-md mb-2 flex items-center justify-center overflow-hidden group"
+                            style={{ backgroundColor: isDark ? "#0f172a" : "#f1f5f9" }}>
+                            {p.image_url || p.image ? (
+                              <img src={p.image_url || p.image} alt={p.name} className="w-full h-full object-cover" />
+                            ) : (
+                              <svg className="w-8 h-8" style={{ color: isDark ? "#475569" : "#cbd5e1" }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            )}
+                          </div>
+                          <p className="text-xs font-bold text-center leading-tight line-clamp-2 w-full" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{p.name}</p>
+                          <p className="text-sm font-semibold mt-1" style={{ color: isDark ? "#4ade80" : DG }}>₱{(p.price || 500).toLocaleString()}</p>
+                        </button>
+                      )
+                    })}
+                    {filteredPosProducts.length === 0 && <p className="col-span-3 text-center text-sm mt-10 text-gray-500">No items found in this category.</p>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Cart & Checkout */}
+              <div className="w-[380px] flex flex-col flex-shrink-0 relative" style={{ backgroundColor: isDark ? "#111827" : "white" }}>
+
+                {/* Toast (inline, non-blocking) */}
+                {posToast && (
+                  <div className="absolute top-3 left-3 right-3 z-20 pos-toast-in">
+                    <div className="flex items-center gap-2.5 px-4 py-3 rounded-lg shadow-lg text-sm font-semibold"
+                      style={{
+                        backgroundColor: posToast.type === "error" ? "#fef2f2" : posToast.type === "warning" ? "#fffbeb" : "#f0fdf4",
+                        color: posToast.type === "error" ? "#b91c1c" : posToast.type === "warning" ? "#b45309" : "#15803d",
+                        border: `1px solid ${posToast.type === "error" ? "#fecaca" : posToast.type === "warning" ? "#fde68a" : "#bbf7d0"}`,
+                      }}>
+                      {posToast.type === "error" ? (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>
+                      ) : posToast.type === "warning" ? (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+                      ) : (
+                        <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                      )}
+                      <span className="flex-1">{posToast.message}</span>
+                      <button onClick={() => setPosToast(null)} className="opacity-60 hover:opacity-100">×</button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Success overlay */}
+                {posSuccess && (
+                  <div className="absolute inset-0 z-30 flex flex-col items-center justify-center pos-success-in"
+                    style={{ backgroundColor: isDark ? "rgba(17,24,39,0.97)" : "rgba(255,255,255,0.97)" }}>
+                    <div className="w-16 h-16 rounded-full flex items-center justify-center mb-3 pos-success-circle"
+                      style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+                      <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M4.5 12.75l6 6 9-13.5"/></svg>
+                    </div>
+                    <p className="font-bold text-base" style={{ color: isDark ? "#f1f5f9" : "#0f172a" }}>Order placed!</p>
+                    <p className="text-xs mt-1" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Walk-in transaction recorded successfully</p>
+                  </div>
+                )}
+
+                {/* Header */}
+                <div className="px-5 py-4 flex items-center justify-between flex-shrink-0 border-b"
+                  style={{ borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-base" style={{ color: isDark ? "#f8fafc" : "#0f172a" }}>Current Order</h3>
+                    {posCart.length > 0 && (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-bold"
+                        style={{ backgroundColor: isDark ? "rgba(74,222,128,0.14)" : "#f0fdf4", color: isDark ? "#4ade80" : DG }}>
+                        {posCart.reduce((s, i) => s + i.qty, 0)} item{posCart.reduce((s, i) => s + i.qty, 0) === 1 ? "" : "s"}
+                      </span>
+                    )}
+                  </div>
+                  {posCart.length > 0 && (
+                    <button onClick={() => setPosCart([])} className="text-xs font-semibold transition-colors" style={{ color: "#f87171" }}
+                      onMouseEnter={e => e.currentTarget.style.color = "#dc2626"}
+                      onMouseLeave={e => e.currentTarget.style.color = "#f87171"}>
+                      Clear cart
+                    </button>
+                  )}
+                </div>
+
+                {/* Cart items */}
+                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+                  {posCart.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center px-6">
+                      <svg className="w-12 h-12 mb-3" style={{ color: isDark ? "#334155" : "#e2e8f0" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" /></svg>
+                      <p className="text-sm font-bold" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Cart is empty</p>
+                      <p className="text-xs mt-1" style={{ color: isDark ? "#475569" : "#cbd5e1" }}>Tap a product on the left to add it here</p>
+                    </div>
+                  ) : (
+                    posCart.map(item => (
+                      <div key={item.id} className="flex items-center gap-3 p-2.5 rounded-lg border pos-item-in"
+                        style={{ borderColor: isDark ? "#1e293b" : "#eef1f4", backgroundColor: isDark ? "#0f172a" : "#fafbfc" }}>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold truncate" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{item.name}</p>
+                          <p className="text-xs mt-0.5" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>₱{item.price.toLocaleString()} each</p>
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-shrink-0">
+                          <button onClick={() => handleUpdateQty(item.id, -1)}
+                            className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-sm transition-all active:scale-90"
+                            style={{ backgroundColor: isDark ? "#1e293b" : "white", border: `1px solid ${isDark ? "#334155" : "#e2e8f0"}`, color: isDark ? "#94a3b8" : "#64748b" }}>−</button>
+                          <span className="text-xs font-bold w-5 text-center" style={{ color: isDark ? "#f1f5f9" : "#0f172a" }}>{item.qty}</span>
+                          <button onClick={() => handleUpdateQty(item.id, 1)}
+                            className="w-6 h-6 rounded-full flex items-center justify-center font-bold text-sm transition-all active:scale-90"
+                            style={{ backgroundColor: isDark ? "#1e293b" : "white", border: `1px solid ${isDark ? "#334155" : "#e2e8f0"}`, color: isDark ? "#94a3b8" : "#64748b" }}>+</button>
+                        </div>
+                        <div className="text-right flex-shrink-0" style={{ minWidth: "64px" }}>
+                          <p className="text-xs font-bold" style={{ color: isDark ? "#4ade80" : DG }}>₱{(item.price * item.qty).toLocaleString()}</p>
+                        </div>
+                        <button onClick={() => handleRemoveFromCart(item.id)}
+                          className="w-6 h-6 rounded-md flex items-center justify-center flex-shrink-0 transition-colors"
+                          style={{ color: isDark ? "#64748b" : "#cbd5e1" }}
+                          onMouseEnter={e => { e.currentTarget.style.color = "#f87171"; e.currentTarget.style.backgroundColor = isDark ? "rgba(248,113,113,0.1)" : "#fef2f2" }}
+                          onMouseLeave={e => { e.currentTarget.style.color = isDark ? "#64748b" : "#cbd5e1"; e.currentTarget.style.backgroundColor = "transparent" }}>
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Summary + checkout */}
+                <div className="flex-shrink-0 px-5 py-4 border-t space-y-4"
+                  style={{ borderColor: isDark ? "#1e293b" : "#e2e8f0", backgroundColor: isDark ? "#0f172a" : "#fafbfc" }}>
+
+                  <div className="flex items-center justify-between text-xs font-semibold" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>
+                    <span>Branch</span>
+                    <span className="px-2 py-0.5 rounded-full" style={{ backgroundColor: isDark ? "#1e293b" : "white", border: `1px solid ${isDark ? "#334155" : "#e2e8f0"}`, color: isDark ? "#e2e8f0" : "#1e293b" }}>{posBranch}</span>
+                  </div>
+
+                  <div className="flex justify-between items-baseline pt-1">
+                    <span className="text-sm font-semibold" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Total Due</span>
+                    <span className="text-2xl font-bold" style={{ color: isDark ? "#4ade80" : DG }}>
+                      ₱{posCart.reduce((sum, i) => sum + (i.price * i.qty), 0).toLocaleString()}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#94a3b8" }}>Payment Method</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button onClick={() => setPosPayMethod("cash")}
+                        className="flex items-center justify-center gap-1.5 py-2.5 text-sm font-bold rounded-lg border transition-all"
+                        style={{
+                          backgroundColor: posPayMethod === "cash" ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : (isDark ? "#1e293b" : "white"),
+                          borderColor: posPayMethod === "cash" ? (isDark ? "#4ade80" : G) : (isDark ? "#334155" : "#e2e8f0"),
+                          color: posPayMethod === "cash" ? (isDark ? "#4ade80" : DG) : (isDark ? "#94a3b8" : "#64748b"),
+                        }}>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V6m0 10v2m9-6a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                        Cash
+                      </button>
+                      <button onClick={() => setPosPayMethod("qrph")}
+                        className="flex items-center justify-center gap-1.5 py-2.5 text-sm font-bold rounded-lg border transition-all"
+                        style={{
+                          backgroundColor: posPayMethod === "qrph" ? (isDark ? "rgba(59,130,246,0.12)" : "#eff6ff") : (isDark ? "#1e293b" : "white"),
+                          borderColor: posPayMethod === "qrph" ? "#3b82f6" : (isDark ? "#334155" : "#e2e8f0"),
+                          color: posPayMethod === "qrph" ? (isDark ? "#93c5fd" : "#1d4ed8") : (isDark ? "#94a3b8" : "#64748b"),
+                        }}>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3.75 4.5h4.5v4.5h-4.5v-4.5zM15.75 4.5h4.5v4.5h-4.5v-4.5zM3.75 15.75h4.5v4.5h-4.5v-4.5zM15.75 15.75h2.25M15.75 18h2.25m-2.25 2.25h2.25M18 15.75v2.25m0 2.25v-2.25"/></svg>
+                        GCash / Bank
+                      </button>
+                    </div>
+                    {posPayMethod === "qrph" && (
+                      <input type="text" placeholder="Reference number" value={posRef} onChange={e => setPosRef(e.target.value)}
+                        className="w-full px-3 py-2.5 text-sm border rounded-lg outline-none transition-all"
+                        style={{ borderColor: isDark ? "#334155" : "#e2e8f0", backgroundColor: isDark ? "#1e293b" : "white", color: isDark ? "#e2e8f0" : "#1e293b" }}
+                        onFocus={e => { e.target.style.borderColor = "#3b82f6"; e.target.style.boxShadow = "0 0 0 2px rgba(59,130,246,0.18)" }}
+                        onBlur={e => { e.target.style.borderColor = isDark ? "#334155" : "#e2e8f0"; e.target.style.boxShadow = "none" }} />
+                    )}
+                  </div>
+
+                  <button onClick={handlePOSCheckout} disabled={posLoading || posCart.length === 0}
+                    className="w-full py-3.5 rounded-lg text-white font-bold tracking-wide transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98]"
+                    style={{ background: `linear-gradient(135deg, ${DG}, ${G})`, boxShadow: posCart.length > 0 ? "0 4px 14px rgba(46,139,52,0.3)" : "none" }}>
+                    {posLoading ? (
+                      <>
+                        <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/></svg>
+                        Complete Checkout
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -710,8 +1008,6 @@ export default function AdminOrders() {
 
       {/* ── Printable area ── */}
       <div id="orders-print-area">
-
-        {/* ── Print 1: letterhead brand band ── */}
         <div className="print-only print-letterhead">
           <div>
             <img className="print-logo-word" src={estingsWordmark} alt="Esting's Flower International Inc." />
@@ -723,14 +1019,12 @@ export default function AdminOrders() {
           </div>
         </div>
 
-        {/* ── Print 2: document title + report scope ── */}
         <div className="print-only print-doc-title">
           <p className="t">Orders Report</p>
           <span className="rule" />
           <p className="scope">{printScope}</p>
         </div>
 
-        {/* ── Print 3: summary cards (current view) ── */}
         <div className="print-only print-summary">
           <div className="print-summary-card c-total">
             <p className="label">Total Orders</p>
@@ -754,7 +1048,6 @@ export default function AdminOrders() {
           </div>
         </div>
 
-        {/* ── Print 4: status distribution ── */}
         {filtered.length > 0 && (
           <div className="print-only print-health">
             <div className="head">
@@ -803,12 +1096,18 @@ export default function AdminOrders() {
                   onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
                   onBlur={e => { e.target.style.borderColor = inputBdr; e.target.style.boxShadow = "none" }} />
               </div>
-              <button onClick={fetchOrders} className="px-4 py-2 text-sm font-semibold text-white rounded-md transition-all hover:opacity-90 active:scale-95"
-                style={{ background: `linear-gradient(135deg,${DG},${G})` }}>Refresh</button>
+              
+              <button onClick={fetchOrders} className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-800 border dark:border-slate-600 rounded-md transition-all hover:bg-gray-50 active:scale-95">
+                Refresh
+              </button>
+              <button onClick={() => setPosOpen(true)} className="px-4 py-2 text-sm font-semibold text-white rounded-md transition-all hover:opacity-90 active:scale-95 flex items-center gap-1.5"
+                style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/></svg>
+                Walk-In POS
+              </button>
             </div>
           </div>
 
-          {/* Table */}
           <div className="overflow-x-auto">
             <table className="w-full" style={{ minWidth: "700px" }}>
               <thead style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
@@ -822,7 +1121,7 @@ export default function AdminOrders() {
               <tbody style={{ borderTop: `1px solid ${isDark ? "#1e293b" : "#f1f5f9"}` }}>
                 {loading ? (
                   <tr><td colSpan={7} className="px-5 py-10 text-center text-sm" style={{ color: subTxt }}>Loading orders...</td></tr>
-                ) : filtered.length > 0 ? filtered.map((o, idx) => (
+                ) : paginatedOrders.length > 0 ? paginatedOrders.map((o, idx) => (
                   <tr key={o.id}
                     style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#f8fafc"}`, backgroundColor: isDark ? (idx % 2 === 0 ? "#1a2332" : "#111827") : "white" }}
                     onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.04)" : "#f8fffe"}
@@ -864,22 +1163,21 @@ export default function AdminOrders() {
             </table>
           </div>
 
-          {/* Pagination */}
           <div className="flex items-center justify-between px-4 sm:px-5 py-3"
             style={{ borderTop: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
-            <span className="text-sm" style={{ color: subTxt }}>Showing {filtered.length} of {orders.length} entries</span>
+            <span className="text-sm" style={{ color: subTxt }}>Showing {paginatedOrders.length} of {filtered.length} entries</span>
             <div className="flex items-center gap-1">
-              {["←", "1", "2", "3", "→"].map((p, i) => (
-                <button key={i} className="px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all"
-                  style={{ background: p === "1" ? `linear-gradient(135deg,${DG},${G})` : isDark ? "#1e293b" : "white", color: p === "1" ? "white" : isDark ? "#94a3b8" : "#6b7280", border: p === "1" ? "none" : `1px solid ${isDark ? "#374151" : "#e2e8f0"}` }}>{p}</button>
-              ))}
+              <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all disabled:opacity-50"
+                style={{ background: isDark ? "#1e293b" : "white", color: isDark ? "#94a3b8" : "#6b7280", border: `1px solid ${isDark ? "#374151" : "#e2e8f0"}` }}>←</button>
+              
+              <span className="px-2 text-sm font-semibold" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{page}</span>
+
+              <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all disabled:opacity-50"
+                style={{ background: isDark ? "#1e293b" : "white", color: isDark ? "#94a3b8" : "#6b7280", border: `1px solid ${isDark ? "#374151" : "#e2e8f0"}` }}>→</button>
             </div>
           </div>
         </div>
 
-        {/* ── Print 5: full detail table, grouped by status ──
-            Prints EVERY filtered order, organized into status sections
-            with per-status subtotals and a report total row. */}
         <div className="print-only print-detail">
           <div className="print-section-head">
             <p className="print-section-title">Order Detail</p>
@@ -944,7 +1242,6 @@ export default function AdminOrders() {
           </div>
         </div>
 
-        {/* ── Print 6: footer + signature lines ── */}
         <div className="print-only print-footer">
           <p className="note">
             <strong>Esting's Flower International Inc.</strong> Confidential. This report is generated for internal use only and reflects order records as of the date and time indicated above. Figures are based on the filters applied at the time of printing.

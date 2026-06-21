@@ -3,9 +3,12 @@ import { createPortal } from "react-dom"
 import { api } from "../../services/api.js"
 import { addToCart } from "../../utils/cart.js"
 import { useTheme } from "../../context/ThemeContext"
+import FallbackImage from "../../components/FallbackImage.jsx" // 🚀 ADDED THIS IMPORT
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
+
+const PLACEHOLDER_IMAGE = new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href
 
 // 1. STEPS: 4-phase flow — Arrangement → Flowers → Wrapper → Accessory
 const STEPS = [
@@ -32,7 +35,7 @@ const ARRANGEMENTS = [
     key: "bouquet",
     label: "Bouquet",
     desc: "Hand-tied & wrapped",
-    promptText: "arranged as a hand-tied bouquet",
+    promptText: "arranged as a beautiful hand-tied bouquet, photographed from a direct side profile view at eye level, clearly showing the full length of the wrapping from the side",
     image: null,
     maxStems: 24,
     path: "M12 3c2.5 2 2.5 5 0 7-2.5-2-2.5-5 0-7Zm6 3c.8 2.8-.8 5.3-3.6 6.1.8-2.8 2.4-5.3 3.6-6.1ZM6 6c1.2.8 2.8 3.3 3.6 6.1C6.8 11.3 5.2 8.8 6 6Zm6 7 4 8H8l4-8Z",
@@ -41,7 +44,7 @@ const ARRANGEMENTS = [
     key: "box",
     label: "Box",
     desc: "Arranged in a gift box",
-    promptText: "arranged neatly inside a gift box",
+    promptText: "arranged neatly inside a premium floral gift box, photographed from a direct side profile view at eye level, ensuring the entire side of the box is clearly visible with the flowers resting inside",
     image: null,
     maxStems: 18,
     path: "M3 8h18v3H3V8Zm1 3h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9Zm8-7 3 4H9l3-4Z",
@@ -50,7 +53,7 @@ const ARRANGEMENTS = [
     key: "vase",
     label: "Vase",
     desc: "Arranged in a vase",
-    promptText: "arranged in an elegant vase",
+    promptText: "arranged in an elegant vase, photographed from a direct side profile view at eye level, ensuring the full height and side of the vase is completely visible",
     image: null,
     maxStems: 15,
     path: "M8 3h8l-1 4c2 1.5 3 4 3 7 0 4-3 7-6 7s-6-3-6-7c0-3 1-5.5 3-7L8 3Z",
@@ -82,9 +85,6 @@ function StockBadge({ status, isDark }) {
 
 // ── Product tile (dark-mode aware) ──
 function ProductCard({ product, selected, onClick, disabled, tokens }) {
-  // Keep the debugging log so broken image URLs are still visible during dev.
-  console.log(`Product: ${product.name}, Image URL:`, product.image_url);
-
   const { accentG, tileBdr, tileBg, tileSelBg, tilePlaceBg, subHeadC, mutedC, isDark } = tokens
 
   return (
@@ -100,15 +100,13 @@ function ProductCard({ product, selected, onClick, disabled, tokens }) {
       }}
     >
       <div className="w-full aspect-square rounded-lg overflow-hidden relative" style={{ backgroundColor: tilePlaceBg }}>
-        {product.image_url ? (
-          <img
-            src={product.image_url}
-            alt={product.name}
-            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
-          />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-xs" style={{ color: mutedC }}>No image</div>
-        )}
+        {/* 🚀 CHANGED: Using FallbackImage to handle missing images safely */}
+        <FallbackImage
+          src={product.image_url || PLACEHOLDER_IMAGE}
+          alt={product.name}
+          fallbackSrc={PLACEHOLDER_IMAGE}
+          className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+        />
         {selected && (
           <div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center" style={{ backgroundColor: accentG }}>
             <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke={isDark ? "#08120c" : "#ffffff"}>
@@ -141,11 +139,13 @@ function FlowerCard({ product, qty, onInc, onDec, disabled, incDisabled, tokens 
       }}
     >
       <div className="w-full aspect-square rounded-lg overflow-hidden relative" style={{ backgroundColor: tilePlaceBg }}>
-        {product.image_url ? (
-          <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-xs" style={{ color: mutedC }}>No image</div>
-        )}
+        {/* 🚀 CHANGED: Using FallbackImage here as well */}
+        <FallbackImage
+          src={product.image_url || PLACEHOLDER_IMAGE}
+          alt={product.name}
+          fallbackSrc={PLACEHOLDER_IMAGE}
+          className="w-full h-full object-cover"
+        />
         {selected && (
           <div className="absolute top-2 right-2 min-w-[20px] h-5 px-1.5 rounded-full flex items-center justify-center text-[11px] font-bold" style={{ backgroundColor: accentG, color: isDark ? "#08120c" : "#ffffff" }}>
             {qty}
@@ -306,8 +306,6 @@ export default function MixAndMatch({ onNavigate }) {
           api.getCustomizationProducts(),
           api.getAiUsage().catch(() => ({ remaining: 5, limit: 5 })),
         ])
-        // Keep the debugging log so product shape is still visible during dev.
-        console.log("FIRST PRODUCT DATA:", prodRes[0]);
 
         setCustomizationEnabled(toggleRes.enabled)
         setProducts(Array.isArray(prodRes) ? prodRes : [])

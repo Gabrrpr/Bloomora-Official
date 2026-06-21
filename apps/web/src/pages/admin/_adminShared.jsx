@@ -315,31 +315,41 @@ export function IconBtn({ onClick, icon, dark = false, color }) {
   )
 }
 
-export function ActionBtns({ onView, onDelete }) {
+export function ActionBtns({ onEdit, onView, onDelete }) {
+  const t = useTokens()
+  const base = "px-2 py-1 text-xs font-semibold rounded-md transition-colors active:scale-95"
+  const divider = <span aria-hidden="true" style={{ width: 1, height: 13, backgroundColor: t.cardBorder, flexShrink: 0 }} />
+
   return (
-    <div className="flex items-center justify-end gap-3">
-      {onView && (
-        <button 
-          onClick={onView} 
-          className="text-gray-400 hover:text-blue-500 transition-colors" 
-          title="View Details"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-          </svg>
+    <div className="flex items-center gap-1.5">
+      {onEdit && (
+        <button onClick={onEdit} className={base}
+          style={{ color: t.textSecondary }}
+          onMouseEnter={e => { e.currentTarget.style.backgroundColor = t.hoverBg; e.currentTarget.style.color = t.isDark ? "#4ade80" : DG }}
+          onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = t.textSecondary }}>
+          Edit
         </button>
       )}
 
+      {onEdit && onView && divider}
+
+      {onView && (
+        <button onClick={onView} className={base}
+          style={{ color: t.textSecondary }}
+          onMouseEnter={e => { e.currentTarget.style.backgroundColor = t.hoverBg; e.currentTarget.style.color = t.isDark ? "#93c5fd" : "#1d4ed8" }}
+          onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = t.textSecondary }}>
+          View
+        </button>
+      )}
+
+      {(onEdit || onView) && onDelete && divider}
+
       {onDelete && (
-        <button 
-          onClick={onDelete} 
-          className="text-gray-400 hover:text-red-500 transition-colors" 
-          title="Delete Record"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
+        <button onClick={onDelete} className={base}
+          style={{ color: t.isDark ? "#f87171" : "#dc2626" }}
+          onMouseEnter={e => e.currentTarget.style.backgroundColor = t.isDark ? "rgba(239,68,68,0.12)" : "#fef2f2"}
+          onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+          Delete
         </button>
       )}
     </div>

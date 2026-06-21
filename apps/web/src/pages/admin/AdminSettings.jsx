@@ -178,7 +178,6 @@ function SaveBtn({ onClick, saved }) {
 
 export default function AdminSettings() {
   const t = useTokens()
-  // Drives the one-time entrance animation; removed after it plays so it never replays.
   const [entered, setEntered] = useState(false)
 
   const [storeName, setStoreName]   = useState("Esting's Flower International Inc.")
@@ -198,11 +197,6 @@ export default function AdminSettings() {
   const [closeTime, setCloseTime]   = useState("20:00")
   const [openDays, setOpenDays]     = useState(["Mon","Tue","Wed","Thu","Fri","Sat"])
   const [hoursSaved, setHoursSaved] = useState(false)
-
-  const [deliveryFee, setDeliveryFee]       = useState("150")
-  const [minOrder, setMinOrder]             = useState("500")
-  const [sameDayCutoff, setSameDayCutoff]   = useState("09:00")
-  const [delivSaved, setDelivSaved]         = useState(false)
 
   const [customizationEnabled, setCustomizationEnabled] = useState(true)
   const [toggleSaved, setToggleSaved]   = useState(false)
@@ -233,7 +227,6 @@ export default function AdminSettings() {
       .catch(() => setCustomizationEnabled(true))
   }, [])
 
-  // Play the entrance animation once on mount, then turn it off.
   useEffect(() => {
     const timer = setTimeout(() => setEntered(true), 1500)
     return () => clearTimeout(timer)
@@ -255,7 +248,6 @@ export default function AdminSettings() {
 
   return (
     <div className="space-y-5">
-      {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
       <style>{`
         @keyframes settingsRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
         .settings-rise { animation: settingsRise 0.85s ease-out both; }
@@ -342,35 +334,6 @@ export default function AdminSettings() {
           </Field>
           <div className="flex justify-end pt-1">
             <SaveBtn onClick={() => save(setHoursSaved)} saved={hoursSaved} />
-          </div>
-        </SectionCard>
-
-        {/* Delivery Settings */}
-        <SectionCard title="Delivery Settings" subtitle="Configure delivery fees and rules"
-          icon="M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Delivery Fee (₱)" hint="Standard delivery fee">
-              <Input type="number" value={deliveryFee} onChange={setDeliveryFee} placeholder="150" />
-            </Field>
-            <Field label="Minimum Order (₱)" hint="Minimum order for delivery">
-              <Input type="number" value={minOrder} onChange={setMinOrder} placeholder="500" />
-            </Field>
-          </div>
-          <Field label="Same-Day Delivery Cutoff" hint="Orders placed before this time qualify">
-            <Input type="time" value={sameDayCutoff} onChange={setSameDayCutoff} />
-          </Field>
-          <Field label="Delivery Coverage">
-            <div className="flex flex-wrap gap-2">
-              {["Manila","Pampanga"].map(a => (
-                <span key={a} className="px-3 py-1.5 text-xs font-semibold rounded-md"
-                  style={{ backgroundColor: t.tagBg, color: t.tagTxt, border: `1px solid ${t.tagBdr}` }}>
-                  {a}
-                </span>
-              ))}
-            </div>
-          </Field>
-          <div className="flex justify-end pt-1">
-            <SaveBtn onClick={() => save(setDelivSaved)} saved={delivSaved} />
           </div>
         </SectionCard>
       </div>

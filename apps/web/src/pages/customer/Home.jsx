@@ -7,6 +7,7 @@ import HeroCarousel from "../../components/HeroCarousel.jsx"
 import OccasionsStrip from "../../components/OccasionsStrip.jsx"
 import ChooseYourBloom from "../../components/ChooseYourBloom.jsx"
 import DynamicFeaturedSections from "../../components/DynamicFeaturedSection.jsx" 
+import RecommendedProducts from "../../components/recommendations.jsx" // 🚀 IMPORTED HERE
 import CustomizeSection from "../../components/CustomizeSection.jsx"
 import Testimonials from "../../components/Testimonials.jsx"
 import HomeFAQ from "../../components/HomeFAQ.jsx"
@@ -112,7 +113,7 @@ export default function Home({ onNavigate, isCustomizationEnabled }) {
 
       {/* 🚀 Map over the branch-filtered flash sales */}
       {branchFlashSales.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pb-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-7">
             <div className="flex items-center gap-3">
               <span className="flex items-center justify-center w-11 h-11 rounded-2xl flex-shrink-0"
@@ -132,7 +133,7 @@ export default function Home({ onNavigate, isCustomizationEnabled }) {
             </div>
             {flashEndsAt && <FlashCountdown endTime={flashEndsAt} isDark={isDark} />}
           </div>
-          <div className="flex flex-wrap justify-center gap-4">
+          <div className="flex flex-wrap justify-center gap-5">
             {branchFlashSales.map(product => (
               <div key={product.id} className="w-[calc(50%-0.5rem)] sm:w-[230px]">
                 <GridCard
@@ -147,16 +148,24 @@ export default function Home({ onNavigate, isCustomizationEnabled }) {
         </section>
       )}
 
+
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <RecommendedProducts 
+          onPreview={setPreviewProduct} 
+          toggleWishlist={toggleWishlist} 
+          wishlist={[]} 
+        />
+      </section>
+
       <OccasionsStrip onNavigate={onNavigate} />
 
-      {/* 🚀 ADDED KEY: Forces a full component remount when branch changes */}
+
       <ChooseYourBloom 
         key={`carousel-${branch}`} 
         branch={branch} 
         onNavigate={onNavigate} 
       />
 
-      {/* 🚀 ADDED KEY: Forces a full component remount when branch changes */}
       <DynamicFeaturedSections 
         key={`featured-${branch}`} 
         branch={branch} 

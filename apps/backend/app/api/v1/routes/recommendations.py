@@ -1,0 +1,101 @@
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.orm import Session
+from typing import List
+from pydantic import BaseModel
+import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+# Import your database session and models
+from app.core.dependencies import get_db, get_current_user
+from app.models import Product, Order, User
+
+router = APIRouter(prefix="", tags=["Recommendations"])
+
+class ProductSchema(BaseModel):
+    id: str
+    name: str
+    category: str
+    price: float
+    image_url: str = None
+
+@router.get("/home", response_model=List[dict])
+async def get_homepage_recommendations(
+    limit: int = 5,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        # 1. Fetch data
+        past_orders = db.query(Order).filter(Order.user_id == current_user.id).all()
+        active_products = db.query(Product).filter(Product.is_available == True).all()
+        
+        if not active_products:
+            return []
+
+        # 2. BULLETPROOF DATA EXTRACTION
+        catalog_data = []
+        for p in active_products:
+            catalog_data.append({
+                "id": str(p.id), 
+                "name": str(getattr(p, "name", "") or ""), 
+                "category": str(getattr(p, "category_name", getattr(p, "category", "")) or ""), 
+                "price": float(getattr(p, "price", 0) or 0.0),
+                "image_url": str(getattr(p, "image_url", getattr(p, "image", "")) or "")
+            })
+            
+        df = pd.DataFrame(catalog_data)
+        
+        # 3. Create metadata soup safely
+        df["name_clean"] = df["name"].fillna("").astype(str).str.lower()
+        df["cat_clean"] = df["category"].fillna("").astype(str).str.lower()
+        df["metadata_soup"] = df["name_clean"] + " " + df["cat_clean"]
+
+        # 4. Handle "Cold Start" (No purchase history)
+        bought_product_ids = [str(o.product_id) for o in past_orders if getattr(o, "product_id", None)]
+        
+        if not bought_product_ids:
+            return df.head(limit).drop(columns=["metadata_soup", "name_clean", "cat_clean"]).to_dict(orient="records")
+
+        # 5. Build Customer Taste Profile
+        bought_items_df = df[df["id"].isin(bought_product_ids)]
+        
+        if bought_items_df.empty:
+            return df.head(limit).drop(columns=["metadata_soup", "name_clean", "cat_clean"]).to_dict(orient="records")
+
+        user_profile_string = " ".join(bought_items_df["metadata_soup"].tolist()).strip()
+
+        if not user_profile_string:
+            return df.head(limit).drop(columns=["metadata_soup", "name_clean", "cat_clean"]).to_dict(orient="records")
+
+        # 6. TF-IDF and Cosine Similarity
+        tfidf = TfidfVectorizer(stop_words="english")
+        catalog_matrix = tfidf.fit_transform(df["metadata_soup"])
+        user_vector = tfidf.transform([user_profile_string])
+        cosine_sim = cosine_similarity(user_vector, catalog_matrix)
+
+        # 7. Sort scores
+        sim_scores = list(enumerate(cosine_sim[0]))
+        sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
+
+        # 8. Filter out items they already bought
+        recommended_indices = []
+        for score in sim_scores:
+            idx = score[0]
+            prod_id = df.iloc[idx]["id"]
+            if prod_id not in bought_product_ids:
+                recommended_indices.append(idx)
+            if len(recommended_indices) == limit:
+                break
+
+        if len(recommended_indices) < limit:
+            top_all = [score[0] for score in sim_scores[:limit]]
+            recommended_indices = list(dict.fromkeys(recommended_indices + top_all))[:limit]
+
+        # 9. Return results
+        recommended_df = df.iloc[recommended_indices]
+        return recommended_df.drop(columns=["metadata_soup", "name_clean", "cat_clean"]).to_dict(orient="records")
+
+    except Exception as e:
+        print("CRITICAL RECOMMENDATION ERROR:", str(e))
+        raise HTTPException(status_code=500, detail=f"Recommendation Engine Failed: {str(e)}")

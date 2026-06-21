@@ -65,7 +65,6 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
   const currentPrice = Number(product.price) || 0;
   const oldPrice = Number(product.original) || 0;
   const hasDiscount = oldPrice > currentPrice;
-  // 🚀 Added stock check
   const isOutOfStock = product.stock <= 0 || !product.is_available || product.status === "inactive";
 
   return (
@@ -73,7 +72,6 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
       style={{ border:"1px solid #e8edf0", borderRadius:"12px", overflow:"hidden", height:"210px" }}
       onClick={() => !isOutOfStock && onPreview(product)}>
       
-      {/* 🚀 Out of Stock Overlay */}
       {isOutOfStock && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/30 backdrop-blur-[1px]">
           <span className="bg-gray-900 text-white text-xs font-bold px-4 py-1.5 rounded shadow-lg tracking-widest uppercase">
@@ -151,7 +149,6 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
   const currentPrice = Number(product.price) || 0;
   const oldPrice = Number(product.original) || 0;
   const hasDiscount = oldPrice > currentPrice;
-  // 🚀 Added stock check
   const isOutOfStock = product.stock <= 0 || !product.is_available || product.status === "inactive";
 
   return (
@@ -160,7 +157,6 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
       style={{ border:"1px solid #e8edf0", borderRadius:"12px", overflow:"hidden", alignItems:"stretch" }}
       onClick={() => !isOutOfStock && onPreview(product)}
     >
-      {/* 🚀 Out of Stock Overlay */}
       {isOutOfStock && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/30 backdrop-blur-[1px]">
           <span className="bg-gray-900 text-white text-[10px] font-bold px-2 py-1 rounded shadow tracking-widest uppercase">
@@ -240,7 +236,7 @@ function SidebarContent({
   setPriceRange,
   selectedLocations,
   setSelectedLocations,
-  selectedOccasions,      // 🚀 Pass down dynamic occasions states
+  selectedOccasions,
   setSelectedOccasions
 }) {
   const [minInput, setMinInput] = useState("");
@@ -254,7 +250,6 @@ function SidebarContent({
     setActiveTypes(prev => prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]);
   };
 
-  // 🚀 Occasions selection toggle handler
   const toggleOccasion = (occ) => {
     setSelectedOccasions(prev => prev.includes(occ) ? prev.filter(o => o !== occ) : [...prev, occ]);
   };
@@ -269,7 +264,7 @@ function SidebarContent({
     setActiveCategory("All");
     setActiveTypes([]);
     setSelectedLocations([]);
-    setSelectedOccasions([]); // 🚀 Clear out dynamic selections
+    setSelectedOccasions([]);
     setPriceRange([0, 999999]);
     setMinInput("");
     setMaxInput("");
@@ -290,7 +285,6 @@ function SidebarContent({
     if (type) groupedHierarchy[group][cat].add(type);
   });
 
-  // 🚀 Compute absolute unique list of active occasions across your live dataset
   const uniqueOccasions = Array.from(
     new Set((products || []).flatMap(p => p.occasions || []))
   ).filter(Boolean).sort();
@@ -378,7 +372,6 @@ function SidebarContent({
           Search Filter
         </h3>
 
-        {/* 🚀 DYNAMIC LIVE OCCASIONS LIST IN SIDEBAR */}
         {uniqueOccasions.length > 0 && (
           <div className="mb-6">
             <h4 className="font-medium mb-3 text-gray-800">Shop By Occasion</h4>
@@ -506,14 +499,15 @@ function MobileFilterDrawer({ open, onClose, products, activeCategory, setActive
   )
 }
 
+// 🚀 UPDATED VIEW_ALL TO INCLUDE GRID 5
 const VIEW_ALL = [
   { key:"list",  label:"List view",  mobileVisible:true,  icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.8"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg> },
   { key:"grid2", label:"2 per row",  mobileVisible:true,  icon:<svg className="w-4 h-4" viewBox="0 0 16 16" fill="currentColor"><rect x="0" y="0" width="7" height="7" rx="1"/><rect x="9" y="0" width="7" height="7" rx="1"/><rect x="0" y="9" width="7" height="7" rx="1"/><rect x="9" y="9" width="7" height="7" rx="1"/></svg> },
   { key:"grid3", label:"3 per row",  mobileVisible:false, icon:<svg className="w-4 h-4" viewBox="0 0 15 15" fill="currentColor"><rect x="0" y="0" width="4" height="6" rx="0.8"/><rect x="5.5" y="0" width="4" height="6" rx="0.8"/><rect x="11" y="0" width="4" height="6" rx="0.8"/><rect x="0" y="8" width="4" height="7" rx="0.8"/><rect x="5.5" y="8" width="4" height="7" rx="0.8"/><rect x="11" y="8" width="4" height="7" rx="0.8"/></svg> },
   { key:"grid4", label:"4 per row",  mobileVisible:false, icon:<svg className="w-4 h-4" viewBox="0 0 18 15" fill="currentColor"><rect x="0" y="0" width="3.5" height="6" rx="0.6"/><rect x="4.8" y="0" width="3.5" height="6" rx="0.6"/><rect x="9.6" y="0" width="3.5" height="6" rx="0.6"/><rect x="14.5" y="0" width="3.5" height="6" rx="0.6"/><rect x="0" y="8" width="3.5" height="7" rx="0.6"/><rect x="4.8" y="8" width="3.5" height="7" rx="0.6"/><rect x="9.6" y="8" width="3.5" height="7" rx="0.6"/><rect x="14.5" y="8" width="3.5" height="7" rx="0.6"/></svg> },
+  { key:"grid5", label:"5 per row",  mobileVisible:false, icon:<svg className="w-4 h-4" viewBox="0 0 22 15" fill="currentColor"><rect x="0" y="0" width="3.2" height="6" rx="0.6"/><rect x="4.7" y="0" width="3.2" height="6" rx="0.6"/><rect x="9.4" y="0" width="3.2" height="6" rx="0.6"/><rect x="14.1" y="0" width="3.2" height="6" rx="0.6"/><rect x="18.8" y="0" width="3.2" height="6" rx="0.6"/><rect x="0" y="8" width="3.2" height="7" rx="0.6"/><rect x="4.7" y="8" width="3.2" height="7" rx="0.6"/><rect x="9.4" y="8" width="3.2" height="7" rx="0.6"/><rect x="14.1" y="8" width="3.2" height="7" rx="0.6"/><rect x="18.8" y="8" width="3.2" height="7" rx="0.6"/></svg> },
 ]
 
-// ── Flower petal loader (matches DynamicFeaturedSection) ─────────────────────
 function ShopLoader() {
   const petals = [
     { angle: 0,   color: "#f48fb1" },
@@ -547,7 +541,7 @@ export default function Shop({ onNavigate, initialCategory }) {
 
   const [products, setProducts]               = useState([])
   const [productsLoading, setProductsLoading] = useState(true)
-  const [viewAs, setViewAs]                   = useState("grid3")
+  const [viewAs, setViewAs]                   = useState("grid4") // 🚀 Default to denser grid now that we support 5
   const [sortBy, setSortBy]                   = useState("best-selling")
   const [activeCategory, setActiveCategory]   = useState("All")
   const [categoryHierarchy, setCategoryHierarchy] = useState([])
@@ -556,7 +550,7 @@ export default function Shop({ onNavigate, initialCategory }) {
     const saved = localStorage.getItem("bloomora_active_branch");
     return saved ? [saved] : ["Manila"];
   });
-  const [selectedOccasions, setSelectedOccasions] = useState([]) // 🚀 NEW OCCASIONS STATE
+  const [selectedOccasions, setSelectedOccasions] = useState([])
   const [searchQuery, setSearchQuery] = useState("");
 
   const [priceRange, setPriceRange]           = useState([0, 999999])
@@ -567,18 +561,14 @@ export default function Shop({ onNavigate, initialCategory }) {
   const sortRef = useRef(null)
   const sortMenuRef = useRef(null)
 
-  // Initialize searchQuery (read from URL search param handled below)
-
   useEffect(() => {
     const handleBranchUpdate = () => {
       const saved = localStorage.getItem("bloomora_active_branch");
-      if (saved) setSelectedLocations([saved]); // Instantly updates the shop grid
+      if (saved) setSelectedLocations([saved]); 
     };
     window.addEventListener("bloomora:branch-updated", handleBranchUpdate);
     return () => window.removeEventListener("bloomora:branch-updated", handleBranchUpdate);
   }, []);
-
-
 
   useEffect(() => {
     if (initialCategory && initialCategory !== "All") {
@@ -595,25 +585,24 @@ export default function Shop({ onNavigate, initialCategory }) {
       }
     }
 
-    // 🚀 READ INTER-PAGE ROUTING REDIRECT FOR AN OCCASION
     const redirectedOccasion = localStorage.getItem("bloomora_active_occasion");
     if (redirectedOccasion) {
       setSelectedOccasions([redirectedOccasion]);
-      localStorage.removeItem("bloomora_active_occasion"); // Clean up state memory
+      localStorage.removeItem("bloomora_active_occasion");
     }
   }, [initialCategory]);
 
   useEffect(() => {
-  const handleUrlChange = () => {
-    const params = new URLSearchParams(window.location.search);
-    const query = params.get("search") || "";
-    setSearchQuery(query);
-  };
+    const handleUrlChange = () => {
+      const params = new URLSearchParams(window.location.search);
+      const query = params.get("search") || "";
+      setSearchQuery(query);
+    };
 
-  handleUrlChange(); // reads on mount
-  window.addEventListener("popstate", handleUrlChange);
-  return () => window.removeEventListener("popstate", handleUrlChange);
-}, []);
+    handleUrlChange();
+    window.addEventListener("popstate", handleUrlChange);
+    return () => window.removeEventListener("popstate", handleUrlChange);
+  }, []);
 
   useEffect(() => {
     api.get("/products/categories/hierarchy") 
@@ -626,10 +615,7 @@ export default function Shop({ onNavigate, initialCategory }) {
           const mapped = data.map(p => ({
             ...p,
             image: p.image_url || new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href,
-            
-            // 🚀 THE FIX: Remove the "* 1.2". If there is no original price, it stays null!
             original: p.original_price || null, 
-            
             rating: 5.0,
             reviews: 0,
             ribbon: p.ribbon || null,
@@ -644,9 +630,11 @@ export default function Shop({ onNavigate, initialCategory }) {
       })
       .finally(() => setProductsLoading(false));
   }, []);
+  
+  // 🚀 UPDATED MOBILE CHECK TO REVERT GRID 5 AS WELL
   useEffect(() => {
-    if (isMobile && (viewAs === "grid3" || viewAs === "grid4")) setViewAs("grid2")
-  }, [isMobile])
+    if (isMobile && (viewAs === "grid3" || viewAs === "grid4" || viewAs === "grid5")) setViewAs("grid2")
+  }, [isMobile, viewAs])
 
   useEffect(() => {
     const h = e => {
@@ -658,8 +646,7 @@ export default function Shop({ onNavigate, initialCategory }) {
     return () => document.removeEventListener("mousedown", h)
   }, [])
 
-  // Toast shown when a product is added to / removed from the wishlist
-  const [toast, setToast] = useState(null) // { msg, added, key }
+  const [toast, setToast] = useState(null)
   useEffect(() => {
     if (!toast) return
     const t = setTimeout(() => setToast(null), 2000)
@@ -671,6 +658,7 @@ export default function Shop({ onNavigate, initialCategory }) {
     setWishlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
     setToast({ msg: has ? "Removed from wishlist" : "Added to wishlist", added: !has, key: Date.now() })
   }
+  
   const normalizeCat = (s) => (s || "").toString().trim().toLowerCase();
 
   const getSidebarCategories = () => {
@@ -688,8 +676,6 @@ export default function Shop({ onNavigate, initialCategory }) {
 
   const dynamicCategories = getSidebarCategories();
 
-  // 🚀 Live search: if user types, fetch from backend search endpoint
-  // (backend supports name/category/description/tags)
   const [searchResults, setSearchResults] = useState(null)
   const [searchLoading, setSearchLoading] = useState(false)
 
@@ -735,7 +721,6 @@ export default function Shop({ onNavigate, initialCategory }) {
     }
   }, [searchQuery])
 
-  // 🚀 LIVE MULTI-LAYER FILTER COMBINATIONS
   const baseList = (searchResults !== null ? searchResults : products)
 
   const filtered = baseList
@@ -744,10 +729,8 @@ export default function Shop({ onNavigate, initialCategory }) {
       const locs = selectedLocations.map(l => (l || "").toLowerCase().trim());
       
       if (locs.includes("pampanga") && !locs.includes("manila")) {
-        // 🚀 FALLBACK: Use stock_pampanga, but if it's undefined or null, fall back to global stock
         branchStock = p.stock_pampanga !== undefined && p.stock_pampanga !== null ? p.stock_pampanga : p.stock;
       } else if (locs.includes("manila") && !locs.includes("pampanga")) {
-        // 🚀 FALLBACK: Use stock_manila, but if it's undefined or null, fall back to global stock
         branchStock = p.stock_manila !== undefined && p.stock_manila !== null ? p.stock_manila : p.stock;
       }
       
@@ -768,20 +751,15 @@ export default function Shop({ onNavigate, initialCategory }) {
       if (!activeTypes || activeTypes.length === 0) return true;
       return activeTypes.map(normalizeCat).includes(normalizeCat(p.product_type || ""));
     })
-    // 🚀 THE FIX: Strictly filter out products not designated for the selected branch!
     .filter(p => {
       if (!selectedLocations || selectedLocations.length === 0) return true;
       const selectedLocsNorm = selectedLocations.map(normalizeCat);
       
-      // Get explicitly assigned branches
       const branches = Array.isArray(p.branches) ? p.branches.map(normalizeCat) : [];
       
-      // 🚨 CRITICAL FIX: If a product has NO branch assigned, default it to Manila.
-      // Do NOT make it available everywhere automatically.
       if (branches.length === 0) {
          branches.push("manila");
       }
-      // Only show the product if the selected branch is in the product's branch list
       return selectedLocsNorm.some(loc => branches.includes(loc));
       })
     .filter(p => p.price >= priceRange[0] && p.price <= priceRange[1])
@@ -811,11 +789,13 @@ export default function Shop({ onNavigate, initialCategory }) {
       return (b.reviews || 0) - (a.reviews || 0);
     });
 
+  // 🚀 CSS CALCULATION UPDATED FOR GRID 5
   const getGridStyle = () => {
     if (viewAs === "list")  return { display:"flex", flexDirection:"column", gap:"10px" }
     if (viewAs === "grid2") return { display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:"12px" }
     if (viewAs === "grid3") return { display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:"12px" }
     if (viewAs === "grid4") return { display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:"12px" }
+    if (viewAs === "grid5") return { display:"grid", gridTemplateColumns:"repeat(5,minmax(0,1fr))", gap:"10px" } // gap slightly smaller to fit smoothly
     return {}
   }
 
@@ -915,8 +895,6 @@ export default function Shop({ onNavigate, initialCategory }) {
                 </button>
 
                 {sortOpen && createPortal(
-                  // Portaled to <body> + fixed positioning so no transformed ancestor
-                  // or stacking context can offset, clip, or cover the menu.
                   <div
                     ref={sortMenuRef}
                     className="fixed bg-white z-[9999] shadow-2xl overflow-hidden"
@@ -965,7 +943,6 @@ export default function Shop({ onNavigate, initialCategory }) {
                   Search: "{searchQuery}"
                   <button 
                     onClick={() => {
-                      // Clear the URL and the state
                       window.history.pushState({}, '', window.location.pathname);
                       setSearchQuery("");
                     }} 
@@ -1003,7 +980,6 @@ export default function Shop({ onNavigate, initialCategory }) {
       <Footer onNavigate={onNavigate}/>
       {previewProduct && <ProductPreviewModal product={{ ...previewProduct, _ribbonColor: RIBBON_COLORS[previewProduct.ribbon] }} onClose={() => setPreviewProduct(null)} onNavigate={onNavigate}/>}
 
-      {/* Wishlist toast */}
       {toast && (
         <div
           key={toast.key}

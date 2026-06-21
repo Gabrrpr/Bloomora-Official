@@ -30,6 +30,7 @@ from app.api.v1.routes import (
     users,
     vases,
     upload,
+    recommendations
 )
 from app.core.config import settings
 from app.core.limiter import limiter
@@ -123,6 +124,7 @@ app.include_router(reviews.router, prefix="/api/v1", tags=["Reviews"])
 app.include_router(vases.router, prefix="/api/v1/vases", tags=["Vases"])
 app.include_router(campaigns.router, prefix="/api/v1", tags=["campaigns"])
 app.include_router(upload.router, prefix="/api/v1")
+app.include_router(recommendations.router, prefix="/api/v1/recommendations", tags=["Recommendations"])
 
 
 # 🚀 2. NEW LIVE EXCHANGE RATE ENDPOINT ADDED HERE

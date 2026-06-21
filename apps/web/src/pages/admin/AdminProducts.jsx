@@ -705,7 +705,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
                 {["Available", "Limited", "Out of Stock"].map(a => (
                   <button key={a} type="button" onClick={()=>set("availability")(a)}
                     className="flex-1 py-2 text-[10px] font-bold rounded-md border transition-all"
-                    style={{ backgroundColor:form.availability===a?DG:d.inputBg, color:form.availability===a?"white":d.subC, borderColor:form.availability===a?DG:d.inputBdr }}>
+style={{ backgroundColor:form.availability===a?DG:d.inputBg, color:form.availability===a?"white":d.subC, borderColor:form.availability===a?DG:d.inputBdr }}>
                     {a}
                   </button>
                 ))}
