@@ -1,7 +1,7 @@
 import uuid
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, UniqueConstraint
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import relationship
 
 from .base import Base, now_utc
@@ -10,7 +10,7 @@ from .base import Base, now_utc
 class CartItem(Base):
     __tablename__ = "cart_items"
     __table_args__ = (
-        UniqueConstraint("user_id", "product_id", name="uq_cart_items_user_product"),
+        UniqueConstraint("user_id", "item_key", name="uq_cart_items_user_key"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -23,9 +23,11 @@ class CartItem(Base):
     product_id = Column(
         UUID(as_uuid=True),
         ForeignKey("products.id", ondelete="CASCADE"),
-        nullable=False,
+        nullable=True,
         index=True,
     )
+    item_key = Column(String(300), nullable=False)
+    item_data = Column(JSONB, nullable=False, default=dict)
     quantity = Column(Integer, nullable=False, default=1)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)

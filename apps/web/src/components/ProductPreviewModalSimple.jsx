@@ -247,9 +247,9 @@ export default function ProductPreviewModalSimple({product,onClose,onNavigate}){
     setErrors(e);return Object.keys(e).length===0
   }
 
-  const handleAdd=d=>{
+  const handleAdd=async d=>{
     if(!validate())return
-    addToCart({id:product.id,name:product.name,price:product.price,qty,img:product.image,desc:product.category})
+    await addToCart({id:product.id,name:product.name,price:product.price,qty,img:product.image,desc:product.category})
     window.dispatchEvent(new Event("bloomora:cart-updated"))
     setDest(d);setDone(true)
   }

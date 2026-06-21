@@ -1599,7 +1599,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
     return Object.keys(e).length === 0
   }
 
-  const startFlow = d => {
+  const startFlow = async d => {
     if (!validate()) return
 
     const selectedAddOnObjects = addOns.map(id => {
@@ -1607,7 +1607,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
       return { id: addon.id, name: addon.name, price: addon.price, qty: 1 }
     })
 
-    addToCart({
+    await addToCart({
       id:           product.id,
       name:         product.name,
       price:        product.price,

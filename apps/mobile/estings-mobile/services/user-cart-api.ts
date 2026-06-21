@@ -19,9 +19,17 @@ type BackendProduct = {
 
 type BackendCartItem = {
   id: string;
-  product: BackendProduct;
-  product_id: string;
+  product: BackendProduct | null;
+  product_id: string | null;
   quantity: number;
+  web_item?: {
+    desc?: string;
+    group?: string;
+    id?: string;
+    img?: string;
+    name?: string;
+    price?: number;
+  };
 };
 
 type CartResponse = {
@@ -62,11 +70,35 @@ function mapProduct(product: BackendProduct): Product {
 }
 
 function mapCartItems(response: CartResponse): CartItem[] {
-  return response.items.map((item) => ({
-    id: item.id,
-    product: mapProduct(item.product),
-    quantity: item.quantity,
-  }));
+  return response.items.map((item) => {
+    if (item.product) {
+      return {
+        id: item.id,
+        product: mapProduct(item.product),
+        quantity: item.quantity,
+      };
+    }
+    const snapshot = item.web_item ?? {};
+    const category = snapshot.group || 'Custom Arrangement';
+    return {
+      id: item.id,
+      product: {
+        categoryId: `cat-${category.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+        categoryName: category,
+        description: snapshot.desc,
+        id: snapshot.id || item.id,
+        imageUrl: snapshot.img,
+        isActive: true,
+        name: snapshot.name || 'Custom Arrangement',
+        priceCents: Math.round(Number(snapshot.price || 0) * 100),
+        productGroup: category,
+        productType: 'Custom Arrangement',
+        stock: 99,
+        tag: category,
+      },
+      quantity: item.quantity,
+    };
+  });
 }
 
 async function mutateCart(
@@ -98,7 +130,10 @@ export const userCartApi = {
   },
 
   async remove(productId: string, session: AuthSession) {
-    return mutateCart(`/cart/items/${encodeURIComponent(productId)}`, session, {
+    const items = await this.get(session);
+    const entry = items.find((item) => item.product.id === productId);
+    if (!entry) return items;
+    return mutateCart(`/cart/entries/${encodeURIComponent(entry.id)}`, session, {
       method: 'DELETE',
     });
   },
@@ -123,8 +158,11 @@ export const userCartApi = {
   },
 
   async update(productId: string, quantity: number, session: AuthSession) {
-    return mutateCart(`/cart/items/${encodeURIComponent(productId)}`, session, {
-      body: JSON.stringify({ product_id: productId, quantity }),
+    const items = await this.get(session);
+    const entry = items.find((item) => item.product.id === productId);
+    if (!entry) return items;
+    return mutateCart(`/cart/entries/${encodeURIComponent(entry.id)}`, session, {
+      body: JSON.stringify({ quantity }),
       method: 'PATCH',
     });
   },

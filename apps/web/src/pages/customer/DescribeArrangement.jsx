@@ -349,7 +349,7 @@ export default function DescribeArrangement({ onNavigate }) {
   const addOnTotal = selectedAddOns.reduce((sum, id) => sum + (liveAddOns.find(a => a.id === id)?.price || 0), 0);
   const grandTotal = baseTotal + addOnTotal;
 
-  const handleAddToCart = (destination = "cart") => {
+  const handleAddToCart = async (destination = "cart") => {
     if (!result) return
     
     const breakdownNames = result.price_breakdown?.items?.map(i => `${i.quantity}x ${i.product_name}`).join(", ") || "Custom arrangement"
@@ -383,7 +383,7 @@ export default function DescribeArrangement({ onNavigate }) {
       branch: currentBranch
     }
     
-    addToCart(cartItem)
+    await addToCart(cartItem)
     onNavigate(destination)
   }
 

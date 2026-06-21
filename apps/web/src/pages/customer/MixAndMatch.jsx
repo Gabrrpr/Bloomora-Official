@@ -482,10 +482,10 @@ export default function MixAndMatch({ onNavigate }) {
     if (m[field]) { setSelections(p => ({ ...p, [m[field]]: id })); setUnavailableItems([]) }
   }
 
-  const addToBag = () => {
+  const addToBag = async () => {
     if (!result) return
     const names = result.price_breakdown?.items?.map(i => i.product_name).join(", ") || "Custom"
-    addToCart({
+    await addToCart({
       id: result.arrangement_id || `arr-${Date.now()}`,
       group: "Mix and Match", groupIcon: "", name: customName || "Custom Arrangement",
       desc: `Mix & Match: ${names}`, qty: 1, price: result.price_breakdown?.total_price || 0,

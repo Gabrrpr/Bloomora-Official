@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useBranch } from "../context/branchContext.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useTheme } from "../context/ThemeContext.jsx";
-import { getCartCount, getCart } from "../utils/cart.js";
+import { getCartCount, getCart, getCachedCart } from "../utils/cart.js";
 import { api } from "../services/api.js";
 import estingsLogo from "../assets/EstingsLogo.svg";
 import estingsText from "../assets/Estings.svg";
@@ -597,7 +597,17 @@ function DropdownMenu({ items, categories, onNavigate, onClose }) {
 
 function CartDropdown({ cartCount, onNavigate, navBottom }) {
   const { isDark } = useTheme();
-  const cartItems = getCart();
+  const [cartItems, setCartItems] = useState(getCachedCart());
+  useEffect(() => {
+    let active = true;
+    getCart().then(items => active && setCartItems(items)).catch(() => {});
+    const update = event => setCartItems(event.detail?.items || getCachedCart());
+    window.addEventListener("bloomora:cart-updated", update);
+    return () => {
+      active = false;
+      window.removeEventListener("bloomora:cart-updated", update);
+    };
+  }, []);
   const subtotal = cartItems.reduce((s, i) => s + (i.price||0)*(i.qty||1), 0);
   const bg  = isDark ? "#1a2332" : "white";
   const bdr = isDark ? "#2d3748" : "#e5e7eb";
@@ -857,12 +867,18 @@ function BranchShippingPopup({ branch, onDismiss, onChangeBranch, navBottom }) {
 }
 
 function useCartCount() {
-  const [count, setCount] = useState(getCartCount);
+  const [count, setCount] = useState(() => getCartCount(getCachedCart()));
   useEffect(() => {
-    const update = () => setCount(getCartCount());
+    let active = true;
+    getCart().then(items => active && setCount(getCartCount(items))).catch(() => {});
+    const update = event => setCount(getCartCount(event.detail?.items || getCachedCart()));
     window.addEventListener("bloomora:cart-updated", update);
     window.addEventListener("storage", update);
-    return () => { window.removeEventListener("bloomora:cart-updated", update); window.removeEventListener("storage", update); };
+    return () => {
+      active = false;
+      window.removeEventListener("bloomora:cart-updated", update);
+      window.removeEventListener("storage", update);
+    };
   }, []);
   return count;
 }

@@ -47,8 +47,16 @@ export default function Checkout({ onNavigate }) {
   })
 
   useEffect(() => {
-    const items = getCart().filter(i => i.checked)
-    setCartItems(items)
+    let active = true
+    getCart()
+      .then(items => {
+        if (active) setCartItems(items.filter(i => i.checked))
+      })
+      .catch(e => {
+        console.error("Failed to load cart", e)
+        if (active) setError("Unable to load your cart.")
+      })
+    return () => { active = false }
   }, [])
 
   useEffect(() => {
@@ -258,7 +266,7 @@ export default function Checkout({ onNavigate }) {
 
       const orderIds = res.order_ids || [];
       localStorage.setItem("bloomora_last_order", JSON.stringify(buildOrderData(orderIds)));
-      clearCart();
+      await clearCart();
 
       if (res.checkout_url) {
         window.location.href = res.checkout_url;
@@ -349,7 +357,7 @@ export default function Checkout({ onNavigate }) {
 
       const orderIds = res.order_ids || [];
       localStorage.setItem("bloomora_last_order", JSON.stringify(buildOrderData(orderIds)));
-      clearCart();
+      await clearCart();
 
       if (res.checkout_url) {
         window.location.href = res.checkout_url;

@@ -2,6 +2,7 @@ import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Image as RNImage,
   Pressable,
@@ -171,10 +172,18 @@ export default function ProductDetailsScreen() {
       return;
     }
 
-    const nextItems = await addCartItem(product, quantity);
-    setIsAdded(true);
-    setShowAddedToast(true);
-    setCartItemCount(nextItems.reduce((total, item) => total + item.quantity, 0));
+    try {
+      const nextItems = await addCartItem(product, quantity);
+      setIsAdded(true);
+      setShowAddedToast(true);
+      setCartItemCount(nextItems.reduce((total, item) => total + item.quantity, 0));
+    } catch (error) {
+      Alert.alert(
+        'Unable to add item',
+        error instanceof Error ? error.message : 'Please try again in a moment.',
+      );
+      return;
+    }
 
     if (toastTimer.current) {
       clearTimeout(toastTimer.current);

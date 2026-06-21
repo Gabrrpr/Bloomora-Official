@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { useTheme } from "../../context/ThemeContext"
-import { getCart, setCart, removeFromCart, getCartCount } from "../../utils/cart.js"
+import { getCart, setCart, getCartCount } from "../../utils/cart.js"
 import { validateVoucher, computeDiscount } from "../../utils/vouchers.js"
 import { useAuth } from "../../context/AuthContext"
 
@@ -36,9 +36,22 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
   const [appliedVoucher, setAppliedVoucher] = useState(null)
   const [voucherMsg, setVoucherMsg]         = useState(null) // { type:"error"|"success", text }
 
-  useEffect(() => { setItems(getCart()); setCartCount(getCartCount()) }, [setCartCount])
+  useEffect(() => {
+    let active = true
+    getCart().then(nextItems => {
+      if (!active) return
+      setItems(nextItems)
+      setCartCount(getCartCount(nextItems))
+    }).catch(error => console.error("Failed to load cart:", error))
+    return () => { active = false }
+  }, [setCartCount])
 
-  const persist = (newItems) => { setItems(newItems); setCart(newItems); setCartCount(getCartCount()) }
+  const persist = async (newItems) => {
+    setItems(newItems)
+    const savedItems = await setCart(newItems)
+    setItems(savedItems)
+    setCartCount(getCartCount(savedItems))
+  }
   const checkedItems = items.filter(i => i.checked)
   const subtotal     = checkedItems.reduce((s,i) => s+(i.price||0)*(i.qty||1), 0)
   const shipping     = checkedItems.length > 0 ? 100 : 0
@@ -55,7 +68,7 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
   const toggleItem   = (id,group) => persist(items.map(i => (i.id===id&&i.group===group)?{...i,checked:!i.checked}:i))
   const toggleAll    = () => { const n=!selectAll; setSelectAll(n); persist(items.map(i=>({...i,checked:n}))) }
   const handleQty    = (id,group,delta) => persist(items.map(i => (i.id===id&&i.group===group)?{...i,qty:Math.max(1,(i.qty||1)+delta)}:i))
-  const handleRemove = (id,group) => { const n=items.filter(i=>!(i.id===id&&i.group===group)); persist(n); removeFromCart(id,group) }
+  const handleRemove = (id,group) => persist(items.filter(i=>!(i.id===id&&i.group===group)))
 
   const groups = items.reduce((acc,item) => { const g=item.group||"Others"; if(!acc[g])acc[g]=[]; acc[g].push(item); return acc }, {})
 

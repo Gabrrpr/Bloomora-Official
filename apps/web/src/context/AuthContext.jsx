@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import { loginUser, googleLogin as googleLoginApi, facebookLogin as facebookLoginApi } from "../services/auth";
 import { API_BASE } from "../config/api";
+import { syncGuestCartToAccount } from "../utils/cart.js";
 
 const AuthContext = createContext(null);
 const isPreview = new URLSearchParams(window.location.search).get("preview") === "true";
@@ -41,6 +42,7 @@ export function AuthProvider({ children }) {
       
       localStorage.setItem("user", JSON.stringify(userData));
       setUser(userData);
+      await syncGuestCartToAccount();
       return userData;
     } catch (err) {
       console.error("Auth Fetch Error:", err);
