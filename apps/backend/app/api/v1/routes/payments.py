@@ -93,6 +93,16 @@ async def create_paymongo_checkout(
 
     line_items = []
     for order in orders:
+        if order.items:
+            for item in order.items:
+                name = item.product.name if item.product else (item.arrangement.name or "Custom Arrangement")
+                line_items.append({
+                    "name": name,
+                    "amount": to_paymongo_amount(Decimal(item.price_at_purchase)),
+                    "currency": "PHP",
+                    "quantity": item.quantity,
+                })
+            continue
         print(f"DEBUG: Processing order {order.id} | Database total_amount: {order.total_amount}")
         
         amount_val = order.total_amount or 0
@@ -217,11 +227,14 @@ def _reconcile_paid_checkout(
         elif raw_method in {"gcash", "paymaya", "pay_maya", "ewallet", "wallet"}:
             transaction.payment_method = "ewallet"
 
-    paid_product_pairs = {
-        (transaction.order.user_id, transaction.order.product_id)
-        for transaction in transactions
-        if transaction.order.product_id
-    }
+    paid_product_pairs = set()
+    for transaction in transactions:
+        order = transaction.order
+        if order.product_id:
+            paid_product_pairs.add((order.user_id, order.product_id))
+        for item in order.items or []:
+            if item.product_id:
+                paid_product_pairs.add((order.user_id, item.product_id))
     for user_id, product_id in paid_product_pairs:
         db.query(CartItem).filter(
             CartItem.user_id == user_id,
@@ -410,11 +423,19 @@ async def paymongo_webhook(
             transaction.paid_at = paid_at or datetime.now(timezone.utc)
             transaction.raw_webhook_event = payload
 
-            if event_type == "checkout_session.payment.paid" and transaction.order.product_id:
-                db.query(CartItem).filter(
-                    CartItem.user_id == transaction.order.user_id,
-                    CartItem.product_id == transaction.order.product_id,
-                ).delete(synchronize_session=False)
+            if event_type == "checkout_session.payment.paid":
+                product_ids = {
+                    item.product_id
+                    for item in transaction.order.items or []
+                    if item.product_id
+                }
+                if transaction.order.product_id:
+                    product_ids.add(transaction.order.product_id)
+                if product_ids:
+                    db.query(CartItem).filter(
+                        CartItem.user_id == transaction.order.user_id,
+                        CartItem.product_id.in_(product_ids),
+                    ).delete(synchronize_session=False)
 
         db.commit()
     except Exception as e:

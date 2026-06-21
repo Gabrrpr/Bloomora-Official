@@ -8,7 +8,7 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.models.order import Order
-from app.models import RoleEnum, Transaction, PaymentStatusEnum, Product
+from app.models import RoleEnum, Transaction, PaymentStatusEnum, Product, OrderItem
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -172,9 +172,11 @@ def get_trending_products(
     q = db.query(
         Product.id,
         Product.name,
-        func.sum(Order.quantity).label("sold")
+        func.sum(OrderItem.quantity).label("sold")
     ).join(
-        Order, Order.product_id == Product.id
+        OrderItem, OrderItem.product_id == Product.id
+    ).join(
+        Order, Order.id == OrderItem.order_id
     ).join(
         Transaction, Order.id == Transaction.order_id
     ).filter(

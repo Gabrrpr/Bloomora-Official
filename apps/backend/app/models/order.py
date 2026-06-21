@@ -57,8 +57,6 @@ class Order(Base):
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
     branch_name = Column(String(50), nullable=False, default="Manila")
-    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
-
     # Relationships
     user = relationship("User", back_populates="orders", foreign_keys=[user_id])
     arrangement = relationship("Arrangement", back_populates="orders")

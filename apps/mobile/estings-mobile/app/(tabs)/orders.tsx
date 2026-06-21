@@ -1,50 +1,47 @@
 import { Image } from 'expo-image';
-import { router, useFocusEffect } from 'expo-router';
-import { CheckCircle2, Clock3, ImageOff, PackageCheck, ReceiptText, RefreshCw, ShoppingBag, Truck } from 'lucide-react-native';
+import { router, useFocusEffect, type Href } from 'expo-router';
+import { CalendarDays, ChevronRight, Clock3, ImageOff, Search, ShoppingBag } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppBrandHeader } from '@/components/app-brand-header';
+import { AppPageHeader } from '@/components/app-page-header';
 import { formatPhp } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { getAuthSession, type AuthSession } from '@/services/auth-session';
 import { getMyOrders, type CustomerOrder } from '@/services/orders-api';
 
-const outlineColor = 'rgba(31, 42, 36, 0.11)';
-const hairlineColor = 'rgba(31, 42, 36, 0.09)';
+type OrderTab = 'all' | 'to_pay' | 'processing' | 'shipped' | 'completed' | 'failed';
+
+const tabs: { id: OrderTab; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'to_pay', label: 'To Pay' },
+  { id: 'processing', label: 'Processing' },
+  { id: 'shipped', label: 'Shipped' },
+  { id: 'completed', label: 'Completed' },
+  { id: 'failed', label: 'Failed' },
+];
 
 export default function OrdersScreen() {
   const insets = useSafeAreaInsets();
+  const [activeTab, setActiveTab] = useState<OrderTab>('all');
+  const [query, setQuery] = useState('');
   const [session, setSession] = useState<AuthSession | null>(null);
   const [orders, setOrders] = useState<CustomerOrder[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const pendingCount = useMemo(
-    () => orders.filter((order) => order.paymentStatus !== 'paid').length,
-    [orders],
-  );
-
-  const loadOrders = useCallback(async (showRefresh = false) => {
-    if (showRefresh) {
+  const loadOrders = useCallback(async (refresh = false) => {
+    if (refresh) {
       setIsRefreshing(true);
     } else {
       setIsLoading(true);
     }
-
     try {
       const nextSession = await getAuthSession();
       setSession(nextSession);
-
-      if (!nextSession) {
-        setOrders([]);
-        setErrorMessage(null);
-        return;
-      }
-
-      setOrders(await getMyOrders({ session: nextSession }));
+      setOrders(nextSession ? await getMyOrders({ session: nextSession }) : []);
       setErrorMessage(null);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Orders are unavailable right now.');
@@ -54,507 +51,197 @@ export default function OrdersScreen() {
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      void loadOrders();
-    }, [loadOrders]),
-  );
+  useFocusEffect(useCallback(() => void loadOrders(), [loadOrders]));
+
+  const visibleOrders = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return orders.filter((order) => {
+      const matchesTab = activeTab === 'all' || getOrderTab(order) === activeTab;
+      const matchesQuery = !normalizedQuery || [
+        order.orderNumber,
+        order.productName,
+        ...order.items.map((item) => item.productName),
+      ].some((value) => value.toLowerCase().includes(normalizedQuery));
+      return matchesTab && matchesQuery;
+    });
+  }, [activeTab, orders, query]);
 
   return (
     <View style={styles.screen}>
+      <AppPageHeader title="My Orders" />
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabsScroll} contentContainerStyle={styles.tabBar}>
+        {tabs.map((tab) => {
+          const selected = activeTab === tab.id;
+          return (
+            <Pressable key={tab.id} onPress={() => setActiveTab(tab.id)} style={styles.tab}>
+              <Text style={[styles.tabText, selected && styles.tabTextActive]}>{tab.label}</Text>
+              <View style={[styles.tabIndicator, selected && styles.tabIndicatorActive]} />
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
       <ScrollView
-        contentInsetAdjustmentBehavior="automatic"
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 100 }]}
         refreshControl={<RefreshControl refreshing={isRefreshing} tintColor={theme.colors.primary} onRefresh={() => loadOrders(true)} />}
-        showsVerticalScrollIndicator={false}
-        style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 104 }]}>
-        <AppBrandHeader />
-
-        <View style={styles.body}>
-          <View style={styles.headerRow}>
-            <View style={styles.headerCopy}>
-              <Text style={styles.eyebrow}>ORDERS</Text>
-              <Text style={styles.title}>Your Orders</Text>
-              <Text style={styles.subtitle}>
-                {session
-                  ? pendingCount > 0
-                    ? `${pendingCount} ${pendingCount === 1 ? 'order is' : 'orders are'} waiting for payment confirmation.`
-                    : 'Track payment, preparation, and delivery status here.'
-                  : 'Sign in to view your flower orders.'}
-              </Text>
-            </View>
-            {session ? (
-              <Pressable
-                accessibilityLabel="Refresh orders"
-                accessibilityRole="button"
-                onPress={() => loadOrders(true)}
-                style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}>
-                <RefreshCw color={theme.colors.primary} size={20} strokeWidth={2.3} />
-              </Pressable>
-            ) : null}
+        showsVerticalScrollIndicator={false}>
+        {session ? (
+          <View style={styles.searchField}>
+            <Search color="#333333" size={21} />
+            <TextInput
+              onChangeText={setQuery}
+              placeholder={`Search ${activeTab === 'all' ? '' : `${tabs.find((tab) => tab.id === activeTab)?.label.toLowerCase()} `}orders`}
+              placeholderTextColor="#B7B7B7"
+              style={styles.searchInput}
+              value={query}
+            />
           </View>
+        ) : null}
 
-          {isLoading ? (
-            <OrdersLoadingState />
-          ) : !session ? (
-            <SignedOutState />
-          ) : errorMessage ? (
-            <OrdersErrorState message={errorMessage} onRetry={() => loadOrders(true)} />
-          ) : orders.length === 0 ? (
-            <EmptyOrdersState />
-          ) : (
-            <View style={styles.orderList}>
-              {orders.map((order) => (
-                <OrderCard key={order.id} order={order} />
-              ))}
-            </View>
-          )}
-        </View>
+        {isLoading ? (
+          <View style={styles.state}><ActivityIndicator color={theme.colors.primary} /><Text style={styles.stateText}>Loading orders</Text></View>
+        ) : !session ? (
+          <EmptyState message="Sign in to see your orders and payment status." action="Sign in" onPress={() => router.push('/(auth)/login')} />
+        ) : errorMessage ? (
+          <EmptyState message={errorMessage} action="Try again" onPress={() => loadOrders(true)} />
+        ) : visibleOrders.length === 0 ? (
+          <View style={styles.noOrders}><Text style={styles.noOrdersText}>{query ? 'No matching orders' : 'No current orders'}</Text></View>
+        ) : (
+          visibleOrders.map((order) => <OrderCard key={order.id} order={order} />)
+        )}
       </ScrollView>
     </View>
   );
 }
 
 function OrderCard({ order }: { order: CustomerOrder }) {
-  const paymentTone = order.paymentStatus === 'paid' ? 'paid' : 'pending';
-  const StatusIcon = getOrderStatusIcon(order.status);
-
+  const status = getCustomerStatus(order);
+  const pending = getOrderTab(order) === 'to_pay';
   return (
-    <View style={styles.orderCard}>
-      <View style={styles.orderTopRow}>
-        <View style={styles.orderIdentity}>
-          <View style={styles.orderIcon}>
-            <ReceiptText color={theme.colors.primary} size={20} strokeWidth={2.2} />
-          </View>
-          <View style={styles.orderNumberCopy}>
-            <Text style={styles.orderNumber}>{order.orderNumber}</Text>
-            <Text style={styles.orderDate}>{formatDate(order.createdAt)}</Text>
-          </View>
+    <Pressable onPress={() => router.push(`/order-details/${order.id}` as Href)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+      <View style={styles.cardHeader}>
+        <View style={styles.orderHeading}>
+          <Text style={styles.orderNumber}>{order.orderNumber}</Text>
+          <View style={[styles.statusBadge, pending && styles.statusBadgePending]}><Text style={[styles.statusText, pending && styles.statusTextPending]}>{status}</Text></View>
         </View>
-        <PaymentBadge status={order.paymentStatus} tone={paymentTone} />
+        <View style={styles.placedRow}><Text style={styles.placedText}>Placed on {formatDateTime(order.createdAt)}</Text><ChevronRight color="#555555" size={19} /></View>
       </View>
 
-      <View style={styles.orderProductRow}>
-        {order.imageUrl ? (
-          <Image cachePolicy="memory-disk" contentFit="cover" source={{ uri: order.imageUrl }} style={styles.productImage} />
-        ) : (
-          <View style={styles.productFallback}>
-            <ImageOff color={theme.colors.primary} size={26} />
+      <View style={styles.schedulePanel}>
+        <ScheduleValue icon={CalendarDays} label="Delivery Date" value={formatScheduleDate(order.scheduledAt)} />
+        <View style={styles.scheduleDivider} />
+        <ScheduleValue icon={Clock3} label="Delivery Time" value={formatScheduleTime(order.scheduledAt)} />
+      </View>
+
+      {order.items.slice(0, 2).map((item) => (
+        <View key={item.id} style={styles.productRow}>
+          {item.imageUrl ? <Image contentFit="cover" source={{ uri: item.imageUrl }} style={styles.productImage} /> : <View style={styles.imageFallback}><ImageOff color={theme.colors.primary} size={23} /></View>}
+          <View style={styles.productCopy}>
+            <Text numberOfLines={2} style={styles.productName}>{item.productName}</Text>
+            <Text style={styles.productDetails}>{order.branch || "Esting's Flower Shop"}</Text>
           </View>
-        )}
-        <View style={styles.productCopy}>
-          <Text numberOfLines={2} style={styles.productName}>
-            {order.productName}
-          </Text>
-          <Text style={styles.productMeta}>
-            Qty {order.quantity} · {order.branch || 'Esting\'s'}
-          </Text>
-          <Text style={styles.productPrice}>{formatPhp(Math.round(order.totalAmount * 100))}</Text>
+          <View style={styles.productPriceColumn}><Text style={styles.quantity}>x{item.quantity}</Text><Text style={styles.productPrice}>{formatPhp(Math.round(item.totalAmount * 100))}</Text></View>
         </View>
-      </View>
+      ))}
+      {order.items.length > 2 ? <Text style={styles.moreItems}>+ {order.items.length - 2} more items</Text> : null}
 
-      <View style={styles.orderStatusRow}>
-        <View style={styles.statusPill}>
-          <StatusIcon color={theme.colors.primary} size={15} strokeWidth={2.3} />
-          <Text style={styles.statusText}>{formatStatus(order.status)}</Text>
+      <View style={styles.dashedDivider} />
+      <View style={styles.totalRow}><Text style={styles.totalLabel}>Total</Text><Text style={styles.totalValue}>{formatPhp(Math.round(order.totalAmount * 100))}</Text></View>
+      {pending ? (
+        <View style={styles.paymentRow}>
+          <View style={styles.paymentDue}><Text style={styles.paymentDueText}>Payment pending</Text></View>
+          <Pressable onPress={(event) => { event.stopPropagation(); if (order.checkoutUrl) void Linking.openURL(order.checkoutUrl); }} style={styles.payButton}>
+            <Text style={styles.payButtonText}>Pay</Text>
+          </Pressable>
         </View>
-        {order.paymentProvider ? <Text style={styles.providerText}>{formatProvider(order.paymentProvider)}</Text> : null}
-      </View>
-    </View>
+      ) : null}
+    </Pressable>
   );
 }
 
-function PaymentBadge({ status, tone }: { status: string; tone: 'paid' | 'pending' }) {
-  return (
-    <View style={[styles.paymentBadge, tone === 'paid' ? styles.paymentBadgePaid : styles.paymentBadgePending]}>
-      {tone === 'paid' ? (
-        <CheckCircle2 color={theme.colors.primary} size={14} strokeWidth={2.3} />
-      ) : (
-        <Clock3 color={theme.colors.textMuted} size={14} strokeWidth={2.3} />
-      )}
-      <Text style={[styles.paymentBadgeText, tone === 'paid' ? styles.paymentBadgeTextPaid : styles.paymentBadgeTextPending]}>
-        {formatStatus(status)}
-      </Text>
-    </View>
-  );
+function ScheduleValue({ icon: Icon, label, value }: { icon: typeof CalendarDays; label: string; value: string }) {
+  return <View style={styles.scheduleValue}><Text style={styles.scheduleMain}>{value}</Text><View style={styles.scheduleLabelRow}><Icon color="#999999" size={11} /><Text style={styles.scheduleLabel}>{label}</Text></View></View>;
 }
 
-function OrdersLoadingState() {
-  return (
-    <View style={styles.statePanel}>
-      <ActivityIndicator color={theme.colors.primary} />
-      <Text style={styles.stateText}>Loading orders</Text>
-    </View>
-  );
+function EmptyState({ action, message, onPress }: { action: string; message: string; onPress: () => void }) {
+  return <View style={styles.state}><ShoppingBag color={theme.colors.primary} size={34} /><Text style={styles.stateText}>{message}</Text><Pressable onPress={onPress} style={styles.payButton}><Text style={styles.payButtonText}>{action}</Text></Pressable></View>;
 }
 
-function SignedOutState() {
-  return (
-    <View style={styles.emptyPanel}>
-      <View style={styles.emptyIcon}>
-        <PackageCheck color={theme.colors.primary} size={34} strokeWidth={2.1} />
-      </View>
-      <Text style={styles.emptyTitle}>Sign in to track orders</Text>
-      <Text style={styles.emptyText}>Orders, payment status, and delivery updates appear here after checkout.</Text>
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => router.push('/(auth)/login')}
-        style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}>
-        <Text style={styles.primaryActionText}>Sign in</Text>
-      </Pressable>
-    </View>
-  );
+export function getOrderTab(order: CustomerOrder): Exclude<OrderTab, 'all'> {
+  if (order.paymentStatus === 'failed' || order.status === 'cancelled') return 'failed';
+  if (order.paymentStatus !== 'paid') return 'to_pay';
+  if (order.status === 'delivered' || order.status === 'completed') return 'completed';
+  if (order.status === 'out_for_delivery') return 'shipped';
+  return 'processing';
 }
 
-function OrdersErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
-  return (
-    <View style={styles.emptyPanel}>
-      <View style={styles.emptyIcon}>
-        <Clock3 color={theme.colors.primary} size={34} strokeWidth={2.1} />
-      </View>
-      <Text style={styles.emptyTitle}>Orders unavailable</Text>
-      <Text style={styles.emptyText}>{message}</Text>
-      <Pressable accessibilityRole="button" onPress={onRetry} style={({ pressed }) => [styles.secondaryAction, pressed && styles.pressed]}>
-        <Text style={styles.secondaryActionText}>Try again</Text>
-      </Pressable>
-    </View>
-  );
+export function getCustomerStatus(order: CustomerOrder) {
+  const tab = getOrderTab(order);
+  if (tab === 'to_pay') return 'Unpaid';
+  if (tab === 'completed') return 'Completed';
+  if (tab === 'shipped') return 'Out for delivery';
+  if (tab === 'failed') return order.status === 'cancelled' ? 'Cancelled' : 'Failed';
+  return order.status === 'preparing' ? 'Processing' : formatLabel(order.status);
 }
 
-function EmptyOrdersState() {
-  return (
-    <View style={styles.emptyPanel}>
-      <View style={styles.emptyIcon}>
-        <ShoppingBag color={theme.colors.primary} size={34} strokeWidth={2.1} />
-      </View>
-      <Text style={styles.emptyTitle}>No orders yet</Text>
-      <Text style={styles.emptyText}>Your paid and pending checkout orders will appear here.</Text>
-      <Pressable
-        accessibilityRole="button"
-        onPress={() => router.push('/categories')}
-        style={({ pressed }) => [styles.primaryAction, pressed && styles.pressed]}>
-        <Text style={styles.primaryActionText}>Browse products</Text>
-      </Pressable>
-    </View>
-  );
+function formatLabel(value: string) {
+  return value.split(/[_-]+/).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
 }
-
-function getOrderStatusIcon(status: string) {
-  if (status === 'out_for_delivery') {
-    return Truck;
-  }
-
-  if (status === 'delivered' || status === 'confirmed') {
-    return CheckCircle2;
-  }
-
-  return Clock3;
-}
-
-function formatStatus(value: string) {
-  return value
-    .split(/[_\s-]+/)
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-}
-
-function formatProvider(value: string) {
-  return value.toLowerCase() === 'paymongo' ? 'PayMongo' : formatStatus(value);
-}
-
-function formatDate(value?: string | null) {
-  if (!value) {
-    return 'Recently placed';
-  }
-
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return 'Recently placed';
-  }
-
-  return new Intl.DateTimeFormat('en-PH', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  }).format(date);
-}
+function validDate(value?: string | null) { const date = value ? new Date(value) : null; return date && !Number.isNaN(date.getTime()) ? date : null; }
+function formatDateTime(value?: string | null) { const date = validDate(value); return date ? new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(date) : 'Recently'; }
+function formatScheduleDate(value?: string | null) { const date = validDate(value); return date ? new Intl.DateTimeFormat('en-PH', { day: '2-digit', month: 'short', year: 'numeric' }).format(date) : 'To be confirmed'; }
+function formatScheduleTime(value?: string | null) { const date = validDate(value); return date ? new Intl.DateTimeFormat('en-PH', { hour: 'numeric', minute: '2-digit' }).format(date) : 'Anytime (9AM - 6PM)'; }
 
 const styles = StyleSheet.create({
-  screen: {
-    backgroundColor: theme.colors.background,
-    flex: 1,
-  },
-  scroll: {
-    backgroundColor: theme.colors.background,
-    flex: 1,
-  },
-  content: {
-    gap: theme.spacing.lg,
-  },
-  body: {
-    gap: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  headerRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-  },
-  headerCopy: {
-    flex: 1,
-    gap: 3,
-  },
-  eyebrow: {
-    color: theme.colors.primary,
-    fontFamily: Fonts.condensedMedium,
-    fontSize: 13,
-    lineHeight: 16,
-  },
-  title: {
-    color: theme.colors.text,
-    fontFamily: Fonts.sansSemiBold,
-    fontSize: 26,
-    lineHeight: 32,
-  },
-  subtitle: {
-    color: theme.colors.textMuted,
-    fontFamily: Fonts.sans,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  iconButton: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: outlineColor,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    height: 42,
-    justifyContent: 'center',
-    width: 42,
-  },
-  orderList: {
-    gap: theme.spacing.md,
-  },
-  orderCard: {
-    backgroundColor: theme.colors.surface,
-    borderColor: outlineColor,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    gap: theme.spacing.md,
-    padding: theme.spacing.md,
-  },
-  orderTopRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    justifyContent: 'space-between',
-  },
-  orderIdentity: {
-    alignItems: 'center',
-    flex: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    minWidth: 0,
-  },
-  orderIcon: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.greenSoft,
-    borderRadius: theme.radius.sm,
-    height: 38,
-    justifyContent: 'center',
-    width: 38,
-  },
-  orderNumberCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  orderNumber: {
-    color: theme.colors.text,
-    fontFamily: Fonts.sansBold,
-    fontSize: 14,
-    lineHeight: 19,
-  },
-  orderDate: {
-    color: theme.colors.textMuted,
-    fontFamily: Fonts.sans,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  paymentBadge: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    flexDirection: 'row',
-    gap: 5,
-    minHeight: 30,
-    paddingHorizontal: theme.spacing.sm,
-  },
-  paymentBadgePaid: {
-    backgroundColor: theme.colors.greenSoft,
-  },
-  paymentBadgePending: {
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  paymentBadgeText: {
-    fontFamily: Fonts.sansBold,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  paymentBadgeTextPaid: {
-    color: theme.colors.primary,
-  },
-  paymentBadgeTextPending: {
-    color: theme.colors.textMuted,
-  },
-  orderProductRow: {
-    borderColor: hairlineColor,
-    borderTopWidth: 1,
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    paddingTop: theme.spacing.md,
-  },
-  productImage: {
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.radius.md,
-    height: 92,
-    width: 82,
-  },
-  productFallback: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.greenSoft,
-    borderRadius: theme.radius.md,
-    height: 92,
-    justifyContent: 'center',
-    width: 82,
-  },
-  productCopy: {
-    flex: 1,
-    gap: 4,
-    minWidth: 0,
-  },
-  productName: {
-    color: theme.colors.text,
-    fontFamily: Fonts.sansBold,
-    fontSize: 15,
-    lineHeight: 20,
-  },
-  productMeta: {
-    color: theme.colors.textMuted,
-    fontFamily: Fonts.sans,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  productPrice: {
-    color: theme.colors.primary,
-    fontFamily: Fonts.sansExtraBold,
-    fontSize: 16,
-    fontVariant: ['tabular-nums'],
-    lineHeight: 22,
-  },
-  orderStatusRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'space-between',
-  },
-  statusPill: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surfaceAlt,
-    borderColor: hairlineColor,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 6,
-    minHeight: 32,
-    paddingHorizontal: theme.spacing.sm,
-  },
-  statusText: {
-    color: theme.colors.text,
-    fontFamily: Fonts.sansSemiBold,
-    fontSize: 12,
-  },
-  providerText: {
-    color: theme.colors.textMuted,
-    fontFamily: Fonts.sansMedium,
-    fontSize: 12,
-  },
-  statePanel: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: outlineColor,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    gap: theme.spacing.sm,
-    padding: theme.spacing.xl,
-  },
-  stateText: {
-    color: theme.colors.textMuted,
-    fontFamily: Fonts.sansMedium,
-    fontSize: 13,
-  },
-  emptyPanel: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: outlineColor,
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.xl,
-    paddingVertical: theme.spacing.xxl,
-  },
-  emptyIcon: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.greenSoft,
-    borderRadius: theme.radius.pill,
-    height: 76,
-    justifyContent: 'center',
-    width: 76,
-  },
-  emptyTitle: {
-    color: theme.colors.text,
-    fontFamily: Fonts.sansBold,
-    fontSize: 20,
-    lineHeight: 26,
-    textAlign: 'center',
-  },
-  emptyText: {
-    color: theme.colors.textMuted,
-    fontFamily: Fonts.sans,
-    fontSize: 13,
-    lineHeight: 19,
-    textAlign: 'center',
-  },
-  primaryAction: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.pill,
-    justifyContent: 'center',
-    marginTop: theme.spacing.md,
-    minHeight: 46,
-    paddingHorizontal: theme.spacing.xl,
-  },
-  primaryActionText: {
-    color: theme.colors.white,
-    fontFamily: Fonts.sansBold,
-    fontSize: 14,
-  },
-  secondaryAction: {
-    alignItems: 'center',
-    borderColor: outlineColor,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    justifyContent: 'center',
-    marginTop: theme.spacing.md,
-    minHeight: 46,
-    paddingHorizontal: theme.spacing.xl,
-  },
-  secondaryActionText: {
-    color: theme.colors.text,
-    fontFamily: Fonts.sansBold,
-    fontSize: 14,
-  },
-  pressed: {
-    opacity: 0.76,
-    transform: [{ scale: 0.98 }],
-  },
+  screen: { backgroundColor: '#F5F5F5', flex: 1 },
+  tabsScroll: { backgroundColor: '#FFFFFF', flexGrow: 0 },
+  tabBar: { borderBottomColor: '#D7D7D7', borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 8 },
+  tab: { alignItems: 'center', minWidth: 82, paddingHorizontal: 8, paddingTop: 16 },
+  tabText: { color: '#A7A7A7', fontFamily: Fonts.sansMedium, fontSize: 12 },
+  tabTextActive: { color: theme.colors.primary, fontFamily: Fonts.sansSemiBold },
+  tabIndicator: { height: 3, marginTop: 12, width: '100%' },
+  tabIndicatorActive: { backgroundColor: theme.colors.primary },
+  content: { gap: 14, padding: 14 },
+  searchField: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#D8D8D8', borderRadius: theme.radius.pill, borderWidth: 1, flexDirection: 'row', gap: 10, minHeight: 52, paddingHorizontal: 16 },
+  searchInput: { color: '#444444', flex: 1, fontFamily: Fonts.sans, fontSize: 14, paddingVertical: 10 },
+  card: { backgroundColor: '#FFFFFF', borderColor: '#D8D8D8', borderRadius: theme.radius.md, borderWidth: 1, boxShadow: '0 2px 3px rgba(0,0,0,0.12)', overflow: 'hidden', paddingBottom: 14 },
+  cardHeader: { alignItems: 'center', borderBottomColor: '#E6E6E6', borderBottomWidth: 1, flexDirection: 'row', justifyContent: 'space-between', padding: 14 },
+  orderHeading: { alignItems: 'center', flexDirection: 'row', gap: 10 },
+  orderNumber: { color: '#333333', fontFamily: Fonts.sansMedium, fontSize: 15 },
+  statusBadge: { backgroundColor: theme.colors.primary, borderRadius: theme.radius.sm, minWidth: 92, paddingHorizontal: 10, paddingVertical: 5 },
+  statusBadgePending: { backgroundColor: '#F1F1F1' },
+  statusText: { color: '#FFFFFF', fontFamily: Fonts.sansMedium, fontSize: 10, textAlign: 'center' },
+  statusTextPending: { color: '#777777' },
+  placedRow: { alignItems: 'center', flexDirection: 'row', gap: 6 },
+  placedText: { color: '#555555', fontFamily: Fonts.sans, fontSize: 9 },
+  schedulePanel: { backgroundColor: '#F6F6F6', borderColor: '#E0E0E0', borderRadius: theme.radius.sm, borderWidth: 1, flexDirection: 'row', margin: 14, minHeight: 72 },
+  scheduleValue: { alignItems: 'center', flex: 1, justifyContent: 'center' },
+  scheduleMain: { color: '#555555', fontFamily: Fonts.sans, fontSize: 13 },
+  scheduleLabelRow: { alignItems: 'center', flexDirection: 'row', gap: 3, marginTop: 3 },
+  scheduleLabel: { color: '#999999', fontFamily: Fonts.sans, fontSize: 9 },
+  scheduleDivider: { backgroundColor: '#E0E0E0', marginVertical: 10, width: 1 },
+  productRow: { alignItems: 'center', flexDirection: 'row', gap: 12, paddingHorizontal: 14, paddingVertical: 7 },
+  productImage: { backgroundColor: '#ECECEC', borderRadius: theme.radius.sm, height: 74, width: 66 },
+  imageFallback: { alignItems: 'center', backgroundColor: '#ECECEC', borderRadius: theme.radius.sm, height: 74, justifyContent: 'center', width: 66 },
+  productCopy: { flex: 1, gap: 4 },
+  productName: { color: '#444444', fontFamily: Fonts.sansMedium, fontSize: 13, lineHeight: 18 },
+  productDetails: { color: '#999999', fontFamily: Fonts.sans, fontSize: 11 },
+  productPriceColumn: { alignItems: 'flex-end', alignSelf: 'stretch', justifyContent: 'space-between', paddingVertical: 4 },
+  quantity: { color: '#777777', fontFamily: Fonts.sans, fontSize: 11 },
+  productPrice: { color: '#444444', fontFamily: Fonts.sansMedium, fontSize: 13, fontVariant: ['tabular-nums'] },
+  moreItems: { color: theme.colors.textMuted, fontFamily: Fonts.sans, fontSize: 11, paddingHorizontal: 14, textAlign: 'right' },
+  dashedDivider: { borderColor: '#D7D7D7', borderStyle: 'dashed', borderTopWidth: 1, marginHorizontal: 14, marginTop: 8 },
+  totalRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 14, paddingTop: 12 },
+  totalLabel: { color: '#555555', fontFamily: Fonts.sans, fontSize: 14 },
+  totalValue: { color: '#444444', fontFamily: Fonts.sansMedium, fontSize: 14, fontVariant: ['tabular-nums'] },
+  paymentRow: { flexDirection: 'row', gap: 10, paddingHorizontal: 14, paddingTop: 10 },
+  paymentDue: { backgroundColor: '#F6F6F6', borderColor: '#DEDEDE', borderRadius: theme.radius.sm, borderWidth: 1, flex: 1, justifyContent: 'center', paddingHorizontal: 12 },
+  paymentDueText: { color: '#555555', fontFamily: Fonts.sans, fontSize: 12 },
+  payButton: { alignItems: 'center', backgroundColor: theme.colors.primary, borderRadius: theme.radius.sm, justifyContent: 'center', minHeight: 44, minWidth: 108, paddingHorizontal: 18 },
+  payButtonText: { color: '#FFFFFF', fontFamily: Fonts.sansMedium, fontSize: 14 },
+  noOrders: { alignItems: 'center', paddingTop: 150 },
+  noOrdersText: { color: '#B7B7B7', fontFamily: Fonts.sans, fontSize: 15 },
+  state: { alignItems: 'center', gap: 12, padding: 48 },
+  stateText: { color: '#777777', fontFamily: Fonts.sans, fontSize: 13, textAlign: 'center' },
+  pressed: { opacity: 0.76 },
 });

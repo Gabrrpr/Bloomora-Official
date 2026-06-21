@@ -3,18 +3,27 @@ from sqlalchemy.orm import Session, object_session, joinedload
 from sqlalchemy import or_, func, String, text
 from typing import List, Optional
 from decimal import Decimal
+from datetime import datetime
 from app.services.email_service import send_order_status_email
 import uuid, os
 import secrets
 
 # 🚀 INJECTED SECURE DEPENDENCIES
 from app.core.dependencies import get_db, get_current_user, require_staff
-from app.models import User, RoleEnum, Order, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory
+from app.models import User, RoleEnum, Order, OrderItem, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory
 
 # We use your dedicated PayMongo service instead of raw requests!
 from app.services.paymongo_service import PayMongoError, create_checkout_session, to_paymongo_amount
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
+
+def _parse_datetime(value):
+    if not value or isinstance(value, datetime):
+        return value
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid delivery date.")
 
 def serialize_order(o) -> dict:
     db = object_session(o)
@@ -23,7 +32,33 @@ def serialize_order(o) -> dict:
     display_name = "Unknown Item"
     total_qty = getattr(o, 'quantity', 1)
 
-    if db and getattr(o, 'product_id', None):
+    serialized_items = []
+    if getattr(o, "items", None):
+        for item in o.items:
+            product = item.product
+            arrangement = item.arrangement
+            unit_price = Decimal(str(item.price_at_purchase or 0))
+            serialized_items.append({
+                "id": str(item.id),
+                "product_id": str(item.product_id) if item.product_id else None,
+                "arrangement_id": str(item.arrangement_id) if item.arrangement_id else None,
+                "product_name": product.name if product else (arrangement.name or "Custom Arrangement"),
+                "image_url": product.image_url if product else arrangement.generated_image_url,
+                "is_custom": arrangement is not None,
+                "quantity": item.quantity,
+                "unit_price": float(unit_price),
+                "line_total": float(unit_price * item.quantity),
+            })
+
+    if serialized_items:
+        first_item = serialized_items[0]
+        display_name = first_item["product_name"]
+        img_url = first_item["image_url"] or ""
+        is_custom = first_item["is_custom"]
+        total_qty = sum(item["quantity"] for item in serialized_items)
+        if len(serialized_items) > 1:
+            display_name = f"{display_name} + {len(serialized_items) - 1} more"
+    elif db and getattr(o, 'product_id', None):
         product = db.query(Product).filter(Product.id == o.product_id).first()
         if product:
             display_name = product.name
@@ -37,26 +72,16 @@ def serialize_order(o) -> dict:
             img_url = getattr(arrangement, 'generated_image_url', "") or getattr(arrangement, 'image_url', "") or getattr(arrangement, 'image', "")
             is_custom = True
             
-    elif getattr(o, 'items', None) and len(o.items) > 0:
-        first_item = o.items[0]
-        if first_item.product:
-            first_item_name = first_item.product.name
-            img_url = getattr(first_item.product, 'image_url', "") or getattr(first_item.product, 'image', "")
-        else:
-            first_item_name = "Unknown Product"
-            
-        if len(o.items) > 1:
-            display_name = f"{first_item_name} + {len(o.items) - 1} more"
-        else:
-            display_name = first_item_name
-            
-        total_qty = sum(item.quantity for item in o.items)
-        is_custom = False
-
     # 🚀 SMART REFERENCE EXTRACTION
     payment_ref = None
+    payment_provider = None
+    checkout_url = None
+    paid_at = None
     if hasattr(o, 'transaction') and o.transaction:
         payment_ref = getattr(o.transaction, 'provider_checkout_session_id', None) or getattr(o.transaction, 'reference_number', None)
+        payment_provider = getattr(o.transaction, 'provider', None)
+        checkout_url = getattr(o.transaction, 'checkout_url', None)
+        paid_at = getattr(o.transaction, 'paid_at', None)
 
     return {
         "id": str(o.id),
@@ -76,7 +101,14 @@ def serialize_order(o) -> dict:
         "delivery_address": o.delivery_address,
         "delivery_notes": o.delivery_notes,
         "scheduled_at": o.scheduled_at.isoformat() if getattr(o, 'scheduled_at', None) else None,
-        "payment_status": o.transaction.status.value if hasattr(o, 'transaction') and o.transaction and hasattr(o.transaction.status, "value") else "pending",
+        "payment_status": (
+            o.transaction.status.value
+            if o.transaction and hasattr(o.transaction.status, "value")
+            else (str(o.transaction.status) if o.transaction else "pending")
+        ),
+        "payment_provider": payment_provider,
+        "checkout_url": checkout_url,
+        "paid_at": paid_at.isoformat() if paid_at else None,
         
         # 🚀 UPDATED: Now it grabs PayMongo IDs too!
         "payment_reference": payment_ref,
@@ -85,7 +117,7 @@ def serialize_order(o) -> dict:
         "has_reviewed": getattr(o, 'has_reviewed', False),
         "created_at": o.created_at.isoformat() if getattr(o, 'created_at', None) else None,
         "updated_at": o.updated_at.isoformat() if getattr(o, 'updated_at', None) else None,
-        "items": [] 
+        "items": serialized_items,
     }
 
 @router.get("/my", response_model=List[dict])
@@ -164,6 +196,130 @@ def get_customer_recent_orders(
     return [serialize_order(o) for o in orders]
 
 @router.post("/", response_model=dict, status_code=201)
+async def create_order(
+    payload: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    cart_items = payload.get("items", [])
+    if not cart_items:
+        raise HTTPException(status_code=400, detail="Cart is empty.")
+
+    delivery_notes = payload.get("delivery_notes", "")
+    raw_branch = payload.get("branch_name") or payload.get("branch")
+    if not raw_branch:
+        raw_branch = "Pampanga" if "[BRANCH:Pampanga]" in delivery_notes else "Manila"
+    payment_method = payload.get("payment_method", "ewallet").lower()
+    checkout_url = None
+
+    try:
+        prepared_items = []
+        total_amount = Decimal("0.00")
+        for incoming in cart_items:
+            item_id = incoming.get("id", "")
+            quantity = int(incoming.get("qty", 1))
+            if quantity < 1:
+                raise HTTPException(status_code=400, detail="Item quantity must be at least 1.")
+            try:
+                item_uuid = uuid.UUID(str(item_id).replace("arr-", ""))
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"Invalid ID format: {item_id}")
+
+            arrangement = db.query(Arrangement).filter(
+                Arrangement.id == item_uuid
+            ).with_for_update().first()
+            if arrangement:
+                if getattr(arrangement, "items", None):
+                    for component in arrangement.items:
+                        required = component.quantity * quantity
+                        inventory = db.query(Inventory).filter(
+                            Inventory.product_id == component.product_id
+                        ).with_for_update().first()
+                        if not inventory or inventory.current_stock < required:
+                            raise HTTPException(status_code=400, detail="Insufficient raw materials for custom order.")
+                        inventory.current_stock -= required
+                unit_price = Decimal(str(arrangement.estimated_price or 0))
+                prepared_items.append(("arrangement", arrangement, quantity, unit_price))
+            else:
+                product = db.query(Product).filter(Product.id == item_uuid).first()
+                inventory = db.query(Inventory).filter(
+                    Inventory.product_id == item_uuid
+                ).with_for_update().first()
+                if not product or not product.is_available or not inventory:
+                    raise HTTPException(status_code=404, detail=f"Product unavailable: {item_id}")
+                if inventory.current_stock < quantity:
+                    raise HTTPException(status_code=400, detail=f"Insufficient stock. Only {inventory.current_stock} left.")
+                inventory.current_stock -= quantity
+                if inventory.current_stock <= 0:
+                    product.is_available = False
+                unit_price = Decimal(str(product.price or 0))
+                prepared_items.append(("product", product, quantity, unit_price))
+
+            if unit_price <= 0:
+                raise HTTPException(status_code=400, detail=f"Invalid price for item: {item_id}")
+            total_amount += unit_price * quantity
+
+        order = Order(
+            id=uuid.uuid4(),
+            user_id=current_user.id,
+            product_id=None,
+            arrangement_id=None,
+            quantity=sum(item[2] for item in prepared_items),
+            total_amount=total_amount,
+            status=OrderStatusEnum.pending,
+            delivery_address=payload.get("delivery_address", ""),
+            delivery_notes=delivery_notes,
+            special_note=payload.get("special_note"),
+            scheduled_at=_parse_datetime(payload.get("scheduled_at") or payload.get("delivery_date")),
+            branch_name=raw_branch.strip().title(),
+        )
+        db.add(order)
+        db.flush()
+
+        for item_type, entity, quantity, unit_price in prepared_items:
+            db.add(OrderItem(
+                order_id=order.id,
+                product_id=entity.id if item_type == "product" else None,
+                arrangement_id=entity.id if item_type == "arrangement" else None,
+                quantity=quantity,
+                price_at_purchase=unit_price,
+            ))
+
+        try:
+            method_enum = PaymentMethodEnum(payment_method)
+        except ValueError:
+            method_enum = PaymentMethodEnum.ewallet
+        is_online = payment_method in {"gcash", "paymaya", "card", "qrph", "paymongo", "ewallet"}
+        transaction = Transaction(
+            id=uuid.uuid4(),
+            order_id=order.id,
+            payment_method=method_enum.value,
+            total_amount=total_amount,
+            status=PaymentStatusEnum.pending.value,
+            reference_number=payload.get("payment_reference") or None,
+            provider="paymongo" if is_online else "manual",
+        )
+        db.add(transaction)
+        db.flush()
+
+        db.commit()
+        return {
+            "status": "success",
+            "message": "Order created.",
+            "order_ids": [str(order.id)],
+            "checkout_url": checkout_url,
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except PayMongoError as error:
+        db.rollback()
+        raise HTTPException(status_code=502, detail=str(error))
+    except Exception:
+        db.rollback()
+        raise
+
+
 async def create_orders(
     payload: dict,
     db: Session = Depends(get_db),
