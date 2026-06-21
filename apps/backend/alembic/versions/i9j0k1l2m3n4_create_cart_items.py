@@ -15,6 +15,10 @@ depends_on = None
 
 
 def upgrade():
+    inspector = sa.inspect(op.get_bind())
+    if inspector.has_table("cart_items"):
+        return
+
     op.create_table(
         "cart_items",
         sa.Column("id", postgresql.UUID(as_uuid=True), nullable=False),
