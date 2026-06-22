@@ -592,27 +592,24 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             <div>
               <div className="flex items-end justify-between mb-1.5">
                 <MLabel d={d}>Category <span style={{ color:"#f87171" }}>*</span></MLabel>
-                {isCustomCategory ? (
-                  <button type="button" onClick={() => { setIsCustomCategory(false); set("category")(""); }} 
-                    className="text-[10px] font-semibold hover:underline transition-all" style={{ color: "#ef4444" }}>
-                    Cancel Custom
-                  </button>
-                ) : (
-                  <span className="text-[10px] font-semibold" style={{ color: d.subC }}>Main Navigation</span>
-                )}
+                <button type="button" onClick={() => setIsCustomCategory(!isCustomCategory)} 
+                  className="text-[10px] font-semibold hover:underline transition-all" style={{ color: isCustomCategory ? "#ef4444" : d.accentG }}>
+                  {isCustomCategory ? "Select Existing" : "Edit / Type Custom"}
+                </button>
               </div>
               {isCustomCategory ? (
-                <MInput value={form.category} onChange={set("category")} placeholder="Type new category..." error={errors.category} d={d}/>
+                <MInput value={form.category} onChange={set("category")} placeholder="Type category name..." error={errors.category} d={d}/> 
               ) : (
                 <MSel value={form.category} 
                   onChange={(val) => {
-                    if (val === "+ Add New Category") { setIsCustomCategory(true); set("category")(""); } 
+                    if (val === "+ Add New Category") { setIsCustomCategory(true); } 
                     else { set("category")(val); }
                   }} 
                   options={["", ...categories, "+ Add New Category"]} d={d} />
               )}
               {errors.category && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.category}</p>}
             </div>
+
 
             <div>
               <div className="flex items-end justify-between mb-1.5">
@@ -1347,9 +1344,21 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             <div>
               <div className="flex items-end justify-between mb-1.5">
                 <MLabel d={d}>Category <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <span className="text-[10px] font-semibold" style={{ color: d.subC }}>Main Navigation</span>
+                <button type="button" onClick={() => setIsCustomCategory(!isCustomCategory)} 
+                  className="text-[10px] font-semibold hover:underline transition-all" style={{ color: isCustomCategory ? "#ef4444" : d.accentG }}>
+                  {isCustomCategory ? "Select Existing" : "Edit / Type Custom"}
+                </button>
               </div>
-              <MSel value={form.category} onChange={set("category")} options={["", ...categories]} d={d}/>
+              {isCustomCategory ? (
+                <MInput value={form.category} onChange={set("category")} placeholder="Type category name..." error={errors.category} d={d}/>
+              ) : (
+                <MSel value={form.category} 
+                  onChange={(val) => {
+                    if (val === "+ Add New Category") { setIsCustomCategory(true); } 
+                    else { set("category")(val); }
+                  }} 
+                  options={["", ...categories, "+ Add New Category"]} d={d} />
+              )}
               {errors.category && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.category}</p>}
             </div>
 
@@ -1857,6 +1866,124 @@ function DeleteProductModal({ product, onClose, onConfirm, isDeleting }) {
   )
 }
 
+// ── Rename Category Modal ─────────────────────────────────────────────────────
+function RenameCategoryModal({ categories, onClose, onSuccess }) {
+  const d = useAdminTokens()
+  const [oldCat, setOldCat] = useState(categories[0] || "")
+  const [newCat, setNewCat] = useState("")
+  
+  const [isSaving, setIsSaving] = useState(false)
+  const [error, setError] = useState("")
+  const [success, setSuccess] = useState(false) // 🚀 New success state
+
+  const handleRename = async () => {
+    setError(""); // Clear previous errors
+    
+    if (!oldCat || !newCat.trim()) {
+      return setError("Please select a target and provide a new name.");
+    }
+    if (oldCat.toLowerCase() === newCat.trim().toLowerCase()) {
+      return setError("The new category name must be different from the old one.");
+    }
+
+    setIsSaving(true)
+    try {
+      await api.post("/products/admin/rename-category", {
+        old_category: oldCat,
+        new_category: newCat.trim()
+      })
+      
+      // 🚀 THE FIX: Trigger the beautiful success screen instead of an alert!
+      setSuccess(true);
+      
+    } catch (e) {
+      setError(e.response?.data?.detail || e.message || "Failed to rename category.")
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4"
+      style={{ backgroundColor: d.overlayBg, backdropFilter: "blur(4px)", top: 0, left: 0, width: "100vw", height: "100vh" }}
+      onClick={e => { if (e.target === e.currentTarget && !isSaving) onClose() }}>
+      <div className="rounded-xl w-full overflow-hidden flex flex-col transition-all"
+        style={{ maxWidth: "400px", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${d.modalBdr}`, backgroundColor: d.modalBg }}>
+        
+        {/* 🚀 PROPER DESIGN: The Success Screen */}
+        {success ? (
+          <div className="p-8 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center animate-bounce-short"
+              style={{ backgroundColor: d.isDark ? "rgba(74,222,128,0.15)" : "#d1fae5" }}>
+              <svg className="w-8 h-8" style={{ color: d.accentG }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            </div>
+            <h3 className="text-xl font-bold mb-2" style={{ color: d.headC }}>Category Renamed!</h3>
+            <p className="text-sm mb-6" style={{ color: d.subC }}>
+              Successfully updated to <strong style={{ color: d.cellC }}>"{newCat.trim()}"</strong>. All products under this category have been instantly updated.
+            </p>
+            <button 
+              onClick={() => { onSuccess(); onClose(); }}
+              className="w-full py-2.5 text-sm font-bold text-white rounded-lg transition-all hover:opacity-90 active:scale-95"
+              style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+              Done
+            </button>
+          </div>
+        ) : (
+          /* The Form Screen */
+          <>
+            <div className="px-6 py-4 border-b" style={{ borderColor: d.modalHdrBdr, background: d.modalHdr }}>
+              <p className="text-base font-bold" style={{ color: d.headC }}>Rename Category</p>
+              <p className="text-xs mt-0.5" style={{ color: d.subC }}>This will instantly update all products in this category.</p>
+            </div>
+
+            <div className="p-6 space-y-4">
+              {/* 🚀 PROPER DESIGN: Inline Error Banner */}
+              {error && (
+                <div className="px-4 py-3 text-sm rounded-lg flex items-start gap-2" 
+                  style={{ backgroundColor: d.isDark ? "rgba(239,68,68,0.1)" : "#fef2f2", border: `1px solid ${d.isDark ? "rgba(239,68,68,0.3)" : "#fecaca"}`, color: d.isDark ? "#fca5a5" : "#dc2626" }}>
+                  <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <div>
+                <MLabel d={d}>Target Category</MLabel>
+                <MSel value={oldCat} onChange={setOldCat} options={categories.filter(c => c)} d={d} />
+              </div>
+              <div>
+                <MLabel d={d}>New Category Name</MLabel>
+                <MInput value={newCat} onChange={setNewCat} placeholder="e.g. Ribbons" error={error} d={d} />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 px-6 py-4 border-t" style={{ borderColor: d.modalFtrBdr, backgroundColor: d.modalFtr }}>
+              <button onClick={onClose} disabled={isSaving} className="px-4 py-2 text-sm font-semibold border rounded-lg transition-all"
+                style={{ borderColor: d.inputBdr, color: d.subC, backgroundColor: d.inputBg }}>
+                Cancel
+              </button>
+              <button onClick={handleRename} disabled={isSaving || !newCat.trim()}
+                className="flex items-center justify-center min-w-[140px] px-5 py-2 text-sm font-bold text-white rounded-lg transition-all disabled:opacity-50"
+                style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+                {isSaving ? (
+                  <span className="flex items-center gap-2">
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Renaming...
+                  </span>
+                ) : "Rename Category"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>,
+    document.body
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 export default function AdminProducts({ onNavigate }) {
   const d = useAdminTokens()
@@ -1868,7 +1995,7 @@ export default function AdminProducts({ onNavigate }) {
   const [status, setStatus]               = useState("")
   const [priceSort, setPriceSort]         = useState("")
   const [branchFilter, setBranchFilter]   = useState("") 
-  
+  const [showRenameModal, setShowRenameModal] = useState(false)
   const [page, setPage]                   = useState(1)
   const [showModal, setShowModal]         = useState(false)
   const [editingProduct, setEditingProduct] = useState(null)
@@ -1983,7 +2110,7 @@ export default function AdminProducts({ onNavigate }) {
   const pageSafe    = Math.min(page,totalPages)
   const paginated   = filtered.slice((pageSafe-1)*PAGE_SIZE, pageSafe*PAGE_SIZE)
 
-  const baseCategories     = ["Bouquet","Flower","Vase","Wrapping","Accessory","Arrangement","Add-on"]
+  const baseCategories = ["Bouquet", "Flowers", "Vase", "Wrapping", "Accessory", "Arrangement", "Add-on"]
   const dynamicCategories  = Array.from(new Set([...baseCategories.map(c=>c.toLowerCase()),...products.map(p=>p.category?.toLowerCase()).filter(Boolean)])).map(c=>c.charAt(0).toUpperCase()+c.slice(1))
 
   const selStyle = { borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }
@@ -2003,6 +2130,7 @@ export default function AdminProducts({ onNavigate }) {
       {editingProduct && <EditProductModal product={editingProduct} onClose={()=>setEditingProduct(null)} onSave={handleEditSave} categories={dynamicCategories} products={products}/>}
       {viewingProduct && <ViewProductModal product={viewingProduct} onClose={()=>setViewingProduct(null)}/>}
       {deletingProduct && <DeleteProductModal product={deletingProduct} onClose={()=>setDeletingProduct(null)} onConfirm={handleConfirmDelete} isDeleting={isDeleting}/>}
+      {showRenameModal && <RenameCategoryModal categories={dynamicCategories} onClose={() => setShowRenameModal(false)} onSuccess={fetchProducts} />}
 
       {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
       <style>{`
@@ -2088,6 +2216,11 @@ export default function AdminProducts({ onNavigate }) {
             </div>
             <button className="px-4 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95"
               style={{ background:`linear-gradient(135deg,${DG},${G})` }}>Filter</button>
+
+              <button onClick={() => setShowRenameModal(true)} className="px-4 py-2 text-sm font-bold rounded-md transition-all active:scale-95 border"
+                style={{ backgroundColor: d.inputBg, borderColor: d.inputBdr, color: d.subC }}>
+                Rename Category
+              </button>
             <ExportProductsBtn data={filtered} d={d}/>
           </div>
         </div>
