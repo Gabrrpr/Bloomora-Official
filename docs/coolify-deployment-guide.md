@@ -65,10 +65,9 @@ Use these application settings:
 | Repository | `Gabrrpr/bloomora-official` |
 | Branch | `main` |
 | Base directory | `/apps/web` |
-| Build pack | Nixpacks |
-| Static site | Enabled |
-| Build command | `npm ci && npm run build` |
-| Publish directory | `/dist` |
+| Build pack | Dockerfile |
+| Dockerfile location | `/Dockerfile` |
+| Port | `80` |
 | Domain | `https://estings.shop` |
 
 Set these build-time environment variables:
@@ -78,6 +77,9 @@ VITE_API_BASE_URL=https://api.estings.shop/api/v1
 VITE_WS_BASE_URL=wss://api.estings.shop/api/v1
 VITE_WEB_URL=https://estings.shop
 ```
+
+Mark the three `VITE_*` values as build-time variables so Coolify passes them
+to the Docker build arguments declared in the Dockerfile.
 
 Add `https://www.estings.shop` only if it will redirect to the canonical root
 domain. Vite embeds these values during the build, so changing one requires a
