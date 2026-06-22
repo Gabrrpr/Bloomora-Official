@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, Fragment } from "react"
 import { createPortal } from "react-dom"
 import { useTheme } from "../../context/ThemeContext"
@@ -252,10 +253,8 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     name:"", group:"floral", category:"", productType:"", 
     price:"", 
     basePrice: "", laborCost: "", markupPercentage: "10", 
-    availability:"Available",
-    status:"Active", description:"", careGuide:[], image_url:"",
+    description:"", careGuide:[], image_url:"",
     season_key:"", limited_start_at:"", limited_end_at:"",
-    stock: 0,          
     is_visible: true,
     composition: [],
     occasions: [],
@@ -313,6 +312,8 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
   const [compSelection, setCompSelection] = useState("");
   const [compQty, setCompQty] = useState(1);
   const [isMaterialDropdownOpen, setIsMaterialDropdownOpen] = useState(false);
+  const [materialSearch, setMaterialSearch] = useState("");
+  const [materialCat, setMaterialCat] = useState("All");
 
   const [errors, setErrors] = useState({})
   const [isUploading, setUploading] = useState(false)
@@ -354,8 +355,20 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     if (!form.name.trim()) err.name = "Product name is required"
     if (!form.category.trim()) err.category = "Category is required"
     if (!form.price || isNaN(form.price) || +form.price <= 0) err.price = "Enter a valid price"
-    if (maxFeasibleStock !== null && Number(form.stock) > maxFeasibleStock) {
-      err.stock = `Insufficient raw materials. Max possible: ${maxFeasibleStock}`
+    
+    // 🚀 NEW: Strict Branch vs Material Validation
+    if (form.composition.length > 0 && form.branches.length > 0) {
+      for (const branch of form.branches) {
+        for (const item of form.composition) {
+          const material = products.find(p => p.id === item.product_id);
+          // If the material has specific branches, make sure it exists in the Arrangement's branch
+          if (material && material.branches && material.branches.length > 0) {
+            if (!material.branches.includes(branch)) {
+              err.branches = `Branch Conflict: "${material.name}" is not available in ${branch}.`;
+            }
+          }
+        }
+      }
     }
     return err
   }
@@ -447,12 +460,17 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
       fd.append("labor_cost", String(form.laborCost || 0));
       fd.append("markup_percentage", String(form.markupPercentage || 0));
 
-      fd.append("status", form.status.toLowerCase());
-      fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false");
+      // 🚀 The FIX: Dynamic Status and Stock
+      const isComposite = form.composition.length > 0;
+      const finalStock = isComposite ? (maxFeasibleStock === null ? 0 : maxFeasibleStock) : 0; // Raw materials default to 0 in Add Product
+      
+      fd.append("status", "active");
+      fd.append("is_available", finalStock > 0 ? "true" : "false");
+      fd.append("stock", String(finalStock));
+
       if (form.description) fd.append("description", form.description.trim());
       if (form.careGuide.length > 0) fd.append("care_guide", form.careGuide.join("\n"));
       if (form.image_url) fd.append("image_url", form.image_url);
-      fd.append("stock", String(form.stock));
       fd.append("is_visible", form.is_visible ? "true" : "false");
       if (form.season_key?.trim()) {
         fd.append("season_key", form.season_key.toLowerCase().trim());
@@ -610,7 +628,6 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
               {errors.category && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.category}</p>}
             </div>
 
-
             <div>
               <div className="flex items-end justify-between mb-1.5">
                 <MLabel d={d}>Type</MLabel>
@@ -634,7 +651,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             <MTextarea value={form.description} onChange={set("description")} placeholder="Brief description..." d={d}/>
           </div>
 
-          {/* CARE GUIDE: shown in the product's "Care Guide" tab on the storefront */}
+          {/* CARE GUIDE */}
           <div className="p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
             <div className="flex items-center gap-2 mb-1.5">
               <svg className="w-4 h-4" style={{ color: d.accentG }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -678,37 +695,40 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <MLabel d={d}>Stock Quantity <span style={{ color:"#f87171" }}>*</span></MLabel>
-              <MInput type="number" value={form.stock} onChange={set("stock")} placeholder="0" error={errors.stock} d={d}/>
-              
-              {maxFeasibleStock !== null && (
-                <div className="mt-1.5 flex items-start gap-1.5">
-                  <span className="text-[10px] mt-0.5">
-                    {Number(form.stock) > maxFeasibleStock ? '❌' : '✅'}
-                  </span>
-                  <span className="text-[10px] leading-tight" style={{ color: Number(form.stock) > maxFeasibleStock ? "#ef4444" : d.subC }}>
-                    Max feasible based on recipe: <strong>{maxFeasibleStock}</strong>
+          {/* 🚀 NEW: Read-Only Dynamic Stock & Availability Panel */}
+          {(() => {
+            const isComposite = form.composition.length > 0;
+            const currentStock = isComposite ? (maxFeasibleStock === null ? 0 : maxFeasibleStock) : 0;
+            const availStatus = currentStock === 0 ? "Out of Stock" : (currentStock <= 5 ? "Limited" : "Available");
+            
+            const colorMap = {
+              "Available": { text: "#10b981", bg: d.isDark ? "rgba(16, 185, 129, 0.1)" : "#d1fae5" },
+              "Limited": { text: "#f59e0b", bg: d.isDark ? "rgba(245, 158, 11, 0.1)" : "#fef3c7" },
+              "Out of Stock": { text: "#ef4444", bg: d.isDark ? "rgba(239, 68, 68, 0.1)" : "#fee2e2" }
+            };
+
+            return (
+              <div className="p-4 rounded-xl flex items-center justify-between" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
+                <div>
+                  <MLabel d={d}>System Availability</MLabel>
+                  <p className="text-xs pr-4" style={{ color: d.subC }}>
+                    {isComposite 
+                      ? "Automatically calculated based on the lowest stock of raw materials in your recipe." 
+                      : "Stock is managed directly in the Inventory tab."}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-1.5 flex-shrink-0 ml-4">
+                  <div className="px-3 py-1.5 rounded-md text-xs font-bold tracking-wide uppercase" 
+                    style={{ backgroundColor: colorMap[availStatus].bg, color: colorMap[availStatus].text, border: `1px solid ${colorMap[availStatus].text}40` }}>
+                    {availStatus}
+                  </div>
+                  <span className="text-xs font-semibold" style={{ color: d.cellC }}>
+                    {currentStock} {isComposite ? "Possible" : "In Stock"}
                   </span>
                 </div>
-              )}
-              {errors.stock && <p className="text-[11px] mt-1 font-bold" style={{ color:"#f87171" }}>{errors.stock}</p>}
-            </div>
-
-            <div>
-              <MLabel d={d}>Availability</MLabel>
-              <div className="flex gap-1">
-                {["Available", "Limited", "Out of Stock"].map(a => (
-                  <button key={a} type="button" onClick={()=>set("availability")(a)}
-                    className="flex-1 py-2 text-[10px] font-bold rounded-md border transition-all"
-style={{ backgroundColor:form.availability===a?DG:d.inputBg, color:form.availability===a?"white":d.subC, borderColor:form.availability===a?DG:d.inputBdr }}>
-                    {a}
-                  </button>
-                ))}
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
           <div className="flex items-start space-x-3 mt-4 p-3 rounded-lg" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f9fafb", border: `1px solid ${d.inputBdr}` }}>
             <input 
@@ -726,11 +746,7 @@ style={{ backgroundColor:form.availability===a?DG:d.inputBg, color:form.availabi
 
           {/* OCCASIONS SELECTION GRID */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {[
-              "Anniversary", "Birthday", "Congratulation", "Get Well", 
-              "Graduation", "I am Sorry", "Love & Romance", "Mother's Day", 
-              "New Baby", "Sympathy", "Thank You", "Valentine's Day", "Wedding"
-            ].map((occ) => (
+            {OCCASIONS_LIST.map((occ) => (
               <label 
                 key={occ} 
                 className="flex items-center space-x-2 cursor-pointer p-1.5 rounded transition-colors"
@@ -775,6 +791,7 @@ style={{ backgroundColor:form.availability===a?DG:d.inputBg, color:form.availabi
             {form.branches.length === 0 && (
                <p className="text-xs text-red-500 mt-2 font-semibold">Please select at least one branch.</p>
             )}
+            {errors.branches && <p className="text-xs text-red-500 mt-2 font-bold p-2 bg-red-50 rounded-md border border-red-200 dark:bg-red-900/20 dark:border-red-800/30">{errors.branches}</p>}
           </div>
 
           <div className="mt-6 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
@@ -829,22 +846,70 @@ style={{ backgroundColor:form.availability===a?DG:d.inputBg, color:form.availabi
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setIsMaterialDropdownOpen(false)} />
                     
-                    <div className="absolute left-0 right-0 top-[65px] z-50 rounded-lg border shadow-xl overflow-y-auto"
-                      style={{ maxHeight: "260px", backgroundColor: d.modalBg, borderColor: d.inputBdr }}>
+                    <div className="absolute left-0 right-0 top-[65px] z-50 rounded-lg border shadow-xl flex flex-col overflow-hidden"
+                      style={{ maxHeight: "320px", backgroundColor: d.modalBg, borderColor: d.inputBdr }}>
                       
-                      <div className="sticky top-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider z-10"
-                        style={{ backgroundColor: d.hdrBg, color: d.subC, borderBottom: `1px solid ${d.divider}` }}>
-                        🌸 Floral Materials
+                      {/* 🚀 NEW: Search Bar & Category Pills (Sticky Header) */}
+                      <div className="p-2 border-b space-y-2 relative z-20" style={{ backgroundColor: d.hdrBg, borderColor: d.divider }}>
+                        <input 
+                          type="text" 
+                          placeholder="Search materials..." 
+                          value={materialSearch} 
+                          onChange={e => setMaterialSearch(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs border rounded-md outline-none transition-colors"
+                          style={{ borderColor: d.inputBdr, backgroundColor: d.inputBg, color: d.inputTxt }}
+                          onFocus={e => e.target.style.borderColor = "#4ade80"}
+                          onBlur={e => e.target.style.borderColor = d.inputBdr}
+                        />
+                        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                          {materialCategories.map(c => (
+                            <button 
+                              key={c} type="button"
+                              onClick={() => setMaterialCat(c)}
+                              className="px-2.5 py-1 text-[10px] font-bold rounded-full whitespace-nowrap transition-colors border"
+                              style={{ 
+                                backgroundColor: materialCat === c ? G : (d.isDark ? "#1e293b" : "#f1f5f9"), 
+                                borderColor: materialCat === c ? G : d.inputBdr,
+                                color: materialCat === c ? "white" : d.subC 
+                              }}>
+                              {c}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      {floralMaterials.map(p => <MaterialDropdownRow key={p.id} p={p} />)}
-                      {floralMaterials.length === 0 && <p className="px-3 py-2 text-xs" style={{ color: d.subC }}>No floral items match the selected branch.</p>}
 
-                      <div className="sticky top-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider z-10"
-                        style={{ backgroundColor: d.hdrBg, color: d.subC, borderTop: `1px solid ${d.divider}`, borderBottom: `1px solid ${d.divider}` }}>
-                        🎀 Non-Floral / Accessories
+                      {/* Dropdown Lists */}
+                      <div className="overflow-y-auto flex-1 relative z-10 pb-2">
+                        {floralMaterials.length > 0 && (
+                          <>
+                            <div className="sticky top-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider z-10"
+                              style={{ backgroundColor: d.hdrBg, color: d.subC, borderBottom: `1px solid ${d.divider}` }}>
+                              🌸 Floral Materials
+                            </div>
+                            {floralMaterials.map(p => <MaterialDropdownRow key={p.id} p={p} />)}
+                          </>
+                        )}
+
+                        {nonFloralMaterials.length > 0 && (
+                          <>
+                            <div className="sticky top-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider z-10"
+                              style={{ 
+                                backgroundColor: d.hdrBg, color: d.subC, 
+                                borderTop: floralMaterials.length > 0 ? `1px solid ${d.divider}` : 'none', 
+                                borderBottom: `1px solid ${d.divider}` 
+                              }}>
+                              🎀 Non-Floral / Accessories
+                            </div>
+                            {nonFloralMaterials.map(p => <MaterialDropdownRow key={p.id} p={p} />)}
+                          </>
+                        )}
+
+                        {floralMaterials.length === 0 && nonFloralMaterials.length === 0 && (
+                           <p className="p-4 text-xs text-center font-medium" style={{ color: d.subC }}>
+                             No materials match your search.
+                           </p>
+                        )}
                       </div>
-                      {nonFloralMaterials.map(p => <MaterialDropdownRow key={p.id} p={p} />)}
-                      {nonFloralMaterials.length === 0 && <p className="px-3 py-2 text-xs" style={{ color: d.subC }}>No accessories match the selected branch.</p>}
                     </div>
                   </>
                 )}
@@ -918,44 +983,19 @@ style={{ backgroundColor:form.availability===a?DG:d.inputBg, color:form.availabi
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
                 <MLabel d={d}>Base Cost (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <MInput
-                  type="number"
-                  value={form.basePrice}
-                  onChange={(val) => handlePricingChange('basePrice', val)}
-                  placeholder="e.g. 500"
-                  d={d}
-                />
+                <MInput type="number" value={form.basePrice} onChange={(val) => handlePricingChange('basePrice', val)} placeholder="e.g. 500" d={d}/>
               </div>
               <div>
                 <MLabel d={d}>Labor Cost (₱)</MLabel>
-                <MInput
-                  type="number"
-                  value={form.laborCost}
-                  onChange={(val) => handlePricingChange('laborCost', val)}
-                  placeholder="e.g. 150"
-                  d={d}
-                />
+                <MInput type="number" value={form.laborCost} onChange={(val) => handlePricingChange('laborCost', val)} placeholder="e.g. 150" d={d}/>
               </div>
               <div>
                 <MLabel d={d}>Markup (%) <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <MInput
-                  type="number"
-                  value={form.markupPercentage}
-                  onChange={(val) => handlePricingChange('markupPercentage', val)}
-                  placeholder="e.g. 50"
-                  d={d}
-                />
+                <MInput type="number" value={form.markupPercentage} onChange={(val) => handlePricingChange('markupPercentage', val)} placeholder="e.g. 50" d={d}/>
               </div>
               <div>
                 <MLabel d={d}>Final Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <MInput
-                  type="number"
-                  value={form.price}
-                  onChange={(val) => handlePricingChange('price', val)}
-                  placeholder="0.00"
-                  error={errors.price}
-                  d={d}
-                />
+                <MInput type="number" value={form.price} onChange={(val) => handlePricingChange('price', val)} placeholder="0.00" error={errors.price} d={d}/>
               </div>
             </div>
             {errors.price && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.price}</p>}
@@ -1002,8 +1042,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     laborCost: product.labor_cost ?? "", 
     markupPercentage: product.markup_percentage ?? "10",
     
-    availability: !product.is_available ? "Out of Stock" : product.stock <= (product.reorder_point || 10) ? "Limited" : "Available",
-    status: product.status === "active" || product.status === "Active" ? "Active" : "Inactive",
     description: product.description || "",
     careGuide: typeof product.care_guide === "string" && product.care_guide.trim()
       ? product.care_guide.split("\n").map(t => t.trim()).filter(Boolean)
@@ -1012,7 +1050,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     season_key: product.season_key || "",
     limited_start_at: product.limited_start_at || "", 
     limited_end_at: product.limited_end_at || "",
-    stock: product.stock ?? 0,
     is_visible: [false, "false", 0, "0"].includes(product.is_visible) ? false : true,
     composition: product.composition || [],
     occasions: product.occasions || [],
@@ -1021,6 +1058,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
   })
 
   const [branchWarning, setBranchWarning] = useState(false);
+  const [isCustomCategory, setIsCustomCategory] = useState(false)
 
   // Recalculate the final price whenever base cost, labor, or markup changes
   const handlePricingChange = (field, value) => {
@@ -1070,13 +1108,13 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
   const [compSelection, setCompSelection] = useState("");
   const [compQty, setCompQty] = useState(1);
   const [isMaterialDropdownOpen, setIsMaterialDropdownOpen] = useState(false);
-
+  const [materialSearch, setMaterialSearch] = useState("");
+  const [materialCat, setMaterialCat] = useState("All");
   const [errors, setErrors] = useState({})
   const [isUploading, setUploading] = useState(false)
   const [removeImage, setRemoveImage] = useState(false)
   const [lightboxSrc, setLightboxSrc] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
-  const [isCustomCategory, setIsCustomCategory] = useState(false)
   const [careTipInput, setCareTipInput] = useState("")
   const set = key => val => setForm(f=>({...f,[key]:val}))
 
@@ -1108,12 +1146,24 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
   }
 
   const validate = () => {
-    const err={}
-    if (!form.name.trim()) err.name="Product name is required"
-    if (!form.category.trim()) err.category="Category is required"
-    if (!form.price||isNaN(form.price)||+form.price<=0) err.price="Enter a valid price"
-    if (maxFeasibleStock !== null && Number(form.stock) > maxFeasibleStock) {
-      err.stock = `Insufficient raw materials. Max possible: ${maxFeasibleStock}`
+    const err = {}
+    if (!form.name.trim()) err.name = "Product name is required"
+    if (!form.category.trim()) err.category = "Category is required"
+    if (!form.price || isNaN(form.price) || +form.price <= 0) err.price = "Enter a valid price"
+    
+    // 🚀 NEW: Strict Branch vs Material Validation
+    if (form.composition.length > 0 && form.branches.length > 0) {
+      for (const branch of form.branches) {
+        for (const item of form.composition) {
+          const material = products.find(p => p.id === item.product_id);
+          // If the material has specific branches, make sure it exists in the Arrangement's branch
+          if (material && material.branches && material.branches.length > 0) {
+            if (!material.branches.includes(branch)) {
+              err.branches = `Branch Conflict: "${material.name}" is not available in ${branch}.`;
+            }
+          }
+        }
+      }
     }
     return err
   }
@@ -1205,13 +1255,18 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
       fd.append("labor_cost", String(form.laborCost || 0)); 
       fd.append("markup_percentage", String(form.markupPercentage || 0));
 
-      fd.append("status", (form.status || "active").toLowerCase());
-      fd.append("is_available", form.availability !== "Out of Stock" ? "true" : "false");
+      // 🚀 The FIX: Dynamic Status and Stock
+      const isComposite = form.composition.length > 0;
+      const finalStock = isComposite ? (maxFeasibleStock === null ? 0 : maxFeasibleStock) : (product.stock || 0);
+      
+      fd.append("status", "active");
+      fd.append("is_available", finalStock > 0 ? "true" : "false");
+      fd.append("stock", String(finalStock));
+
       fd.append("branches", JSON.stringify(form.branches));
       if (form.description) fd.append("description", form.description.trim());
       if (form.careGuide.length > 0) fd.append("care_guide", form.careGuide.join("\n"));
       if (form.image_url) fd.append("image_url", form.image_url);
-      fd.append("stock", String(form.stock));
       fd.append("is_visible", form.is_visible ? "true" : "false");
       if (form.season_key?.trim()) {
         fd.append("season_key", form.season_key.toLowerCase().trim());
@@ -1245,9 +1300,26 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     if (form.branches.length === 0) return false;
     return form.branches.every(b => !p.branches || p.branches.length === 0 || p.branches.includes(b));
   };
+  const isFloral = (p) => {
+    // Checks both the database field (product_group) and the form field (group), plus category keywords
+    const g = (p.product_group || p.group || "").toLowerCase();
+    const c = (p.category || "").toLowerCase();
+    return g === 'floral' || c.includes('flower') || c.includes('rose') || c.includes('bouquet');
+  };
 
-  const floralMaterials = products.filter(p => (p.group?.toLowerCase() === 'floral' || p.category?.toLowerCase() === 'flower') && isMaterialAvailableInSelectedBranches(p));
-  const nonFloralMaterials = products.filter(p => (p.group?.toLowerCase() !== 'floral' && p.category?.toLowerCase() !== 'flower') && isMaterialAvailableInSelectedBranches(p));
+  const availableMaterials = products.filter(p => isMaterialAvailableInSelectedBranches(p));
+  const materialCategories = ["All", ...Array.from(new Set(availableMaterials.map(p => 
+    p.category ? p.category.charAt(0).toUpperCase() + p.category.slice(1) : ""
+  ).filter(Boolean)))];
+
+  const filteredMaterials = availableMaterials.filter(p => {
+    const matchSearch = p.name.toLowerCase().includes(materialSearch.toLowerCase());
+    const matchCat = materialCat === "All" || (p.category?.toLowerCase() === materialCat.toLowerCase());
+    return matchSearch && matchCat;
+  });
+
+  const floralMaterials = filteredMaterials.filter(isFloral);
+  const nonFloralMaterials = filteredMaterials.filter(p => !isFloral(p));
   const selectedMaterial = products.find(p => p.id === compSelection);
 
   const MaterialDropdownRow = ({ p }) => {
@@ -1350,7 +1422,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
                 </button>
               </div>
               {isCustomCategory ? (
-                <MInput value={form.category} onChange={set("category")} placeholder="Type category name..." error={errors.category} d={d}/>
+                <MInput value={form.category} onChange={set("category")} placeholder="Type category name..." error={errors.category} d={d}/> 
               ) : (
                 <MSel value={form.category} 
                   onChange={(val) => {
@@ -1385,7 +1457,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             <MTextarea value={form.description} onChange={set("description")} placeholder="Brief description..." d={d}/>
           </div>
 
-          {/* CARE GUIDE: shown in the product's "Care Guide" tab on the storefront */}
+          {/* CARE GUIDE */}
           <div className="p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
             <div className="flex items-center gap-2 mb-1.5">
               <svg className="w-4 h-4" style={{ color: d.accentG }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1429,44 +1501,42 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             )}
           </div>
 
-          <div>
-            <MLabel d={d}>Status</MLabel>
-            <MSel value={form.status} onChange={set("status")} options={["Active", "Inactive", "On Sale"]} d={d}/>
-          </div>
+          {/* 🚀 NEW: Read-Only Dynamic Stock & Availability Panel */}
+          {(() => {
+            const isComposite = form.composition.length > 0;
+            const currentStock = isComposite ? (maxFeasibleStock === null ? 0 : maxFeasibleStock) : (product.stock || 0);
+            const availStatus = currentStock === 0 ? "Out of Stock" : (currentStock <= 5 ? "Limited" : "Available");
+            
+            const colorMap = {
+              "Available": { text: "#10b981", bg: d.isDark ? "rgba(16, 185, 129, 0.1)" : "#d1fae5" },
+              "Limited": { text: "#f59e0b", bg: d.isDark ? "rgba(245, 158, 11, 0.1)" : "#fef3c7" },
+              "Out of Stock": { text: "#ef4444", bg: d.isDark ? "rgba(239, 68, 68, 0.1)" : "#fee2e2" }
+            };
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <MLabel d={d}>Stock Quantity <span style={{ color:"#f87171" }}>*</span></MLabel>
-              <MInput type="number" value={form.stock} onChange={set("stock")} placeholder="0" error={errors.stock} d={d}/>
-              
-              {maxFeasibleStock !== null && (
-                <div className="mt-1.5 flex items-start gap-1.5">
-                  <span className="text-[10px] mt-0.5">
-                    {Number(form.stock) > maxFeasibleStock ? '❌' : '✅'}
-                  </span>
-                  <span className="text-[10px] leading-tight" style={{ color: Number(form.stock) > maxFeasibleStock ? "#ef4444" : d.subC }}>
-                    Max feasible based on recipe: <strong>{maxFeasibleStock}</strong>
+            return (
+              <div className="p-4 rounded-xl flex items-center justify-between" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
+                <div>
+                  <MLabel d={d}>System Availability</MLabel>
+                  <p className="text-xs pr-4" style={{ color: d.subC }}>
+                    {isComposite 
+                      ? "Automatically calculated based on the lowest stock of raw materials in your recipe." 
+                      : "Stock is managed directly in the Inventory tab."}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-1.5 flex-shrink-0 ml-4">
+                  <div className="px-3 py-1.5 rounded-md text-xs font-bold tracking-wide uppercase" 
+                    style={{ backgroundColor: colorMap[availStatus].bg, color: colorMap[availStatus].text, border: `1px solid ${colorMap[availStatus].text}40` }}>
+                    {availStatus}
+                  </div>
+                  <span className="text-xs font-semibold" style={{ color: d.cellC }}>
+                    {currentStock} {isComposite ? "Possible" : "In Stock"}
                   </span>
                 </div>
-              )}
-              {errors.stock && <p className="text-[11px] mt-1 font-bold" style={{ color:"#f87171" }}>{errors.stock}</p>}
-            </div>
-
-            <div>
-              <MLabel d={d}>Availability</MLabel>
-              <div className="flex gap-1">
-                {["Available", "Limited", "Out of Stock"].map(a => (
-                  <button key={a} type="button" onClick={()=>set("availability")(a)}
-                    className="flex-1 py-2 text-[10px] font-bold rounded-md border transition-all"
-                    style={{ backgroundColor:form.availability===a?DG:d.inputBg, color:form.availability===a?"white":d.subC, borderColor:form.availability===a?DG:d.inputBdr }}>
-                    {a}
-                  </button>
-                ))}
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
-          <div className="flex items-start space-x-3 mt-2 p-3 rounded-lg" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f9fafb", border: `1px solid ${d.inputBdr}` }}>
+          <div className="flex items-start space-x-3 mt-4 p-3 rounded-lg" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f9fafb", border: `1px solid ${d.inputBdr}` }}>
             <input 
               type="checkbox" 
               id="edit_is_visible" 
@@ -1480,12 +1550,9 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             </div>
           </div>
 
+          {/* OCCASIONS SELECTION GRID */}
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-            {[
-              "Anniversary", "Birthday", "Congratulation", "Get Well", 
-              "Graduation", "I am Sorry", "Love & Romance", "Mother's Day", 
-              "New Baby", "Sympathy", "Thank You", "Valentine's Day", "Wedding"
-            ].map((occ) => (
+            {OCCASIONS_LIST.map((occ) => (
               <label 
                 key={occ} 
                 className="flex items-center space-x-2 cursor-pointer p-1.5 rounded transition-colors"
@@ -1503,6 +1570,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             ))}
           </div>
 
+          {/* BRANCHES SELECTION GRID */}
           <div className="mt-4 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
             <MLabel d={d}>Available Branches <span style={{ color:"#f87171" }}>*</span></MLabel>
             <p className="text-xs mb-3" style={{ color: d.subC }}>
@@ -1529,6 +1597,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             {form.branches.length === 0 && (
                <p className="text-xs text-red-500 mt-2 font-semibold">Please select at least one branch.</p>
             )}
+            {errors.branches && <p className="text-xs text-red-500 mt-2 font-bold p-2 bg-red-50 rounded-md border border-red-200 dark:bg-red-900/20 dark:border-red-800/30">{errors.branches}</p>}
           </div>
 
           <div className="mt-6 p-4 rounded-xl" style={{ backgroundColor: d.isDark ? "rgba(255,255,255,0.02)" : "#f8fafc", border: `1px solid ${d.inputBdr}` }}>
@@ -1583,22 +1652,70 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setIsMaterialDropdownOpen(false)} />
                     
-                    <div className="absolute left-0 right-0 top-[65px] z-50 rounded-lg border shadow-xl overflow-y-auto"
-                      style={{ maxHeight: "260px", backgroundColor: d.modalBg, borderColor: d.inputBdr }}>
+                    <div className="absolute left-0 right-0 top-[65px] z-50 rounded-lg border shadow-xl flex flex-col overflow-hidden"
+                      style={{ maxHeight: "320px", backgroundColor: d.modalBg, borderColor: d.inputBdr }}>
                       
-                      <div className="sticky top-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider z-10"
-                        style={{ backgroundColor: d.hdrBg, color: d.subC, borderBottom: `1px solid ${d.divider}` }}>
-                        🌸 Floral Materials
+                      {/* 🚀 NEW: Search Bar & Category Pills (Sticky Header) */}
+                      <div className="p-2 border-b space-y-2 relative z-20" style={{ backgroundColor: d.hdrBg, borderColor: d.divider }}>
+                        <input 
+                          type="text" 
+                          placeholder="Search materials..." 
+                          value={materialSearch} 
+                          onChange={e => setMaterialSearch(e.target.value)}
+                          className="w-full px-2.5 py-1.5 text-xs border rounded-md outline-none transition-colors"
+                          style={{ borderColor: d.inputBdr, backgroundColor: d.inputBg, color: d.inputTxt }}
+                          onFocus={e => e.target.style.borderColor = "#4ade80"}
+                          onBlur={e => e.target.style.borderColor = d.inputBdr}
+                        />
+                        <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-hide">
+                          {materialCategories.map(c => (
+                            <button 
+                              key={c} type="button"
+                              onClick={() => setMaterialCat(c)}
+                              className="px-2.5 py-1 text-[10px] font-bold rounded-full whitespace-nowrap transition-colors border"
+                              style={{ 
+                                backgroundColor: materialCat === c ? G : (d.isDark ? "#1e293b" : "#f1f5f9"), 
+                                borderColor: materialCat === c ? G : d.inputBdr,
+                                color: materialCat === c ? "white" : d.subC 
+                              }}>
+                              {c}
+                            </button>
+                          ))}
+                        </div>
                       </div>
-                      {floralMaterials.map(p => <MaterialDropdownRow key={p.id} p={p} />)}
-                      {floralMaterials.length === 0 && <p className="px-3 py-2 text-xs" style={{ color: d.subC }}>No floral items match the selected branch.</p>}
 
-                      <div className="sticky top-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider z-10"
-                        style={{ backgroundColor: d.hdrBg, color: d.subC, borderTop: `1px solid ${d.divider}`, borderBottom: `1px solid ${d.divider}` }}>
-                        🎀 Non-Floral / Accessories
+                      {/* Dropdown Lists */}
+                      <div className="overflow-y-auto flex-1 relative z-10 pb-2">
+                        {floralMaterials.length > 0 && (
+                          <>
+                            <div className="sticky top-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider z-10"
+                              style={{ backgroundColor: d.hdrBg, color: d.subC, borderBottom: `1px solid ${d.divider}` }}>
+                              🌸 Floral Materials
+                            </div>
+                            {floralMaterials.map(p => <MaterialDropdownRow key={p.id} p={p} />)}
+                          </>
+                        )}
+
+                        {nonFloralMaterials.length > 0 && (
+                          <>
+                            <div className="sticky top-0 px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider z-10"
+                              style={{ 
+                                backgroundColor: d.hdrBg, color: d.subC, 
+                                borderTop: floralMaterials.length > 0 ? `1px solid ${d.divider}` : 'none', 
+                                borderBottom: `1px solid ${d.divider}` 
+                              }}>
+                              🎀 Non-Floral / Accessories
+                            </div>
+                            {nonFloralMaterials.map(p => <MaterialDropdownRow key={p.id} p={p} />)}
+                          </>
+                        )}
+
+                        {floralMaterials.length === 0 && nonFloralMaterials.length === 0 && (
+                           <p className="p-4 text-xs text-center font-medium" style={{ color: d.subC }}>
+                             No materials match your search.
+                           </p>
+                        )}
                       </div>
-                      {nonFloralMaterials.map(p => <MaterialDropdownRow key={p.id} p={p} />)}
-                      {nonFloralMaterials.length === 0 && <p className="px-3 py-2 text-xs" style={{ color: d.subC }}>No accessories match the selected branch.</p>}
                     </div>
                   </>
                 )}
@@ -1672,44 +1789,19 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
                 <MLabel d={d}>Base Cost (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <MInput
-                  type="number"
-                  value={form.basePrice}
-                  onChange={(val) => handlePricingChange('basePrice', val)}
-                  placeholder="e.g. 500"
-                  d={d}
-                />
+                <MInput type="number" value={form.basePrice} onChange={(val) => handlePricingChange('basePrice', val)} placeholder="e.g. 500" d={d}/>
               </div>
               <div>
                 <MLabel d={d}>Labor Cost (₱)</MLabel>
-                <MInput
-                  type="number"
-                  value={form.laborCost}
-                  onChange={(val) => handlePricingChange('laborCost', val)}
-                  placeholder="e.g. 150"
-                  d={d}
-                />
+                <MInput type="number" value={form.laborCost} onChange={(val) => handlePricingChange('laborCost', val)} placeholder="e.g. 150" d={d}/>
               </div>
               <div>
                 <MLabel d={d}>Markup (%) <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <MInput
-                  type="number"
-                  value={form.markupPercentage}
-                  onChange={(val) => handlePricingChange('markupPercentage', val)}
-                  placeholder="e.g. 50"
-                  d={d}
-                />
+                <MInput type="number" value={form.markupPercentage} onChange={(val) => handlePricingChange('markupPercentage', val)} placeholder="e.g. 50" d={d}/>
               </div>
               <div>
                 <MLabel d={d}>Final Price (₱) <span style={{ color:"#f87171" }}>*</span></MLabel>
-                <MInput
-                  type="number"
-                  value={form.price}
-                  onChange={(val) => handlePricingChange('price', val)}
-                  placeholder="0.00"
-                  error={errors.price}
-                  d={d}
-                />
+                <MInput type="number" value={form.price} onChange={(val) => handlePricingChange('price', val)} placeholder="0.00" error={errors.price} d={d}/>
               </div>
             </div>
             {errors.price && <p className="text-[11px] mt-1" style={{ color:"#f87171" }}>{errors.price}</p>}
@@ -2110,7 +2202,7 @@ export default function AdminProducts({ onNavigate }) {
   const pageSafe    = Math.min(page,totalPages)
   const paginated   = filtered.slice((pageSafe-1)*PAGE_SIZE, pageSafe*PAGE_SIZE)
 
-  const baseCategories = ["Bouquet", "Flowers", "Vase", "Wrapping", "Accessory", "Arrangement", "Add-on"]
+  const baseCategories = [] // 🚀 THE FIX: Wiped out hardcoded categories
   const dynamicCategories  = Array.from(new Set([...baseCategories.map(c=>c.toLowerCase()),...products.map(p=>p.category?.toLowerCase()).filter(Boolean)])).map(c=>c.charAt(0).toUpperCase()+c.slice(1))
 
   const selStyle = { borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }
