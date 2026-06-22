@@ -12,9 +12,8 @@ import secrets
 
 # 🚀 INJECTED SECURE DEPENDENCIES
 from app.core.dependencies import get_db, get_current_user, require_staff
-from app.models import User, RoleEnum, Order, OrderItem, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory
-from app.utils.lalamove import book_lalamove_delivery
 from app.models import User, RoleEnum, Order, OrderItem, StockReservation, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory
+from app.utils.lalamove import book_lalamove_delivery
 
 # We use your dedicated PayMongo service instead of raw requests!
 from app.services.paymongo_service import PayMongoError, create_checkout_session, to_paymongo_amount
@@ -391,19 +390,6 @@ async def create_order(
                 print(f"❌ Lalamove Booking Failed: {str(e)}")
                 # Even if Lalamove fails, the order is already placed.
                 # You might want to email the staff to book manually.
-
-            return {
-                "status": "success",
-                "message": "Order created.",
-                "order_ids": [str(order.id)],
-                "checkout_url": checkout_url,
-            }
-        return {
-            "status": "success",
-            "message": "Order created.",
-            "order_ids": [str(order.id)],
-            "checkout_url": checkout_url,
-        }
 
         return _created_order_response(order)
 
