@@ -5,6 +5,7 @@ const TABS = ["All", "Pending", "Preparing", "Out for Delivery", "Delivered", "C
 
 const STATUS_COLOR = {
   delivered:        "#3B6D11",
+  completed:        "#3B6D11",
   preparing:        "#185FA5",
   pending:          "#854F0B",
   out_for_delivery: "#EE4D2D",
@@ -13,17 +14,17 @@ const STATUS_COLOR = {
 
 function formatStatus(s) {
   if (!s) return "Pending"
+  const normalized = s.toLowerCase()
+  if (normalized === "completed") return "Delivered"
   return s.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
 }
 
 function OrderCard({ order, onNavigate, idx = 0 }) {
   const statusKey = (order.status || "pending").toLowerCase()
   const statusColor = STATUS_COLOR[statusKey] || STATUS_COLOR.pending
-  const dateStr = order.created_at
-    ? new Date(order.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })
-    : "N/A"
+  
   const isPending = ["pending", "preparing"].includes(statusKey)
-  const isDelivered = statusKey === "delivered"
+  const isDelivered = ["delivered", "completed"].includes(statusKey)
   const isOutForDelivery = statusKey === "out_for_delivery"
 
   return (
@@ -105,7 +106,10 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
 
           {isDelivered && (
             <>
-              <button className="px-4 py-1.5 text-sm border border-gray-200 rounded text-gray-700 hover:bg-gray-50 transition">
+              <button 
+                onClick={() => onNavigate("shop")} 
+                className="px-4 py-1.5 text-sm border border-gray-200 rounded text-gray-700 hover:bg-gray-50 transition"
+              >
                 Buy again
               </button>
               {!order.has_reviewed && (

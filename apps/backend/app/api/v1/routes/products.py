@@ -234,7 +234,7 @@ def get_product_reviews(product_id: str, db: Session = Depends(get_db)):
             "user_name": f"{r.User.first_name} {r.User.last_name}",
             "star_rating": r.Review.star_rating,
             "comment": r.Review.comment,
-            "image_url": r.Review.image_url,
+            "image_url": getattr(r.Review, "image_url", None),
             "created_at": r.Review.created_at.isoformat() if r.Review.created_at else None,
         }
         for r in reviews

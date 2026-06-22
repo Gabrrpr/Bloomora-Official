@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from app.models import ActivityLog  # Adjust import based on where your models live
 
-def log_activity(db: Session, action: str, user=None, details: str = None):
+def log_activity(db: Session, action: str, user=None, details: str = None, user_id=None, **kwargs):
     """
     Safely drops an activity log into the database.
     Automatically extracts user ID, role, and branch from the user object.

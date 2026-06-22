@@ -15,6 +15,9 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 # Philippine Timezone (UTC+8)
 PH_TZ = timezone(timedelta(hours=8))
 
+# 🚀 THE FIX: The VIP List of statuses that actually count as "Revenue"
+REVENUE_STATUSES = ["delivered", "confirmed", "preparing", "out_for_delivery", "completed", "paid"]
+
 @router.get("/revenue")
 def get_revenue(
     period: str = "week",
@@ -46,7 +49,8 @@ def get_revenue(
     ).join(
         Transaction, Order.id == Transaction.order_id
     ).filter(
-        Order.status.in_(["delivered", "confirmed", "preparing", "out_for_delivery"]),
+        # 🚀 THE FIX: Applied the expanded status list here!
+        Order.status.in_(REVENUE_STATUSES),
         Transaction.status == PaymentStatusEnum.paid
     )
 
@@ -88,11 +92,11 @@ def get_summary(
         Transaction, Order.id == Transaction.order_id
     ).filter(
         Order.created_at >= start_of_today_utc,
-        Order.status.in_(["delivered", "confirmed", "preparing", "out_for_delivery"]),
+        # 🚀 THE FIX: Applied the expanded status list here!
+        Order.status.in_(REVENUE_STATUSES),
         Transaction.status == PaymentStatusEnum.paid,
     )
 
-    # 🚀 THE FIX: Removed the requirement for pending orders to be 'paid'
     q_pending = db.query(func.count(Order.id)).filter(
         Order.status == "pending"
     )
@@ -169,6 +173,7 @@ def get_trending_products(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # REMOVE THE TRANSACTION JOIN TEMPORARILY TO TEST
     q = db.query(
         Product.id,
         Product.name,
@@ -177,11 +182,8 @@ def get_trending_products(
         OrderItem, OrderItem.product_id == Product.id
     ).join(
         Order, Order.id == OrderItem.order_id
-    ).join(
-        Transaction, Order.id == Transaction.order_id
     ).filter(
-        Order.status.in_(["delivered", "confirmed", "preparing", "out_for_delivery"]),
-        Transaction.status == PaymentStatusEnum.paid
+        Order.status.in_(["delivered", "completed", "paid"])
     )
 
     clean_branch = branch.strip().lower()
@@ -189,7 +191,9 @@ def get_trending_products(
         q = q.filter(func.lower(Order.branch_name) == clean_branch)
 
     results = q.group_by(Product.id, Product.name).order_by(desc("sold")).limit(5).all()
-
+    
+    print(f"DEBUG: Found {len(results)} trending products") # Check your server terminal!
+    
     return [
         {
             "id": str(r.id),
