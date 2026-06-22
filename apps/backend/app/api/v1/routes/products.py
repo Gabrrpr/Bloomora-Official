@@ -23,6 +23,10 @@ class StockLogCreate(BaseModel):
     branch: str
     notes: Optional[str] = None
 
+class RenameCategorySchema(BaseModel):
+    old_category: str
+    new_category: str
+
 router = APIRouter()
 
 MAX_FILE_SIZE = 5 * 1024 * 1024
@@ -848,3 +852,28 @@ def get_product(product_id: str, db: Session = Depends(get_db)):
         "is_available": product.is_available,
         "status": product.status.value if hasattr(product.status, "value") else product.status,
     }
+    
+@router.post("/admin/rename-category")
+def rename_category(
+    payload: RenameCategorySchema, 
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    # Security check: Ensure they are an admin
+    if current_user.role not in [RoleEnum.admin, RoleEnum.staff]:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    old_cat_clean = payload.old_category.strip().lower()
+    new_cat_clean = payload.new_category.strip().lower()
+
+    if not old_cat_clean or not new_cat_clean:
+        raise HTTPException(status_code=400, detail="Both old and new category names are required")
+
+    # Update all products matching the old category (case-insensitive)
+    updated_count = db.query(Product).filter(
+        func.lower(Product.category) == old_cat_clean
+    ).update({"category": new_cat_clean}, synchronize_session=False)
+
+    db.commit()
+
+    return {"status": "success", "message": f"Successfully renamed category for {updated_count} products."}
