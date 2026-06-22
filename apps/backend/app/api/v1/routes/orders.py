@@ -336,6 +336,7 @@ async def create_order(
                 price_at_purchase=unit_price,
             )
             db.add(order_item)
+            db.commit()
             db.flush()
             if item_type == "product":
                 db.add(StockReservation(

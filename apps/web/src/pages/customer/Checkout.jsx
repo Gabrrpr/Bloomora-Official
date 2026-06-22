@@ -168,7 +168,6 @@ export default function Checkout({ onNavigate }) {
   const rawStoreBranch = localStorage.getItem("bloomora_active_branch") || "Manila";
   const selectedStoreBranch = rawStoreBranch.charAt(0).toUpperCase() + rawStoreBranch.slice(1).toLowerCase();
 
-  // 🚀 UPDATED: Parses entire address strings to catch profile addresses too!
   const provinceToBranch = (provinceOrAddress) => {
     const p = (provinceOrAddress || "").toLowerCase()
     if (!p) return null
@@ -204,23 +203,7 @@ export default function Checkout({ onNavigate }) {
     special_note: orderNote.trim() || null,
   })
 
-  const proceedAfterBranchConfirm = async () => {
-    setBranchConfirmOpen(false);
-
-    if (cartItems.length === 0) {
-      setError("Your cart is empty. Please select items from your cart.");
-      return;
-    }
-    if (!deliveryDetails.address || !deliveryDetails.phone) {
-      setError("Please provide a complete delivery address and phone number before placing an order.");
-      return;
-    }
-
-    if (!addressBranch) {
-      setError("Sorry, we currently only deliver to Metro Manila and Pampanga areas. Please provide a valid address within our coverage.");
-      return;
-    }
-
+  const executeOrderPlacement = async () => {
     setPlacing(true);
     setError("");
 
@@ -245,6 +228,7 @@ export default function Checkout({ onNavigate }) {
         }
       }
 
+      // 1. Create the base order
       const res = await api.createOrder({
         items: cartItems.map(i => ({
           id: i.id,
@@ -262,28 +246,80 @@ export default function Checkout({ onNavigate }) {
         payment_reference: referenceNumber.trim(),
         special_note: orderNote.trim() || null,
         
-        branch_name: addressBranch,
-        branch: addressBranch
+        // 🚀 THE FIX: Force these to strictly lowercase so the Database Enum accepts them!
+        branch_name: addressBranch.toLowerCase(),
+        branch: addressBranch.toLowerCase()
       });
 
       const orderIds = res.order_ids || [];
       localStorage.setItem("bloomora_last_order", JSON.stringify(buildOrderData(orderIds)));
       await clearCart();
 
+      // 2. Fetch PayMongo link directly if selected
+      if (paymentMethod === "paymongo" && orderIds.length > 0) {
+        const token = localStorage.getItem("access_token");
+        const pmReq = await fetch(`${API_BASE}/payments/paymongo/checkout`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            order_ids: orderIds,
+            success_url: `${window.location.origin}/`,
+            cancel_url: `${window.location.origin}/checkout`
+          })
+        });
+
+        const pmData = await pmReq.json();
+
+        if (!pmReq.ok) {
+           const errorMsg = typeof pmData.detail === 'string' ? pmData.detail : JSON.stringify(pmData.detail) || "Unknown backend error.";
+           throw new Error(`PayMongo Error: ${errorMsg}`);
+        }
+
+        if (pmData.checkout_url) {
+          window.location.href = pmData.checkout_url;
+          return; 
+        } else {
+          throw new Error("PayMongo succeeded but did not return a checkout URL.");
+        }
+      }
+
+      // 3. Fallback for manual transfer or fallback URL
       if (res.checkout_url) {
         window.location.href = res.checkout_url;
       } else {
         onNavigate("confirmation");
       }
+
     } catch (e) {
+      console.error("Checkout Crash:", e);
       setError(e.message || "Failed to place order. Please try again.");
-    } finally {
       setPlacing(false);
     }
   };
 
+  const proceedAfterBranchConfirm = async () => {
+    setBranchConfirmOpen(false);
+    if (cartItems.length === 0) {
+      setError("Your cart is empty. Please select items from your cart.");
+      return;
+    }
+    if (!deliveryDetails.address || !deliveryDetails.phone) {
+      setError("Please provide a complete delivery address and phone number before placing an order.");
+      return;
+    }
+    if (!addressBranch) {
+      setError("Sorry, we currently only deliver to Metro Manila and Pampanga areas. Please provide a valid address within our coverage.");
+      return;
+    }
+    
+    await executeOrderPlacement();
+  };
+
   const handlePlaceOrder = async () => {
-    setError(""); // Clear old errors
+    setError(""); 
     if (!user) {
       onNavigate("login");
       return;
@@ -300,75 +336,16 @@ export default function Checkout({ onNavigate }) {
       setError("Please select or add a complete delivery address and phone number.");
       return;
     }
-
     if (!addressBranch) {
       setError("Sorry, we only deliver to Metro Manila and Pampanga. Please provide a valid address within our coverage.");
       return;
     }
-
     if (needsBranchConfirm) {
       setBranchConfirmOpen(true);
       return;
     }
 
-    setPlacing(true);
-
-    try {
-      if (saveAddressToBook && recipientType === "someone_else" && manualForm.recipient_name && manualForm.phone && manualForm.street) {
-        try {
-          await api.createAddress({
-            label: `To: ${manualForm.recipient_name}`,
-            recipient_name: manualForm.recipient_name,
-            phone: manualForm.phone,
-            street: manualForm.street,
-            barangay: manualForm.barangay || "",
-            city: manualForm.city,
-            province: manualForm.province,
-            zip_code: manualForm.zip || "",
-            is_default: false,
-          });
-          const res = await api.getAddresses();
-          setAddresses(res.addresses || []);
-        } catch (addrErr) {
-          console.error("Failed to save address to book:", addrErr);
-        }
-      }
-
-      const res = await api.createOrder({
-        items: cartItems.map(i => ({
-          id: i.id,
-          group: i.group,
-          name: i.name,
-          desc: i.desc,
-          price: i.price,
-          qty: i.qty,
-          img: i.img || i.image || i.image_url || i.generated_image_url || "",
-        })),
-        delivery_address: deliveryDetails.address,
-        delivery_notes: buildDeliveryNotes(),
-        scheduled_at: deliveryDate.toISOString(),
-        payment_method: paymentMethod,
-        payment_reference: referenceNumber.trim(),
-        special_note: orderNote.trim() || null,
-        
-        branch_name: addressBranch,
-        branch: addressBranch
-      });
-
-      const orderIds = res.order_ids || [];
-      localStorage.setItem("bloomora_last_order", JSON.stringify(buildOrderData(orderIds)));
-      await clearCart();
-
-      if (res.checkout_url) {
-        window.location.href = res.checkout_url;
-      } else {
-        onNavigate("confirmation");
-      }
-    } catch (e) {
-      setError(e.message || "Failed to place order. Please try again.");
-    } finally {
-      setPlacing(false);
-    }
+    await executeOrderPlacement();
   };
 
   return (
@@ -619,9 +596,6 @@ export default function Checkout({ onNavigate }) {
                 </div>
               )}
             </div>
-
-            {/* 🚀 THE ERROR DISPLAY USED TO BE HERE. WE MOVED IT! */}
-            
           </div>
 
           {/* ── Right: delivery date + payment + summary ── */}
@@ -828,7 +802,6 @@ export default function Checkout({ onNavigate }) {
                 <p className="text-xs text-gray-400">VAT included, where applicable</p>
               </div>
 
-              {/* 🚀 THE FIX: Moved Error Message directly above the button so it's impossible to miss! */}
               {error && (
                 <div className="mb-4 bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-600 text-center font-medium shadow-sm">
                   {error}
@@ -837,7 +810,7 @@ export default function Checkout({ onNavigate }) {
 
               <button
                 onClick={handlePlaceOrder}
-                disabled={placing} // 🚀 THE FIX: Removed physical disable for empty carts so it can tell you WHY
+                disabled={placing}
                 className="w-full py-3.5 text-sm font-bold text-white rounded-xl transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
                 style={{ background: `linear-gradient(135deg, ${DG}, ${G})`, boxShadow: "0 8px 20px rgba(46,139,52,0.22)" }}
               >

@@ -197,7 +197,7 @@ function AppContent() {
             case "cart": return <Cart onNavigate={navigate} cartCount={cartCount} setCartCount={setCartCount} />;
             case "checkout": return <Checkout onNavigate={navigate} />;
             case "confirmation": return <Confirmation onNavigate={navigate} />;
-            case "write-review": return <WriteReviewPage onNavigate={navigate} selectedOrderId={selectedOrderId} />;
+            case "write-review": return <WriteReviewPage onNavigate={navigate} orderId={selectedOrderId} />;
 
             case "account": return <AccountPage onNavigate={navigate} />;
             case "orders": return <Orders onNavigate={navigate} selectedOrderId={selectedOrderId} />;

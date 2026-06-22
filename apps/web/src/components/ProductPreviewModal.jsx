@@ -1360,9 +1360,13 @@ function ReviewsSection({ reviews, isDark }) {
               </div>
               <p className="text-sm" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>{review.comment}</p>
               {review.image_url && (
-                <img src={review.image_url} alt="Review" className="w-20 h-20 rounded-lg mt-2 object-cover"
-                  style={{ border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}` }}/>
-              )}
+              <img 
+                src={review.image_url} 
+                alt="Review photo" 
+                className="w-20 h-20 rounded-lg object-cover mt-2" 
+                onError={(e) => { e.target.style.display = 'none'; }} // Hides broken images
+              />
+            )}
             </div>
           ))}
         </div>
@@ -1619,6 +1623,9 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
       deliveryDate: delivType==="custom" ? customDate : delivType,
       addOns:       selectedAddOnObjects,
       totalPrice:   total,
+      
+      // 🚀 THE FIX: Force the item to be "ticked" so Checkout can see it!
+      checked:      true, 
     })
 
     window.dispatchEvent(new Event("bloomora:cart-updated"))

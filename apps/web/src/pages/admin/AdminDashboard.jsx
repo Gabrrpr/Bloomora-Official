@@ -305,6 +305,7 @@ function BranchBadge({ branch }) {
 }
 
 // ─── Revenue Chart ────────────────────────────────────────────────────────────
+// ─── Revenue Chart ────────────────────────────────────────────────────────────
 function RevenueChart({ branch }) {
   const { isDark } = useTheme();
   const t = useTokens(isDark);
@@ -315,7 +316,6 @@ function RevenueChart({ branch }) {
 
   const staticPeriod = REVENUE_PERIODS.find(p => p.key === periodKey);
 
-  // HELPER 1: Generate rolling 7 days labels (ends on Today)
   const getRollingWeekLabels = () => {
     const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     const labels = [];
@@ -327,23 +327,21 @@ function RevenueChart({ branch }) {
     return labels;
   };
 
-  // 🚀 HELPER 2: Generate rolling 6 years labels (ends on Current Year)
   const getRollingYearLabels = () => {
     const currentYear = new Date().getFullYear();
-    // Generates an array of the last 6 years, e.g., ["2021", "2022", "2023", "2024", "2025", "2026"]
     return Array.from({ length: 6 }, (_, i) => String(currentYear - 5 + i));
   };
 
   useEffect(() => {
     setLoading(true);
 
-    const apiBranch = branch === "all" ? "all" : branch.charAt(0).toUpperCase() + branch.slice(1);
+    // 🚀 THE FIX: Send the exact lowercase branch to the backend! No capitalization.
+    const apiBranch = branch; 
 
     api.get(`/dashboard/revenue?period=${periodKey}&branch=${apiBranch}`)
       .then(rows => {
         const period = REVENUE_PERIODS.find(p => p.key === periodKey);
         
-        // 🚀 Swap in the dynamic labels for Week AND Year!
         const actualLabels = periodKey === "week" 
           ? getRollingWeekLabels() 
           : periodKey === "year" 
@@ -366,8 +364,8 @@ function RevenueChart({ branch }) {
             if (periodKey === "week") {
               const rowDate = new Date(date);
               rowDate.setHours(0, 0, 0, 0);
-              const diffTime = today - rowDate;
-              const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+              // 🚀 THE FIX: Use Math.round to prevent timezone shifts from returning negative days
+              const diffDays = Math.round((today - rowDate) / (1000 * 60 * 60 * 24));
               
               if (diffDays >= 0 && diffDays <= 6) {
                 idx = 6 - diffDays; 
@@ -375,7 +373,6 @@ function RevenueChart({ branch }) {
             } else if (periodKey === "month") {
               idx = date.getMonth();
             } else if (periodKey === "year") {
-              // Map the database year to our dynamic rolling year array
               idx = actualLabels.indexOf(String(date.getFullYear()));
             }
 
@@ -395,7 +392,6 @@ function RevenueChart({ branch }) {
         const allValues = [...manilaData, ...pampangaData];
         const maxDataValue = Math.max(...allValues, 0); 
 
-        // DYNAMIC Y-AXIS GENERATOR
         let chartCeiling = 15000; 
         if (maxDataValue > 0) {
           if (maxDataValue <= 1500) chartCeiling = 1500;
@@ -436,9 +432,8 @@ function RevenueChart({ branch }) {
   }, [periodKey, branch]);
 
   const currentIdx = (() => {
-    if (periodKey === "week") return 6; // Rolling week: Today is ALWAYS index 6 (far right)
-    if (periodKey === "year") return 5; // Rolling year: This Year is ALWAYS index 5 (far right)
-    
+    if (periodKey === "week") return 6; 
+    if (periodKey === "year") return 5; 
     const d = new Date();
     if (periodKey === "month") return d.getMonth();
     return -1;
