@@ -48,7 +48,7 @@ function useIsMobile(breakpoint = 900) {
 }
 
 /* ── Mini Calendar ── */
-const MAX_ORDER_DAYS = 30 // Customers can't schedule beyond this — flower prices fluctuate (e.g. holidays)
+const MAX_ORDER_DAYS = 30 
 
 function MiniCalendar({ selected, onSelect }) {
   const now = todayD()
@@ -186,7 +186,6 @@ function AIPanel({ onUse, onBack, isMobile }) {
     try {
       const text = await generateCardMessage({ relationship, occasion, tone, extra })
       const elapsed = Date.now() - start
-      // keep the flower loader on screen long enough to read, so it never just flashes
       if (elapsed < 1000) await new Promise(r => setTimeout(r, 1000 - elapsed))
       setGenerated(text)
     } catch (e) {
@@ -597,7 +596,6 @@ function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark
     setPhase("loading")
   }
 
-  // After the flower loader plays, reveal the quotation
   useEffect(() => {
     if (phase !== "loading") return
     const t = setTimeout(() => setPhase("report"), 1600)
@@ -1315,31 +1313,48 @@ function DeliverySection({ delivType, customDate, showCal, todayOk, errors, setD
   )
 }
 
-/* ✅ FIX: accepts `similar` prop (not `suggestions`) to match what the main component passes */
 function SuggestionsSection({ suggestions = [], isDark, onClose, onNavigate }) {
-  // 🚀 FIX: Safely check if the array exists and has items before rendering
   if (!suggestions || suggestions.length === 0) return null;
 
   return (
     <div className="pt-6" style={{ borderTop: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
       <p className="text-xs font-semibold uppercase tracking-widest mb-4"
         style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>You might also like</p>
-      <div className="flex gap-3 overflow-x-auto pb-2 -mr-4 pr-4">
-        {suggestions.map(s => (
-          <button 
+      
+      {/* 🚀 FIXED: Slick, horizontal scroll layout that perfectly fits the modal body */}
+      <div className="flex overflow-x-auto gap-4 pb-4 snap-x snap-mandatory hide-scrollbar">
+        {suggestions.map((s) => (
+          <div 
             key={s.id} 
-            onClick={() => {
-              if (onClose) onClose(); 
-              if (onNavigate) onNavigate(`/product/${s.id}`); 
+            className="snap-start flex-shrink-0 w-[140px] sm:w-[160px] rounded-xl overflow-hidden cursor-pointer transition-transform hover:-translate-y-1"
+            style={{ backgroundColor: isDark ? "#1a2332" : "white", border: `1px solid ${isDark ? "#2d3748" : "#e8edf2"}` }}
+onClick={() => {
+              // Keep user in the preview modal by swapping the product.
+              // This prevents navigation to an unhandled /product/:id route which falls back to Home.
+              if (onClose) onClose();
+              if (onNavigate) {
+                // If the parent supports product-replacement navigation, it can handle this.
+                onNavigate({ type: "preview-product", id: s.id });
+              }
             }}
-            className="flex-shrink-0 w-28 rounded-lg overflow-hidden border cursor-pointer text-left p-0 transition-transform hover:scale-105"
-            style={{ borderColor: isDark ? "#334155" : "#e5e7eb", background: "transparent" }}>
-            <img src={s.image_url || s.image} className="w-full h-20 object-cover" alt={s.name} />
-            <div className="p-2">
-              <p className="text-[10px] font-bold truncate" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>{s.name}</p>
-              <p className="text-[10px]" style={{ color: "#2E8B34" }}>₱{(+s.price).toLocaleString()}</p>
+          >
+            <div className="h-[140px] sm:h-[160px] w-full bg-gray-100 dark:bg-gray-800">
+              <img 
+                src={s.image_url || s.image || PLACEHOLDER_IMAGE} 
+                alt={s.name}
+                className="w-full h-full object-cover"
+                onError={(e) => { e.target.src = PLACEHOLDER_IMAGE; }}
+              />
             </div>
-          </button>
+            <div className="p-3">
+              <p className="text-xs font-semibold truncate" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>
+                {s.name}
+              </p>
+              <p className="text-xs font-bold mt-1 text-green-600 dark:text-green-400">
+                ₱{(+s.price).toLocaleString()}
+              </p>
+            </div>
+          </div>
         ))}
       </div>
     </div>
@@ -1475,6 +1490,9 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   const todayOk  = isTodayAvail()
   const { isDark } = useTheme()
   const isMobile = useIsMobile(900)
+  
+  // 🚀 THE FIX: Calling useBranch to ensure the filter works!
+  const { branch } = useBranch() 
 
   const modalBg = isDark ? "#1e293b" : "white"
   const rightBg = isDark ? "#0f172a" : "#f3f4f6"
@@ -1482,16 +1500,30 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   const cardBdr = isDark ? "rgba(0,255,136,0.08)" : "rgba(0,0,0,0.08)"
   const colors  = CATEGORY_COLORS[product.category] || CATEGORY_COLORS.Roses
 
-  // ✅ FIX: similarProducts derived directly from the products prop, no missing state, no dead API call
+  // 🚀 THE FIX: No more parallel API call. This is fast and synchronous!
   const suggestedProducts = products
     .filter(p => {
+      // 1. Don't suggest the exact same item
       if (p.id === product.id) return false;
+      
+      // 2. Must be in the exact same category
       if (p.category?.toLowerCase() !== product.category?.toLowerCase()) return false;
+      
+      // 3. Must actually be available to buy
       if (p.status === "inactive" || !p.is_available || p.stock <= 0) return false;
-      if (!Array.isArray(p.branches) || !p.branches.includes(branch)) return false;
+      
+      // 4. FIX: Only enforce branch checking if a specific branch is actually selected
+      if (branch && branch !== "All" && branch !== "All Branches") {
+        if (!Array.isArray(p.branches) || !p.branches.includes(branch)) return false;
+      }
+      
       return true;
     })
-    .slice(0, 4)
+    .slice(0, 4);
+
+  // 🚀 DEBUG LOGGER: This will tell us exactly what is failing!
+  console.log("Total products passed to modal:", products.length);
+  console.log("Valid suggestions found:", suggestedProducts.length);
 
   const originalPrice = product.original_price || product.original || 0
   const hasDisc = originalPrice > product.price
@@ -1728,13 +1760,15 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
       {tab === "details" && (
         <div className="pb-4 space-y-5">
           <DescriptionSection product={product} isDark={isDark}/>
-          {/* ✅ FIX: pass `similar` prop matching SuggestionsSection's expected prop name */}
+          
+          {/* 🚀 THE FIX: This is where the Similar Products properly belong! */}
           <SuggestionsSection 
              suggestions={suggestedProducts} 
              isDark={isDark} 
              onClose={onClose} 
              onNavigate={onNavigate} 
           />
+          
           <QtySection {...qtyProps}/>
           <div className="pb-5" style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
             <AddOnsSection {...addOnProps}/>
@@ -1790,7 +1824,6 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
 
   /* ── Footer CTAs ── */
   const FooterCTAs = () => {
-    // 🚀 THE FIX: Check if the item is legally allowed to be sold
     const isOutOfStock = product.stock <= 0 || !product.is_available || product.status === "inactive";
 
     if (isOutOfStock) {

@@ -259,6 +259,11 @@ export const api = {
     return api.get('/products/customization/all');
   },
 
+  getSimilarProducts: async (productId) => {
+    return await api.get(`/products/${productId}/similar`);
+  },
+
+
   // ── Campaigns ───────────────────────────────────────────────────────────
   async getActiveCampaigns() {
     return api.get('/campaigns/active');

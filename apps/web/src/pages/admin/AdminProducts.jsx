@@ -297,14 +297,17 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
 
       const next = { ...prev, composition: newComposition };
       
-      if (newComposition.length > 0) {
-        next.basePrice = totalMaterialCost.toFixed(2);
-        const base = totalMaterialCost;
-        const labor = parseFloat(next.laborCost) || 0;
-        const markup = parseFloat(next.markupPercentage) || 0;
-        const totalCost = base + labor;
-        next.price = (totalCost + (totalCost * (markup / 100))).toFixed(2);
-      }
+      // 🚀 THE FIX: Always set the base price, even if it drops to 0
+      next.basePrice = totalMaterialCost > 0 ? totalMaterialCost.toFixed(2) : "";
+      
+      const base = totalMaterialCost;
+      const labor = parseFloat(next.laborCost) || 0;
+      const markup = parseFloat(next.markupPercentage) || 0;
+      const totalCost = base + labor;
+      
+      // Also reset the final price if the total cost drops to 0
+      next.price = totalCost > 0 ? (totalCost + (totalCost * (markup / 100))).toFixed(2) : "";
+      
       return next;
     });
   };
@@ -1093,14 +1096,17 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
 
       const next = { ...prev, composition: newComposition };
       
-      if (newComposition.length > 0) {
-        next.basePrice = totalMaterialCost.toFixed(2);
-        const base = totalMaterialCost;
-        const labor = parseFloat(next.laborCost) || 0;
-        const markup = parseFloat(next.markupPercentage) || 0;
-        const totalCost = base + labor;
-        next.price = (totalCost + (totalCost * (markup / 100))).toFixed(2);
-      }
+      // 🚀 THE FIX: Always set the base price, even if it drops to 0
+      next.basePrice = totalMaterialCost > 0 ? totalMaterialCost.toFixed(2) : "";
+      
+      const base = totalMaterialCost;
+      const labor = parseFloat(next.laborCost) || 0;
+      const markup = parseFloat(next.markupPercentage) || 0;
+      const totalCost = base + labor;
+      
+      // Also reset the final price if the total cost drops to 0
+      next.price = totalCost > 0 ? (totalCost + (totalCost * (markup / 100))).toFixed(2) : "";
+      
       return next;
     });
   };

@@ -978,8 +978,26 @@ export default function Shop({ onNavigate, initialCategory }) {
         </div>
       </div>
 
-      <Footer onNavigate={onNavigate}/>
-      {previewProduct && <ProductPreviewModal product={{ ...previewProduct, _ribbonColor: RIBBON_COLORS[previewProduct.ribbon] }} onClose={() => setPreviewProduct(null)} onNavigate={onNavigate}/>}
+<Footer onNavigate={onNavigate}/>
+      {previewProduct && (
+        <ProductPreviewModal
+          product={{ ...previewProduct, _ribbonColor: RIBBON_COLORS[previewProduct.ribbon] }}
+          products={products}
+          onClose={() => setPreviewProduct(null)}
+          onNavigate={(action) => {
+            // Support suggestion-click swapping the product preview in-place.
+            if (action && typeof action === "object" && action.type === "preview-product" && action.id) {
+              const next = products.find(p => String(p.id) === String(action.id));
+              if (next) setPreviewProduct(next);
+              return;
+            }
+            // Fallback to the existing page navigation.
+            if (typeof onNavigate === "function") onNavigate(action);
+          }}
+        />
+      )}
+
+
 
       {toast && (
         <div

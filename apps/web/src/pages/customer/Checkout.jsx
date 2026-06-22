@@ -24,6 +24,7 @@ export default function Checkout({ onNavigate }) {
   const [deliveryDate, setDeliveryDate] = useState(() => {
     const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + 1); return d
   })
+  const [deliverySettings, setDeliverySettings] = useState(null);
 
   const [orderNote, setOrderNote] = useState("")
   const [customer, setCustomer] = useState(null)
@@ -45,6 +46,18 @@ export default function Checkout({ onNavigate }) {
     province: "",
     zip: "",
   })
+
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const res = await api.get("/settings/delivery"); // Or your specific endpoint
+        setDeliverySettings(res.data);
+      } catch (e) {
+        console.error("Could not fetch settings", e);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   useEffect(() => {
     let active = true

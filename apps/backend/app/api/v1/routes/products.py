@@ -877,3 +877,52 @@ def rename_category(
     db.commit()
 
     return {"status": "success", "message": f"Successfully renamed category for {updated_count} products."}
+ 
+@router.get("/{product_id}/similar")
+def get_similar_products(product_id: str, limit: int = 5, db: Session = Depends(get_db)):
+    # 1. Find the target product to know its category
+    target_product = db.query(Product).filter(Product.id == product_id).first()
+    if not target_product:
+        return []
+
+    # 2. Find other visible products in the same category
+    similar_products = db.query(Product).filter(
+        Product.category == target_product.category,
+        Product.id != product_id,          # Don't show the exact same product
+        Product.is_visible == True         # Only show items meant for the storefront
+    ).limit(limit).all()
+
+    return similar_products
+@router.get("/admin/settings/lalamove", tags=["Admin"])
+def get_lalamove_status(db: Session = Depends(get_db), current_user: User = Depends(require_staff)):
+    # Query your database for the setting
+    query = text("SELECT setting_value FROM store_settings WHERE setting_key = 'lalamove_enabled'")
+    result = db.execute(query).fetchone()
+
+    # Default to False if nothing is found
+    enabled = False 
+    if result and result[0]:
+        # result[0] is typically a JSON string in your DB
+        enabled = json.loads(result[0])
+    
+    return {"enabled": enabled}
+
+# 2. POST ROUTE (For the Admin side to toggle)
+@router.post("/admin/settings/lalamove", tags=["Admin"])
+def update_lalamove_status(
+    payload: dict = Body(...), 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    enabled = payload.get("enabled", False)
+    
+    query = text("""
+        INSERT INTO store_settings (setting_key, setting_value, updated_at)
+        VALUES ('lalamove_enabled', :val, now())
+        ON CONFLICT (setting_key) DO UPDATE
+        SET setting_value = EXCLUDED.setting_value, updated_at = now()
+    """)
+    db.execute(query, {"val": json.dumps(enabled)})
+    db.commit()
+
+    return {"status": "success", "enabled": enabled}

@@ -4,6 +4,7 @@ import { api } from "../../services/api.js"
 
 const DG = "#0C573E"
 const G  = "#2E8B34"
+const API_BASE = import.meta.env.VITE_API_BASE;
 
 function useTokens() {
   const { isDark } = useTheme()
@@ -226,6 +227,20 @@ export default function AdminSettings() {
   }
 
   useEffect(() => {
+  const fetchLalamoveStatus = async () => {
+    try {
+      // Calls the GET route we just created
+      const res = await api.get("/products/admin/settings/lalamove"); 
+      setLalamoveEnabled(res.enabled); 
+    } catch (e) {
+      console.error("Could not fetch Lalamove status:", e);
+    }
+  };
+  
+  fetchLalamoveStatus();
+}, []);
+
+  useEffect(() => {
     api.isCustomizationEnabled()
       .then(data => setCustomizationEnabled(data.enabled))
       .catch(() => setCustomizationEnabled(true))
@@ -260,28 +275,25 @@ export default function AdminSettings() {
     }
   }
 
+  // Inside AdminSettings.jsx
   const handleToggleLalamove = async () => {
-    setLalamoveLoading(true)
-    const token = localStorage.getItem("access_token")
+    setLalamoveLoading(true);
     try {
-      const newState = !lalamoveEnabled
-      await fetch(`${API_BASE}/products/admin/settings/lalamove`, {
-        method: "POST",
-        headers: { 
-            "Authorization": `Bearer ${token}`,
-            "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ enabled: newState })
-      })
-      setLalamoveEnabled(newState)
-      setLalamoveSaved(true)
-      setTimeout(() => setLalamoveSaved(false), 2000)
+      const newState = !lalamoveEnabled;
+      // Using your api service instead of fetch + API_BASE
+      // This assumes your api.js is set up for POST requests
+      await api.post("/products/admin/settings/lalamove", { enabled: newState });
+      
+      setLalamoveEnabled(newState);
+      setLalamoveSaved(true);
+      setTimeout(() => setLalamoveSaved(false), 2000);
     } catch (e) {
-      alert("Failed to update Lalamove status")
+      console.error(e);
+      alert("Failed to update Lalamove status: " + (e.response?.data?.detail || e.message));
     } finally {
-      setLalamoveLoading(false)
+      setLalamoveLoading(false);
     }
-  }
+  };
 
   return (
     <div className="space-y-5">
