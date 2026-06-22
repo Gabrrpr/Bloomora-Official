@@ -2045,7 +2045,7 @@ export default function AdminDashboard({ onNavigate }) {
       case "Products":       return <AdminProducts onNavigate={goTo} />
       case "Inventory":      return <AdminInventory />
       case "Staffs":         return <AdminStaff />
-      case "Customers":      return <AdminCustomers />
+      case "Customers":      return <AdminCustomers onNavigate={onNavigate} />
       case "Messages":       return <AdminChat />
       case "Activity Logs":  return <AdminActivityLogs />
       case "Transactions":   return <AdminTransactions />

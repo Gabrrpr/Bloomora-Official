@@ -73,7 +73,7 @@ function FlowerLoader({ message = "Loading...", isDark = false }) {
   )
 }
 
-export default function AdminCustomers() {
+export default function AdminCustomers({ onNavigate }) {
   const { isDark } = useTheme()
 
   const [search, setSearch]             = useState("")
@@ -83,6 +83,8 @@ export default function AdminCustomers() {
   const [customers, setCustomers]       = useState([])
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState(null)
+  // Add this inside AdminCustomers()
+const [viewingCustomer, setViewingCustomer] = useState(null);
   // Controls the one-time entrance animation. Once the content has eased in we
   // drop the animation class so it never replays on later re-renders.
   const [entered, setEntered]           = useState(false)
@@ -341,10 +343,11 @@ export default function AdminCustomers() {
                   </td>
                   <td className="px-4 py-3">
                     <button
-                      className="px-3 py-1.5 text-xs font-semibold rounded-md border transition-all hover:shadow-sm active:scale-95"
-                      style={{ backgroundColor: isDark ? "rgba(74,222,128,0.10)" : "#f0fdf4", borderColor: isDark ? "rgba(74,222,128,0.30)" : "#bbf7d0", color: isDark ? "#4ade80" : DG }}>
-                      View
-                    </button>
+                    onClick={() => setViewingCustomer(c)} // 🚀 Updates state to show the card
+                    className="px-3 py-1.5 text-xs font-semibold rounded-md border transition-all hover:shadow-sm active:scale-95"
+                    style={{ backgroundColor: isDark ? "rgba(74,222,128,0.10)" : "#f0fdf4", borderColor: isDark ? "rgba(74,222,128,0.30)" : "#bbf7d0", color: isDark ? "#4ade80" : DG }}>
+                    View
+                  </button>
                   </td>
                 </tr>
               )) : (
@@ -355,6 +358,50 @@ export default function AdminCustomers() {
             </tbody>
           </table>
         </div>
+        {viewingCustomer && (
+          <>
+            {/* Dark Background Overlay */}
+            <div className="fixed inset-0 bg-black/40 z-40 backdrop-blur-sm" onClick={() => setViewingCustomer(null)} />
+            
+            {/* The Card */}
+            <div className="fixed top-0 right-0 h-full w-full sm:w-[400px] z-50 shadow-2xl flex flex-col"
+              style={{ backgroundColor: isDark ? "#111827" : "white" }}>
+              
+              {/* Header */}
+              <div className="px-6 py-5 flex items-center justify-between border-b" style={{ borderColor: isDark ? "#1e293b" : "#e5e7eb" }}>
+                <h2 className="font-bold text-lg" style={{ color: isDark ? "white" : "#111827" }}>Customer Details</h2>
+                <button onClick={() => setViewingCustomer(null)} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800">
+                  <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+              </div>
+
+              {/* Content */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                <div className="text-center">
+                  <div className="w-20 h-20 mx-auto rounded-full flex items-center justify-center text-2xl font-bold text-white mb-3"
+                    style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+                    {(viewingCustomer.first_name?.[0] || "A").toUpperCase()}
+                  </div>
+                  <h3 className="text-xl font-bold" style={{ color: isDark ? "white" : "#111827" }}>{getName(viewingCustomer)}</h3>
+                  <p className="text-sm" style={{ color: subTxt }}>{viewingCustomer.email}</p>
+                </div>
+
+                <div className="space-y-4 pt-4">
+                  {[
+                    { label: "Phone Number", value: viewingCustomer.phone_number },
+                    { label: "Account Status", value: customerStatus(viewingCustomer) },
+                    { label: "Date Joined", value: viewingCustomer.created_at ? new Date(viewingCustomer.created_at).toLocaleDateString() : "N/A" }
+                  ].map(field => (
+                    <div key={field.label} className="flex justify-between py-2 border-b" style={{ borderColor: isDark ? "#1e293b" : "#f1f5f9" }}>
+                      <span className="text-sm" style={{ color: subTxt }}>{field.label}</span>
+                      <span className="text-sm font-semibold" style={{ color: isDark ? "#e2e8f0" : "#374151" }}>{field.value || "—"}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </>
+        )}
 
         {/* Pagination */}
         <div className="flex items-center justify-between px-4 sm:px-5 py-3 flex-wrap gap-2"

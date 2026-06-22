@@ -249,6 +249,7 @@ function Section({ icon, title, subtitle, children, d }) {
 }
 
 // ── Add Staff Form ────────────────────────────────────────────────────────────
+// ── Add Staff Form ────────────────────────────────────────────────────────────
 function AddStaffForm({ onBack, onCreated }) {
   const d = useDark();
   const [f, setF] = useState({ fn:"", mn:"", ln:"", un:"", role:"", branch:"", email:"", phone:"" });
@@ -265,16 +266,22 @@ function AddStaffForm({ onBack, onCreated }) {
     const newErrors = {};
     const email = f.email.trim().toLowerCase();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    const phoneRegex = /^[0-9]{11}$/; 
+    const phoneRegex = /^[0-9]{11}$/;
 
+    // Names set — only first + last required, middle always optional
     if (!f.fn.trim()) newErrors.fn = "First name is required.";
     if (!f.ln.trim()) newErrors.ln = "Last name is required.";
-    if (!f.role) newErrors.role = "Role is required.";
-    
-    if (!email) newErrors.email = "Email is required.";
+
+    // All other fields — required
+    if (!f.un.trim()) newErrors.un = "Username is required.";
+    if (!f.role)      newErrors.role = "Role is required.";
+    if (!f.branch)    newErrors.branch = "Branch is required.";
+
+    if (!email)                       newErrors.email = "Email is required.";
     else if (!emailRegex.test(email)) newErrors.email = "Invalid email format.";
-    
-    if (f.phone && !phoneRegex.test(f.phone)) newErrors.phone = "Must be 11 digits.";
+
+    if (!f.phone)                        newErrors.phone = "Phone number is required.";
+    else if (!phoneRegex.test(f.phone))  newErrors.phone = "Must be 11 digits.";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -309,7 +316,6 @@ function AddStaffForm({ onBack, onCreated }) {
     }
   }
 
-  // ── derived preview values ──
   const fullName = `${f.fn} ${f.mn} ${f.ln}`.replace(/\s+/g, " ").trim()
   const initials = ((f.fn?.[0] || "") + (f.ln?.[0] || "")).toUpperCase() || "?"
   const roleColors = {
@@ -341,10 +347,9 @@ function AddStaffForm({ onBack, onCreated }) {
         </div>
       )}
 
-      {/* Two-column: form (left) + live preview (right) */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
 
-        {/* ── Form card (spans 2 cols on desktop) ── */}
+        {/* ── Form card ── */}
         <div className="lg:col-span-2 rounded-xl overflow-hidden"
           style={{ backgroundColor:d.cardBg, border:`1px solid ${d.cardBdr}`, boxShadow:d.cardShdw }}>
 
@@ -354,9 +359,18 @@ function AddStaffForm({ onBack, onCreated }) {
             title="Personal Information"
             subtitle="The staff member's legal name">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div><FL d={d}>First name <span style={{ color:"#f87171" }}>*</span></FL><FInput placeholder="First name" value={f.fn} onChange={s("fn")} error={errors.fn} d={d}/></div>
-              <div><FL d={d}>Middle name</FL><FInput placeholder="Middle name" value={f.mn} onChange={s("mn")} d={d}/></div>
-              <div><FL d={d}>Last name <span style={{ color:"#f87171" }}>*</span></FL><FInput placeholder="Last name" value={f.ln} onChange={s("ln")} error={errors.ln} d={d}/></div>
+              <div>
+                <FL d={d}>First name <span style={{ color:"#f87171" }}>*</span></FL>
+                <FInput placeholder="First name" value={f.fn} onChange={s("fn")} error={errors.fn} d={d}/>
+              </div>
+              <div>
+                <FL d={d}>Middle name</FL>
+                <FInput placeholder="Middle name" value={f.mn} onChange={s("mn")} d={d}/>
+              </div>
+              <div>
+                <FL d={d}>Last name <span style={{ color:"#f87171" }}>*</span></FL>
+                <FInput placeholder="Last name" value={f.ln} onChange={s("ln")} error={errors.ln} d={d}/>
+              </div>
             </div>
           </Section>
 
@@ -367,11 +381,26 @@ function AddStaffForm({ onBack, onCreated }) {
             subtitle="Login identity and access level">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <FL d={d}>Username</FL>
-                <FInput placeholder="e.g. j.delacruz" value={f.un} onChange={s("un")} hint="first initial.last name" d={d}/>
+                <FL d={d}>Username <span style={{ color:"#f87171" }}>*</span></FL>
+                <FInput
+                  placeholder="e.g. j.delacruz"
+                  value={f.un}
+                  onChange={s("un")}
+                  hint={!errors.un ? "first initial.last name" : undefined}
+                  error={errors.un}
+                  d={d}
+                />
               </div>
-              <div><FL d={d}>Role <span style={{ color:"#f87171" }}>*</span></FL><FSel options={["Admin","Staff","Delivery"]} value={f.role} onChange={s("role")} placeholder="Select role" d={d}/>{errors.role && <p className="text-[10px] font-bold mt-1 text-red-500">{errors.role}</p>}</div>
-              <div><FL d={d}>Branch</FL><FSel options={["Manila","Pampanga"]} value={f.branch} onChange={s("branch")} placeholder="Select branch" d={d}/></div>
+              <div>
+                <FL d={d}>Role <span style={{ color:"#f87171" }}>*</span></FL>
+                <FSel options={["Admin","Staff","Delivery"]} value={f.role} onChange={s("role")} placeholder="Select role" d={d}/>
+                {errors.role && <p className="text-[10px] font-bold mt-1 text-red-500 animate-pulse">{errors.role}</p>}
+              </div>
+              <div>
+                <FL d={d}>Branch <span style={{ color:"#f87171" }}>*</span></FL>
+                <FSel options={["Manila","Pampanga"]} value={f.branch} onChange={s("branch")} placeholder="Select branch" d={d}/>
+                {errors.branch && <p className="text-[10px] font-bold mt-1 text-red-500 animate-pulse">{errors.branch}</p>}
+              </div>
             </div>
           </Section>
 
@@ -381,16 +410,18 @@ function AddStaffForm({ onBack, onCreated }) {
             title="Contact Details"
             subtitle="Where the invite will be sent">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><FL d={d}>Email address <span style={{ color:"#f87171" }}>*</span></FL><FInput type="email" placeholder="e.g. j.delacruz@gmail.com" value={f.email} onChange={s("email")} error={errors.email} d={d}/></div>
               <div>
-                <FL d={d}>Phone number</FL>
+                <FL d={d}>Email address <span style={{ color:"#f87171" }}>*</span></FL>
+                <FInput type="email" placeholder="e.g. j.delacruz@gmail.com" value={f.email} onChange={s("email")} error={errors.email} d={d}/>
+              </div>
+              <div>
+                <FL d={d}>Phone number <span style={{ color:"#f87171" }}>*</span></FL>
                 <div className="flex gap-2">
                   <select className="appearance-none px-2 py-2.5 text-sm border rounded-md outline-none flex-shrink-0"
                     style={{ borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt, width:"70px" }}>
                     <option>+63</option>
                   </select>
                   <div className="flex-1">
-                    {/* 🚀 FIXED: Instantly strips letters, preventing them from being typed */}
                     <FInput 
                       placeholder="Phone number" 
                       value={f.phone} 
@@ -407,7 +438,6 @@ function AddStaffForm({ onBack, onCreated }) {
             </div>
           </Section>
 
-          {/* last section: no bottom border */}
           <div className="px-5 py-5">
             <div className="flex items-start gap-3 p-4 rounded-lg border"
               style={{ backgroundColor: d.isDark ? "rgba(56,189,248,0.1)" : "#f0f9ff", borderColor: d.isDark ? "rgba(56,189,248,0.2)" : "#bae6fd" }}>
@@ -421,15 +451,13 @@ function AddStaffForm({ onBack, onCreated }) {
           </div>
         </div>
 
-        {/* ── Live preview card (right column, sticky on desktop) ── */}
+        {/* ── Live preview card ── */}
         <div className="lg:sticky lg:top-4">
           <div className="rounded-xl overflow-hidden"
             style={{ backgroundColor:d.cardBg, border:`1px solid ${d.cardBdr}`, boxShadow:d.cardShdw }}>
             <p className="px-5 pt-4 pb-3 text-[11px] font-bold uppercase tracking-wider" style={{ color:d.muted, borderBottom:`1px solid ${d.hdrBdr}` }}>
               Preview
             </p>
-
-            {/* avatar + name banner */}
             <div className="px-5 py-6 flex flex-col items-center text-center"
               style={{ background: d.isDark ? "linear-gradient(135deg,#0f3326,#16432f)" : "linear-gradient(135deg,#f0fdf4,#fafff8)" }}>
               <div className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold text-white mb-3"
@@ -453,8 +481,6 @@ function AddStaffForm({ onBack, onCreated }) {
                 </span>
               </div>
             </div>
-
-            {/* detail rows */}
             <div className="px-5 py-4 space-y-3">
               {[
                 { label:"Email",  value:f.email,  icon:"M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" },
@@ -474,14 +500,12 @@ function AddStaffForm({ onBack, onCreated }) {
                 </div>
               ))}
             </div>
-
-            {/* submit button lives in the preview footer so it feels like the final step */}
             <div className="px-5 py-4" style={{ borderTop:`1px solid ${d.hdrBdr}`, backgroundColor:d.modalFtr }}>
               <button onClick={handleSubmit} disabled={submitting}
                 className="w-full flex items-center justify-center gap-1.5 px-5 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-60"
                 style={{ background:`linear-gradient(135deg,${DG},${G})`, boxShadow:"0 2px 8px rgba(12,87,62,0.3)" }}>
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                {submitting?"Sending Invite...":"Send Invite"}
+                {submitting ? "Sending Invite..." : "Send Invite"}
               </button>
             </div>
           </div>
