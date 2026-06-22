@@ -242,8 +242,10 @@ function SidebarContent({
   const [minInput, setMinInput] = useState("");
   const [maxInput, setMaxInput] = useState("");
 
-  const toggleLocation = (loc) => {
-    setSelectedLocations(prev => prev.includes(loc) ? prev.filter(l => l !== loc) : [...prev, loc]);
+  const handleLocationChange = (loc) => {
+    setSelectedLocations([loc]); // Forces only 1 selection
+    localStorage.setItem("bloomora_active_branch", loc); // Saves to local storage
+    window.dispatchEvent(new Event("bloomora:branch-updated")); // Broadcasts to Navbar instantly
   };
 
   const toggleType = (type) => {
@@ -263,7 +265,6 @@ function SidebarContent({
   const clearAll = () => {
     setActiveCategory("All");
     setActiveTypes([]);
-    setSelectedLocations([]);
     setSelectedOccasions([]);
     setPriceRange([0, 999999]);
     setMinInput("");
@@ -401,16 +402,17 @@ function SidebarContent({
           <h4 className="font-medium mb-3 text-gray-800">Shipped From</h4>
           <ul className="space-y-2.5">
             {["Manila", "Pampanga"].map(loc => (
-              <li key={loc} className="flex items-center gap-2">
+              <li key={loc} className="flex items-center gap-2 group">
                 <input 
-                  type="checkbox" 
+                  type="radio" 
+                  name="shipped_from_branch"
                   id={`loc-${loc}`}
                   checked={selectedLocations.includes(loc)}
-                  onChange={() => toggleLocation(loc)}
-                  className="w-3.5 h-3.5 rounded-sm border-gray-300 cursor-pointer focus:ring-0"
+                  onChange={() => handleLocationChange(loc)}
+                  className="w-4 h-4 border-gray-300 cursor-pointer focus:ring-0"
                   style={{ accentColor: G }}
                 />
-                <label htmlFor={`loc-${loc}`} className="cursor-pointer hover:text-gray-900">
+                <label htmlFor={`loc-${loc}`} className={`cursor-pointer text-sm transition-colors ${selectedLocations.includes(loc) ? "text-gray-900 font-medium" : "text-gray-600 group-hover:text-gray-900"}`}>
                   {loc}
                 </label>
               </li>
@@ -789,13 +791,12 @@ export default function Shop({ onNavigate, initialCategory }) {
       return (b.reviews || 0) - (a.reviews || 0);
     });
 
-  // 🚀 CSS CALCULATION UPDATED FOR GRID 5
   const getGridStyle = () => {
     if (viewAs === "list")  return { display:"flex", flexDirection:"column", gap:"10px" }
-    if (viewAs === "grid2") return { display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:"12px" }
-    if (viewAs === "grid3") return { display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:"12px" }
-    if (viewAs === "grid4") return { display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:"12px" }
-    if (viewAs === "grid5") return { display:"grid", gridTemplateColumns:"repeat(5,minmax(0,1fr))", gap:"10px" } // gap slightly smaller to fit smoothly
+    if (viewAs === "grid2") return { display:"grid", gridTemplateColumns:"repeat(2,minmax(0,1fr))", gap:"12px", alignItems:"stretch" }
+    if (viewAs === "grid3") return { display:"grid", gridTemplateColumns:"repeat(3,minmax(0,1fr))", gap:"12px", alignItems:"stretch" }
+    if (viewAs === "grid4") return { display:"grid", gridTemplateColumns:"repeat(4,minmax(0,1fr))", gap:"12px", alignItems:"stretch" }
+    if (viewAs === "grid5") return { display:"grid", gridTemplateColumns:"repeat(5,minmax(0,1fr))", gap:"10px", alignItems:"stretch" }
     return {}
   }
 

@@ -165,21 +165,24 @@ export default function Checkout({ onNavigate }) {
 
   const deliveryDetails = getDeliveryDetails()
 
-  // ── 🚀 THE FIX: SMART BRANCH MATCHING & AREA RESTRICTION ──
   const rawStoreBranch = localStorage.getItem("bloomora_active_branch") || "Manila";
   const selectedStoreBranch = rawStoreBranch.charAt(0).toUpperCase() + rawStoreBranch.slice(1).toLowerCase();
 
-  const provinceToBranch = (province) => {
-    const p = (province || "").toLowerCase()
+  // 🚀 UPDATED: Parses entire address strings to catch profile addresses too!
+  const provinceToBranch = (provinceOrAddress) => {
+    const p = (provinceOrAddress || "").toLowerCase()
     if (!p) return null
     if (p.includes("pampanga") || p.includes("angeles") || p.includes("mabalacat") || p.includes("san fernando")) return "Pampanga"
-    if (p.includes("manila") || p.includes("ncr") || p.includes("quezon") || p.includes("makati") || p.includes("pasig") || p.includes("taguig")) return "Manila"
+    if (p.includes("manila") || p.includes("ncr") || p.includes("quezon") || p.includes("makati") || p.includes("pasig") || p.includes("taguig") || p.includes("caloocan") || p.includes("paranaque") || p.includes("valenzuela") || p.includes("muntinlupa") || p.includes("mandaluyong") || p.includes("marikina") || p.includes("pasay")) return "Manila"
     return null
   }
 
-  const addressBranch = provinceToBranch(recipientType === "myself" ? selectedAddress?.province : manualForm.province)
+  const addressBranch = provinceToBranch(
+    recipientType === "myself" 
+      ? (selectedAddress ? selectedAddress.province : (customer?.address || user?.address)) 
+      : manualForm.province
+  )
   
-  // Case-insensitive comparison prevents false-positive mismatches!
   const needsBranchConfirm = selectedStoreBranch && addressBranch && (selectedStoreBranch.toLowerCase() !== addressBranch.toLowerCase())
   const [branchConfirmOpen, setBranchConfirmOpen] = useState(false)
 
@@ -205,7 +208,7 @@ export default function Checkout({ onNavigate }) {
     setBranchConfirmOpen(false);
 
     if (cartItems.length === 0) {
-      setError("Your cart is empty.");
+      setError("Your cart is empty. Please select items from your cart.");
       return;
     }
     if (!deliveryDetails.address || !deliveryDetails.phone) {
@@ -259,7 +262,6 @@ export default function Checkout({ onNavigate }) {
         payment_reference: referenceNumber.trim(),
         special_note: orderNote.trim() || null,
         
-        // 🚀 FORCE BACKEND TO USE THE ADDRESS BRANCH
         branch_name: addressBranch,
         branch: addressBranch
       });
@@ -281,26 +283,26 @@ export default function Checkout({ onNavigate }) {
   };
 
   const handlePlaceOrder = async () => {
+    setError(""); // Clear old errors
     if (!user) {
       onNavigate("login");
       return;
     }
     if (paymentMethod === "qrph" && !referenceNumber.trim()) {
-      setError("Please enter your Transaction Reference Number (TRN) to verify your payment.");
+      setError("Please enter your Transaction Reference Number (TRN) to verify your manual payment.");
       return;
     }
     if (cartItems.length === 0) {
-      setError("Your cart is empty.");
+      setError("Your cart is empty! Please go back and select items to checkout.");
       return;
     }
     if (!deliveryDetails.address || !deliveryDetails.phone) {
-      setError("Please provide a complete delivery address and phone number.");
+      setError("Please select or add a complete delivery address and phone number.");
       return;
     }
 
-    // 🚀 STRICT BRANCH & AREA VALIDATION
     if (!addressBranch) {
-      setError("Sorry, we currently only deliver to Metro Manila and Pampanga areas. Please provide a valid address within our coverage.");
+      setError("Sorry, we only deliver to Metro Manila and Pampanga. Please provide a valid address within our coverage.");
       return;
     }
 
@@ -310,7 +312,6 @@ export default function Checkout({ onNavigate }) {
     }
 
     setPlacing(true);
-    setError("");
 
     try {
       if (saveAddressToBook && recipientType === "someone_else" && manualForm.recipient_name && manualForm.phone && manualForm.street) {
@@ -350,7 +351,6 @@ export default function Checkout({ onNavigate }) {
         payment_reference: referenceNumber.trim(),
         special_note: orderNote.trim() || null,
         
-        // 🚀 FORCE BACKEND TO USE THE ADDRESS BRANCH
         branch_name: addressBranch,
         branch: addressBranch
       });
@@ -480,10 +480,16 @@ export default function Checkout({ onNavigate }) {
                     <div className="text-center py-4">
                       <p className="text-sm text-gray-500 mb-2">No saved addresses yet</p>
                       <button
-                        onClick={() => onNavigate("profile")}
-                        className="px-4 py-2 text-xs font-semibold text-white rounded-lg bg-[#2E8B34] hover:brightness-105"
+                        onClick={() => {
+                          if (!user) {
+                            onNavigate("login"); 
+                          } else {
+                            onNavigate("profile");
+                          }
+                        }}
+                        className="w-full py-2 text-xs font-semibold text-gray-500 border border-dashed border-gray-300 rounded-lg hover:bg-gray-50 transition"
                       >
-                        Add Address in Profile
+                        + Manage Addresses
                       </button>
                     </div>
                   ) : (
@@ -614,11 +620,8 @@ export default function Checkout({ onNavigate }) {
               )}
             </div>
 
-            {error && (
-              <div className="bg-white border border-red-200 rounded-xl p-4 text-sm text-red-600">
-                {error}
-              </div>
-            )}
+            {/* 🚀 THE ERROR DISPLAY USED TO BE HERE. WE MOVED IT! */}
+            
           </div>
 
           {/* ── Right: delivery date + payment + summary ── */}
@@ -824,9 +827,17 @@ export default function Checkout({ onNavigate }) {
                 </div>
                 <p className="text-xs text-gray-400">VAT included, where applicable</p>
               </div>
+
+              {/* 🚀 THE FIX: Moved Error Message directly above the button so it's impossible to miss! */}
+              {error && (
+                <div className="mb-4 bg-red-50 border border-red-200 rounded-xl p-3 text-xs text-red-600 text-center font-medium shadow-sm">
+                  {error}
+                </div>
+              )}
+
               <button
                 onClick={handlePlaceOrder}
-                disabled={placing || cartItems.length === 0}
+                disabled={placing} // 🚀 THE FIX: Removed physical disable for empty carts so it can tell you WHY
                 className="w-full py-3.5 text-sm font-bold text-white rounded-xl transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg"
                 style={{ background: `linear-gradient(135deg, ${DG}, ${G})`, boxShadow: "0 8px 20px rgba(46,139,52,0.22)" }}
               >

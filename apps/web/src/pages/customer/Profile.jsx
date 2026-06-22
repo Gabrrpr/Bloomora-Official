@@ -378,6 +378,12 @@ export default function Profile({ onNavigate }) {
     return "text-gray-400";
   };
 
+  if (!user) {
+    // If user is null, redirect to login and render nothing to prevent crashes
+    setTimeout(() => onNavigate("login"), 0); 
+    return null; 
+  }
+
   return (
     <div className="min-h-screen" style={{ backgroundColor: "#F7F8FA" }}>
       <style>{`@keyframes profileRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}`}</style>

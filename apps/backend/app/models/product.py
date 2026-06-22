@@ -42,6 +42,7 @@ class Product(Base):
     is_visible = Column(Boolean, default=True)
     occasions = Column(JSONB, default=[])
     composition = Column(JSONB, default=[])
+    sold_count = Column(Integer, default=0, nullable=False)
 
     
     # Relationships (Unchanged)

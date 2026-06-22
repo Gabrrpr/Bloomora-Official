@@ -12,12 +12,9 @@ import secrets
 
 # 🚀 INJECTED SECURE DEPENDENCIES
 from app.core.dependencies import get_db, get_current_user, require_staff
-<<<<<<< HEAD
 from app.models import User, RoleEnum, Order, OrderItem, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory
 from app.utils.lalamove import book_lalamove_delivery
-=======
 from app.models import User, RoleEnum, Order, OrderItem, StockReservation, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory
->>>>>>> f22b6e7d367d83249a467e25a0ec9bf06078053b
 
 # We use your dedicated PayMongo service instead of raw requests!
 from app.services.paymongo_service import PayMongoError, create_checkout_session, to_paymongo_amount
@@ -368,7 +365,6 @@ async def create_order(
         db.flush()
 
         db.commit()
-<<<<<<< HEAD
 
         if payload.get("delivery_method") == "lalamove":
             try:
@@ -407,9 +403,9 @@ async def create_order(
             "order_ids": [str(order.id)],
             "checkout_url": checkout_url,
         }
-=======
+
         return _created_order_response(order)
->>>>>>> f22b6e7d367d83249a467e25a0ec9bf06078053b
+
     except HTTPException:
         db.rollback()
         raise

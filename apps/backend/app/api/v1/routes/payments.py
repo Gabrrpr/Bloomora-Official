@@ -17,7 +17,7 @@ from app.api.v1.routes.orders import _expire_pending_transaction, _release_reser
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
-from app.models import CartItem, Inventory, Order, OrderStatusEnum, PaymentStatusEnum, StockReservation, Transaction, User
+from app.models import CartItem, Inventory, Order, OrderStatusEnum, PaymentStatusEnum, Product, StockReservation, Transaction, User
 from app.services.paymongo_service import (
     PayMongoError,
     create_checkout_session,
@@ -239,6 +239,15 @@ def _convert_reservations(db: Session, order: Order):
         reservation.status = "converted"
         reservation.converted_at = datetime.now(timezone.utc)
 
+def _increment_sold_count(db: Session, order: Order):
+    """Safely increments the sold_count for all standard products in a paid order."""
+    for item in order.items or []:
+        if item.product_id:
+            # with_for_update() locks the row briefly to prevent race conditions if multiple people buy at once
+            product = db.query(Product).filter(Product.id == item.product_id).with_for_update().first()
+            if product:
+                current_count = getattr(product, "sold_count", 0) or 0
+                product.sold_count = current_count + item.quantity
 
 def _reconcile_paid_checkout(
     db: Session,
@@ -273,6 +282,7 @@ def _reconcile_paid_checkout(
             "checkout_session": checkout,
         }
         _convert_reservations(db, transaction.order)
+        _increment_sold_count(db, transaction.order)
 
         raw_method = str(source.get("type") or transaction.payment_method or "ewallet").lower()
         if raw_method in {"card", "qrph"}:
@@ -458,6 +468,7 @@ async def paymongo_webhook(
                 transaction.status = PaymentStatusEnum.paid.value
                 transaction.order.status = OrderStatusEnum.paid
                 _convert_reservations(db, transaction.order)
+                _increment_sold_count(db, transaction.order)
             else:
                 transaction.status = PaymentStatusEnum.failed.value
                 transaction.order.status = OrderStatusEnum.payment_failed

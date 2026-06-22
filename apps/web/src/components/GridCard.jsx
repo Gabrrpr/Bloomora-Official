@@ -39,16 +39,16 @@ export default function GridCard({ product, wishlist, toggleWishlist, onPreview 
   const oldPrice = Number(product.original_price || product.original) || 0;
   const isDiscounted = oldPrice > currentPrice;
   
-  // 🚀 THE FIX: Calculate if out of stock
   const isOutOfStock = product.stock <= 0 || !product.is_available || product.status === "inactive";
 
   return (
     <div
-      className={`bg-white group transition-all duration-200 relative ${isOutOfStock ? "grayscale opacity-75 cursor-not-allowed" : "hover:shadow-lg cursor-pointer"}`}
+      className={`bg-white group transition-all duration-200 relative flex flex-col h-full ${
+        isOutOfStock ? "grayscale opacity-75 cursor-not-allowed" : "hover:shadow-lg cursor-pointer"
+      }`}
       style={{ border: "1px solid #e5e7eb", borderRadius: "8px", overflow: "hidden" }}
       onClick={() => !isOutOfStock && onPreview(product)}
     >
-      {/* 🚀 THE FIX: Out of Stock Overlay */}
       {isOutOfStock && (
         <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-white/30 backdrop-blur-[1px]">
           <span className="bg-gray-900 text-white text-[10px] sm:text-xs font-bold px-3 py-1.5 rounded shadow tracking-widest uppercase">
@@ -57,19 +57,28 @@ export default function GridCard({ product, wishlist, toggleWishlist, onPreview 
         </div>
       )}
 
-      <div className="relative overflow-hidden bg-gray-50" style={{ aspectRatio: "1/1" }}>
+      <div className="relative overflow-hidden bg-gray-50 flex-shrink-0" style={{ aspectRatio: "1/1" }}>
         <FallbackImage
           src={product.image || product.image_url}
           alt={product.name}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
+        
+        {product.sold_count > 10 && !isOutOfStock && (
+          <div className="absolute top-2 left-2 bg-red-500 text-white text-[10px] font-bold px-2.5 py-1 rounded shadow-sm z-10 tracking-wide">
+            🔥 BEST SELLER
+          </div>
+        )}
+
         {isDiscounted && !isOutOfStock && (
           <div className="absolute top-2 right-2 text-white text-[10px] font-bold px-1.5 py-0.5" style={{ backgroundColor: DG, borderRadius: "4px" }}>
             -{discount(oldPrice, currentPrice)}%
           </div>
         )}
       </div>
-      <div className="p-3 relative z-10">
+
+      {/* 🚀 THE LAYOUT FIX: Added 'flex flex-col flex-1' to keep spacing identical */}
+      <div className="p-3 relative z-10 flex flex-col flex-1">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-baseline gap-1.5">
             <span className="text-base font-bold" style={{ color: G }}>₱{currentPrice.toLocaleString()}</span>
@@ -79,15 +88,22 @@ export default function GridCard({ product, wishlist, toggleWishlist, onPreview 
           </div>
           <WishlistBtn id={product.id} wishlist={wishlist} toggleWishlist={toggleWishlist} small />
         </div>
-        <p className="text-sm font-medium text-gray-800 leading-snug mb-1.5 line-clamp-2">{product.name}</p>
+
+        {/* Enforced a strict height constraint for exactly 2 lines maximum */}
+        <p className="text-sm font-medium text-gray-800 leading-snug mb-1.5 line-clamp-2 min-h-[2.5rem]">
+          {product.name}
+        </p>
+
         <div className="flex items-center gap-1 mb-3">
           <Stars rating={product.rating || 5} />
           <span className="text-xs text-gray-400">{product.rating || 5} ({product.reviews || 0})</span>
         </div>
+
+        {/* 🚀 THE ANCHOR FIX: 'mt-auto' forces this button to dock at the absolute bottom of the card */}
         <button
           disabled={isOutOfStock}
           onClick={(e) => { e.stopPropagation(); onPreview(product); }}
-          className="w-full text-sm font-semibold py-2 text-white transition-all flex items-center justify-center gap-1.5"
+          className="w-full text-sm font-semibold py-2 text-white transition-all flex items-center justify-center gap-1.5 mt-auto"
           style={{ backgroundColor: isOutOfStock ? "#9ca3af" : G, borderRadius: "6px", border: "none", cursor: isOutOfStock ? "not-allowed" : "pointer" }}
         >
           View Details
