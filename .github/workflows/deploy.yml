@@ -1,0 +1,145 @@
+name: Validate and deploy
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: production-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Validate frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    env:
+      VITE_API_BASE_URL: https://api.estings.shop/api/v1
+      VITE_WS_BASE_URL: wss://api.estings.shop/api/v1
+      VITE_WEB_URL: https://estings.shop
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production frontend
+        run: npm run build
+
+  backend:
+    name: Validate backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/backend
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      SUPABASE_URL: https://example.supabase.co
+      SUPABASE_KEY: ci-placeholder-key
+      SUPABASE_SERVICE_KEY: ci-placeholder-service-key
+      SECRET_KEY: ci-only-secret-key
+      POLLINATIONS_API_KEY: ci-placeholder-key
+      GEMINI_API_KEY: ci-placeholder-key
+      CORS_ORIGINS: https://estings.shop
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: apps/backend/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Compile backend source
+        run: python -m compileall -q app alembic
+
+      - name: Import FastAPI application
+        run: python -c "import app.main; print('BACKEND_IMPORT_OK')"
+
+      - name: Verify a single Alembic head
+        shell: bash
+        run: |
+          heads="$(python -m alembic heads)"
+          printf '%s\n' "$heads"
+          count="$(printf '%s\n' "$heads" | grep -c '(head)')"
+          test "$count" -eq 1
+
+  deploy:
+    name: Deploy production
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      - frontend
+      - backend
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      COOLIFY_BACKEND_DEPLOY_WEBHOOK: ${{ secrets.COOLIFY_BACKEND_DEPLOY_WEBHOOK }}
+      COOLIFY_FRONTEND_DEPLOY_WEBHOOK: ${{ secrets.COOLIFY_FRONTEND_DEPLOY_WEBHOOK }}
+    steps:
+      - name: Require Coolify deployment webhooks
+        shell: bash
+        run: |
+          test -n "$COOLIFY_BACKEND_DEPLOY_WEBHOOK"
+          test -n "$COOLIFY_FRONTEND_DEPLOY_WEBHOOK"
+
+      - name: Trigger backend deployment
+        run: curl --fail-with-body --retry 3 --request GET "$COOLIFY_BACKEND_DEPLOY_WEBHOOK"
+
+      - name: Allow backend deployment to start
+        run: sleep 20
+
+      - name: Wait for backend health
+        shell: bash
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error https://api.estings.shop/health > /dev/null; then
+              exit 0
+            fi
+            echo "Backend is not healthy yet (attempt $attempt/30)."
+            sleep 10
+          done
+          echo "Backend health check timed out."
+          exit 1
+
+      - name: Trigger frontend deployment
+        run: curl --fail-with-body --retry 3 --request GET "$COOLIFY_FRONTEND_DEPLOY_WEBHOOK"
+
+      - name: Allow frontend deployment to start
+        run: sleep 20
+
+      - name: Wait for frontend
+        shell: bash
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error https://estings.shop > /dev/null; then
+              exit 0
+            fi
+            echo "Frontend is not ready yet (attempt $attempt/30)."
+            sleep 10
+          done
+          echo "Frontend verification timed out."
+          exit 1
