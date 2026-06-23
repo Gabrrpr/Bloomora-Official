@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { Star } from 'lucide-react-native';
+import { memo, useCallback } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { formatPhp, type Product } from '@/constants/shop';
@@ -19,20 +20,23 @@ type ProductCardProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-export function ProductCard({ product, style }: ProductCardProps) {
+export const ProductCard = memo(function ProductCard({ product, style }: ProductCardProps) {
   const isSoldOut = (product.stock ?? 0) <= 0;
   const hasSalePrice = Boolean(product.originalPriceCents && product.originalPriceCents > product.priceCents);
   const discountPercent =
     hasSalePrice && product.originalPriceCents
       ? Math.round(((product.originalPriceCents - product.priceCents) / product.originalPriceCents) * 100)
       : 0;
+  const handlePress = useCallback(() => {
+    router.push(`/product-details?id=${encodeURIComponent(product.id)}`);
+  }, [product.id]);
 
   return (
     <Pressable
       accessibilityLabel={`View ${product.name} details`}
       accessibilityRole="button"
       style={({ pressed }) => [styles.card, style, pressed && styles.cardPressed]}
-      onPress={() => router.push(`/product-details?id=${encodeURIComponent(product.id)}`)}>
+      onPress={handlePress}>
       {product.imageUrl ? (
         <Image
           cachePolicy="memory-disk"
@@ -81,7 +85,7 @@ export function ProductCard({ product, style }: ProductCardProps) {
       </View>
     </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

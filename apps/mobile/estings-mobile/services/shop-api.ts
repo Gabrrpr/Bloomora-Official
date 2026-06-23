@@ -17,6 +17,7 @@ import { getCartItems } from '@/services/cart-storage';
 export type BackendProduct = {
   branch?: string | null;
   branch_name?: string | null;
+  branches?: string[] | null;
   category?: string | null;
   created_at?: string | null;
   description?: string | null;
@@ -178,12 +179,16 @@ function mapBackendProductReview(review: BackendProductReview): ProductReview {
 export function mapBackendProduct(product: BackendProduct): Product {
   const category = product.category || 'Flowers';
   const productGroup = product.product_group || undefined;
-  const branch = normalizeBranch(product.branch_name ?? product.branch);
+  const normalizedBranches = (product.branches ?? [])
+    .map((value) => normalizeBranch(value))
+    .filter((value): value is string => Boolean(value));
+  const branch = normalizeBranch(product.branch_name ?? product.branch) ?? normalizedBranches[0];
   const originalPrice = Number(product.original_price ?? product.original ?? 0);
   const price = Number(product.price || 0);
 
   return {
     branch,
+    branches: normalizedBranches,
     categoryId: toCategoryId(category),
     categoryName: toTitleCase(category),
     createdAt: product.created_at || undefined,
@@ -346,7 +351,7 @@ export const shopApi = {
   },
   async getProductRating(productId: string): Promise<ProductRatingSummary> {
     try {
-      const rating = await apiFetch<BackendProductRating>(`/product/${encodeURIComponent(productId)}/rating`);
+      const rating = await apiFetch<BackendProductRating>(`/reviews/product/${encodeURIComponent(productId)}/rating`);
       return {
         averageRating: Number(rating.average_rating ?? 0),
         reviewCount: Number(rating.review_count ?? 0),
@@ -357,7 +362,7 @@ export const shopApi = {
   },
   async getProductReviews(productId: string) {
     try {
-      const reviews = await apiFetch<BackendProductReview[]>(`/product/${encodeURIComponent(productId)}`);
+      const reviews = await apiFetch<BackendProductReview[]>(`/reviews/product/${encodeURIComponent(productId)}`);
       return reviews.map(mapBackendProductReview);
     } catch {
       return [];
@@ -370,6 +375,10 @@ export const shopApi = {
       console.warn('Failed to load featured products.', error);
       throw toCatalogError(error);
     }
+  },
+  async getRecommendations(limit = 12) {
+    const products = await apiFetch<BackendProduct[]>(`/recommendations/home?limit=${limit}`);
+    return products.filter(isCustomerCatalogProduct).map(mapBackendProduct);
   },
   async getCategories(options?: CatalogRequestOptions) {
     try {

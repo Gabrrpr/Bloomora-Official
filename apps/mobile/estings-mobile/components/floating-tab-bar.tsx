@@ -125,6 +125,7 @@ export function FloatingTabBar({ descriptors, navigation, state }: BottomTabBarP
               activeIndex={activeIndex}
               icon={item.icon}
               index={index}
+              isHomeTab={isHomeTab}
               key={route.key}
               label={item.label}
               layout={layout}
@@ -146,6 +147,7 @@ function FloatingTabItem({
   badgeCount,
   icon: Icon,
   index,
+  isHomeTab,
   label,
   layout,
   onPress,
@@ -157,6 +159,7 @@ function FloatingTabItem({
   badgeCount?: number;
   icon: LucideIcon;
   index: number;
+  isHomeTab: boolean;
   label: string;
   layout: ReturnType<typeof getFloatingTabLayout>;
   onPress: () => void;
@@ -176,13 +179,15 @@ function FloatingTabItem({
     ],
   }));
 
+  const inactiveColor = isHomeTab ? '#3D4A42' : theme.colors.textMuted;
+
   const labelStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(progress.value, [0, 1], [theme.colors.textMuted, theme.colors.primary]),
-    opacity: interpolate(progress.value, [0, 1], [0.62, 1], Extrapolation.CLAMP),
+    color: interpolateColor(progress.value, [0, 1], [inactiveColor, theme.colors.primary]),
+    opacity: interpolate(progress.value, [0, 1], [0.72, 1], Extrapolation.CLAMP),
     transform: [{ translateY: interpolate(progress.value, [0, 1], [2, 0], Extrapolation.CLAMP) }],
   }));
 
-  const iconColor = active ? theme.colors.primary : theme.colors.textMuted;
+  const iconColor = active ? theme.colors.primary : inactiveColor;
 
   return (
     <Pressable

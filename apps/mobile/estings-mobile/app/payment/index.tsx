@@ -1,7 +1,7 @@
 import * as Linking from 'expo-linking';
 import { Image } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
-import { router, type Href, useLocalSearchParams } from 'expo-router';
+import { router, type Href, useLocalSearchParams, useNavigation } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import {
   Banknote,
@@ -13,7 +13,7 @@ import {
   Upload,
 } from 'lucide-react-native';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
 
@@ -27,7 +27,7 @@ import { formatPhp } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { getAuthSession } from '@/services/auth-session';
 import { getOrderById, type CustomerOrder, type CustomerOrderItem } from '@/services/orders-api';
-import { createPayMongoCheckout } from '@/services/payments-api';
+import { createPayMongoCheckout, getPayMongoPaymentStatus } from '@/services/payments-api';
 
 type PaymentMethod = 'paymongo' | 'gcash' | 'bank';
 
@@ -41,6 +41,7 @@ const paymentLogos = {
 
 export default function PaymentScreen() {
   const insets = useSafeAreaInsets();
+  const navigation = useNavigation();
   const params = useLocalSearchParams<{
     orderId?: string;
   }>();
@@ -49,11 +50,24 @@ export default function PaymentScreen() {
   const [isLoadingOrder, setIsLoadingOrder] = useState(true);
   const [orderError, setOrderError] = useState<string | null>(null);
   const [method, setMethod] = useState<PaymentMethod | null>('paymongo');
-  const [voucher, setVoucher] = useState('');
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
+
+  useEffect(() => {
+    const removeBefore = navigation.addListener('beforeRemove', (event) => {
+      if (order?.paymentStatus === 'paid') return;
+      event.preventDefault();
+      Alert.alert('Leave payment?', 'Your order is not paid yet.', [
+        { style: 'cancel', text: 'Stay' },
+        { style: 'destructive', text: 'Leave', onPress: () => navigation.dispatch(event.data.action) },
+      ]);
+    });
+    return () => {
+      removeBefore();
+    };
+  }, [navigation, order?.paymentStatus]);
 
   useEffect(() => {
     let active = true;
@@ -162,6 +176,11 @@ export default function PaymentScreen() {
           router.replace(`/payment/cancel?orderId=${encodeURIComponent(orderId)}` as Href);
         }
         else router.replace(successHref);
+      } else {
+        const status = await getPayMongoPaymentStatus({ orderId, session });
+        if (status.payment_status === 'paid' || status.order?.payment_status === 'paid') {
+          router.replace(successHref);
+        }
       }
     } catch (error) {
       Alert.alert('Payment unavailable', error instanceof Error ? error.message : 'Unable to open PayMongo.');
@@ -173,7 +192,7 @@ export default function PaymentScreen() {
   if (isLoadingOrder) {
     return (
       <View style={styles.screen}>
-        <AppPageHeader title="Payment" />
+        <AppPageHeader onBack={() => navigation.goBack()} title="Payment" />
         <View style={styles.loadingState}>
           <ActivityIndicator color={theme.colors.primary} size="large" />
           <Text style={styles.resultBody}>Loading the server-confirmed order total…</Text>
@@ -185,7 +204,7 @@ export default function PaymentScreen() {
   if (!order || orderError) {
     return (
       <View style={styles.screen}>
-        <AppPageHeader title="Payment" />
+        <AppPageHeader onBack={() => navigation.goBack()} title="Payment" />
         <View style={styles.loadingState}>
           <Text style={styles.resultMutedTitle}>Payment unavailable</Text>
           <Text style={styles.resultBody}>{orderError ?? 'Unable to load this order.'}</Text>
@@ -197,7 +216,7 @@ export default function PaymentScreen() {
 
   return (
     <View style={styles.screen}>
-      <AppPageHeader title="Payment" />
+      <AppPageHeader onBack={() => navigation.goBack()} title="Payment" />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]} showsVerticalScrollIndicator={false}>
         <View style={styles.summaryCard}>
           <Pressable onPress={() => setIsSummaryExpanded((current) => !current)} style={styles.summaryHeader}>
@@ -228,18 +247,6 @@ export default function PaymentScreen() {
           totalCents={totalCents}
         />
 
-        <View style={styles.voucherSection}>
-          <Text style={styles.fieldTitle}>Voucher Code</Text>
-          <View style={styles.voucherRow}>
-            <TextInput onChangeText={setVoucher} placeholder="Enter voucher code" placeholderTextColor="#AAAAAA" style={styles.voucherInput} value={voucher} />
-            <Pressable
-              onPress={() => Alert.alert('Voucher', voucher.trim() ? 'This voucher will be validated when voucher support is connected.' : 'Enter a voucher code first.')}
-              style={({ pressed }) => [styles.applyButton, pressed && styles.pressed]}>
-              <Text style={styles.applyButtonText}>Apply</Text>
-            </Pressable>
-          </View>
-        </View>
-
         <View style={styles.methodsCard}>
           <Text style={styles.methodsTitle}>Choose a payment method</Text>
           <Text style={styles.methodsSubtitle}>Select how you’d like to pay for your order.</Text>
@@ -263,8 +270,9 @@ export default function PaymentScreen() {
           </PaymentOption>
           <PaymentOption
             active={method === 'gcash'}
+            disabled
             label="E-Wallet"
-            onPress={() => setMethod(method === 'gcash' ? null : 'gcash')}
+            onPress={() => {}}
             right={<Image contentFit="contain" source={paymentLogos.gcash} style={styles.gcashLogoImage} />}>
             <ManualPaymentDetails
               method="gcash"
@@ -276,8 +284,9 @@ export default function PaymentScreen() {
           </PaymentOption>
           <PaymentOption
             active={method === 'bank'}
+            disabled
             label="Bank Transfer"
-            onPress={() => setMethod(method === 'bank' ? null : 'bank')}
+            onPress={() => {}}
             right={<Banknote color={method === 'bank' ? theme.colors.primary : '#777777'} size={23} />}>
             <ManualPaymentDetails
               method="bank"
@@ -320,21 +329,24 @@ function AmountCard({ label, status, totalCents }: { label: string; status: stri
 function PaymentOption({
   active,
   children,
+  disabled = false,
   label,
   onPress,
   right,
 }: {
   active: boolean;
   children?: ReactNode;
+  disabled?: boolean;
   label: string;
   onPress: () => void;
   right: ReactNode;
 }) {
   return (
-    <View style={[styles.paymentOption, active && styles.paymentOptionActive]}>
-      <Pressable onPress={onPress} style={({ pressed }) => [styles.paymentOptionHeader, pressed && styles.pressed]}>
+    <View style={[styles.paymentOption, active && styles.paymentOptionActive, disabled && styles.paymentOptionDisabled]}>
+      <Pressable disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.paymentOptionHeader, pressed && styles.pressed]}>
         <View style={[styles.radio, active && styles.radioActive]}>{active ? <Check color={theme.colors.white} size={16} strokeWidth={3} /> : null}</View>
         <Text style={styles.paymentOptionLabel}>{label}</Text>
+        {disabled ? <View style={styles.unavailableTag}><Text style={styles.unavailableTagText}>Unavailable</Text></View> : null}
         <View style={styles.paymentOptionRight}>{right}</View>
       </Pressable>
       {active && children ? <View style={styles.paymentOptionDetails}>{children}</View> : null}
@@ -483,11 +495,14 @@ const styles = StyleSheet.create({
   methodsSubtitle: { color: '#666666', fontFamily: Fonts.sans, fontSize: 13, marginBottom: 2 },
   paymentOption: { borderColor: '#C5C5C5', borderRadius: theme.radius.sm, borderWidth: 1, overflow: 'hidden' },
   paymentOptionActive: { borderColor: theme.colors.primary, borderWidth: 1.5 },
+  paymentOptionDisabled: { backgroundColor: '#F2F2F2', opacity: 0.55 },
   paymentOptionHeader: { alignItems: 'center', flexDirection: 'row', gap: 9, minHeight: 54, paddingHorizontal: 11 },
   radio: { alignItems: 'center', borderColor: '#B8B8B8', borderRadius: 14, borderWidth: 1.3, height: 26, justifyContent: 'center', width: 26 },
   radioActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
   paymentOptionLabel: { color: '#333333', flexShrink: 1, fontFamily: Fonts.sans, fontSize: 14 },
   paymentOptionRight: { alignItems: 'flex-end', flex: 1, minWidth: 70 },
+  unavailableTag: { backgroundColor: '#E2E2E2', borderRadius: 5, paddingHorizontal: 6, paddingVertical: 3 },
+  unavailableTagText: { color: '#666666', fontFamily: Fonts.sansMedium, fontSize: 9 },
   recommended: { backgroundColor: '#C9F2D0', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
   recommendedText: { color: theme.colors.primary, fontFamily: Fonts.sansMedium, fontSize: 10 },
   paymongoLogoImage: { height: 21, width: 92 },

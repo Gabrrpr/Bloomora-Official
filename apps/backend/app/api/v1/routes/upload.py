@@ -1,17 +1,31 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from supabase import create_client, Client
 import uuid
 import mimetypes
 from app.core.config import settings
+from app.core.dependencies import require_staff
+from app.models import User
 
 router = APIRouter(prefix="/upload", tags=["Uploads"])
 
 @router.post("/{bucket_name}")
-async def upload_file(bucket_name: str, file: UploadFile = File(...)):
+async def upload_file(
+    bucket_name: str,
+    file: UploadFile = File(...),
+    _: User = Depends(require_staff),
+):
     """Handles dynamic file uploads to any specified Supabase bucket."""
     try:
+        if bucket_name not in {"advertisements", "hero-images", "products"}:
+            raise HTTPException(status_code=400, detail="Unsupported upload bucket.")
+        if not file.content_type or not (
+            file.content_type.startswith("image/") or file.content_type in {"video/mp4", "video/webm"}
+        ):
+            raise HTTPException(status_code=400, detail="Only images, MP4, and WebM files are supported.")
         supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
         file_bytes = await file.read()
+        if len(file_bytes) > 25 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Feed media must be 25 MB or smaller.")
         
         # Generate a safe, unique filename
         ext = mimetypes.guess_extension(file.content_type) or ".png"
@@ -28,6 +42,8 @@ async def upload_file(bucket_name: str, file: UploadFile = File(...)):
         public_url = supabase.storage.from_(bucket_name).get_public_url(filename)
         return {"url": public_url}
         
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Upload error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

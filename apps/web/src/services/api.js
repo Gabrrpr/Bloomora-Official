@@ -214,16 +214,8 @@ export const api = {
   },
 
   // ── Orders ────────────────────────────────────────────────────────────────
-  async createOrder({ items, delivery_address, delivery_notes, special_note, scheduled_at, payment_method, payment_reference }) {
-    return api.post('/orders/', { 
-      items, 
-      delivery_address, 
-      delivery_notes, 
-      special_note, 
-      scheduled_at, 
-      payment_method, 
-      payment_reference 
-    });
+  async createOrder(data) {
+    return api.post('/orders/', data);
   },
 
   async confirmPayment(orderId) {
@@ -373,5 +365,93 @@ export const api = {
       method: 'PUT',
       body: JSON.stringify({ enabled }),
     });
+  },
+
+  async getCheckoutSettings() {
+    return api.get('/commerce/checkout-settings');
+  },
+
+  async updateDeliverySettings(data) {
+    return api.put('/commerce/delivery-settings', data);
+  },
+
+  async getPromos() {
+    return api.get('/commerce/promos');
+  },
+
+  async createPromo(data) {
+    return api.post('/commerce/promos', data);
+  },
+
+  async updatePromo(id, data) {
+    return api.put(`/commerce/promos/${id}`, data);
+  },
+
+  async deletePromo(id) {
+    return api.delete(`/commerce/promos/${id}`);
+  },
+
+  async getAdvertisements() {
+    return api.get('/commerce/advertisements');
+  },
+
+  async getActiveAdvertisement() {
+    return api.get('/commerce/advertisements/active');
+  },
+
+  async createAdvertisement(data) {
+    return api.post('/commerce/advertisements', data);
+  },
+
+  async updateAdvertisement(id, data) {
+    return api.put(`/commerce/advertisements/${id}`, data);
+  },
+
+  async deleteAdvertisement(id) {
+    return api.delete(`/commerce/advertisements/${id}`);
+  },
+
+  async getMobileFeedCampaigns() {
+    return api.get('/mobile-feed/admin/campaigns');
+  },
+
+  async createMobileFeedCampaign(data) {
+    return api.post('/mobile-feed/admin/campaigns', data);
+  },
+
+  async createMobileFeedPost(data) {
+    return api.post('/mobile-feed/admin/posts', data);
+  },
+
+  async updateMobileFeedPost(id, data) {
+    return api.put(`/mobile-feed/admin/posts/${id}`, data);
+  },
+
+  async updateMobileFeedCampaign(id, data) {
+    return api.put(`/mobile-feed/admin/campaigns/${id}`, data);
+  },
+
+  async deleteMobileFeedCampaign(id) {
+    return api.delete(`/mobile-feed/admin/campaigns/${id}`);
+  },
+
+  async setMobileFeedPlacement(campaignId, data) {
+    return api.put(`/mobile-feed/admin/campaigns/${campaignId}/placement`, data);
+  },
+
+  async getMobileFeedProductControls(branch = 'all') {
+    return api.get(`/mobile-feed/admin/product-controls?branch=${encodeURIComponent(branch)}`);
+  },
+
+  async setMobileFeedProductControl(productId, data) {
+    return api.put(`/mobile-feed/admin/products/${productId}/control`, data);
+  },
+
+  async previewMobileFeed(tab, branch) {
+    return api.get(`/mobile-feed/admin/preview?tab=${encodeURIComponent(tab)}&branch=${encodeURIComponent(branch)}`);
+  },
+
+  async getMobileFeedAnalytics(tab, branch) {
+    return api.get(`/mobile-feed/admin/analytics?tab=${encodeURIComponent(tab)}&branch=${encodeURIComponent(branch)}`);
   },
 };

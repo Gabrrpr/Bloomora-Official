@@ -2,6 +2,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { Platform } from 'react-native';
 
 import type { CartItem } from '@/constants/shop';
+import type { AppliedVoucher } from '@/services/commerce-api';
 
 export type CheckoutDraft = {
   attemptId: string;
@@ -16,6 +17,7 @@ export type CheckoutDraft = {
   recipient: { firstName: string; lastName: string; phoneNumber: string };
   recipientType: 'myself' | 'someone';
   timeSlot: string;
+  voucher?: AppliedVoucher | null;
 };
 
 const key = 'bloomora.checkout-draft';

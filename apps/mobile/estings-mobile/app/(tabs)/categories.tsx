@@ -12,7 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Search, Star, WifiOff, X, Zap } from 'lucide-react-native';
+import { Search, Star, Store, WifiOff, X, Zap } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppBrandHeader } from '@/components/app-brand-header';
@@ -21,6 +21,7 @@ import { ProductCard } from '@/components/product-card';
 import { formatPhp, type Product } from '@/constants/shop';
 import { theme } from '@/constants/theme';
 import { shopApi } from '@/services/shop-api';
+import { getStoreBranch, setStoreBranch, type StoreBranch } from '@/services/branch-preference';
 import { buildDiscoveryProductOrder, createRecommendationSeed } from '@/utils/product-recommendations';
 
 const imageNotFound = require('@/assets/images/default-img/ImageNotFound.webp');
@@ -63,6 +64,8 @@ export default function CategoriesScreen() {
   const [products, setProducts] = useState<Product[]>([]);
   const [productOrderSeed, setProductOrderSeed] = useState(() => createRecommendationSeed());
   const [query, setQuery] = useState('');
+  const [branch, setBranch] = useState<StoreBranch>('manila');
+  const [isBranchPickerOpen, setIsBranchPickerOpen] = useState(false);
   const searchBarProgress = useRef(new Animated.Value(0)).current;
 
   const loadCatalog = useCallback(async (showRefresh = false) => {
@@ -74,6 +77,7 @@ export default function CategoriesScreen() {
 
     try {
       const { products: nextProducts } = await shopApi.getCatalog({
+        branch,
         forceRefresh: showRefresh,
       });
 
@@ -85,10 +89,14 @@ export default function CategoriesScreen() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
+  }, [branch]);
+
+  useEffect(() => {
+    void getStoreBranch().then(setBranch);
   }, []);
 
   useEffect(() => {
-    loadCatalog();
+    void loadCatalog();
   }, [loadCatalog]);
 
   const handleRefreshCatalog = useCallback(() => {
@@ -113,8 +121,8 @@ export default function CategoriesScreen() {
 
     setIsSearchOpen(false);
     setIsSearchBarMounted(false);
-    router.push(nextQuery ? `/search-results?q=${encodeURIComponent(nextQuery)}` : '/search-results');
-  }, [query]);
+    router.push(nextQuery ? `/search-results?q=${encodeURIComponent(nextQuery)}&branch=${branch}` : `/search-results?branch=${branch}`);
+  }, [branch, query]);
 
   const handleOpenSearch = useCallback(() => {
     setIsSearchOpen(true);
@@ -147,15 +155,40 @@ export default function CategoriesScreen() {
   }, [searchBarProgress]);
 
   const handleOpenProductList = useCallback((params: ProductListRouteParams) => {
-    router.push(buildProductListRoute(params));
-  }, []);
+    router.push(buildProductListRoute({ ...params, branch }));
+  }, [branch]);
 
   return (
     <View style={styles.screen}>
       <View style={styles.stickyHeader}>
         <AppBrandHeader onSearchPress={handleOpenSearch} />
+        <Pressable
+          accessibilityLabel={`Change store branch. Current branch ${branch}`}
+          onPress={() => setIsBranchPickerOpen((current) => !current)}
+          style={styles.branchButton}>
+          <Store color={theme.colors.primary} size={17} />
+          <Text style={styles.branchButtonText}>{branch === 'manila' ? 'Manila' : 'Pampanga'}</Text>
+        </Pressable>
 
       </View>
+      {isBranchPickerOpen ? (
+        <View style={styles.branchPicker}>
+          {(['manila', 'pampanga'] as StoreBranch[]).map((option) => (
+            <Pressable
+              key={option}
+              onPress={() => {
+                setBranch(option);
+                void setStoreBranch(option);
+                setIsBranchPickerOpen(false);
+              }}
+              style={[styles.branchOption, branch === option && styles.branchOptionActive]}>
+              <Text style={[styles.branchOptionText, branch === option && styles.branchOptionTextActive]}>
+                {option === 'manila' ? 'Manila' : 'Pampanga'}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
 
       {isSearchBarMounted ? (
         <FloatingSearchBar
@@ -257,6 +290,7 @@ function ProductAppendLoader() {
 }
 
 type ProductListRouteParams = {
+  branch?: StoreBranch;
   category?: string;
   group?: 'occasions';
   section?: ProductSectionKind;
@@ -605,6 +639,7 @@ function buildProductListRoute(params: ProductListRouteParams) {
   const searchParams = new URLSearchParams();
 
   searchParams.set('title', params.title);
+  if (params.branch) searchParams.set('branch', params.branch);
 
   if (params.section) {
     searchParams.set('section', params.section);
@@ -678,6 +713,54 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     paddingBottom: theme.spacing.sm,
     zIndex: 20,
+  },
+  branchButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    backgroundColor: theme.colors.greenSoft,
+    borderColor: 'rgba(46, 139, 52, 0.22)',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    marginHorizontal: theme.spacing.lg,
+    minHeight: 36,
+    paddingHorizontal: 12,
+  },
+  branchButtonText: {
+    color: theme.colors.primary,
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 12,
+  },
+  branchPicker: {
+    backgroundColor: theme.colors.white,
+    borderBottomColor: hairlineColor,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    padding: 12,
+    zIndex: 19,
+  },
+  branchOption: {
+    alignItems: 'center',
+    borderColor: hairlineColor,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flex: 1,
+    minHeight: 40,
+    justifyContent: 'center',
+  },
+  branchOptionActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  branchOptionText: {
+    color: softText,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 13,
+  },
+  branchOptionTextActive: {
+    color: theme.colors.white,
   },
   catalogScroll: {
     backgroundColor: pageBackground,

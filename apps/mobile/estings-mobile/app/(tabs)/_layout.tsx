@@ -8,8 +8,9 @@ export default function TabLayout() {
       tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{
         animation: 'fade',
+        freezeOnBlur: true,
         headerShown: false,
-        lazy: false,
+        lazy: true,
         sceneStyle: {
           backgroundColor: '#FFFFFF',
         },

@@ -1,16 +1,14 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { Image } from 'expo-image';
 import {
   Animated,
   Easing,
+  FlatList,
+  Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native';
 import { ArrowLeft, ChevronDown, Search, X } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -45,7 +43,7 @@ const budgetOptions: { label: string; value: BudgetOption }[] = [
 
 export default function SearchResultsScreen() {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ q?: string }>();
+  const params = useLocalSearchParams<{ branch?: 'manila' | 'pampanga'; q?: string }>();
   const initialQuery = typeof params.q === 'string' ? params.q : '';
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -55,7 +53,6 @@ export default function SearchResultsScreen() {
   const [submittedQuery, setSubmittedQuery] = useState(initialQuery);
   const [selectedBudget, setSelectedBudget] = useState<BudgetOption>('all');
   const [selectedSort, setSelectedSort] = useState<SortOption>('all');
-  const [visibleResultCount, setVisibleResultCount] = useState(8);
 
   useEffect(() => {
     const nextQuery = typeof params.q === 'string' ? params.q : '';
@@ -68,13 +65,13 @@ export default function SearchResultsScreen() {
     setErrorMessage(null);
 
     try {
-      setProducts(await shopApi.getProducts());
+      setProducts(await shopApi.getProducts({ branch: params.branch }));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Search is unavailable.');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [params.branch]);
 
   useEffect(() => {
     void loadProducts();
@@ -104,30 +101,39 @@ export default function SearchResultsScreen() {
     return sortProducts(nextProducts, selectedSort);
   }, [normalizedQuery, products, selectedBudget, selectedSort]);
 
-  const visibleSearchResults = searchResults.slice(0, visibleResultCount);
-  const resultColumns = splitIntoColumns(visibleSearchResults);
-
   const handleSubmitSearch = useCallback(() => {
     const nextQuery = query.trim();
     setSubmittedQuery(nextQuery);
     setOpenFilter(null);
   }, [query]);
 
-  const handleResultsScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-      const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
-
-      if (distanceFromBottom < 420) {
-        setVisibleResultCount((current) => Math.min(current + 4, searchResults.length));
-      }
-    },
-    [searchResults.length],
+  const renderProduct = useCallback(
+    ({ item }: { item: Product }) => (
+      <View style={styles.productCell}>
+        <ProductCard product={item} style={styles.productCard} />
+      </View>
+    ),
+    [],
   );
 
-  useEffect(() => {
-    setVisibleResultCount(8);
-  }, [normalizedQuery, selectedBudget, selectedSort]);
+  const listHeader = isLoading ? (
+    <SearchHeaderSkeleton />
+  ) : (
+    <View style={styles.resultsHeader}>
+      <Text style={styles.resultsTitle}>{normalizedQuery ? `"${normalizedQuery}"` : 'All products'}</Text>
+      <Text style={styles.resultsSubtitle}>
+        {`${searchResults.length} ${searchResults.length === 1 ? 'product' : 'products'} found`}
+      </Text>
+    </View>
+  );
+
+  const listEmpty = isLoading ? (
+    <SearchSkeleton />
+  ) : errorMessage ? (
+    <EmptyState title="Search unavailable" description={errorMessage} />
+  ) : (
+    <EmptyState title="No products found" description="Try another product name, category, color, or flower type." />
+  );
 
   return (
     <View style={styles.screen}>
@@ -189,45 +195,25 @@ export default function SearchResultsScreen() {
         </View>
       </View>
 
-      <ScrollView
-        onScroll={handleResultsScroll}
-        scrollEventThrottle={160}
+      <FlatList
+        columnWrapperStyle={styles.productRow}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 104 }]}
+        contentInsetAdjustmentBehavior="automatic"
+        data={isLoading || errorMessage ? [] : searchResults}
+        initialNumToRender={Platform.OS === 'android' ? 8 : 10}
+        keyExtractor={(product) => product.id}
+        ListEmptyComponent={listEmpty}
+        ListHeaderComponent={listHeader}
+        ListHeaderComponentStyle={styles.listHeader}
+        maxToRenderPerBatch={Platform.OS === 'android' ? 6 : 8}
+        numColumns={2}
+        removeClippedSubviews={Platform.OS === 'android'}
+        renderItem={renderProduct}
         showsVerticalScrollIndicator={false}
         style={styles.scroll}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 104 }]}>
-        {isLoading ? (
-          <SearchHeaderSkeleton />
-        ) : (
-          <View style={styles.resultsHeader}>
-            <Text style={styles.resultsTitle}>{normalizedQuery ? `"${normalizedQuery}"` : 'All products'}</Text>
-            <Text style={styles.resultsSubtitle}>
-              {`${searchResults.length} ${searchResults.length === 1 ? 'product' : 'products'} found`}
-            </Text>
-          </View>
-        )}
-
-        {isLoading ? (
-          <SearchSkeleton />
-        ) : errorMessage ? (
-          <EmptyState title="Search unavailable" description={errorMessage} />
-        ) : visibleSearchResults.length > 0 ? (
-          <View style={styles.productGrid}>
-            {resultColumns.map((column, columnIndex) => (
-              <View key={`results-${columnIndex}`} style={styles.productColumn}>
-                {column.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    style={styles.productCard}
-                  />
-                ))}
-              </View>
-            ))}
-          </View>
-        ) : (
-          <EmptyState title="No products found" description="Try another product name, category, color, or flower type." />
-        )}
-      </ScrollView>
+        updateCellsBatchingPeriod={50}
+        windowSize={Platform.OS === 'android' ? 7 : 9}
+      />
     </View>
   );
 }
@@ -385,8 +371,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   content: {
-    gap: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  listHeader: {
+    marginBottom: theme.spacing.lg,
   },
   stickyHeader: {
     backgroundColor: theme.colors.white,
@@ -499,7 +488,6 @@ const styles = StyleSheet.create({
   },
   resultsHeader: {
     gap: theme.spacing.xs,
-    paddingHorizontal: theme.spacing.lg,
   },
   resultsTitle: {
     color: softText,
@@ -534,7 +522,6 @@ const styles = StyleSheet.create({
   productGrid: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
   },
   productColumn: {
     flex: 1,
@@ -542,6 +529,14 @@ const styles = StyleSheet.create({
   },
   productCard: {
     width: '100%',
+  },
+  productCell: {
+    flex: 1,
+    maxWidth: '48.7%',
+  },
+  productRow: {
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
   },
   productTile: {
     backgroundColor: theme.colors.surface,

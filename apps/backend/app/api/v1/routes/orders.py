@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
 from decimal import Decimal
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from app.services.email_service import send_order_status_email
 import uuid, os
 import secrets
@@ -17,8 +18,10 @@ from app.utils.lalamove import book_lalamove_delivery
 
 # We use your dedicated PayMongo service instead of raw requests!
 from app.services.paymongo_service import PayMongoError, create_checkout_session, to_paymongo_amount
+from app.api.v1.routes.commerce import get_delivery_settings, validate_voucher
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
+MANILA_TZ = ZoneInfo("Asia/Manila")
 
 
 def _created_order_response(order: Order) -> dict:
@@ -62,6 +65,8 @@ def serialize_order(o) -> dict:
                 "quantity": item.quantity,
                 "unit_price": float(unit_price),
                 "line_total": float(unit_price * item.quantity),
+                "card_message": getattr(item, "card_message", None),
+                "card_enabled": bool(getattr(item, "card_enabled", False)),
             })
 
     if serialized_items:
@@ -123,6 +128,8 @@ def serialize_order(o) -> dict:
         "time_slot": o.time_slot,
         "subtotal_amount": float(o.subtotal_amount or o.total_amount),
         "delivery_fee": float(o.delivery_fee or 0),
+        "voucher_code": getattr(o, "voucher_code", None),
+        "discount_amount": float(getattr(o, "discount_amount", 0) or 0),
         "scheduled_at": o.scheduled_at.isoformat() if getattr(o, 'scheduled_at', None) else None,
         "payment_status": (
             o.transaction.status.value
@@ -144,6 +151,45 @@ def serialize_order(o) -> dict:
         "updated_at": o.updated_at.isoformat() if getattr(o, 'updated_at', None) else None,
         "items": serialized_items,
     }
+
+
+def _derive_delivery_branch(address: str) -> str:
+    normalized = (address or "").lower()
+    if any(value in normalized for value in ("pampanga", "angeles", "mabalacat", "san fernando")):
+        return "Pampanga"
+    if any(value in normalized for value in ("metro manila", "national capital region", " ncr", "manila")):
+        return "Manila"
+    raise HTTPException(
+        status_code=400,
+        detail="Delivery is currently available only within Metro Manila and Pampanga.",
+    )
+
+
+def _validate_delivery_date(value, fulfillment_method: str, cutoff: str = "14:00") -> datetime:
+    scheduled = _parse_datetime(value)
+    if not scheduled:
+        raise HTTPException(status_code=400, detail="Select a delivery date.")
+    if scheduled.tzinfo is None:
+        scheduled = scheduled.replace(tzinfo=MANILA_TZ)
+    local_date = scheduled.astimezone(MANILA_TZ).date()
+    now = datetime.now(MANILA_TZ)
+    today = now.date()
+    if local_date < today or local_date > today + timedelta(days=30):
+        raise HTTPException(status_code=400, detail="Delivery date must be within the next 30 days.")
+    cutoff_hour, cutoff_minute = (int(part) for part in cutoff.split(":", 1))
+    if fulfillment_method == "delivery" and local_date == today and (now.hour, now.minute) >= (cutoff_hour, cutoff_minute):
+        display_hour = cutoff_hour % 12 or 12
+        suffix = "AM" if cutoff_hour < 12 else "PM"
+        raise HTTPException(status_code=400, detail=f"Same-day delivery is unavailable after {display_hour}:{cutoff_minute:02d} {suffix}.")
+    return scheduled
+
+
+def _product_supports_branch(product: Product, branch: str) -> bool:
+    branches = getattr(product, "branches", None) or []
+    if not branches:
+        return True
+    normalized = {str(value).strip().lower() for value in branches}
+    return branch.lower() in normalized or "all" in normalized
 
 @router.get("/my", response_model=List[dict])
 def get_my_orders(
@@ -240,9 +286,21 @@ async def create_order(
             return _created_order_response(existing_order)
 
     delivery_notes = payload.get("delivery_notes", "")
-    raw_branch = payload.get("branch_name") or payload.get("branch")
-    if not raw_branch:
-        raw_branch = "Pampanga" if "[BRANCH:Pampanga]" in delivery_notes else "Manila"
+    fulfillment_method = payload.get("fulfillmentMethod") or payload.get("fulfillment_method") or "delivery"
+    delivery_address = payload.get("delivery_address", "")
+    raw_branch = (
+        _derive_delivery_branch(delivery_address)
+        if fulfillment_method == "delivery"
+        else str(payload.get("branch_name") or payload.get("branch") or "Manila").strip().title()
+    )
+    if raw_branch not in {"Manila", "Pampanga"}:
+        raise HTTPException(status_code=400, detail="Select either the Manila or Pampanga branch.")
+    delivery_settings = get_delivery_settings(db)
+    scheduled_at = _validate_delivery_date(
+        payload.get("scheduled_at") or payload.get("delivery_date"),
+        fulfillment_method,
+        delivery_settings["same_day_cutoff"],
+    )
     payment_method = payload.get("payment_method", "ewallet").lower()
     checkout_url = None
 
@@ -281,6 +339,11 @@ async def create_order(
                 ).with_for_update().first()
                 if not product or not product.is_available or not inventory:
                     raise HTTPException(status_code=404, detail=f"Product unavailable: {item_id}")
+                if not _product_supports_branch(product, raw_branch):
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"{product.name} is not available in the {raw_branch} branch.",
+                    )
                 active_reserved = db.query(func.coalesce(func.sum(StockReservation.quantity), 0)).filter(
                     StockReservation.product_id == item_uuid,
                     StockReservation.status == "active",
@@ -296,6 +359,24 @@ async def create_order(
                 raise HTTPException(status_code=400, detail=f"Invalid price for item: {item_id}")
             total_amount += unit_price * quantity
 
+        delivery_fee = (
+            Decimal(str(delivery_settings["delivery_fee"]))
+            if fulfillment_method == "delivery"
+            else Decimal("0.00")
+        )
+        minimum_order = Decimal(str(delivery_settings["minimum_order"]))
+        if total_amount < minimum_order:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Minimum order is ₱{float(minimum_order):,.2f}.",
+            )
+        voucher_code = str(payload.get("voucher_code") or payload.get("voucherCode") or "").strip()
+        discount_amount = Decimal("0.00")
+        normalized_voucher = None
+        if voucher_code:
+            promo, discount_amount = validate_voucher(db, voucher_code, total_amount)
+            normalized_voucher = promo.code
+
         order = Order(
             id=uuid.uuid4(),
             user_id=current_user.id,
@@ -304,35 +385,42 @@ async def create_order(
             quantity=sum(item[2] for item in prepared_items),
             total_amount=total_amount,
             status=OrderStatusEnum.pending_payment,
-            delivery_address=payload.get("delivery_address", ""),
+            delivery_address=delivery_address,
             delivery_notes=delivery_notes,
             special_note=payload.get("special_note"),
-            scheduled_at=_parse_datetime(payload.get("scheduled_at") or payload.get("delivery_date")),
-            branch_name=raw_branch.strip().title(),
+            scheduled_at=scheduled_at,
+            branch_name=raw_branch,
             checkout_attempt_id=attempt_id,
             recipient_first_name=(payload.get("recipient") or {}).get("firstName") or payload.get("recipient_first_name"),
             recipient_last_name=(payload.get("recipient") or {}).get("lastName") or payload.get("recipient_last_name"),
             recipient_phone=(payload.get("recipient") or {}).get("phoneNumber") or payload.get("recipient_phone_number"),
             recipient_type=payload.get("recipientType") or payload.get("recipient_type"),
             is_anonymous=bool(payload.get("isAnonymous") or payload.get("is_anonymous")),
-            fulfillment_method=payload.get("fulfillmentMethod") or payload.get("fulfillment_method") or "delivery",
+            fulfillment_method=fulfillment_method,
             delivery_provider=payload.get("deliveryProvider") or payload.get("delivery_provider"),
             time_slot=payload.get("timeSlot") or payload.get("time_slot") or "anytime",
             subtotal_amount=total_amount,
-            delivery_fee=Decimal("100.00") if (payload.get("fulfillmentMethod") or payload.get("fulfillment_method") or "delivery") == "delivery" else Decimal("0.00"),
+            delivery_fee=delivery_fee,
+            voucher_code=normalized_voucher,
+            discount_amount=discount_amount,
         )
-        order.total_amount = order.subtotal_amount + order.delivery_fee
+        order.total_amount = max(Decimal("0.00"), order.subtotal_amount + order.delivery_fee - order.discount_amount)
         db.add(order)
         db.flush()
 
         reserved_until = datetime.now(timezone.utc) + timedelta(hours=1)
+        incoming_by_id = {str(item.get("id")): item for item in cart_items}
         for item_type, entity, quantity, unit_price in prepared_items:
+            incoming = incoming_by_id.get(str(entity.id), {})
+            card_message = str(incoming.get("card_message") or incoming.get("cardMessage") or "").strip() or None
             order_item = OrderItem(
                 order_id=order.id,
                 product_id=entity.id if item_type == "product" else None,
                 arrangement_id=entity.id if item_type == "arrangement" else None,
                 quantity=quantity,
                 price_at_purchase=unit_price,
+                card_message=card_message,
+                card_enabled=bool(card_message),
             )
             db.add(order_item)
             db.commit()

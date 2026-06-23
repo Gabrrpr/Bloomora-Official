@@ -4,6 +4,7 @@ import { MessageCircle, X } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated as RNAnimated,
+  AppState,
   Modal,
   Pressable,
   StyleSheet,
@@ -33,7 +34,7 @@ const tapSlop = 5;
 const previewVisibleMs = 5600;
 const removeDropDistance = removeTargetSize * 0.82;
 const removeMagnetDistance = 148;
-const chatHistoryPollMs = 5000;
+const chatHistoryPollMs = 30_000;
 const defaultBubbleYRatio = 0.52;
 
 type BubblePosition = {
@@ -60,7 +61,6 @@ export function ChatFloatingBubble() {
   const positionRef = useRef<BubblePosition>({ x: width - bubbleSize - sideInset, y: height * defaultBubbleYRatio });
   const wsRef = useRef<WebSocket | null>(null);
   const previewHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const dragStartRef = useRef<BubblePosition>({ x: width - bubbleSize - sideInset, y: height * defaultBubbleYRatio });
   const liveDragPositionRef = useRef<BubblePosition>({ x: width - bubbleSize - sideInset, y: height * defaultBubbleYRatio });
   const isOverRemoveTargetRef = useRef(false);
   const lastStaffMessageIdRef = useRef<string | null>(null);
@@ -73,7 +73,9 @@ export function ChatFloatingBubble() {
   const [isOverRemoveTarget, setIsOverRemoveTarget] = useState(false);
   const [isAuthChecked, setIsAuthChecked] = useState(false);
   const [isChatOverlayVisible, setIsChatOverlayVisible] = useState(false);
+  const [isAppActive, setIsAppActive] = useState(AppState.currentState === 'active');
   const isDraggingRef = useRef(false);
+  const userDismissedRef = useRef(false);
 
   const isLiveChatRoute = pathname.includes('/live-chat');
   const isAuthRoute = pathname.includes('/login') || pathname.includes('/sign-up') || pathname.includes('/forgot-password');
@@ -88,6 +90,14 @@ export function ChatFloatingBubble() {
     }),
     [height, insets.bottom, insets.top, width],
   );
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      setIsAppActive(nextState === 'active');
+    });
+
+    return () => subscription.remove();
+  }, []);
 
   const removeTarget = useMemo(
     () => {
@@ -206,6 +216,8 @@ export function ChatFloatingBubble() {
     setIsHidden(false);
     hidePreviewBubble(true);
     lastStaffMessageIdRef.current = null;
+    // Reset dismissal so the bubble shows on the next login session.
+    userDismissedRef.current = false;
   }, [hidePreviewBubble]);
 
   useEffect(() => {
@@ -227,7 +239,10 @@ export function ChatFloatingBubble() {
 
         if (isMounted) {
           setChatSession({ session, userId: chat.id });
-          setIsHidden(false);
+          // Only un-hide if the user hasn't explicitly dismissed the bubble.
+          if (!userDismissedRef.current) {
+            setIsHidden(false);
+          }
           setIsAuthChecked(true);
           getChatHistory({ session, userId: chat.id })
             .then((history) => {
@@ -252,7 +267,7 @@ export function ChatFloatingBubble() {
   }, [clearBubbleSession, pathname]);
 
   useEffect(() => {
-    if (!chatSession || isLiveChatRoute) {
+    if (!chatSession || isLiveChatRoute || !isAppActive) {
       wsRef.current?.close();
       wsRef.current = null;
       return;
@@ -269,6 +284,8 @@ export function ChatFloatingBubble() {
       lastStaffMessageIdRef.current = payload.id;
       setUnreadCount((current) => Math.min(current + 1, 99));
       setLatestPreview(getMessagePreview(payload));
+      // A new staff message overrides the user's dismissal — treat it as a notification.
+      userDismissedRef.current = false;
       setIsHidden(false);
       showPreviewBubble();
     };
@@ -324,7 +341,7 @@ export function ChatFloatingBubble() {
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [chatSession, isLiveChatRoute, showPreviewBubble]);
+  }, [chatSession, isAppActive, isLiveChatRoute, showPreviewBubble]);
 
   useEffect(() => {
     if (isLiveChatRoute) {
@@ -378,6 +395,8 @@ export function ChatFloatingBubble() {
 
   const hideFromDrag = useCallback(
     (restorePosition: BubblePosition) => {
+      // Mark as intentionally dismissed so tab switches don't resurrect the bubble.
+      userDismissedRef.current = true;
       setIsHidden(true);
       setDragActive(false);
       setRemoveTargetActive(false);
@@ -645,40 +664,6 @@ export function ChatFloatingBubble() {
 function getMessagePreview(message: Partial<BackendChatMessage>) {
   const text = message.message?.trim() || (message.image_url ? 'sent an image.' : 'New message');
   return text.length > 42 ? `${text.slice(0, 39).trimEnd()}...` : text;
-}
-
-function getBubbleCenter(position: BubblePosition) {
-  return {
-    x: position.x + bubbleSize / 2,
-    y: position.y + bubbleSize / 2,
-  };
-}
-
-function magnetizeToRemoveTarget(
-  position: BubblePosition,
-  removeTarget: { centerX: number; centerY: number },
-) {
-  const targetPosition = getRemoveTargetBubblePosition(removeTarget);
-  const bubbleCenter = getBubbleCenter(position);
-  const distance = Math.hypot(bubbleCenter.x - removeTarget.centerX, bubbleCenter.y - removeTarget.centerY);
-
-  if (distance > removeMagnetDistance) {
-    return position;
-  }
-
-  const pullStrength = Math.min(0.48, ((removeMagnetDistance - distance) / removeMagnetDistance) * 0.72);
-
-  return {
-    x: position.x + (targetPosition.x - position.x) * pullStrength,
-    y: position.y + (targetPosition.y - position.y) * pullStrength,
-  };
-}
-
-function getRemoveTargetBubblePosition(removeTarget: { centerX: number; centerY: number }) {
-  return {
-    x: removeTarget.centerX - bubbleSize / 2,
-    y: removeTarget.centerY - bubbleSize / 2,
-  };
 }
 
 function clampPosition(position: BubblePosition, bounds: { maxX: number; maxY: number; minX: number; minY: number }) {

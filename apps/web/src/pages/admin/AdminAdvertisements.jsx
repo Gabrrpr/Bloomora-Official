@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react"
 import { useTheme } from "../../context/ThemeContext"
+import { api } from "../../services/api"
 
 const DG = "#0C573E"
 const G  = "#2E8B34"
@@ -152,6 +153,22 @@ export default function AdminAdvertisements() {
 
   useEffect(() => {
     const t = setTimeout(() => setGridReady(true), 80)
+    api.getAdvertisements()
+      .then(data => {
+        if (Array.isArray(data) && data.length) {
+          const mapped = data.map(ad => ({
+            id: ad.id,
+            title: ad.title,
+            src: ad.image_url,
+            builtin: false,
+            isActive: ad.is_active,
+            sortOrder: ad.sort_order || 0,
+          }))
+          setAds(mapped)
+          setActive(mapped.find(ad => ad.isActive)?.id || mapped[0].id)
+        }
+      })
+      .catch(() => {})
     return () => clearTimeout(t)
   }, [])
 
@@ -182,14 +199,30 @@ export default function AdminAdvertisements() {
 
   const handleSetActive = useCallback((id) => { setActive(id); setSaved(false) }, [])
 
-  const handleSave = () => {
+  const handleSave = async () => {
     // 1. Save the active Ad ID to the browser so the customer side can read it!
     localStorage.setItem(ACTIVE_ID_KEY, active)
     // 1b. Also save the resolved image of the active ad — read this on the customer
     //     side so uploaded/replaced ads display too (works for built-in ads as well).
     try { if (activeAd?.src) localStorage.setItem(ACTIVE_SRC_KEY, activeAd.src) } catch { /* ignore */ }
-    // 2. Optional: If you have a backend route for this later, you would do:
-    // api.updateSettings({ active_ad_id: active })
+    if (activeAd) {
+      if (activeAd.builtin) {
+        const created = await api.createAdvertisement({
+          title: activeAd.title,
+          image_url: activeAd.src,
+          is_active: true,
+          sort_order: activeIndex,
+        })
+        setActive(created.id)
+      } else {
+        await api.updateAdvertisement(activeAd.id, {
+          title: activeAd.title,
+          image_url: activeAd.src,
+          is_active: true,
+          sort_order: activeAd.sortOrder || activeIndex,
+        })
+      }
+    }
 
     // 3. Run your UI animation
     setSaved(true)
@@ -216,20 +249,20 @@ export default function AdminAdvertisements() {
     if (!file.type.startsWith("image/")) { setUploadError("Please choose an image file (PNG or JPG)."); return }
 
     let dataUrl
-    try { dataUrl = await compressImage(file) }
+    try { dataUrl = (await api.uploadImage("advertisements", file)).url }
     catch { setUploadError("Sorry, that image couldn't be processed."); return }
 
     const targetId = uploadTargetRef.current
 
     if (targetId == null) {
       // Add a brand-new advertisement
-      const newId = Date.now()
       const title = (file.name || "Advertisement").replace(/\.[^/.]+$/, "").slice(0, 40) || "Advertisement"
-      const next = [...ads, { id: newId, title, src: dataUrl, builtin: false }]
+      const created = await api.createAdvertisement({ title, image_url: dataUrl, is_active: false, sort_order: ads.length })
+      const next = [...ads, { id: created.id, title: created.title, src: created.image_url, builtin: false, sortOrder: created.sort_order }]
       setAds(next)
       const ok = persistCustomAds(next)
       setUploadError(ok ? "" : "Added for this session, but local storage is full — it won't persist after reload.")
-      setActive(newId)
+      setActive(created.id)
       setSaved(false)
     } else {
       // Replace an existing ad's image
@@ -238,27 +271,46 @@ export default function AdminAdvertisements() {
       const target = next.find(a => a.id === targetId)
       const ok = target?.builtin ? persistOverrides(next) : persistCustomAds(next)
       setUploadError(ok ? "" : "Updated for this session, but local storage is full — it won't persist after reload.")
+      if (target && !target.builtin) {
+        await api.updateAdvertisement(target.id, {
+          title: target.title,
+          image_url: target.src,
+          is_active: target.id === active,
+          sort_order: target.sortOrder || 0,
+        })
+      }
       setSaved(false)
     }
   }
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     const next = ads.filter(a => a.id !== id)
     setAds(next)
     persistCustomAds(next)
     if (active === id) { setActive(next[0]?.id ?? 1); setSaved(false) }
     if (preview?.id === id) setPreview(null)
+    const removed = ads.find(a => a.id === id)
+    if (removed && !removed.builtin) await api.deleteAdvertisement(id)
   }
 
   const startRename = (ad) => { setRenaming(ad); setRenameValue(ad.title) }
 
-  const confirmRename = () => {
+  const confirmRename = async () => {
     const title = renameValue.trim()
     if (!renaming || !title) return
     const next = ads.map(a => a.id === renaming.id ? { ...a, title } : a)
     setAds(next)
     persistCustomAds(next)
     if (preview?.id === renaming.id) setPreview(p => ({ ...p, title }))
+    const renamed = next.find(a => a.id === renaming.id)
+    if (renamed && !renamed.builtin) {
+      await api.updateAdvertisement(renamed.id, {
+        title,
+        image_url: renamed.src,
+        is_active: renamed.id === active,
+        sort_order: renamed.sortOrder || 0,
+      })
+    }
     setRenaming(null)
   }
 

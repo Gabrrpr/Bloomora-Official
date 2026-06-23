@@ -110,6 +110,22 @@ export default function AdminPromotions() {
        .catch(err => console.error("Failed to load products for flash sale", err))
   }, [])
 
+  const loadBackendPromos = () => api.getPromos()
+    .then(data => setVouchers((data || []).map(v => ({
+      id: v.id,
+      code: v.code,
+      type: v.discount_type,
+      value: Number(v.discount_value),
+      minSpend: Number(v.min_spend || 0),
+      expires: v.expires_at ? v.expires_at.slice(0, 10) : "",
+      active: v.is_active !== false,
+    }))))
+    .catch(err => console.error("Failed to load promo codes", err))
+
+  useEffect(() => {
+    loadBackendPromos()
+  }, [])
+
   // Play the entrance animation once on mount, then turn it off.
   useEffect(() => {
     const t = setTimeout(() => setEntered(true), 1500)
@@ -147,7 +163,7 @@ export default function AdminPromotions() {
 
   const resetForm = () => { setForm(blankForm); setEditing(null); setFormError("") }
 
-  const submitForm = () => {
+  const submitForm = async () => {
     const code = form.code.trim().toUpperCase()
     if (!code) return setFormError("Enter a promo code.")
     if (!/^[A-Z0-9]+$/.test(code)) return setFormError("Code can only contain letters and numbers (no spaces).")
@@ -166,10 +182,22 @@ export default function AdminPromotions() {
       active: !!form.active,
     }
 
-    if (isEditing) {
-      persist(vouchers.map(v => (v.code || "").toUpperCase() === editingCode.toUpperCase() ? entry : v))
-    } else {
-      persist([entry, ...vouchers])
+    const payload = {
+      code: entry.code,
+      discount_type: entry.type,
+      discount_value: entry.value,
+      min_spend: entry.minSpend,
+      expires_at: entry.expires ? new Date(`${entry.expires}T23:59:59+08:00`).toISOString() : null,
+      is_active: entry.active,
+    }
+    const current = vouchers.find(v => (v.code || "").toUpperCase() === editingCode?.toUpperCase())
+    try {
+      if (isEditing && current?.id) await api.updatePromo(current.id, payload)
+      else await api.createPromo(payload)
+      await loadBackendPromos()
+    } catch (error) {
+      setFormError(error.message || "Unable to save promo code.")
+      return
     }
     setSaved(true); setTimeout(() => setSaved(false), 2000)
     resetForm()
@@ -189,8 +217,25 @@ export default function AdminPromotions() {
     if (typeof window !== "undefined") window.scrollTo({ top: 0, behavior: "smooth" })
   }
 
-  const toggleActive = (code) => persist(vouchers.map(v => (v.code || "").toUpperCase() === code.toUpperCase() ? { ...v, active: !(v.active !== false) } : v))
-  const deleteVoucher = (code) => { persist(vouchers.filter(v => (v.code || "").toUpperCase() !== code.toUpperCase())); if (isEditing && editingCode.toUpperCase() === code.toUpperCase()) resetForm() }
+  const toggleActive = async (code) => {
+    const voucher = vouchers.find(v => (v.code || "").toUpperCase() === code.toUpperCase())
+    if (!voucher?.id) return
+    await api.updatePromo(voucher.id, {
+      code: voucher.code,
+      discount_type: voucher.type,
+      discount_value: voucher.value,
+      min_spend: voucher.minSpend || 0,
+      expires_at: voucher.expires ? new Date(`${voucher.expires}T23:59:59+08:00`).toISOString() : null,
+      is_active: !(voucher.active !== false),
+    })
+    await loadBackendPromos()
+  }
+  const deleteVoucher = async (code) => {
+    const voucher = vouchers.find(v => (v.code || "").toUpperCase() === code.toUpperCase())
+    if (voucher?.id) await api.deletePromo(voucher.id)
+    await loadBackendPromos()
+    if (isEditing && editingCode.toUpperCase() === code.toUpperCase()) resetForm()
+  }
 
 
   const annSet = (k) => (v) => { setAnnForm(p => ({ ...p, [k]: v })); if (annError) setAnnError("") }

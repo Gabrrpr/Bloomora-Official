@@ -35,12 +35,17 @@ export default function WriteReviewPage({ onNavigate, orderId }) {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState(false)
+  const [reviewProducts, setReviewProducts] = useState([])
+  const [selectedProductId, setSelectedProductId] = useState("")
 
   useEffect(() => {
     async function fetchOrder() {
       try {
         const res = await api.get(`/orders/${orderId}`)
         setOrder(res.data ? res.data : res)
+        const eligibility = await api.get(`/reviews/order/${orderId}/eligibility`)
+        setReviewProducts(eligibility.products || [])
+        setSelectedProductId((eligibility.products || []).find(product => !product.reviewed)?.id || "")
       } catch (err) {
         setError("Order not found")
       } finally {
@@ -80,6 +85,7 @@ export default function WriteReviewPage({ onNavigate, orderId }) {
       // 🚀 THE FIX: Use FormData instead of JSON so we can attach a file!
       const formData = new FormData()
       formData.append("order_id", orderId)
+      formData.append("product_id", selectedProductId)
       formData.append("star_rating", rating)
       formData.append("comment", comment)
       if (imageFile) {
@@ -181,7 +187,7 @@ export default function WriteReviewPage({ onNavigate, orderId }) {
   }
 
   // ── Already reviewed ──────────────────────────────────────────────────────
-  if (order.has_reviewed) {
+  if (order.has_reviewed || !selectedProductId) {
     return (
       <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#f5f5f2" }}>
         <div className="flex-1 flex items-center justify-center px-4">
@@ -220,10 +226,25 @@ export default function WriteReviewPage({ onNavigate, orderId }) {
         <p className="text-sm text-gray-400 mb-6">Your feedback helps other customers choose better.</p>
 
         {/* Product card */}
+        {reviewProducts.filter(product => !product.reviewed).length > 1 && (
+          <div className="flex gap-2 overflow-x-auto mb-4">
+            {reviewProducts.filter(product => !product.reviewed).map(product => (
+              <button
+                type="button"
+                key={product.id}
+                onClick={() => setSelectedProductId(product.id)}
+                className="px-3 py-2 rounded-full text-xs font-semibold border whitespace-nowrap"
+                style={selectedProductId === product.id ? { backgroundColor: G, color: "white", borderColor: G } : { borderColor: "#d1d5db" }}
+              >
+                {product.name}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-4 bg-white border border-gray-100 rounded-2xl p-4 mb-6">
-          {order.items?.[0]?.image_url ? (
+          {(reviewProducts.find(product => product.id === selectedProductId)?.image_url || order.items?.[0]?.image_url) ? (
             <img
-              src={order.items[0].image_url}
+              src={reviewProducts.find(product => product.id === selectedProductId)?.image_url || order.items[0].image_url}
               alt={order.product_name}
               className="w-14 h-14 object-cover rounded-xl flex-shrink-0"
             />
@@ -238,7 +259,7 @@ export default function WriteReviewPage({ onNavigate, orderId }) {
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-gray-900 text-sm truncate">{order.product_name}</p>
+            <p className="font-semibold text-gray-900 text-sm truncate">{reviewProducts.find(product => product.id === selectedProductId)?.name || order.product_name}</p>
             <p className="text-xs text-gray-400 mt-0.5">
               Order #{order.order_number || order.id?.slice(0, 8)}
             </p>

@@ -8,7 +8,7 @@ class CampaignCreateRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     campaign_key: str = Field(..., min_length=1, max_length=50)
     start_at: datetime
-    end_at: datetime
+    end_at: Optional[datetime] = None
     is_active: bool = True
 
 
@@ -28,7 +28,7 @@ class CampaignOut(BaseModel):
     name: str
     campaign_key: str
     start_at: datetime
-    end_at: datetime
+    end_at: Optional[datetime] = None
     is_active: bool
 
 

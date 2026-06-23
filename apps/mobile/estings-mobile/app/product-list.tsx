@@ -43,6 +43,7 @@ export default function ProductListScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     category?: string;
+    branch?: 'manila' | 'pampanga';
     group?: string;
     section?: ProductSectionKind;
     title?: string;
@@ -67,13 +68,13 @@ export default function ProductListScreen() {
     setErrorMessage(null);
 
     try {
-      setProducts(await shopApi.getProducts());
+      setProducts(await shopApi.getProducts({ branch: params.branch }));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Products are unavailable.');
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [params.branch]);
 
   useEffect(() => {
     void loadProducts();

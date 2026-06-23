@@ -1,3 +1,4 @@
+import { useIsFocused } from '@react-navigation/native';
 import { router, useFocusEffect } from 'expo-router';
 import {
   Bell,
@@ -21,6 +22,7 @@ import Animated, {
   interpolate,
   useAnimatedStyle,
   useSharedValue,
+  cancelAnimation,
   withRepeat,
   withSequence,
   withTiming,
@@ -43,6 +45,7 @@ const accountBenefits = [
 ];
 
 export default function MeScreen() {
+  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const topPadding = insets.top + theme.spacing.lg;
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -114,7 +117,7 @@ export default function MeScreen() {
         </View>
       ) : (
         <View style={styles.signInPanel}>
-          <AnimatedAccountPreview />
+          <AnimatedAccountPreview isActive={isFocused} />
           <View style={styles.signInCopy}>
             <Text style={styles.signInTitle}>Sign in to track orders</Text>
             <Text style={styles.signInText}>Save delivery details, keep favorite arrangements, and checkout faster next time.</Text>
@@ -150,6 +153,8 @@ export default function MeScreen() {
       <SectionHeader title="Orders" />
       <View style={styles.menuGroup}>
         <AccountRow icon={PackageCheck} title="My orders" detail="Payment, preparation, and delivery status" onPress={() => router.push('/(tabs)/orders')} />
+        <Divider />
+        <AccountRow icon={MapPin} title="Saved addresses" detail="Create, edit, and choose delivery addresses" onPress={() => router.push('/addresses')} />
       </View>
 
       <SectionHeader title="Support" />
@@ -172,11 +177,17 @@ export default function MeScreen() {
   );
 }
 
-function AnimatedAccountPreview() {
+function AnimatedAccountPreview({ isActive }: { isActive: boolean }) {
   const progress = useSharedValue(0);
   const sparkleProgress = useSharedValue(0);
 
   useEffect(() => {
+    if (!isActive) {
+      cancelAnimation(progress);
+      cancelAnimation(sparkleProgress);
+      return;
+    }
+
     progress.value = withRepeat(
       withSequence(
         withTiming(1, { duration: 1600, easing: Easing.inOut(Easing.cubic) }),
@@ -190,7 +201,12 @@ function AnimatedAccountPreview() {
       -1,
       true,
     );
-  }, [progress, sparkleProgress]);
+
+    return () => {
+      cancelAnimation(progress);
+      cancelAnimation(sparkleProgress);
+    };
+  }, [isActive, progress, sparkleProgress]);
 
   const bloomStyle = useAnimatedStyle(() => ({
     transform: [

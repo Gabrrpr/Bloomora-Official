@@ -76,7 +76,25 @@ function AppContent() {
   const [showCookieConsent, setShowCookieConsent] = useState(false);
   const [showAdPopup, setShowAdPopup] = useState(false);
   const [activeAdId, setActiveAdId] = useState("1");
+  const [activeAdvertisement, setActiveAdvertisement] = useState(null);
   const pageRef = useRef(page);
+
+  useEffect(() => {
+    api.getActiveAdvertisement()
+      .then(data => {
+        if (data.advertisement && !sessionStorage.getItem("bloomora_ad_seen")) {
+          setActiveAdvertisement(data.advertisement)
+          setActiveAdId(data.advertisement.id)
+          setShowAdPopup(true)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
+  const handleCloseAd = () => {
+    sessionStorage.setItem("bloomora_ad_seen", "1")
+    setShowAdPopup(false)
+  }
 
   useEffect(() => {
     const fetchGlobalSettings = async () => {
@@ -219,7 +237,7 @@ function AppContent() {
       {!AUTH_PAGES.includes(page) && page !== "admin" && !isPreview && (
         <>
           {showCookieConsent && <CookieConsent onAccept={handleAcceptCookies} />}
-          {showAdPopup && <AdPopup adId={activeAdId} onClose={handleCloseAd} />}
+          {showAdPopup && <AdPopup advertisement={activeAdvertisement} adId={activeAdId} onClose={handleCloseAd} />}
         </>
       )}
     </>

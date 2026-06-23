@@ -2,6 +2,7 @@ import { useState, useEffect } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { DG, G, GreenCard, WhiteCard } from "./_adminShared"
 import estingsWordmark from "../../assets/Estings.svg"
+import { api } from "../../services/api"
 
 const SEARCH_SAMPLES = ["Juan Dela Cruz", "Mark Reyes", "Angelo Cruz", "Paolo Ramos"]
 
@@ -147,6 +148,14 @@ export default function AdminDelivery() {
 
   useEffect(() => {
     const t = setTimeout(() => setLoading(false), 600)
+    api.getCheckoutSettings()
+      .then(data => {
+        const settings = data.delivery || {}
+        setDeliveryFee(String(settings.delivery_fee ?? 100))
+        setMinOrder(String(settings.minimum_order ?? 0))
+        setSameDayCutoff(settings.same_day_cutoff || "14:00")
+      })
+      .catch(() => {})
     return () => clearTimeout(t)
   }, [])
 
@@ -179,9 +188,15 @@ export default function AdminDelivery() {
   const cardBg     = isDark ? "#1a2332" : "white"
   const cardBdr    = isDark ? "#1e293b" : "#e8edf2"
 
-  const saveConfig = () => {
-    setDelivSaved(true);
-    setTimeout(() => setDelivSaved(false), 2000);
+  const saveConfig = async () => {
+    await api.updateDeliverySettings({
+      delivery_fee: Math.max(0, Number(deliveryFee) || 0),
+      minimum_order: Math.max(0, Number(minOrder) || 0),
+      same_day_cutoff: sameDayCutoff,
+      timezone: "Asia/Manila",
+    })
+    setDelivSaved(true)
+    setTimeout(() => setDelivSaved(false), 2000)
   }
 
   const handlePrint = () => window.print()

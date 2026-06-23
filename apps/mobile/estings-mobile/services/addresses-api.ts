@@ -56,4 +56,16 @@ export const addressesApi = {
       token,
     });
   },
+  async delete(addressId: string, token: string) {
+    return apiFetch<{ status: string }>(`/addresses/${encodeURIComponent(addressId)}`, {
+      method: 'DELETE',
+      token,
+    });
+  },
+  async setDefault(addressId: string, token: string) {
+    return apiFetch<AddressMutationResponse>(`/addresses/${encodeURIComponent(addressId)}/set-default`, {
+      method: 'PATCH',
+      token,
+    });
+  },
 };

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Body, Request 
+from fastapi import APIRouter, Depends, HTTPException, Form, UploadFile, File, Body, Query, Request 
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import and_, or_, text, func, cast, String
 from pydantic import BaseModel
@@ -245,8 +245,8 @@ def get_product_reviews(product_id: str, db: Session = Depends(get_db)):
     ]
 
 @router.get("/", response_model=List[dict])
-def get_products(db: Session = Depends(get_db)):
-    products = (
+def get_products(branch: Optional[str] = Query(None), db: Session = Depends(get_db)):
+    query = (
         db.query(Product)
         .outerjoin(Inventory, Product.id == Inventory.product_id)
         .filter(
@@ -257,8 +257,18 @@ def get_products(db: Session = Depends(get_db)):
             )
         )
         .options(joinedload(Product.inventory))
-        .all()
     )
+    normalized_branch = (branch or "").strip().lower()
+    if normalized_branch in {"manila", "pampanga"}:
+        query = query.filter(
+            or_(
+                Product.branches == [],
+                Product.branches.is_(None),
+                Product.branches.cast(String).ilike(f'%"{normalized_branch}"%'),
+                Product.branches.cast(String).ilike(f'%"{normalized_branch.title()}"%'),
+            )
+        )
+    products = query.all()
 
     return [
         {

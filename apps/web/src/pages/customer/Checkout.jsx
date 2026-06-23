@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { api } from "../../services/api.js"
 import { getCart, clearCart } from "../../utils/cart.js"
 import { useAuth } from "../../context/AuthContext"
-import { validateVoucher, computeDiscount } from "../../utils/vouchers.js"
+import { computeDiscount } from "../../utils/vouchers.js"
 import { API_BASE } from "../../config/api.js"
 
 const G = "#2E8B34"
@@ -13,6 +13,7 @@ export default function Checkout({ onNavigate }) {
   const [cartItems, setCartItems] = useState([])
   const deliveryTime = "Anytime"
   const [paymentMethod, setPaymentMethod] = useState("paymongo");
+  const [deliverySettings, setDeliverySettings] = useState({ delivery_fee: 100, minimum_order: 0, same_day_cutoff: "14:00" });
   const [referenceNumber, setReferenceNumber] = useState("")
   const [voucher, setVoucher] = useState("")
   const [appliedVoucher, setAppliedVoucher] = useState(null)
@@ -24,7 +25,6 @@ export default function Checkout({ onNavigate }) {
   const [deliveryDate, setDeliveryDate] = useState(() => {
     const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() + 1); return d
   })
-  const [deliverySettings, setDeliverySettings] = useState(null);
 
   const [orderNote, setOrderNote] = useState("")
   const [customer, setCustomer] = useState(null)
@@ -48,16 +48,20 @@ export default function Checkout({ onNavigate }) {
   })
 
   useEffect(() => {
-    const fetchSettings = async () => {
-      try {
-        const res = await api.get("/settings/delivery"); // Or your specific endpoint
-        setDeliverySettings(res.data);
-      } catch (e) {
-        console.error("Could not fetch settings", e);
+    api.getCheckoutSettings()
+      .then(data => setDeliverySettings(current => ({ ...current, ...(data.delivery || {}) })))
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("bloomora_applied_voucher") || "null")
+      if (saved?.code) {
+        setVoucher(saved.code)
+        setAppliedVoucher(saved)
       }
-    };
-    fetchSettings();
-  }, []);
+    } catch {}
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -123,24 +127,49 @@ export default function Checkout({ onNavigate }) {
   }, [])
 
   const subtotal = cartItems.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0)
-  const shipping = cartItems.length > 0 ? 100 : 0
+  const shipping = cartItems.length > 0 ? Number(deliverySettings.delivery_fee || 0) : 0
   const discount = computeDiscount(appliedVoucher, subtotal)
   const total = Math.max(0, subtotal + shipping - discount)
 
-  const applyVoucher = () => {
-    const result = validateVoucher(voucher, subtotal, cartItems.length > 0)
-    setVoucherMsg({ type: result.type, text: result.message })
-    setAppliedVoucher(result.ok ? result.voucher : null)
+  const applyVoucher = async () => {
+    if (!cartItems.length) return setVoucherMsg({ type: "error", text: "Add products before applying a voucher." })
+    try {
+      const result = await api.post("/commerce/vouchers/validate", { code: voucher, subtotal })
+      const next = {
+        code: result.voucher.code,
+        type: result.voucher.discount_type,
+        value: Number(result.voucher.discount_value),
+        minSpend: Number(result.voucher.min_spend || 0),
+        discount: Number(result.discount || 0),
+      }
+      setAppliedVoucher(next)
+      localStorage.setItem("bloomora_applied_voucher", JSON.stringify(next))
+      setVoucherMsg({ type: "success", text: `Voucher applied — you saved ₱${Number(result.discount).toLocaleString()}.` })
+    } catch (error) {
+      setAppliedVoucher(null)
+      localStorage.removeItem("bloomora_applied_voucher")
+      setVoucherMsg({ type: "error", text: error.message || "Voucher is invalid." })
+    }
   }
+
+  useEffect(() => {
+    if (appliedVoucher?.code && cartItems.length) void applyVoucher()
+    // Revalidate only when checkout subtotal changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtotal])
 
   const removeVoucher = () => {
     setAppliedVoucher(null)
     setVoucher("")
     setVoucherMsg(null)
+    localStorage.removeItem("bloomora_applied_voucher")
   }
 
   const today = new Date()
   const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
+  const maximumDeliveryDate = new Date(today); maximumDeliveryDate.setDate(today.getDate() + 30)
+  const [cutoffHour, cutoffMinute] = String(deliverySettings.same_day_cutoff || "14:00").split(":").map(Number)
+  const isTodayUnavailable = today.getHours() > cutoffHour || (today.getHours() === cutoffHour && today.getMinutes() >= cutoffMinute)
   const fmt = (d) => d.toLocaleDateString("en-PH", { month: "long", day: "numeric" })
   const fmtDay = (d) => d.toLocaleDateString("en-PH", { weekday: "long" })
   const toInputDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
@@ -251,6 +280,7 @@ export default function Checkout({ onNavigate }) {
           price: i.price,
           qty: i.qty,
           img: i.img || i.image || i.image_url || i.generated_image_url || "",
+          card_message: i.cardMessage || i.card_message || null,
         })),
         delivery_address: deliveryDetails.address,
         delivery_notes: buildDeliveryNotes(),
@@ -261,7 +291,8 @@ export default function Checkout({ onNavigate }) {
         
         // 🚀 THE FIX: Force these to strictly lowercase so the Database Enum accepts them!
         branch_name: addressBranch.toLowerCase(),
-        branch: addressBranch.toLowerCase()
+        branch: addressBranch.toLowerCase(),
+        voucher_code: appliedVoucher?.code || null,
       });
 
       const orderIds = res.order_ids || [];
@@ -624,10 +655,15 @@ export default function Checkout({ onNavigate }) {
               </div>
 
               <div className="grid grid-cols-3 gap-2 mb-3">
-                <div className="h-[64px] flex flex-col items-center justify-center text-center border border-gray-200 rounded-lg p-2 opacity-50">
+                <button
+                  type="button"
+                  disabled={isTodayUnavailable}
+                  onClick={() => { setDeliveryMode("today"); setDeliveryDate(today) }}
+                  className={`h-[64px] flex flex-col items-center justify-center text-center rounded-lg p-2 ${isTodayUnavailable ? "border border-gray-200 opacity-50" : deliveryMode === "today" ? "border-2 border-[#2E8B34] bg-[#F0F7F1]" : "border border-gray-200 hover:border-gray-300"}`}
+                >
                   <p className="text-xs font-medium text-gray-500">{fmt(today)}</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">Today · Unavailable</p>
-                </div>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{isTodayUnavailable ? "Today · Unavailable" : "Today"}</p>
+                </button>
 
                 <button
                   type="button"
@@ -654,7 +690,8 @@ export default function Checkout({ onNavigate }) {
                   )}
                   <input
                     type="date"
-                    min={toInputDate(tomorrow)}
+                    min={toInputDate(isTodayUnavailable ? tomorrow : today)}
+                    max={toInputDate(maximumDeliveryDate)}
                     value={deliveryMode === "custom" ? toInputDate(deliveryDate) : ""}
                     onChange={e => {
                       if (!e.target.value) return

@@ -1,20 +1,21 @@
 import { router, useFocusEffect } from 'expo-router';
 import { Image } from 'expo-image';
 import { ArrowRight, Check, ChevronRight, ChevronUp, Flower2, Gift, Minus, Plus, ShoppingBag, Sparkles, Trash2 } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
   Easing,
+  FlatList,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -31,19 +32,31 @@ import {
   updateCartItemQuantity,
 } from '@/services/cart-storage';
 import { shopApi } from '@/services/shop-api';
+import { getStoreBranch, type StoreBranch } from '@/services/branch-preference';
+import { validateVoucher, type AppliedVoucher } from '@/services/commerce-api';
 import { buildCartProductRecommendations, createRecommendationSeed } from '@/utils/product-recommendations';
 
 const outlineColor = 'rgba(31, 42, 36, 0.11)';
 const hairlineColor = 'rgba(31, 42, 36, 0.09)';
 const pageBackground = '#F5F5F5';
 const floatingCheckoutOffset = 92;
+
+type CartListRow =
+  | { id: 'header'; type: 'header' }
+  | { id: 'empty'; type: 'empty' }
+  | { id: 'guest'; type: 'guest' }
+  | { id: 'voucher'; type: 'voucher' }
+  | { id: 'summary'; type: 'summary' }
+  | { id: 'recommendation-title'; type: 'recommendation-title' }
+  | { id: 'recommendation-skeleton'; type: 'recommendation-skeleton' }
+  | { id: string; index: number; item: CartItem; type: 'cart-item' }
+  | { id: string; products: Product[]; type: 'recommendation-row' };
+
 export default function CartScreen() {
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   const brandHeaderLayout = getAppBrandHeaderLayout(width, height, insets.top);
   const headerHeight = brandHeaderLayout.top + brandHeaderLayout.height;
-  const lastRecommendationBatchAt = useRef(0);
-  const recommendationBatchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recommendationSeed = useRef(createRecommendationSeed()).current;
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [hasRequestedRecommendations, setHasRequestedRecommendations] = useState(true);
@@ -53,17 +66,16 @@ export default function CartScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isCheckingOut, setIsCheckingOut] = useState(false);
-  const [isAppendingRecommendations, setIsAppendingRecommendations] = useState(false);
   const [isRecommendationLoading, setIsRecommendationLoading] = useState(false);
-  const [visibleRecommendationCount, setVisibleRecommendationCount] = useState(4);
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
+  const [branch, setBranch] = useState<StoreBranch>('manila');
+  const [voucherCode, setVoucherCode] = useState('');
+  const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
+  const [voucherMessage, setVoucherMessage] = useState<string | null>(null);
+  const [isValidatingVoucher, setIsValidatingVoucher] = useState(false);
   const selectedCartItems = useMemo(
     () => cartItems.filter((item) => selectedProductIds.has(item.product.id)),
     [cartItems, selectedProductIds],
-  );
-  const cartRecommendationKey = useMemo(
-    () => cartItems.map((item) => `${item.product.id}:${item.quantity}`).join('|'),
-    [cartItems],
   );
   const cartSummary = getCartSummary(selectedCartItems);
   const selectedItemCount = selectedCartItems.reduce((total, item) => total + item.quantity, 0);
@@ -79,9 +91,6 @@ export default function CartScreen() {
       }),
     [cartItems, productsForRecommendations, recommendationSeed],
   );
-  const visibleRecommendations = rankedRecommendations.slice(0, visibleRecommendationCount);
-  const recommendationCap = rankedRecommendations.length;
-  const canAppendRecommendations = visibleRecommendationCount < recommendationCap;
 
   const loadCart = useCallback(async (showLoading = true) => {
     if (showLoading) {
@@ -123,6 +132,7 @@ export default function CartScreen() {
 
     try {
       setSession(await getAuthSession());
+      setBranch(await getStoreBranch());
     } catch (error) {
       console.warn('Failed to load auth session for cart.', error);
       setSession(null);
@@ -147,14 +157,7 @@ export default function CartScreen() {
       setHasRequestedRecommendations(true);
       void loadCart();
 
-      return () => {
-        if (recommendationBatchTimer.current) {
-          clearTimeout(recommendationBatchTimer.current);
-          recommendationBatchTimer.current = null;
-        }
-        lastRecommendationBatchAt.current = 0;
-        setIsAppendingRecommendations(false);
-      };
+      return undefined;
     }, [loadCart]),
   );
 
@@ -182,41 +185,55 @@ export default function CartScreen() {
     setHasRequestedRecommendations(true);
   }, []);
 
-  useEffect(() => {
-    setVisibleRecommendationCount(4);
-    lastRecommendationBatchAt.current = 0;
-  }, [cartRecommendationKey]);
-
-  const appendRecommendationBatch = useCallback(() => {
-    if (isAppendingRecommendations || !canAppendRecommendations) {
+  const handleApplyVoucher = useCallback(async () => {
+    if (!session || isValidatingVoucher) return;
+    if (!voucherCode.trim()) {
+      setAppliedVoucher(null);
+      setVoucherMessage('Enter a voucher code.');
       return;
     }
+    setIsValidatingVoucher(true);
+    try {
+      const voucher = await validateVoucher({
+        code: voucherCode,
+        session,
+        subtotal: cartSummary.subtotalCents / 100,
+      });
+      setAppliedVoucher(voucher);
+      setVoucherCode(voucher.code);
+      setVoucherMessage(`Applied. You saved ${formatPhp(Math.round(voucher.discount * 100))}.`);
+    } catch (error) {
+      setAppliedVoucher(null);
+      setVoucherMessage(error instanceof Error ? error.message : 'Voucher is invalid.');
+    } finally {
+      setIsValidatingVoucher(false);
+    }
+  }, [cartSummary.subtotalCents, isValidatingVoucher, session, voucherCode]);
 
-    setIsAppendingRecommendations(true);
-
-    recommendationBatchTimer.current = setTimeout(() => {
-      setVisibleRecommendationCount((current) => Math.min(current + 4, recommendationCap));
-      setIsAppendingRecommendations(false);
-      recommendationBatchTimer.current = null;
-    }, 260);
-  }, [canAppendRecommendations, isAppendingRecommendations, recommendationCap]);
-
-  const handleCartScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-      const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
-
-      if (distanceFromBottom < 520) {
-        requestRecommendations();
-      }
-
-      if (distanceFromBottom < 340 && Date.now() - lastRecommendationBatchAt.current > 700) {
-        lastRecommendationBatchAt.current = Date.now();
-        appendRecommendationBatch();
-      }
-    },
-    [appendRecommendationBatch, requestRecommendations],
-  );
+  useEffect(() => {
+    if (!appliedVoucher || !session) return;
+    let active = true;
+    void validateVoucher({
+      code: appliedVoucher.code,
+      session,
+      subtotal: cartSummary.subtotalCents / 100,
+    })
+      .then((voucher) => {
+        if (active) {
+          setAppliedVoucher(voucher);
+          setVoucherMessage(`Applied. You saved ${formatPhp(Math.round(voucher.discount * 100))}.`);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setAppliedVoucher(null);
+          setVoucherMessage(error instanceof Error ? error.message : 'Voucher is no longer valid.');
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [appliedVoucher?.code, cartSummary.subtotalCents, session]);
 
   const handleCheckout = useCallback(async () => {
     if (isCheckingOut) {
@@ -230,6 +247,17 @@ export default function CartScreen() {
 
     if (selectedCartItems.length === 0) {
       Alert.alert('Select an item', 'Choose at least one item before checkout.');
+      return;
+    }
+    const incompatible = selectedCartItems.filter((item) => {
+      const branches = item.product.branches?.map((value) => value.toLowerCase()) ?? [];
+      return branches.length > 0 && !branches.includes('all') && !branches.includes(branch);
+    });
+    if (incompatible.length) {
+      Alert.alert(
+        'Mixed branch cart',
+        `${incompatible.map((item) => item.product.name).join(', ')} is unavailable in the ${branch === 'manila' ? 'Manila' : 'Pampanga'} branch. Remove it or change the selected branch.`,
+      );
       return;
     }
 
@@ -248,7 +276,8 @@ export default function CartScreen() {
       }
 
       const checkoutQuery = hydratedSelectedItems.map((item) => item.product.id).join(',');
-      router.push(`/checkout?ids=${encodeURIComponent(checkoutQuery)}`);
+      const voucherQuery = appliedVoucher ? `&voucher=${encodeURIComponent(appliedVoucher.code)}` : '';
+      router.push(`/checkout?ids=${encodeURIComponent(checkoutQuery)}${voucherQuery}`);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         await clearAuthSession();
@@ -267,7 +296,7 @@ export default function CartScreen() {
     } finally {
       setIsCheckingOut(false);
     }
-  }, [isCheckingOut, loadCart, selectedCartItems, session]);
+  }, [appliedVoucher, branch, isCheckingOut, loadCart, selectedCartItems, session]);
 
   useEffect(() => {
     if (!hasRequestedRecommendations || recommendedProducts.length > 0 || isRecommendationLoading) {
@@ -278,17 +307,21 @@ export default function CartScreen() {
     setIsRecommendationLoading(true);
 
     shopApi
-      .getCatalog()
+      .getRecommendations(16)
       .then((products) => {
         if (isActive) {
-          setRecommendedProducts(products.products);
-          setCatalogProducts(products.products);
+          setRecommendedProducts(products);
         }
       })
       .catch((error) => {
         if (isActive) {
           console.warn('Failed to load cart recommendations.', error);
-          setRecommendedProducts([]);
+          void shopApi.getCatalog().then((catalog) => {
+            if (isActive) {
+              setRecommendedProducts(catalog.products);
+              setCatalogProducts(catalog.products);
+            }
+          }).catch(() => setRecommendedProducts([]));
         }
       })
       .finally(() => {
@@ -307,6 +340,182 @@ export default function CartScreen() {
       requestRecommendations();
     }
   }, [cartItems.length, isLoading, requestRecommendations]);
+
+  const listRows = useMemo<CartListRow[]>(() => {
+    const rows: CartListRow[] = [{ id: 'header', type: 'header' }];
+
+    if (cartItems.length === 0) {
+      rows.push({ id: 'empty', type: 'empty' });
+    } else {
+      rows.push(
+        ...cartItems.map(
+          (item, index): CartListRow => ({
+            id: `cart-${item.id}`,
+            index,
+            item,
+            type: 'cart-item',
+          }),
+        ),
+        { id: 'summary', type: 'summary' },
+        { id: 'voucher', type: 'voucher' },
+      );
+    }
+
+    if (!isSignedIn) {
+      rows.push({ id: 'guest', type: 'guest' });
+    }
+
+    rows.push({ id: 'recommendation-title', type: 'recommendation-title' });
+
+    if (isRecommendationLoading && rankedRecommendations.length === 0) {
+      rows.push({ id: 'recommendation-skeleton', type: 'recommendation-skeleton' });
+    } else {
+      for (let index = 0; index < rankedRecommendations.length; index += 2) {
+        const products = rankedRecommendations.slice(index, index + 2);
+        rows.push({
+          id: `recommendations-${products.map((product) => product.id).join('-')}`,
+          products,
+          type: 'recommendation-row',
+        });
+      }
+    }
+
+    return rows;
+  }, [cartItems, isRecommendationLoading, isSignedIn, rankedRecommendations]);
+
+  const handleToggleSelected = useCallback((productId: string) => {
+    setSelectedProductIds((current) => {
+      const next = new Set(current);
+
+      if (next.has(productId)) {
+        next.delete(productId);
+      } else {
+        next.add(productId);
+      }
+
+      return next;
+    });
+  }, []);
+
+  const renderListRow = useCallback(
+    ({ item: row }: { item: CartListRow }) => {
+      if (row.type === 'header') {
+        return (
+          <View style={[styles.pageHeader, styles.sectionSpacing]}>
+            <Text style={styles.title}>Shopping Bag</Text>
+          </View>
+        );
+      }
+
+      if (row.type === 'empty') {
+        return (
+          <View style={styles.sectionSpacing}>
+            <EmptyCart />
+          </View>
+        );
+      }
+
+      if (row.type === 'guest') {
+        return (
+          <View style={styles.sectionSpacing}>
+            <GuestCheckoutPrompt />
+          </View>
+        );
+      }
+
+      if (row.type === 'summary') {
+        return (
+          <View style={styles.sectionSpacing}>
+            <PriceBreakdown summary={cartSummary} />
+          </View>
+        );
+      }
+
+      if (row.type === 'voucher') {
+        return (
+          <View style={[styles.voucherPanel, styles.sectionSpacing]}>
+            <Text style={styles.voucherTitle}>Voucher code</Text>
+            <View style={styles.voucherRow}>
+              <TextInput
+                autoCapitalize="characters"
+                editable={!isValidatingVoucher && !appliedVoucher}
+                onChangeText={(value) => {
+                  setVoucherCode(value);
+                  setVoucherMessage(null);
+                }}
+                placeholder="Enter voucher"
+                placeholderTextColor={theme.colors.textMuted}
+                style={styles.voucherInput}
+                value={voucherCode}
+              />
+              <Pressable
+                onPress={
+                  appliedVoucher
+                    ? () => {
+                        setAppliedVoucher(null);
+                        setVoucherCode('');
+                        setVoucherMessage(null);
+                      }
+                    : handleApplyVoucher
+                }
+                style={styles.voucherButton}>
+                <Text style={styles.voucherButtonText}>
+                  {appliedVoucher ? 'Remove' : isValidatingVoucher ? 'Checking...' : 'Apply'}
+                </Text>
+              </Pressable>
+            </View>
+            {voucherMessage ? (
+              <Text style={[styles.voucherMessage, appliedVoucher && styles.voucherMessageSuccess]}>
+                {voucherMessage}
+              </Text>
+            ) : null}
+          </View>
+        );
+      }
+
+      if (row.type === 'recommendation-title') {
+        return (
+          <View style={[styles.recommendationTitleRow, styles.sectionSpacing]}>
+            <View style={styles.titleLine} />
+            <Text style={styles.recommendationTitle}>You May Also Like</Text>
+            <View style={styles.titleLine} />
+          </View>
+        );
+      }
+
+      if (row.type === 'recommendation-skeleton') {
+        return <GallerySkeleton />;
+      }
+
+      if (row.type === 'recommendation-row') {
+        return (
+          <View style={styles.recommendationGridRow}>
+            {row.products.map((product) => (
+              <ProductCard key={product.id} product={product} style={styles.recommendationCard} />
+            ))}
+            {row.products.length === 1 ? <View style={styles.recommendationCardSpacer} /> : null}
+          </View>
+        );
+      }
+
+      const isFirst = row.index === 0;
+      const isLast = row.index === cartItems.length - 1;
+
+      return (
+        <View style={[styles.cartItemShell, isFirst && styles.cartItemShellFirst, isLast && styles.cartItemShellLast]}>
+          <CartLineItem
+            item={row.item}
+            isSelected={selectedProductIds.has(row.item.product.id)}
+            onRemove={handleRemoveItem}
+            onToggleSelected={handleToggleSelected}
+            onUpdateQuantity={handleUpdateQuantity}
+            showDivider={!isLast}
+          />
+        </View>
+      );
+    },
+    [appliedVoucher, cartItems.length, cartSummary, handleApplyVoucher, handleRemoveItem, handleToggleSelected, handleUpdateQuantity, isValidatingVoucher, selectedProductIds, voucherCode, voucherMessage],
+  );
 
   if (isLoading) {
     return (
@@ -331,8 +540,21 @@ export default function CartScreen() {
   return (
     <View style={styles.screen}>
       <AppBrandHeader absolute={true} style={styles.stickyBrandHeader} />
-      <ScrollView
-        onScroll={handleCartScroll}
+      <FlatList
+        contentContainerStyle={[
+          styles.listContent,
+          {
+            paddingTop: headerHeight + theme.spacing.md,
+            paddingBottom: insets.bottom + (cartItems.length > 0 && isSignedIn ? 264 : 104),
+          },
+        ]}
+        contentInsetAdjustmentBehavior="automatic"
+        data={listRows}
+        initialNumToRender={Platform.OS === 'android' ? 8 : 10}
+        keyExtractor={(row) => row.id}
+        maxToRenderPerBatch={Platform.OS === 'android' ? 6 : 8}
+        removeClippedSubviews={Platform.OS === 'android'}
+        renderItem={renderListRow}
         refreshControl={
           <RefreshControl
             colors={[theme.colors.primary]}
@@ -342,75 +564,11 @@ export default function CartScreen() {
             tintColor={theme.colors.primary}
           />
         }
-        scrollEventThrottle={160}
         showsVerticalScrollIndicator={false}
         style={styles.scroll}
-        contentContainerStyle={[
-          styles.content,
-          {
-            paddingTop: headerHeight + theme.spacing.md,
-            paddingBottom: insets.bottom + (cartItems.length > 0 && isSignedIn ? 264 : 104),
-          },
-        ]}>
-
-        <View style={styles.body}>
-          <View style={styles.pageHeader}>
-            <Text style={styles.title}>Shopping Bag</Text>
-          </View>
-
-          {cartItems.length === 0 ? (
-            <>
-              <EmptyCart />
-              {!isSignedIn ? <GuestCheckoutPrompt /> : null}
-              <RecommendationGallery
-                canAppend={canAppendRecommendations}
-                isAppending={isAppendingRecommendations}
-                isLoading={isRecommendationLoading}
-                products={visibleRecommendations}
-              />
-            </>
-          ) : (
-            <>
-              <View style={styles.cartList}>
-                {cartItems.map((item, index) => (
-                  <CartLineItem
-                    item={item}
-                    key={item.id}
-                    isSelected={selectedProductIds.has(item.product.id)}
-                    onRemove={handleRemoveItem}
-                    onToggleSelected={() => {
-                      setSelectedProductIds((current) => {
-                        const next = new Set(current);
-
-                        if (next.has(item.product.id)) {
-                          next.delete(item.product.id);
-                        } else {
-                          next.add(item.product.id);
-                        }
-
-                        return next;
-                      });
-                    }}
-                    onUpdateQuantity={handleUpdateQuantity}
-                    showDivider={index < cartItems.length - 1}
-                  />
-                ))}
-              </View>
-
-              <PriceBreakdown summary={cartSummary} />
-
-              {!isSignedIn ? <GuestCheckoutPrompt /> : null}
-
-              <RecommendationGallery
-                canAppend={canAppendRecommendations}
-                isAppending={isAppendingRecommendations}
-                isLoading={isRecommendationLoading}
-                products={visibleRecommendations}
-              />
-            </>
-          )}
-        </View>
-      </ScrollView>
+        updateCellsBatchingPeriod={50}
+        windowSize={Platform.OS === 'android' ? 7 : 9}
+      />
 
       {cartItems.length > 0 && isSignedIn ? (
         <CheckoutBar
@@ -473,7 +631,7 @@ function EmptyCart() {
   );
 }
 
-function CartLineItem({
+const CartLineItem = memo(function CartLineItem({
   isSelected,
   item,
   onRemove,
@@ -484,7 +642,7 @@ function CartLineItem({
   isSelected: boolean;
   item: CartItem;
   onRemove: (productId: string) => void;
-  onToggleSelected: () => void;
+  onToggleSelected: (productId: string) => void;
   onUpdateQuantity: (productId: string, quantity: number) => void;
   showDivider: boolean;
 }) {
@@ -513,6 +671,9 @@ function CartLineItem({
   const handleNavigateToProduct = useCallback(() => {
     router.push(`/product-details?id=${encodeURIComponent(item.product.id)}`);
   }, [item.product.id]);
+  const handleToggle = useCallback(() => {
+    onToggleSelected(item.product.id);
+  }, [item.product.id, onToggleSelected]);
 
   const animatedStyle = {
     opacity: removeProgress.interpolate({
@@ -538,7 +699,7 @@ function CartLineItem({
   const itemContent = (
     <>
       <View style={styles.cartItemMain}>
-        <Checkbox checked={isSelected} label={`Select ${item.product.name}`} onPress={onToggleSelected} />
+        <Checkbox checked={isSelected} label={`Select ${item.product.name}`} onPress={handleToggle} />
         {item.product.imageUrl ? (
           <Pressable
             accessibilityLabel={`View ${item.product.name} details`}
@@ -637,68 +798,7 @@ function CartLineItem({
       {showDivider ? <View style={styles.cartItemDivider} /> : null}
     </Animated.View>
   );
-}
-
-function RecommendationGallery({
-  canAppend,
-  isAppending,
-  isLoading,
-  products,
-}: {
-  canAppend: boolean;
-  isAppending: boolean;
-  isLoading: boolean;
-  products: Product[];
-}) {
-  const productColumns = splitIntoColumns(products);
-
-  return (
-    <View style={styles.recommendationSection}>
-      <View style={styles.recommendationTitleRow}>
-        <View style={styles.titleLine} />
-        <Text style={styles.recommendationTitle}>You May Also Like</Text>
-        <View style={styles.titleLine} />
-      </View>
-      {isLoading && products.length === 0 ? (
-        <GallerySkeleton />
-      ) : (
-        <View style={styles.recommendationGrid}>
-          {productColumns.map((column, columnIndex) => (
-            <View key={`products-${columnIndex}`} style={styles.recommendationColumn}>
-              {column.map((product) => (
-                <ProductCard key={product.id} product={product} style={styles.recommendationCard} />
-              ))}
-            </View>
-          ))}
-        </View>
-      )}
-      {isAppending ? <RecommendationAppendLoader /> : null}
-      {!isAppending && canAppend && products.length > 0 ? <View style={styles.recommendationScrollBuffer} /> : null}
-    </View>
-  );
-}
-
-function RecommendationAppendLoader() {
-  const skeletonColumns = splitIntoColumns([0, 1]);
-
-  return (
-    <View style={styles.recommendationGrid}>
-      {skeletonColumns.map((column, columnIndex) => (
-        <View key={`append-column-${columnIndex}`} style={styles.recommendationColumn}>
-          {column.map((item) => (
-            <View key={item} style={styles.recommendationCard}>
-              <SkeletonBlock style={styles.recommendationImage} />
-              <View style={styles.recommendationBody}>
-                <SkeletonBlock style={styles.skeletonLineWide} />
-                <SkeletonBlock style={styles.skeletonLineShort} />
-              </View>
-            </View>
-          ))}
-        </View>
-      ))}
-    </View>
-  );
-}
+});
 
 function CheckoutBar({
   bottomInset,
@@ -752,7 +852,7 @@ function CheckoutBar({
             pressed && !isCheckingOut && itemCount > 0 && styles.pressed,
           ]}
           onPress={onCheckout}>
-          <Text style={styles.checkoutBarText}>{isCheckingOut ? 'Opening...' : `Checkout (${itemCount})`}</Text>
+          <Text style={styles.checkoutBarText}>{isCheckingOut ? 'Checking out...' : `Checkout (${itemCount})`}</Text>
         </Pressable>
       </View>
     </View>
@@ -990,6 +1090,61 @@ const styles = StyleSheet.create({
   content: {
     gap: theme.spacing.lg,
   },
+  listContent: {
+    paddingHorizontal: theme.spacing.lg,
+  },
+  sectionSpacing: {
+    marginBottom: theme.spacing.lg,
+  },
+  voucherPanel: {
+    backgroundColor: theme.colors.surface,
+    borderColor: outlineColor,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    gap: 10,
+    padding: theme.spacing.md,
+  },
+  voucherTitle: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 14,
+  },
+  voucherRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  voucherInput: {
+    borderColor: outlineColor,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    color: theme.colors.text,
+    flex: 1,
+    fontFamily: Fonts.sans,
+    minHeight: 46,
+    paddingHorizontal: 12,
+  },
+  voucherButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.md,
+    justifyContent: 'center',
+    minWidth: 92,
+    paddingHorizontal: 12,
+  },
+  voucherButtonText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 12,
+  },
+  voucherMessage: {
+    color: theme.colors.danger,
+    fontFamily: Fonts.sans,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  voucherMessageSuccess: {
+    color: theme.colors.primary,
+  },
   body: {
     gap: theme.spacing.lg,
     paddingHorizontal: theme.spacing.lg,
@@ -1099,6 +1254,25 @@ const styles = StyleSheet.create({
     borderColor: outlineColor,
     borderRadius: theme.radius.lg,
     borderWidth: 1,
+    overflow: 'hidden',
+  },
+  cartItemShell: {
+    backgroundColor: theme.colors.surface,
+    borderColor: outlineColor,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+  },
+  cartItemShellFirst: {
+    borderTopLeftRadius: theme.radius.lg,
+    borderTopRightRadius: theme.radius.lg,
+    borderTopWidth: 1,
+    overflow: 'hidden',
+  },
+  cartItemShellLast: {
+    borderBottomLeftRadius: theme.radius.lg,
+    borderBottomRightRadius: theme.radius.lg,
+    borderBottomWidth: 1,
+    marginBottom: theme.spacing.lg,
     overflow: 'hidden',
   },
   cartItem: {
@@ -1306,6 +1480,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.sm,
   },
+  recommendationGridRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
+  },
   recommendationColumn: {
     flex: 1,
     gap: theme.spacing.sm,
@@ -1319,7 +1498,11 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     borderWidth: 1,
     overflow: 'hidden',
-    width: '100%',
+    flex: 1,
+    width: 'auto',
+  },
+  recommendationCardSpacer: {
+    flex: 1,
   },
   recommendationImage: {
     backgroundColor: theme.colors.white,

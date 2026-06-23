@@ -1,5 +1,6 @@
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 from datetime import datetime
 from uuid import UUID
@@ -150,7 +151,7 @@ def get_active_campaigns(db: Session = Depends(get_db)):
         db.query(Campaign)
         .filter(Campaign.is_active == True)
         .filter(Campaign.start_at <= now)
-        .filter(Campaign.end_at >= now)
+        .filter(or_(Campaign.end_at.is_(None), Campaign.end_at >= now))
     )
     return q.order_by(Campaign.start_at.desc()).all()
 

@@ -52,7 +52,9 @@
         {
           "microphonePermission": "Allow Esting's to use the microphone for voice prompts.",
           "speechRecognitionPermission": "Allow Esting's to turn your voice into bouquet prompt text.",
-          "androidSpeechServicePackages": ["com.google.android.googlequicksearchbox"]
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
         }
       ],
       "expo-notifications",
@@ -68,7 +70,8 @@
           }
         }
       ],
-      "expo-font"
+      "expo-font",
+      "expo-video"
     ],
     "experiments": {
       "typedRoutes": true,

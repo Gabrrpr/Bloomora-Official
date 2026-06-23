@@ -1,2068 +1,1107 @@
+import * as Clipboard from 'expo-clipboard';
+import { Image } from 'expo-image';
 import * as NavigationBar from 'expo-navigation-bar';
 import { router, useFocusEffect } from 'expo-router';
 import { setStatusBarBackgroundColor, setStatusBarStyle, setStatusBarTranslucent, StatusBar } from 'expo-status-bar';
-import { EllipsisVertical, Heart, Search, Star, X, type LucideIcon } from 'lucide-react-native';
+import { useVideoPlayer, VideoView } from 'expo-video';
+import { Heart, Search, Share2, ShoppingBag, Star } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
   ActivityIndicator,
-  Easing,
+  Alert,
   FlatList,
-  Image,
+  Linking,
   NativeScrollEvent,
   NativeSyntheticEvent,
-  PixelRatio,
   Platform,
   Pressable,
+  Share,
   StyleSheet,
   Text,
-  TextInput,
   useWindowDimensions,
   View,
-  type ImageSourcePropType,
-  type LayoutChangeEvent,
-  type ViewStyle,
+  type ViewToken,
 } from 'react-native';
+import Reanimated, {
+  Extrapolation,
+  interpolate,
+  useAnimatedScrollHandler,
+  useAnimatedStyle,
+  useSharedValue,
+  type SharedValue,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { AppBrandHeader, getAppBrandHeaderLayout } from '@/components/app-brand-header';
-import { formatPhp, type Product } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
+import { addCartItem } from '@/services/cart-storage';
+import { getFeedWishlistIds, setFeedWishlistId } from '@/services/feed-wishlist';
+import {
+  mapFeedProduct,
+  mobileFeedApi,
+  type FeedBranch,
+  type FeedTab,
+  type MobileFeedEntry,
+  type ProductFeedEntry,
+  type PromotionFeedEntry,
+} from '@/services/mobile-feed-api';
+import { getStoreBranch } from '@/services/branch-preference';
 import { shopApi } from '@/services/shop-api';
 
-const feedImage1 = require('@/assets/images/feed/explore/1.webp');
-const feedImage2 = require('@/assets/images/feed/explore/2.webp');
-const feedImage3 = require('@/assets/images/feed/explore/3.webp');
-const feedImage4 = require('@/assets/images/feed/explore/4.webp');
-const feedImage5 = require('@/assets/images/feed/explore/5.webp');
-const mothersDayFeedImage = require('@/assets/images/feed/fyp/EstingsMothersDay.png');
-const addToCartIcon = require('@/assets/images/floatingAction/addToCart-icon.png');
-const shareIcon = require('@/assets/images/floatingAction/share-icon.png');
-
-type ProductFeedItem = {
-  id: string;
-  name: string;
-  price: number | null;
-  currency: 'PHP';
-  category: string;
-  section: 'explore' | 'new' | 'for-you';
-  description: string;
-  longDescription: string;
-  image: ImageSourcePropType | null;
-  imagePresentation?: 'cover' | 'poster';
-  stock: number;
-  rating: number;
-  reviewCount: number;
-  isNew: boolean;
-  isBestSeller: boolean;
-  isAddToCartEnabled?: boolean;
-  isContentOverlayHidden?: boolean;
-  ctaLabel?: string;
-  tags: string[];
-};
-
-type FeedSection = ProductFeedItem['section'];
-
-const feedSections: { label: string; value: FeedSection }[] = [
+const tabs: { label: string; value: FeedTab }[] = [
   { label: 'EXPLORE', value: 'explore' },
   { label: "WHAT'S NEW", value: 'new' },
   { label: 'FOR YOU', value: 'for-you' },
 ];
-const feedLoopCopies = 9;
-const feedLoopMiddleCopy = Math.floor(feedLoopCopies / 2);
-const AnimatedFlatList = Animated.createAnimatedComponent(FlatList) as unknown as typeof FlatList;
-const webHorizontalSnapStyle = Platform.OS === 'web'
-  ? ({ scrollSnapType: 'x mandatory' } as ViewStyle)
-  : null;
-const webVerticalSnapStyle = Platform.OS === 'web'
-  ? ({ scrollSnapType: 'y mandatory' } as ViewStyle)
-  : null;
-const webSnapItemStyle = Platform.OS === 'web'
-  ? ({ scrollSnapAlign: 'start', scrollSnapStop: 'always' } as ViewStyle)
-  : null;
-
-const productFeedData: ProductFeedItem[] = [
-  {
-    id: 'blush-morning',
-    name: 'Blush Lily Wrap',
-    price: 1990,
-    currency: 'PHP',
-    category: 'Pastel Wraps',
-    section: 'new',
-    description: 'Peach roses, white lilies, and baby blooms tucked in soft blush wrapping.',
-    longDescription:
-      'A delicate pastel hand bouquet with peach roses, white lily blooms, airy fillers, and layered blush paper finished with a satin ribbon.',
-    image: feedImage1,
-    stock: 18,
-    rating: 4.8,
-    reviewCount: 126,
-    isNew: true,
-    isBestSeller: true,
-    tags: ['new', 'lilies', 'pastel', 'blush'],
-  },
-  {
-    id: 'peony-cloud',
-    name: 'Pink Kiss Roses',
-    price: 3299,
-    currency: 'PHP',
-    category: 'Rose Bouquets',
-    section: 'new',
-    description: 'Cream roses edged in bright pink for a sweet, photo-ready surprise.',
-    longDescription:
-      'A romantic rose bunch with cream petals kissed in pink, styled for birthdays, anniversaries, and soft everyday gestures.',
-    image: feedImage2,
-    stock: 9,
-    rating: 4.9,
-    reviewCount: 84,
-    isNew: true,
-    isBestSeller: true,
-    tags: ['new', 'roses', 'pink', 'romantic'],
-  },
-  {
-    id: 'orchid-white',
-    name: 'Red Romance Gift Set',
-    price: 4299,
-    currency: 'PHP',
-    category: 'Gift Sets',
-    section: 'explore',
-    description: 'Velvet red roses paired with a ribboned gift box for grand gestures.',
-    longDescription:
-      'A bold red rose arrangement styled beside a crisp white gift box, made for anniversaries, proposals, and Valentine surprises.',
-    image: feedImage3,
-    stock: 7,
-    rating: 4.7,
-    reviewCount: 61,
-    isNew: false,
-    isBestSeller: false,
-    tags: ['red roses', 'gift box', 'romance'],
-  },
-  {
-    id: 'sunlit-tulip',
-    name: 'Ivory Garden Vase',
-    price: 2190,
-    currency: 'PHP',
-    category: 'Vase Arrangements',
-    section: 'explore',
-    description: "White roses, soft baby's breath, and greenery arranged in a glass vase.",
-    longDescription:
-      "A clean ivory vase arrangement with white roses, baby's breath, and fresh green texture for calm, elegant spaces.",
-    image: feedImage4,
-    stock: 14,
-    rating: 4.6,
-    reviewCount: 98,
-    isNew: true,
-    isBestSeller: false,
-    tags: ['white roses', 'vase', 'minimal'],
-  },
-  {
-    id: 'market-bloom',
-    name: 'Blue Orchid Rose Wrap',
-    price: 2599,
-    currency: 'PHP',
-    category: 'Premium Wraps',
-    section: 'explore',
-    description: 'Pink garden roses and white orchids wrapped in vivid blue paper.',
-    longDescription:
-      'A bright premium bouquet with soft pink roses, white orchid accents, and vivid blue wrapping for a fresh statement look.',
-    image: feedImage5,
-    stock: 22,
-    rating: 4.8,
-    reviewCount: 143,
-    isNew: false,
-    isBestSeller: true,
-    tags: ['orchids', 'pink roses', 'blue wrap'],
-  },
-  {
-    id: 'mothers-day-for-you',
-    name: "Celebrate with Esting's",
-    price: null,
-    currency: 'PHP',
-    category: "Mother's Day",
-    section: 'new',
-    description: "Esting's wishes every mom a beautiful Mother's Day. Order a bouquet made for her heart.",
-    longDescription:
-      "Esting's wishes every mom a beautiful Mother's Day. Order a bouquet made for her heart.",
-    image: mothersDayFeedImage,
-    stock: 0,
-    rating: 5,
-    reviewCount: 0,
-    isNew: true,
-    isBestSeller: false,
-    isAddToCartEnabled: false,
-    ctaLabel: "Shop now with Esting's",
-    tags: ['mothers day', 'whats new'],
-  },
-  {
-    id: 'make-it-personal-feature',
-    name: 'Make It Personal',
-    price: null,
-    currency: 'PHP',
-    category: 'Personalized Flowers',
-    section: 'for-you',
-    description: 'Describe a mood or build your bouquet step by step, then preview a floral idea made around your story.',
-    longDescription:
-      'Make It Personal helps you create a bouquet in two ways: describe the arrangement you imagine, or mix and match flowers, style, and finishing touches.',
-    image: null,
-    stock: 0,
-    rating: 5,
-    reviewCount: 0,
-    isNew: true,
-    isBestSeller: false,
-    isAddToCartEnabled: false,
-    ctaLabel: 'Create your bouquet',
-    tags: ['for you', 'make it personal'],
-  },
-];
 
 export default function HomeScreen() {
-  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
+  const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const [feedViewport, setFeedViewport] = useState<{ height: number; width: number } | null>(null);
-  const layout = getHomeLayout(feedViewport?.width ?? windowWidth, feedViewport?.height ?? windowHeight, insets);
-  const [activeSection, setActiveSection] = useState<FeedSection>('new');
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
-  const [isSearchBarMounted, setIsSearchBarMounted] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
-  const [isProductSearchLoading, setIsProductSearchLoading] = useState(false);
-  const [productSearchError, setProductSearchError] = useState<string | null>(null);
-  const [addedProductId, setAddedProductId] = useState<string | null>(null);
-  const [likedProductIds, setLikedProductIds] = useState<ReadonlySet<string>>(() => new Set());
-  const [likeBurstProductId, setLikeBurstProductId] = useState<string | null>(null);
-  const [shareProduct, setShareProduct] = useState<ProductFeedItem | null>(null);
-  const likeBurstProgress = useRef(new Animated.Value(0)).current;
-  const searchBarProgress = useRef(new Animated.Value(0)).current;
-  const sharePanelProgress = useRef(new Animated.Value(0)).current;
-  const shareDismissTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const sectionPagerRef = useRef<FlatList<FeedSection>>(null);
-  const initialSectionIndex = feedSections.findIndex((section) => section.value === 'new');
-  const exploreProducts = useMemo(
-    () => catalogProducts.map((product) => mapCatalogProductToFeedItem(product)),
-    [catalogProducts],
-  );
-  const sectionProducts = useMemo(
-    () =>
-      feedSections.reduce(
-        (sections, section) => ({
-          ...sections,
-          [section.value]: (section.value === 'explore' && exploreProducts.length > 0
-            ? exploreProducts
-            : productFeedData.filter((product) => product.section === section.value)
-          )
-            .sort((first, second) => getFeedItemSort(section.value, first) - getFeedItemSort(section.value, second)),
-        }),
-        {} as Record<FeedSection, ProductFeedItem[]>,
-      ),
-    [exploreProducts],
-  );
-  const searchResults = useMemo(() => {
-    const normalizedQuery = searchQuery.trim().toLowerCase();
-
-    if (!normalizedQuery) {
-      return [];
-    }
-
-    return catalogProducts
-      .filter((product) =>
-        [
-          product.name,
-          product.description,
-          product.categoryName,
-          product.productGroup,
-          product.productType,
-          product.tag,
-        ]
-          .filter(Boolean)
-          .join(' ')
-          .toLowerCase()
-          .includes(normalizedQuery),
-      )
-      .slice(0, 6);
-  }, [catalogProducts, searchQuery]);
-  const verticalFeedRefs = useRef<Record<FeedSection, ProductFeedListRef | null>>({
-    explore: null,
-    new: null,
-    'for-you': null,
+  const [viewport, setViewport] = useState({ height, width });
+  const [activeTab, setActiveTab] = useState<FeedTab>('explore');
+  const [branch, setBranch] = useState<FeedBranch>('manila');
+  const pagerRef = useRef<FlatList<FeedTab>>(null);
+  const tabScrollX = useSharedValue(0);
+  const layout = useMemo(() => getLayout(viewport.width, viewport.height, insets.top), [insets.top, viewport]);
+  const handleTabScroll = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      tabScrollX.value = event.contentOffset.x;
+    },
   });
-  const sectionScrollX = useRef(new Animated.Value(initialSectionIndex * layout.screenWidth)).current;
-  const requestedSectionRef = useRef<FeedSection>('new');
-  const sectionScrollYs = useRef<Record<FeedSection, Animated.Value>>({
-    explore: new Animated.Value(0),
-    new: new Animated.Value(0),
-    'for-you': new Animated.Value(0),
-  }).current;
 
   useEffect(() => {
-    feedSections.forEach((section) => {
-      const initialOffset = sectionProducts[section.value].length * feedLoopMiddleCopy * layout.feedItemHeight;
-      sectionScrollYs[section.value].setValue(initialOffset);
-    });
-  }, [layout.feedItemHeight, sectionProducts, sectionScrollYs]);
-
-  const handleScreenLayout = useCallback((event: LayoutChangeEvent) => {
-    const { height, width } = event.nativeEvent.layout;
-
-    if (height <= 0 || width <= 0) {
-      return;
-    }
-
-    setFeedViewport((current) => {
-      const nextHeight = PixelRatio.roundToNearestPixel(height);
-      const nextWidth = PixelRatio.roundToNearestPixel(width);
-
-      if (current?.height === nextHeight && current.width === nextWidth) {
-        return current;
+    void getStoreBranch().then(setBranch);
+    const handleBranch = (event: Event) => {
+      const next = (event as CustomEvent<FeedBranch>).detail;
+      if (next === 'manila' || next === 'pampanga') {
+        setBranch(next);
       }
-
-      return {
-        height: nextHeight,
-        width: nextWidth,
-      };
-    });
+    };
+    globalThis.addEventListener?.('estings:branch-changed', handleBranch);
+    return () => globalThis.removeEventListener?.('estings:branch-changed', handleBranch);
   }, []);
 
-  const setImmersiveSystemBars = useCallback(() => {
+  const setImmersiveBars = useCallback(() => {
     if (Platform.OS !== 'android') {
       return;
     }
-
     setStatusBarStyle('light');
     setStatusBarTranslucent(true);
     setStatusBarBackgroundColor('transparent', false);
-    void NavigationBar.setVisibilityAsync('visible').catch(() => { });
-    void NavigationBar.setButtonStyleAsync('dark').catch(() => { });
+    void NavigationBar.setVisibilityAsync('visible').catch(() => {});
+    void NavigationBar.setButtonStyleAsync('light').catch(() => {});
   }, []);
 
-  useEffect(() => {
-    setImmersiveSystemBars();
-  }, [setImmersiveSystemBars]);
-
-  useEffect(
-    () => () => {
-      if (shareDismissTimer.current) {
-        clearTimeout(shareDismissTimer.current);
-      }
-    },
-    [],
-  );
-
-  useFocusEffect(
-    useCallback(() => {
-      setImmersiveSystemBars();
-
-      return () => {
-        if (Platform.OS !== 'android') {
-          return;
-        }
-
+  useFocusEffect(useCallback(() => {
+    setImmersiveBars();
+    return () => {
+      if (Platform.OS === 'android') {
         setStatusBarStyle('dark');
         setStatusBarTranslucent(false);
         setStatusBarBackgroundColor('#FFFFFF', false);
-        void NavigationBar.setButtonStyleAsync('dark').catch(() => { });
-      };
-    }, [setImmersiveSystemBars]),
-  );
-
-  const getItemLayout = useCallback(
-    (_: ArrayLike<ProductFeedItem> | null | undefined, index: number) => ({
-      index,
-      length: layout.feedItemHeight,
-      offset: layout.feedItemHeight * index,
-    }),
-    [layout.feedItemHeight],
-  );
-
-  const getSectionLayout = useCallback(
-    (_: ArrayLike<FeedSection> | null | undefined, index: number) => ({
-      index,
-      length: layout.screenWidth,
-      offset: layout.screenWidth * index,
-    }),
-    [layout.screenWidth],
-  );
-
-  const handleChangeSection = useCallback(
-    (section: FeedSection) => {
-      if (requestedSectionRef.current === section) {
-        return;
+        void NavigationBar.setButtonStyleAsync('dark').catch(() => {});
       }
+    };
+  }, [setImmersiveBars]));
 
-      const nextIndex = feedSections.findIndex((feedSection) => feedSection.value === section);
-
-      if (nextIndex < 0) {
-        return;
-      }
-
-      requestedSectionRef.current = section;
-      setActiveSection(section);
-      sectionPagerRef.current?.scrollToOffset({
-        animated: true,
-        offset: nextIndex * layout.screenWidth,
-      });
-    },
-    [layout.screenWidth],
-  );
-
-  const handleSectionMomentumScrollEnd = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const nextIndex = Math.round(event.nativeEvent.contentOffset.x / layout.screenWidth);
-    const nextSection = feedSections[nextIndex]?.value;
-
-    if (nextSection) {
-      requestedSectionRef.current = nextSection;
-      setActiveSection(nextSection);
-    }
-  }, [layout.screenWidth]);
-
-  function handleAddToCart(productId: string) {
-    setAddedProductId(productId);
-    setTimeout(() => {
-      setAddedProductId((current) => (current === productId ? null : current));
-    }, 1400);
-  }
-
-  function handleLike(productId: string) {
-    const isAlreadyLiked = likedProductIds.has(productId);
-
-    if (isAlreadyLiked) {
-      setLikedProductIds((current) => {
-        const next = new Set(current);
-        next.delete(productId);
-        return next;
-      });
-      likeBurstProgress.stopAnimation();
-      setLikeBurstProductId(null);
+  const changeTab = useCallback((tab: FeedTab) => {
+    const index = tabs.findIndex((item) => item.value === tab);
+    if (index < 0) {
       return;
     }
+    setActiveTab(tab);
+    pagerRef.current?.scrollToOffset({ animated: true, offset: index * viewport.width });
+  }, [viewport.width]);
+  const horizontalTabGesture = useMemo(
+    () =>
+      Gesture.Pan()
+        .activeOffsetX([-38, 38])
+        .failOffsetY([-14, 14])
+        .onEnd((event) => {
+          const currentIndex = tabs.findIndex((item) => item.value === activeTab);
+          const direction = event.translationX < 0 ? 1 : -1;
+          const isIntentional =
+            Math.abs(event.translationX) >= 54
+            || Math.abs(event.velocityX) >= 520;
 
-    setLikedProductIds((current) => {
-      const next = new Set(current);
-      next.add(productId);
-      return next;
-    });
-    setLikeBurstProductId(productId);
-    likeBurstProgress.stopAnimation();
-    likeBurstProgress.setValue(0);
-    Animated.sequence([
-      Animated.timing(likeBurstProgress, {
-        duration: 380,
-        easing: Easing.out(Easing.back(1.35)),
-        toValue: 1,
-        useNativeDriver: true,
-      }),
-      Animated.delay(760),
-      Animated.timing(likeBurstProgress, {
-        duration: 340,
-        easing: Easing.in(Easing.cubic),
-        toValue: 0,
-        useNativeDriver: true,
-      }),
-    ]).start(() => setLikeBurstProductId(null));
-  }
+          if (!isIntentional) {
+            return;
+          }
 
-  function handleShare(productId: string) {
-    const nextProduct =
-      feedSections
-        .flatMap((section) => sectionProducts[section.value])
-        .find((product) => product.id === productId) ?? productFeedData[0];
-
-    if (shareDismissTimer.current) {
-      clearTimeout(shareDismissTimer.current);
-    }
-
-    setShareProduct(nextProduct);
-    sharePanelProgress.stopAnimation();
-    sharePanelProgress.setValue(0);
-    Animated.timing(sharePanelProgress, {
-      duration: 260,
-      easing: Easing.out(Easing.cubic),
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
-    shareDismissTimer.current = setTimeout(() => {
-      Animated.timing(sharePanelProgress, {
-        duration: 220,
-        easing: Easing.in(Easing.cubic),
-        toValue: 0,
-        useNativeDriver: true,
-      }).start(() => setShareProduct(null));
-    }, 2200);
-  }
-
-  function handleProductCta(productId: string) {
-    if (productId === 'make-it-personal-feature') {
-      router.push('/create/describe');
-      return;
-    }
-
-    router.push('/categories');
-  }
-
-  const loadCatalogProductsForSearch = useCallback(async () => {
-    if (catalogProducts.length > 0 || isProductSearchLoading) {
-      return;
-    }
-
-    setIsProductSearchLoading(true);
-    setProductSearchError(null);
-
-    try {
-      setCatalogProducts(await shopApi.getProducts());
-    } catch (error) {
-      setProductSearchError(error instanceof Error ? error.message : 'Unable to load products.');
-    } finally {
-      setIsProductSearchLoading(false);
-    }
-  }, [catalogProducts.length, isProductSearchLoading]);
-
-  useEffect(() => {
-    void loadCatalogProductsForSearch();
-  }, [loadCatalogProductsForSearch]);
-
-  function handleOpenSearch() {
-    setIsSearchOpen(true);
-    setIsSearchBarMounted(true);
-    void loadCatalogProductsForSearch();
-    searchBarProgress.stopAnimation();
-    Animated.timing(searchBarProgress, {
-      duration: 240,
-      easing: Easing.out(Easing.cubic),
-      toValue: 1,
-      useNativeDriver: true,
-    }).start();
-  }
-
-  function handleCloseSearch() {
-    searchBarProgress.stopAnimation();
-    Animated.timing(searchBarProgress, {
-      duration: 190,
-      easing: Easing.in(Easing.cubic),
-      toValue: 0,
-      useNativeDriver: true,
-    }).start(({ finished }) => {
-      if (!finished) {
-        return;
-      }
-
-      setIsSearchOpen(false);
-      setIsSearchBarMounted(false);
-      setSearchQuery('');
-    });
-  }
-
-  return (
-    <View style={styles.screen} onLayout={handleScreenLayout}>
-      <StatusBar backgroundColor="transparent" style="light" translucent />
-
-      <HorizontalSectionPager
-        addedProductId={addedProductId}
-        getItemLayout={getItemLayout}
-        getSectionLayout={getSectionLayout}
-        initialSectionIndex={initialSectionIndex}
-        layout={layout}
-        likedProductIds={likedProductIds}
-        onAddToCart={handleAddToCart}
-        onCtaPress={handleProductCta}
-        onLike={handleLike}
-        onMomentumScrollEnd={handleSectionMomentumScrollEnd}
-        onShare={handleShare}
-        pagerRef={sectionPagerRef}
-        sectionScrollX={sectionScrollX}
-        sectionScrollYs={sectionScrollYs}
-        sectionProducts={sectionProducts}
-        verticalFeedRefs={verticalFeedRefs}
-      />
-      <FloatingHeader
-        layout={layout}
-        onOpenSearch={handleOpenSearch}
-      />
-      <TopTabs
-        activeSection={activeSection}
-        layout={layout}
-        onChangeSection={handleChangeSection}
-        sectionScrollX={sectionScrollX}
-      />
-      {isSearchBarMounted ? (
-        <SearchBar
-          isOpen={isSearchOpen}
-          isLoading={isProductSearchLoading}
-          layout={layout}
-          onChangeText={setSearchQuery}
-          onClose={handleCloseSearch}
-          onOpenCatalog={(nextQuery) => {
-            const catalogQuery = (nextQuery ?? searchQuery).trim();
-            handleCloseSearch();
-            router.push(catalogQuery ? `/search-results?q=${encodeURIComponent(catalogQuery)}` : '/search-results');
-          }}
-          progress={searchBarProgress}
-          results={searchResults}
-          searchError={productSearchError}
-          value={searchQuery}
-        />
-      ) : null}
-      <LikeBurst layout={layout} progress={likeBurstProgress} visible={likeBurstProductId !== null} />
-      <ShareFloatingPanel layout={layout} product={shareProduct} progress={sharePanelProgress} />
-    </View>
-  );
-}
-
-function HorizontalSectionPager({
-  addedProductId,
-  getItemLayout,
-  getSectionLayout,
-  initialSectionIndex,
-  layout,
-  likedProductIds,
-  onAddToCart,
-  onCtaPress,
-  onLike,
-  onMomentumScrollEnd,
-  onShare,
-  pagerRef,
-  sectionScrollX,
-  sectionScrollYs,
-  sectionProducts,
-  verticalFeedRefs,
-}: {
-  addedProductId: string | null;
-  getItemLayout: (
-    data: ArrayLike<ProductFeedItem> | null | undefined,
-    index: number,
-  ) => { index: number; length: number; offset: number };
-  getSectionLayout: (
-    data: ArrayLike<FeedSection> | null | undefined,
-    index: number,
-  ) => { index: number; length: number; offset: number };
-  initialSectionIndex: number;
-  layout: HomeLayout;
-  likedProductIds: ReadonlySet<string>;
-  onAddToCart: (productId: string) => void;
-  onCtaPress: (productId: string) => void;
-  onLike: (productId: string) => void;
-  onMomentumScrollEnd: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
-  onShare: (productId: string) => void;
-  pagerRef: React.RefObject<FlatList<FeedSection> | null>;
-  sectionScrollX: Animated.Value;
-  sectionScrollYs: Record<FeedSection, Animated.Value>;
-  sectionProducts: Record<FeedSection, ProductFeedItem[]>;
-  verticalFeedRefs: React.MutableRefObject<Record<FeedSection, ProductFeedListRef | null>>;
-}) {
-  return (
-    <AnimatedFlatList
-      ref={pagerRef}
-      bounces={false}
-      data={feedSections.map((section) => section.value)}
-      decelerationRate="fast"
-      disableIntervalMomentum={true}
-      directionalLockEnabled
-      getItemLayout={getSectionLayout}
-      horizontal
-      initialScrollIndex={initialSectionIndex}
-      key={`${layout.screenWidth}-sections`}
-      keyExtractor={(section) => section}
-      onMomentumScrollEnd={onMomentumScrollEnd}
-      onScroll={Animated.event([{ nativeEvent: { contentOffset: { x: sectionScrollX } } }], {
-        useNativeDriver: true,
-      })}
-      nestedScrollEnabled
-      overScrollMode="never"
-      renderItem={({ item: section }) => (
-        <View style={[{ width: layout.screenWidth }, webSnapItemStyle]}>
-          <VerticalProductFeed
-            addedProductId={addedProductId}
-            getItemLayout={getItemLayout}
-            layout={layout}
-            likedProductIds={likedProductIds}
-            onAddToCart={onAddToCart}
-            onCtaPress={onCtaPress}
-            onLike={onLike}
-            onShare={onShare}
-            products={sectionProducts[section]}
-            scrollY={sectionScrollYs[section]}
-            section={section}
-            verticalFeedRefs={verticalFeedRefs}
-          />
-        </View>
-      )}
-      showsHorizontalScrollIndicator={false}
-      snapToAlignment="start"
-      snapToEnd={false}
-      snapToInterval={layout.screenWidth}
-      scrollEventThrottle={16}
-      style={[styles.feedList, webHorizontalSnapStyle]}
-    />
-  );
-}
-
-function VerticalProductFeed({
-  addedProductId,
-  getItemLayout,
-  layout,
-  likedProductIds,
-  onAddToCart,
-  onCtaPress,
-  onLike,
-  onShare,
-  products,
-  scrollY,
-  section,
-  verticalFeedRefs,
-}: {
-  getItemLayout: (
-    data: ArrayLike<ProductFeedItem> | null | undefined,
-    index: number,
-  ) => { index: number; length: number; offset: number };
-  addedProductId: string | null;
-  layout: HomeLayout;
-  likedProductIds: ReadonlySet<string>;
-  onAddToCart: (productId: string) => void;
-  onCtaPress: (productId: string) => void;
-  onLike: (productId: string) => void;
-  onShare: (productId: string) => void;
-  products: ProductFeedItem[];
-  scrollY: Animated.Value;
-  section: FeedSection;
-  verticalFeedRefs: React.MutableRefObject<Record<FeedSection, ProductFeedListRef | null>>;
-}) {
-  const feedRef = useRef<FlatList<ProductFeedItem>>(null);
-  const productsKey = products.map((product) => product.id).join(':');
-  const loopedProducts = useMemo(
-    () => Array.from({ length: feedLoopCopies }, () => products).flat(),
-    [products],
-  );
-  const middleFeedIndex = products.length * feedLoopMiddleCopy;
-
-  const resetLoopPosition = useCallback(
-    (index: number) => {
-      if (products.length <= 0) {
-        return;
-      }
-
-      const normalizedIndex = ((index % products.length) + products.length) % products.length;
-      const resetIndex = products.length * feedLoopMiddleCopy + normalizedIndex;
-
-      if (index < products.length * 2 || index >= products.length * (feedLoopCopies - 2)) {
-        const resetOffset = resetIndex * layout.feedItemHeight;
-
-        requestAnimationFrame(() => {
-          feedRef.current?.scrollToOffset({
-            animated: false,
-            offset: resetOffset,
-          });
-          scrollY.setValue(resetOffset);
-        });
-      }
-    },
-    [layout.feedItemHeight, products.length, scrollY],
+          const nextIndex = Math.min(Math.max(currentIndex + direction, 0), tabs.length - 1);
+          if (nextIndex !== currentIndex) {
+            changeTab(tabs[nextIndex].value);
+          }
+        })
+        .runOnJS(true),
+    [activeTab, changeTab],
   );
 
-  const setFeedRef = useCallback(
-    (node: ProductFeedListRef | null) => {
-      feedRef.current = node;
-      verticalFeedRefs.current[section] = node;
-    },
-    [section, verticalFeedRefs],
-  );
+  const handleHorizontalEnd = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const index = Math.round(event.nativeEvent.contentOffset.x / viewport.width);
+    setActiveTab(tabs[index]?.value ?? 'explore');
+  }, [viewport.width]);
 
-  const handleMomentumScrollEnd = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (products.length <= 0) {
-        return;
-      }
-
-      const nextIndex = Math.round(event.nativeEvent.contentOffset.y / layout.feedItemHeight);
-
-      resetLoopPosition(nextIndex);
-    },
-    [layout.feedItemHeight, products.length, resetLoopPosition],
-  );
-
-  return (
-    <AnimatedFlatList
-      ref={setFeedRef}
-      bounces={false}
-      data={loopedProducts}
-      decelerationRate="fast"
-      disableIntervalMomentum={true}
-      directionalLockEnabled
-      getItemLayout={getItemLayout}
-      key={`${section}-${productsKey}-${layout.screenWidth}x${layout.feedItemHeight}`}
-      initialScrollIndex={middleFeedIndex}
-      keyExtractor={(item, index) => `${item.id}-${index}`}
-      onMomentumScrollEnd={handleMomentumScrollEnd}
-      onScroll={Animated.event([{ nativeEvent: { contentOffset: { y: scrollY } } }], {
-        useNativeDriver: true,
-      })}
-      nestedScrollEnabled
-      overScrollMode="never"
-      initialNumToRender={Math.min(loopedProducts.length, Platform.OS === 'android' ? 3 : 5)}
-      maxToRenderPerBatch={Math.min(loopedProducts.length, Platform.OS === 'android' ? 3 : 5)}
-      removeClippedSubviews={Platform.OS === 'android'}
-      renderItem={({ item, index }) => (
-        <MemoizedProductFeedImageCard
-          index={index}
-          isAddedToCart={addedProductId === item.id}
-          isLiked={likedProductIds.has(item.id)}
-          item={item}
-          layout={layout}
-          onAddToCart={() => onAddToCart(item.id)}
-          onCtaPress={() => onCtaPress(item.id)}
-          onLike={() => onLike(item.id)}
-          onShare={() => onShare(item.id)}
-          scrollY={scrollY}
-        />
-      )}
-      snapToAlignment="start"
-      snapToEnd={false}
-      snapToInterval={layout.feedItemHeight}
-      scrollEventThrottle={16}
-      style={[
-        styles.sectionFeedList,
-        { height: layout.feedItemHeight, width: layout.screenWidth },
-        webVerticalSnapStyle,
-      ]}
-      showsVerticalScrollIndicator={false}
-      updateCellsBatchingPeriod={Platform.OS === 'android' ? 80 : 50}
-      windowSize={Platform.OS === 'android' ? 5 : 7}
-    />
-  );
-}
-
-function ProductFeedImageCard({
-  index,
-  isAddedToCart,
-  isLiked,
-  item,
-  layout,
-  onAddToCart,
-  onCtaPress,
-  onLike,
-  onShare,
-  scrollY,
-}: {
-  index: number;
-  isAddedToCart: boolean;
-  isLiked: boolean;
-  item: ProductFeedItem;
-  layout: HomeLayout;
-  onAddToCart: () => void;
-  onCtaPress: () => void;
-  onLike: () => void;
-  onShare: () => void;
-  scrollY: Animated.Value;
-}) {
   return (
     <View
-      style={[
-        styles.feedItem,
-        item.section === 'explore' && styles.exploreFeedItem,
-        { height: layout.feedItemHeight, width: layout.screenWidth },
-        webSnapItemStyle,
-      ]}>
-      <View style={[styles.productImageContainer, item.section === 'explore' && styles.exploreImageContainer]}>
-        {item.image ? (
-          item.imagePresentation === 'poster' ? (
-            <>
-              <Image source={item.image} style={styles.posterBackdropImage} resizeMode="cover" blurRadius={22} />
-              <View style={[styles.posterBackdropWash, item.section === 'explore' && styles.explorePosterBackdropWash]} />
-              <View style={styles.posterImageFrame}>
-                <Image source={item.image} style={styles.posterImage} resizeMode="contain" />
-              </View>
-            </>
-          ) : (
-            <Image source={item.image} style={styles.productImage} resizeMode="cover" />
-          )
-        ) : (
-          <View style={[styles.blankFeedImage, item.section === 'for-you' && styles.forYouFeedImage]} />
-        )}
-        <View style={[styles.imageVeil, item.imagePresentation === 'poster' && styles.posterImageVeil]} />
-      </View>
-      <BottomVignette layout={layout} />
-      <ProductFeedContent
-        index={index}
-        isAddedToCart={isAddedToCart}
-        isLiked={isLiked}
-        item={item}
+      style={styles.screen}
+      onLayout={(event) => {
+        const next = event.nativeEvent.layout;
+        if (next.width > 0 && next.height > 0) {
+          setViewport({ height: next.height, width: next.width });
+        }
+      }}>
+      <StatusBar backgroundColor="transparent" style="light" translucent />
+      <GestureDetector gesture={horizontalTabGesture}>
+        <View style={StyleSheet.absoluteFill}>
+          <Reanimated.FlatList
+            ref={pagerRef}
+            data={tabs.map((tab) => tab.value)}
+            getItemLayout={(_, index) => ({
+              index,
+              length: viewport.width,
+              offset: index * viewport.width,
+            })}
+            horizontal
+            initialScrollIndex={0}
+            key={viewport.width}
+            keyExtractor={(item) => item}
+            onMomentumScrollEnd={handleHorizontalEnd}
+            onScroll={handleTabScroll}
+            renderItem={({ item }) => (
+              <FeedColumn
+                branch={branch}
+                height={viewport.height}
+                isActive={activeTab === item}
+                layout={layout}
+                tab={item}
+                width={viewport.width}
+              />
+            )}
+            scrollEnabled={false}
+            scrollEventThrottle={16}
+            showsHorizontalScrollIndicator={false}
+            style={StyleSheet.absoluteFill}
+          />
+        </View>
+      </GestureDetector>
+      <AppBrandHeader
+        absolute
+        actionColor={theme.colors.white}
+        logoColor={theme.colors.white}
+        onSearchPress={() => router.push('/search-results')}
+        shadowLogo
+      />
+      <FeedTabs
+        activeTab={activeTab}
         layout={layout}
-        onAddToCart={onAddToCart}
-        onCtaPress={onCtaPress}
-        onLike={onLike}
-        onShare={onShare}
-        scrollY={scrollY}
+        onChange={changeTab}
+        scrollX={tabScrollX}
+        screenWidth={viewport.width}
       />
     </View>
   );
 }
 
-const MemoizedProductFeedImageCard = memo(ProductFeedImageCard);
-
-function ProductFeedContent({
-  index,
-  isAddedToCart,
-  isLiked,
-  item,
+function FeedColumn({
+  branch,
+  height,
+  isActive,
   layout,
-  onAddToCart,
-  onCtaPress,
-  onLike,
-  onShare,
-  scrollY,
+  tab,
+  width,
 }: {
-  index: number;
-  isAddedToCart: boolean;
-  isLiked: boolean;
-  item: ProductFeedItem;
+  branch: FeedBranch;
+  height: number;
+  isActive: boolean;
   layout: HomeLayout;
-  onAddToCart: () => void;
-  onCtaPress: () => void;
-  onLike: () => void;
-  onShare: () => void;
-  scrollY: Animated.Value;
+  tab: FeedTab;
+  width: number;
 }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const description = isExpanded ? item.longDescription : item.description;
-  const itemOffset = index * layout.feedItemHeight;
-  const scale = scrollY.interpolate({
-    extrapolate: 'clamp',
-    inputRange: [itemOffset - layout.feedItemHeight, itemOffset, itemOffset + layout.feedItemHeight],
-    outputRange: [0.94, 1, 0.955],
-  });
-  const translateY = scrollY.interpolate({
-    extrapolate: 'clamp',
-    inputRange: [itemOffset - layout.feedItemHeight, itemOffset, itemOffset + layout.feedItemHeight],
-    outputRange: [48, 0, -30],
-  });
+  const [items, setItems] = useState<MobileFeedEntry[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [activeItemId, setActiveItemId] = useState<string | null>(null);
+  const [wishlistIds, setWishlistIds] = useState<ReadonlySet<string>>(() => new Set());
+  const impressionIds = useRef(new Set<string>());
+  const branchRef = useRef(branch);
+  const tabRef = useRef(tab);
+
+  useEffect(() => {
+    branchRef.current = branch;
+    tabRef.current = tab;
+  }, [branch, tab]);
+
+  const load = useCallback(async (nextCursor?: string | null) => {
+    const isAppend = Boolean(nextCursor);
+    if (isAppend) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+    }
+    if (!isAppend) {
+      setError(null);
+    }
+    try {
+      const response = await mobileFeedApi.getFeed({ branch, cursor: nextCursor, limit: 10, tab });
+      setItems((current) => isAppend
+        ? [...current, ...response.items.filter((entry) => !current.some((existing) => existing.id === entry.id))]
+        : response.items);
+      setCursor(response.next_cursor);
+      if (!isAppend) {
+        setActiveItemId(response.items[0]?.id ?? null);
+      }
+    } catch (loadError) {
+      if (!isAppend) {
+        setError(loadError instanceof Error ? loadError.message : 'Unable to load the feed.');
+      } else {
+        setCursor(null);
+      }
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }, [branch, tab]);
+
+  useEffect(() => {
+    setItems([]);
+    setCursor(null);
+    impressionIds.current.clear();
+    void Promise.all([
+      load(null),
+      getFeedWishlistIds().then(setWishlistIds),
+    ]).catch(() => {
+      setWishlistIds(new Set());
+    });
+  }, [load]);
+
+  const handleWishlist = useCallback(async (entry: ProductFeedEntry) => {
+    const shouldSave = !wishlistIds.has(entry.id);
+    setWishlistIds((current) => {
+      const next = new Set(current);
+      if (shouldSave) {
+        next.add(entry.id);
+      } else {
+        next.delete(entry.id);
+      }
+      return next;
+    });
+    try {
+      await setFeedWishlistId(entry.id, shouldSave);
+      void mobileFeedApi.track([{
+        branch,
+        event_type: 'like',
+        item_id: entry.id,
+        item_type: 'product',
+        metadata: { saved: shouldSave },
+        tab,
+      }]).catch(() => {});
+    } catch {
+      setWishlistIds((current) => {
+        const next = new Set(current);
+        if (shouldSave) {
+          next.delete(entry.id);
+        } else {
+          next.add(entry.id);
+        }
+        return next;
+      });
+      Alert.alert('Wishlist unavailable', 'Your wishlist could not be updated.');
+    }
+  }, [branch, tab, wishlistIds]);
+
+  const handlePromotionLike = useCallback(async (entry: PromotionFeedEntry) => {
+    const currentLiked = entry.promotion.is_liked;
+    setItems((current) => current.map((item) => item.id === entry.id && item.type === 'promotion'
+      ? {
+          ...item,
+          promotion: {
+            ...item.promotion,
+            is_liked: !currentLiked,
+            like_count: Math.max(0, item.promotion.like_count + (currentLiked ? -1 : 1)),
+          },
+        }
+      : item));
+    try {
+      const result = currentLiked
+        ? await mobileFeedApi.unlikeCampaign(entry.id)
+        : await mobileFeedApi.likeCampaign(entry.id);
+      setItems((current) => current.map((item) => item.id === entry.id && item.type === 'promotion'
+        ? { ...item, promotion: { ...item.promotion, ...result } }
+        : item));
+      void mobileFeedApi.track([{
+        branch,
+        event_type: 'like',
+        item_id: entry.id,
+        item_type: 'promotion',
+        metadata: { liked: result.is_liked },
+        tab,
+      }]).catch(() => {});
+    } catch {
+      setItems((current) => current.map((item) => item.id === entry.id && item.type === 'promotion'
+        ? { ...item, promotion: { ...item.promotion, is_liked: currentLiked } }
+        : item));
+    }
+  }, [branch, tab]);
+
+  const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken<MobileFeedEntry>[] }) => {
+    const visible = viewableItems.find((token) => token.isViewable)?.item;
+    if (!visible) {
+      return;
+    }
+    setActiveItemId(visible.id);
+    if (!impressionIds.current.has(visible.id)) {
+      impressionIds.current.add(visible.id);
+      void mobileFeedApi.track([{
+        branch: branchRef.current,
+        event_type: 'impression',
+        item_id: visible.id,
+        item_type: visible.type,
+        tab: tabRef.current,
+      }]).catch(() => {});
+    }
+  }).current;
+
+  if (loading && items.length === 0) {
+    return <FeedLoading height={height} width={width} />;
+  }
+
+  if (error && items.length === 0) {
+    return <FeedError error={error} height={height} onRetry={() => void load(null)} width={width} />;
+  }
 
   return (
-    <Animated.View
-      pointerEvents="box-none"
-      style={{
-        height: layout.feedItemHeight,
-        transform: [{ translateY }, { scale }],
-        width: layout.screenWidth,
-        zIndex: 3,
-      }}>
-      {!item.isContentOverlayHidden ? (
-        <View
-          style={[
-            styles.productText,
-            {
-              bottom: layout.productTextBottom,
-              left: layout.sidePadding,
-              right: layout.productTextRight,
-            },
-          ]}>
-          <View style={styles.productMetaRow}>
-            {item.isNew ? (
-              <View style={styles.productMetaChip}>
-                <Text style={[styles.productMetaText, layout.text.meta]}>New</Text>
-              </View>
-            ) : null}
-            <View style={styles.productMetaChip}>
-              <Text style={[styles.productMetaText, layout.text.meta]}>{item.category}</Text>
-            </View>
-            <View style={styles.productMetaChip}>
-              <Star size={layout.metaIcon} color={theme.colors.white} fill={theme.colors.white} strokeWidth={2} />
-              <Text style={[styles.productMetaText, layout.text.meta]}>{item.rating.toFixed(1)}</Text>
-            </View>
-          </View>
-          <Text style={[styles.productName, layout.text.productName]}>{item.name}</Text>
-          <Text numberOfLines={isExpanded ? 4 : 2} style={[styles.productDescription, layout.text.productDescription]}>
-            {description}{' '}
-            <Text
-              accessibilityRole="button"
-              onPress={() => setIsExpanded((current) => !current)}
-              style={styles.viewMoreText}>
-              {isExpanded ? 'View less' : 'View more'}
-            </Text>
-          </Text>
-          {item.ctaLabel ? (
-            <Pressable
-              accessibilityRole="button"
-              style={({ pressed }) => [styles.feedCta, pressed && styles.feedCtaPressed]}
-              onPress={onCtaPress}>
-              <Text style={styles.feedCtaText}>{item.ctaLabel}</Text>
-            </Pressable>
-          ) : null}
-          {item.price !== null ? (
-            <Text style={[styles.productPrice, layout.text.productPrice]}>{formatProductPrice(item.price, item.currency)}</Text>
-          ) : null}
-        </View>
-      ) : null}
-
-      <RightSideActions
-        isActive
-        isAddToCartEnabled={item.isAddToCartEnabled ?? true}
-        isAddedToCart={isAddedToCart}
-        isLiked={isLiked}
-        layout={layout}
-        onAddToCart={onAddToCart}
-        onLike={onLike}
-        onShare={onShare}
-      />
-    </Animated.View>
+    <FlatList
+      data={items}
+      decelerationRate="fast"
+      disableIntervalMomentum
+      getItemLayout={(_, index) => ({ index, length: height, offset: index * height })}
+      key={`${tab}-${branch}-${width}x${height}`}
+      keyExtractor={(item) => `${item.type}:${item.id}`}
+      ListFooterComponent={loadingMore ? <ActivityIndicator color={theme.colors.white} style={styles.footerLoader} /> : null}
+      onEndReached={() => {
+        if (cursor && !loadingMore) {
+          void load(cursor);
+        }
+      }}
+      onEndReachedThreshold={0.7}
+      onViewableItemsChanged={onViewableItemsChanged}
+      renderItem={({ item }) => item.type === 'product'
+        ? (
+          <ProductFeedCard
+            branch={branch}
+            entry={item}
+            height={height}
+            isActive={isActive && activeItemId === item.id}
+            isWishlisted={wishlistIds.has(item.id) || item.product.is_wishlisted}
+            layout={layout}
+            onWishlist={() => void handleWishlist(item)}
+            tab={tab}
+            width={width}
+          />
+        )
+        : (
+          <PromotionFeedCard
+            branch={branch}
+            entry={item}
+            height={height}
+            isActive={isActive && activeItemId === item.id}
+            layout={layout}
+            onLike={() => void handlePromotionLike(item)}
+            tab={tab}
+            width={width}
+          />
+        )}
+      showsVerticalScrollIndicator={false}
+      snapToInterval={height}
+      viewabilityConfig={{ itemVisiblePercentThreshold: 65, minimumViewTime: 300 }}
+      windowSize={5}
+    />
   );
 }
 
-function BottomVignette({ layout }: { layout: HomeLayout }) {
+const ProductFeedCard = memo(function ProductFeedCard({
+  branch,
+  entry,
+  height,
+  isWishlisted,
+  layout,
+  onWishlist,
+  tab,
+  width,
+}: {
+  branch: FeedBranch;
+  entry: ProductFeedEntry;
+  height: number;
+  isActive: boolean;
+  isWishlisted: boolean;
+  layout: HomeLayout;
+  onWishlist: () => void;
+  tab: FeedTab;
+  width: number;
+}) {
+  const product = mapFeedProduct(entry);
+  const openProduct = () => {
+    void mobileFeedApi.track([{ branch, event_type: 'open', item_id: entry.id, item_type: 'product', tab }]).catch(() => {});
+    router.push(`/product-details?id=${encodeURIComponent(entry.id)}`);
+  };
+  const shareProduct = async () => {
+    await Share.share({ message: `${entry.product.name} — ${formatCurrency(entry.product.price)}` });
+    void mobileFeedApi.track([{ branch, event_type: 'share', item_id: entry.id, item_type: 'product', tab }]).catch(() => {});
+  };
+  const addProduct = async () => {
+    try {
+      await addCartItem(product, 1);
+      void mobileFeedApi.track([{ branch, event_type: 'add_to_cart', item_id: entry.id, item_type: 'product', tab }]).catch(() => {});
+      Alert.alert('Added to cart', `${entry.product.name} is now in your cart.`);
+    } catch (error) {
+      Alert.alert('Unable to add item', error instanceof Error ? error.message : 'Please try again.');
+    }
+  };
+
+  return (
+    <View style={[styles.item, { height, width }]}>
+      <View style={styles.productBackdrop}>
+        {entry.product.image_url ? (
+          <Image
+            blurRadius={12}
+            contentFit="cover"
+            recyclingKey={`backdrop-${entry.id}`}
+            source={{ uri: entry.product.image_url }}
+            style={styles.productBackdropImage}
+          />
+        ) : null}
+      </View>
+      <BottomScreenGradient height={height} />
+      <Pressable
+        accessibilityLabel={`View ${entry.product.name}`}
+        accessibilityRole="button"
+        onPress={openProduct}
+        style={[styles.productImagePanel, layout.productImagePanel]}>
+        {entry.product.image_url ? (
+          <Image
+            contentFit="cover"
+            recyclingKey={entry.id}
+            source={{ uri: entry.product.image_url }}
+            style={styles.productForegroundImage}
+            transition={180}
+          />
+        ) : (
+          <View style={styles.productImageFallback}>
+            <Text style={styles.productImageFallbackText}>No product image</Text>
+          </View>
+        )}
+      </Pressable>
+      <Pressable onPress={openProduct} style={[styles.productCopy, layout.productCopy]}>
+        <View style={styles.priceRow}>
+          <Text style={styles.productPrice}>{formatCurrency(entry.product.price)}</Text>
+          {entry.product.original_price && entry.product.original_price > entry.product.price ? (
+            <Text style={styles.originalPrice}>{formatCurrency(entry.product.original_price)}</Text>
+          ) : null}
+        </View>
+        <Text numberOfLines={2} style={styles.productName}>{entry.product.name}</Text>
+        <Text numberOfLines={layout.descriptionLines} style={styles.productDescription}>
+          {entry.product.description || entry.product.category}
+        </Text>
+        <View style={styles.ratingRow}>
+          <Text style={styles.ratingText}>{entry.product.rating.toFixed(1)}</Text>
+          <Star color="#F4B740" fill="#F4B740" size={13} strokeWidth={2} />
+          <Text style={styles.reviewText}>({entry.product.review_count})</Text>
+        </View>
+        {(entry.product.tags?.length ?? 0) > 0 ? (
+          <View style={styles.tagRow}>
+            {[...new Set(entry.product.tags)].slice(0, layout.tagLimit).map((tag) => (
+              <View key={tag} style={styles.tagChip}>
+                <Text numberOfLines={1} style={styles.tagText}>#{tag}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </Pressable>
+      <ActionRail
+        buttonMinHeight={layout.actionButtonMinHeight}
+        gap={layout.actionGap}
+        top={layout.productActionTop}
+        actions={[
+          {
+            active: isWishlisted,
+            icon: Heart,
+            label: isWishlisted ? 'Saved' : 'Wishlist',
+            onPress: onWishlist,
+          },
+          { icon: Share2, label: 'Share', onPress: () => void shareProduct() },
+          {
+            disabled: entry.product.stock <= 0,
+            icon: ShoppingBag,
+            label: entry.product.stock <= 0 ? 'Sold out' : 'Add to cart',
+            onPress: () => void addProduct(),
+          },
+        ]}
+      />
+    </View>
+  );
+});
+
+const PromotionFeedCard = memo(function PromotionFeedCard({
+  branch,
+  entry,
+  height,
+  isActive,
+  layout,
+  onLike,
+  tab,
+  width,
+}: {
+  branch: FeedBranch;
+  entry: PromotionFeedEntry;
+  height: number;
+  isActive: boolean;
+  layout: HomeLayout;
+  onLike: () => void;
+  tab: FeedTab;
+  width: number;
+}) {
+  const promotion = entry.promotion;
+  const sharePromotion = async () => {
+    await Share.share({ message: [promotion.title, promotion.description, promotion.cta_destination].filter(Boolean).join('\n') });
+    void mobileFeedApi.track([{ branch, event_type: 'share', item_id: entry.id, item_type: 'promotion', tab }]).catch(() => {});
+  };
+  const openCta = async () => {
+    void mobileFeedApi.track([{ branch, event_type: 'cta', item_id: entry.id, item_type: 'promotion', tab }]).catch(() => {});
+    if (promotion.linked_product_id) {
+      router.push(`/product-details?id=${encodeURIComponent(promotion.linked_product_id)}`);
+      return;
+    }
+    const destination = promotion.cta_destination?.trim();
+    if (!destination) {
+      return;
+    }
+    if (/^https?:\/\//i.test(destination)) {
+      await Linking.openURL(destination);
+    } else {
+      router.push(destination as never);
+    }
+  };
+  const addLinkedProduct = async () => {
+    if (!promotion.linked_product_id) {
+      return;
+    }
+    try {
+      const products = await shopApi.getProducts();
+      const product = products.find((item) => item.id === promotion.linked_product_id);
+      if (!product) {
+        throw new Error('This campaign product is unavailable.');
+      }
+      await addCartItem(product, 1);
+      void mobileFeedApi.track([{ branch, event_type: 'add_to_cart', item_id: entry.id, item_type: 'promotion', tab }]).catch(() => {});
+      Alert.alert('Added to cart', `${product.name} is now in your cart.`);
+    } catch (error) {
+      Alert.alert('Unable to add item', error instanceof Error ? error.message : 'Please try again.');
+    }
+  };
+
+  return (
+    <View style={[styles.item, { height, width }]}>
+      <PromotionMedia entry={entry} isActive={isActive} />
+      <BottomScreenGradient height={height} />
+      <View style={[styles.promotionCopy, layout.promotionCopy]}>
+        <View style={styles.badgeRow}>
+          {promotion.badge ? <Text style={styles.promotionBadge}>{promotion.badge}</Text> : null}
+        </View>
+        <Text style={styles.promotionTitle}>{promotion.title}</Text>
+        {promotion.description ? (
+          <Text numberOfLines={3} style={styles.promotionDescription}>{promotion.description}</Text>
+        ) : null}
+        {promotion.voucher_code ? (
+          <Pressable
+            onPress={async () => {
+              await Clipboard.setStringAsync(promotion.voucher_code!);
+              void mobileFeedApi.track([{ branch, event_type: 'voucher_copy', item_id: entry.id, item_type: 'promotion', tab }]).catch(() => {});
+              Alert.alert('Voucher copied', promotion.voucher_code!);
+            }}
+            style={styles.voucherButton}>
+            <Text style={styles.voucherText}>{promotion.voucher_code} · TAP TO COPY</Text>
+          </Pressable>
+        ) : null}
+        {promotion.cta_label ? (
+          <Pressable onPress={() => void openCta()} style={({ pressed }) => [styles.promotionCta, pressed && styles.pressed]}>
+            <Text style={styles.promotionCtaText}>{promotion.cta_label}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      <ActionRail
+        bottom={layout.actionBottom}
+        buttonMinHeight={layout.actionButtonMinHeight}
+        gap={layout.actionGap}
+        actions={[
+          {
+            active: promotion.is_liked,
+            count: promotion.like_count,
+            icon: Heart,
+            label: promotion.is_liked ? 'Liked' : 'Like',
+            onPress: onLike,
+          },
+          { icon: Share2, label: 'Share', onPress: () => void sharePromotion() },
+          ...(promotion.can_add_to_cart
+            ? [{ icon: ShoppingBag, label: 'Add to cart', onPress: () => void addLinkedProduct() }]
+            : []),
+        ]}
+      />
+    </View>
+  );
+});
+
+function PromotionMedia({ entry, isActive }: { entry: PromotionFeedEntry; isActive: boolean }) {
+  const promotion = entry.promotion;
+  if (promotion.media_type === 'video') {
+    return <PromotionVideo active={isActive} posterUrl={promotion.poster_url} source={promotion.media_url} />;
+  }
+  return (
+    <Image
+      contentFit="cover"
+      recyclingKey={`promotion-${entry.id}`}
+      source={{ uri: promotion.media_url }}
+      style={StyleSheet.absoluteFill}
+      transition={180}
+    />
+  );
+}
+
+function BottomScreenGradient({ height }: { height: number }) {
   return (
     <Svg
-      height={layout.bottomVignetteHeight}
+      height={height * 0.56}
       pointerEvents="none"
-      style={styles.bottomVignette}
+      style={styles.bottomScreenGradient}
       width="100%">
       <Defs>
-        <LinearGradient id="bottomVignetteGradient" x1="0" x2="0" y1="0" y2="1">
+        <LinearGradient id="feedBottomGradient" x1="0" x2="0" y1="0" y2="1">
           <Stop offset="0" stopColor="#000000" stopOpacity="0" />
-          <Stop offset="0.48" stopColor="#000000" stopOpacity="0.2" />
-          <Stop offset="1" stopColor="#000000" stopOpacity="0.48" />
+          <Stop offset="0.42" stopColor="#000000" stopOpacity="0.2" />
+          <Stop offset="0.72" stopColor="#000000" stopOpacity="0.62" />
+          <Stop offset="1" stopColor="#000000" stopOpacity="0.94" />
         </LinearGradient>
       </Defs>
-      <Rect fill="url(#bottomVignetteGradient)" height="100%" width="100%" />
+      <Rect fill="url(#feedBottomGradient)" height="100%" width="100%" />
     </Svg>
   );
 }
 
-function FloatingHeader({
-  layout,
-  onOpenSearch,
+function PromotionVideo({
+  active,
+  posterUrl,
+  source,
 }: {
-  layout: HomeLayout;
-  onOpenSearch: () => void;
+  active: boolean;
+  posterUrl?: string | null;
+  source: string;
 }) {
+  const player = useVideoPlayer(source, (instance) => {
+    instance.loop = true;
+    instance.muted = true;
+  });
+
+  useEffect(() => {
+    if (active) {
+      player.play();
+    } else {
+      player.pause();
+    }
+  }, [active, player]);
+
   return (
-    <AppBrandHeader
-      absolute
-      actionColor={theme.colors.white}
-      logoColor={theme.colors.white}
-      onSearchPress={onOpenSearch}
-      shadowLogo
-    />
+    <View style={StyleSheet.absoluteFill}>
+      {posterUrl ? (
+        <Image contentFit="cover" source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} />
+      ) : null}
+      <VideoView
+        contentFit="cover"
+        nativeControls={false}
+        player={player}
+        playsInline
+        style={StyleSheet.absoluteFill}
+      />
+    </View>
   );
 }
 
-function TopTabs({
-  activeSection,
-  layout,
-  onChangeSection,
-  sectionScrollX,
+function ActionRail({
+  actions,
+  bottom,
+  buttonMinHeight,
+  gap,
+  top,
 }: {
-  activeSection: FeedSection;
-  layout: HomeLayout;
-  onChangeSection: (section: FeedSection) => void;
-  sectionScrollX: Animated.Value;
+  actions: {
+    active?: boolean;
+    count?: number;
+    disabled?: boolean;
+    icon: typeof Heart;
+    label: string;
+    onPress: () => void;
+  }[];
+  bottom?: number;
+  buttonMinHeight: number;
+  gap: number;
+  top?: number;
 }) {
-  const [pressedSection, setPressedSection] = useState<FeedSection | null>(null);
-  const pressedSectionTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const tabsWidth = layout.screenWidth - layout.sidePadding * 2;
-  const tabWidth = tabsWidth / feedSections.length;
-  const indicatorWidth = tabWidth * 0.56;
-  const indicatorTranslateX = sectionScrollX.interpolate({
-    extrapolate: 'clamp',
-    inputRange: feedSections.map((_, index) => index * layout.screenWidth),
-    outputRange: feedSections.map((_, index) => index * tabWidth),
-  });
-
-  useEffect(
-    () => () => {
-      if (pressedSectionTimer.current) {
-        clearTimeout(pressedSectionTimer.current);
-      }
-    },
-    [],
-  );
-
-  const pulseSection = useCallback((section: FeedSection) => {
-    if (pressedSectionTimer.current) {
-      clearTimeout(pressedSectionTimer.current);
-    }
-
-    setPressedSection(section);
-    pressedSectionTimer.current = setTimeout(() => {
-      setPressedSection((current) => (current === section ? null : current));
-      pressedSectionTimer.current = null;
-    }, 180);
-  }, []);
-
   return (
-    <View style={[styles.topTabs, { left: layout.sidePadding, right: layout.sidePadding, top: layout.tabsTop }]}>
-      {feedSections.map((tab) => {
-        const isTabPressed = pressedSection === tab.value;
-
+    <View style={[styles.actionRail, { bottom, gap, top }]}>
+      {actions.map((action) => {
+        const Icon = action.icon;
         return (
           <Pressable
-            key={tab.value}
-            android_ripple={{ borderless: false, color: 'rgba(255, 255, 255, 0.18)' }}
+            accessibilityLabel={action.label}
             accessibilityRole="button"
-            accessibilityState={{ selected: tab.value === activeSection }}
-            style={({ pressed }) => [styles.topTab, (pressed || isTabPressed) && styles.topTabPressed]}
-            onPressIn={() => pulseSection(tab.value)}
-            onPress={() => onChangeSection(tab.value)}>
-            <Text style={[styles.tabText, layout.text.tab]}>{tab.label}</Text>
+            disabled={action.disabled}
+            key={action.label}
+            onPress={action.onPress}
+            style={({ pressed }) => [
+              styles.actionButton,
+              { minHeight: buttonMinHeight },
+              pressed && styles.pressed,
+              action.disabled && styles.disabled,
+            ]}>
+            <Icon
+              color={theme.colors.white}
+              fill={action.active ? theme.colors.white : 'transparent'}
+              size={30}
+              strokeWidth={2.3}
+            />
+            {typeof action.count === 'number' ? (
+              <Text style={styles.actionCount}>{formatCount(action.count)}</Text>
+            ) : null}
+            <Text numberOfLines={2} style={styles.actionLabel}>{action.label}</Text>
           </Pressable>
         );
       })}
-      <Animated.View
+    </View>
+  );
+}
+
+function FeedTabs({
+  activeTab,
+  layout,
+  onChange,
+  screenWidth,
+  scrollX,
+}: {
+  activeTab: FeedTab;
+  layout: HomeLayout;
+  onChange: (tab: FeedTab) => void;
+  screenWidth: number;
+  scrollX: SharedValue<number>;
+}) {
+  const tabsWidth = screenWidth - layout.sidePadding * 2;
+  const tabWidth = tabsWidth / tabs.length;
+  const indicatorWidth = tabWidth * 0.54;
+  const indicatorStyle = useAnimatedStyle(() => ({
+    transform: [{
+      translateX: interpolate(
+        scrollX.value,
+        [0, screenWidth * (tabs.length - 1)],
+        [0, tabWidth * (tabs.length - 1)],
+        Extrapolation.CLAMP,
+      ),
+    }],
+  }));
+
+  return (
+    <View style={[styles.tabs, { left: layout.sidePadding, right: layout.sidePadding, top: layout.tabsTop }]}>
+      {tabs.map((tab, index) => (
+        <AnimatedFeedTab
+          active={activeTab === tab.value}
+          index={index}
+          key={tab.value}
+          label={tab.label}
+          onPress={() => onChange(tab.value)}
+          screenWidth={screenWidth}
+          scrollX={scrollX}
+          value={tab.value}
+        />
+      ))}
+      <Reanimated.View
         pointerEvents="none"
         style={[
           styles.tabIndicator,
           {
             left: (tabWidth - indicatorWidth) / 2,
-            transform: [{ translateX: indicatorTranslateX }],
             width: indicatorWidth,
           },
+          indicatorStyle,
         ]}
       />
     </View>
   );
 }
 
-function SearchBar({
-  isOpen,
-  isLoading,
-  layout,
-  onChangeText,
-  onClose,
-  onOpenCatalog,
-  progress,
-  results,
-  searchError,
-  value,
-}: {
-  isOpen: boolean;
-  isLoading: boolean;
-  layout: HomeLayout;
-  onChangeText: (value: string) => void;
-  onClose: () => void;
-  onOpenCatalog: (query?: string) => void;
-  progress: Animated.Value;
-  results: Product[];
-  searchError: string | null;
-  value: string;
-}) {
-  const trimmedValue = value.trim();
-  const opacity = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
-  });
-  const scale = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.94, 1],
-  });
-  const translateY = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [-10, 0],
-  });
-
-  return (
-    <Animated.View
-      pointerEvents={isOpen ? 'auto' : 'none'}
-      style={[
-        styles.searchOverlay,
-        {
-          left: layout.sidePadding,
-          opacity,
-          right: layout.sidePadding,
-          top: layout.searchTop,
-          transform: [{ translateY }, { scale }],
-        },
-      ]}>
-      <View style={[styles.searchBar, { height: layout.searchBarHeight }]}>
-        <Search size={layout.searchIcon} color={theme.colors.textMuted} strokeWidth={2} />
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChangeText={onChangeText}
-          placeholder="Search bouquets, flowers, gifts..."
-          placeholderTextColor={theme.colors.textMuted}
-          returnKeyType="search"
-          style={[styles.searchInput, layout.text.search]}
-          value={value}
-        />
-        <Pressable accessibilityLabel="Close search" accessibilityRole="button" hitSlop={layout.hitSlop} onPress={onClose}>
-          <X size={layout.searchIcon} color={theme.colors.text} strokeWidth={2.2} />
-        </Pressable>
-      </View>
-
-      {trimmedValue ? (
-        <View style={styles.searchResultsPanel}>
-          {isLoading ? (
-            <View style={styles.searchStateRow}>
-              <ActivityIndicator color={theme.colors.primary} size="small" />
-              <Text style={styles.searchStateText}>Searching products</Text>
-            </View>
-          ) : searchError ? (
-            <Text style={styles.searchStateText}>{searchError}</Text>
-          ) : results.length > 0 ? (
-            <>
-              {results.map((product) => (
-                <Pressable
-                  key={product.id}
-                  accessibilityRole="button"
-                  style={({ pressed }) => [styles.searchResultRow, pressed && styles.searchResultRowPressed]}
-                  onPress={() => onOpenCatalog(product.name)}>
-                  {product.imageUrl ? (
-                    <Image source={{ uri: product.imageUrl }} style={styles.searchResultImage} resizeMode="cover" />
-                  ) : (
-                    <View style={styles.searchResultImageFallback} />
-                  )}
-                  <View style={styles.searchResultCopy}>
-                    <Text numberOfLines={1} style={styles.searchResultName}>
-                      {product.name}
-                    </Text>
-                    <Text numberOfLines={1} style={styles.searchResultMeta}>
-                      {product.categoryName ?? product.tag}
-                    </Text>
-                  </View>
-                  <Text style={styles.searchResultPrice}>{formatPhp(product.priceCents)}</Text>
-                </Pressable>
-              ))}
-              <Pressable accessibilityRole="button" style={styles.searchCatalogButton} onPress={() => onOpenCatalog(trimmedValue)}>
-                <Text style={styles.searchCatalogButtonText}>View all products</Text>
-              </Pressable>
-            </>
-          ) : (
-            <Text style={styles.searchStateText}>No products found for &quot;{trimmedValue}&quot;.</Text>
-          )}
-        </View>
-      ) : null}
-    </Animated.View>
-  );
-}
-
-function RightSideActions({
-  isActive,
-  isAddToCartEnabled,
-  isAddedToCart,
-  isLiked,
-  layout,
-  onAddToCart,
-  onLike,
-  onShare,
-}: {
-  isActive: boolean;
-  isAddToCartEnabled: boolean;
-  isAddedToCart: boolean;
-  isLiked: boolean;
-  layout: HomeLayout;
-  onAddToCart: () => void;
-  onLike: () => void;
-  onShare: () => void;
-}) {
-  return (
-    <View
-      pointerEvents="box-none"
-      style={[
-        styles.actionRail,
-        {
-          bottom: layout.actionBottom,
-          gap: layout.actionGap,
-          right: layout.actionRight,
-          width: layout.actionColumnWidth,
-        },
-      ]}>
-      <ActionButton label={isLiked ? 'Liked' : 'Like'} layout={layout} onPress={onLike}>
-        {isLiked ? (
-          <GradientHeart size={layout.actionIcon + 2} strokeWidth={1.15} />
-        ) : (
-          <ShadowedIcon
-            icon={Heart}
-            size={layout.actionIcon}
-            color={theme.colors.white}
-            fill={theme.colors.white}
-            strokeWidth={2.1}
-          />
-        )}
-      </ActionButton>
-      <ActionButton label="Share" layout={layout} onPress={onShare}>
-        <Image source={shareIcon} style={layout.shareIcon} resizeMode="contain" />
-      </ActionButton>
-      <ActionButton
-        disabled={!isAddToCartEnabled}
-        label={!isAddToCartEnabled ? 'Coming soon' : isAddedToCart && isActive ? 'Added to cart' : 'Add to cart'}
-        layout={layout}
-        onPress={onAddToCart}>
-        <Image source={addToCartIcon} style={layout.addToCartIcon} resizeMode="contain" />
-      </ActionButton>
-      <ActionButton label="More" layout={layout} onPress={() => { }}>
-        <EllipsisVertical size={layout.actionIcon + 1} color={theme.colors.white} strokeWidth={3} />
-      </ActionButton>
-    </View>
-  );
-}
-
-function ActionButton({
-  children,
-  disabled = false,
+function AnimatedFeedTab({
+  active,
+  index,
   label,
-  layout,
   onPress,
+  screenWidth,
+  scrollX,
 }: {
-  children: React.ReactNode;
-  disabled?: boolean;
+  active: boolean;
+  index: number;
   label: string;
-  layout: HomeLayout;
   onPress: () => void;
+  screenWidth: number;
+  scrollX: SharedValue<number>;
+  value: FeedTab;
 }) {
+  const animatedStyle = useAnimatedStyle(() => {
+    const progress = interpolate(
+      scrollX.value,
+      [(index - 1) * screenWidth, index * screenWidth, (index + 1) * screenWidth],
+      [0, 1, 0],
+      Extrapolation.CLAMP,
+    );
+    return {
+      opacity: interpolate(progress, [0, 1], [0.62, 1]),
+      transform: [{ scale: interpolate(progress, [0, 1], [1, 1.08]) }],
+    };
+  });
+  const regularTextStyle = useAnimatedStyle(() => {
+    const progress = interpolate(
+      scrollX.value,
+      [(index - 1) * screenWidth, index * screenWidth, (index + 1) * screenWidth],
+      [0, 1, 0],
+      Extrapolation.CLAMP,
+    );
+    return { opacity: 1 - progress };
+  });
+  const boldTextStyle = useAnimatedStyle(() => {
+    const progress = interpolate(
+      scrollX.value,
+      [(index - 1) * screenWidth, index * screenWidth, (index + 1) * screenWidth],
+      [0, 1, 0],
+      Extrapolation.CLAMP,
+    );
+    return { opacity: progress };
+  });
+
   return (
     <Pressable
-      android_ripple={{ borderless: true, color: 'rgba(255, 255, 255, 0.16)', radius: layout.actionIconFrame.width / 2 }}
-      accessibilityLabel={label}
-      accessibilityRole="button"
-      disabled={disabled}
-      hitSlop={layout.actionHitSlop}
-      style={({ pressed }) => [
-        styles.actionButton,
-        layout.actionButton,
-        pressed && !disabled && styles.actionButtonPressed,
-        disabled && styles.actionButtonDisabled,
-      ]}
-      onPress={onPress}>
-      <View style={[styles.actionIconFrame, layout.actionIconFrame]}>{children}</View>
-      <Text numberOfLines={2} style={[styles.actionLabel, layout.text.action]}>
-        {label}
-      </Text>
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={styles.tabButton}>
+      <Reanimated.View style={[styles.tabLabelFrame, animatedStyle]}>
+        <Reanimated.Text style={[styles.tabText, regularTextStyle]}>{label}</Reanimated.Text>
+        <Reanimated.Text style={[styles.tabText, styles.tabTextActive, boldTextStyle]}>{label}</Reanimated.Text>
+      </Reanimated.View>
     </Pressable>
   );
 }
 
-function ShadowedIcon({
-  color,
-  fill,
-  icon: Icon,
-  size,
-  strokeWidth,
-}: {
-  color: string;
-  fill?: string;
-  icon: LucideIcon;
-  size: number;
-  strokeWidth: number;
-}) {
-  const shadowFill = fill ? 'rgba(0, 0, 0, 0.3)' : 'transparent';
-
+function FeedLoading({ height, width }: { height: number; width: number }) {
   return (
-    <View style={[styles.shadowedIcon, { height: size + 5, width: size + 5 }]}>
-      <View style={styles.iconShadowLayer}>
-        <Icon color="rgba(0, 0, 0, 0.32)" fill={shadowFill} size={size} strokeWidth={strokeWidth} />
-      </View>
-      <View style={styles.iconForegroundLayer}>
-        <Icon color={color} fill={fill ?? 'transparent'} size={size} strokeWidth={strokeWidth} />
-      </View>
+    <View style={[styles.stateScreen, { height, width }]}>
+      <ActivityIndicator color={theme.colors.white} size="large" />
+      <Text style={styles.stateText}>Preparing your feed…</Text>
     </View>
   );
 }
 
-function GradientHeart({ size, strokeWidth = 1 }: { size: number; strokeWidth?: number }) {
-  return (
-    <Svg height={size} viewBox="0 0 24 24" width={size}>
-      <Defs>
-        <LinearGradient id="likedHeartGradient" x1="0" x2="1" y1="0" y2="1">
-          <Stop offset="0" stopColor="#FF8A3D" />
-          <Stop offset="0.32" stopColor="#FF4F5F" />
-          <Stop offset="0.66" stopColor="#D92E91" />
-          <Stop offset="1" stopColor="#6D3BDD" />
-        </LinearGradient>
-      </Defs>
-      <Path
-        d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.08C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"
-        fill="url(#likedHeartGradient)"
-        stroke={theme.colors.white}
-        strokeLinejoin="round"
-        strokeWidth={strokeWidth}
-      />
-    </Svg>
-  );
-}
-
-function LikeBurst({
-  layout,
-  progress,
-  visible,
+function FeedError({
+  error,
+  height,
+  onRetry,
+  width,
 }: {
-  layout: HomeLayout;
-  progress: Animated.Value;
-  visible: boolean;
+  error: string;
+  height: number;
+  onRetry: () => void;
+  width: number;
 }) {
-  if (!visible) {
-    return null;
-  }
-
-  const opacity = progress.interpolate({
-    inputRange: [0, 0.16, 0.78, 1],
-    outputRange: [0, 1, 1, 0],
-  });
-  const scale = progress.interpolate({
-    inputRange: [0, 0.45, 1],
-    outputRange: [0.56, 1.12, 0.98],
-  });
-  const translateY = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [18, -28],
-  });
-
+  const updateRequired = error.toLowerCase().includes('update required');
   return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        styles.likeBurst,
-        {
-          opacity,
-          transform: [{ translateY }, { scale }],
-        },
-      ]}>
-      <GradientHeart size={layout.likeBurstSize} strokeWidth={0.8} />
-      <Text style={styles.likeBurstText}>Liked</Text>
-    </Animated.View>
+    <View style={[styles.stateScreen, { height, width }]}>
+      <Search color={theme.colors.white} size={38} />
+      <Text style={styles.stateTitle}>{updateRequired ? 'Feed update required' : 'Feed unavailable'}</Text>
+      <Text style={styles.stateText}>{error}</Text>
+      <Pressable onPress={onRetry} style={styles.retryButton}>
+        <Text style={styles.retryText}>Try again</Text>
+      </Pressable>
+    </View>
   );
 }
 
-function ShareFloatingPanel({
-  layout,
-  product,
-  progress,
-}: {
-  layout: HomeLayout;
-  product: ProductFeedItem | null;
-  progress: Animated.Value;
-}) {
-  if (!product) {
-    return null;
-  }
-
-  const opacity = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, 1],
-  });
-  const translateY = progress.interpolate({
-    inputRange: [0, 1],
-    outputRange: [28, 0],
-  });
-
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        styles.sharePanel,
-        {
-          bottom: layout.sharePanelBottom,
-          left: layout.sidePadding,
-          opacity,
-          right: layout.sidePadding,
-          transform: [{ translateY }],
-        },
-      ]}>
-      <View style={styles.sharePanelIconFrame}>
-        <Image source={shareIcon} style={layout.sharePanelIcon} resizeMode="contain" />
-      </View>
-      <View style={styles.sharePanelText}>
-        <Text numberOfLines={1} style={styles.sharePanelTitle}>
-          Share {product.name}
-        </Text>
-        <Text numberOfLines={1} style={styles.sharePanelSubtitle}>
-          Share options are ready
-        </Text>
-      </View>
-    </Animated.View>
-  );
-}
-
-type HomeLayout = ReturnType<typeof getHomeLayout>;
-type ProductFeedListRef = FlatList<ProductFeedItem> & {
-  getNode?: () => FlatList<ProductFeedItem>;
-};
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(Math.max(value, min), max);
-}
-
-function mapCatalogProductToFeedItem(product: Product): ProductFeedItem {
-  const description = product.description?.trim() || `${product.name} from Esting's flower collection.`;
-  const category = product.categoryName || product.productGroup || product.productType || product.tag || 'Bouquet';
-  const tags = [product.tag, product.categoryName, product.productGroup, product.productType].filter(
-    (tag): tag is string => Boolean(tag),
-  );
-
-  return {
-    id: product.id,
-    name: product.name,
-    price: Math.round(product.priceCents / 100),
-    currency: 'PHP',
-    category,
-    section: 'explore',
-    description,
-    longDescription: description,
-    image: product.imageUrl ? { uri: product.imageUrl } : null,
-    imagePresentation: 'poster',
-    stock: product.stock ?? 0,
-    rating: 5,
-    reviewCount: 0,
-    isNew: false,
-    isBestSeller: product.tag.toLowerCase().includes('best'),
-    tags,
-  };
-}
-
-function getFeedItemSort(section: FeedSection, item: ProductFeedItem) {
-  if (section === 'new' && item.id === 'mothers-day-for-you') {
-    return 0;
-  }
-
-  return 1;
-}
-
-function formatProductPrice(price: number, currency: ProductFeedItem['currency']) {
+function formatCurrency(value: number) {
   return new Intl.NumberFormat('en-PH', {
-    currency,
+    currency: 'PHP',
     maximumFractionDigits: 0,
     style: 'currency',
-  }).format(price);
+  }).format(value);
 }
 
-function getHomeLayout(width: number, height: number, insets: { bottom: number; top: number }) {
-  const screenWidth = PixelRatio.roundToNearestPixel(width);
-  const screenHeight = PixelRatio.roundToNearestPixel(height);
-  const shortSide = Math.min(width, height);
-  const heightScale = clamp(height / 844, 0.82, 1.1);
-  const widthScale = clamp(width / 390, 0.86, 1.1);
-  const scale = Math.min(heightScale, widthScale);
-  const brandHeaderLayout = getAppBrandHeaderLayout(width, height, insets.top);
-  const sidePadding = brandHeaderLayout.sidePadding;
-  const feedItemHeight = screenHeight;
-  const headerTop = brandHeaderLayout.top;
-  const headerHeight = brandHeaderLayout.height;
-  const tabsTop = headerTop + headerHeight + clamp(height * 0.018, 12, 18);
-  const tabHeight = clamp(height * 0.034, 28, 34);
-  const searchBarHeight = clamp(height * 0.054, 44, 50);
-  const searchTop = tabsTop + tabHeight + clamp(height * 0.014, 10, 14);
-  const navHeight = clamp(height * 0.074, 60, 70);
-  const actionIcon = clamp(shortSide * 0.082, 30, 36);
-  const actionColumnWidth = clamp(actionIcon + 34, 64, 74);
-  const actionRight = sidePadding + (36 - actionColumnWidth) / 2;
-  const productTextBottom = clamp(height * 0.19, 136, 170);
-  const navBottom = Math.max(insets.bottom + theme.spacing.sm, (productTextBottom - navHeight) / 2);
-  const actionBottom = navBottom + navHeight + clamp(height * 0.006, 5, 8);
+function formatCount(value: number) {
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1)}M`;
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(1)}K`;
+  }
+  return String(value);
+}
 
+function getLayout(width: number, height: number, topInset: number) {
+  const brand = getAppBrandHeaderLayout(width, height, topInset);
+  const sidePadding = brand.sidePadding;
+  const tabsTop = brand.top + brand.height + 10;
+  const isShortScreen = height < 760;
+  const navClearance = isShortScreen ? 110 : Math.max(height * 0.12, 104);
+  const imageTopGap = isShortScreen ? 18 : 24;
+  const contentGap = isShortScreen ? 14 : 18;
+  const productImageTop = tabsTop + 34 + imageTopGap;
+  const actionButtonMinHeight = isShortScreen ? 44 : 48;
+  const actionGap = isShortScreen ? 3 : 6;
+  const contentBlockHeight = isShortScreen ? 196 : height < 880 ? 214 : 232;
+  const productContentTop = height - navClearance - contentBlockHeight;
+  const productImageHeight = Math.max(
+    isShortScreen ? 226 : 270,
+    productContentTop - contentGap - productImageTop,
+  );
   return {
-    actionBottom,
-    actionButton: {
-      minHeight: clamp(height * 0.062, 48, 56),
-      width: actionColumnWidth,
+    actionBottom: navClearance + 8,
+    actionButtonMinHeight,
+    actionGap,
+    descriptionLines: height >= 850 ? 4 : 3,
+    productActionTop: productContentTop - 6,
+    productCopy: {
+      left: sidePadding + 8,
+      right: 88,
+      top: productContentTop,
     },
-    actionHitSlop: {
-      bottom: 4,
-      left: 4,
-      right: 4,
-      top: 4,
+    productImagePanel: {
+      borderRadius: 9,
+      height: productImageHeight,
+      left: sidePadding,
+      right: sidePadding,
+      top: productImageTop,
     },
-    actionColumnWidth,
-    actionGap: clamp(height * 0.014, 9, 13),
-    actionIcon,
-    actionIconFrame: {
-      height: clamp(actionIcon + 10, 40, 46),
-      width: clamp(actionIcon + 10, 40, 46),
-    },
-    actionRight,
-    addToCartIcon: {
-      height: clamp(actionIcon * 1.18, 38, 44),
-      marginLeft: clamp(actionIcon * 0.12, 4, 5),
-      width: clamp(actionIcon * 1.22, 40, 46),
-    },
-    bottomVignetteHeight: clamp(height * 0.46, 330, 460),
-    feedItemHeight,
-    headerTop,
-    hitSlop: {
-      bottom: 8,
-      left: 10,
-      right: 10,
-      top: 8,
-    },
-    likeBurstSize: clamp(shortSide * 0.23, 86, 108),
-    navBottom,
-    navHeight,
-    productTextBottom,
-    productTextRight: sidePadding + actionColumnWidth + clamp(width * 0.035, 12, 18),
-    screenWidth,
-    searchBarHeight,
-    searchIcon: clamp(shortSide * 0.05, 18, 21),
-    searchTop,
-    shareIcon: {
-      height: clamp(actionIcon * 0.86, 28, 32),
-      width: clamp(actionIcon * 0.98, 32, 36),
-    },
-    sharePanelBottom: navBottom + navHeight + clamp(height * 0.016, 12, 16),
-    sharePanelIcon: {
-      height: clamp(shortSide * 0.052, 18, 22),
-      width: clamp(shortSide * 0.062, 22, 26),
+    promotionCopy: {
+      bottom: navClearance,
+      left: sidePadding,
+      right: 88,
     },
     sidePadding,
+    tagLimit: width >= 410 ? 4 : 3,
     tabsTop,
-    metaIcon: clamp(12 * scale, 11, 13),
-    text: {
-      action: {
-        fontFamily: Fonts.sansMedium,
-        fontSize: clamp(11 * scale, 10, 11.5),
-        lineHeight: clamp(14 * scale, 13, 15),
-      },
-      meta: {
-        fontFamily: Fonts.sansMedium,
-        fontSize: clamp(11.5 * scale, 10.5, 12),
-        lineHeight: clamp(15 * scale, 14, 16),
-      },
-      productDescription: {
-        fontFamily: Fonts.sans,
-        fontSize: clamp(15.5 * scale, 14, 16),
-        lineHeight: clamp(22 * scale, 20, 24),
-      },
-      productName: {
-        fontFamily: Fonts.sansBold,
-        fontSize: clamp(25 * scale, 21, 27),
-        lineHeight: clamp(31 * scale, 27, 33),
-      },
-      productPrice: {
-        fontFamily: Fonts.sansBold,
-        fontSize: clamp(34 * scale, 29, 37),
-        lineHeight: clamp(42 * scale, 36, 45),
-      },
-      search: {
-        fontFamily: Fonts.sans,
-        fontSize: clamp(14 * scale, 13, 15),
-      },
-      tab: {
-        fontFamily: Fonts.condensedMedium,
-        fontSize: clamp(13.5 * scale, 12.5, 14.5),
-        lineHeight: clamp(18 * scale, 16, 19),
-      },
-    },
   };
 }
 
-const whiteShadow = {
-  textShadowColor: 'rgba(0, 0, 0, 0.24)',
+type HomeLayout = ReturnType<typeof getLayout>;
+
+const textShadow = {
+  textShadowColor: 'rgba(0,0,0,0.55)',
   textShadowOffset: { height: 1, width: 1 },
-  textShadowRadius: 1.6,
+  textShadowRadius: 3,
 };
 
 const styles = StyleSheet.create({
-  screen: {
-    backgroundColor: theme.colors.text,
-    flex: 1,
-    overflow: 'hidden',
-  },
-  feedList: {
-    ...StyleSheet.absoluteFillObject,
-    overflow: 'hidden',
-    zIndex: 0,
-  },
-  sectionFeedList: {
-    overflow: 'hidden',
-  },
-  feedItem: {
-    backgroundColor: theme.colors.text,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  exploreFeedItem: {
-    backgroundColor: '#1E8B4E',
-  },
-  productImageContainer: {
-    backgroundColor: '#F4F4F1',
-    bottom: 0,
-    left: 0,
-    overflow: 'hidden',
-    position: 'absolute',
-    right: 0,
-    top: 0,
-  },
-  exploreImageContainer: {
-    backgroundColor: '#1E8B4E',
-  },
-  productImage: {
-    width: '100%',
-    height: '100%',
-  },
-  posterBackdropImage: {
-    ...StyleSheet.absoluteFillObject,
-    opacity: 0.2,
-    transform: [{ scale: 1.18 }],
-  },
-  posterBackdropWash: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(48, 50, 49, 0.78)',
-  },
-  explorePosterBackdropWash: {
-    backgroundColor: 'rgba(30, 139, 78, 0.88)',
-  },
-  posterImageFrame: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    left: 12,
-    overflow: 'hidden',
-    position: 'absolute',
-    right: 12,
-    top: 136,
-  },
-  posterImage: {
-    aspectRatio: 1,
-    borderRadius: 28,
-    maxHeight: 430,
-    overflow: 'hidden',
-    width: '100%',
-  },
-  blankFeedImage: {
-    backgroundColor: '#111A13',
-    height: '100%',
-    width: '100%',
-  },
-  forYouFeedImage: {
-    backgroundColor: '#1E8B4E',
-  },
-  imageVeil: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0, 0, 0, 0.08)',
-  },
-  posterImageVeil: {
-    backgroundColor: 'rgba(0, 0, 0, 0.02)',
-  },
-  bottomVignette: {
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-    right: 0,
-    zIndex: 2,
-  },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    position: 'absolute',
-    zIndex: 10,
-  },
-  logoFrame: {
-    alignItems: 'flex-start',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  logoImage: {
-    height: '100%',
-    width: '100%',
-  },
-  logoShadowImage: {
-    height: '100%',
-    opacity: 0.26,
-    position: 'absolute',
-    transform: [{ translateX: 0.8 }, { translateY: 1.2 }],
-    width: '100%',
-  },
-  headerActions: {
-    alignItems: 'center',
-    flexDirection: 'row',
-  },
-  headerIconButton: {
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-    borderColor: 'transparent',
-    borderRadius: theme.radius.pill,
-    borderWidth: 0,
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  topTabs: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingBottom: 9,
-    position: 'absolute',
-    zIndex: 10,
-  },
-  topTab: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    flex: 1,
-    justifyContent: 'center',
-    minHeight: 30,
-    overflow: 'hidden',
-  },
-  topTabPressed: {
-    backgroundColor: 'rgba(255, 255, 255, 0.13)',
-    transform: [{ scale: 0.97 }],
-  },
-  tabText: {
-    ...whiteShadow,
-    color: theme.colors.white,
-    fontFamily: Fonts.condensedMedium,
-    textAlign: 'center',
-  },
-  tabIndicator: {
-    backgroundColor: theme.colors.white,
-    borderRadius: theme.radius.pill,
-    bottom: 0,
-    height: 2,
-    position: 'absolute',
-  },
-  searchOverlay: {
-    gap: theme.spacing.sm,
-    position: 'absolute',
-    zIndex: 11,
-  },
-  searchBar: {
-    alignItems: 'center',
+  screen: { backgroundColor: '#000000', flex: 1, overflow: 'hidden' },
+  item: { backgroundColor: '#000000', overflow: 'hidden' },
+  productBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000000' },
+  productBackdropImage: { ...StyleSheet.absoluteFillObject, opacity: 0.25 },
+  productImagePanel: {
     backgroundColor: '#FFFFFF',
-    borderRadius: 999,
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.md,
+    overflow: 'hidden',
+    position: 'absolute',
   },
-  searchInput: {
-    color: theme.colors.text,
-    flex: 1,
-    fontFamily: Fonts.sans,
-    paddingVertical: 0,
-  },
-  searchResultsPanel: {
-    backgroundColor: 'rgba(255, 255, 255, 0.98)',
-    borderColor: 'rgba(31, 42, 36, 0.1)',
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    gap: theme.spacing.xs,
-    padding: theme.spacing.sm,
-  },
-  searchStateRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    minHeight: 48,
-    paddingHorizontal: theme.spacing.sm,
-  },
-  searchStateText: {
-    color: theme.colors.textMuted,
-    fontFamily: Fonts.sansSemiBold,
-    fontSize: 13,
-    lineHeight: 18,
-    padding: theme.spacing.sm,
-  },
-  searchResultRow: {
-    alignItems: 'center',
-    borderRadius: theme.radius.md,
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    minHeight: 58,
-    padding: theme.spacing.sm,
-  },
-  searchResultRowPressed: {
-    backgroundColor: theme.colors.surfaceAlt,
-  },
-  searchResultImage: {
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.radius.sm,
-    height: 42,
-    width: 42,
-  },
-  searchResultImageFallback: {
-    backgroundColor: theme.colors.greenSoft,
-    borderRadius: theme.radius.sm,
-    height: 42,
-    width: 42,
-  },
-  searchResultCopy: {
-    flex: 1,
-    minWidth: 0,
-  },
-  searchResultName: {
-    color: theme.colors.text,
-    fontFamily: Fonts.sansBold,
-    fontSize: 14,
-    lineHeight: 18,
-  },
-  searchResultMeta: {
-    color: theme.colors.textMuted,
+  productForegroundImage: { height: '100%', width: '100%' },
+  productImageFallback: { alignItems: 'center', flex: 1, justifyContent: 'center' },
+  productImageFallbackText: { color: theme.colors.textMuted, fontFamily: Fonts.sansMedium },
+  productCopy: { gap: 7, position: 'absolute' },
+  priceRow: { alignItems: 'baseline', flexDirection: 'row', gap: 8 },
+  productPrice: { ...textShadow, color: '#FFFFFF', fontFamily: Fonts.sansExtraBold, fontSize: 27, lineHeight: 33 },
+  originalPrice: {
+    color: 'rgba(255,255,255,0.56)',
     fontFamily: Fonts.sansMedium,
     fontSize: 12,
-    lineHeight: 16,
-    marginTop: 2,
+    textDecorationLine: 'line-through',
   },
-  searchResultPrice: {
-    color: theme.colors.primary,
-    fontFamily: Fonts.sansExtraBold,
-    fontSize: 13,
-    lineHeight: 17,
-  },
-  searchCatalogButton: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.pill,
-    justifyContent: 'center',
-    minHeight: 42,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  searchCatalogButtonText: {
-    color: theme.colors.white,
-    fontFamily: Fonts.sansBold,
-    fontSize: 13,
-    lineHeight: 17,
-  },
-  productText: {
-    position: 'absolute',
-    zIndex: 4,
-  },
-  productMetaRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    marginBottom: theme.spacing.sm,
-  },
-  productMetaChip: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.18)',
-    borderColor: 'rgba(255, 255, 255, 0.22)',
-    borderRadius: theme.radius.pill,
+  productName: { ...textShadow, color: '#FFFFFF', fontFamily: Fonts.sansBold, fontSize: 15, lineHeight: 20 },
+  productDescription: { ...textShadow, color: '#FFFFFF', fontFamily: Fonts.sans, fontSize: 13, lineHeight: 17 },
+  ratingRow: { alignItems: 'center', flexDirection: 'row', gap: 3 },
+  ratingText: { color: '#F4B740', fontFamily: Fonts.sansBold, fontSize: 12 },
+  reviewText: { color: 'rgba(255,255,255,0.68)', fontFamily: Fonts.sansMedium, fontSize: 11 },
+  tagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, paddingTop: 2 },
+  tagChip: {
+    backgroundColor: 'rgba(255,255,255,0.13)',
+    borderColor: 'rgba(255,255,255,0.2)',
+    borderRadius: 999,
     borderWidth: 1,
-    flexDirection: 'row',
-    gap: 5,
+    maxWidth: 108,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+  },
+  tagText: { color: 'rgba(255,255,255,0.88)', fontFamily: Fonts.sansMedium, fontSize: 10 },
+  bottomScreenGradient: { bottom: 0, left: 0, position: 'absolute', right: 0 },
+  promotionCopy: { gap: 8, position: 'absolute' },
+  badgeRow: { alignItems: 'flex-start' },
+  promotionBadge: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.35)',
+    borderRadius: 999,
+    borderWidth: 1,
+    color: '#FFFFFF',
+    fontFamily: Fonts.sansBold,
+    fontSize: 11,
+    overflow: 'hidden',
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
-  productMetaText: {
-    ...whiteShadow,
-    color: theme.colors.white,
-    fontFamily: Fonts.sansMedium,
-  },
-  productName: {
-    ...whiteShadow,
-    color: theme.colors.white,
-    fontFamily: Fonts.sansBold,
-    marginBottom: theme.spacing.sm,
-  },
-  productDescription: {
-    ...whiteShadow,
-    color: theme.colors.white,
-    fontFamily: Fonts.sans,
-  },
-  viewMoreText: {
-    fontFamily: Fonts.sansSemiBold,
-  },
-  feedCta: {
+  promotionTitle: { ...textShadow, color: '#FFFFFF', fontFamily: Fonts.sansExtraBold, fontSize: 25, lineHeight: 30 },
+  promotionDescription: { ...textShadow, color: '#FFFFFF', fontFamily: Fonts.sansMedium, fontSize: 14, lineHeight: 19 },
+  promotionCta: {
     alignSelf: 'flex-start',
-    backgroundColor: theme.colors.white,
-    borderRadius: theme.radius.pill,
-    marginTop: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: 10,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 999,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
   },
-  feedCtaPressed: {
-    opacity: 0.84,
-    transform: [{ scale: 0.98 }],
+  promotionCtaText: { color: theme.colors.primaryDark, fontFamily: Fonts.sansBold, fontSize: 13 },
+  voucherButton: {
+    alignSelf: 'flex-start',
+    backgroundColor: 'rgba(0,0,0,0.42)',
+    borderColor: 'rgba(255,255,255,0.48)',
+    borderRadius: 8,
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
   },
-  feedCtaText: {
-    color: theme.colors.primaryDark,
-    fontFamily: Fonts.sansBold,
+  voucherText: { color: '#FFFFFF', fontFamily: Fonts.sansBold, fontSize: 11, letterSpacing: 0.5 },
+  actionRail: { alignItems: 'center', position: 'absolute', right: 10, width: 66 },
+  actionButton: { alignItems: 'center', gap: 2, justifyContent: 'center', width: 66 },
+  actionLabel: { ...textShadow, color: '#FFFFFF', fontFamily: Fonts.sansMedium, fontSize: 10, lineHeight: 13, textAlign: 'center' },
+  actionCount: { ...textShadow, color: '#FFFFFF', fontFamily: Fonts.sansBold, fontSize: 10, lineHeight: 12 },
+  pressed: { opacity: 0.76, transform: [{ scale: 0.96 }] },
+  disabled: { opacity: 0.45 },
+  tabs: { flexDirection: 'row', position: 'absolute', zIndex: 20 },
+  tabButton: { alignItems: 'center', flex: 1, minHeight: 34, paddingBottom: 7 },
+  tabLabelFrame: { alignItems: 'center', height: 20, justifyContent: 'center', width: '100%' },
+  tabText: {
+    ...textShadow,
+    color: '#FFFFFF',
+    fontFamily: Fonts.condensedMedium,
     fontSize: 13,
-    lineHeight: 17,
-  },
-  productPrice: {
-    ...whiteShadow,
-    color: theme.colors.white,
-    fontFamily: Fonts.sansBold,
-    marginTop: theme.spacing.md,
-  },
-  actionRail: {
-    alignItems: 'center',
     position: 'absolute',
-    zIndex: 5,
-  },
-  actionButton: {
-    alignItems: 'center',
-    gap: 1,
-    justifyContent: 'center',
-  },
-  actionButtonPressed: {
-    opacity: 0.86,
-    transform: [{ scale: 0.92 }],
-  },
-  actionButtonDisabled: {
-    opacity: 0.48,
-  },
-  actionIconFrame: {
-    alignItems: 'center',
-    backgroundColor: 'transparent',
-    borderColor: 'transparent',
-    borderRadius: theme.radius.pill,
-    borderWidth: 0,
-    justifyContent: 'center',
-  },
-  shadowedIcon: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  iconShadowLayer: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    opacity: 0.72,
-    transform: [{ translateX: 1 }, { translateY: 1 }],
-  },
-  iconForegroundLayer: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionLabel: {
-    ...whiteShadow,
-    color: theme.colors.white,
-    fontFamily: Fonts.sansMedium,
     textAlign: 'center',
   },
-  likeBurst: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    justifyContent: 'center',
-    position: 'absolute',
-    top: '39%',
-    zIndex: 20,
-  },
-  likeBurstText: {
-    ...whiteShadow,
-    color: theme.colors.white,
-    fontFamily: Fonts.sansExtraBold,
-    fontSize: 18,
-    marginTop: theme.spacing.sm,
-  },
-  sharePanel: {
-    alignItems: 'center',
-    alignSelf: 'center',
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    borderColor: 'rgba(255, 255, 255, 0.74)',
-    borderRadius: theme.radius.lg,
-    borderWidth: 1,
-    boxShadow: '0 14px 30px rgba(20, 28, 22, 0.2)',
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    minHeight: 64,
-    paddingHorizontal: theme.spacing.lg,
-    position: 'absolute',
-    zIndex: 18,
-  },
-  sharePanelIconFrame: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.text,
-    borderRadius: theme.radius.pill,
-    height: 42,
-    justifyContent: 'center',
-    width: 42,
-  },
-  sharePanelText: {
-    flex: 1,
-  },
-  sharePanelTitle: {
-    color: theme.colors.text,
-    fontFamily: Fonts.sansExtraBold,
-    fontSize: 15,
-  },
-  sharePanelSubtitle: {
-    color: theme.colors.textMuted,
-    fontFamily: Fonts.sansSemiBold,
-    fontSize: 12,
-    marginTop: 2,
-  },
+  tabTextActive: { fontFamily: Fonts.sansBold },
+  tabIndicator: { backgroundColor: '#FFFFFF', borderRadius: 99, bottom: 0, height: 2, position: 'absolute', width: '54%' },
+  stateScreen: { alignItems: 'center', backgroundColor: '#101512', gap: 14, justifyContent: 'center', paddingHorizontal: 36 },
+  stateTitle: { color: '#FFFFFF', fontFamily: Fonts.sansBold, fontSize: 20 },
+  stateText: { color: 'rgba(255,255,255,0.7)', fontFamily: Fonts.sansMedium, fontSize: 14, lineHeight: 20, textAlign: 'center' },
+  retryButton: { backgroundColor: '#FFFFFF', borderRadius: 999, paddingHorizontal: 22, paddingVertical: 11 },
+  retryText: { color: theme.colors.primaryDark, fontFamily: Fonts.sansBold },
+  footerLoader: { bottom: 110, position: 'absolute', right: 28 },
 });

@@ -3,7 +3,7 @@ import * as Network from 'expo-network';
 import { Platform } from 'react-native';
 
 export const DEFAULT_API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? 'https://bloomora-api.onrender.com/api/v1';
+  process.env.EXPO_PUBLIC_API_URL ?? 'https://api.estings.shop/api/v1';
 
 const apiBaseUrlFileUri = `${FileSystem.documentDirectory}api-base-url.json`;
 const apiBaseUrlStorageKey = 'estings.api-base-url';
@@ -186,11 +186,13 @@ function fetchFromBaseUrl(
   headers: HeadersInit | undefined,
   token: string | undefined,
 ) {
+  const hasBody = Boolean(requestOptions.body);
+  const isFormData = typeof FormData !== 'undefined' && requestOptions.body instanceof FormData;
   return fetch(buildUrl(path, baseUrl), {
     ...requestOptions,
     headers: {
       Accept: 'application/json',
-      ...(requestOptions.body ? { 'Content-Type': 'application/json' } : {}),
+      ...(hasBody && !isFormData ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...headers,
     },

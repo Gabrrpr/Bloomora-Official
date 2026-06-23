@@ -27,7 +27,12 @@ export default function OrderDetailsScreen() {
   }, []);
 
   const loadOrder = useCallback(async () => {
-    if (!id) return;
+    if (!id?.trim()) {
+      setOrder(null);
+      setErrorMessage('The order ID is missing.');
+      setIsLoading(false);
+      return;
+    }
     setIsLoading(true);
     try {
       const session = await getAuthSession();
@@ -79,12 +84,18 @@ export default function OrderDetailsScreen() {
 
   return (
     <View style={styles.screen}>
-      <AppPageHeader title="Order Details" />
+      <AppPageHeader
+        onBack={() => {
+          if (router.canGoBack()) router.back();
+          else router.replace('/(tabs)/orders');
+        }}
+        title="Order Details"
+      />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]} showsVerticalScrollIndicator={false}>
         {isLoading ? (
           <View style={styles.state}><ActivityIndicator color={theme.colors.primary} /><Text style={styles.muted}>Loading order details</Text></View>
         ) : errorMessage || !order ? (
-          <View style={styles.state}><Text style={styles.title}>Order unavailable</Text><Text style={styles.muted}>{errorMessage}</Text><Pressable onPress={loadOrder} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Try again</Text></Pressable></View>
+          <View style={styles.state}><Text style={styles.title}>Order unavailable</Text><Text style={styles.muted}>{errorMessage ?? 'No order data was returned.'}</Text><Pressable onPress={loadOrder} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Try again</Text></Pressable><Pressable onPress={() => router.replace('/(tabs)/orders')} style={styles.outlineButton}><Text style={styles.outlineButtonText}>Back to orders</Text></Pressable></View>
         ) : (
           <>
             <View style={styles.hero}>

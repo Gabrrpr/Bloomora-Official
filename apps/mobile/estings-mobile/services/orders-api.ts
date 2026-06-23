@@ -10,6 +10,7 @@ export type CustomerOrder = {
   deliveryNotes?: string | null;
   deliveryFee: number;
   deliveryProvider?: string | null;
+  discountAmount: number;
   expiresAt?: string | null;
   hasReviewed: boolean;
   id: string;
@@ -23,6 +24,7 @@ export type CustomerOrder = {
   paymentProvider?: string | null;
   paymentReference?: string | null;
   paymentStatus: string;
+  voucherCode?: string | null;
   transactionId?: string | null;
   productName: string;
   quantity: number;
@@ -39,6 +41,8 @@ export type CustomerOrder = {
 };
 
 export type CustomerOrderItem = {
+  cardEnabled?: boolean;
+  cardMessage?: string | null;
   id: string;
   imageUrl?: string | null;
   productId?: string | null;
@@ -56,6 +60,7 @@ type BackendOrder = {
   delivery_notes?: string | null;
   delivery_fee?: number | null;
   delivery_provider?: string | null;
+  discount_amount?: number | null;
   expires_at?: string | null;
   has_reviewed?: boolean | null;
   id: string;
@@ -67,6 +72,7 @@ type BackendOrder = {
   payment_provider?: string | null;
   payment_reference?: string | null;
   payment_status?: string | null;
+  voucher_code?: string | null;
   transaction_id?: string | null;
   product_name?: string | null;
   quantity?: number | null;
@@ -84,6 +90,8 @@ type BackendOrder = {
 };
 
 type BackendOrderItem = {
+  card_enabled?: boolean | null;
+  card_message?: string | null;
   id: string;
   image_url?: string | null;
   line_total?: number | null;
@@ -128,6 +136,8 @@ function mapBackendOrder(order: BackendOrder): CustomerOrder {
         imageUrl: item.image_url,
         productId: item.product_id,
         productName: item.product_name || 'Flower order',
+        cardEnabled: item.card_enabled === true,
+        cardMessage: item.card_message,
         quantity: Number(item.quantity ?? 1),
         totalAmount: Number(item.line_total ?? 0),
       }))
@@ -148,6 +158,7 @@ function mapBackendOrder(order: BackendOrder): CustomerOrder {
     deliveryNotes: order.delivery_notes,
     deliveryFee: Number(order.delivery_fee ?? 0),
     deliveryProvider: order.delivery_provider,
+    discountAmount: Number(order.discount_amount ?? 0),
     expiresAt: order.expires_at,
     hasReviewed: order.has_reviewed === true,
     id: order.id,
@@ -161,6 +172,7 @@ function mapBackendOrder(order: BackendOrder): CustomerOrder {
     paymentProvider: order.payment_provider,
     paymentReference: order.payment_reference,
     paymentStatus: order.payment_status || 'pending',
+    voucherCode: order.voucher_code,
     transactionId: order.transaction_id,
     productName: order.product_name || 'Flower order',
     quantity: Number(order.quantity ?? 1),

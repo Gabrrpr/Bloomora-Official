@@ -15,6 +15,7 @@ router = APIRouter(prefix="/cart", tags=["Cart"])
 class CartItemPayload(BaseModel):
     product_id: str
     quantity: int = Field(default=1, ge=1, le=99)
+    card_message: Optional[str] = Field(default=None, max_length=1000)
 
 
 class CartSyncPayload(BaseModel):
@@ -99,6 +100,7 @@ def _serialize(item: CartItem) -> dict:
             "is_visible": product.is_visible,
             "status": product.status.value if hasattr(product.status, "value") else product.status,
             "stock": inventory.current_stock if inventory else 0,
+            "branches": product.branches or [],
         },
     }
 
@@ -136,12 +138,14 @@ def add_cart_item(
     )
     if item:
         item.quantity = _clamp_quantity(product, item.quantity + payload.quantity)
+        if payload.card_message is not None:
+            item.item_data = {**(item.item_data or {}), "card_message": payload.card_message.strip() or None}
     else:
         item = CartItem(
             user_id=current_user.id,
             product_id=product_id,
             item_key=f"product:{product_id}",
-            item_data={},
+            item_data={"card_message": payload.card_message.strip()} if payload.card_message else {},
             quantity=_clamp_quantity(product, payload.quantity),
         )
         db.add(item)
@@ -201,13 +205,15 @@ def sync_cart(
         )
         if item:
             item.quantity = _clamp_quantity(product, max(item.quantity, incoming.quantity))
+            if incoming.card_message is not None:
+                item.item_data = {**(item.item_data or {}), "card_message": incoming.card_message.strip() or None}
         else:
             db.add(
                 CartItem(
                     user_id=current_user.id,
                     product_id=product_id,
                     item_key=f"product:{product_id}",
-                    item_data={},
+                    item_data={"card_message": incoming.card_message.strip()} if incoming.card_message else {},
                     quantity=_clamp_quantity(product, incoming.quantity),
                 )
             )

@@ -50,6 +50,7 @@ export async function createOrdersFromCart({
   fulfillmentMethod = 'delivery',
   isAnonymous = false,
   items,
+  voucherCode,
   recipient,
   recipientType = 'myself',
   session,
@@ -71,6 +72,7 @@ export async function createOrdersFromCart({
   recipientType?: 'myself' | 'someone';
   session: AuthSession;
   timeSlot?: string;
+  voucherCode?: string;
 }) {
   return apiFetch<CreateOrdersResponse>('/orders/', {
     body: JSON.stringify({
@@ -85,6 +87,7 @@ export async function createOrdersFromCart({
         group: item.product.productGroup ?? item.product.categoryName ?? item.product.tag,
         id: item.product.id,
         qty: item.quantity,
+        card_message: item.cardMessage,
       })),
       payment_method: 'ewallet',
       recipient_first_name: recipient?.firstName,
@@ -92,6 +95,7 @@ export async function createOrdersFromCart({
       recipient_phone_number: recipient?.phoneNumber,
       recipient_type: recipientType,
       time_slot: timeSlot,
+      voucher_code: voucherCode,
     }),
     method: 'POST',
     token: session.accessToken,

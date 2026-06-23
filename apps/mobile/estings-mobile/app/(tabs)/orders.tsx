@@ -179,6 +179,16 @@ function OrderCard({ order }: { order: CustomerOrder }) {
           </Pressable>
         </View>
       ) : null}
+      {getOrderTab(order) === 'completed' && !order.hasReviewed ? (
+        <Pressable
+          onPress={(event) => {
+            event.stopPropagation();
+            router.push(`/review/${order.orderIds[0] ?? order.id}` as Href);
+          }}
+          style={styles.reviewButton}>
+          <Text style={styles.reviewButtonText}>Write a review</Text>
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 }
@@ -232,7 +242,7 @@ const styles = StyleSheet.create({
   cardHeader: { alignItems: 'center', borderBottomColor: '#E6E6E6', borderBottomWidth: 1, flexDirection: 'row', justifyContent: 'space-between', padding: 14 },
   orderHeading: { alignItems: 'center', flexDirection: 'row', gap: 10 },
   orderNumber: { color: '#333333', fontFamily: Fonts.sansMedium, fontSize: 15 },
-  statusBadge: { backgroundColor: theme.colors.primary, borderRadius: theme.radius.sm, minWidth: 92, paddingHorizontal: 10, paddingVertical: 5 },
+  statusBadge: { alignSelf: 'flex-start', backgroundColor: theme.colors.primary, borderRadius: theme.radius.sm, paddingHorizontal: 10, paddingVertical: 5 },
   statusBadgePending: { backgroundColor: '#F1F1F1' },
   statusText: { color: '#FFFFFF', fontFamily: Fonts.sansMedium, fontSize: 10, textAlign: 'center' },
   statusTextPending: { color: '#777777' },
@@ -263,6 +273,8 @@ const styles = StyleSheet.create({
   paymentDueText: { color: '#555555', fontFamily: Fonts.sans, fontSize: 12 },
   payButton: { alignItems: 'center', backgroundColor: theme.colors.primary, borderRadius: theme.radius.sm, justifyContent: 'center', minHeight: 44, minWidth: 108, paddingHorizontal: 18 },
   payButtonText: { color: '#FFFFFF', fontFamily: Fonts.sansMedium, fontSize: 14 },
+  reviewButton: { alignItems: 'center', alignSelf: 'flex-end', borderColor: theme.colors.primary, borderRadius: theme.radius.sm, borderWidth: 1, marginHorizontal: 14, marginTop: 10, minHeight: 42, justifyContent: 'center', paddingHorizontal: 18 },
+  reviewButtonText: { color: theme.colors.primary, fontFamily: Fonts.sansMedium, fontSize: 13 },
   noOrders: { alignItems: 'center', paddingTop: 150 },
   noOrdersText: { color: '#B7B7B7', fontFamily: Fonts.sans, fontSize: 15 },
   state: { alignItems: 'center', gap: 12, padding: 48 },

@@ -4,6 +4,7 @@ import type { AuthSession } from '@/services/auth-session';
 import { notifyCartUpdated } from '@/services/guest-cart';
 
 type BackendProduct = {
+  branches?: string[] | null;
   category?: string | null;
   description?: string | null;
   id: string;
@@ -23,6 +24,7 @@ type BackendCartItem = {
   product_id: string | null;
   quantity: number;
   web_item?: {
+    card_message?: string;
     desc?: string;
     group?: string;
     id?: string;
@@ -65,6 +67,7 @@ function mapProduct(product: BackendProduct): Product {
     productGroup: product.product_group ? toTitleCase(product.product_group) : undefined,
     productType: product.product_type ? toTitleCase(product.product_type) : undefined,
     stock: Number(product.stock ?? 0),
+    branches: product.branches ?? [],
     tag: toTitleCase(category),
   };
 }
@@ -73,6 +76,7 @@ function mapCartItems(response: CartResponse): CartItem[] {
   return response.items.map((item) => {
     if (item.product) {
       return {
+        cardMessage: item.web_item?.card_message,
         id: item.id,
         product: mapProduct(item.product),
         quantity: item.quantity,
@@ -81,6 +85,7 @@ function mapCartItems(response: CartResponse): CartItem[] {
     const snapshot = item.web_item ?? {};
     const category = snapshot.group || 'Custom Arrangement';
     return {
+      cardMessage: snapshot.card_message,
       id: item.id,
       product: {
         categoryId: `cat-${category.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
@@ -115,9 +120,9 @@ async function mutateCart(
 }
 
 export const userCartApi = {
-  async add(product: Product, quantity: number, session: AuthSession) {
+  async add(product: Product, quantity: number, session: AuthSession, cardMessage?: string) {
     return mutateCart('/cart/items', session, {
-      body: JSON.stringify({ product_id: product.id, quantity }),
+      body: JSON.stringify({ product_id: product.id, quantity, card_message: cardMessage }),
       method: 'POST',
     });
   },
@@ -151,6 +156,7 @@ export const userCartApi = {
         items: items.map((item) => ({
           product_id: item.product.id,
           quantity: item.quantity,
+          card_message: item.cardMessage,
         })),
       }),
       method: 'POST',

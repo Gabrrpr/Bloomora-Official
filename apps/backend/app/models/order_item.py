@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import CheckConstraint, Column, DateTime, ForeignKey, Integer, Numeric, String
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -25,6 +25,8 @@ class OrderItem(Base):
     
     # Crucial for e-commerce: Locks in the price they actually paid
     price_at_purchase = Column(Numeric(10, 2), nullable=False)
+    card_message = Column(Text, nullable=True)
+    card_enabled = Column(Boolean, nullable=False, default=False)
 
     # ── Relationships ──
     order = relationship("Order", back_populates="items")

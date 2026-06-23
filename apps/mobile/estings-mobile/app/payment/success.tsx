@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { CheckCircle2, Clock3, ReceiptText } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts, theme } from '@/constants/theme';
@@ -91,6 +91,15 @@ export default function PaymentSuccessScreen() {
       }
     };
   }, [checkPaymentStatus]);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && confirmationState !== 'confirmed') {
+        void checkPaymentStatus();
+      }
+    });
+    return () => subscription.remove();
+  }, [checkPaymentStatus, confirmationState]);
 
   return (
     <ScrollView

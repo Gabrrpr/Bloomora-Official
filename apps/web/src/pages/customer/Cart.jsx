@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { getCart, setCart, getCartCount } from "../../utils/cart.js"
-import { validateVoucher, computeDiscount } from "../../utils/vouchers.js"
+import { computeDiscount } from "../../utils/vouchers.js"
 import { useAuth } from "../../context/AuthContext"
+import { api } from "../../services/api.js"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -58,12 +59,32 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
   const discount     = computeDiscount(appliedVoucher, subtotal)
   const total        = Math.max(0, subtotal + shipping - discount)
 
-  const applyVoucher = () => {
-    const result = validateVoucher(voucher, subtotal, checkedItems.length > 0)
-    setVoucherMsg({ type: result.type, text: result.message })
-    setAppliedVoucher(result.ok ? result.voucher : null)
+  const applyVoucher = async () => {
+    if (!checkedItems.length) return setVoucherMsg({ type: "error", text: "Add products before applying a voucher." })
+    try {
+      const result = await api.post("/commerce/vouchers/validate", { code: voucher, subtotal })
+      const next = {
+        code: result.voucher.code,
+        type: result.voucher.discount_type,
+        value: Number(result.voucher.discount_value),
+        minSpend: Number(result.voucher.min_spend || 0),
+        discount: Number(result.discount || 0),
+      }
+      setAppliedVoucher(next)
+      localStorage.setItem("bloomora_applied_voucher", JSON.stringify(next))
+      setVoucherMsg({ type: "success", text: `Voucher applied — you saved ₱${Number(result.discount).toLocaleString()}.` })
+    } catch (error) {
+      setAppliedVoucher(null)
+      localStorage.removeItem("bloomora_applied_voucher")
+      setVoucherMsg({ type: "error", text: error.message || "Voucher is invalid." })
+    }
   }
-  const removeVoucher = () => { setAppliedVoucher(null); setVoucher(""); setVoucherMsg(null) }
+  useEffect(() => {
+    if (appliedVoucher?.code && checkedItems.length) void applyVoucher()
+    // Revalidate only when the selected cart subtotal changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subtotal])
+  const removeVoucher = () => { setAppliedVoucher(null); setVoucher(""); setVoucherMsg(null); localStorage.removeItem("bloomora_applied_voucher") }
 
   const toggleItem   = (id,group) => persist(items.map(i => (i.id===id&&i.group===group)?{...i,checked:!i.checked}:i))
   const toggleAll    = () => { const n=!selectAll; setSelectAll(n); persist(items.map(i=>({...i,checked:n}))) }

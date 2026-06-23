@@ -1,11 +1,15 @@
 import { useState, useEffect } from "react"
 
-export default function AdPopup({ onClose }) {
+export default function AdPopup({ advertisement, onClose }) {
   const [hiding, setHiding] = useState(false)
   const [visible, setVisible] = useState(false)
   const [imageSrc, setImageSrc] = useState(null)
 
   useEffect(() => {
+    if (advertisement?.image_url) {
+      setImageSrc(advertisement.image_url)
+      return
+    }
     // 1. Check if the Admin Panel has saved a custom or overridden ad source
     const customSrc = localStorage.getItem("bloomora_active_ad_src")
     
@@ -16,7 +20,7 @@ export default function AdPopup({ onClose }) {
       const defaultSrc = new URL(`../assets/ads/advertisement1.png`, import.meta.url).href
       setImageSrc(defaultSrc)
     }
-  }, [])
+  }, [advertisement])
 
   // Trigger the entrance transition on the next frame so it eases in from hidden
   // (a value set on first mount won't animate).

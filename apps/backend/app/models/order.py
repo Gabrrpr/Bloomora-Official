@@ -76,6 +76,8 @@ class Order(Base):
     time_slot = Column(String(50), nullable=True)
     subtotal_amount = Column(Numeric(10, 2), nullable=True)
     delivery_fee = Column(Numeric(10, 2), nullable=True)
+    voucher_code = Column(String(50), nullable=True)
+    discount_amount = Column(Numeric(10, 2), nullable=False, default=0)
     # Relationships
     user = relationship("User", back_populates="orders", foreign_keys=[user_id])
     arrangement = relationship("Arrangement", back_populates="orders")

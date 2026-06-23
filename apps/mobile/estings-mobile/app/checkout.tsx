@@ -41,6 +41,12 @@ import { getCartItems } from '@/services/cart-storage';
 import { createOrdersFromCart } from '@/services/payments-api';
 import { shopApi } from '@/services/shop-api';
 import {
+  getCheckoutSettings,
+  validateVoucher,
+  type AppliedVoucher,
+  type DeliverySettings,
+} from '@/services/commerce-api';
+import {
   findLocationByName,
   findPhilippineLocationPath,
   getPhilippineBarangays,
@@ -78,7 +84,6 @@ type AddressFormValue = {
   street: string;
 };
 
-const deliveryFeeCents = 10000;
 const timeSlots: TimeSlot[] = [
   { enabled: true, id: 'anytime', label: 'Anytime of the day' },
   { enabled: false, id: 'morning', label: '9:00 AM – 12:00 PM' },
@@ -193,7 +198,7 @@ export default function CheckoutScreen() {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
   const checkoutAttemptIdRef = useRef(`${Date.now()}-${Math.random().toString(36).slice(2)}`);
-  const params = useLocalSearchParams<{ ids?: string }>();
+  const params = useLocalSearchParams<{ ids?: string; voucher?: string }>();
   const selectedIds = useMemo(
     () => new Set((params.ids ?? '').split(',').map((id) => id.trim()).filter(Boolean)),
     [params.ids],
@@ -201,7 +206,7 @@ export default function CheckoutScreen() {
   const minimumDate = useMemo(() => startOfDay(new Date()), []);
   const maximumDate = useMemo(() => {
     const date = startOfDay(new Date());
-    date.setMonth(date.getMonth() + 1);
+    date.setDate(date.getDate() + 30);
     return date;
   }, []);
   const availableDates = useMemo(
@@ -229,10 +234,25 @@ export default function CheckoutScreen() {
   const [recipientCountry, setRecipientCountry] = useState<CountryCode>(countryCodes[0]);
   const [deliveryAddress, setDeliveryAddress] = useState('');
   const [accountAddress, setAccountAddress] = useState<AccountAddress | null>(null);
+  const [savedAddresses, setSavedAddresses] = useState<AccountAddress[]>([]);
   const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
   const [isDateModalOpen, setIsDateModalOpen] = useState(false);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(true);
   const [validationErrors, setValidationErrors] = useState<CheckoutValidationErrors>({});
+  const [deliverySettings, setDeliverySettings] = useState<DeliverySettings>({
+    delivery_fee: 100,
+    minimum_order: 0,
+    same_day_cutoff: '14:00',
+    timezone: 'Asia/Manila',
+  });
+  const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
+  const [voucherError, setVoucherError] = useState<string | null>(null);
+  const isTodayUnavailable = useMemo(() => {
+    if (fulfillmentMethod !== 'delivery') return false;
+    const [hour, minute] = deliverySettings.same_day_cutoff.split(':').map(Number);
+    const now = new Date();
+    return now.getHours() > hour || (now.getHours() === hour && now.getMinutes() >= minute);
+  }, [deliverySettings.same_day_cutoff, fulfillmentMethod]);
   const isCustomDateSelected = Boolean(
     selectedDate &&
       !availableDates.some((date) => date.toDateString() === selectedDate.toDateString()),
@@ -240,9 +260,10 @@ export default function CheckoutScreen() {
 
   const summary = useMemo(() => {
     const subtotalCents = items.reduce((total, item) => total + item.product.priceCents * item.quantity, 0);
-    const feeCents = fulfillmentMethod === 'delivery' ? deliveryFeeCents : 0;
-    return { feeCents, subtotalCents, totalCents: subtotalCents + feeCents };
-  }, [fulfillmentMethod, items]);
+    const feeCents = fulfillmentMethod === 'delivery' ? Math.round(deliverySettings.delivery_fee * 100) : 0;
+    const discountCents = Math.round((appliedVoucher?.discount ?? 0) * 100);
+    return { discountCents, feeCents, subtotalCents, totalCents: Math.max(0, subtotalCents + feeCents - discountCents) };
+  }, [appliedVoucher?.discount, deliverySettings.delivery_fee, fulfillmentMethod, items]);
   const addressLines = useMemo(() => {
     const parts = deliveryAddress.split(',').map((part) => part.trim()).filter(Boolean);
     const fullName = [recipientFirstName, recipientLastName].filter(Boolean).join(' ');
@@ -265,8 +286,9 @@ export default function CheckoutScreen() {
       getCartItems(),
       getAuthSession(),
       shopApi.getCatalog().catch(() => null),
+      getCheckoutSettings().catch(() => null),
     ])
-      .then(async ([cartItems, nextSession, catalog]) => {
+      .then(async ([cartItems, nextSession, catalog, checkoutSettings]) => {
         if (!active) return;
         const liveProducts = new Map(catalog?.products.map((product) => [product.id, product]) ?? []);
         const hydratedItems = cartItems.map((item) => ({
@@ -275,11 +297,13 @@ export default function CheckoutScreen() {
         }));
         setItems(selectedIds.size ? hydratedItems.filter((item) => selectedIds.has(item.product.id)) : hydratedItems);
         setSession(nextSession);
+        if (checkoutSettings?.delivery) setDeliverySettings(checkoutSettings.delivery);
         let savedAddress: AccountAddress | null = null;
 
         if (nextSession?.accessToken) {
           try {
             const addresses = await addressesApi.list(nextSession.accessToken);
+            setSavedAddresses(addresses);
             savedAddress = addresses.find((address) => address.is_default) ?? addresses[0] ?? null;
           } catch {
             savedAddress = null;
@@ -304,6 +328,34 @@ export default function CheckoutScreen() {
       active = false;
     };
   }, [selectedIds]);
+
+  useEffect(() => {
+    if (!params.voucher || !session || !items.length) {
+      setAppliedVoucher(null);
+      return;
+    }
+    let active = true;
+    void validateVoucher({
+      code: params.voucher,
+      session,
+      subtotal: items.reduce((total, item) => total + item.product.priceCents * item.quantity, 0) / 100,
+    })
+      .then((voucher) => {
+        if (active) {
+          setAppliedVoucher(voucher);
+          setVoucherError(null);
+        }
+      })
+      .catch((error) => {
+        if (active) {
+          setAppliedVoucher(null);
+          setVoucherError(error instanceof Error ? error.message : 'Voucher is no longer valid.');
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [items, params.voucher, session]);
 
   const selectRecipient = (value: OrderRecipient) => {
     setRecipientType(value);
@@ -354,6 +406,23 @@ export default function CheckoutScreen() {
       : await addressesApi.create(payload, session.accessToken);
 
     setAccountAddress(response.address);
+    setSavedAddresses((current) => {
+      const next = current.filter((address) => address.id !== response.address.id);
+      return [response.address, ...next].sort((first, second) => Number(second.is_default) - Number(first.is_default));
+    });
+  };
+
+  const selectSavedAddress = (address: AccountAddress) => {
+    setAccountAddress(address);
+    setDeliveryAddress(formatAccountAddress(address));
+    const name = splitRecipientName(address.recipient_name);
+    const country = getCountryForPhone(address.phone);
+    setRecipientFirstName(name.firstName);
+    setRecipientLastName(name.lastName);
+    setRecipientCountry(country);
+    setRecipientPhone(normalizeLocalPhone(address.phone, country.code));
+    clearValidationError('address');
+    clearValidationError('recipient');
   };
 
   const handleContinue = async () => {
@@ -425,6 +494,7 @@ export default function CheckoutScreen() {
         recipientType,
         session,
         timeSlot: selectedSlot?.id ?? 'anytime',
+        voucherCode: appliedVoucher?.code,
       });
       const orderId = created.order_ids[0];
       if (!orderId) {
@@ -482,6 +552,7 @@ export default function CheckoutScreen() {
               <View style={styles.divider} />
               <SummaryRow label={`Subtotal (${items.reduce((total, item) => total + item.quantity, 0)})`} value={formatPhp(summary.subtotalCents)} />
               {fulfillmentMethod === 'delivery' ? <SummaryRow label="Shipping Fee" value={formatPhp(summary.feeCents)} /> : null}
+              {summary.discountCents > 0 ? <SummaryRow label={`Voucher (${appliedVoucher?.code})`} value={`-${formatPhp(summary.discountCents)}`} /> : null}
               <View style={styles.dashedDivider} />
               <SummaryRow isTotal label="Total" value={formatPhp(summary.totalCents)} />
             </View>
@@ -526,8 +597,11 @@ export default function CheckoutScreen() {
 
         <Section title={fulfillmentMethod === 'delivery' ? 'Delivery Date' : 'Pickup Date'}>
           <View style={styles.dateCards}>
-            {availableDates.slice(0, 3).map((date, index) => (
+            {availableDates.slice(0, 3).map((date, index) => {
+              const disabled = index === 0 && isTodayUnavailable;
+              return (
               <Pressable
+                disabled={disabled}
                 key={date.toISOString()}
                 onPress={() =>
                   setSelectedDate((current) => {
@@ -538,13 +612,15 @@ export default function CheckoutScreen() {
                 }
                 style={({ pressed }) => [
                   styles.dateCard,
+                  disabled && styles.disabled,
                   selectedDate && date.toDateString() === selectedDate.toDateString() && styles.dateCardActive,
-                  pressed && styles.controlPressed,
+                  pressed && !disabled && styles.controlPressed,
                 ]}>
                 <Text style={styles.dateCardDate}>{date.toLocaleDateString('en-PH', { day: 'numeric', month: 'short' })}</Text>
                 <Text style={styles.dateCardCaption}>{index === 0 ? 'TODAY' : index === 1 ? 'TOMORROW' : date.toLocaleDateString('en-PH', { weekday: 'short' }).toUpperCase()}</Text>
               </Pressable>
-            ))}
+              );
+            })}
             <Pressable
               onPress={() => setIsDateModalOpen(true)}
               style={({ pressed }) => [
@@ -570,6 +646,8 @@ export default function CheckoutScreen() {
             </Pressable>
           </View>
           {validationErrors.date ? <Text style={styles.fieldError}>{validationErrors.date}</Text> : null}
+          {isTodayUnavailable ? <Text style={styles.helperText}>Same-day delivery is unavailable after 2:00 PM.</Text> : null}
+          {voucherError ? <Text style={styles.fieldError}>{voucherError}</Text> : null}
           {fulfillmentMethod === 'pickup' ? (
             <Text style={styles.helperText}>Orders are prepared during store hours. You’ll receive a notification once your order is ready for pickup on the selected date.</Text>
           ) : null}
@@ -633,7 +711,25 @@ export default function CheckoutScreen() {
             <>
               <View style={styles.addressLabelRow}>
                 <Text style={styles.inputLabel}>Shipping Address</Text>
-              <Pressable onPress={() => setIsAddressModalOpen(true)} style={styles.changeButton}>
+                <Pressable onPress={() => router.push('/addresses')} style={styles.changeButton}>
+                  <Text style={styles.changeButtonText}>Manage</Text>
+                </Pressable>
+              </View>
+              {savedAddresses.length > 1 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.savedAddressRow}>
+                  {savedAddresses.map((address) => (
+                    <Pressable
+                      key={address.id}
+                      onPress={() => selectSavedAddress(address)}
+                      style={[styles.savedAddressChip, accountAddress?.id === address.id && styles.savedAddressChipActive]}>
+                      <Text style={[styles.savedAddressChipText, accountAddress?.id === address.id && styles.savedAddressChipTextActive]}>{address.label}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              ) : null}
+              <View style={styles.addressLabelRow}>
+                <Text style={styles.inputLabel}>Selected address</Text>
+                <Pressable onPress={() => setIsAddressModalOpen(true)} style={styles.changeButton}>
                   <Text style={styles.changeButtonText}>{deliveryAddress.trim() ? 'Change Address' : '+ Add Address'}</Text>
                 </Pressable>
               </View>
@@ -681,7 +777,7 @@ export default function CheckoutScreen() {
           disabled={isPaying || !items.length}
           onPress={handleContinue}
           style={({ pressed }) => [styles.continueButton, (isPaying || !items.length) && styles.disabled, pressed && styles.pressed]}>
-          <Text style={styles.continueButtonText}>{isPaying ? 'Please wait…' : 'Continue to payment'}</Text>
+          <Text style={styles.continueButtonText}>{isPaying ? 'Checking out...' : 'Continue to payment'}</Text>
         </Pressable>
       </View>
 
@@ -1339,6 +1435,11 @@ const styles = StyleSheet.create({
   noAddressText: { color: '#888888', fontFamily: Fonts.sansMedium, fontSize: 13, textAlign: 'center' },
   changeButton: { backgroundColor: '#FFFFFF', borderColor: '#C5C5C5', borderRadius: theme.radius.sm, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 7 },
   changeButtonText: { color: '#888888', fontFamily: Fonts.sans, fontSize: 11 },
+  savedAddressRow: { gap: 8, paddingVertical: 2 },
+  savedAddressChip: { backgroundColor: '#FFFFFF', borderColor: '#C5C5C5', borderRadius: theme.radius.pill, borderWidth: 1, paddingHorizontal: 13, paddingVertical: 8 },
+  savedAddressChipActive: { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+  savedAddressChipText: { color: '#666666', fontFamily: Fonts.sansMedium, fontSize: 11 },
+  savedAddressChipTextActive: { color: theme.colors.white },
   summaryCard: { backgroundColor: '#FFFFFF', borderColor: '#D8D8D8', borderRadius: theme.radius.md, borderWidth: 1, overflow: 'hidden' },
   summaryHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', minHeight: 58, paddingHorizontal: 14 },
   summaryTitleRow: { alignItems: 'center', flexDirection: 'row', gap: theme.spacing.sm },

@@ -4,11 +4,14 @@ import {
   ActivityIndicator,
   Alert,
   Animated,
+  FlatList,
   Image as RNImage,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -21,7 +24,7 @@ import { BulkQuotationSheet } from '@/components/bulk-quotation-sheet';
 import { EmptyState } from '@/components/bloom-ui';
 import { ProductAddOnSelector } from '@/components/product-add-on-selector';
 import { ProductCareGuideSection } from '@/components/product-care-guide-section';
-import { ProductRecommendationGallery } from '@/components/product-recommendation-gallery';
+import { ProductCard } from '@/components/product-card';
 import { formatPhp, type Product, type ProductColor } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { addCartItem, getCartItems } from '@/services/cart-storage';
@@ -33,22 +36,27 @@ const cartRoute = '/(tabs)/cart' as Href;
 const bulkQuantityHint = 10;
 const imageNotFound = require('@/assets/images/default-img/ImageNotFound.webp');
 const pageBackground = '#F5F5F5';
+const hairlineColor = 'rgba(31, 42, 36, 0.09)';
+
+type ProductDetailsRow =
+  | { id: 'reviews-empty'; type: 'reviews-empty' }
+  | { id: 'reviews-divider'; type: 'reviews-divider' }
+  | { id: 'recommendation-title'; type: 'recommendation-title' }
+  | { id: string; review: ProductReview; type: 'review' }
+  | { id: string; products: Product[]; type: 'recommendation-row' };
 
 export default function ProductDetailsScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ id?: string }>();
   const productId = typeof params.id === 'string' ? params.id : '';
-  const lastRecommendationBatchAt = useRef(0);
-  const recommendationBatchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const compactHeaderProgress = useRef(new Animated.Value(0)).current;
   const recommendationSeed = useRef(createRecommendationSeed()).current;
-  const scrollRef = useRef<ScrollView>(null);
+  const scrollRef = useRef<FlatList<ProductDetailsRow>>(null);
   const toastProgress = useRef(new Animated.Value(0)).current;
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isAdded, setIsAdded] = useState(false);
   const [isFavorite, setIsFavorite] = useState(false);
   const [cartItemCount, setCartItemCount] = useState(0);
-  const [isAppendingRecommendations, setIsAppendingRecommendations] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [productColors, setProductColors] = useState<ProductColor[]>([]);
   const [addOns, setAddOns] = useState<Product[]>([]);
@@ -57,13 +65,13 @@ export default function ProductDetailsScreen() {
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedColorId, setSelectedColorId] = useState<string | null>(null);
   const [selectedAddOnIds, setSelectedAddOnIds] = useState<ReadonlySet<string>>(() => new Set());
-  const [visibleRecommendationCount, setVisibleRecommendationCount] = useState(4);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [showCompactHeader, setShowCompactHeader] = useState(false);
   const [showAddedToast, setShowAddedToast] = useState(false);
   const [isLoadingAddOns, setIsLoadingAddOns] = useState(false);
   const [showBulkQuotation, setShowBulkQuotation] = useState(false);
+  const [cardMessage, setCardMessage] = useState('');
 
   const loadProducts = useCallback(async () => {
     setIsLoading(true);
@@ -166,9 +174,31 @@ export default function ProductDetailsScreen() {
       }),
     [product, products, recommendationSeed],
   );
-  const visibleRecommendations = recommendedProducts.slice(0, visibleRecommendationCount);
-  const recommendationCap = recommendedProducts.length;
-  const canAppendRecommendations = visibleRecommendationCount < recommendationCap;
+  const detailsRows = useMemo<ProductDetailsRow[]>(() => {
+    const rows: ProductDetailsRow[] =
+      productReviews.length > 0
+        ? productReviews.map((review) => ({
+            id: `review-${review.id}`,
+            review,
+            type: 'review' as const,
+          }))
+        : [{ id: 'reviews-empty', type: 'reviews-empty' }];
+
+    rows.push(
+      { id: 'reviews-divider', type: 'reviews-divider' },
+      { id: 'recommendation-title', type: 'recommendation-title' },
+    );
+    for (let index = 0; index < recommendedProducts.length; index += 2) {
+      const products = recommendedProducts.slice(index, index + 2);
+      rows.push({
+        id: `recommendations-${products.map((item) => item.id).join('-')}`,
+        products,
+        type: 'recommendation-row',
+      });
+    }
+
+    return rows;
+  }, [productReviews, recommendedProducts]);
   const isSoldOut = (product?.stock ?? 0) <= 0;
   const soldCount = getProductSoldCount(product);
   const selectedAddOns = useMemo(
@@ -204,7 +234,7 @@ export default function ProductDetailsScreen() {
     }
 
     try {
-      let nextItems = await addCartItem(product, quantity);
+      let nextItems = await addCartItem(product, quantity, cardMessage);
       for (const addOn of selectedAddOns) {
         nextItems = await addCartItem(addOn, 1);
       }
@@ -242,14 +272,14 @@ export default function ProductDetailsScreen() {
       });
       toastTimer.current = null;
     }, 1800);
-  }, [isAdded, isSoldOut, product, quantity, selectedAddOns, toastProgress]);
+  }, [cardMessage, isAdded, isSoldOut, product, quantity, selectedAddOns, toastProgress]);
 
   const handleBuyNow = useCallback(async () => {
     if (!product || isSoldOut) {
       return;
     }
 
-    let nextItems = await addCartItem(product, quantity);
+    let nextItems = await addCartItem(product, quantity, cardMessage);
     const checkoutIds = [product.id];
     for (const addOn of selectedAddOns) {
       nextItems = await addCartItem(addOn, 1);
@@ -258,7 +288,7 @@ export default function ProductDetailsScreen() {
     setIsAdded(true);
     setCartItemCount(nextItems.reduce((total, item) => total + item.quantity, 0));
     router.push(`/checkout?ids=${encodeURIComponent(checkoutIds.join(','))}` as Href);
-  }, [isSoldOut, product, quantity, selectedAddOns]);
+  }, [cardMessage, isSoldOut, product, quantity, selectedAddOns]);
 
   const handleOpenBulkQuotation = useCallback(() => {
     setShowBulkQuotation(true);
@@ -288,40 +318,20 @@ export default function ProductDetailsScreen() {
     );
   }, [product]);
 
-  const appendRecommendationBatch = useCallback(() => {
-    if (isAppendingRecommendations || !canAppendRecommendations) {
-      return;
-    }
-
-    setIsAppendingRecommendations(true);
-
-    recommendationBatchTimer.current = setTimeout(() => {
-      setVisibleRecommendationCount((current) => Math.min(current + 4, recommendationCap));
-      setIsAppendingRecommendations(false);
-      recommendationBatchTimer.current = null;
-    }, 260);
-  }, [canAppendRecommendations, isAppendingRecommendations, recommendationCap]);
-
   const handleScrollToTop = useCallback(() => {
-    scrollRef.current?.scrollTo({ animated: true, y: 0 });
+    scrollRef.current?.scrollToOffset({ animated: true, offset: 0 });
   }, []);
 
   const handleProductScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-      const distanceFromBottom = contentSize.height - (contentOffset.y + layoutMeasurement.height);
+      const { contentOffset } = event.nativeEvent;
       const shouldShowCompactHeader = contentOffset.y > 180;
 
       if (shouldShowCompactHeader !== showCompactHeader) {
         setShowCompactHeader(shouldShowCompactHeader);
       }
-
-      if (distanceFromBottom < 340 && Date.now() - lastRecommendationBatchAt.current > 700) {
-        lastRecommendationBatchAt.current = Date.now();
-        appendRecommendationBatch();
-      }
     },
-    [appendRecommendationBatch, showCompactHeader],
+    [showCompactHeader],
   );
 
   useEffect(() => {
@@ -337,21 +347,10 @@ export default function ProductDetailsScreen() {
     setQuantity(1);
     setSelectedAddOnIds(new Set());
     setShowBulkQuotation(false);
-    setVisibleRecommendationCount(4);
-    setIsAppendingRecommendations(false);
-    lastRecommendationBatchAt.current = 0;
-
-    if (recommendationBatchTimer.current) {
-      clearTimeout(recommendationBatchTimer.current);
-      recommendationBatchTimer.current = null;
-    }
   }, [productId]);
 
   useEffect(() => {
     return () => {
-      if (recommendationBatchTimer.current) {
-        clearTimeout(recommendationBatchTimer.current);
-      }
       if (toastTimer.current) {
         clearTimeout(toastTimer.current);
       }
@@ -377,16 +376,59 @@ export default function ProductDetailsScreen() {
     ],
   };
 
+  const renderDetailsRow = useCallback(
+    ({ item: row }: { item: ProductDetailsRow }) => {
+      if (row.type === 'review') {
+        return <ReviewRow review={row.review} />;
+      }
+
+      if (row.type === 'reviews-empty') {
+        return <ReviewsEmpty />;
+      }
+
+      if (row.type === 'reviews-divider') {
+        return (
+          <View style={styles.detailsDividerRow}>
+            <View style={styles.divider} />
+          </View>
+        );
+      }
+
+      if (row.type === 'recommendation-title') {
+        return (
+          <View style={styles.recommendationWrap}>
+            <View style={styles.recommendationTitleRow}>
+              <View style={styles.recommendationTitleLine} />
+              <Text style={styles.recommendationTitle}>You May Also Like</Text>
+              <View style={styles.recommendationTitleLine} />
+            </View>
+          </View>
+        );
+      }
+
+      return (
+        <View style={styles.recommendationGridRow}>
+          {row.products.map((item) => (
+            <ProductCard key={item.id} product={item} style={styles.recommendationCard} />
+          ))}
+          {row.products.length === 1 ? <View style={styles.recommendationCardSpacer} /> : null}
+        </View>
+      );
+    },
+    [],
+  );
+
   return (
     <View style={styles.screen}>
-      <ScrollView
+      <FlatList
         ref={scrollRef}
-        onScroll={handleProductScroll}
-        scrollEventThrottle={16}
-        showsVerticalScrollIndicator={false}
-        style={styles.scroll}
-        contentContainerStyle={{ paddingBottom: insets.bottom + (product ? 180 : 104) }}>
-
+        contentContainerStyle={{ paddingBottom: insets.bottom + (product ? 180 : 104) }}
+        contentInsetAdjustmentBehavior="automatic"
+        data={product ? detailsRows : []}
+        initialNumToRender={Platform.OS === 'android' ? 3 : 4}
+        keyExtractor={(row) => row.id}
+        ListHeaderComponent={
+          <>
         {isLoading ? (
           <View style={[styles.loadingState, { paddingTop: insets.top + 80 }]}>
             <ActivityIndicator color={theme.colors.primary} />
@@ -566,6 +608,23 @@ export default function ProductDetailsScreen() {
                 <BulkOrderHint onGetQuote={handleOpenBulkQuotation} quantity={quantity} />
               ) : null}
 
+              <View style={styles.cardComposer}>
+                <View style={styles.cardComposerTitleRow}>
+                  <FileText color={theme.colors.primary} size={18} />
+                  <Text style={styles.cardComposerTitle}>Add a letter card</Text>
+                </View>
+                <TextInput
+                  maxLength={500}
+                  multiline
+                  onChangeText={setCardMessage}
+                  placeholder="Write a short message for the recipient (optional)"
+                  placeholderTextColor={theme.colors.textMuted}
+                  style={styles.cardComposerInput}
+                  value={cardMessage}
+                />
+                <Text style={styles.cardComposerCount}>{cardMessage.length}/500</Text>
+              </View>
+
               {/* Stock info */}
               {!isSoldOut ? (
                 <View style={styles.stockRow}>
@@ -585,20 +644,7 @@ export default function ProductDetailsScreen() {
               <View style={styles.divider} />
 
               {/* Reviews section */}
-              <ReviewsSection reviews={productReviews} summary={productRating} />
-
-              {/* Divider */}
-              <View style={styles.divider} />
-
-              {/* Recommendations */}
-              <View style={styles.recommendationWrap}>
-                <ProductRecommendationGallery
-                  canAppend={canAppendRecommendations}
-                  isAppending={isAppendingRecommendations}
-                  isLoading={isLoading}
-                  products={visibleRecommendations}
-                />
-              </View>
+              <ReviewsSummary reviews={productReviews} summary={productRating} />
             </View>
           </>
         ) : (
@@ -606,7 +652,18 @@ export default function ProductDetailsScreen() {
             <EmptyState title="Product not found" description="This product may no longer be available." />
           </View>
         )}
-      </ScrollView>
+          </>
+        }
+        maxToRenderPerBatch={Platform.OS === 'android' ? 3 : 4}
+        onScroll={handleProductScroll}
+        removeClippedSubviews={Platform.OS === 'android'}
+        renderItem={renderDetailsRow}
+        scrollEventThrottle={16}
+        showsVerticalScrollIndicator={false}
+        style={styles.scroll}
+        updateCellsBatchingPeriod={50}
+        windowSize={Platform.OS === 'android' ? 5 : 7}
+      />
 
       {product ? (
         <ProductActionBar
@@ -828,7 +885,7 @@ function ColorSelector({
 }
 
 // ─── Reviews ───────────────────────────────────────────────────────────────────
-function ReviewsSection({ reviews, summary }: { reviews: ProductReview[]; summary: ProductRatingSummary }) {
+function ReviewsSummary({ reviews, summary }: { reviews: ProductReview[]; summary: ProductRatingSummary }) {
   const counts = useMemo(() => {
     const nextCounts = new Map<number, number>();
 
@@ -878,36 +935,42 @@ function ReviewsSection({ reviews, summary }: { reviews: ProductReview[]; summar
         ))}
       </ScrollView>
 
-      {/* Review list */}
-      {reviews.length > 0 ? (
-        <View style={styles.reviewList}>
-          {reviews.map((review) => (
-            <View key={review.id} style={styles.reviewItem}>
-              <View style={styles.reviewItemHeader}>
-                <View style={styles.starsRow}>
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <Star
-                      key={star}
-                      size={12}
-                      color={review.rating >= star ? '#F2B950' : '#DDE0DD'}
-                      fill={review.rating >= star ? '#F2B950' : 'transparent'}
-                      strokeWidth={2}
-                    />
-                  ))}
-                </View>
-              </View>
-              {review.comment ? <Text style={styles.reviewComment}>{review.comment}</Text> : null}
-            </View>
-          ))}
+    </View>
+  );
+}
+
+function ReviewRow({ review }: { review: ProductReview }) {
+  return (
+    <View style={styles.reviewRowWrap}>
+      <View style={styles.reviewItem}>
+        <View style={styles.reviewItemHeader}>
+          <View style={styles.starsRow}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <Star
+                key={star}
+                size={12}
+                color={review.rating >= star ? '#F2B950' : '#DDE0DD'}
+                fill={review.rating >= star ? '#F2B950' : 'transparent'}
+                strokeWidth={2}
+              />
+            ))}
+          </View>
         </View>
-      ) : (
-        <View style={styles.reviewsEmpty}>
-          <Text style={styles.reviewsEmptyTitle}>No reviews yet</Text>
-          <Text style={styles.reviewsEmptyText}>
-            Be the first to share your experience with this product.
-          </Text>
-        </View>
-      )}
+        {review.comment ? <Text style={styles.reviewComment}>{review.comment}</Text> : null}
+      </View>
+    </View>
+  );
+}
+
+function ReviewsEmpty() {
+  return (
+    <View style={styles.reviewsEmptyWrap}>
+      <View style={styles.reviewsEmpty}>
+        <Text style={styles.reviewsEmptyTitle}>No reviews yet</Text>
+        <Text style={styles.reviewsEmptyText}>
+          Be the first to share your experience with this product.
+        </Text>
+      </View>
     </View>
   );
 }
@@ -985,6 +1048,43 @@ function ProductActionBar({
 
 // ─── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
+  cardComposer: {
+    backgroundColor: theme.colors.greenSoft,
+    borderColor: 'rgba(46, 139, 52, 0.22)',
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    gap: 8,
+    marginTop: 14,
+    padding: 12,
+  },
+  cardComposerTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 7,
+  },
+  cardComposerTitle: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 13,
+  },
+  cardComposerInput: {
+    backgroundColor: theme.colors.white,
+    borderColor: hairlineColor,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    color: theme.colors.text,
+    fontFamily: Fonts.sans,
+    fontSize: 13,
+    minHeight: 86,
+    padding: 10,
+    textAlignVertical: 'top',
+  },
+  cardComposerCount: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 10,
+    textAlign: 'right',
+  },
   screen: {
     backgroundColor: theme.colors.white,
     flex: 1,
@@ -1582,6 +1682,10 @@ const styles = StyleSheet.create({
   reviewList: {
     gap: theme.spacing.md,
   },
+  reviewRowWrap: {
+    backgroundColor: theme.colors.white,
+    paddingHorizontal: theme.spacing.xl,
+  },
   reviewItem: {
     borderBottomColor: 'rgba(31, 42, 36, 0.05)',
     borderBottomWidth: 1,
@@ -1604,6 +1708,10 @@ const styles = StyleSheet.create({
     gap: theme.spacing.xs,
     paddingVertical: theme.spacing.lg,
   },
+  reviewsEmptyWrap: {
+    backgroundColor: theme.colors.white,
+    paddingHorizontal: theme.spacing.xl,
+  },
   reviewsEmptyTitle: {
     color: theme.colors.text,
     fontFamily: Fonts.sansSemiBold,
@@ -1620,9 +1728,44 @@ const styles = StyleSheet.create({
   // Recommendations
   recommendationWrap: {
     backgroundColor: pageBackground,
-    marginHorizontal: -theme.spacing.xl,
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing.lg,
+  },
+  detailsDividerRow: {
+    backgroundColor: theme.colors.white,
+    paddingHorizontal: theme.spacing.xl,
+    paddingVertical: theme.spacing.lg,
+  },
+  recommendationTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    justifyContent: 'center',
+  },
+  recommendationTitleLine: {
+    backgroundColor: hairlineColor,
+    flex: 1,
+    height: 1,
+  },
+  recommendationTitle: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 17,
+    lineHeight: 23,
+  },
+  recommendationGridRow: {
+    backgroundColor: pageBackground,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    paddingBottom: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xl,
+  },
+  recommendationCard: {
+    flex: 1,
+    width: 'auto',
+  },
+  recommendationCardSpacer: {
+    flex: 1,
   },
 
   // Action bar

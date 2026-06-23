@@ -1,3 +1,4 @@
+import { useIsFocused } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowRight, Send, Shuffle, Sparkles } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -68,6 +69,7 @@ const PROMPT_SAMPLES = [
 const OBJECT_WORDS = ['bouquet', 'arrangement', 'flower box', 'gift', 'floral base'];
 
 export default function GenerateScreen() {
+  const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ frame?: string }>();
   const { height, width } = useWindowDimensions();
@@ -181,6 +183,7 @@ export default function GenerateScreen() {
             body={scene.body}
             eyebrow={scene.eyebrow}
             index={index}
+            isActive={isFocused}
             sceneHeight={sceneHeight}
             scrollY={scrollY}
             side={side}
@@ -215,7 +218,7 @@ export default function GenerateScreen() {
 
       {showSwipeGuide && !hasReachedFinalFrame ? (
         <View pointerEvents="none" style={[styles.sideSwipeGuide, { bottom: insets.bottom + 128 }]}>
-          <LowFrameSwipeGuide />
+          <LowFrameSwipeGuide isActive={isFocused} />
         </View>
       ) : null}
     </View>
@@ -263,14 +266,15 @@ type StorySceneProps = {
   body: string;
   eyebrow: string;
   index: number;
+  isActive: boolean;
   sceneHeight: number;
   scrollY: SharedValue<number>;
   side: number;
   title: string;
 };
 
-function StoryScene({ body, eyebrow, index, sceneHeight, scrollY, side, title }: StorySceneProps) {
-  const rollingWordIndex = useRollingWordIndex(OBJECT_WORDS);
+function StoryScene({ body, eyebrow, index, isActive, sceneHeight, scrollY, side, title }: StorySceneProps) {
+  const rollingWordIndex = useRollingWordIndex(OBJECT_WORDS, isActive && index === 0);
   const textStyle = useAnimatedStyle(() => {
     const isPromptPreviewScene = index === 1;
     const isFirstScene = index === 0;
@@ -317,16 +321,20 @@ function StoryScene({ body, eyebrow, index, sceneHeight, scrollY, side, title }:
   );
 }
 
-function useRollingWordIndex(words: string[]) {
+function useRollingWordIndex(words: string[], isActive: boolean) {
   const [index, setIndex] = useState(0);
 
   useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+
     const timer = setInterval(() => {
       setIndex((value) => (value + 1) % words.length);
     }, 1350);
 
     return () => clearInterval(timer);
-  }, [words.length]);
+  }, [isActive, words.length]);
 
   return index;
 }
@@ -489,16 +497,20 @@ function MixStep({ index, label, sceneHeight, scrollY }: { index: number; label:
   );
 }
 
-function LowFrameSwipeGuide() {
+function LowFrameSwipeGuide({ isActive }: { isActive: boolean }) {
   const [frame, setFrame] = useState(0);
 
   useEffect(() => {
+    if (!isActive) {
+      return;
+    }
+
     const timer = setInterval(() => {
       setFrame((value) => (value + 1) % 4);
     }, 220);
 
     return () => clearInterval(timer);
-  }, []);
+  }, [isActive]);
 
   return (
     <View style={styles.swipeGuideFrame}>

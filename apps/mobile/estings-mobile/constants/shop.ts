@@ -14,6 +14,7 @@ export type Product = {
   categoryId: string;
   categoryName?: string;
   branch?: 'all' | 'manila' | 'pampanga' | string;
+  branches?: string[];
   createdAt?: string;
   productGroup?: string;
   productType?: string;
@@ -35,6 +36,7 @@ export type Category = {
 };
 
 export type CartItem = {
+  cardMessage?: string;
   id: string;
   product: Product;
   quantity: number;
