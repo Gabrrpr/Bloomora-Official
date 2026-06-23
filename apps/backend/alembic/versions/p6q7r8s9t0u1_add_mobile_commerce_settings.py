@@ -102,14 +102,6 @@ def upgrade():
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=True),
         sa.PrimaryKeyConstraint("id"),
     )
-    op.execute(
-        """
-        INSERT INTO commerce_settings (key, value, updated_at)
-        VALUES
-          ('delivery', '{"delivery_fee":100,"minimum_order":0,"same_day_cutoff":"14:00","timezone":"Asia/Manila"}', now())
-        ON CONFLICT (key) DO NOTHING
-        """
-    )
 
 
 def downgrade():
