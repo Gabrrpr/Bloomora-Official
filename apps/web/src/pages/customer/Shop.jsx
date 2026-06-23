@@ -24,6 +24,25 @@ const SORT_OPTIONS = [
 
 const discount = (orig, price) => Math.round((1 - price / orig) * 100)
 
+const normalizeFilterValue = value => (value || "").toString().trim().toLowerCase()
+
+const toFilterList = value => {
+  if (Array.isArray(value)) return value
+  if (typeof value !== "string") return []
+
+  const trimmed = value.trim()
+  if (!trimmed) return []
+
+  try {
+    const parsed = JSON.parse(trimmed)
+    if (Array.isArray(parsed)) return parsed
+  } catch {
+    // Fall back to comma-separated occasion values.
+  }
+
+  return trimmed.split(",")
+}
+
 function useWidth() {
   const [w, setW] = useState(typeof window !== "undefined" ? window.innerWidth : 1024)
   useEffect(() => {
@@ -253,7 +272,11 @@ function SidebarContent({
   };
 
   const toggleOccasion = (occ) => {
-    setSelectedOccasions(prev => prev.includes(occ) ? prev.filter(o => o !== occ) : [...prev, occ]);
+    const occNorm = normalizeFilterValue(occ);
+    setSelectedOccasions(prev => {
+      const exists = prev.some(o => normalizeFilterValue(o) === occNorm);
+      return exists ? prev.filter(o => normalizeFilterValue(o) !== occNorm) : [...prev, occ];
+    });
   };
 
   const applyPrice = () => {
@@ -286,9 +309,15 @@ function SidebarContent({
     if (type) groupedHierarchy[group][cat].add(type);
   });
 
-  const uniqueOccasions = Array.from(
-    new Set((products || []).flatMap(p => p.occasions || []))
-  ).filter(Boolean).sort();
+  const occasionMap = new Map();
+  (products || []).forEach(p => {
+    toFilterList(p.occasions).forEach(occ => {
+      const label = (occ || "").toString().trim();
+      const key = normalizeFilterValue(label);
+      if (key && !occasionMap.has(key)) occasionMap.set(key, label);
+    });
+  });
+  const uniqueOccasions = Array.from(occasionMap.values()).sort((a, b) => a.localeCompare(b));
 
   return (
     <div className="w-full text-[13px] text-gray-700 font-sans pr-4">
@@ -382,7 +411,7 @@ function SidebarContent({
                   <input 
                     type="checkbox" 
                     id={`sidebar-occ-${occ}`}
-                    checked={selectedOccasions.includes(occ)}
+                    checked={selectedOccasions.some(o => normalizeFilterValue(o) === normalizeFilterValue(occ))}
                     onChange={() => toggleOccasion(occ)}
                     className="w-3.5 h-3.5 rounded-sm border-gray-300 cursor-pointer focus:ring-0"
                     style={{ accentColor: G }}
@@ -633,6 +662,21 @@ export default function Shop({ onNavigate, initialCategory }) {
       .finally(() => setProductsLoading(false));
   }, []);
   
+
+  useEffect(() => {
+    if (!localStorage.getItem("access_token")) return;
+
+    api.getWishlist()
+      .then(data => {
+        const rawList = Array.isArray(data) ? data : (data?.wishlist || []);
+        const ids = rawList
+          .map(item => typeof item === "string" ? item : item?.id)
+          .filter(Boolean)
+          .map(String);
+        setWishlist(ids);
+      })
+      .catch(err => console.error("Failed to load wishlist", err));
+  }, []);
   // 🚀 UPDATED MOBILE CHECK TO REVERT GRID 5 AS WELL
   useEffect(() => {
     if (isMobile && (viewAs === "grid3" || viewAs === "grid4" || viewAs === "grid5")) setViewAs("grid2")
@@ -655,10 +699,32 @@ export default function Shop({ onNavigate, initialCategory }) {
     return () => clearTimeout(t)
   }, [toast])
 
-  const toggleWishlist = id => {
-    const has = wishlist.includes(id)
-    setWishlist(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
-    setToast({ msg: has ? "Removed from wishlist" : "Added to wishlist", added: !has, key: Date.now() })
+  const toggleWishlist = async (id) => {
+    const productId = String(id);
+    const isLoggedIn = !!localStorage.getItem("access_token");
+
+    if (!isLoggedIn) {
+      if (onNavigate) onNavigate("login");
+      else window.location.href = "/login";
+      return;
+    }
+
+    try {
+      const res = await api.toggleWishlist(productId);
+
+      if (Array.isArray(res?.wishlist)) {
+        setWishlist(res.wishlist.map(String));
+      } else {
+        setWishlist(prev => {
+          const exists = prev.includes(productId);
+          if (res?.action === "removed" || exists) return prev.filter(item => item !== productId);
+          return [...prev, productId];
+        });
+      }
+    } catch (err) {
+      console.error("Failed to update wishlist:", err);
+      setToast({ key: Date.now(), msg: "Wishlist could not be updated", added: false });
+    }
   }
   
   const normalizeCat = (s) => (s || "").toString().trim().toLowerCase();
@@ -752,6 +818,12 @@ export default function Shop({ onNavigate, initialCategory }) {
     .filter(p => {
       if (!activeTypes || activeTypes.length === 0) return true;
       return activeTypes.map(normalizeCat).includes(normalizeCat(p.product_type || ""));
+    })
+    .filter(p => {
+      if (!selectedOccasions || selectedOccasions.length === 0) return true;
+      const selectedOccsNorm = selectedOccasions.map(normalizeFilterValue).filter(Boolean);
+      const productOccsNorm = toFilterList(p.occasions).map(normalizeFilterValue).filter(Boolean);
+      return selectedOccsNorm.some(occ => productOccsNorm.includes(occ));
     })
     .filter(p => {
       if (!selectedLocations || selectedLocations.length === 0) return true;

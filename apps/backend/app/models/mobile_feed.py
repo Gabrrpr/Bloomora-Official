@@ -78,27 +78,6 @@ class CampaignReaction(Base):
     created_at = Column(DateTime(timezone=True), default=now_utc)
 
 
-class WishlistItem(Base):
-    __tablename__ = "wishlist_items"
-    __table_args__ = (
-        UniqueConstraint("user_id", "product_id", name="uq_wishlist_user_product"),
-    )
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    product_id = Column(
-        UUID(as_uuid=True),
-        ForeignKey("products.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    created_at = Column(DateTime(timezone=True), default=now_utc)
-
 
 class FeedEvent(Base):
     __tablename__ = "feed_events"

@@ -10,7 +10,7 @@ from PIL import Image
 from app.api.v1.routes.auth import hash_password, generate_username 
 from app.core.dependencies import get_db, get_current_user, require_staff
 from app.core.supabase import supabase
-from app.models import User, RoleEnum, BranchEnum, ActivityLog
+from app.models import User, RoleEnum, BranchEnum, ActivityLog, WishListItem, Product
 from pydantic import BaseModel, EmailStr
 from app.services.email_service import send_otp_email, send_staff_confirm_email
 from app.utils.logger import log_activity
@@ -475,34 +475,13 @@ def delete_my_account(
 
 @router.get("/me/wishlist", response_model=List[dict])
 def get_wishlist(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    wishlist_data = getattr(current_user, "wishlist", [])
-    
-    # Safety check: if the database returned it as a string, parse it into a list
-    if isinstance(wishlist_data, str):
-        try:
-            import json
-            wishlist_data = json.loads(wishlist_data)
-        except:
-            wishlist_data = []
+    products = (
+        db.query(Product)
+        .join(WishListItem, WishListItem.product_id == Product.id)
+        .filter(WishListItem.user_id == current_user.id)
+        .all()
+    )
 
-    if not wishlist_data or not isinstance(wishlist_data, list):
-        return []
-    
-    # 🚀 THE FIX: Convert the text strings back into proper UUID objects
-    import uuid
-    valid_uuids = []
-    for w_id in wishlist_data:
-        try:
-            valid_uuids.append(uuid.UUID(w_id))
-        except:
-            pass
-
-    if not valid_uuids:
-        return []
-
-    # Fetch the actual product data using the properly formatted UUIDs
-    products = db.query(Product).filter(Product.id.in_(valid_uuids)).all()
-    
     result = []
     for p in products:
         result.append({
@@ -514,37 +493,44 @@ def get_wishlist(db: Session = Depends(get_db), current_user: User = Depends(get
         })
     return result
 
-
 @router.post("/me/wishlist/{product_id}", response_model=dict)
 def toggle_wishlist(
-    product_id: str, 
-    db: Session = Depends(get_db), 
+    product_id: str,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    print(f"DEBUG: Current User ID: {current_user.id}")
-    print(f"DEBUG: Current Wishlist: {getattr(current_user, 'wishlist', 'Not Found')}")
-
     try:
-        # Normalize product_id
-        prod_uuid = str(uuid.UUID(product_id))
+        prod_uuid = uuid.UUID(product_id)
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid product ID")
 
-    current_wishlist = list(getattr(current_user, "wishlist", []) or [])
-    
-    if prod_uuid in current_wishlist:
-        current_wishlist.remove(prod_uuid)
+    product_exists = db.query(Product.id).filter(Product.id == prod_uuid).first()
+    if not product_exists:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    existing = (
+        db.query(WishListItem)
+        .filter(
+            WishListItem.user_id == current_user.id,
+            WishListItem.product_id == prod_uuid,
+        )
+        .first()
+    )
+
+    if existing:
+        db.delete(existing)
         action = "removed"
     else:
-        current_wishlist.append(prod_uuid)
+        db.add(WishListItem(user_id=current_user.id, product_id=prod_uuid))
         action = "added"
-        
-    current_user.wishlist = current_wishlist
-    
-    from sqlalchemy.orm.attributes import flag_modified
-    flag_modified(current_user, "wishlist")
-    
+
     db.commit()
-    print(f"DEBUG: Successfully {action} product {prod_uuid}")
-    
+
+    current_wishlist = [
+        str(row.product_id)
+        for row in db.query(WishListItem.product_id)
+        .filter(WishListItem.user_id == current_user.id)
+        .all()
+    ]
+
     return {"status": "success", "action": action, "wishlist": current_wishlist}

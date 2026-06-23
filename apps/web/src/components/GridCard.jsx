@@ -23,7 +23,15 @@ function WishlistBtn({ id, wishlist, toggleWishlist, small }) {
   const sz = small ? "w-7 h-7" : "w-8 h-8";
   return (
     <button
-      onClick={(e) => { e.stopPropagation(); toggleWishlist(id); }}
+      type="button"
+      aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+      onClick={(e) => {
+        // Prevent the card click (onPreview) from firing.
+        e.preventDefault();
+        e.stopPropagation();
+        // Ensure toggleWishlist only receives the product id
+        toggleWishlist(String(id));
+      }}
       className={`${sz} flex items-center justify-center rounded-lg transition-all flex-shrink-0 cursor-pointer`}
       style={{ backgroundColor: wishlisted ? "#fef2f2" : "#f3f4f6", border: wishlisted ? "1px solid #fecaca" : "1px solid #e5e7eb" }}
     >

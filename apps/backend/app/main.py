@@ -119,7 +119,7 @@ app.include_router(customization.router, prefix="/api/v1", tags=["customization"
 app.include_router(chats.router, prefix="/api/v1", tags=["chats"])
 app.include_router(orders.router, prefix="/api/v1", tags=["orders"])
 app.include_router(payments.router, prefix="/api/v1", tags=["payments"])
-app.include_router(users.router, prefix="/api/v1/users", tags=["Users"])
+app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
 app.include_router(site_customization.router, prefix="/api/v1", tags=["site-customization"])
 app.include_router(addresses.router, prefix="/api/v1", tags=["addresses"])
 app.include_router(cart.router, prefix="/api/v1", tags=["cart"])

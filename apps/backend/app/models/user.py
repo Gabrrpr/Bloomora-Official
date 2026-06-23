@@ -47,7 +47,7 @@ class User(Base):
     staff_verification_token = Column(String(255), nullable=True)
     staff_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     profile_picture_url = Column(String(255), nullable=True)
-    wishlist = Column(JSON, default=[])
+    wishlist_items = relationship("WishlistItem", back_populates="user", cascade="all, delete-orphan")
 
     # Relationships
     orders = relationship("Order", back_populates="user", foreign_keys="Order.user_id")

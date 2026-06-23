@@ -459,7 +459,7 @@ export const api = {
   },
 
   async getWishlist() {
-    return api.get('/users/me/wishlist');
+    return api.get('/users/me/wishlist'); 
   },
 
   async toggleWishlist(productId) {

@@ -8,11 +8,25 @@ import { API_BASE } from "../../config/api.js"
 const G = "#2E8B34"
 const DG = "#0C573E"
 
+const PICKUP_BRANCHES = {
+  Manila: {
+    label: "Manila Branch",
+    address: "Laon-Laan Cor. Dos Castillas St., Sampaloc, Manila",
+    hours: "Mon-Sat, 9:00 AM-9:00 PM",
+  },
+  Pampanga: {
+    label: "Pampanga Branch",
+    address: "McArthur Hi-way, Dolores, San Fernando, Pampanga",
+    hours: "Mon-Sat, 7:30 AM-5:00 PM",
+  },
+}
+
 export default function Checkout({ onNavigate }) {
   const { user } = useAuth()
   const [cartItems, setCartItems] = useState([])
   const deliveryTime = "Anytime"
   const [paymentMethod, setPaymentMethod] = useState("paymongo");
+  const [fulfillmentMethod, setFulfillmentMethod] = useState("delivery");
   const [deliverySettings, setDeliverySettings] = useState({ delivery_fee: 100, minimum_order: 0, same_day_cutoff: "14:00" });
   const [referenceNumber, setReferenceNumber] = useState("")
   const [voucher, setVoucher] = useState("")
@@ -127,7 +141,7 @@ export default function Checkout({ onNavigate }) {
   }, [])
 
   const subtotal = cartItems.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0)
-  const shipping = cartItems.length > 0 ? Number(deliverySettings.delivery_fee || 0) : 0
+  const shipping = cartItems.length > 0 && fulfillmentMethod === "delivery" ? Number(deliverySettings.delivery_fee || 0) : 0
   const discount = computeDiscount(appliedVoucher, subtotal)
   const total = Math.max(0, subtotal + shipping - discount)
 
@@ -180,9 +194,20 @@ export default function Checkout({ onNavigate }) {
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
     : "Guest"
 
+  const rawStoreBranch = localStorage.getItem("bloomora_active_branch") || "Manila";
+  const selectedStoreBranch = rawStoreBranch.charAt(0).toUpperCase() + rawStoreBranch.slice(1).toLowerCase();
+  const pickupBranch = PICKUP_BRANCHES[selectedStoreBranch] || PICKUP_BRANCHES.Manila;
+
   const selectedAddress = addresses.find(a => a.id === selectedAddressId)
 
   const getDeliveryDetails = () => {
+    if (fulfillmentMethod === "pickup") {
+      return {
+        name: fullName,
+        phone: customer?.phone_number || user?.phoneNumber || "",
+        address: `Pickup - ${pickupBranch.label}: ${pickupBranch.address}`,
+      }
+    }
     if (recipientType === "myself") {
       if (selectedAddress) {
         return {
@@ -207,9 +232,6 @@ export default function Checkout({ onNavigate }) {
 
   const deliveryDetails = getDeliveryDetails()
 
-  const rawStoreBranch = localStorage.getItem("bloomora_active_branch") || "Manila";
-  const selectedStoreBranch = rawStoreBranch.charAt(0).toUpperCase() + rawStoreBranch.slice(1).toLowerCase();
-
   const provinceToBranch = (provinceOrAddress) => {
     const p = (provinceOrAddress || "").toLowerCase()
     if (!p) return null
@@ -218,17 +240,19 @@ export default function Checkout({ onNavigate }) {
     return null
   }
 
-  const addressBranch = provinceToBranch(
-    recipientType === "myself" 
-      ? (selectedAddress ? selectedAddress.province : (customer?.address || user?.address)) 
-      : manualForm.province
-  )
+  const addressBranch = fulfillmentMethod === "pickup"
+    ? selectedStoreBranch
+    : provinceToBranch(
+      recipientType === "myself" 
+        ? (selectedAddress ? selectedAddress.province : (customer?.address || user?.address)) 
+        : manualForm.province
+    )
   
-  const needsBranchConfirm = selectedStoreBranch && addressBranch && (selectedStoreBranch.toLowerCase() !== addressBranch.toLowerCase())
+  const needsBranchConfirm = fulfillmentMethod === "delivery" && selectedStoreBranch && addressBranch && (selectedStoreBranch.toLowerCase() !== addressBranch.toLowerCase())
   const [branchConfirmOpen, setBranchConfirmOpen] = useState(false)
 
   const buildDeliveryNotes = () =>
-    `[BRANCH:${addressBranch || "Manila"}] Delivery time: ${deliveryTime} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone})${appliedVoucher ? ` | Voucher: ${appliedVoucher.code}` : ""}`
+    `[BRANCH:${addressBranch || "Manila"}] ${fulfillmentMethod === "pickup" ? `Pickup at ${pickupBranch.label}` : `Delivery time: ${deliveryTime}`} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone || "No phone provided"})${appliedVoucher ? ` | Voucher: ${appliedVoucher.code}` : ""}`
 
   const buildOrderData = (orderIds) => ({
     orderIds,
@@ -350,15 +374,25 @@ export default function Checkout({ onNavigate }) {
       setError("Your cart is empty. Please select items from your cart.");
       return;
     }
-    if (!deliveryDetails.address || !deliveryDetails.phone) {
-      setError("Please provide a complete delivery address and phone number before placing an order.");
-      return;
+
+    // Pickup doesn't require an address
+    if (fulfillmentMethod === "delivery") {
+      if (!deliveryDetails.address || !deliveryDetails.phone) {
+        setError("Please provide a complete delivery address and phone number before placing an order.");
+        return;
+      }
+      if (!addressBranch) {
+        setError("Sorry, we currently only deliver to Metro Manila and Pampanga areas. Please provide a valid address within our coverage.");
+        return;
+      }
+    } else {
+      // For pickup, we still need contact phone
+      if (!deliveryDetails.phone) {
+        setError("Please provide a phone number for pickup.");
+        return;
+      }
     }
-    if (!addressBranch) {
-      setError("Sorry, we currently only deliver to Metro Manila and Pampanga areas. Please provide a valid address within our coverage.");
-      return;
-    }
-    
+
     await executeOrderPlacement();
   };
 

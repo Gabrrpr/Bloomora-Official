@@ -1,5 +1,9 @@
 from .base import Base
 from .user import User, RoleEnum, BranchEnum
+from .wishlist import WishlistItem
+
+# Backward-compatible alias (some routes import the wrong casing)
+WishListItem = WishlistItem
 from .address import Address
 from .product import Product, Inventory, Discount, ProductStatusEnum, ProductRecipe, PromoCode
 from .order import Order, Transaction, Delivery, OrderStatusEnum, PaymentMethodEnum, PaymentStatusEnum, DeliveryStatusEnum
@@ -11,4 +15,4 @@ from .ai_usage_log import AIUsageLog
 from .order_item import OrderItem, StockReservation
 from .cart import CartItem
 from .commerce import Advertisement, CommerceSetting
-from .mobile_feed import CampaignReaction, FeedEvent, FeedPlacement, ProductFeedControl, WishlistItem
+from .mobile_feed import CampaignReaction, FeedEvent, FeedPlacement, ProductFeedControl
