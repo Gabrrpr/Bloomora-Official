@@ -197,7 +197,7 @@ def active_advertisement(db: Session = Depends(get_db)):
     campaign = (
         db.query(Campaign)
         .filter(
-            Campaign.status == "published",
+            # 🚀 FIXED: Removed Campaign.status == "published"
             Campaign.is_active.is_(True),
             Campaign.start_at <= now,
             or_(Campaign.end_at.is_(None), Campaign.end_at >= now),

@@ -1,3 +1,4 @@
+import os
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, func
@@ -15,6 +16,10 @@ from app.services.email_service import send_otp_email, send_staff_confirm_email
 from app.utils.logger import log_activity
 
 router = APIRouter(tags=["Users"]) 
+
+# 🚀 DYNAMIC FRONTEND URL SETUP
+# This pulls the URL from Coolify, safely removing any accidental trailing slashes
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173").rstrip('/')
 
 # 🛡️ Hard limits for profile picture uploads
 MAX_FILE_SIZE = 5 * 1024 * 1024  # 5 MB
@@ -96,7 +101,7 @@ def list_users(
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff), # 🚀 Fully delegates security to the dependency
+    current_user: User = Depends(require_staff), 
 ):
     query = db.query(User)
 
@@ -144,7 +149,6 @@ def create_staff(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    # 🚀 FIX: Use dot notation with the exact schema property names
     phone_input = payload.phone_number
     email_input = payload.email
     
@@ -156,7 +160,6 @@ def create_staff(
     if role_enum == RoleEnum.customer:
         raise HTTPException(status_code=400, detail="Use customer registration for customer accounts.")
     
-    # 🚀 This duplicate check will now work perfectly
     if phone_input:
         existing_phone = db.query(User).filter(User.phone_number == phone_input).first()
         if existing_phone:
@@ -199,19 +202,16 @@ def create_staff(
         staff_token_expires_at=expires_at,
     )
 
-    # 1. Add the user to the session (but DON'T commit yet)
     db.add(new_user)
     
-    # 2. Try to send the email FIRST
-    verify_url = f"http://localhost:5173/activate-staff?token={token}"
+    # 🚀 FIX: Swapped localhost for the dynamic FRONTEND_URL
+    verify_url = f"{FRONTEND_URL}/activate-staff?token={token}"
     sent, error = send_staff_confirm_email(payload.email, payload.first_name, verify_url)
     
     if not sent:
-        # 🚀 THE FIX: If the email fails, rollback the database so no duplicate is left behind!
         db.rollback() 
         raise HTTPException(status_code=400, detail=f"Failed to send invite email. Please check if the email address is valid.")
 
-    # 3. Only if the email was sent successfully, permanently save to the database
     db.commit()
     db.refresh(new_user)
 
@@ -241,7 +241,8 @@ def resend_staff_invite(
     user.staff_token_expires_at = datetime.now(timezone.utc) + timedelta(hours=24)
     db.commit()
 
-    verify_url = f"http://localhost:5173/activate-staff?token={new_token}"
+    # 🚀 FIX: Swapped localhost for the dynamic FRONTEND_URL
+    verify_url = f"{FRONTEND_URL}/activate-staff?token={new_token}"
     sent, error = send_staff_confirm_email(user.email, user.first_name, verify_url)
     
     if not sent:
@@ -276,8 +277,6 @@ def activate_staff_account(payload: StaffActivateRequest, db: Session = Depends(
 
 @router.get("/activity-logs")
 def get_activity_logs(db: Session = Depends(get_db)):
-    # Fetch all logs, newest first. Load each log's user in the same query
-    # so we can read their branch without an extra lookup per row.
     logs = (
         db.query(ActivityLog)
         .options(joinedload(ActivityLog.user))
@@ -285,9 +284,6 @@ def get_activity_logs(db: Session = Depends(get_db)):
         .all()
     )
     
-    # Format them cleanly for the frontend.
-    # Branch comes from the user who performed the action, since the log
-    # itself doesn't store one.
     return [
         {
             "id": str(log.id),
@@ -304,12 +300,11 @@ def get_activity_logs(db: Session = Depends(get_db)):
 def get_user(
     user_id: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user) # 👈 Kept get_current_user to allow self-access
+    current_user: User = Depends(get_current_user) 
 ):
     try: user_uuid = uuid.UUID(user_id)
     except ValueError: raise HTTPException(status_code=400, detail="Invalid user ID format")
     
-    # 🛡️ Explicit IDOR check: You can only see your own profile, unless you are staff
     role_val = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
     if str(current_user.id) != user_id and role_val not in ["admin", "staff"]:
         raise HTTPException(status_code=403, detail="You do not have permission to view this profile.")
@@ -361,20 +356,17 @@ async def upload_profile_picture(
         except Exception:
             raise HTTPException(status_code=400, detail="Malicious or corrupted file detected.")
 
-        # 🚀 1. CLEANUP: Delete old avatars in this user's folder first
         try:
             old_files = supabase.storage.from_("avatars").list(str(current_user.id))
             if old_files:
                 paths = [f"{current_user.id}/{f['name']}" for f in old_files]
                 supabase.storage.from_("avatars").remove(paths)
         except Exception:
-            pass # Ignore cleanup errors if folder is empty
+            pass 
 
-        # 🚀 2. CACHE BUSTER: Add a timestamp to guarantee a unique URL
         timestamp = int(time.time())
         file_path = f"{current_user.id}/avatar_{timestamp}.{ext}"
 
-        # Upload to Supabase Storage
         supabase.storage.from_("avatars").upload(
             path=file_path,
             file=file_bytes,
@@ -428,7 +420,7 @@ def update_user(
     user_id: str,
     payload: UserUpdateRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_staff), # 🚀 Fully delegates security
+    current_user: User = Depends(require_staff), 
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if not user: raise HTTPException(status_code=404, detail="User not found.")
