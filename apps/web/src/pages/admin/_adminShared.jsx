@@ -57,30 +57,31 @@ export function StatusBadge({ status }) {
 
 // ── Branch badge (Bulletproof) ────────────────────────────────────────────────
 export function BranchBadge({ branch }) {
-  // Hide it if it's the "All Branches" header filter or entirely missing
-  if (!branch || branch === "all") return null;
+  // 1. If branch is completely missing, render nothing (or you can return a default badge)
+  if (!branch) return null;
 
-  // Handle old DB records that have a NULL/empty branch name
+  // 2. Clean the string
   const safeBranch = String(branch).trim().toLowerCase();
 
-  // Define our standard colors
+  // 3. Include "all" in our styles so it shows up beautifully on the Dashboard
   const styles = {
     manila:   { bg: "#dbeafe", color: "#1d4ed8", label: "Manila" },
     pampanga: { bg: "#ede9fe", color: "#6d28d9", label: "Pampanga" },
+    all:      { bg: "#f1f5f9", color: "#64748b", label: "All Branches" },
   };
 
-  // Lookup style or use a gray fallback for old/unknown orders
+  // 4. Safe fallback for old orders with NULL or unknown branches
   const cfg = styles[safeBranch] || { 
     bg: "#f1f5f9", 
     color: "#475569", 
-    label: safeBranch === "unknown" || !safeBranch 
+    label: safeBranch === "unknown" 
       ? "Unknown" 
       : safeBranch.charAt(0).toUpperCase() + safeBranch.slice(1) 
   };
 
   return (
     <span 
-      className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+      className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0 whitespace-nowrap"
       style={{ backgroundColor: cfg.bg, color: cfg.color }}
     >
       {cfg.label}
