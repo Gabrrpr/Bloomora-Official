@@ -25,7 +25,7 @@ import AdminLegal          from "./AdminLegal"
 import AdminMobileFeed     from "./AdminMobileFeed"
 
 import { api } from "../../services/api.js"
-import { GreenCard, StatCard, WhiteCard, ComingSoon } from "./_adminShared"
+import { GreenCard, StatCard, WhiteCard, ComingSoon, BranchBadge } from "./_adminShared"
 
 const DG = "#0C573E"
 const G  = "#2E8B34"
@@ -285,28 +285,6 @@ function BranchToggle({ value, onChange }) {
   )
 }
 
-function BranchBadge({ branch }) {
-  if (branch === "all") return null
-  const colors = {
-    manila:   { bg: "#1e3a5f", color: "#93c5fd" },   // dark-mode safe blues
-    pampanga: { bg: "#2e1a4a", color: "#c4b5fd" },
-  }
-  // Use light-mode colours in light, dark-mode in dark
-  const lightColors = {
-    manila:   { bg: "#dbeafe", color: "#1d4ed8" },
-    pampanga: { bg: "#ede9fe", color: "#6d28d9" },
-  }
-  // We need isDark here but BranchBadge is small — use CSS variables hack via inline
-  // Instead just always use the "safe" version that reads ok in both
-  return (
-    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
-      style={{ backgroundColor: lightColors[branch].bg, color: lightColors[branch].color }}>
-      {branch === "manila" ? "Manila" : "Pampanga"}
-    </span>
-  )
-}
-
-// ─── Revenue Chart ────────────────────────────────────────────────────────────
 // ─── Revenue Chart ────────────────────────────────────────────────────────────
 function RevenueChart({ branch }) {
   const { isDark } = useTheme();

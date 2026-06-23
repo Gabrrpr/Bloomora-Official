@@ -54,6 +54,40 @@ export function StatusBadge({ status }) {
     </span>
   )
 }
+
+// ── Branch badge (Bulletproof) ────────────────────────────────────────────────
+export function BranchBadge({ branch }) {
+  // Hide it if it's the "All Branches" header filter or entirely missing
+  if (!branch || branch === "all") return null;
+
+  // Handle old DB records that have a NULL/empty branch name
+  const safeBranch = String(branch).trim().toLowerCase();
+
+  // Define our standard colors
+  const styles = {
+    manila:   { bg: "#dbeafe", color: "#1d4ed8", label: "Manila" },
+    pampanga: { bg: "#ede9fe", color: "#6d28d9", label: "Pampanga" },
+  };
+
+  // Lookup style or use a gray fallback for old/unknown orders
+  const cfg = styles[safeBranch] || { 
+    bg: "#f1f5f9", 
+    color: "#475569", 
+    label: safeBranch === "unknown" || !safeBranch 
+      ? "Unknown" 
+      : safeBranch.charAt(0).toUpperCase() + safeBranch.slice(1) 
+  };
+
+  return (
+    <span 
+      className="text-[10px] font-bold px-2 py-0.5 rounded-full flex-shrink-0"
+      style={{ backgroundColor: cfg.bg, color: cfg.color }}
+    >
+      {cfg.label}
+    </span>
+  );
+}
+
 // ── Export button (kept for backward compat) ───────────────────────────────
 export function ExportBtn({ onClick }) {
   const t = useTokens()
