@@ -10,18 +10,19 @@ load_dotenv()
 
 # ── CORE SMTP SENDER UTILITY ──────────────────────────────────────────────────
 def _send_email_via_hostinger(to_email: str, subject: str, html_content: str):
-    """
-    Internal helper to send emails using Hostinger SMTP credentials loaded from Coolify.
-    """
     smtp_host = os.getenv("SMTP_HOST")
     smtp_port = int(os.getenv("SMTP_PORT", 465))
-    smtp_user = os.getenv("SMTP_USER")
-    smtp_pass = os.getenv("SMTP_PASSWORD")
-    sender_email = os.getenv("SMTP_FROM_EMAIL")
-    sender_name = os.getenv("SMTP_FROM_NAME", "Esting's Flowers")
+    
+    # Clean up the variables
+    smtp_user = os.getenv("SMTP_USER", "").strip(' "\'')
+    smtp_pass = os.getenv("SMTP_PASSWORD", "").strip(' "\'')
+    sender_email = os.getenv("SMTP_FROM_EMAIL", "").strip(' "\'')
 
     msg = MIMEMultipart()
-    msg["From"] = f"{sender_name} <{sender_email}>"
+    
+    # 🚀 THE FIX: Send strictly the raw email address. 
+    # Do not include "Esting's Flowers" here to bypass Hostinger's strict filter.
+    msg["From"] = sender_email
     msg["To"] = to_email
     msg["Subject"] = subject
 

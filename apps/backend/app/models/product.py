@@ -21,7 +21,6 @@ class Product(Base):
     care_guide = Column(Text, nullable=True)
     price = Column(Numeric(10, 2), nullable=False)
     
-    
     product_group = Column(String(50), nullable=False)
     category = Column(String(100), nullable=False, index=True)
     product_type = Column(String(100), nullable=True, index=True)
@@ -29,7 +28,6 @@ class Product(Base):
     
     season_key = Column(String(100), nullable=True, index=True)
     
- 
     limited_start_at = Column(DateTime(timezone=True), nullable=True)
     limited_end_at = Column(DateTime(timezone=True), nullable=True)
     # ──────────────────────────────────
@@ -44,8 +42,7 @@ class Product(Base):
     composition = Column(JSONB, default=[])
     sold_count = Column(Integer, default=0, nullable=False)
 
-    
-    # Relationships (Unchanged)
+    # Relationships
     inventory = relationship("Inventory", back_populates="product", uselist=False, cascade="all, delete-orphan")
     reviews = relationship("Review", back_populates="product")
     flower = relationship("Flower", back_populates="product", uselist=False, cascade="all, delete-orphan")
@@ -54,11 +51,13 @@ class Product(Base):
     discounts = relationship("Discount", back_populates="product")
     campaigns = relationship("Campaign", secondary="product_campaigns", back_populates="products")
     order_items = relationship("OrderItem", back_populates="product")
-    components = relationship("ProductRecipe", foreign_keys="[ProductRecipe.parent_product_id]", cascade="all, delete-orphan")
+    
+    # 🚀 FIX APPLIED HERE: Added overlaps
+    components = relationship("ProductRecipe", foreign_keys="[ProductRecipe.parent_product_id]", cascade="all, delete-orphan", overlaps="recipe_items,parent_product")
+    
     tags = Column(JSONB, default=[])
     original_price = Column(Numeric(10, 2), nullable=True)
     
-
 
 class Inventory(Base):
     __tablename__ = "inventory"
@@ -94,8 +93,6 @@ class Discount(Base):
     product = relationship("Product", back_populates="discounts")
     
     
-# Paste this at the bottom of the file where your Product class is:
-
 class ProductRecipe(Base):
     __tablename__ = "product_recipes"
 
@@ -105,26 +102,22 @@ class ProductRecipe(Base):
     
     quantity_required = Column(Numeric(10, 2), nullable=False)
     
-    # 🚀 FIXED: Changed from server_default=func.now() to match your project's pattern
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
-    # Relationships
-    parent_product = relationship("Product", foreign_keys=[parent_product_id], backref="recipe_items")
+    # 🚀 FIX APPLIED HERE: Added overlaps
+    parent_product = relationship("Product", foreign_keys=[parent_product_id], backref="recipe_items", overlaps="components")
     component_product = relationship("Product", foreign_keys=[component_product_id])
     
 class PromoCode(Base):
     __tablename__ = "promo_codes"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    # The actual string they type at checkout (e.g., "SUMMER20")
     code = Column(String(50), unique=True, nullable=False, index=True) 
     
-    # 'percent' or 'fixed'
     discount_type = Column(String(20), nullable=False) 
     discount_value = Column(Numeric(10, 2), nullable=False)
     
-    # Optional threshold to trigger the discount
     min_spend = Column(Numeric(10, 2), default=0) 
     expires_at = Column(DateTime(timezone=True), nullable=True)
     
