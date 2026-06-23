@@ -1,4 +1,5 @@
 from pydantic_settings import BaseSettings
+from pathlib import Path
 
 
 class Settings(BaseSettings):
@@ -36,6 +37,9 @@ class Settings(BaseSettings):
     # Email
     RESEND_API_KEY: str | None = None
 
+    # Currency exchange
+    EXCHANGERATE_API_KEY: str = ""
+
     # OAuth
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
@@ -46,7 +50,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = ""
 
     class Config:
-        env_file = ".env"
+        env_file = str(Path(__file__).resolve().parents[2] / ".env")
         extra = "ignore"
 
 

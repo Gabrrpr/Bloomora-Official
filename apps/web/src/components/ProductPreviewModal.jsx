@@ -3,6 +3,7 @@ import { addToCart } from "../utils/cart.js"
 import { useTheme } from "../context/ThemeContext"
 import { useBranch } from "../context/BranchContext";
 import { api } from "../services/api.js"
+import { useCurrency } from "../context/CuurencyContext"
 import { generateCardMessage, RELATIONSHIP_OPTIONS, OCCASION_OPTIONS, TONE_OPTIONS, getPendingCard, clearPendingCard } from "../utils/cardMessage.js"
 
 import withCardImg from "../assets/productpreview/withCard.webp"
@@ -33,6 +34,7 @@ const todayD      = ()     => { const d = new Date(); d.setHours(0,0,0,0); retur
 const tomorrowStr = ()     => { const d = new Date(); d.setDate(d.getDate()+1); return toStr(d) }
 const fmtDate     = s      => { if (!s) return ""; const [y,m,d] = s.split("-").map(Number); return new Date(y,m-1,d).toLocaleDateString("en-PH",{weekday:"short",month:"short",day:"numeric"}) }
 const isTodayAvail = ()    => new Date().getHours() < 14
+
 
 /* ── Viewport hook ── */
 function useIsMobile(breakpoint = 900) {
@@ -191,7 +193,7 @@ function AIPanel({ onUse, onBack, isMobile }) {
     } catch (e) {
       setErr("Could not generate message. Please try again.")
     }
-    setLoading(false)
+    loading && setLoading(false)
   }
 
   return (
@@ -549,24 +551,24 @@ function CardStep({ delivLabel, dest, onClose, onNavigate, isMobile }) {
 }
 
 /* ── Quote line row ── */
-function QuoteLineRow({ label, unit, qty, txt, subTxt, addon }) {
+function QuoteLineRow({ label, unit, qty, txt, subTxt, addon, formatPrice }) {
   return (
     <div className="flex justify-between items-start mb-1.5">
       <div className="flex-1 min-w-0 pr-2">
         <span className="text-xs font-medium" style={{ color: txt }}>{addon ? `+ ${label}` : label}</span>
         <span className="text-[10px] block" style={{ color: subTxt }}>
-          ₱{unit.toLocaleString()} × {qty.toLocaleString()}
+          {formatPrice(unit)} × {qty.toLocaleString()}
         </span>
       </div>
       <span className="text-xs font-semibold whitespace-nowrap" style={{ color: txt }}>
-        ₱{(unit * qty).toLocaleString()}
+        {formatPrice(unit * qty)}
       </span>
     </div>
   )
 }
 
 /* ── Quote Step ── */
-function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark, onBack, onClose, onOpenChat, isMobile }) {
+function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark, onBack, onClose, onOpenChat, isMobile, formatPrice }) {
   const [phase,  setPhase]  = useState("input")
   const [qtyStr, setQtyStr] = useState("")
   const [err,    setErr]    = useState("")
@@ -603,7 +605,7 @@ function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark
   }, [phase])
 
   const grand = unitPrice * meta.qty
-  const quoteSummary = `${product.name} · ${meta.qty.toLocaleString()} pcs · ₱${grand.toLocaleString()}`
+  const quoteSummary = `${product.name} · ${meta.qty.toLocaleString()} pcs · ${formatPrice(grand)}`
 
   const buildReportText = () => {
     const L = []
@@ -616,13 +618,13 @@ function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark
     if (sizeLabel)   L.push(`Variant: ${sizeLabel}`)
     L.push(`Quantity: ${meta.qty}`)
     L.push("")
-    L.push(`Base: PHP ${product.price.toLocaleString()} x ${meta.qty} = PHP ${(product.price * meta.qty).toLocaleString()}`)
+    L.push(`Base: ${formatPrice(product.price)} x ${meta.qty} = ${formatPrice(product.price * meta.qty)}`)
     addOnObjects.forEach(a =>
-      L.push(`Add-on (${a.name}): PHP ${a.price.toLocaleString()} x ${meta.qty} = PHP ${(a.price * meta.qty).toLocaleString()}`)
+      L.push(`Add-on (${a.name}): ${formatPrice(a.price)} x ${meta.qty} = ${formatPrice(a.price * meta.qty)}`)
     )
     L.push("")
-    L.push(`Per-unit total: PHP ${unitPrice.toLocaleString()}`)
-    L.push(`GRAND TOTAL: PHP ${grand.toLocaleString()}`)
+    L.push(`Per-unit total: ${formatPrice(unitPrice)}`)
+    L.push(`GRAND TOTAL: ${formatPrice(grand)}`)
     L.push("")
     L.push("This is a standard-rate estimate. Is a bulk discount available for this quantity?")
     return L.join("\n")
@@ -697,7 +699,7 @@ function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark
                     {[color?.name, sizeLabel].filter(Boolean).join(" · ") || "Standard"}
                   </p>
                   <p className="text-xs font-semibold mt-0.5 m-0" style={{ color: accent }}>
-                    ₱{unitPrice.toLocaleString()} per unit{addOnTotal > 0 ? " (incl. add-ons)" : ""}
+                    {formatPrice(unitPrice)} per unit{addOnTotal > 0 ? " (incl. add-ons)" : ""}
                   </p>
                 </div>
               </div>
@@ -809,20 +811,20 @@ function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark
                 </div>
 
                 <div className="px-4 py-3" style={{ background: docBg }}>
-                  <QuoteLineRow label={product.name} unit={product.price} qty={meta.qty} txt={txt} subTxt={subTxt}/>
+                  <QuoteLineRow label={product.name} unit={product.price} qty={meta.qty} txt={txt} subTxt={subTxt} formatPrice={formatPrice}/>
                   {addOnObjects.map(a => (
-                    <QuoteLineRow key={a.id} label={a.name} unit={a.price} qty={meta.qty} txt={txt} subTxt={subTxt} addon/>
+                    <QuoteLineRow key={a.id} label={a.name} unit={a.price} qty={meta.qty} txt={txt} subTxt={subTxt} addon formatPrice={formatPrice}/>
                   ))}
                   <div className="flex justify-between pt-2 mt-1" style={{ borderTop: `1px dashed ${bdr}` }}>
                     <span className="text-xs" style={{ color: subTxt }}>Per-unit total</span>
-                    <span className="text-xs font-semibold" style={{ color: txt }}>₱{unitPrice.toLocaleString()}</span>
+                    <span className="text-xs font-semibold" style={{ color: txt }}>{formatPrice(unitPrice)}</span>
                   </div>
                 </div>
 
                 <div className="px-4 py-3 flex items-center justify-between"
                   style={{ background: isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4", borderTop: `1px solid ${lineBdr}` }}>
                   <span className="text-sm font-semibold" style={{ color: txt }}>Grand Total</span>
-                  <span className="text-2xl font-bold tracking-tight" style={{ color: accent }}>₱{grand.toLocaleString()}</span>
+                  <span className="text-2xl font-bold tracking-tight" style={{ color: accent }}>{formatPrice(grand)}</span>
                 </div>
               </div>
 
@@ -1163,7 +1165,7 @@ function QtySection({ qty, errors, setQty, setErrors, isDark, onBulk }) {
   )
 }
 
-function AddOnsSection({ loadingAddOns, liveAddOns, visibleAddons, addOns, toggleAddOn, showAllAddons, setShowAllAddons, isDark }) {
+function AddOnsSection({ loadingAddOns, liveAddOns, visibleAddons, addOns, toggleAddOn, showAllAddons, setShowAllAddons, isDark, formatPrice }) {
   return (
     <div>
       <p className="text-xs font-semibold uppercase tracking-widest mb-3"
@@ -1215,7 +1217,7 @@ function AddOnsSection({ loadingAddOns, liveAddOns, visibleAddons, addOns, toggl
                   </p>
                   <p className="text-xs font-semibold mt-0.5 m-0"
                     style={{ color: isUnavailable ? (isDark ? "#64748b" : "#9ca3af") : (isDark ? "#4ade80" : G) }}>
-                    +₱{a.price}
+                    +{formatPrice(a.price)}
                   </p>
                 </div>
 
@@ -1313,7 +1315,7 @@ function DeliverySection({ delivType, customDate, showCal, todayOk, errors, setD
   )
 }
 
-function SuggestionsSection({ suggestions = [], isDark, onClose, onNavigate }) {
+function SuggestionsSection({ suggestions = [], isDark, onClose, onNavigate, formatPrice }) {
   if (!suggestions || suggestions.length === 0) return null;
 
   return (
@@ -1351,7 +1353,7 @@ onClick={() => {
                 {s.name}
               </p>
               <p className="text-xs font-bold mt-1 text-green-600 dark:text-green-400">
-                ₱{(+s.price).toLocaleString()}
+                {formatPrice(s.price)}
               </p>
             </div>
           </div>
@@ -1500,6 +1502,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   const cardBg  = isDark ? "#1e293b" : "white"
   const cardBdr = isDark ? "rgba(0,255,136,0.08)" : "rgba(0,0,0,0.08)"
   const colors  = CATEGORY_COLORS[product.category] || CATEGORY_COLORS.Roses
+  const { formatPrice } = useCurrency();
 
   // 🚀 THE FIX: No more parallel API call. This is fast and synchronous!
   const suggestedProducts = products
@@ -1697,7 +1700,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   /* Shared prop bundles */
   const colorProps    = { colors, color, errors, setColor, setErrors, isDark }
   const qtyProps      = { qty, errors, setQty, setErrors, isDark, onBulk: () => setStep("quote") }
-  const addOnProps    = { loadingAddOns, liveAddOns, visibleAddons, addOns, toggleAddOn, showAllAddons, setShowAllAddons, isDark }
+  const addOnProps    = { loadingAddOns, liveAddOns, visibleAddons, addOns, toggleAddOn, showAllAddons, setShowAllAddons, isDark, formatPrice }
   const deliveryProps = { delivType, customDate, showCal, todayOk, errors, setDelivType, setShowCal, setCustDate, setErrors, isDark }
 
   /* ── Stars ── */
@@ -1774,6 +1777,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
              isDark={isDark} 
              onClose={onClose} 
              onNavigate={onNavigate} 
+             formatPrice={formatPrice}
           />
           
           <QtySection {...qtyProps}/>
@@ -1794,12 +1798,12 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
       style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
       <span className="text-3xl font-bold tracking-tight"
         style={{ color: isDark ? "#4ade80" : "#111827", textShadow: "none" }}>
-        ₱{total.toLocaleString()}
+        {formatPrice(total)}
       </span>
       {hasDisc && (
         <>
           <span className="text-sm line-through" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>
-            ₱{originalPrice.toLocaleString()}
+            {formatPrice(originalPrice)}
           </span>
           <span className="text-xs font-semibold px-2 py-0.5 rounded"
             style={{
@@ -1808,7 +1812,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
               border: `1px solid ${isDark ? "rgba(0,255,136,0.25)" : "#bbf7d0"}`,
               textShadow: isDark ? "0 0 8px rgba(0,255,136,0.5)" : "none"
             }}>
-            Save ₱{(originalPrice - product.price).toLocaleString()}
+            Save {formatPrice(originalPrice - product.price)}
           </span>
         </>
       )}
@@ -1941,7 +1945,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
               product={product} color={color} sizeLabel={qty}
               addOnObjects={quoteAddOnObjects} addOnTotal={addOnTotal}
               isDark={isDark} onBack={() => setStep("product")} onClose={close}
-              onOpenChat={openChatWithQuote} isMobile/>
+              onOpenChat={openChatWithQuote} isMobile formatPrice={formatPrice}/>
           </div>
         ) : (
           <div className="flex-1 min-h-0 flex flex-col">
@@ -2007,8 +2011,8 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
               {addOnTotal > 0 && (
                 <div className="flex justify-between mb-2.5 pb-2.5 border-b border-dashed"
                   style={{ borderColor: isDark ? "#1e293b" : "#f3f4f6" }}>
-                  <span className="text-xs" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>Base ₱{product.price.toLocaleString()} + extras ₱{addOnTotal}</span>
-                  <span className="text-sm font-bold" style={{ color: isDark ? "#4ade80" : DG }}>Total ₱{total.toLocaleString()}</span>
+                  <span className="text-xs" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>Base {formatPrice(product.price)} + extras {formatPrice(addOnTotal)}</span>
+                  <span className="text-sm font-bold" style={{ color: isDark ? "#4ade80" : DG }}>Total {formatPrice(total)}</span>
                 </div>
               )}
               {errorBanner && <div className="mb-2.5">{errorBanner}</div>}
@@ -2055,7 +2059,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
                 product={product} color={color} sizeLabel={qty}
                 addOnObjects={quoteAddOnObjects} addOnTotal={addOnTotal}
                 isDark={isDark} onBack={() => setStep("product")} onClose={close}
-                onOpenChat={openChatWithQuote}/>
+                onOpenChat={openChatWithQuote} formatPrice={formatPrice}/>
             </div>
           )}
 
@@ -2119,8 +2123,8 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
                     style={{ borderTop: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}`, background: cardBg }}>
                     {addOnTotal > 0 && (
                       <div className="flex justify-between mb-2.5 pb-2.5 border-b border-dashed border-gray-100">
-                        <span className="text-xs text-gray-400">Base ₱{product.price.toLocaleString()} + extras ₱{addOnTotal}</span>
-                        <span className="text-sm font-bold" style={{ color: DG }}>Total ₱{total.toLocaleString()}</span>
+                        <span className="text-xs text-gray-400">Base {formatPrice(product.price)} + extras {formatPrice(addOnTotal)}</span>
+                        <span className="text-sm font-bold" style={{ color: DG }}>Total {formatPrice(total)}</span>
                       </div>
                     )}
                     {FooterCTAs()}

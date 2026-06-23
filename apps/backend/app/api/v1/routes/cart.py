@@ -235,10 +235,14 @@ def _web_item_key(item: dict[str, Any]) -> str:
 
 def _optional_product(db: Session, item: dict[str, Any]) -> tuple[Optional[uuid.UUID], Optional[Product]]:
     try:
-        product_id = uuid.UUID(str(item.get("id") or ""))
+        candidate_id = uuid.UUID(str(item.get("id") or ""))
     except ValueError:
         return None, None
-    return product_id, _available_product(db, product_id)
+
+    product = _available_product(db, candidate_id)
+    if not product:
+        return None, None
+    return candidate_id, product
 
 
 def _upsert_web_item(db: Session, user_id: uuid.UUID, incoming: dict[str, Any]) -> CartItem:

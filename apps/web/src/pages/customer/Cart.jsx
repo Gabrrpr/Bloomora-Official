@@ -4,6 +4,7 @@ import { getCart, setCart, getCartCount } from "../../utils/cart.js"
 import { computeDiscount } from "../../utils/vouchers.js"
 import { useAuth } from "../../context/AuthContext"
 import { api } from "../../services/api.js"
+import { useCurrency } from "../../context/CuurencyContext.jsx"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -28,6 +29,8 @@ function QtyControl({ qty, onDecrease, onIncrease, isDark }) {
 export default function Cart({ onNavigate, cartCount, setCartCount }) {
   const { isDark } = useTheme()
   const { user } = useAuth()
+  const { formatPrice } = useCurrency() || {}
+  const money = formatPrice || ((value) => new Intl.NumberFormat(undefined, { style: "currency", currency: "PHP" }).format(Number(value || 0)))
   const [items, setItems]         = useState([])
   const [selectAll, setSelectAll] = useState(false)
   const [catalogOpen, setCatalogOpen] = useState(false)
@@ -72,7 +75,7 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
       }
       setAppliedVoucher(next)
       localStorage.setItem("bloomora_applied_voucher", JSON.stringify(next))
-      setVoucherMsg({ type: "success", text: `Voucher applied — you saved ₱${Number(result.discount).toLocaleString()}.` })
+      setVoucherMsg({ type: "success", text: `Voucher applied — you saved ${money(Number(result.discount))}.` })
     } catch (error) {
       setAppliedVoucher(null)
       localStorage.removeItem("bloomora_applied_voucher")
@@ -211,7 +214,7 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
                       <div className="hidden sm:flex flex-col items-end gap-2 flex-shrink-0">
                         <QtyControl qty={item.qty||1} onDecrease={()=>handleQty(item.id,item.group,-1)} onIncrease={()=>handleQty(item.id,item.group,1)} isDark={isDark}/>
                         <span className="text-sm font-bold" style={{ color:priceC }}>
-                          ₱{((item.price||0)*(item.qty||1)).toLocaleString()}
+                          {money((item.price||0)*(item.qty||1))}
                         </span>
                       </div>
 
@@ -231,7 +234,7 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
                     <div className="flex sm:hidden items-center justify-between gap-3 mt-3">
                       <QtyControl qty={item.qty||1} onDecrease={()=>handleQty(item.id,item.group,-1)} onIncrease={()=>handleQty(item.id,item.group,1)} isDark={isDark}/>
                       <span className="text-sm font-bold" style={{ color:priceC }}>
-                        ₱{((item.price||0)*(item.qty||1)).toLocaleString()}
+                        {money((item.price||0)*(item.qty||1))}
                       </span>
                     </div>
                   </div>
@@ -291,22 +294,22 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
             <div className="space-y-2.5 text-sm">
               <div className="flex justify-between">
                 <span style={{ color:subC }}>Subtotal ({checkedItems.length} item{checkedItems.length!==1?"s":""})</span>
-                <span className="font-semibold" style={{ color:labelC }}>₱{subtotal.toLocaleString()}.00</span>
+                <span className="font-semibold" style={{ color:labelC }}>{money(subtotal)}</span>
               </div>
               <div className="flex justify-between">
                 <span style={{ color:subC }}>Shipping Fee</span>
-                <span className="font-semibold" style={{ color:labelC }}>{shipping>0?`₱${shipping}.00`:"—"}</span>
+                <span className="font-semibold" style={{ color:labelC }}>{shipping>0 ? money(shipping) : "—"}</span>
               </div>
               {discount > 0 && (
                 <div className="flex justify-between">
                   <span style={{ color:okC }}>Voucher{appliedVoucher ? ` (${appliedVoucher.code})` : ""}</span>
-                  <span className="font-semibold" style={{ color:okC }}>−₱{discount.toLocaleString()}.00</span>
+                  <span className="font-semibold" style={{ color:okC }}>−{money(discount)}</span>
                 </div>
               )}
               <div className="h-px my-1" style={{ backgroundColor:divC }}/>
               <div className="flex justify-between font-bold text-sm">
                 <span style={{ color:labelC }}>Order total</span>
-                <span style={{ color:priceC }}>₱{total.toLocaleString()}.00</span>
+                <span style={{ color:priceC }}>{money(total)}</span>
               </div>
               <p className="text-xs" style={{ color:subC }}>VAT included, where applicable</p>
             </div>
@@ -337,7 +340,7 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
                   <div className="min-w-0">
                     <p className="text-xs font-bold truncate" style={{ color:okC }}>{appliedVoucher.code}</p>
                     <p className="text-[11px]" style={{ color:subC }}>
-                      {appliedVoucher.type==="percent" ? `${appliedVoucher.value}% off` : `₱${appliedVoucher.value} off`} · −₱{discount.toLocaleString()}
+                      {appliedVoucher.type==="percent" ? `${appliedVoucher.value}% off` : `${money(appliedVoucher.value)} off`} · −{money(discount)}
                     </p>
                   </div>
                   <button onClick={removeVoucher}

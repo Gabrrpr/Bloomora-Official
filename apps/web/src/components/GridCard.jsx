@@ -1,4 +1,5 @@
 import FallbackImage from "./FallbackImage.jsx";
+import { useCurrency } from "../context/CuurencyContext.jsx";
 
 const G  = "#2E8B34";
 const DG = "#0C573E";
@@ -43,9 +44,14 @@ function WishlistBtn({ id, wishlist, toggleWishlist, small }) {
 }
 
 export default function GridCard({ product, wishlist, toggleWishlist, onPreview }) {
+  const { formatPrice } = useCurrency() || {};
   const currentPrice = Number(product.price) || 0;
   const oldPrice = Number(product.original_price || product.original) || 0;
   const isDiscounted = oldPrice > currentPrice;
+  const displayPrice = formatPrice || ((price) => new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "PHP",
+  }).format(Number(price || 0)));
   
   const isOutOfStock = product.stock <= 0 || !product.is_available || product.status === "inactive";
 
@@ -89,9 +95,9 @@ export default function GridCard({ product, wishlist, toggleWishlist, onPreview 
       <div className="p-3 relative z-10 flex flex-col flex-1">
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-baseline gap-1.5">
-            <span className="text-base font-bold" style={{ color: G }}>₱{currentPrice.toLocaleString()}</span>
+            <span className="text-base font-bold" style={{ color: G }}>{displayPrice(currentPrice)}</span>
             {isDiscounted && (
-              <span className="text-xs text-gray-400 line-through">₱{oldPrice.toLocaleString()}</span>
+              <span className="text-xs text-gray-400 line-through">{displayPrice(oldPrice)}</span>
             )}
           </div>
           <WishlistBtn id={product.id} wishlist={wishlist} toggleWishlist={toggleWishlist} small />

@@ -367,7 +367,8 @@ export default function Register({ onNavigate }) {
         sessionStorage.removeItem(STORAGE_KEY)
         sessionStorage.setItem("registerEmail", form.email)
         sessionStorage.setItem("registerPassword", form.password)
-        localStorage.setItem("preferredCurrency", form.preferred_currency) // Remember their currency choice for the login step
+        localStorage.setItem("preferred_currency", form.preferred_currency) // Remember their currency choice for the login step
+        localStorage.removeItem("preferredCurrency")
         onNavigate("login")
       } else { setError(result.message || "Registration failed. Please try again.") }
     } catch (err) { setError(err.message || "Invalid OTP or registration failed.") }

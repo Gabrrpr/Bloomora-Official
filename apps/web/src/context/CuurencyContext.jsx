@@ -8,7 +8,7 @@ export function CurrencyProvider({ children }) {
   
   // 1. Check local storage for their preferred currency, default to PHP
   const [currency, setCurrency] = useState(() => {
-    return localStorage.getItem("preferred_currency") || "PHP";
+    return localStorage.getItem("preferred_currency") || localStorage.getItem("preferredCurrency") || "PHP";
   });
 
   // 2. Fetch live exchange rates from your new Python backend when app loads
@@ -27,6 +27,7 @@ export function CurrencyProvider({ children }) {
   // 3. Whenever they change currency, remember it in their browser
   useEffect(() => {
     localStorage.setItem("preferred_currency", currency);
+    localStorage.removeItem("preferredCurrency");
   }, [currency]);
 
   // 4. The global function that converts and formats the price

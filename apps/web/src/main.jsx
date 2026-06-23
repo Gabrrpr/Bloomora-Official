@@ -7,15 +7,18 @@ import './index.css'
 // 🚀 1. Import your Providers
 import { ThemeProvider } from './context/ThemeContext'
 import { BranchProvider } from './context/BranchContext' 
+import { CurrencyProvider } from './context/CuurencyContext'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     {/* 🚀 2. Wrap your app with the Providers */}
     <ThemeProvider>
       <BranchProvider>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
+        <CurrencyProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </CurrencyProvider>
       </BranchProvider>
     </ThemeProvider>
   </React.StrictMode>,

@@ -17,6 +17,8 @@ from typing import Any, Dict, Optional
 
 import httpx
 
+from app.core.config import settings
+
 
 _cached_rates: Optional[Dict[str, Any]] = None
 _last_fetch_time: float = 0.0
@@ -37,7 +39,7 @@ async def get_latest_rates() -> Dict[str, Any]:
     if _cached_rates is not None and (now - _last_fetch_time) < CACHE_DURATION_SECONDS:
         return _cached_rates
 
-    api_key = os.getenv("EXCHANGERATE_API_KEY")
+    api_key = settings.EXCHANGERATE_API_KEY or os.getenv("EXCHANGERATE_API_KEY")
     if not api_key:
         # Fail safely; keep backend running
         return _cached_rates or {"PHP": 1}

@@ -1,10 +1,10 @@
 from fastapi import APIRouter, HTTPException, Depends
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 from typing import List
 from pydantic import BaseModel
 # Import your database session and models
 from app.core.dependencies import get_db, get_current_user
-from app.models import Product, Order, User
+from app.models import Product, Order, OrderItem, User
 
 # NOTE: pandas and scikit-learn are imported lazily inside the function
 # to avoid crashing the server at startup when they are not installed.
@@ -38,7 +38,12 @@ async def get_homepage_recommendations(
 
         # 1. Fetch data
         past_orders = db.query(Order).filter(Order.user_id == current_user.id).all()
-        active_products = db.query(Product).filter(Product.is_available == True).all()
+        active_products = (
+            db.query(Product)
+            .options(joinedload(Product.inventory))
+            .filter(Product.is_available == True)
+            .all()
+        )
         
         if not active_products:
             return []
@@ -46,12 +51,20 @@ async def get_homepage_recommendations(
         # 2. BULLETPROOF DATA EXTRACTION
         catalog_data = []
         for p in active_products:
+            inv = getattr(p, "inventory", None)
+            image_url = str(getattr(p, "image_url", getattr(p, "image", "")) or "")
             catalog_data.append({
-                "id": str(p.id), 
-                "name": str(getattr(p, "name", "") or ""), 
-                "category": str(getattr(p, "category_name", getattr(p, "category", "")) or ""), 
+                "id": str(p.id),
+                "name": str(getattr(p, "name", "") or ""),
+                "category": str(getattr(p, "category_name", getattr(p, "category", "")) or ""),
                 "price": float(getattr(p, "price", 0) or 0.0),
-                "image_url": str(getattr(p, "image_url", getattr(p, "image", "")) or "")
+                "image_url": image_url,
+                "image": image_url,
+                "is_available": bool(getattr(p, "is_available", True)),
+                "status": p.status.value if hasattr(p.status, "value") else str(getattr(p, "status", "active") or "active"),
+                "stock": int(getattr(inv, "current_stock", 1) if inv else 1),
+                "sold_count": int(getattr(p, "sold_count", 0) or 0),
+                "original_price": float(p.original_price) if getattr(p, "original_price", None) else None,
             })
             
         df = pd.DataFrame(catalog_data)
@@ -61,8 +74,21 @@ async def get_homepage_recommendations(
         df["cat_clean"] = df["category"].fillna("").astype(str).str.lower()
         df["metadata_soup"] = df["name_clean"] + " " + df["cat_clean"]
 
-        # 4. Handle "Cold Start" (No purchase history)
-        bought_product_ids = [str(o.product_id) for o in past_orders if getattr(o, "product_id", None)]
+        # 4. Build purchase history from both legacy single-product orders and current order items.
+        bought_product_ids = {
+            str(o.product_id)
+            for o in past_orders
+            if getattr(o, "product_id", None)
+        }
+        item_product_ids = (
+            db.query(OrderItem.product_id)
+            .join(Order, Order.id == OrderItem.order_id)
+            .filter(Order.user_id == current_user.id, OrderItem.product_id.isnot(None))
+            .distinct()
+            .all()
+        )
+        bought_product_ids.update(str(row.product_id) for row in item_product_ids if row.product_id)
+        bought_product_ids = list(bought_product_ids)
         
         if not bought_product_ids:
             return df.head(limit).drop(columns=["metadata_soup", "name_clean", "cat_clean"]).to_dict(orient="records")

@@ -85,7 +85,7 @@ export async function addToCart(item) {
     writeGuestCart(cart)
     return cart
   }
-  const nextItems = mapResponse(await api.post("/cart/web/items", { item }))
+  const nextItems = mapResponse(await api.post("/cart/items", { item }))
   broadcastCartUpdate(nextItems)
   return nextItems
 }
