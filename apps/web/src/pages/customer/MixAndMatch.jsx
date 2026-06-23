@@ -308,7 +308,10 @@ export default function MixAndMatch({ onNavigate }) {
         ])
 
         setCustomizationEnabled(toggleRes.enabled)
-        setProducts(Array.isArray(prodRes) ? prodRes : [])
+        
+        // 🚀 FIX: Safely extract products so we don't accidentally wipe the array
+        const allProds = Array.isArray(prodRes) ? prodRes : (prodRes.products || prodRes.data || []);
+        setProducts(allProds)
         setAiUsage(usageRes)
       } catch (e) {
         console.error("Failed to load products", e)
@@ -321,7 +324,7 @@ export default function MixAndMatch({ onNavigate }) {
     load()
   }, [])
 
-  // ── Loading overlay: animate progress bar + rotate facts ──
+  // ── Loading overlay: animate progress bar + rotate facts (UI only) ──
   useEffect(() => {
     if (!generating) { setProgress(0); return }
     setProgress(8)
@@ -337,45 +340,65 @@ export default function MixAndMatch({ onNavigate }) {
     return () => { clearInterval(prog); clearInterval(facts) }
   }, [generating])
 
-  const getByCategory = (cat) => products.filter(p => p.category === cat)
-  const selProd = (cat) => products.find(p => p.id === selections[cat])
+  // 🚀 FIX: Smart Category Checker
+  const getCat = (p) => {
+    if (typeof p.category === 'string') return p.category.toLowerCase().trim();
+    if (typeof p.category_name === 'string') return p.category_name.toLowerCase().trim();
+    if (p.category && p.category.name) return p.category.name.toLowerCase().trim();
+    return "";
+  };
 
-  // Fillers may live in their own category or inside "flower" — detect by name/category.
+  const getByCategory = (catTarget) => products.filter(p => {
+    const c = getCat(p);
+    const target = catTarget.toLowerCase().trim();
+    return c === target || c === target + "s" || c + "s" === target;
+  });
+
+  const selProd = (cat) => products.find(p => p.id === selections[cat]);
+
+  // 🚀 FIX: Strictly block "pot fillers", but accept genuine fillers
   const isFiller = (p) => {
-    const c = (p.category || "").toLowerCase()
-    const n = (p.name || "").toLowerCase()
-    return c.includes("filler") || n.includes("filler")
-  }
-  const flowerList = products.filter(p => p.category === "flower" && !isFiller(p))
-  const fillerList = products.filter(isFiller)
+    const c = getCat(p);
+    const n = (p.name || "").toLowerCase();
+    const t = (p.product_type || "").toLowerCase();
+    
+    if (c.includes("pot filler") || n.includes("pot filler") || t.includes("pot filler")) return false;
+    
+    return c.includes("filler") || n.includes("filler") || t.includes("filler");
+  };
+
+  // 🚀 FIX: Broad match to catch all flowers, ignoring the storefront 'is_available' flag
+  const flowerList = products.filter(p => {
+    if (isFiller(p)) return false;
+    
+    const c = getCat(p);
+    const t = (p.product_type || "").toLowerCase();
+    
+    return c.includes("flower") || t.includes("flower") || 
+           c === "roses" || c === "tulips" || c === "sunflowers" || 
+           c === "carnations" || c === "lilies" || c === "peonies" || c === "orchids";
+  });
+
+  const fillerList = products.filter(isFiller);
 
   const selectedFlowers = flowerList.filter(p => (flowerQty[p.id] || 0) > 0)
   const totalStems = selectedFlowers.reduce((sum, p) => sum + (flowerQty[p.id] || 0), 0)
 
-  // Each presentation caps the total stems (a vase holds fewer than a bouquet).
   const maxStems = ARRANGEMENTS.find(a => a.key === arrangementType)?.maxStems ?? 24
   const atStemLimit = totalStems >= maxStems
 
-  // Flower stem stepper (phase 2). qty 0 = not selected.
+  // 🚀 FIX: Stop relying on 'stock_status' and check actual stock to bypass storefront rules
   const incFlower = (p) => {
-    if (p.stock_status === "out_of_stock") return
-    if (atStemLimit) {                                 // arrangement is full
+    if (p.stock <= 0 || p.status === "inactive") return // Only block if TRULY empty or deleted
+    if (atStemLimit) { 
       const label = ARRANGEMENTS.find(a => a.key === arrangementType)?.label || "arrangement"
       setError(`A ${label.toLowerCase()} fits up to ${maxStems} stems. Remove a stem to add a different flower.`)
       return
     }
     setFlowerQty(prev => {
       const cur = prev[p.id] || 0
-      if (p.stock && cur >= p.stock) return prev      // don't exceed stock on hand
+      if (p.stock && cur >= p.stock) return prev 
       return { ...prev, [p.id]: cur + 1 }
-    })
-    setError("")
-  }
-  const decFlower = (p) => {
-    setFlowerQty(prev => {
-      const cur = prev[p.id] || 0
-      if (cur <= 1) { const { [p.id]: _, ...rest } = prev; return rest }
-      return { ...prev, [p.id]: cur - 1 }
     })
     setError("")
   }
@@ -410,6 +433,12 @@ export default function MixAndMatch({ onNavigate }) {
   }
 
   const handleGenerate = async () => {
+    // 🚀 NEW: Redirect guests to login
+    if (!localStorage.getItem('access_token')) {
+      window.location.href = '/login';
+      return;
+    }
+
     if (!customizationEnabled) {
       setError("AI Customization is temporarily disabled during peak seasons.")
       return
@@ -481,6 +510,12 @@ export default function MixAndMatch({ onNavigate }) {
   }
 
   const addToBag = async () => {
+    // 🚀 NEW: Redirect guests to login
+    if (!localStorage.getItem('access_token')) {
+      window.location.href = '/login';
+      return;
+    }
+
     if (!result) return
     const names = result.price_breakdown?.items?.map(i => i.product_name).join(", ") || "Custom"
     await addToCart({
@@ -925,7 +960,7 @@ export default function MixAndMatch({ onNavigate }) {
                             qty={flowerQty[p.id] || 0}
                             onInc={() => incFlower(p)}
                             onDec={() => decFlower(p)}
-                            disabled={p.stock_status === "out_of_stock"}
+                            disabled={p.stock <= 0 || p.status === "inactive"} // 🚀 FIX
                             incDisabled={atStemLimit}
                             tokens={tokens}
                           />
@@ -946,7 +981,7 @@ export default function MixAndMatch({ onNavigate }) {
                             product={p}
                             selected={fillerIds.includes(p.id)}
                             onClick={() => toggleFiller(p.id)}
-                            disabled={p.stock_status === "out_of_stock"}
+                            disabled={p.stock <= 0 || p.status === "inactive"} // 🚀 FIX
                             tokens={tokens}
                           />
                         ))}
@@ -972,7 +1007,7 @@ export default function MixAndMatch({ onNavigate }) {
                         product={p}
                         selected={selections[cat] === p.id}
                         onClick={() => toggleProduct(cat, p.id)}
-                        disabled={p.stock_status === "out_of_stock"}
+                        disabled={p.stock <= 0 || p.status === "inactive"} // 🚀 FIX
                         tokens={tokens}
                       />
                     ))}

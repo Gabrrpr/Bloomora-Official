@@ -243,6 +243,12 @@ export default function DescribeArrangement({ onNavigate }) {
   }
 
   const handleGenerateCard = async () => {
+    // 🚀 NEW: Redirect guests to login
+    if (!localStorage.getItem('access_token')) {
+      window.location.href = '/login';
+      return;
+    }
+
     if (!aiCardState.relationship || !aiCardState.occasion) {
       setCardError("Please select a relationship and occasion.");
       return;
@@ -265,6 +271,12 @@ export default function DescribeArrangement({ onNavigate }) {
   }
 
   const handleGenerate = async () => {
+    // 🚀 NEW: Redirect guests to login
+    if (!localStorage.getItem('access_token')) {
+      window.location.href = '/login';
+      return;
+    }
+
     if (!customizationEnabled) {
       setError("AI Customization is temporarily disabled during peak seasons.")
       return
@@ -350,6 +362,12 @@ export default function DescribeArrangement({ onNavigate }) {
   const grandTotal = baseTotal + addOnTotal;
 
   const handleAddToCart = async (destination = "cart") => {
+    // 🚀 NEW: Redirect guests to login
+    if (!localStorage.getItem('access_token')) {
+      window.location.href = '/login';
+      return;
+    }
+
     if (!result) return
     
     const breakdownNames = result.price_breakdown?.items?.map(i => `${i.quantity}x ${i.product_name}`).join(", ") || "Custom arrangement"

@@ -60,16 +60,39 @@ export default function Profile({ onNavigate }) {
 
   const [savedForm, setSavedForm] = useState({ ...form });
 
-  // Password & Security state (fixes runtime ReferenceError: pwdStep is not defined)
+  // Password & Security state
   const [pwdLoading, setPwdLoading] = useState(false);
   const [pwdOtp, setPwdOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
+
+  // Wishlist State
+  const [wishlistProducts, setWishlistProducts] = useState([]);
+  const [loadingWishlist, setLoadingWishlist] = useState(true);
+
+  // Address book state
+  const [addresses, setAddresses] = useState([]);
+  const [loadingAddresses, setLoadingAddresses] = useState(true);
+  const [showAddressModal, setShowAddressModal] = useState(false);
+  const [editingAddress, setEditingAddress] = useState(null);
+  const [addressForm, setAddressForm] = useState({ ...EMPTY_ADDRESS });
+  const [savingAddress, setSavingAddress] = useState(false);
+  const [addressError, setAddressError] = useState("");
+  
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [loadingOrders, setLoadingOrders] = useState(true);
+
+  // Notification preferences
+  const [loadingPrefs, setLoadingPrefs] = useState(true);
+  const [prefs, setPrefs] = useState({
+    order_updates: false,
+    promotions: false,
+    chat_messages: false,
+  });
 
   const requestPasswordOTP = async () => {
     try {
       setPwdLoading(true);
       setPwdOtp("");
-      // expects backend to start reset/verification flow
       await api.requestPasswordOTP?.();
       setPwdStep(2);
     } catch (e) {
@@ -83,10 +106,7 @@ export default function Profile({ onNavigate }) {
   const confirmAndChangePassword = async () => {
     try {
       setPwdLoading(true);
-      await api.confirmAndChangePassword?.({
-        otp: pwdOtp,
-        new_password: newPassword,
-      });
+      await api.confirmAndChangePassword?.({ otp: pwdOtp, new_password: newPassword });
       setPwdStep(1);
       alert("Password updated successfully.");
     } catch (e) {
@@ -97,42 +117,18 @@ export default function Profile({ onNavigate }) {
     }
   };
 
-  // Address book state
-  const [addresses, setAddresses] = useState([]);
-
-
-  const [loadingAddresses, setLoadingAddresses] = useState(true);
-  const [showAddressModal, setShowAddressModal] = useState(false);
-  const [editingAddress, setEditingAddress] = useState(null);
-  const [addressForm, setAddressForm] = useState({ ...EMPTY_ADDRESS });
-  const [savingAddress, setSavingAddress] = useState(false);
-  const [addressError, setAddressError] = useState("");
-  const [recentOrders, setRecentOrders] = useState([]);
-  const [loadingOrders, setLoadingOrders] = useState(true);
-
-  // Notification preferences (fixes runtime ReferenceError: loadingPrefs is not defined)
-  const [loadingPrefs, setLoadingPrefs] = useState(true);
-  const [prefs, setPrefs] = useState({
-    order_updates: false,
-    promotions: false,
-    chat_messages: false,
-  });
-
   const handleTogglePref = async (key) => {
-    // Optimistic UI update; backend integration can be added later.
     setPrefs((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-
+  // Load Recent Orders
   useEffect(() => {
     async function loadRecentOrders() {
       if (!user) return;
       setLoadingOrders(true);
       try {
-        const data = await api.getMyOrders(); // Fetch the user's orders
+        const data = await api.getMyOrders();
         const ordersArray = Array.isArray(data) ? data : data.data || [];
-        
-        // Sort by newest first and grab the top 3
         const sorted = ordersArray.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         setRecentOrders(sorted.slice(0, 3));
       } catch (e) {
@@ -144,6 +140,7 @@ export default function Profile({ onNavigate }) {
     loadRecentOrders();
   }, [user]);
   
+  // Load User Info, Addresses, and Wishlist
   useEffect(() => {
     if (user) {
       setForm({
@@ -161,6 +158,7 @@ export default function Profile({ onNavigate }) {
       setSavedForm({ ...form });
     }
     loadAddresses();
+    loadWishlist();
   }, [user]);
 
   async function loadAddresses() {
@@ -172,6 +170,18 @@ export default function Profile({ onNavigate }) {
       console.error("Failed to load addresses:", e);
     } finally {
       setLoadingAddresses(false);
+    }
+  }
+
+  async function loadWishlist() {
+    setLoadingWishlist(true);
+    try {
+      const data = await api.getWishlist();
+      setWishlistProducts(data || []);
+    } catch (e) {
+      console.error("Failed to load wishlist:", e);
+    } finally {
+      setLoadingWishlist(false);
     }
   }
 
@@ -210,7 +220,6 @@ export default function Profile({ onNavigate }) {
       await loadAddresses();
       setShowAddressModal(false);
     } catch (err) {
-      console.error("Failed to save address:", err);
       setAddressError(err.message || "Failed to save address.");
     } finally {
       setSavingAddress(false);
@@ -236,10 +245,24 @@ export default function Profile({ onNavigate }) {
     }
   };
 
-  const initials = [form.firstName?.[0], form.lastName?.[0]]
-    .filter(Boolean)
-    .join("")
-    .toUpperCase() || "U";
+  const handleDeleteAccount = async () => {
+    const confirmDelete = window.confirm(
+      "WARNING: Are you absolutely sure you want to permanently delete your account? All your personal data, order history, and preferences will be erased. This action cannot be undone."
+    );
+    if (!confirmDelete) return;
+
+    try {
+      await api.deleteAccount();
+      // Completely wipe the frontend session
+      localStorage.clear();
+      window.dispatchEvent(new CustomEvent("bloomora:logout"));
+      onNavigate("login");
+    } catch (err) {
+      alert(err.message || "Failed to delete account. Please contact support.");
+    }
+  };
+
+  const initials = [form.firstName?.[0], form.lastName?.[0]].filter(Boolean).join("").toUpperCase() || "U";
 
   const handlePhotoClick = () => {
     if (editing) fileInputRef.current?.click();
@@ -250,29 +273,23 @@ export default function Profile({ onNavigate }) {
     if (!file) return;
     if (!file.type.startsWith("image/")) return;
 
-    // 1. Rip the token straight from browser memory to guarantee it exists
     const rawToken = localStorage.getItem("access_token");
     if (!rawToken) {
       alert("Authentication error: No token found. Please log in again.");
       return;
     }
 
-    // 2. Show the local preview instantly
     const reader = new FileReader();
     reader.onload = (ev) => setAvatarSrc(ev.target.result);
     reader.readAsDataURL(file);
 
-    // 3. Prepare the file
     const formData = new FormData();
-    formData.append("file", file); // Must exactly match the FastAPI parameter name
+    formData.append("file", file); 
 
     try {
-      // 4. Send directly to backend with the raw token
       const response = await fetch(`${API_BASE}/users/profile/upload-picture`, {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${rawToken}`
-        },
+        headers: { "Authorization": `Bearer ${rawToken}` },
         body: formData
       });
 
@@ -282,15 +299,11 @@ export default function Profile({ onNavigate }) {
       }
 
       const res = await response.json();
-
-      // 5. Update UI
       updateUserContext({ profilePictureUrl: res.profile_picture_url || res.url });
       alert("Profile picture updated successfully!");
-
     } catch (error) {
-      console.error("Failed to upload avatar:", error);
       alert(error.message);
-      setAvatarSrc(user?.profilePictureUrl || null); // Revert preview on fail
+      setAvatarSrc(user?.profilePictureUrl || null); 
     }
   };
 
@@ -361,7 +374,6 @@ export default function Profile({ onNavigate }) {
         setTimeout(() => onNavigate("home"), 1500);
       }
     } catch (err) {
-      console.error("Failed to save profile:", err);
       alert(err.message || "Failed to save.");
     }
   };
@@ -379,7 +391,6 @@ export default function Profile({ onNavigate }) {
   };
 
   if (!user) {
-    // If user is null, redirect to login and render nothing to prevent crashes
     setTimeout(() => onNavigate("login"), 0); 
     return null; 
   }
@@ -418,6 +429,7 @@ export default function Profile({ onNavigate }) {
           </div>
         )}
 
+        {/* Header Block */}
         <div className="bg-white border border-gray-200 rounded-xl overflow-hidden mb-5" style={{ animation: "profileRise 0.5s ease 0.08s both" }}>
           <div className="h-24" style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }} />
           <div className="px-6 pb-6">
@@ -465,6 +477,7 @@ export default function Profile({ onNavigate }) {
           </div>
         </div>
 
+        {/* Personal Info */}
         <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5" style={{ animation: "profileRise 0.5s ease 0.16s both" }}>
           <h3 className="text-sm font-semibold text-gray-700 mb-5">Personal Information</h3>
           <div className="grid sm:grid-cols-2 gap-4">
@@ -577,7 +590,40 @@ export default function Profile({ onNavigate }) {
             </div>
           )}
         </div>
-                {/* Preferences */}
+
+        {/* 🚀 NEW: Wishlist Section */}
+        <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5" style={{ animation: "profileRise 0.5s ease 0.30s both" }}>
+          <h3 className="text-sm font-semibold text-gray-700 mb-1">My Wishlist</h3>
+          <p className="text-xs text-gray-400 mb-5">Items you've saved for later</p>
+
+          {loadingWishlist ? (
+            <div className="py-8 text-center text-gray-400 text-sm">Loading wishlist...</div>
+          ) : wishlistProducts.length === 0 ? (
+            <div className="py-8 text-center border border-dashed border-gray-200 rounded-lg">
+              <div className="text-3xl mb-2">❤️</div>
+              <p className="text-sm text-gray-500">Your wishlist is empty</p>
+              <button onClick={() => onNavigate("shop")} className="mt-3 text-xs font-semibold hover:underline" style={{ color: G }}>
+                Browse flowers
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+              {wishlistProducts.map((p) => (
+                <div key={p.id} className="border border-gray-100 rounded-xl overflow-hidden group cursor-pointer" onClick={() => onNavigate("shop")}>
+                  <div className="aspect-square bg-gray-50 overflow-hidden">
+                    <img src={p.image_url} alt={p.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                  </div>
+                  <div className="p-3">
+                    <p className="text-xs font-semibold text-gray-800 truncate">{p.name}</p>
+                    <p className="text-xs font-bold mt-1" style={{ color: G }}>₱{p.price.toLocaleString()}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Preferences */}
         <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5" style={{ animation: "profileRise 0.5s ease 0.32s both" }}>
           <h3 className="text-sm font-semibold text-gray-700 mb-1">Preferences</h3>
           <p className="text-xs text-gray-400 mb-5">Manage your theme and notification settings</p>
@@ -713,10 +759,14 @@ export default function Profile({ onNavigate }) {
           )}
         </div>
 
+        {/* 🚀 NEW: Functional Danger Zone */}
         <div className="bg-white border border-red-100 rounded-xl p-6" style={{ animation: "profileRise 0.5s ease 0.48s both" }}>
           <h3 className="text-sm font-semibold text-red-500 mb-1">Danger Zone</h3>
           <p className="text-xs text-gray-400 mb-4">Permanently delete your account. This cannot be undone.</p>
-          <button className="px-5 py-2 text-sm font-semibold text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition">
+          <button 
+            onClick={handleDeleteAccount}
+            className="px-5 py-2 text-sm font-semibold text-red-500 border border-red-200 rounded-lg hover:bg-red-50 transition cursor-pointer"
+          >
             Delete Account
           </button>
         </div>
@@ -795,4 +845,3 @@ export default function Profile({ onNavigate }) {
     </div>
   );
 }
-

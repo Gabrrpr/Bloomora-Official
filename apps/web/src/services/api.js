@@ -223,7 +223,7 @@ export const api = {
   },
 
   async updateAdminOrderStatus(orderId, status) {
-    return api.post(`/orders/${orderId}/action`, { status });
+  return api.patch(`/orders/admin/${orderId}/force-status`, { status });
   },
 
   async getMyOrders(status) {
@@ -454,4 +454,17 @@ export const api = {
   async getMobileFeedAnalytics(tab, branch) {
     return api.get(`/mobile-feed/admin/analytics?tab=${encodeURIComponent(tab)}&branch=${encodeURIComponent(branch)}`);
   },
+  async deleteAccount() {
+    return api.delete('/users/me');
+  },
+
+  async getWishlist() {
+    return api.get('/users/me/wishlist');
+  },
+
+  async toggleWishlist(productId) {
+    return api.post(`/users/me/wishlist/${productId}`, {});
+  },
 };
+
+

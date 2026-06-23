@@ -447,3 +447,104 @@ def update_user(
     db.refresh(user)
 
     return {"status": "success", "message": "User updated successfully.", "user": serialize_user(user)}
+
+@router.delete("/me", response_model=dict)
+def delete_my_account(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        # 1. Attempt to delete avatar from Supabase to free up space
+        if current_user.profile_picture_url:
+            try:
+                files = supabase.storage.from_("avatars").list(str(current_user.id))
+                if files:
+                    paths = [f"{current_user.id}/{f['name']}" for f in files]
+                    supabase.storage.from_("avatars").remove(paths)
+            except Exception:
+                pass
+        
+        # 2. Delete the user from the database
+        db.delete(current_user)
+        db.commit()
+        return {"status": "success", "message": "Account deleted permanently."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to delete account: {str(e)}")
+
+
+@router.get("/me/wishlist", response_model=List[dict])
+def get_wishlist(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    wishlist_data = getattr(current_user, "wishlist", [])
+    
+    # Safety check: if the database returned it as a string, parse it into a list
+    if isinstance(wishlist_data, str):
+        try:
+            import json
+            wishlist_data = json.loads(wishlist_data)
+        except:
+            wishlist_data = []
+
+    if not wishlist_data or not isinstance(wishlist_data, list):
+        return []
+    
+    # 🚀 THE FIX: Convert the text strings back into proper UUID objects
+    import uuid
+    valid_uuids = []
+    for w_id in wishlist_data:
+        try:
+            valid_uuids.append(uuid.UUID(w_id))
+        except:
+            pass
+
+    if not valid_uuids:
+        return []
+
+    # Fetch the actual product data using the properly formatted UUIDs
+    products = db.query(Product).filter(Product.id.in_(valid_uuids)).all()
+    
+    result = []
+    for p in products:
+        result.append({
+            "id": str(p.id),
+            "name": p.name,
+            "price": float(p.price) if p.price else 0,
+            "image_url": p.image_url,
+            "status": p.status.value if hasattr(p.status, "value") else str(p.status)
+        })
+    return result
+
+
+@router.post("/me/wishlist/{product_id}", response_model=dict)
+def toggle_wishlist(
+    product_id: str, 
+    db: Session = Depends(get_db), 
+    current_user: User = Depends(get_current_user)
+):
+    print(f"DEBUG: Current User ID: {current_user.id}")
+    print(f"DEBUG: Current Wishlist: {getattr(current_user, 'wishlist', 'Not Found')}")
+
+    try:
+        # Normalize product_id
+        prod_uuid = str(uuid.UUID(product_id))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid product ID")
+
+    current_wishlist = list(getattr(current_user, "wishlist", []) or [])
+    
+    if prod_uuid in current_wishlist:
+        current_wishlist.remove(prod_uuid)
+        action = "removed"
+    else:
+        current_wishlist.append(prod_uuid)
+        action = "added"
+        
+    current_user.wishlist = current_wishlist
+    
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(current_user, "wishlist")
+    
+    db.commit()
+    print(f"DEBUG: Successfully {action} product {prod_uuid}")
+    
+    return {"status": "success", "action": action, "wishlist": current_wishlist}

@@ -120,7 +120,9 @@ def search_products(q: str = "", db: Session = Depends(get_db)):
 def get_customization_products(db: Session = Depends(get_db)):
     products = (
         db.query(Product)
-        .filter(Product.is_available == True, Product.is_visible == True)
+        # 🚀 THE FIX: We removed `Product.is_available == True` and `Product.is_visible == True`.
+        # Now we only check if the product hasn't been completely deleted/archived.
+        .filter(Product.status == ProductStatusEnum.active)
         .options(
             joinedload(Product.inventory),
             joinedload(Product.flower),

@@ -1472,6 +1472,7 @@ function CareSection({ isDark, product }) {
 export default function ProductPreviewModal({ product, products = [], onClose, onNavigate }) {
   const [color,         setColor]         = useState(null)
   const [qty, setQty] = useState(1)
+  const isLoggedIn = !!localStorage.getItem('access_token');
   const [addOns,        setAddOns]        = useState([])
   const [delivType,     setDelivType]     = useState(null)
   const [customDate,    setCustDate]      = useState("")
@@ -1636,6 +1637,12 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   }
 
   const startFlow = async d => {
+    // 🚀 THE FIX: Block guests from running the logic
+    if (!isLoggedIn) {
+      window.location.href = '/login';
+      return;
+    }
+
     if (!validate()) return
 
     const selectedAddOnObjects = addOns.map(id => {
@@ -1824,6 +1831,17 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
 
   /* ── Footer CTAs ── */
   const FooterCTAs = () => {
+    if (!isLoggedIn) {
+      return (
+        <button onClick={() => window.location.href = '/login'}
+          className="w-full py-3.5 rounded-xl text-sm font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer border-none"
+          style={{ background: isDark ? "#374151" : "#e5e7eb", color: isDark ? "#f8fafc" : "#111827" }}>
+          <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"/></svg>
+          Log in to Order
+        </button>
+      );
+    }
+
     const isOutOfStock = product.stock <= 0 || !product.is_available || product.status === "inactive";
 
     if (isOutOfStock) {

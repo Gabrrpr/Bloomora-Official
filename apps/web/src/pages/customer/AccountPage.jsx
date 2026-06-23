@@ -13,7 +13,6 @@ const DG  = "#0C573E"
 const MENU_ITEMS = [
   { id:"overview", label:"Overview",        d:"M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
   { id:"orders",   label:"My Orders",       d:"M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007Z" },
-  { id:"wishlist", label:"Wishlist",         d:"M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z" },
   { id:"details",  label:"Personal Details", d:"M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" },
   { id:"address",  label:"Address Book",    d:"M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75" },
   { id:"password", label:"Change Password", d:"M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" },
@@ -174,32 +173,6 @@ function OrdersPanel({ onNavigate, isDark }) {
   )
 }
 
-// ── WishlistPanel ─────────────────────────────────────────────────────────────
-function WishlistPanel({ onNavigate, isDark }) {
-  const iconBg = isDark ? "#1e293b" : "#f3f4f6"
-  const iconC  = isDark ? "#334155" : "#d1d5db"
-  const headC  = isDark ? "#f1f5f9" : "#374151"
-  const subC   = isDark ? "#64748b" : "#9ca3af"
-  return (
-    <div>
-      <SectionHeader title="Wishlist" description="Items you've saved for later." isDark={isDark}/>
-      <div className="flex flex-col items-center py-12 sm:py-16 text-center">
-        <div className="w-16 h-16 rounded-full flex items-center justify-center mb-5" style={{ backgroundColor:iconBg }}>
-          <svg className="w-7 h-7" style={{ color:iconC }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12Z"/>
-          </svg>
-        </div>
-        <p className="text-base font-semibold mb-1" style={{ color:headC }}>Your wishlist is empty</p>
-        <p className="text-sm mb-6" style={{ color:subC }}>Save items you love by clicking the heart icon on any product.</p>
-        <PrimaryBtn onClick={() => onNavigate?.("shop")}>Explore Products</PrimaryBtn>
-      </div>
-    </div>
-  )
-}
-
-// ── DetailsPanel ──────────────────────────────────────────────────────────────
-// Sensitive fields (email) require the user to re-enter their current password
-// before the change is saved. Non-sensitive fields (name, phone) save directly.
 function DetailsPanel({ user, showToast, isDark }) {
   const { refreshUser, updateUserContext } = useAuth()
 
@@ -885,7 +858,6 @@ export default function AccountPage({ onNavigate }) {
     switch(panel) {
       case "overview": return <OverviewPanel {...props}/>
       case "orders":   return <OrdersPanel {...props}/>
-      case "wishlist": return <WishlistPanel {...props}/>
       case "details":  return <DetailsPanel {...props}/>
       case "address":  return <AddressPanel {...props}/>
       case "password": return <PasswordPanel {...props}/>

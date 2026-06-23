@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Text, Enum, Boolean, ForeignKey, DateTime
+from sqlalchemy import Column, String, Text, Enum, Boolean, ForeignKey, DateTime, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from .base import Base, now_utc
@@ -47,6 +47,7 @@ class User(Base):
     staff_verification_token = Column(String(255), nullable=True)
     staff_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     profile_picture_url = Column(String(255), nullable=True)
+    wishlist = Column(JSON, default=[])
 
     # Relationships
     orders = relationship("Order", back_populates="user", foreign_keys="Order.user_id")

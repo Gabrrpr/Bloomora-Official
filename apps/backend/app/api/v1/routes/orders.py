@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Body, Query, Request
 from sqlalchemy.orm import Session, object_session, joinedload
 from sqlalchemy import or_, func, String, text
 from sqlalchemy.exc import IntegrityError
@@ -826,3 +826,28 @@ def save_lalamove_setting(
     db.execute(query, {"val": enabled})
     db.commit()
     return {"status": "success", "enabled": enabled == "true"}
+
+# In app/api/v1/routes/orders.py
+@router.patch("/{order_id}/force-status")
+def force_order_status(
+    order_id: str,
+    payload: dict = Body(...), # Receive a simple dict
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff)
+):
+    status = payload.get("status")
+    order = db.query(Order).filter(Order.id == uuid.UUID(order_id)).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    if status == "paid":
+        order.status = OrderStatusEnum.paid
+        if order.transaction:
+            order.transaction.status = PaymentStatusEnum.paid.value
+        _convert_reservations(db, order) 
+        _increment_sold_count(db, order)
+    elif status == "delivered":
+        order.status = OrderStatusEnum.delivered
+        
+    db.commit()
+    return {"status": "success", "new_status": order.status}

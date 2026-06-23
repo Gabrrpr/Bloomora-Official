@@ -51,7 +51,7 @@ LOCAL_ORIGINS = {
 }
 
 DEPLOYED_ORIGINS = {
-    "https://blueviolet-otter-621683.hostingersite.com",
+    "https://estings.shop",
 }
 
 CONFIGURED_ORIGINS = {
