@@ -911,13 +911,29 @@ def get_lalamove_status(db: Session = Depends(get_db), current_user: User = Depe
 
     # Default to False if nothing is found
     enabled = False 
-    if result and result[0]:
-        # result[0] is typically a JSON string in your DB
-        enabled = json.loads(result[0])
+    if result and result[0] is not None:
+        raw_val = result[0]
+        
+        # If the database already parsed it as a boolean, just use it
+        if isinstance(raw_val, bool):
+            enabled = raw_val
+        # If it's a string, try to parse it
+        elif isinstance(raw_val, str):
+            # Sometimes raw strings like 'true' or 'false' get saved without JSON formatting
+            if raw_val.lower() == 'true':
+                enabled = True
+            elif raw_val.lower() == 'false':
+                enabled = False
+            else:
+                try:
+                    enabled = json.loads(raw_val)
+                except json.JSONDecodeError:
+                    enabled = bool(raw_val)
+        # Fallback catch-all
+        else:
+            enabled = bool(raw_val)
     
     return {"enabled": enabled}
-
-# 2. POST ROUTE (For the Admin side to toggle)
 @router.post("/admin/settings/lalamove", tags=["Admin"])
 def update_lalamove_status(
     payload: dict = Body(...), 
