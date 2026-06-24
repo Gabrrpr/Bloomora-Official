@@ -17,6 +17,7 @@ export type AppliedVoucher = {
 };
 
 export type ActiveAdvertisement = {
+  cta_destination?: string | null;
   id: string;
   image_url: string;
   title: string;

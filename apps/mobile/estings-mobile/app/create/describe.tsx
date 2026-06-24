@@ -12,8 +12,6 @@ import {
   Send,
   ShoppingCart,
   Sparkles,
-  Star,
-  Heart,
   X,
 } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -45,7 +43,11 @@ import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg'
 
 import { AppBrandHeader, getAppBrandHeaderLayout } from '@/components/app-brand-header';
 import { FloatingProductSearch } from '@/components/floating-product-search';
+import { GreetingCardComposer } from '@/components/greeting-card-composer';
+import { ProductAddOnSelector } from '@/components/product-add-on-selector';
+import { formatPhp, type Product } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
+import { requireSignedIn } from '@/services/auth-guard';
 import { addAiArrangementToCart } from '@/services/guest-cart';
 import {
   checkAndGenerate,
@@ -103,6 +105,11 @@ export default function DescribeArrangementScreen() {
   const [customizationEnabled, setCustomizationEnabled] = useState(true);
   const [addingToCart, setAddingToCart] = useState(false);
   const [addedToCart, setAddedToCart] = useState(false);
+  const [addOns, setAddOns] = useState<Product[]>([]);
+  const [arrangementName, setArrangementName] = useState('AI Arrangement');
+  const [cardMessage, setCardMessage] = useState('');
+  const [isLoadingAddOns, setIsLoadingAddOns] = useState(false);
+  const [selectedAddOnIds, setSelectedAddOnIds] = useState<ReadonlySet<string>>(() => new Set());
   const [isListening, setIsListening] = useState(false);
   const [speechLevel, setSpeechLevel] = useState(0);
   const [isHeaderSolid, setIsHeaderSolid] = useState(false);
@@ -121,6 +128,30 @@ export default function DescribeArrangementScreen() {
       easing: Easing.out(Easing.cubic),
     });
   }, [hasPrompt, promptFocusProgress]);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoadingAddOns(true);
+    shopApi.getAddOns()
+      .then((nextAddOns) => {
+        if (active) {
+          setAddOns(nextAddOns);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setAddOns([]);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setIsLoadingAddOns(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     const speechModule = getSpeechRecognitionModule();
@@ -298,6 +329,9 @@ export default function DescribeArrangementScreen() {
 
       if (data.success) {
         setResult(data);
+        setArrangementName(data.price_breakdown?.items?.[0]?.product_name || 'AI Arrangement');
+        setCardMessage('');
+        setSelectedAddOnIds(new Set());
         setAiUsage((prev) => (prev ? { ...prev, remaining: data.remaining_generations ?? prev.remaining } : prev));
 
         // Scroll to results after a brief delay
@@ -315,7 +349,10 @@ export default function DescribeArrangementScreen() {
   };
 
   const handleAddToCart = async () => {
-    if (!result || addingToCart) return;
+    if (!result || addingToCart) return false;
+
+    const session = await requireSignedIn('add this arrangement to your cart');
+    if (!session) return false;
 
     setAddingToCart(true);
     try {
@@ -323,26 +360,34 @@ export default function DescribeArrangementScreen() {
         result.price_breakdown?.items?.map((i) => `${i.quantity}x ${i.product_name}`).join(', ') ||
         'Custom arrangement';
       const totalPricePesos = result.price_breakdown?.total_price || 0;
+      const selectedAddOns = addOns.filter((item) => selectedAddOnIds.has(item.id));
+      const addOnTotalPesos = selectedAddOns.reduce((total, item) => total + item.priceCents / 100, 0);
 
       await addAiArrangementToCart({
+        addOns: selectedAddOns,
         arrangementId: result.arrangement_id,
+        cardMessage,
         description: `Contains: ${breakdownNames}.`,
         imageUrl: result.generated_image_url,
-        name: result.price_breakdown?.items?.[0]?.product_name || 'AI Arrangement',
-        priceCents: Math.round(totalPricePesos * 100),
+        name: arrangementName.trim() || 'AI Arrangement',
+        priceCents: Math.round((totalPricePesos + addOnTotalPesos) * 100),
       });
 
       setAddedToCart(true);
-    } catch {
-      Alert.alert('Error', 'Failed to add to cart. Please try again.');
+      return true;
+    } catch (addError) {
+      Alert.alert('Error', addError instanceof Error ? addError.message : 'Failed to add to cart. Please try again.');
+      return false;
     } finally {
       setAddingToCart(false);
     }
   };
 
   const handleBuyNow = async () => {
-    await handleAddToCart();
-    router.push('/(tabs)/cart');
+    const didAdd = await handleAddToCart();
+    if (didAdd) {
+      router.push('/(tabs)/cart');
+    }
   };
 
   const handleStartOver = () => {
@@ -350,6 +395,9 @@ export default function DescribeArrangementScreen() {
     setError(null);
     setPrompt('');
     setAddedToCart(false);
+    setArrangementName('AI Arrangement');
+    setCardMessage('');
+    setSelectedAddOnIds(new Set());
   };
 
   const showResults = result && result.success;
@@ -397,11 +445,29 @@ export default function DescribeArrangementScreen() {
           <ResultsView
             addedToCart={addedToCart}
             addingToCart={addingToCart}
+            addOns={addOns}
+            arrangementName={arrangementName}
+            cardMessage={cardMessage}
+            isLoadingAddOns={isLoadingAddOns}
             onAddToCart={handleAddToCart}
             onBuyNow={handleBuyNow}
+            onChangeArrangementName={setArrangementName}
+            onChangeCardMessage={setCardMessage}
             onStartOver={handleStartOver}
+            onToggleAddOn={(addOnId) => {
+              setSelectedAddOnIds((current) => {
+                const next = new Set(current);
+                if (next.has(addOnId)) {
+                  next.delete(addOnId);
+                } else {
+                  next.add(addOnId);
+                }
+                return next;
+              });
+            }}
             prompt={prompt}
             result={result}
+            selectedAddOnIds={selectedAddOnIds}
           />
         ) : (
           <>
@@ -493,24 +559,40 @@ export default function DescribeArrangementScreen() {
 function ResultsView({
   addedToCart,
   addingToCart,
+  addOns,
+  arrangementName,
+  cardMessage,
+  isLoadingAddOns,
   onAddToCart,
   onBuyNow,
+  onChangeArrangementName,
+  onChangeCardMessage,
   onStartOver,
+  onToggleAddOn,
   prompt,
   result,
+  selectedAddOnIds,
 }: {
   addedToCart: boolean;
   addingToCart: boolean;
+  addOns: Product[];
+  arrangementName: string;
+  cardMessage: string;
+  isLoadingAddOns: boolean;
   onAddToCart: () => void;
   onBuyNow: () => void;
+  onChangeArrangementName: (value: string) => void;
+  onChangeCardMessage: (value: string) => void;
   onStartOver: () => void;
+  onToggleAddOn: (addOnId: string) => void;
   prompt: string;
   result: GenerationResult;
+  selectedAddOnIds: ReadonlySet<string>;
 }) {
   const { width } = useWindowDimensions();
   const imageSize = width - Math.min(Math.max(width * 0.062, 20), 30) * 2;
-  const arrangementName = result.price_breakdown?.items?.[0]?.product_name || 'AI Arrangement';
   const totalPrice = result.price_breakdown?.total_price || 0;
+  const materialCount = result.price_breakdown?.items?.reduce((total, item) => total + item.quantity, 0) ?? 0;
 
   return (
     <View style={styles.resultsContainer}>
@@ -525,18 +607,26 @@ function ResultsView({
 
       {/* Generated image */}
       {result.generated_image_url ? (
-        <View style={styles.imageContainer}>
-          <Image
-            contentFit="cover"
-            source={{ uri: result.generated_image_url }}
-            style={[styles.generatedImage, { height: imageSize * 1.1, width: imageSize }]}
-            transition={400}
-          />
-          <View style={styles.aiBadge}>
-            <Sparkles color="#FFFFFF" size={11} strokeWidth={2.5} />
-            <Text style={styles.aiBadgeText}>AI Generated</Text>
+        <>
+          <View style={styles.imageContainer}>
+            <Image
+              contentFit="cover"
+              source={{ uri: result.generated_image_url }}
+              style={[styles.generatedImage, { height: imageSize * 1.1, width: imageSize }]}
+              transition={400}
+            />
+            <View style={styles.aiBadge}>
+              <Sparkles color="#FFFFFF" size={11} strokeWidth={2.5} />
+              <Text style={styles.aiBadgeText}>AI Concept Preview</Text>
+            </View>
           </View>
-        </View>
+          <View style={styles.conceptNote}>
+            <Sparkles color={theme.colors.primary} size={15} strokeWidth={2.3} />
+            <Text style={styles.conceptNoteText}>
+              This image is an AI-generated concept to show the overall color palette and vibe. Your final handcrafted arrangement will strictly follow the exact stem counts and materials listed below in your Cost Breakdown.
+            </Text>
+          </View>
+        </>
       ) : (
         <View style={[styles.imagePlaceholder, { height: imageSize * 0.8, width: imageSize }]}>
           <Sparkles color="#C4C9C5" size={32} strokeWidth={1.5} />
@@ -546,7 +636,15 @@ function ResultsView({
 
       {/* Details card */}
       <View style={styles.detailsCard}>
-        <Text style={styles.arrangementName}>{arrangementName}</Text>
+        <Text style={styles.inputLabel}>Arrangement name</Text>
+        <TextInput
+          maxLength={80}
+          onChangeText={onChangeArrangementName}
+          placeholder="Arrangement name"
+          placeholderTextColor={theme.colors.textMuted}
+          style={styles.arrangementNameInput}
+          value={arrangementName}
+        />
 
         {result.price_breakdown?.items && result.price_breakdown.items.length > 0 ? (
           <>
@@ -560,7 +658,7 @@ function ResultsView({
                     <Text style={styles.materialType}>{item.material_type}:</Text>
                     <Text style={styles.materialName}>
                       {item.product_name}
-                      {item.quantity > 1 ? ` × ${item.quantity}` : ''}
+                      {item.quantity > 1 ? ` x ${item.quantity}` : ''}
                     </Text>
                   </View>
                 ))}
@@ -575,39 +673,40 @@ function ResultsView({
                   <View key={`cost-${idx}`} style={styles.costRow}>
                     <Text style={styles.costItemName}>
                       {item.product_name}
-                      {item.quantity > 1 ? (
-                        <Text style={styles.costItemQty}> × {item.quantity}</Text>
-                      ) : null}
+                      {item.quantity > 1 ? <Text style={styles.costItemQty}> x {item.quantity}</Text> : null}
                     </Text>
-                    <Text style={styles.costItemPrice}>₱{(+item.subtotal).toLocaleString()}</Text>
+                    <Text style={styles.costItemPrice}>{formatPhp(Math.round(item.subtotal * 100))}</Text>
                   </View>
                 ))}
                 <View style={styles.costTotalRow}>
                   <Text style={styles.costTotalLabel}>Total</Text>
-                  <Text style={styles.costTotalPrice}>₱{totalPrice.toLocaleString()}.00</Text>
+                  <Text style={styles.costTotalPrice}>{formatPhp(Math.round(totalPrice * 100))}</Text>
                 </View>
               </View>
             </View>
           </>
         ) : null}
 
-        {/* Availability scores */}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Flower Availability</Text>
-          <View style={styles.scoresRow}>
-            {[
-              { icon: Check, label: 'Availability', score: '10/10' },
-              { icon: Star, label: 'Popular', score: '9/10' },
-              { icon: Heart, label: 'Easy to care', score: '9/10' },
-            ].map(({ icon: Icon, label, score }) => (
-              <View key={label} style={styles.scoreCard}>
-                <Icon color={theme.colors.primary} size={18} strokeWidth={2} />
-                <Text style={styles.scoreValue}>{score}</Text>
-                <Text style={styles.scoreLabel}>{label}</Text>
-              </View>
-            ))}
+          <View style={styles.availabilityPanel}>
+            <Check color={theme.colors.primary} size={18} strokeWidth={2.4} />
+            <Text style={styles.availabilityText}>
+              {materialCount > 0
+                ? `${materialCount} listed material${materialCount === 1 ? '' : 's'} were generated from current available inventory.`
+                : 'The backend accepted this arrangement against current available inventory.'}
+            </Text>
           </View>
         </View>
+
+        <ProductAddOnSelector
+          addOns={addOns}
+          isLoading={isLoadingAddOns}
+          selectedIds={selectedAddOnIds}
+          onToggle={onToggleAddOn}
+        />
+
+        <GreetingCardComposer message={cardMessage} onChangeMessage={onChangeCardMessage} />
 
         {/* AI usage */}
         {result.remaining_generations !== undefined ? (
@@ -1417,6 +1516,23 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sansSemiBold,
     fontSize: 14,
   },
+  conceptNote: {
+    alignItems: 'flex-start',
+    backgroundColor: theme.colors.greenSoft,
+    borderColor: 'rgba(46, 139, 52, 0.16)',
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+  },
+  conceptNoteText: {
+    color: theme.colors.primaryDark,
+    flex: 1,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 12,
+    lineHeight: 18,
+  },
   detailsCard: {
     backgroundColor: '#FFFFFF',
     borderColor: 'rgba(218, 222, 218, 0.72)',
@@ -1432,6 +1548,24 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: '800',
     lineHeight: 28,
+  },
+  arrangementNameInput: {
+    backgroundColor: '#F7F8F7',
+    borderColor: 'rgba(46, 139, 52, 0.2)',
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    color: theme.colors.primaryDark,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 20,
+    minHeight: 54,
+    paddingHorizontal: theme.spacing.md,
+  },
+  inputLabel: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansBold,
+    fontSize: 11,
+    marginBottom: -12,
+    textTransform: 'uppercase',
   },
   section: {
     gap: 10,
@@ -1476,7 +1610,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   costTable: {
-    borderColor: 'rgba(218, 222, 218, 0.72)',
+    backgroundColor: '#FCF9F2',
+    borderColor: 'rgba(183, 121, 31, 0.16)',
     borderRadius: 14,
     borderWidth: 1,
     overflow: 'hidden',
@@ -1524,6 +1659,23 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sansBold,
     fontSize: 15,
     fontWeight: '700',
+  },
+  availabilityPanel: {
+    alignItems: 'center',
+    backgroundColor: '#F4FBF6',
+    borderColor: 'rgba(46, 139, 52, 0.16)',
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+  },
+  availabilityText: {
+    color: theme.colors.primaryDark,
+    flex: 1,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 12,
+    lineHeight: 18,
   },
   scoresRow: {
     flexDirection: 'row',

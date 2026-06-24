@@ -1,6 +1,6 @@
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
-import { ArrowRight, Check, ChevronRight, ChevronUp, Flower2, Gift, Minus, Plus, ShoppingBag, Sparkles, Trash2 } from 'lucide-react-native';
+import { ArrowRight, Check, ChevronRight, ChevronUp, Flower2, Minus, Plus, ShoppingBag, Sparkles, Trash2 } from 'lucide-react-native';
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
@@ -53,6 +53,7 @@ type CartListRow =
   | { id: string; products: Product[]; type: 'recommendation-row' };
 
 export default function CartScreen() {
+  const params = useLocalSearchParams<{ voucher?: string }>();
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   const brandHeaderLayout = getAppBrandHeaderLayout(width, height, insets.top);
@@ -73,6 +74,7 @@ export default function CartScreen() {
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
   const [voucherMessage, setVoucherMessage] = useState<string | null>(null);
   const [isValidatingVoucher, setIsValidatingVoucher] = useState(false);
+  const lastVoucherParam = useRef<string | null>(null);
   const selectedCartItems = useMemo(
     () => cartItems.filter((item) => selectedProductIds.has(item.product.id)),
     [cartItems, selectedProductIds],
@@ -92,18 +94,31 @@ export default function CartScreen() {
     [cartItems, productsForRecommendations, recommendationSeed],
   );
 
+  useEffect(() => {
+    const incomingVoucher = typeof params.voucher === 'string' ? params.voucher.trim().toUpperCase() : '';
+    if (!incomingVoucher || incomingVoucher === lastVoucherParam.current) {
+      return;
+    }
+    lastVoucherParam.current = incomingVoucher;
+    setAppliedVoucher(null);
+    setVoucherCode(incomingVoucher);
+    setVoucherMessage('Voucher filled in from the feed. Tap Apply when you are ready.');
+  }, [params.voucher]);
+
   const loadCart = useCallback(async (showLoading = true) => {
     if (showLoading) {
       setIsLoading(true);
     }
 
     try {
+      const selectedBranch = await getStoreBranch();
+      setBranch(selectedBranch);
       const storedItems = await getCartItems();
 
       setCartItems(storedItems);
       setSelectedProductIds(new Set(storedItems.map((item) => item.product.id)));
 
-      const catalog = await shopApi.getCatalog();
+      const catalog = await shopApi.getCatalog({ branch: selectedBranch });
       const liveProducts = catalog.products;
       setCatalogProducts(liveProducts);
       const nextItems = hydrateCartItemsFromInventory(storedItems, liveProducts);
@@ -132,7 +147,6 @@ export default function CartScreen() {
 
     try {
       setSession(await getAuthSession());
-      setBranch(await getStoreBranch());
     } catch (error) {
       console.warn('Failed to load auth session for cart.', error);
       setSession(null);
@@ -210,11 +224,13 @@ export default function CartScreen() {
     }
   }, [cartSummary.subtotalCents, isValidatingVoucher, session, voucherCode]);
 
+  const appliedVoucherCode = appliedVoucher?.code;
+
   useEffect(() => {
-    if (!appliedVoucher || !session) return;
+    if (!appliedVoucherCode || !session) return;
     let active = true;
     void validateVoucher({
-      code: appliedVoucher.code,
+      code: appliedVoucherCode,
       session,
       subtotal: cartSummary.subtotalCents / 100,
     })
@@ -233,7 +249,7 @@ export default function CartScreen() {
     return () => {
       active = false;
     };
-  }, [appliedVoucher?.code, cartSummary.subtotalCents, session]);
+  }, [appliedVoucherCode, cartSummary.subtotalCents, session]);
 
   const handleCheckout = useCallback(async () => {
     if (isCheckingOut) {
@@ -307,7 +323,7 @@ export default function CartScreen() {
     setIsRecommendationLoading(true);
 
     shopApi
-      .getRecommendations(16)
+      .getRecommendations(16, { branch })
       .then((products) => {
         if (isActive) {
           setRecommendedProducts(products);
@@ -316,7 +332,7 @@ export default function CartScreen() {
       .catch((error) => {
         if (isActive) {
           console.warn('Failed to load cart recommendations.', error);
-          void shopApi.getCatalog().then((catalog) => {
+          void shopApi.getCatalog({ branch }).then((catalog) => {
             if (isActive) {
               setRecommendedProducts(catalog.products);
               setCatalogProducts(catalog.products);
@@ -333,7 +349,7 @@ export default function CartScreen() {
     return () => {
       isActive = false;
     };
-  }, [hasRequestedRecommendations, isRecommendationLoading, recommendedProducts.length]);
+  }, [branch, hasRequestedRecommendations, isRecommendationLoading, recommendedProducts.length]);
 
   useEffect(() => {
     if (!isLoading && cartItems.length === 0) {
@@ -426,7 +442,7 @@ export default function CartScreen() {
       if (row.type === 'summary') {
         return (
           <View style={styles.sectionSpacing}>
-            <PriceBreakdown summary={cartSummary} />
+            <PriceBreakdown appliedVoucher={appliedVoucher} summary={cartSummary} />
           </View>
         );
       }
@@ -582,6 +598,7 @@ export default function CartScreen() {
             );
           }}
           summary={cartSummary}
+          appliedVoucher={appliedVoucher}
           bottomInset={insets.bottom}
         />
       ) : null}
@@ -650,6 +667,7 @@ const CartLineItem = memo(function CartLineItem({
   const removeProgress = useRef(new Animated.Value(0)).current;
   const [isRemoving, setIsRemoving] = useState(false);
   const isAiArrangement = item.product.productType === 'Ai Arrangement';
+  const addOnSummary = item.addOns?.map((addOn) => addOn.name).join(', ');
 
   const handleRemove = useCallback(() => {
     if (isRemoving) {
@@ -661,7 +679,7 @@ const CartLineItem = memo(function CartLineItem({
       duration: 220,
       easing: Easing.out(Easing.cubic),
       toValue: 1,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start(() => onRemove(item.product.id));
   }, [isRemoving, item.product.id, onRemove, removeProgress]);
 
@@ -742,6 +760,12 @@ const CartLineItem = memo(function CartLineItem({
             </Text>
           </Pressable>
           <Text style={styles.cartItemPrice}>{formatPhp(lineTotal)}</Text>
+          {addOnSummary ? (
+            <Text numberOfLines={2} style={styles.cartItemMeta}>Add-ons: {addOnSummary}</Text>
+          ) : null}
+          {item.cardMessage ? (
+            <Text numberOfLines={2} style={styles.cartItemMeta}>Greeting card: {item.cardMessage}</Text>
+          ) : null}
           <View style={styles.cartItemActions}>
             <View style={styles.quantityControl}>
               <Pressable
@@ -770,13 +794,6 @@ const CartLineItem = memo(function CartLineItem({
           </View>
         </View>
       </View>
-      <Pressable accessibilityRole="button" style={({ pressed }) => [styles.addOnDeal, pressed && styles.pressed]} onPress={() => {}}>
-        <View style={styles.addOnIcon}>
-          <Gift size={17} color={theme.colors.primary} strokeWidth={2.2} />
-        </View>
-        <Text style={styles.addOnText}>Add-on deals at lower prices</Text>
-        <ArrowRight size={16} color={theme.colors.textMuted} />
-      </Pressable>
     </>
   );
 
@@ -801,6 +818,7 @@ const CartLineItem = memo(function CartLineItem({
 });
 
 function CheckoutBar({
+  appliedVoucher,
   bottomInset,
   isAllSelected,
   isCheckingOut,
@@ -809,6 +827,7 @@ function CheckoutBar({
   onToggleAll,
   summary,
 }: {
+  appliedVoucher: AppliedVoucher | null;
   bottomInset: number;
   isAllSelected: boolean;
   isCheckingOut: boolean;
@@ -818,12 +837,14 @@ function CheckoutBar({
   summary: ReturnType<typeof getCartSummary>;
 }) {
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
+  const discountCents = getVoucherDiscountCents(summary, appliedVoucher);
+  const totalCents = Math.max(0, summary.subtotalCents - discountCents);
 
   return (
     <View style={[styles.checkoutBarWrap, { bottom: Math.max(bottomInset + floatingCheckoutOffset, 104) }]}>
       {isBreakdownOpen ? (
         <View style={styles.checkoutBreakdownPanel}>
-          <PriceBreakdown summary={summary} compact />
+          <PriceBreakdown appliedVoucher={appliedVoucher} summary={summary} compact />
         </View>
       ) : null}
       <View style={styles.checkoutTotalRow}>
@@ -835,7 +856,7 @@ function CheckoutBar({
           accessibilityRole="button"
           style={({ pressed }) => [styles.checkoutTotalTextButton, pressed && styles.pressed]}
           onPress={() => setIsBreakdownOpen((current) => !current)}>
-          <Text style={styles.checkoutTotalValue}>{formatPhp(summary.subtotalCents)}</Text>
+          <Text style={styles.checkoutTotalValue}>{formatPhp(totalCents)}</Text>
           <ChevronUp
             size={16}
             color={theme.colors.primary}
@@ -974,13 +995,13 @@ function SkeletonBlock({ style }: { style: object }) {
           duration: 760,
           easing: Easing.inOut(Easing.quad),
           toValue: 0.78,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.timing(opacity, {
           duration: 760,
           easing: Easing.inOut(Easing.quad),
           toValue: 0.42,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ]),
     );
@@ -994,19 +1015,35 @@ function SkeletonBlock({ style }: { style: object }) {
 }
 
 function PriceBreakdown({
+  appliedVoucher,
   compact = false,
   summary,
 }: {
+  appliedVoucher?: AppliedVoucher | null;
   compact?: boolean;
   summary: ReturnType<typeof getCartSummary>;
 }) {
+  const discountCents = getVoucherDiscountCents(summary, appliedVoucher ?? null);
+  const totalCents = Math.max(0, summary.subtotalCents - discountCents);
+
   return (
     <View style={[styles.summaryPanel, compact && styles.summaryPanelCompact]}>
       <SummaryRow label="Subtotal" value={formatPhp(summary.subtotalCents)} />
+      {appliedVoucher && discountCents > 0 ? (
+        <SummaryRow label={`Voucher ${appliedVoucher.code}`} value={`-${formatPhp(discountCents)}`} />
+      ) : null}
       <View style={styles.summaryDivider} />
-      <SummaryRow isTotal label="Total" value={formatPhp(summary.subtotalCents)} />
+      <SummaryRow isTotal label="Total" value={formatPhp(totalCents)} />
     </View>
   );
+}
+
+function getVoucherDiscountCents(summary: ReturnType<typeof getCartSummary>, voucher: AppliedVoucher | null) {
+  if (!voucher) {
+    return 0;
+  }
+
+  return Math.min(summary.subtotalCents, Math.max(0, Math.round(voucher.discount * 100)));
 }
 
 function SummaryRow({ isTotal = false, label, value }: { isTotal?: boolean; label: string; value: string }) {
@@ -1383,6 +1420,12 @@ const styles = StyleSheet.create({
     fontVariant: ['tabular-nums'],
     lineHeight: 20,
   },
+  cartItemMeta: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 12,
+    lineHeight: 16,
+  },
   cartItemActions: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -1423,31 +1466,6 @@ const styles = StyleSheet.create({
     height: 36,
     justifyContent: 'center',
     width: 36,
-  },
-  addOnDeal: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surfaceAlt,
-    borderRadius: theme.radius.sm,
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.xs,
-    minHeight: 42,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  addOnIcon: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.white,
-    borderRadius: theme.radius.sm,
-    height: 28,
-    justifyContent: 'center',
-    width: 28,
-  },
-  addOnText: {
-    color: theme.colors.text,
-    flex: 1,
-    fontFamily: Fonts.sansSemiBold,
-    fontSize: 13,
-    lineHeight: 17,
   },
   recommendationSection: {
     gap: theme.spacing.md,

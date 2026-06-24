@@ -29,6 +29,7 @@ def serialize_review(review: Review) -> dict:
         "star_rating": review.star_rating,
         "comment": review.comment,
         "image_url": review.image_url,
+        "profile_picture_url": getattr(user, "profile_picture_url", None),
         "created_at": review.created_at.isoformat() if review.created_at else None,
     }
 

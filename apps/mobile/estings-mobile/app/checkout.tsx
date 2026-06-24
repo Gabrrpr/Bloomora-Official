@@ -158,6 +158,29 @@ function formatPhoneForDisplay(phone: string, countryCode: string) {
   return digits.replace(/(\d{3})(?=\d)/g, '$1 ').trim();
 }
 
+function getSupportedDeliveryArea(address: string) {
+  const normalizedAddress = address.toLowerCase();
+  if (
+    normalizedAddress.includes('metro manila') ||
+    normalizedAddress.includes('national capital region') ||
+    normalizedAddress.includes(' ncr') ||
+    normalizedAddress.includes('manila')
+  ) {
+    return 'Metro Manila';
+  }
+
+  if (
+    normalizedAddress.includes('pampanga') ||
+    normalizedAddress.includes('angeles') ||
+    normalizedAddress.includes('mabalacat') ||
+    normalizedAddress.includes('san fernando')
+  ) {
+    return 'Pampanga';
+  }
+
+  return null;
+}
+
 function toCanonicalPhone(phone: string, countryCode: string) {
   return `${countryCode}${normalizeLocalPhone(phone, countryCode)}`;
 }
@@ -441,8 +464,12 @@ export default function CheckoutScreen() {
     if (!recipientFirstName.trim() || !recipientLastName.trim() || !recipientPhone.trim()) {
       nextErrors.recipient = 'Add the recipient’s first name, last name, and phone number.';
     }
-    if (fulfillmentMethod === 'delivery' && !deliveryAddress.trim()) {
-      nextErrors.address = 'Add a delivery address.';
+    if (fulfillmentMethod === 'delivery') {
+      if (!deliveryAddress.trim()) {
+        nextErrors.address = 'Add a delivery address.';
+      } else if (!getSupportedDeliveryArea(deliveryAddress)) {
+        nextErrors.address = 'Delivery is currently available only within Metro Manila and Pampanga.';
+      }
     }
     if (Object.keys(nextErrors).length) {
       setValidationErrors(nextErrors);
@@ -454,9 +481,15 @@ export default function CheckoutScreen() {
       Alert.alert('Recipient details required', 'Add the recipient’s name and phone number.');
       return;
     }
-    if (fulfillmentMethod === 'delivery' && !deliveryAddress.trim()) {
-      Alert.alert('Delivery address required', 'Add the recipient’s delivery address.');
-      return;
+    if (fulfillmentMethod === 'delivery') {
+      if (!deliveryAddress.trim()) {
+        Alert.alert('Delivery address required', 'Add the recipient’s delivery address.');
+        return;
+      }
+      if (!getSupportedDeliveryArea(deliveryAddress)) {
+        Alert.alert('Outside delivery area', 'Delivery is currently available only within Metro Manila and Pampanga.');
+        return;
+      }
     }
 
     if (!selectedDate) {
@@ -1274,12 +1307,12 @@ function LocationSelect({
         Animated.timing(backdropOpacity, {
           duration: 160,
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.timing(sheetTranslateY, {
           duration: 220,
           toValue: 0,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ]).start();
     });
@@ -1290,12 +1323,12 @@ function LocationSelect({
       Animated.timing(backdropOpacity, {
         duration: 140,
         toValue: 0,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
       Animated.timing(sheetTranslateY, {
         duration: 180,
         toValue: 28,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
     ]).start(({ finished }) => {
       if (finished) {

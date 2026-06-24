@@ -9,10 +9,14 @@ type AppBrandHeaderProps = {
   actionColor?: string;
   absolute?: boolean;
   logoColor?: string;
+  onMenuPress?: () => void;
   onSearchPress?: () => void;
+  onStorePress?: () => void;
   panHandlers?: GestureResponderHandlers;
   shadowLogo?: boolean;
+  showMenuAction?: boolean;
   showSearchAction?: boolean;
+  showStoreAction?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
@@ -20,10 +24,14 @@ export function AppBrandHeader({
   actionColor = theme.colors.primary,
   absolute = false,
   logoColor = theme.colors.primary,
+  onMenuPress,
   onSearchPress,
+  onStorePress,
   panHandlers,
   shadowLogo = false,
+  showMenuAction = false,
   showSearchAction = true,
+  showStoreAction = false,
   style,
 }: AppBrandHeaderProps) {
   const { height, width } = useWindowDimensions();
@@ -46,11 +54,27 @@ export function AppBrandHeader({
         },
         style,
       ]}>
-      <View style={[styles.logoFrame, { height: layout.logoHeight, marginLeft: layout.logoOffset, width: layout.logoWidth }]}>
+      <View
+        style={[
+          styles.logoFrame,
+          {
+            height: layout.logoHeight,
+            marginLeft: layout.logoOffset,
+            width: showStoreAction ? clamp(width * 0.43, 156, 190) : layout.logoWidth,
+          },
+        ]}>
         {shadowLogo ? <EstingsLogo color="rgba(0, 0, 0, 0.72)" style={styles.logoShadowImage} /> : null}
         <EstingsLogo color={logoColor} style={styles.logoImage} />
       </View>
-      <PageHeaderActions color={actionColor} onSearchPress={onSearchPress} showSearch={showSearchAction} />
+      <PageHeaderActions
+        color={actionColor}
+        onMenuPress={onMenuPress}
+        onSearchPress={onSearchPress}
+        onStorePress={onStorePress}
+        showMenu={showMenuAction}
+        showSearch={showSearchAction}
+        showStore={showStoreAction}
+      />
     </View>
   );
 }

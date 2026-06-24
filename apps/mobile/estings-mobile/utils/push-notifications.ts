@@ -1,15 +1,5 @@
 import Constants from 'expo-constants';
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
 
 export type PushRegistrationResult =
   | {
@@ -23,6 +13,50 @@ export type PushRegistrationResult =
     };
 
 let hasScheduledAppOpenCreateReminder = false;
+let notificationsModulePromise: Promise<typeof import('expo-notifications')> | null = null;
+let hasConfiguredNotificationHandler = false;
+
+function isAndroidExpoGo() {
+  return Platform.OS === 'android' && Constants.appOwnership === 'expo';
+}
+
+function getUnavailableReason() {
+  if (Platform.OS === 'web') {
+    return 'Push notifications are only available on iOS and Android.';
+  }
+
+  if (isAndroidExpoGo()) {
+    return 'Android push notifications are not available in Expo Go. Use a development build to test notifications.';
+  }
+
+  return null;
+}
+
+async function getNotificationsModule() {
+  const unavailableReason = getUnavailableReason();
+
+  if (unavailableReason) {
+    return null;
+  }
+
+  notificationsModulePromise ??= import('expo-notifications').then((Notifications) => {
+    if (!hasConfiguredNotificationHandler) {
+      Notifications.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldPlaySound: true,
+          shouldSetBadge: true,
+          shouldShowBanner: true,
+          shouldShowList: true,
+        }),
+      });
+      hasConfiguredNotificationHandler = true;
+    }
+
+    return Notifications;
+  });
+
+  return notificationsModulePromise;
+}
 
 function getProjectId() {
   return (
@@ -54,6 +88,12 @@ export async function configureAndroidNotificationChannel() {
     return;
   }
 
+  const Notifications = await getNotificationsModule();
+
+  if (!Notifications) {
+    return;
+  }
+
   await Notifications.setNotificationChannelAsync('default', {
     name: 'Default',
     importance: Notifications.AndroidImportance.MAX,
@@ -64,11 +104,23 @@ export async function configureAndroidNotificationChannel() {
 
 export async function registerForPushNotifications(): Promise<PushRegistrationResult> {
   try {
-    if (Platform.OS === 'web') {
+    const unavailableReason = getUnavailableReason();
+
+    if (unavailableReason) {
       return {
         status: 'unavailable',
         token: null,
-        reason: 'Push notifications are only available on iOS and Android.',
+        reason: unavailableReason,
+      };
+    }
+
+    const Notifications = await getNotificationsModule();
+
+    if (!Notifications) {
+      return {
+        status: 'unavailable',
+        token: null,
+        reason: 'Notifications are not available in this runtime.',
       };
     }
 
@@ -129,7 +181,13 @@ export async function showLocalChatNotification({
   messageId?: string;
   title?: string;
 }) {
-  if (Platform.OS === 'web') {
+  if (getUnavailableReason()) {
+    return false;
+  }
+
+  const Notifications = await getNotificationsModule();
+
+  if (!Notifications) {
     return false;
   }
 
@@ -165,7 +223,13 @@ export async function showLocalChatNotification({
 }
 
 export async function scheduleAppOpenCreateReminder() {
-  if (hasScheduledAppOpenCreateReminder || Platform.OS === 'web') {
+  if (hasScheduledAppOpenCreateReminder || getUnavailableReason()) {
+    return false;
+  }
+
+  const Notifications = await getNotificationsModule();
+
+  if (!Notifications) {
     return false;
   }
 

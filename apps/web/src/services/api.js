@@ -1,5 +1,28 @@
 import { API_BASE } from "../config/api";
 
+function formatApiErrorPayload(payload, fallback) {
+  const detail = payload?.detail ?? payload?.message ?? payload?.error;
+
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    const message = detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        const location = Array.isArray(item?.loc) ? item.loc.join(".") : "";
+        const text = item?.msg || item?.message;
+        return [location, text].filter(Boolean).join(": ");
+      })
+      .filter(Boolean)
+      .join(" ");
+    return message || fallback;
+  }
+  if (detail && typeof detail === "object") {
+    return detail.msg || detail.message || JSON.stringify(detail);
+  }
+  if (payload && typeof payload === "object") return JSON.stringify(payload);
+  return fallback;
+}
+
 export const api = {
   // ── Core Request Engine ───────────────────────────────────────────────────
   async request(endpoint, options = {}) {
@@ -78,7 +101,7 @@ export const api = {
       let errorMsg = `API Error: ${response.status}`;
       try {
         const errorData = await response.json();
-        errorMsg = errorData.detail || JSON.stringify(errorData);
+        errorMsg = formatApiErrorPayload(errorData, errorMsg);
       } catch (e) {}
       throw new Error(errorMsg);
     }

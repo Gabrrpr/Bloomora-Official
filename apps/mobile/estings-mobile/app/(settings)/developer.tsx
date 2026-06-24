@@ -112,12 +112,12 @@ export default function DeveloperScreen() {
         Animated.timing(statusGlow, {
           duration: 1050,
           toValue: 1,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.timing(statusGlow, {
           duration: 850,
           toValue: 0,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ])
     );

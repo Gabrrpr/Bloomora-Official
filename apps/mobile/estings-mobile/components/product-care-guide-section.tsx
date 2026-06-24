@@ -1,4 +1,4 @@
-import { Droplets, Moon, Scissors } from 'lucide-react-native';
+import { Heart, Leaf, Scissors } from 'lucide-react-native';
 import type { ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
@@ -15,14 +15,14 @@ const DEFAULT_CARE_TIPS: CareGuideEntry[] = [
   {
     title: 'Water daily',
     description: 'Replace water every 1-2 days with clean, room-temperature water.',
-    iconBackground: 'rgba(59, 130, 246, 0.12)',
-    icon: <Droplets color="#3B82F6" size={18} strokeWidth={2} />,
+    iconBackground: 'rgba(46, 139, 52, 0.12)',
+    icon: <Leaf color={theme.colors.primary} size={18} strokeWidth={2} />,
   },
   {
     title: 'Avoid direct sunlight',
     description: 'Keep away from heat sources and direct sun to slow wilting.',
-    iconBackground: 'rgba(99, 102, 241, 0.12)',
-    icon: <Moon color="#6366F1" size={18} strokeWidth={2} />,
+    iconBackground: 'rgba(236, 72, 153, 0.12)',
+    icon: <Heart color="#BE185D" size={18} strokeWidth={2} />,
   },
   {
     title: 'Trim stems',
@@ -44,7 +44,7 @@ export function ProductCareGuideSection({ entries }: ProductCareGuideSectionProp
           title: entry,
           description: undefined,
           iconBackground: theme.colors.greenSoft,
-          icon: null,
+          icon: <Heart color={theme.colors.primary} size={18} strokeWidth={2} />,
         }))
       : DEFAULT_CARE_TIPS;
 

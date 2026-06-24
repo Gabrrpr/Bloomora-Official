@@ -76,6 +76,36 @@ def serialize_product(p: Product) -> dict:
         "limited_end_at": getattr(p, "limited_end_at", None),
     }
 
+
+def get_review_summaries(db: Session, product_ids: list[uuid.UUID]) -> dict[uuid.UUID, dict[str, float | int]]:
+    if not product_ids:
+        return {}
+
+    rows = (
+        db.query(
+            Review.product_id,
+            func.avg(Review.star_rating).label("average_rating"),
+            func.count(Review.id).label("review_count"),
+        )
+        .filter(Review.product_id.in_(product_ids))
+        .group_by(Review.product_id)
+        .all()
+    )
+
+    return {
+        row.product_id: {
+            "average_rating": round(float(row.average_rating or 0), 1),
+            "review_count": int(row.review_count or 0),
+        }
+        for row in rows
+    }
+
+
+def with_review_summary(payload: dict, summary: dict[str, float | int] | None) -> dict:
+    payload["average_rating"] = float(summary["average_rating"]) if summary else 0
+    payload["review_count"] = int(summary["review_count"]) if summary else 0
+    return payload
+
 @router.get("/flash-sales", response_model=List[dict])
 def get_flash_sales(db: Session = Depends(get_db)):
     try:
@@ -85,7 +115,8 @@ def get_flash_sales(db: Session = Depends(get_db)):
             .filter(Product.original_price.isnot(None))
             .all()
         )
-        return [serialize_product(p) for p in products]
+        review_summaries = get_review_summaries(db, [p.id for p in products])
+        return [with_review_summary(serialize_product(p), review_summaries.get(p.id)) for p in products]
     except Exception as e:
         print("CRITICAL ERROR IN FLASH SALES ROUTE:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
@@ -115,7 +146,8 @@ def search_products(q: str = "", db: Session = Depends(get_db)):
         .all()
     )
 
-    return [serialize_product(p) for p in results]
+    review_summaries = get_review_summaries(db, [p.id for p in results])
+    return [with_review_summary(serialize_product(p), review_summaries.get(p.id)) for p in results]
 
 @router.get("/customization/all", response_model=List[dict])
 def get_customization_products(db: Session = Depends(get_db)):
@@ -254,7 +286,6 @@ def get_products(branch: Optional[str] = Query(None), db: Session = Depends(get_
         .outerjoin(Inventory, Product.id == Inventory.product_id)
         .filter(
             and_(
-                Product.is_available == True,
                 Product.is_visible == True,
                 Product.status == ProductStatusEnum.active,
             )
@@ -272,6 +303,7 @@ def get_products(branch: Optional[str] = Query(None), db: Session = Depends(get_
             )
         )
     products = query.all()
+    review_summaries = get_review_summaries(db, [p.id for p in products])
 
     return [
         {
@@ -299,6 +331,8 @@ def get_products(branch: Optional[str] = Query(None), db: Session = Depends(get_
             "occasions": getattr(p, "occasions", []),
             "branches": getattr(p, "branches", []),
             "tags": getattr(p, "tags", []), 
+            "average_rating": review_summaries.get(p.id, {}).get("average_rating", 0),
+            "review_count": review_summaries.get(p.id, {}).get("review_count", 0),
         }
         for p in products
     ]

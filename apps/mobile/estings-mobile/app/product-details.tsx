@@ -16,7 +16,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import { ArrowLeft, Check, FileText, Heart, MessageCircle, Minus, Package, Plus, Share2, ShoppingBag, Star } from 'lucide-react-native';
+import { ArrowLeft, Check, FileText, Heart, MessageCircle, Minus, Package, Plus, Share2, ShoppingBag, Star, User } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -940,21 +940,42 @@ function ReviewsSummary({ reviews, summary }: { reviews: ProductReview[]; summar
 }
 
 function ReviewRow({ review }: { review: ProductReview }) {
+  const formattedDate = review.createdAt
+    ? new Date(review.createdAt).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+      })
+    : '';
+
   return (
     <View style={styles.reviewRowWrap}>
       <View style={styles.reviewItem}>
         <View style={styles.reviewItemHeader}>
-          <View style={styles.starsRow}>
-            {[1, 2, 3, 4, 5].map((star) => (
-              <Star
-                key={star}
-                size={12}
-                color={review.rating >= star ? '#F2B950' : '#DDE0DD'}
-                fill={review.rating >= star ? '#F2B950' : 'transparent'}
-                strokeWidth={2}
-              />
-            ))}
+          <View style={styles.reviewAuthorRow}>
+            {review.profilePictureUrl ? (
+              <Image source={{ uri: review.profilePictureUrl }} style={styles.reviewAvatar} contentFit="cover" />
+            ) : (
+              <View style={styles.reviewAvatarFallback}>
+                <User size={16} color={theme.colors.textMuted} strokeWidth={2.2} />
+              </View>
+            )}
+            <View style={styles.reviewAuthorInfo}>
+              <Text style={styles.reviewAuthorName}>{review.userName || 'Anonymous'}</Text>
+              <View style={styles.starsRow}>
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <Star
+                    key={star}
+                    size={12}
+                    color={review.rating >= star ? '#F2B950' : '#DDE0DD'}
+                    fill={review.rating >= star ? '#F2B950' : 'transparent'}
+                    strokeWidth={2}
+                  />
+                ))}
+              </View>
+            </View>
           </View>
+          {formattedDate ? <Text style={styles.reviewDate}>{formattedDate}</Text> : null}
         </View>
         {review.comment ? <Text style={styles.reviewComment}>{review.comment}</Text> : null}
       </View>
@@ -1693,9 +1714,41 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.md,
   },
   reviewItemHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: theme.spacing.sm,
+  },
+  reviewAuthorRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.sm,
+  },
+  reviewAvatar: {
+    borderRadius: 18,
+    height: 36,
+    width: 36,
+  },
+  reviewAvatarFallback: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: 18,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  reviewAuthorInfo: {
+    gap: 3,
+  },
+  reviewAuthorName: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 14,
+  },
+  reviewDate: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 12,
   },
   reviewComment: {
     color: theme.colors.text,

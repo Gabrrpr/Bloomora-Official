@@ -21,6 +21,7 @@ from app.api.v1.routes import (
     campaigns,
     commerce,
     mobile_feed,
+    mobile_content,
     chats,
     customization,
     dashboard,
@@ -144,6 +145,7 @@ app.include_router(vases.router, prefix="/api/v1/vases", tags=["Vases"])
 app.include_router(campaigns.router, prefix="/api/v1", tags=["campaigns"])
 app.include_router(commerce.router, prefix="/api/v1")
 app.include_router(mobile_feed.router, prefix="/api/v1")
+app.include_router(mobile_content.router, prefix="/api/v1")
 app.include_router(upload.router, prefix="/api/v1")
 app.include_router(recommendations.router, prefix="/api/v1/recommendations", tags=["Recommendations"])
 app.include_router(webhooks.router, prefix="/api/v1")

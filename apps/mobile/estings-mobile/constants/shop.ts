@@ -1,4 +1,5 @@
 export type Product = {
+  averageRating?: number;
   id: string;
   colors?: ProductColor[];
   description?: string;
@@ -6,6 +7,7 @@ export type Product = {
   name: string;
   originalPriceCents?: number;
   priceCents: number;
+  reviewCount?: number;
   tag: string;
   imageUrl?: string;
   isActive?: boolean;
@@ -37,6 +39,7 @@ export type Category = {
 
 export type CartItem = {
   cardMessage?: string;
+  addOns?: Product[];
   id: string;
   product: Product;
   quantity: number;

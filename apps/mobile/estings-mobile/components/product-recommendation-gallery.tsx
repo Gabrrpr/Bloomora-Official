@@ -107,13 +107,13 @@ function SkeletonBlock({ style }: { style: object }) {
           duration: 760,
           easing: Easing.inOut(Easing.quad),
           toValue: 0.78,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.timing(opacity, {
           duration: 760,
           easing: Easing.inOut(Easing.quad),
           toValue: 0.42,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ]),
     );

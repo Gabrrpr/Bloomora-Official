@@ -415,7 +415,7 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
         duration: 260,
         easing: Easing.out(Easing.cubic),
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }).start();
     }
   }, [hasComposerContent, sendButtonAnim, sendIconSpinAnim]);

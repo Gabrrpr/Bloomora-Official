@@ -52,6 +52,19 @@ def get_notifications(
     ]
 
 
+@router.patch("/read-all")
+def mark_all_read(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    db.execute(
+        text("UPDATE notifications SET is_read = TRUE WHERE user_id = :uid"),
+        {"uid": str(current_user.id)}
+    )
+    db.commit()
+    return {"status": "success"}
+
+
 @router.patch("/{notification_id}/read")
 def mark_read(
     notification_id: str,
@@ -64,19 +77,6 @@ def mark_read(
             WHERE id = :nid AND user_id = :uid
         """),
         {"nid": notification_id, "uid": str(current_user.id)}
-    )
-    db.commit()
-    return {"status": "success"}
-
-
-@router.patch("/read-all")
-def mark_all_read(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    db.execute(
-        text("UPDATE notifications SET is_read = TRUE WHERE user_id = :uid"),
-        {"uid": str(current_user.id)}
     )
     db.commit()
     return {"status": "success"}

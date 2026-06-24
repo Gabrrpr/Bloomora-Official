@@ -37,7 +37,7 @@ export function ProductAddOnSelector({
         </Text>
         <View style={styles.loadingRow}>
           <ActivityIndicator color={theme.colors.primary} size="small" />
-          <Text style={styles.loadingText}>Loading add-ons…</Text>
+          <Text style={styles.loadingText}>Loading add-ons...</Text>
         </View>
       </View>
     );

@@ -144,7 +144,7 @@ export default function SignUpScreen() {
     Animated.timing(strengthAnim, {
       duration: 180,
       toValue: hasPasswordInput ? 1 : 0,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   }, [hasPasswordInput, strengthAnim]);
 

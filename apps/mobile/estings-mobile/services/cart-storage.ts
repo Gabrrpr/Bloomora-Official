@@ -41,14 +41,7 @@ export async function addCartItem(product: Product, quantity = 1, cardMessage?: 
   if (session) {
     return userCartApi.add(product, quantity, session, cardMessage);
   }
-  const items = await addGuestCartItem(product, quantity);
-  if (cardMessage !== undefined) {
-    const next = items.map((item) =>
-      item.product.id === product.id ? { ...item, cardMessage: cardMessage.trim() || undefined } : item,
-    );
-    return setGuestCartItems(next);
-  }
-  return items;
+  throw new Error('Please sign in to add items to your cart.');
 }
 
 export async function updateCartItemQuantity(productId: string, quantity: number) {

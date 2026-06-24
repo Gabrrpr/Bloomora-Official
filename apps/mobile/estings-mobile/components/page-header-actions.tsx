@@ -1,20 +1,46 @@
 import { router } from 'expo-router';
-import { Bell, Search } from 'lucide-react-native';
+import { Bell, Menu, Search, Store } from 'lucide-react-native';
 import { Pressable, StyleSheet, View } from 'react-native';
 
 import { theme } from '@/constants/theme';
 
 export function PageHeaderActions({
   color = theme.colors.primary,
+  onMenuPress,
   onSearchPress,
+  onStorePress,
+  showMenu = false,
   showSearch = true,
+  showStore = false,
 }: {
   color?: string;
+  onMenuPress?: () => void;
   onSearchPress?: () => void;
+  onStorePress?: () => void;
+  showMenu?: boolean;
   showSearch?: boolean;
+  showStore?: boolean;
 }) {
   return (
-    <View style={styles.headerActions}>
+    <View style={[styles.headerActions, (showMenu || showStore) && styles.headerActionsCompact]}>
+      {showMenu ? (
+        <Pressable
+          accessibilityLabel="All Categories"
+          accessibilityRole="button"
+          onPress={onMenuPress}
+          style={({ pressed }) => [styles.headerIconButton, pressed && styles.headerIconButtonPressed]}>
+          <Menu size={23} color={color} strokeWidth={2.3} />
+        </Pressable>
+      ) : null}
+      {showStore ? (
+        <Pressable
+          accessibilityLabel="Change store branch"
+          accessibilityRole="button"
+          onPress={onStorePress}
+          style={({ pressed }) => [styles.headerIconButton, pressed && styles.headerIconButtonPressed]}>
+          <Store size={22} color={color} strokeWidth={2.2} />
+        </Pressable>
+      ) : null}
       {showSearch ? (
         <Pressable
           accessibilityLabel="Search products"
@@ -40,6 +66,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.md,
+  },
+  headerActionsCompact: {
+    gap: 6,
   },
   headerIconButton: {
     alignItems: 'center',

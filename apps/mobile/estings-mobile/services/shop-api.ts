@@ -32,6 +32,8 @@ export type BackendProduct = {
   original?: number | null;
   original_price?: number | null;
   price: number;
+  average_rating?: number | null;
+  review_count?: number | null;
   product_group?: string | null;
   product_type?: string | null;
   status?: string | null;
@@ -49,6 +51,7 @@ type BackendProductReview = {
   created_at?: string | null;
   id: string;
   image_url?: string | null;
+  profile_picture_url?: string | null;
   star_rating?: number | null;
   user_id?: string | null;
   user_name?: string | null;
@@ -64,6 +67,7 @@ export type ProductReview = {
   createdAt?: string;
   id: string;
   imageUrl?: string;
+  profilePictureUrl?: string;
   rating: number;
   userName?: string;
 };
@@ -83,6 +87,11 @@ export type ShopHeroSlide = {
   id: number | string;
   image?: string | null;
   tag: string;
+};
+
+export type CategoryHierarchyGroup = {
+  title: string;
+  items: string[];
 };
 
 type CatalogRequestOptions = {
@@ -171,6 +180,7 @@ function mapBackendProductReview(review: BackendProductReview): ProductReview {
     createdAt: review.created_at || undefined,
     id: review.id,
     imageUrl: normalizeImageUrl(review.image_url),
+    profilePictureUrl: normalizeImageUrl(review.profile_picture_url),
     rating: Number(review.star_rating ?? 0),
     userName: review.user_name?.trim() || undefined,
   };
@@ -187,6 +197,7 @@ export function mapBackendProduct(product: BackendProduct): Product {
   const price = Number(product.price || 0);
 
   return {
+    averageRating: Number(product.average_rating ?? 0),
     branch,
     branches: normalizedBranches,
     categoryId: toCategoryId(category),
@@ -205,6 +216,7 @@ export function mapBackendProduct(product: BackendProduct): Product {
     productGroup: productGroup ? toTitleCase(productGroup) : undefined,
     productType: product.product_type ? toTitleCase(product.product_type) : undefined,
     stock: Number(product.stock ?? 0),
+    reviewCount: Number(product.review_count ?? 0),
     tag: toTitleCase(category),
   };
 }
@@ -241,6 +253,70 @@ function getCategoriesFromProducts(products: Product[]): Category[] {
     productGroup: value.productGroup,
     totalStock: value.totalStock,
   })).sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function normalizeCategoryHierarchyGroup(value: unknown): CategoryHierarchyGroup | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const group = value as Partial<{ items: unknown; title: unknown }>;
+  const title = typeof group.title === 'string' ? group.title.trim() : '';
+  const items = Array.isArray(group.items)
+    ? group.items
+        .map((item) => (typeof item === 'string' ? item.trim() : ''))
+        .filter(Boolean)
+    : [];
+
+  if (!title || items.length === 0) {
+    return null;
+  }
+
+  return { title, items };
+}
+
+function getCategoryHierarchyFromProducts(products: Product[]): CategoryHierarchyGroup[] {
+  const groupedCategories = new Map<string, Set<string>>();
+
+  for (const product of products) {
+    const category = product.categoryName?.trim() || product.tag?.trim();
+
+    if (!category || /^add[\s-]?on$/i.test(category)) {
+      continue;
+    }
+
+    const group = product.productGroup?.trim() || (isLikelyNonFloralCategory(category) ? 'Non-Floral' : 'Floral');
+    const categories = groupedCategories.get(group) ?? new Set<string>();
+    categories.add(category);
+    groupedCategories.set(group, categories);
+  }
+
+  return Array.from(groupedCategories, ([title, items]) => ({
+    title: toTitleCase(title),
+    items: Array.from(items).sort((a, b) => a.localeCompare(b)),
+  })).sort(compareCategoryGroups);
+}
+
+function compareCategoryGroups(first: CategoryHierarchyGroup, second: CategoryHierarchyGroup) {
+  return getCategoryGroupPriority(first.title) - getCategoryGroupPriority(second.title) || first.title.localeCompare(second.title);
+}
+
+function getCategoryGroupPriority(title: string) {
+  const normalizedTitle = title.toLowerCase();
+
+  if (normalizedTitle.includes('floral') && !normalizedTitle.includes('non')) {
+    return 0;
+  }
+
+  if (normalizedTitle.includes('non')) {
+    return 1;
+  }
+
+  return 2;
+}
+
+function isLikelyNonFloralCategory(category: string) {
+  return /\b(non[\s-]?floral|accessory|basket|candle|card|gift|pot|ribbon|tool|vase|wrapper|wrapping)\b/i.test(category);
 }
 
 function buildCatalogPath(options: CatalogRequestOptions = {}) {
@@ -376,9 +452,17 @@ export const shopApi = {
       throw toCatalogError(error);
     }
   },
-  async getRecommendations(limit = 12) {
-    const products = await apiFetch<BackendProduct[]>(`/recommendations/home?limit=${limit}`);
-    return products.filter(isCustomerCatalogProduct).map(mapBackendProduct);
+  async getRecommendations(limit = 12, options?: CatalogRequestOptions) {
+    const params = new URLSearchParams({ limit: String(limit) });
+    if (options?.branch && options.branch !== 'all') {
+      params.set('branch', options.branch);
+    }
+    const products = await apiFetch<BackendProduct[]>(`/recommendations/home?${params.toString()}`);
+    const mappedProducts = products.filter(isCustomerCatalogProduct).map(mapBackendProduct);
+    if (!options?.branch || options.branch === 'all') {
+      return mappedProducts;
+    }
+    return mappedProducts.filter((product) => product.branches?.length ? product.branches.includes(options.branch!) : product.branch === options.branch);
   },
   async getCategories(options?: CatalogRequestOptions) {
     try {
@@ -388,6 +472,24 @@ export const shopApi = {
       console.warn('Failed to load catalog categories.', error);
       throw toCatalogError(error);
     }
+  },
+  async getCategoryHierarchy(options?: CatalogRequestOptions) {
+    try {
+      const hierarchy = await apiFetch<unknown[]>('/products/categories/hierarchy');
+      const normalizedHierarchy = hierarchy
+        .map(normalizeCategoryHierarchyGroup)
+        .filter((group): group is CategoryHierarchyGroup => Boolean(group))
+        .sort(compareCategoryGroups);
+
+      if (normalizedHierarchy.length > 0) {
+        return normalizedHierarchy;
+      }
+    } catch (error) {
+      console.warn('Failed to load category hierarchy.', error);
+    }
+
+    const products = await getBackendProducts(options);
+    return getCategoryHierarchyFromProducts(products);
   },
   async getCatalog(options?: CatalogRequestOptions) {
     try {

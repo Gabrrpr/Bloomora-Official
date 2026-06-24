@@ -13,6 +13,24 @@ import { getAuthSession } from '@/services/auth-session';
 import { getOrderById, type CustomerOrder } from '@/services/orders-api';
 import { getPayMongoPaymentStatus } from '@/services/payments-api';
 
+export function ErrorBoundary({ error, retry }: { error: Error; retry: () => void }) {
+  return (
+    <View style={styles.screen}>
+      <AppPageHeader onBack={() => router.replace('/(tabs)/orders')} title="Order Details" />
+      <View style={styles.state}>
+        <Text style={styles.title}>Order details unavailable</Text>
+        <Text style={styles.muted}>{error.message || 'This order could not be opened.'}</Text>
+        <Pressable onPress={retry} style={styles.primaryButton}>
+          <Text style={styles.primaryButtonText}>Try again</Text>
+        </Pressable>
+        <Pressable onPress={() => router.replace('/(tabs)/orders')} style={styles.outlineButton}>
+          <Text style={styles.outlineButtonText}>Back to orders</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
 export default function OrderDetailsScreen() {
   const insets = useSafeAreaInsets();
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -168,10 +186,14 @@ export default function OrderDetailsScreen() {
               <View style={styles.divider} />
 
               <Text style={styles.sectionTitle}>Order Summary</Text>
-              {order.items.map((item) => (
+              {(order.items ?? []).map((item) => (
                 <View key={item.id} style={styles.productRow}>
                   {item.imageUrl ? <Image contentFit="cover" source={{ uri: item.imageUrl }} style={styles.image} /> : <View style={styles.imageFallback}><ImageOff color={theme.colors.primary} size={25} /></View>}
-                  <View style={styles.productCopy}><Text style={styles.productName}>{item.productName}</Text><Text style={styles.muted}>{order.branch || "Esting's Flower Shop"}</Text></View>
+                  <View style={styles.productCopy}>
+                    <Text style={styles.productName}>{item.productName || 'Flower order'}</Text>
+                    <Text style={styles.muted}>{order.branch || "Esting's Flower Shop"}</Text>
+                    {item.cardMessage ? <Text style={styles.cardMessage}>Card message: {item.cardMessage}</Text> : null}
+                  </View>
                   <View style={styles.productEnd}><Text style={styles.muted}>x{item.quantity}</Text><Text style={styles.price}>{formatPhp(Math.round(item.totalAmount * 100))}</Text></View>
                 </View>
               ))}
@@ -279,6 +301,7 @@ const styles = StyleSheet.create({
   image: { backgroundColor: '#ECECEC', borderRadius: theme.radius.sm, height: 76, width: 66 },
   imageFallback: { alignItems: 'center', backgroundColor: '#ECECEC', borderRadius: theme.radius.sm, height: 76, justifyContent: 'center', width: 66 },
   productCopy: { flex: 1, gap: 5 },
+  cardMessage: { color: theme.colors.primary, fontFamily: Fonts.sansMedium, fontSize: 11, lineHeight: 16 },
   productEnd: { alignItems: 'flex-end', alignSelf: 'stretch', justifyContent: 'space-between', paddingVertical: 8 },
   productName: { color: '#444444', fontFamily: Fonts.sansMedium, fontSize: 13, lineHeight: 18 },
   price: { color: '#444444', fontFamily: Fonts.sansMedium, fontSize: 13 },

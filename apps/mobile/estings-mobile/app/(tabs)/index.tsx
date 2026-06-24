@@ -1,7 +1,6 @@
-import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
 import * as NavigationBar from 'expo-navigation-bar';
-import { router, useFocusEffect } from 'expo-router';
+import { router, type Href, useFocusEffect } from 'expo-router';
 import { setStatusBarBackgroundColor, setStatusBarStyle, setStatusBarTranslucent, StatusBar } from 'expo-status-bar';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import { Heart, Search, Share2, ShoppingBag, Star } from 'lucide-react-native';
@@ -15,6 +14,7 @@ import {
   NativeSyntheticEvent,
   Platform,
   Pressable,
+  RefreshControl,
   Share,
   StyleSheet,
   Text,
@@ -36,6 +36,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
 import { AppBrandHeader, getAppBrandHeaderLayout } from '@/components/app-brand-header';
 import { Fonts, theme } from '@/constants/theme';
+import { requireSignedIn } from '@/services/auth-guard';
 import { addCartItem } from '@/services/cart-storage';
 import { getFeedWishlistIds, setFeedWishlistId } from '@/services/feed-wishlist';
 import {
@@ -48,7 +49,6 @@ import {
   type PromotionFeedEntry,
 } from '@/services/mobile-feed-api';
 import { getStoreBranch } from '@/services/branch-preference';
-import { shopApi } from '@/services/shop-api';
 
 const tabs: { label: string; value: FeedTab }[] = [
   { label: 'EXPLORE', value: 'explore' },
@@ -224,22 +224,18 @@ function FeedColumn({
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeItemId, setActiveItemId] = useState<string | null>(null);
   const [wishlistIds, setWishlistIds] = useState<ReadonlySet<string>>(() => new Set());
-  const impressionIds = useRef(new Set<string>());
-  const branchRef = useRef(branch);
-  const tabRef = useRef(tab);
+  const loadedBranchRef = useRef<FeedBranch | null>(null);
 
-  useEffect(() => {
-    branchRef.current = branch;
-    tabRef.current = tab;
-  }, [branch, tab]);
-
-  const load = useCallback(async (nextCursor?: string | null) => {
+  const load = useCallback(async (nextCursor?: string | null, forceRefresh = false) => {
     const isAppend = Boolean(nextCursor);
     if (isAppend) {
       setLoadingMore(true);
+    } else if (forceRefresh) {
+      setRefreshing(true);
     } else {
       setLoading(true);
     }
@@ -247,7 +243,7 @@ function FeedColumn({
       setError(null);
     }
     try {
-      const response = await mobileFeedApi.getFeed({ branch, cursor: nextCursor, limit: 10, tab });
+      const response = await mobileFeedApi.getFeed({ branch, cursor: nextCursor, forceRefresh, limit: 10, tab });
       setItems((current) => isAppend
         ? [...current, ...response.items.filter((entry) => !current.some((existing) => existing.id === entry.id))]
         : response.items);
@@ -264,20 +260,30 @@ function FeedColumn({
     } finally {
       setLoading(false);
       setLoadingMore(false);
+      setRefreshing(false);
     }
   }, [branch, tab]);
 
   useEffect(() => {
-    setItems([]);
-    setCursor(null);
-    impressionIds.current.clear();
+    if (!isActive) {
+      return;
+    }
+
+    const branchChanged = loadedBranchRef.current !== branch;
+    if (branchChanged) {
+      loadedBranchRef.current = branch;
+      setItems([]);
+      setCursor(null);
+      setActiveItemId(null);
+    }
+
     void Promise.all([
-      load(null),
+      branchChanged || items.length === 0 ? load(null) : Promise.resolve(),
       getFeedWishlistIds().then(setWishlistIds),
     ]).catch(() => {
       setWishlistIds(new Set());
     });
-  }, [load]);
+  }, [branch, isActive, items.length, load]);
 
   const handleWishlist = useCallback(async (entry: ProductFeedEntry) => {
     const shouldSave = !wishlistIds.has(entry.id);
@@ -292,14 +298,6 @@ function FeedColumn({
     });
     try {
       await setFeedWishlistId(entry.id, shouldSave);
-      void mobileFeedApi.track([{
-        branch,
-        event_type: 'like',
-        item_id: entry.id,
-        item_type: 'product',
-        metadata: { saved: shouldSave },
-        tab,
-      }]).catch(() => {});
     } catch {
       setWishlistIds((current) => {
         const next = new Set(current);
@@ -312,7 +310,7 @@ function FeedColumn({
       });
       Alert.alert('Wishlist unavailable', 'Your wishlist could not be updated.');
     }
-  }, [branch, tab, wishlistIds]);
+  }, [wishlistIds]);
 
   const handlePromotionLike = useCallback(async (entry: PromotionFeedEntry) => {
     const currentLiked = entry.promotion.is_liked;
@@ -333,20 +331,12 @@ function FeedColumn({
       setItems((current) => current.map((item) => item.id === entry.id && item.type === 'promotion'
         ? { ...item, promotion: { ...item.promotion, ...result } }
         : item));
-      void mobileFeedApi.track([{
-        branch,
-        event_type: 'like',
-        item_id: entry.id,
-        item_type: 'promotion',
-        metadata: { liked: result.is_liked },
-        tab,
-      }]).catch(() => {});
     } catch {
       setItems((current) => current.map((item) => item.id === entry.id && item.type === 'promotion'
         ? { ...item, promotion: { ...item.promotion, is_liked: currentLiked } }
         : item));
     }
-  }, [branch, tab]);
+  }, []);
 
   const onViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: ViewToken<MobileFeedEntry>[] }) => {
     const visible = viewableItems.find((token) => token.isViewable)?.item;
@@ -354,16 +344,6 @@ function FeedColumn({
       return;
     }
     setActiveItemId(visible.id);
-    if (!impressionIds.current.has(visible.id)) {
-      impressionIds.current.add(visible.id);
-      void mobileFeedApi.track([{
-        branch: branchRef.current,
-        event_type: 'impression',
-        item_id: visible.id,
-        item_type: visible.type,
-        tab: tabRef.current,
-      }]).catch(() => {});
-    }
   }).current;
 
   if (loading && items.length === 0) {
@@ -390,73 +370,83 @@ function FeedColumn({
       }}
       onEndReachedThreshold={0.7}
       onViewableItemsChanged={onViewableItemsChanged}
+      refreshControl={(
+        <RefreshControl
+          refreshing={refreshing}
+          onRefresh={() => {
+            if (!refreshing && !loadingMore) {
+              void load(null, true);
+            }
+          }}
+          tintColor={theme.colors.white}
+          colors={[theme.colors.primary]}
+          progressBackgroundColor={theme.colors.white}
+        />
+      )}
       renderItem={({ item }) => item.type === 'product'
         ? (
           <ProductFeedCard
-            branch={branch}
             entry={item}
             height={height}
             isActive={isActive && activeItemId === item.id}
             isWishlisted={wishlistIds.has(item.id) || item.product.is_wishlisted}
             layout={layout}
             onWishlist={() => void handleWishlist(item)}
-            tab={tab}
             width={width}
           />
         )
         : (
           <PromotionFeedCard
-            branch={branch}
             entry={item}
             height={height}
             isActive={isActive && activeItemId === item.id}
             layout={layout}
             onLike={() => void handlePromotionLike(item)}
-            tab={tab}
             width={width}
           />
         )}
       showsVerticalScrollIndicator={false}
       snapToInterval={height}
       viewabilityConfig={{ itemVisiblePercentThreshold: 65, minimumViewTime: 300 }}
-      windowSize={5}
+      initialNumToRender={2}
+      maxToRenderPerBatch={2}
+      removeClippedSubviews={Platform.OS === 'android'}
+      updateCellsBatchingPeriod={50}
+      windowSize={3}
     />
   );
 }
 
 const ProductFeedCard = memo(function ProductFeedCard({
-  branch,
   entry,
   height,
   isWishlisted,
   layout,
   onWishlist,
-  tab,
   width,
 }: {
-  branch: FeedBranch;
   entry: ProductFeedEntry;
   height: number;
   isActive: boolean;
   isWishlisted: boolean;
   layout: HomeLayout;
   onWishlist: () => void;
-  tab: FeedTab;
   width: number;
 }) {
   const product = mapFeedProduct(entry);
   const openProduct = () => {
-    void mobileFeedApi.track([{ branch, event_type: 'open', item_id: entry.id, item_type: 'product', tab }]).catch(() => {});
     router.push(`/product-details?id=${encodeURIComponent(entry.id)}`);
   };
   const shareProduct = async () => {
     await Share.share({ message: `${entry.product.name} — ${formatCurrency(entry.product.price)}` });
-    void mobileFeedApi.track([{ branch, event_type: 'share', item_id: entry.id, item_type: 'product', tab }]).catch(() => {});
   };
   const addProduct = async () => {
     try {
+      const session = await requireSignedIn('add items to your cart');
+      if (!session) {
+        return;
+      }
       await addCartItem(product, 1);
-      void mobileFeedApi.track([{ branch, event_type: 'add_to_cart', item_id: entry.id, item_type: 'product', tab }]).catch(() => {});
       Alert.alert('Added to cart', `${entry.product.name} is now in your cart.`);
     } catch (error) {
       Alert.alert('Unable to add item', error instanceof Error ? error.message : 'Please try again.');
@@ -547,31 +537,41 @@ const ProductFeedCard = memo(function ProductFeedCard({
 });
 
 const PromotionFeedCard = memo(function PromotionFeedCard({
-  branch,
   entry,
   height,
   isActive,
   layout,
   onLike,
-  tab,
   width,
 }: {
-  branch: FeedBranch;
   entry: PromotionFeedEntry;
   height: number;
   isActive: boolean;
   layout: HomeLayout;
   onLike: () => void;
-  tab: FeedTab;
   width: number;
 }) {
   const promotion = entry.promotion;
   const sharePromotion = async () => {
     await Share.share({ message: [promotion.title, promotion.description, promotion.cta_destination].filter(Boolean).join('\n') });
-    void mobileFeedApi.track([{ branch, event_type: 'share', item_id: entry.id, item_type: 'promotion', tab }]).catch(() => {});
   };
-  const openCta = async () => {
-    void mobileFeedApi.track([{ branch, event_type: 'cta', item_id: entry.id, item_type: 'promotion', tab }]).catch(() => {});
+  const openPost = async () => {
+    const action = promotion.action;
+    if (action?.type === 'product') {
+      router.push(`/product-details?id=${encodeURIComponent(action.targetId)}`);
+      return;
+    }
+    if (action?.type === 'voucher') {
+      router.push(`/(tabs)/cart?voucher=${encodeURIComponent(action.code)}` as Href);
+      return;
+    }
+    if (action?.type === 'feature') {
+      router.push(action.route as Href);
+      return;
+    }
+    if (action?.type === 'none') {
+      return;
+    }
     if (promotion.linked_product_id) {
       router.push(`/product-details?id=${encodeURIComponent(promotion.linked_product_id)}`);
       return;
@@ -586,51 +586,24 @@ const PromotionFeedCard = memo(function PromotionFeedCard({
       router.push(destination as never);
     }
   };
-  const addLinkedProduct = async () => {
-    if (!promotion.linked_product_id) {
-      return;
-    }
-    try {
-      const products = await shopApi.getProducts();
-      const product = products.find((item) => item.id === promotion.linked_product_id);
-      if (!product) {
-        throw new Error('This campaign product is unavailable.');
-      }
-      await addCartItem(product, 1);
-      void mobileFeedApi.track([{ branch, event_type: 'add_to_cart', item_id: entry.id, item_type: 'promotion', tab }]).catch(() => {});
-      Alert.alert('Added to cart', `${product.name} is now in your cart.`);
-    } catch (error) {
-      Alert.alert('Unable to add item', error instanceof Error ? error.message : 'Please try again.');
-    }
-  };
 
   return (
     <View style={[styles.item, { height, width }]}>
-      <PromotionMedia entry={entry} isActive={isActive} />
+      <Pressable
+        accessibilityLabel={`Open ${promotion.title}`}
+        accessibilityRole="button"
+        onPress={() => void openPost()}
+        style={StyleSheet.absoluteFill}>
+        <PromotionMedia entry={entry} isActive={isActive} />
+      </Pressable>
       <BottomScreenGradient height={height} />
-      <View style={[styles.promotionCopy, layout.promotionCopy]}>
+      <View pointerEvents="none" style={[styles.promotionCopy, layout.promotionCopy]}>
         <View style={styles.badgeRow}>
           {promotion.badge ? <Text style={styles.promotionBadge}>{promotion.badge}</Text> : null}
         </View>
         <Text style={styles.promotionTitle}>{promotion.title}</Text>
         {promotion.description ? (
           <Text numberOfLines={3} style={styles.promotionDescription}>{promotion.description}</Text>
-        ) : null}
-        {promotion.voucher_code ? (
-          <Pressable
-            onPress={async () => {
-              await Clipboard.setStringAsync(promotion.voucher_code!);
-              void mobileFeedApi.track([{ branch, event_type: 'voucher_copy', item_id: entry.id, item_type: 'promotion', tab }]).catch(() => {});
-              Alert.alert('Voucher copied', promotion.voucher_code!);
-            }}
-            style={styles.voucherButton}>
-            <Text style={styles.voucherText}>{promotion.voucher_code} · TAP TO COPY</Text>
-          </Pressable>
-        ) : null}
-        {promotion.cta_label ? (
-          <Pressable onPress={() => void openCta()} style={({ pressed }) => [styles.promotionCta, pressed && styles.pressed]}>
-            <Text style={styles.promotionCtaText}>{promotion.cta_label}</Text>
-          </Pressable>
         ) : null}
       </View>
       <ActionRail
@@ -646,9 +619,6 @@ const PromotionFeedCard = memo(function PromotionFeedCard({
             onPress: onLike,
           },
           { icon: Share2, label: 'Share', onPress: () => void sharePromotion() },
-          ...(promotion.can_add_to_cart
-            ? [{ icon: ShoppingBag, label: 'Add to cart', onPress: () => void addLinkedProduct() }]
-            : []),
         ]}
       />
     </View>
@@ -920,12 +890,15 @@ function FeedError({
   onRetry: () => void;
   width: number;
 }) {
-  const updateRequired = error.toLowerCase().includes('update required');
+  const customerMessage = error.toLowerCase().includes('update required')
+    ? 'We could not load the latest feed right now. Please try again.'
+    : error;
+
   return (
     <View style={[styles.stateScreen, { height, width }]}>
       <Search color={theme.colors.white} size={38} />
-      <Text style={styles.stateTitle}>{updateRequired ? 'Feed update required' : 'Feed unavailable'}</Text>
-      <Text style={styles.stateText}>{error}</Text>
+      <Text style={styles.stateTitle}>Feed unavailable</Text>
+      <Text style={styles.stateText}>{customerMessage}</Text>
       <Pressable onPress={onRetry} style={styles.retryButton}>
         <Text style={styles.retryText}>Try again</Text>
       </Pressable>
@@ -1006,9 +979,9 @@ const textShadow = {
 };
 
 const styles = StyleSheet.create({
-  screen: { backgroundColor: '#000000', flex: 1, overflow: 'hidden' },
-  item: { backgroundColor: '#000000', overflow: 'hidden' },
-  productBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#000000' },
+  screen: { backgroundColor: '#171717', flex: 1, overflow: 'hidden' },
+  item: { backgroundColor: '#171717', overflow: 'hidden' },
+  productBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#1C1C1C' },
   productBackdropImage: { ...StyleSheet.absoluteFillObject, opacity: 0.25 },
   productImagePanel: {
     backgroundColor: '#FFFFFF',
