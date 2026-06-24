@@ -302,7 +302,8 @@ export default function AdminOrders() {
     if (posCart.length === 0) return showPosToast("warning", "Add at least one item before checking out.");
     if (!customerName.trim()) return showPosToast("warning", "Customer name is required.");
     if (fulfillmentMethod === "delivery" && !deliveryAddress.trim()) return showPosToast("warning", "Delivery address is required.");
-    if (posPayMethod === "qrph" && !posRef.trim()) return showPosToast("warning", "Enter the GCash / Bank reference number.");
+    
+    // 🚀 REMOVED: We no longer require manual reference numbers for GCash/Bank!
 
     setPosLoading(true);
     try {
@@ -316,18 +317,28 @@ export default function AdminOrders() {
         scheduled_at: deliveryDate || undefined,
         recipient_name: recipientName || customerName,
         payment_method: posPayMethod,
-        payment_reference: posPayMethod === "cash" ? "CASH-WALK-IN" : posRef,
+        // 🚀 UPDATED: Send a placeholder since PayMongo will generate the real reference
+        payment_reference: posPayMethod === "cash" ? "CASH-WALK-IN" : "PAYMONGO-PENDING", 
         branch_name: posBranch
       };
 
+      let responseData;
       if (api.createOrder) {
-        await api.createOrder(payload);
+        responseData = await api.createOrder(payload);
       } else if (api.post) {
-        await api.post("/orders/", payload);
+        const res = await api.post("/orders/", payload);
+        responseData = res.data || res; // Handle Axios vs Fetch wrappers
       } else {
-        await api.request({ method: "POST", url: "/orders/", data: payload });
+        responseData = await api.request({ method: "POST", url: "/orders/", data: payload });
       }
 
+      // 🚀 THE REDIRECT MAGIC: If PayMongo generated a URL, redirect the POS screen immediately!
+      if (posPayMethod === "qrph" && responseData && responseData.checkout_url) {
+        window.location.href = responseData.checkout_url;
+        return; // Stop execution here so the UI doesn't reset while redirecting
+      }
+
+      // If it's a cash transaction, show the success animation and reset
       setPosSuccess(true);
       fetchOrders();
       setTimeout(() => {

@@ -1,11 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, desc
 from typing import List
 import uuid
 
 from app.core.dependencies import get_db, get_current_user
 from app.models.user import User
+from app.models import Order, Product, Inventory, Chat
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
@@ -16,7 +17,10 @@ def get_unread_count(
     current_user: User = Depends(get_current_user),
 ):
     result = db.execute(
-        text("SELECT COUNT(*) FROM notifications WHERE user_id = :uid AND is_read = FALSE"),
+        text("""
+            SELECT COUNT(*) FROM notifications
+            WHERE (user_id = :uid OR is_global = true) AND is_read = FALSE
+        """),
         {"uid": str(current_user.id)}
     ).scalar()
     return {"unread_count": result or 0}
@@ -31,7 +35,7 @@ def get_notifications(
         text("""
             SELECT id, type, title, message, order_id, is_read, created_at
             FROM notifications
-            WHERE user_id = :uid
+            WHERE user_id = :uid OR is_global = true
             ORDER BY created_at DESC
             LIMIT 30
         """),
@@ -93,7 +97,6 @@ def get_preferences(
     ).fetchone()
 
     if not row:
-        # Return defaults if not yet set
         return {"order_updates": True, "promotions": True, "chat_messages": True}
 
     return {
@@ -127,3 +130,81 @@ def update_preferences(
     )
     db.commit()
     return {"status": "success"}
+
+
+@router.post("/seed")
+def seed_notifications(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate notifications from existing system state (orders, inventory, chats)."""
+    created = 0
+
+    # 1. Recent orders without notification
+    recent_orders = db.query(Order).order_by(desc(Order.created_at)).limit(20).all()
+    existing_order_ids = {
+        str(r.order_id)
+        for r in db.execute(
+            text("SELECT order_id FROM notifications WHERE type = 'order' AND order_id IS NOT NULL")
+        ).fetchall()
+    }
+    for order in recent_orders:
+        if str(order.id) in existing_order_ids:
+            continue
+        order_num = f"ORD-{order.id.hex[:8].upper()}"
+        title = "New Order Received"
+        message = f"Order {order_num} placed by {order.user.first_name if order.user else 'Customer'} for {order.branch_name}."
+        db.execute(
+            text("""
+                INSERT INTO notifications (user_id, type, title, message, order_id, is_global)
+                VALUES (:uid, 'order', :title, :message, :oid, true)
+            """),
+            {"uid": str(current_user.id), "title": title, "message": message, "oid": str(order.id)},
+        )
+        created += 1
+
+    # 2. Low stock / OOS items
+    low_stock_products = (
+        db.query(Product, Inventory)
+        .join(Inventory, Product.id == Inventory.product_id)
+        .filter(Inventory.current_stock <= Inventory.reorder_point)
+        .order_by(Inventory.current_stock.asc())
+        .limit(10)
+        .all()
+    )
+    for product, inventory in low_stock_products:
+        if inventory.current_stock <= 0:
+            title = "Critical: Out of Stock"
+            message = f"{product.name} is now out of stock."
+        else:
+            title = "Low Stock Alert"
+            message = f"{product.name} has only {inventory.current_stock} {inventory.unit_type or 'units'} left (reorder at {inventory.reorder_point})."
+        db.execute(
+            text("""
+                INSERT INTO notifications (user_id, type, title, message, order_id, is_global)
+                VALUES (:uid, 'inventory', :title, :message, NULL, true)
+            """),
+            {"uid": str(current_user.id), "title": title, "message": message},
+        )
+        created += 1
+
+    # 3. Unread customer chats
+    unread_chats = (
+        db.query(Chat)
+        .filter(Chat.is_read == 0, Chat.sender == "customer")
+        .order_by(desc(Chat.created_at))
+        .limit(10)
+        .all()
+    )
+    for chat in unread_chats:
+        db.execute(
+            text("""
+                INSERT INTO notifications (user_id, type, title, message, order_id, is_global)
+                VALUES (NULL, 'message', 'New Customer Message', :message, NULL, true)
+            """),
+            {"message": chat.message},
+        )
+        created += 1
+
+    db.commit()
+    return {"status": "success", "created": created}

@@ -27,6 +27,7 @@ export default function Checkout({ onNavigate }) {
   const deliveryTime = "Anytime"
   const [paymentMethod, setPaymentMethod] = useState("paymongo");
   const [fulfillmentMethod, setFulfillmentMethod] = useState("delivery");
+  const [lalamoveEnabled, setLalamoveEnabled] = useState(false);
   const [deliverySettings, setDeliverySettings] = useState({ delivery_fee: 100, minimum_order: 0, same_day_cutoff: "14:00" });
   const [referenceNumber, setReferenceNumber] = useState("")
   const [voucher, setVoucher] = useState("")
@@ -65,6 +66,12 @@ export default function Checkout({ onNavigate }) {
     api.getCheckoutSettings()
       .then(data => setDeliverySettings(current => ({ ...current, ...(data.delivery || {}) })))
       .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    api.getLalamoveEnabled()
+      .then(data => setLalamoveEnabled(Boolean(data.enabled)))
+      .catch(() => setLalamoveEnabled(false))
   }, [])
 
   useEffect(() => {
@@ -141,7 +148,7 @@ export default function Checkout({ onNavigate }) {
   }, [])
 
   const subtotal = cartItems.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0)
-  const shipping = cartItems.length > 0 && fulfillmentMethod === "delivery" ? Number(deliverySettings.delivery_fee || 0) : 0
+ 	const shipping = cartItems.length > 0 && (fulfillmentMethod === "delivery" || fulfillmentMethod === "lalamove") ? Number(deliverySettings.delivery_fee || 0) : 0
   const discount = computeDiscount(appliedVoucher, subtotal)
   const total = Math.max(0, subtotal + shipping - discount)
 
@@ -208,6 +215,13 @@ export default function Checkout({ onNavigate }) {
         address: `Pickup - ${pickupBranch.label}: ${pickupBranch.address}`,
       }
     }
+    if (fulfillmentMethod === "lalamove") {
+      return {
+        name: fullName,
+        phone: customer?.phone_number || user?.phoneNumber || "",
+        address: customer?.address || user?.address || "",
+      }
+    }
     if (recipientType === "myself") {
       if (selectedAddress) {
         return {
@@ -240,15 +254,17 @@ export default function Checkout({ onNavigate }) {
     return null
   }
 
-  const addressBranch = fulfillmentMethod === "pickup"
+  const addressBranch = (fulfillmentMethod === "pickup")
     ? selectedStoreBranch
-    : provinceToBranch(
-      recipientType === "myself" 
-        ? (selectedAddress ? selectedAddress.province : (customer?.address || user?.address)) 
-        : manualForm.province
-    )
+    : (fulfillmentMethod === "lalamove")
+      ? selectedStoreBranch
+      : provinceToBranch(
+        recipientType === "myself" 
+          ? (selectedAddress ? selectedAddress.province : (customer?.address || user?.address)) 
+          : manualForm.province
+      )
   
-  const needsBranchConfirm = fulfillmentMethod === "delivery" && selectedStoreBranch && addressBranch && (selectedStoreBranch.toLowerCase() !== addressBranch.toLowerCase())
+  const needsBranchConfirm = (fulfillmentMethod === "delivery" || fulfillmentMethod === "lalamove") && selectedStoreBranch && addressBranch && (selectedStoreBranch.toLowerCase() !== addressBranch.toLowerCase())
   const [branchConfirmOpen, setBranchConfirmOpen] = useState(false)
 
   const buildDeliveryNotes = () =>
@@ -385,8 +401,17 @@ export default function Checkout({ onNavigate }) {
         setError("Sorry, we currently only deliver to Metro Manila and Pampanga areas. Please provide a valid address within our coverage.");
         return;
       }
+    } else if (fulfillmentMethod === "lalamove") {
+      if (!deliveryDetails.address || !deliveryDetails.phone) {
+        setError("Please provide a complete delivery address and phone number for Lalamove delivery.");
+        return;
+      }
+      if (!addressBranch) {
+        setError("Lalamove is only available within Metro Manila. Please provide a valid Manila address.");
+        return;
+      }
     } else {
-      // For pickup, we still need contact phone
+      // pickup
       if (!deliveryDetails.phone) {
         setError("Please provide a phone number for pickup.");
         return;
@@ -622,25 +647,47 @@ export default function Checkout({ onNavigate }) {
               <p className="text-xs text-gray-400 font-medium mb-4">Package 1 of 1</p>
 
               {/* Delivery option */}
-              <p className="text-xs font-medium text-gray-500 mb-3">Choose your delivery option</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-                <div className="border-2 border-[#2E8B34] rounded-lg p-3.5 cursor-pointer">
+              <p className="text-xs font-medium text-gray-500 mb-3">Fulfillment method</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
+                <div
+                  onClick={() => { setFulfillmentMethod("delivery") }}
+                  className={`border-2 rounded-lg p-3.5 cursor-pointer transition ${fulfillmentMethod === "delivery" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200 hover:border-gray-300"}`}
+                >
                   <div className="flex items-center gap-2 mb-1">
-                    <div className="w-5 h-5 rounded-full border-2 border-[#2E8B34] flex items-center justify-center">
-                      <div className="w-2.5 h-2.5 rounded-full bg-[#2E8B34]" />
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${fulfillmentMethod === "delivery" ? "border-[#2E8B34]" : "border-gray-300"}`}>
+                      {fulfillmentMethod === "delivery" && <div className="w-2.5 h-2.5 rounded-full bg-[#2E8B34]" />}
                     </div>
-                    <span className="text-sm font-semibold text-[#2E8B34]">₱100.00</span>
+                    <span className={`text-sm font-semibold ${fulfillmentMethod === "delivery" ? "text-[#2E8B34]" : "text-gray-700"}`}>Standard</span>
                   </div>
-                  <p className="text-xs font-medium text-gray-700">Standard</p>
-                  <p className="text-xs text-gray-400 mt-0.5">Guaranteed by {fmt(deliveryDate)}<br />{fmtDay(deliveryDate).toUpperCase()} (Anytime)</p>
+                  <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">Guaranteed by {fmt(deliveryDate)}<br />{fmtDay(deliveryDate).toUpperCase()} (Anytime)</p>
                 </div>
-                <div className="border border-gray-200 rounded-lg p-3.5 opacity-50 cursor-not-allowed">
-                  <div className="flex items-center gap-2 mb-1">
-                    <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" /></svg>
-                    <span className="text-sm font-medium text-gray-400">Unavailable</span>
+
+                {lalamoveEnabled && (
+                  <div
+                    onClick={() => setFulfillmentMethod("lalamove")}
+                    className={`border-2 rounded-lg p-3.5 cursor-pointer transition ${fulfillmentMethod === "lalamove" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200 hover:border-gray-300"}`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${fulfillmentMethod === "lalamove" ? "border-[#2E8B34]" : "border-gray-300"}`}>
+                        {fulfillmentMethod === "lalamove" && <div className="w-2.5 h-2.5 rounded-full bg-[#2E8B34]" />}
+                      </div>
+                      <span className={`text-sm font-semibold ${fulfillmentMethod === "lalamove" ? "text-[#2E8B34]" : "text-gray-700"}`}>Lalamove</span>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">Within Metro Manila only<br />Fast same-day delivery</p>
                   </div>
-                  <p className="text-xs text-gray-400">Lalamove Delivery</p>
-                  <p className="text-xs text-gray-300 mt-0.5">Within Metro Manila Only</p>
+                )}
+
+                <div
+                  onClick={() => { setFulfillmentMethod("pickup") }}
+                  className={`border-2 rounded-lg p-3.5 cursor-pointer transition ${fulfillmentMethod === "pickup" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200 hover:border-gray-300"}`}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${fulfillmentMethod === "pickup" ? "border-[#2E8B34]" : "border-gray-300"}`}>
+                      {fulfillmentMethod === "pickup" && <div className="w-2.5 h-2.5 rounded-full bg-[#2E8B34]" />}
+                    </div>
+                    <span className={`text-sm font-semibold ${fulfillmentMethod === "pickup" ? "text-[#2E8B34]" : "text-gray-700"}`}>Pickup</span>
+                  </div>
+                  <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">Collect from {pickupBranch.label}<br />{pickupBranch.hours}</p>
                 </div>
               </div>
 

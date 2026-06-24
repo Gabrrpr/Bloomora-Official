@@ -12,7 +12,7 @@ from PIL import Image
 from supabase import create_client, Client
 from app.core.config import settings
 from app.core.dependencies import get_db, get_current_user, require_staff
-from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum, Review, Order, OrderItem, ProductRecipe, Notification
+from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum, Review, Order, OrderItem, ProductRecipe
 from app.utils.logger import log_activity
 
 class StockLogCreate(BaseModel):
@@ -803,14 +803,6 @@ def apply_promotion(
     product.original_price = base_price
     product.price = base_price * discount_multiplier
 
-    alert = Notification(
-        title="Flash Sale Alert!",
-        message=f"{product.name} is now {discount_percent}% OFF! Shop now.",
-        type="promotion",
-        is_global=True,
-        is_read=False,
-    )
-    db.add(alert)
     db.commit()
     db.refresh(product)
 

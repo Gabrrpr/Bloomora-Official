@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react"
 import { useAuth } from "../../context/AuthContext"
+import { useNavigate } from "react-router-dom";
 import { useTheme } from "../../context/ThemeContext"
 import estingsLogo from "../../assets/EstingsLogo.svg"
 import estingsText from "../../assets/Estings.svg"
@@ -17,7 +18,7 @@ import AdminActivityLogs   from "./AdminActivityLogs"
 import AdminSettings       from "./AdminSettings"
 import AdminHero           from "./AdminHero"
 import AdminAdvertisements from "./AdminAdvertisements"
-import AdminCampaigns    from "./AdminCampaigns"
+import AdminCampaigns      from "./AdminCampaigns"
 import AdminFAQ            from "./AdminFAQ"
 import AdminFeaturedProducts from "./AdminFeaturedProducts"
 import AdminPromotions     from "./AdminPromotions"
@@ -31,8 +32,8 @@ const DG = "#0C573E"
 const G  = "#2E8B34"
 const GREEN_FILTER = "brightness(0) saturate(100%) invert(38%) sepia(72%) saturate(500%) hue-rotate(90deg) brightness(90%)"
 
-const SIDEBAR_MIN            = 60
-const SIDEBAR_MAX            = 220
+const SIDEBAR_MIN             = 60
+const SIDEBAR_MAX             = 220
 const SIDEBAR_SNAP_THRESHOLD = 120
 
 const BRANCHES = [
@@ -74,47 +75,37 @@ const REVENUE_PERIODS = [
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DESIGN TOKEN SYSTEM
-// The key principle: dark mode needs MUCH higher contrast than the original.
-// • Page background: very dark navy (#0f172a)
-// • Cards: noticeably lighter than the page (#1e293b) — visible separation
-// • Card borders: clearly visible (#334155)
-// • Primary text: near-white (#f1f5f9)
-// • Secondary text: light gray (#cbd5e1) — NOT dimmed to match background
-// • Muted text: medium gray (#94a3b8) — still readable
-// • Table headers/alt rows: slightly different from card (#1a2d42)
-// • Inputs: dark but distinct (#0f172a bg, #475569 border)
-// • Hover states: clearly lighter than base
 // ─────────────────────────────────────────────────────────────────────────────
 function useTokens(isDark) {
   if (isDark) return {
     // Page & surfaces — each level clearly distinct
-    pageBg:      "#0f172a",          // darkest — page background
-    surfaceBg:   "#1e293b",          // cards, panels — clearly lighter than page
-    surfaceAlt:  "#162032",          // alt rows, disabled inputs
+    pageBg:      "#0f172a",         // darkest — page background
+    surfaceBg:   "#1e293b",         // cards, panels — clearly lighter than page
+    surfaceAlt:  "#162032",         // alt rows, disabled inputs
     cardBg:      "#1e293b",
-    cardBorder:  "#334155",          // clearly visible border
+    cardBorder:  "#334155",         // clearly visible border
     cardShadow:  "0 2px 8px rgba(0,0,0,0.4)",
     inputBg:     "#0f172a",
-    inputBorder: "#475569",          // clearly visible input border
+    inputBorder: "#475569",         // clearly visible input border
     divider:     "#334155",
-    hoverBg:     "#2d3f55",          // noticeably lighter on hover
+    hoverBg:     "#2d3f55",         // noticeably lighter on hover
     // Text — high contrast, all readable
-    textPrimary:   "#f1f5f9",        // almost white — headings, values
-    textSecondary: "#cbd5e1",        // light gray — body text, labels
-    textMuted:     "#94a3b8",        // medium gray — captions, metadata
+    textPrimary:   "#f1f5f9",       // almost white — headings, values
+    textSecondary: "#cbd5e1",       // light gray — body text, labels
+    textMuted:     "#94a3b8",       // medium gray — captions, metadata
     // Sidebar
-    sidebarBg:     "#111827",        // slightly different from page
+    sidebarBg:     "#111827",       // slightly different from page
     sidebarBorder: "#1e293b",
     navActive:     "rgba(74,222,128,0.12)",
     navHover:      "#1e2d3d",
-    navTextActive: "#4ade80",        // bright green — clearly active
-    navTextNormal: "#94a3b8",        // readable gray
-    navTextHover:  "#e2e8f0",        // near-white on hover
+    navTextActive: "#4ade80",       // bright green — clearly active
+    navTextNormal: "#94a3b8",       // readable gray
+    navTextHover:  "#e2e8f0",       // near-white on hover
     // Accent
     accentG:  "#4ade80",
     accentDG: "#22c55e",
     // Table
-    tableHead:   "#162032",          // subtly different from card
+    tableHead:   "#162032",         // subtly different from card
     tableBorder: "#2d3f55",
     // Misc
     overlayBg: "rgba(0,0,0,0.75)",
@@ -214,7 +205,6 @@ function DarkModeToggle() {
 }
 
 // ─── Topbar Icon Button ───────────────────────────────────────────────────────
-// Consistent wrapper for bell, search etc so they all have the same size + hover
 function IconBtn({ onClick, active, title, badge, children, t }) {
   return (
     <button
@@ -315,7 +305,6 @@ function RevenueChart({ branch }) {
   useEffect(() => {
     setLoading(true);
 
-    // 🚀 THE FIX: Send the exact lowercase branch to the backend! No capitalization.
     const apiBranch = branch; 
 
     api.get(`/dashboard/revenue?period=${periodKey}&branch=${apiBranch}`)
@@ -344,7 +333,6 @@ function RevenueChart({ branch }) {
             if (periodKey === "week") {
               const rowDate = new Date(date);
               rowDate.setHours(0, 0, 0, 0);
-              // 🚀 THE FIX: Use Math.round to prevent timezone shifts from returning negative days
               const diffDays = Math.round((today - rowDate) / (1000 * 60 * 60 * 24));
               
               if (diffDays >= 0 && diffDays <= 6) {
@@ -516,6 +504,9 @@ function RevenueChart({ branch }) {
 
 // ─── Recent Orders Card ───────────────────────────────────────────────────────
 function RecentOrdersCard({ branch, t, orders, loading }) {
+  // 🚀 NEW: Initialize the navigate function
+  const navigate = useNavigate();
+
   return (
     <div className="rounded-xl overflow-hidden h-full flex flex-col"
       style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
@@ -525,11 +516,16 @@ function RecentOrdersCard({ branch, t, orders, loading }) {
           <p className="text-sm font-semibold" style={{ color: t.textPrimary }}>Recent Orders</p>
           <BranchBadge branch={branch} />
         </div>
-        <button className="text-xs font-semibold px-2.5 py-1 rounded-md border transition-all"
+        
+        {/* 🚀 NEW: Added onClick to trigger navigation to the orders page */}
+        <button 
+          onClick={() => navigate("/admin/orders")} 
+          className="text-xs font-semibold px-2.5 py-1 rounded-md border transition-all hover:opacity-80 active:scale-95"
           style={{ borderColor: t.cardBorder, color: t.textSecondary }}>
           View All
         </button>
       </div>
+      
       <div className="overflow-x-auto flex-1">
         <table className="w-full text-sm">
           <thead style={{ borderBottom: `1px solid ${t.tableBorder}` }}>
@@ -566,7 +562,6 @@ function RecentOrdersCard({ branch, t, orders, loading }) {
                     <span className="font-medium whitespace-nowrap">{o.customer_name || "—"}</span>
                   </td>
                   <td className="px-4 py-3">
-                    {/* 🚀 NEW: Dynamic Branch Badge based on the order's actual branch */}
                     <BranchBadge branch={String(o.branch || o.branch_name || "manila").toLowerCase()} />
                   </td>
                   <td className="px-4 py-3" style={{ color: t.textSecondary }}>
@@ -588,7 +583,7 @@ function RecentOrdersCard({ branch, t, orders, loading }) {
 }
 
 // ─── Low Stock Card ───────────────────────────────────────────────────────────
-function LowStockCard({ branch, lowStock, t, isDark }) {
+function LowStockCard({ branch, lowStock, t, isDark, onManage }) {
   return (
     <div className="rounded-xl overflow-hidden h-full"
       style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
@@ -598,7 +593,7 @@ function LowStockCard({ branch, lowStock, t, isDark }) {
           <p className="text-sm font-semibold flex-shrink-0" style={{ color: t.textPrimary }}>Low Stock List</p>
           <BranchBadge branch={branch} />
         </div>
-        <button className="flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-md text-white transition-all hover:opacity-90"
+        <button onClick={onManage} className="flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-md text-white transition-all hover:opacity-90"
           style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
           Manage
         </button>
@@ -628,12 +623,23 @@ function LowStockCard({ branch, lowStock, t, isDark }) {
             onMouseEnter={e => e.currentTarget.style.backgroundColor = t.hoverBg}
             onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
             <div className="flex items-center gap-2 min-w-0">
-              <div className="w-7 h-7 rounded-lg flex-shrink-0 flex items-center justify-center"
-                style={{ backgroundColor: isDark ? "rgba(249,115,22,0.15)" : "#fff7ed", border: `1px solid ${isDark ? "rgba(249,115,22,0.3)" : "#fed7aa"}` }}>
-                <svg className="w-3.5 h-3.5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-2.048-.833-2.818 0L3.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
-                </svg>
+              
+              {/* 🚀 NEW: Product Image Container replacing the danger icon */}
+              <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden"
+                style={{ backgroundColor: isDark ? "#1e293b" : "#f1f5f9", border: `1px solid ${isDark ? "#334155" : "#e2e8f0"}` }}>
+                {item.image_url || item.image ? (
+                  <img 
+                    src={item.image_url || item.image} 
+                    alt={item.name} 
+                    className="w-full h-full object-cover" 
+                  />
+                ) : (
+                  <svg className="w-4 h-4 opacity-40" style={{ color: t.textSecondary }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                )}
               </div>
+
               <p className="text-sm font-medium truncate" style={{ color: t.textPrimary }}>{item.name}</p>
             </div>
             <p className="text-xs truncate" style={{ color: t.textSecondary }}>{item.category || "—"}</p>
@@ -707,7 +713,7 @@ function TrendingProductsCard({ branch, trending, t, isDark }) {
 }
 
 // ─── Draggable Panel Row ──────────────────────────────────────────────────────
-function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading, trending }) {
+function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading, trending, onManageInventory }) {
   const { isDark } = useTheme()
   const t = useTokens(isDark)
   const containerRef = useRef(null)
@@ -739,7 +745,7 @@ function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading, tren
       <div className="flex flex-col gap-4 xl:hidden">
         <RecentOrdersCard branch={branch} t={t} orders={recentOrders} loading={recentLoading} />
         <TrendingProductsCard branch={branch} trending={trending} t={t} isDark={isDark} />
-        <LowStockCard branch={branch} lowStock={lowStock} t={t} isDark={isDark} />
+        <LowStockCard branch={branch} lowStock={lowStock} t={t} isDark={isDark} onManage={onManageInventory} />
       </div>
       <div ref={containerRef} className="hidden xl:flex items-stretch gap-0" style={{ position: "relative" }}>
         <div style={{ width: `${leftPct}%`, minWidth: 0, flexShrink: 0 }}>
@@ -763,7 +769,7 @@ function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading, tren
              <TrendingProductsCard branch={branch} trending={trending} t={t} isDark={isDark} />
           </div>
           <div style={{ flex: 1 }}>
-             <LowStockCard branch={branch} lowStock={lowStock} t={t} isDark={isDark} />
+            <LowStockCard branch={branch} lowStock={lowStock} t={t} isDark={isDark} onManage={onManageInventory} />
           </div>
         </div>
       </div>
@@ -810,7 +816,7 @@ function FlowerLoader({ message = "Loading...", isDark = false }) {
 }
 
 // ─── Dashboard Panel ──────────────────────────────────────────────────────────
-function DashboardPanel({ user }) {
+function DashboardPanel({ user, onNavigate }) {
   const { isDark } = useTheme();
   const t = useTokens(isDark);
   
@@ -1178,6 +1184,7 @@ function DashboardPanel({ user }) {
             recentOrders={recentOrders}    
             recentLoading={recentLoading}  
             trending={trending}
+            onManageInventory={() => onNavigate("Inventory")}
           />
         </div>
       </div>
@@ -1434,7 +1441,7 @@ function MyProfilePanel({ user, onBack }) {
           <FRow label="Email Address" value={form.email} onChange={s("email")} type="email" editable={editMode} />
           <FRow label="Phone Number" value={form.phone} onChange={s("phone")} editable={editMode} />
           <FRow label="Role"   value={user?.role || "Administrator"} editable={false} />
-          <FRow label="Branch" value={user?.branch || "—"}           editable={false} />
+          <FRow label="Branch" value={user?.branch || "—"}            editable={false} />
         </div>
         {editMode && (
           <div className="flex justify-end mt-5">
@@ -1451,10 +1458,20 @@ function MyProfilePanel({ user, onBack }) {
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────
-function NotificationsPage({ onBack }) {
+function NotificationsPage({ notifications = [], onBack }) {
   const { isDark } = useTheme()
   const t = useTokens(isDark)
-  const [tab, setTab] = useState("All")
+
+  const timeAgo = (iso) => {
+    const diff = Date.now() - new Date(iso).getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 1) return "Just now"
+    if (mins < 60) return `${mins}m ago`
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24) return `${hrs}h ago`
+    return `${Math.floor(hrs / 24)}d ago`
+  }
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
@@ -1469,38 +1486,71 @@ function NotificationsPage({ onBack }) {
       <div className="rounded-xl overflow-hidden" style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
         <div className="flex px-2 pt-2" style={{ borderBottom: `1px solid ${t.tableBorder}` }}>
           {["All","Orders","Messages","System"].map(tt => (
-            <button key={tt} onClick={() => setTab(tt)} className="px-4 py-2.5 text-sm font-semibold border-b-2 transition-all mr-1"
-              style={{ borderColor: tab === tt ? G : "transparent", color: tab === tt ? (isDark ? "#4ade80" : G) : t.textMuted }}>{tt}</button>
+            <button key={tt} className="px-4 py-2.5 text-sm font-semibold border-b-2 transition-all mr-1"
+              style={{ borderColor: tt === "All" ? G : "transparent", color: tt === "All" ? (isDark ? "#4ade80" : G) : t.textMuted }}>{tt}</button>
           ))}
         </div>
-        <div className="flex flex-col items-center justify-center py-20 text-center px-4">
-          <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
-            style={{ background: "linear-gradient(135deg,#f0fdf4,#dcfce7)", border: "1px solid #bbf7d0" }}>
-            <svg className="w-7 h-7" style={{ color: DG }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
-            </svg>
+        {notifications.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 text-center px-4">
+            <div className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4"
+              style={{ background: "linear-gradient(135deg,#f0fdf4,#dcfce7)", border: "1px solid #bbf7d0" }}>
+              <svg className="w-7 h-7" style={{ color: DG }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+              </svg>
+            </div>
+            <p className="text-sm font-semibold" style={{ color: t.textSecondary }}>All caught up!</p>
+            <p className="text-xs mt-1 max-w-xs" style={{ color: t.textMuted }}>No notifications right now.</p>
           </div>
-          <p className="text-sm font-semibold" style={{ color: t.textSecondary }}>All caught up!</p>
-          <p className="text-xs mt-1 max-w-xs" style={{ color: t.textMuted }}>No notifications right now.</p>
-        </div>
+        ) : (
+          <div className="flex flex-col">
+            {notifications.map((n) => (
+              <div key={n.id} className="px-5 py-4 border-b transition-colors"
+                style={{ borderColor: t.tableBorder, backgroundColor: n.is_read ? "transparent" : (isDark ? "rgba(74,222,128,0.06)" : "#f0fdf4") }}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-sm font-semibold truncate" style={{ color: t.textPrimary }}>{n.title || "Notification"}</span>
+                      {!n.is_read && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: isDark ? "#4ade80" : "#2E8B34" }} />}
+                    </div>
+                    {n.message && <p className="text-xs leading-relaxed line-clamp-3" style={{ color: t.textSecondary }}>{n.message}</p>}
+                    <p className="text-[10px] mt-2 font-medium uppercase tracking-wider" style={{ color: t.textMuted }}>{n.type || "system"} · {timeAgo(n.created_at)}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
 }
 
-function NotificationPanel({ onViewAll }) {
+function NotificationPanel({ notifications, unreadCount, loading, onMarkAllRead, onViewAll, onNotificationClick }) {
   const { isDark } = useTheme()
   const t = useTokens(isDark)
+
+  const timeAgo = (iso) => {
+    const diff = Date.now() - new Date(iso).getTime()
+    const mins = Math.floor(diff / 60000)
+    if (mins < 1) return "Just now"
+    if (mins < 60) return `${mins}m ago`
+    const hrs = Math.floor(mins / 60)
+    if (hrs < 24) return `${hrs}h ago`
+    return `${Math.floor(hrs / 24)}d ago`
+  }
+
   return (
     <div className="absolute right-0 top-full mt-2 rounded-xl overflow-hidden z-50"
-      style={{ width: "340px", backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: isDark ? "0 16px 48px rgba(0,0,0,0.6)" : "0 16px 48px rgba(0,0,0,0.12)" }}>
+      style={{ width: "360px", backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: isDark ? "0 16px 48px rgba(0,0,0,0.6)" : "0 16px 48px rgba(0,0,0,0.12)" }}>
       <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: `1px solid ${t.tableBorder}`, backgroundColor: t.tableHead }}>
         <div>
           <p className="text-sm font-bold" style={{ color: t.textPrimary }}>Notifications</p>
-          <p className="text-xs" style={{ color: t.textMuted }}>You have 0 unread</p>
+          <p className="text-xs" style={{ color: t.textMuted }}>{unreadCount > 0 ? `${unreadCount} unread` : "All caught up"}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="text-xs font-semibold hover:underline" style={{ color: isDark ? "#4ade80" : G }}>Mark all read</button>
+          {unreadCount > 0 && (
+            <button onClick={onMarkAllRead} className="text-xs font-semibold hover:underline" style={{ color: isDark ? "#4ade80" : G }}>Mark all read</button>
+          )}
           <button onClick={onViewAll} className="p-1 rounded-md transition-all" style={{ color: t.textMuted }}
             onMouseEnter={e => e.currentTarget.style.backgroundColor = t.hoverBg}
             onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
@@ -1510,26 +1560,52 @@ function NotificationPanel({ onViewAll }) {
           </button>
         </div>
       </div>
-      <div className="flex" style={{ borderBottom: `1px solid ${t.tableBorder}` }}>
-        {["All","Orders","Messages","System"].map((tt, i) => (
-          <button key={tt} className="flex-1 py-2 text-xs font-semibold border-b-2 transition-all"
-            style={{ borderColor: i === 0 ? G : "transparent", color: i === 0 ? (isDark ? "#4ade80" : G) : t.textMuted }}>{tt}</button>
-        ))}
+      <div className="overflow-y-auto" style={{ maxHeight: "360px" }}>
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-10">
+            <div className="w-6 h-6 rounded-full border-2 animate-spin mb-2" style={{ borderColor: isDark ? "#334155" : "#dcfce7", borderTopColor: isDark ? "#4ade80" : "#16a34a" }} />
+            <p className="text-xs" style={{ color: t.textMuted }}>Loading...</p>
+          </div>
+        ) : notifications.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center px-4">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "linear-gradient(135deg,#f0fdf4,#dcfce7)" }}>
+              <svg className="w-5 h-5" style={{ color: DG }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+              </svg>
+            </div>
+            <p className="text-sm font-medium" style={{ color: t.textSecondary }}>All caught up!</p>
+            <p className="text-xs mt-0.5" style={{ color: t.textMuted }}>No new notifications right now</p>
+          </div>
+        ) : (
+          <div className="flex flex-col">
+            {notifications.slice(0, 8).map((n) => (
+              <button
+                key={n.id}
+                onClick={() => onNotificationClick(n)}
+                className="w-full text-left px-4 py-3 transition-all border-b last:border-b-0"
+                style={{ borderColor: t.tableBorder, backgroundColor: n.is_read ? "transparent" : (isDark ? "rgba(74,222,128,0.06)" : "#f0fdf4") }}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = t.hoverBg}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = n.is_read ? "transparent" : (isDark ? "rgba(74,222,128,0.06)" : "#f0fdf4")}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold truncate" style={{ color: t.textPrimary }}>{n.title || "Notification"}</p>
+                    {n.message && <p className="text-xs mt-0.5 line-clamp-2" style={{ color: t.textMuted }}>{n.message}</p>}
+                  </div>
+                  <span className="text-[10px] flex-shrink-0 mt-0.5" style={{ color: t.textMuted }}>{timeAgo(n.created_at)}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
-      <div className="flex flex-col items-center justify-center py-10 text-center px-4">
-        <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3" style={{ background: "linear-gradient(135deg,#f0fdf4,#dcfce7)" }}>
-          <svg className="w-5 h-5" style={{ color: DG }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
-          </svg>
+      {notifications.length > 0 && (
+        <div className="px-4 py-2.5 text-center" style={{ borderTop: `1px solid ${t.tableBorder}`, backgroundColor: t.tableHead }}>
+          <button onClick={onViewAll} className="text-xs font-semibold hover:underline" style={{ color: isDark ? "#4ade80" : G }}>
+            View all notifications →
+          </button>
         </div>
-        <p className="text-sm font-medium" style={{ color: t.textSecondary }}>All caught up!</p>
-        <p className="text-xs mt-0.5" style={{ color: t.textMuted }}>No new notifications right now</p>
-      </div>
-      <div className="px-4 py-2.5 text-center" style={{ borderTop: `1px solid ${t.tableBorder}`, backgroundColor: t.tableHead }}>
-        <button onClick={onViewAll} className="text-xs font-semibold hover:underline" style={{ color: isDark ? "#4ade80" : G }}>
-          View all notifications →
-        </button>
-      </div>
+      )}
     </div>
   )
 }
@@ -1996,8 +2072,45 @@ export default function AdminDashboard({ onNavigate }) {
   const [mobileOpen,   setMobileOpen]   = useState(false)
   const [notifOpen,    setNotifOpen]    = useState(false)
   const [userOpen,     setUserOpen]     = useState(false)
+  const [notifications, setNotifications] = useState([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [loadingNotifs, setLoadingNotifs] = useState(false)
   const notifRef = useRef(null)
   const userRef  = useRef(null)
+
+  const loadNotifications = useCallback(async () => {
+    setLoadingNotifs(true)
+    try {
+      const [list, count] = await Promise.all([
+        api.getNotifications(),
+        api.getUnreadNotificationCount(),
+      ])
+      setNotifications(Array.isArray(list) ? list : [])
+      setUnreadCount(typeof count?.unread_count === 'number' ? count.unread_count : 0)
+
+      if ((Array.isArray(list) ? list : []).length === 0) {
+        try {
+          await api.seedNotifications()
+          const [seededList, seededCount] = await Promise.all([
+            api.getNotifications(),
+            api.getUnreadNotificationCount(),
+          ])
+          setNotifications(Array.isArray(seededList) ? seededList : [])
+          setUnreadCount(typeof seededCount?.unread_count === 'number' ? seededCount.unread_count : 0)
+        } catch (seedError) {
+          console.error('Failed to seed notifications', seedError)
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load notifications', e)
+    } finally {
+      setLoadingNotifs(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadNotifications()
+  }, [loadNotifications])
 
   const handleLogout  = () => { logout(); onNavigate("login") }
   const toggleSidebar = () => {
@@ -2018,9 +2131,9 @@ export default function AdminDashboard({ onNavigate }) {
 
   const renderMain = () => {
     if (overlay === "profile")       return <MyProfilePanel user={user} onBack={() => setOverlay(null)} />
-    if (overlay === "notifications") return <NotificationsPage onBack={() => setOverlay(null)} />
+    if (overlay === "notifications") return <NotificationsPage notifications={notifications} onBack={() => setOverlay(null)} />
     switch (active) {
-      case "Dashboard":      return <DashboardPanel user={user} />
+      case "Dashboard":      return <DashboardPanel user={user} onNavigate={goTo} />
       case "Orders":         return <AdminOrders />
       case "Products":       return <AdminProducts onNavigate={goTo} />
       case "Inventory":      return <AdminInventory />
@@ -2111,21 +2224,42 @@ export default function AdminDashboard({ onNavigate }) {
             {/* Dark mode toggle */}
             <DarkModeToggle />
 
-            {/* Notification bell */}
-            <div className="relative" ref={notifRef}>
-              <IconBtn
-                onClick={() => { setNotifOpen(p => !p); setUserOpen(false) }}
-                active={notifOpen}
-                badge
-                title="Notifications"
-                t={t}
-              >
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
-                </svg>
-              </IconBtn>
-              {notifOpen && <NotificationPanel onViewAll={() => { setOverlay("notifications"); setNotifOpen(false) }} />}
-            </div>
+             {/* Notification bell */}
+             <div className="relative" ref={notifRef}>
+               <IconBtn
+                 onClick={() => { setNotifOpen(p => !p); setUserOpen(false) }}
+                 active={notifOpen}
+                 badge={unreadCount > 0}
+                 title="Notifications"
+                 t={t}
+               >
+                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                   <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                 </svg>
+               </IconBtn>
+               {notifOpen && (
+                 <NotificationPanel
+                   notifications={notifications}
+                   unreadCount={unreadCount}
+                   loading={loadingNotifs}
+                   onMarkAllRead={async () => {
+                     await api.markAllNotificationsRead()
+                     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
+                     setUnreadCount(0)
+                   }}
+                   onViewAll={() => { setOverlay("notifications"); setNotifOpen(false) }}
+                   onNotificationClick={async (notification) => {
+                     if (!notification.is_read) {
+                       await api.markNotificationRead(notification.id)
+                       setNotifications(prev => prev.map(n => n.id === notification.id ? { ...n, is_read: true } : n))
+                       setUnreadCount(c => Math.max(0, c - 1))
+                     }
+                     setOverlay("notifications")
+                     setNotifOpen(false)
+                   }}
+                 />
+               )}
+             </div>
 
             {/* Divider */}
             <div className="hidden sm:block w-px h-5" style={{ backgroundColor: t.divider }} />

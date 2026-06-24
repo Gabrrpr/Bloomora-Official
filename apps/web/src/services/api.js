@@ -394,6 +394,10 @@ export const api = {
     return api.get('/commerce/checkout-settings');
   },
 
+  async getLalamoveEnabled() {
+    return api.get('/settings/lalamove');
+  },
+
   async updateDeliverySettings(data) {
     return api.put('/commerce/delivery-settings', data);
   },
@@ -490,6 +494,26 @@ export const api = {
 
   async toggleWishlist(productId) {
     return api.post(`/users/me/wishlist/${productId}`, {});
+  },
+
+  async getNotifications() {
+    return api.get('/notifications/');
+  },
+
+  async getUnreadNotificationCount() {
+    return api.get('/notifications/unread-count');
+  },
+
+  async markNotificationRead(notificationId) {
+    return api.patch(`/notifications/${encodeURIComponent(notificationId)}/read`, {});
+  },
+
+  async seedNotifications() {
+    return api.request('/notifications/seed', { method: 'POST' });
+  },
+
+  async markAllNotificationsRead() {
+    return api.request('/notifications/read-all', { method: 'PATCH' });
   },
 };
 

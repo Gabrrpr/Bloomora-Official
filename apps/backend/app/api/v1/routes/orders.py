@@ -541,18 +541,20 @@ async def create_orders(
     current_user: User = Depends(get_current_user)
 ):
     cart_items = payload.get("items", [])
-    delivery_address = payload.get("delivery_address", "")
     delivery_notes = payload.get("delivery_notes", "")
     scheduled_at = payload.get("scheduled_at")
     payment_method = payload.get("payment_method", "qrph").lower()
     special_note = payload.get("special_note", None)
     payment_reference = payload.get("payment_reference", "").strip()
-
-    # 🚀 THE TROJAN HORSE EXTRACTION
-    # 1. Try to get it normally
-    raw_branch = payload.get("branch_name") or payload.get("branch")
     
-    # 2. If api.js stripped it out, catch it from the delivery notes!
+    # 🚀 NEW: Walk-in Customer Capture & Fulfillment Method
+    fulfillment_method = str(payload.get("fulfillment_method") or payload.get("fulfillmentMethod") or "delivery").lower()
+    walk_in_customer_name = payload.get("customer_name", "").strip()
+    walk_in_customer_phone = payload.get("customer_phone", "").strip()
+    delivery_address = payload.get("delivery_address", "") if fulfillment_method == "delivery" else "PICKUP"
+    
+    # 🚀 THE TROJAN HORSE EXTRACTION
+    raw_branch = payload.get("branch_name") or payload.get("branch")
     if not raw_branch:
         if "[BRANCH:Pampanga]" in delivery_notes:
             raw_branch = "Pampanga"
@@ -561,7 +563,6 @@ async def create_orders(
         else:
             raw_branch = "Manila"
 
-    # Ensures it saves cleanly as 'Pampanga' or 'Manila'
     final_branch_name = raw_branch.strip().title()
 
     if not cart_items:
@@ -572,6 +573,14 @@ async def create_orders(
 
     created_orders = []
     total_checkout_amount = Decimal("0.00")
+
+    # 🚀 NEW: Dynamic Delivery Fee
+    delivery_settings = get_delivery_settings(db)
+    delivery_fee = (
+        Decimal(str(delivery_settings.get("delivery_fee", 0)))
+        if fulfillment_method == "delivery"
+        else Decimal("0.00") # Force 0 for pickup/walk-in
+    )
 
     for item in cart_items:
         arrangement_id = None
@@ -626,21 +635,33 @@ async def create_orders(
         item_total = db_price * qty
         total_checkout_amount += item_total
 
-        # 🚀 SAVING THE BRANCH CORRECTLY (NO CRASHES!)
+        # 🚀 SAVING WALK-IN DETAILS TO THE ORDER
+        # For walk-in POS, we overwrite the recipient fields with the captured customer info.
         order = Order(
             id=uuid.uuid4(),
             user_id=current_user.id,
             product_id=product_id,
             arrangement_id=arrangement_id,
             quantity=qty,
-            total_amount=item_total,
+            total_amount=item_total, # We will update this with delivery fee later if applicable
+            subtotal_amount=item_total,
             status=OrderStatusEnum.pending,
             delivery_address=delivery_address,
             delivery_notes=delivery_notes,
             special_note=special_note,
             scheduled_at=scheduled_at,
             branch_name=final_branch_name, 
+            fulfillment_method=fulfillment_method,
+            delivery_fee=delivery_fee,
+            # If walk_in_customer_name exists, force it into recipient_first_name
+            recipient_first_name=walk_in_customer_name if walk_in_customer_name else ((payload.get("recipient") or {}).get("firstName") or payload.get("recipient_first_name")),
+            recipient_last_name=(payload.get("recipient") or {}).get("lastName") or payload.get("recipient_last_name"),
+            recipient_phone=walk_in_customer_phone if walk_in_customer_phone else ((payload.get("recipient") or {}).get("phoneNumber") or payload.get("recipient_phone_number")),
         )
+        
+        # Calculate final amount for this specific order record (Total + Fee)
+        order.total_amount = max(Decimal("0.00"), order.subtotal_amount + order.delivery_fee - order.discount_amount)
+
         db.add(order)
         db.commit()
         db.refresh(order)
@@ -663,14 +684,16 @@ async def create_orders(
         db.commit()
         created_orders.append(str(order.id))
 
+    # Add the delivery fee to the global PayMongo checkout total ONLY ONCE
+    final_paymongo_amount = total_checkout_amount + delivery_fee
     checkout_url = None
     
     if payment_method in ["gcash", "paymaya", "card", "qrph", "paymongo"]:
         try:
             checkout = await create_checkout_session(
                 line_items=[{
-                    "name": f"Bloomora Order ({len(created_orders)} items)",
-                    "amount": to_paymongo_amount(total_checkout_amount),
+                    "name": f"Bloomora POS Order ({len(created_orders)} items)",
+                    "amount": to_paymongo_amount(final_paymongo_amount), # 🚀 Uses the total + dynamic delivery fee
                     "currency": "PHP",
                     "quantity": 1
                 }],

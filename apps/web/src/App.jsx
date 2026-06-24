@@ -127,15 +127,27 @@ function AppContent() {
   // 🚀 THE FIX: Role-based routing lock
   useEffect(() => {
     if (loading || isPreview || page === "activate-staff") return; 
-    
-    // Normalize the role string to lowercase and remove accidental spaces
+
     const safeRole = user?.role?.toLowerCase()?.trim();
-    
-    if (user && (safeRole === "admin" || safeRole === "staff")) {
-      // Force admin/staff to the dashboard if they land anywhere else
+    const isAdminOrStaff = safeRole === "admin" || safeRole === "staff";
+
+    // 1. If an Admin/Staff logs in, force them to the dashboard
+    if (user && isAdminOrStaff) {
       if (page !== "admin") {
         setPage("admin");
+        window.history.pushState({}, "", "/admin");
       }
+    }
+
+    // 2. 🛡️ SECURITY: If someone tries to access the admin page but IS NOT an admin, kick them out
+    if (page === "admin" && !isAdminOrStaff) {
+      console.warn("Access Denied: You do not have admin privileges.");
+      
+      // If they aren't logged in at all, send them to login. 
+      // If they are logged in as a customer, send them home.
+      const redirectPage = user ? "home" : "login";
+      setPage(redirectPage);
+      window.history.pushState({}, "", redirectPage === "home" ? "/" : `/${redirectPage}`);
     }
   }, [user, page, loading]);
 

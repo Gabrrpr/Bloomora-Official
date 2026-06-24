@@ -1,7 +1,7 @@
 import os
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, func
+from sqlalchemy import or_, func, text
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 import uuid, secrets, io, time
@@ -282,24 +282,45 @@ def activate_staff_account(payload: StaffActivateRequest, db: Session = Depends(
 
 @router.get("/activity-logs")
 def get_activity_logs(db: Session = Depends(get_db)):
-    logs = (
-        db.query(ActivityLog)
-        .options(joinedload(ActivityLog.user))
-        .order_by(ActivityLog.created_at.desc())
-        .all()
-    )
-    
-    return [
-        {
-            "id": str(log.id),
-            "user_id": str(log.user_id) if log.user_id else None,
-            "role": log.role,
-            "action": log.action,
-            "branch": getattr(log.user.branch, "value", log.user.branch) if log.user and log.user.branch else None,
-            "created_at": log.created_at.isoformat() if log.created_at else None
-        }
-        for log in logs
-    ]
+    try:
+        rows = db.execute(
+            text("""
+                SELECT
+                    al.id,
+                    al.user_id,
+                    COALESCE((
+                        SELECT TRIM(
+                            COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')
+                        )
+                        FROM users u
+                        WHERE u.id = al.user_id
+                    ), al.role) AS staff_name,
+                    al.role,
+                    al.action,
+                    (SELECT u.branch FROM users u WHERE u.id = al.user_id) AS branch,
+                    al.action AS details,
+                    al.created_at
+                FROM activity_logs al
+                ORDER BY al.created_at DESC
+                LIMIT 200
+            """)
+        ).fetchall()
+
+        return [
+            {
+                "id": str(r.id),
+                "user_id": str(r.user_id) if r.user_id else None,
+                "staff_name": r.staff_name or "System",
+                "role": r.role,
+                "action": r.action,
+                "branch": r.branch,
+                "details": r.details or r.action,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+    except Exception:
+        raise
 
 @router.get("/{user_id}", response_model=dict)
 def get_user(

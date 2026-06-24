@@ -1,6 +1,6 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, UploadFile, File, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, text
 from typing import List
 from uuid import UUID
 from datetime import datetime, timezone
@@ -158,6 +158,21 @@ async def create_message(
             await manager.broadcast_to_staff(payload)
         except Exception as e:
             print(f"❌ HTTP-WS Staff Broadcast Error: {e}")
+
+        try:
+            db.execute(
+                text("""
+                    INSERT INTO notifications (user_id, type, title, message, order_id, is_global)
+                    VALUES (NULL, 'message', 'New Message from Customer', :message, NULL, true)
+                """),
+                {
+                    "message": f"Customer said: {new_message.message}",
+                }
+            )
+            db.commit()
+        except Exception as e:
+            print(f"❌ Notification Insert Error: {e}")
+            db.rollback()
     else:
         try:
             await manager.send_to_user(str(message.user_id), payload)

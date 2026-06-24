@@ -4,6 +4,7 @@ from sqlalchemy import CheckConstraint, Column, String, Text, Integer, Boolean, 
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from .base import Base, now_utc
+from .user import RoleEnum, BranchEnum
 
 
 class SenderEnum(str, enum.Enum):
@@ -58,10 +59,11 @@ class ActivityLog(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     role = Column(String(50), nullable=True)
     action = Column(String(500), nullable=False)        # e.g. "Updated product price"
+    details = Column(Text, nullable=True)
+    branch = Column(String(50), nullable=True)
     ip_address = Column(String(50), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
 
-    # Relationships
     user = relationship("User", back_populates="activity_logs")
     
 class Notification(Base):
@@ -82,6 +84,10 @@ class Notification(Base):
     
     # 🚀 NEW: The global broadcast flag
     is_global = Column(Boolean, default=False) 
+
+    # New columns for targeting
+    target_role = Column(Enum(RoleEnum), nullable=True)
+    target_branch = Column(Enum(BranchEnum), nullable=True)
     
     created_at = Column(DateTime(timezone=True), default=now_utc)
 

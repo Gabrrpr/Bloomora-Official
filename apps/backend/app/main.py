@@ -20,6 +20,7 @@ from app.api.v1.routes import (
     cart,
     campaigns,
     commerce,
+    notifications,
     mobile_feed,
     mobile_content,
     chats,
@@ -148,6 +149,7 @@ app.include_router(mobile_feed.router, prefix="/api/v1")
 app.include_router(mobile_content.router, prefix="/api/v1")
 app.include_router(upload.router, prefix="/api/v1")
 app.include_router(recommendations.router, prefix="/api/v1/recommendations", tags=["Recommendations"])
+app.include_router(notifications.router, prefix="/api/v1", tags=["notifications"])
 app.include_router(webhooks.router, prefix="/api/v1")
 
 

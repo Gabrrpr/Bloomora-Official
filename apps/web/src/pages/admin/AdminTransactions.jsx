@@ -361,6 +361,19 @@ export default function AdminTransactions() {
     a.click(); URL.revokeObjectURL(a.href)
   }
 
+  const [selectedTransaction, setSelectedTransaction] = useState(null)
+  const [showDetailModal, setShowDetailModal] = useState(false)
+
+  const openTransactionDetail = (txn) => {
+    setSelectedTransaction(txn)
+    setShowDetailModal(true)
+  }
+
+  const closeTransactionDetail = () => {
+    setShowDetailModal(false)
+    setSelectedTransaction(null)
+  }
+
   if (loading) {
     return (
       <div className="space-y-5">
@@ -378,6 +391,7 @@ export default function AdminTransactions() {
       <style>{`
         .print-only { display: none; }
         @keyframes txnRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        @keyframes daPop { from { opacity:0; transform:scale(0.94); } to { opacity:1; transform:scale(1); } }
         .txn-rise { animation: txnRise 0.85s ease-out both; }
         @media print {
           @page { margin: 12mm 10mm; }
@@ -694,9 +708,9 @@ export default function AdminTransactions() {
                         <StatusBadge status={t.payment_status} />
                       </td>
                       <td className="px-4 py-3 text-xs" style={{ color: subTxt }}>{new Date(t.created_at).toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right">
-                        <ActionBtns onView={() => alert(`View details for ${t.id}`)} />
-                      </td>
+                       <td className="px-4 py-3 text-right">
+                         <ActionBtns onView={() => openTransactionDetail(t)} />
+                       </td>
                     </tr>
                   ))
                 ) : (
@@ -802,23 +816,94 @@ export default function AdminTransactions() {
           </div>
         </div>
 
-        {/* Print 6: footer + signature lines */}
-        <div className="print-only print-footer">
-          <p className="note">
-            <strong>Esting's Flower International Inc.</strong> Confidential. This report is generated for internal use only and reflects transaction records as of the date and time indicated above. Figures are based on the filters applied at the time of printing.
-          </p>
-          <div className="print-signs">
-            <div className="print-sign">
-              <div className="line" />
-              <p className="cap">Prepared by</p>
-            </div>
-            <div className="print-sign">
-              <div className="line" />
-              <p className="cap">Reviewed by</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
+         {/* Print 6: footer + signature lines */}
+         <div className="print-only print-footer">
+           <p className="note">
+             <strong>Esting's Flower International Inc.</strong> Confidential. This report is generated for internal use only and reflects transaction records as of the date and time indicated above. Figures are based on the filters applied at the time of printing.
+           </p>
+           <div className="print-signs">
+             <div className="print-sign">
+               <div className="line" />
+               <p className="cap">Prepared by</p>
+             </div>
+             <div className="print-sign">
+               <div className="line" />
+               <p className="cap">Reviewed by</p>
+             </div>
+           </div>
+         </div>
+       </div>
+
+       {showDetailModal && selectedTransaction && (
+         <div
+           className="fixed inset-0 z-[70] flex items-center justify-center p-4 sm:p-6"
+           style={{ backgroundColor: "rgba(0,0,0,0.55)", backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)" }}
+           onClick={closeTransactionDetail}
+         >
+           <div
+             className="w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden"
+             onClick={e => e.stopPropagation()}
+             style={{ backgroundColor: isDark ? "#111827" : "#ffffff", border: `1px solid ${isDark ? "#374151" : "#e5e7eb"}`, animation: "daPop 0.25s ease both" }}
+           >
+             <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: `1px solid ${isDark ? "#374151" : "#e5e7eb"}` }}>
+               <div>
+                 <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: isDark ? "#94a3b8" : "#9ca3af" }}>Payment Details</p>
+                 <p className="text-sm font-bold font-mono" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>#{selectedTransaction.id.slice(0, 8)}</p>
+               </div>
+               <button
+                 onClick={closeTransactionDetail}
+                 className="w-8 h-8 flex items-center justify-center rounded-full transition active:scale-95"
+                 style={{ color: isDark ? "#cbd5e1" : "#4b5563", backgroundColor: isDark ? "#1f2937" : "#f3f4f6" }}
+               >
+                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                 </svg>
+               </button>
+             </div>
+             <div className="px-6 py-5 space-y-4">
+               <div className="grid grid-cols-2 gap-4">
+                 <div>
+                   <p className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>Customer</p>
+                   <p className="text-sm font-semibold" style={{ color: isDark ? "#e2e8f0" : "#111827" }}>{selectedTransaction.customer_name}</p>
+                 </div>
+                 <div>
+                   <p className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>Date & Time</p>
+                   <p className="text-sm font-semibold" style={{ color: isDark ? "#e2e8f0" : "#111827" }}>{new Date(selectedTransaction.created_at).toLocaleString()}</p>
+                 </div>
+               </div>
+               <div className="grid grid-cols-2 gap-4">
+                 <div>
+                   <p className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>Payment Method</p>
+                   <p className="text-sm font-semibold" style={{ color: isDark ? "#e2e8f0" : "#111827" }}>{selectedTransaction.payment_method}</p>
+                 </div>
+                 <div>
+                   <p className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>Reference / Transaction ID</p>
+                   <p className="text-xs font-mono font-semibold break-all" style={{ color: isDark ? "#e2e8f0" : "#111827" }}>{selectedTransaction.payment_reference || "—"}</p>
+                 </div>
+               </div>
+               <div className="grid grid-cols-2 gap-4">
+                 <div>
+                   <p className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>Status</p>
+                   <StatusBadge status={selectedTransaction.payment_status} />
+                 </div>
+                 <div>
+                   <p className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>Total Amount</p>
+                   <p className="text-sm font-bold" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>₱{(+selectedTransaction.total_price).toLocaleString()}</p>
+                 </div>
+               </div>
+             </div>
+             <div className="px-6 py-4 flex justify-end" style={{ borderTop: `1px solid ${isDark ? "#374151" : "#e5e7eb" }`, backgroundColor: isDark ? "#0f172a" : "#f9fafb" }}>
+               <button
+                 onClick={closeTransactionDetail}
+                 className="px-5 py-2.5 text-sm font-semibold rounded-xl border transition-all active:scale-95"
+                 style={{ borderColor: isDark ? "#4b5563" : "#d1d5db", color: isDark ? "#e2e8f0" : "#111827", backgroundColor: isDark ? "#1e293b" : "#ffffff" }}
+               >
+                 Close
+               </button>
+             </div>
+           </div>
+         </div>
+       )}
+     </div>
+   )
 }
