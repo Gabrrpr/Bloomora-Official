@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import estingsMobileHeaderLogo from "../../../../mobile/estings-mobile/assets/images/branding/estingsFlowerShop-logo-white.svg"
-import mobileInterRegular from "../../../../mobile/estings-mobile/node_modules/@expo-google-fonts/inter/400Regular/Inter_400Regular.ttf?url"
-import mobileInterMedium from "../../../../mobile/estings-mobile/node_modules/@expo-google-fonts/inter/500Medium/Inter_500Medium.ttf?url"
-import mobileInterBold from "../../../../mobile/estings-mobile/node_modules/@expo-google-fonts/inter/700Bold/Inter_700Bold.ttf?url"
-import mobileInterExtraBold from "../../../../mobile/estings-mobile/node_modules/@expo-google-fonts/inter/800ExtraBold/Inter_800ExtraBold.ttf?url"
-import mobileInterTightMedium from "../../../../mobile/estings-mobile/node_modules/@expo-google-fonts/inter-tight/500Medium/InterTight_500Medium.ttf?url"
+import estingsMobileHeaderLogo from "../../assets/mobile-preview/estingsFlowerShop-logo-white.svg"
+import mobileInterRegular from "../../assets/mobile-preview/Inter_400Regular.ttf?url"
+import mobileInterMedium from "../../assets/mobile-preview/Inter_500Medium.ttf?url"
+import mobileInterBold from "../../assets/mobile-preview/Inter_700Bold.ttf?url"
+import mobileInterExtraBold from "../../assets/mobile-preview/Inter_800ExtraBold.ttf?url"
+import mobileInterTightMedium from "../../assets/mobile-preview/InterTight_500Medium.ttf?url"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api"
 import {
