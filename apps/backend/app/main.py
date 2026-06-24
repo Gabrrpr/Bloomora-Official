@@ -38,13 +38,6 @@ from app.api.v1.routes import (
     webhooks
 )
 
-# Debug: confirm cart router loaded correctly
-print("[DEBUG] cart router loaded:", getattr(cart, "router", None))
-try:
-    print("[DEBUG] cart router prefix:", getattr(cart.router, "prefix", None))
-except Exception as _e:
-    print("[DEBUG] cart router prefix read failed:", _e)
-
 from app.core.config import settings
 from app.core.limiter import limiter
 
@@ -83,13 +76,6 @@ app = FastAPI(
 @app.on_event("startup")
 def on_startup():
     start_scheduler()
-    # Debug: dump registered /api/v1 routes to verify cart inclusion at runtime
-    try:
-        route_paths = sorted({r.path for r in app.routes if hasattr(r, "path")})
-        api_v1_paths = [p for p in route_paths if p.startswith("/api/v1")]
-        print("[DEBUG] registered /api/v1 paths:", api_v1_paths)
-    except Exception as e:
-        print("[DEBUG] route dump failed:", e)
 
 
 app.state.limiter = limiter

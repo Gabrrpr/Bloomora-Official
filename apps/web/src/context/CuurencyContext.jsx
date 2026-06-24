@@ -4,14 +4,18 @@ import { useAuth } from "./AuthContext";
 
 const CurrencyContext = createContext(null);
 
+const userCurrencyKey = (user) => {
+  const identity = user?.email || user?.id;
+  return identity ? `preferred_currency:${String(identity).toLowerCase()}` : null;
+};
+
 export function CurrencyProvider({ children }) {
   const [rates, setRates] = useState({ PHP: 1 });
   const auth = useAuth?.() || {};
   const user = auth.user || null;
 
   const [currency, setCurrency] = useState(() => {
-    if (typeof window === "undefined") return "PHP";
-    return localStorage.getItem("preferred_currency") || "PHP";
+    return "PHP";
   });
 
   useEffect(() => {
@@ -26,15 +30,25 @@ export function CurrencyProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("preferred_currency", currency);
-  }, [currency]);
+    if (typeof window === "undefined") return;
+    const key = userCurrencyKey(user);
+    if (key) localStorage.setItem(key, currency);
+    localStorage.removeItem("preferredCurrency");
+    if (!key) localStorage.removeItem("preferred_currency");
+  }, [currency, user]);
 
   useEffect(() => {
     if (!user) {
       setCurrency("PHP");
-    } else if (user.preferredCurrency) {
-      setCurrency(user.preferredCurrency);
+      return;
     }
+    const key = userCurrencyKey(user);
+    const stored = key ? localStorage.getItem(key) : null;
+    const legacy = localStorage.getItem("preferred_currency");
+    const next = user.preferredCurrency || stored || legacy || "PHP";
+    setCurrency(next);
+    if (key && legacy && !stored) localStorage.setItem(key, legacy);
+    localStorage.removeItem("preferred_currency");
   }, [user]);
 
   const formatPrice = (priceInPHP) => {

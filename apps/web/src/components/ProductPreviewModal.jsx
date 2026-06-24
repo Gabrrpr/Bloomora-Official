@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react"
-import { addToCart } from "../utils/cart.js"
+import { addToCart, getCart, setCart } from "../utils/cart.js"
 import { useTheme } from "../context/ThemeContext"
 import { useBranch } from "../context/BranchContext";
 import { api } from "../services/api.js"
@@ -33,6 +33,16 @@ const toStr       = d      => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d
 const todayD      = ()     => { const d = new Date(); d.setHours(0,0,0,0); return d }
 const tomorrowStr = ()     => { const d = new Date(); d.setDate(d.getDate()+1); return toStr(d) }
 const fmtDate     = s      => { if (!s) return ""; const [y,m,d] = s.split("-").map(Number); return new Date(y,m-1,d).toLocaleDateString("en-PH",{weekday:"short",month:"short",day:"numeric"}) }
+const searchable  = item   => [item?.name, item?.category, item?.product_type, item?.desc, item?.description].filter(Boolean).join(" ").toLowerCase()
+const isMassCardAddOn = item => {
+  const text = searchable(item)
+  return text.includes("mass card") || (text.includes("mass") && text.includes("card"))
+}
+const isInauguralProduct = item => {
+  const text = searchable(item)
+  const occasionText = Array.isArray(item?.occasions) ? item.occasions.map(o => String(o).toLowerCase()).join(" ") : ""
+  return text.includes("inaugural") || text.includes("inagural") || occasionText.includes("inaugural") || occasionText.includes("inagural")
+}
 const isTodayAvail = ()    => new Date().getHours() < 14
 
 
@@ -193,7 +203,7 @@ function AIPanel({ onUse, onBack, isMobile }) {
     } catch (e) {
       setErr("Could not generate message. Please try again.")
     }
-    loading && setLoading(false)
+    setLoading(false)
   }
 
   return (
@@ -327,7 +337,7 @@ function AIPanel({ onUse, onBack, isMobile }) {
 }
 
 /* ── Card Step ── */
-function CardStep({ delivLabel, dest, onClose, onNavigate, isMobile }) {
+function CardStep({ delivLabel, dest, onClose, onNavigate, isMobile, cartItemKey }) {
   const [phase,   setPhase]   = useState("choice")
   const [form,    setForm]    = useState(() => {
     const pending = getPendingCard()
@@ -358,13 +368,27 @@ function CardStep({ delivLabel, dest, onClose, onNavigate, isMobile }) {
     }
   }, [phase])
 
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
     const e = {}
     if (!form.msg.trim())  e.msg  = true
     if (!form.to.trim())   e.to   = true
     if (!form.from.trim()) e.from = true
     setFormErr(e)
     if (Object.keys(e).length > 0) return
+    const fullMessage = `To: ${form.to.trim()}\nFrom: ${form.from.trim()}\n${form.msg.trim()}`
+    if (cartItemKey?.id) {
+      try {
+        const items = await getCart()
+        const nextItems = items.map(item => (
+          item.id === cartItemKey.id && item.group === cartItemKey.group
+            ? { ...item, cardMessage: fullMessage, card_message: fullMessage, cardEnabled: true }
+            : item
+        ))
+        await setCart(nextItems)
+      } catch (error) {
+        console.error("Failed to save greeting card message:", error)
+      }
+    }
     clearPendingCard()
     setPhase("done")
   }
@@ -1489,6 +1513,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   const [loadingAddOns, setLoadingAddOns] = useState(true)
   const [showAllAddons, setShowAllAddons] = useState(false)
   const [navH,          setNavH]          = useState(80)
+  const [massCardContext, setMassCardContext] = useState("")
 
   const todayOk  = isTodayAvail()
   const { isDark } = useTheme()
@@ -1559,6 +1584,12 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   }, [])
 
   const visibleAddons = showAllAddons ? liveAddOns : liveAddOns.slice(0, INITIAL_ADDON_COUNT)
+  const selectedMassCardAddOns = addOns
+    .map(id => liveAddOns.find(a => a.id === id))
+    .filter(Boolean)
+    .filter(isMassCardAddOn)
+  const hasMassCardAddOn = selectedMassCardAddOns.length > 0
+  const cartItemKey = { id: product.id, group: product.product_group || product.category || "Catalog" }
 
   /* Mount */
   useEffect(() => {
@@ -1629,6 +1660,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
     const e = {}
     if (!qty)     e.qty   = true
     if (!delivType || (delivType==="custom" && !customDate)) e.date = true
+    if (hasMassCardAddOn && !massCardContext.trim()) e.massCardContext = true
     // Reject custom dates beyond the booking window (prices may change too far out)
     if (delivType==="custom" && customDate) {
       const max = todayD(); max.setDate(max.getDate() + MAX_ORDER_DAYS)
@@ -1646,19 +1678,25 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
       const addon = liveAddOns.find(a => a.id===id)
       return { id: addon.id, name: addon.name, price: addon.price, qty: 1 }
     })
+    const cleanMassCardContext = massCardContext.trim()
+    const massCardMessage = cleanMassCardContext ? `Mass card context: ${cleanMassCardContext}` : null
 
     await addToCart({
       id:           product.id,
+      group:        cartItemKey.group,
       name:         product.name,
       price:        product.price,
       qty:          parseInt(qty) || 1,
-      img:          product.image,
+      img:          product.image || product.image_url,
       desc:         product.category,
       color:        color?.name,
       size:         qty,
       deliveryDate: delivType==="custom" ? customDate : delivType,
       addOns:       selectedAddOnObjects,
       totalPrice:   total,
+      massCardContext: cleanMassCardContext || null,
+      cardMessage: massCardMessage,
+      card_message: massCardMessage,
       
       // 🚀 THE FIX: Force the item to be "ticked" so Checkout can see it!
       checked:      true, 
@@ -1666,6 +1704,10 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
 
     window.dispatchEvent(new Event("bloomora:cart-updated"))
     setDest(d)
+    if (isInauguralProduct(product) || hasMassCardAddOn) {
+      setTimeout(() => { close(); onNavigate?.(d==="checkout" ? "checkout" : "cart") }, 120)
+      return
+    }
     setStep("card")
   }
 
@@ -1777,6 +1819,41 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
           <QtySection {...qtyProps}/>
           <div className="pb-5" style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
             <AddOnsSection {...addOnProps}/>
+            {hasMassCardAddOn && (
+              <div className="mt-4 p-3.5 rounded-xl"
+                style={{
+                  background: isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4",
+                  border: `1px solid ${errors.massCardContext ? "#fca5a5" : isDark ? "rgba(74,222,128,0.25)" : "#bbf7d0"}`
+                }}>
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <label className="text-xs font-semibold uppercase tracking-widest"
+                    style={{ color: errors.massCardContext ? "#ef4444" : isDark ? "#86efac" : DG }}>
+                    Mass card context <span className="text-red-400">*</span>
+                  </label>
+                  {errors.massCardContext && (
+                    <span className="text-[10px] font-semibold text-red-500">required</span>
+                  )}
+                </div>
+                <textarea
+                  rows={3}
+                  value={massCardContext}
+                  onChange={e => { setMassCardContext(e.target.value); setErrors(prev => ({ ...prev, massCardContext: false })) }}
+                  placeholder="Name of the person, intention, family details, preferred wording, or schedule notes for the Mass card."
+                  className="w-full rounded-lg px-3 py-2.5 text-sm outline-none transition-all"
+                  style={{
+                    resize: "none",
+                    border: `1.5px solid ${errors.massCardContext ? "#fca5a5" : isDark ? "#334155" : "#d1fae5"}`,
+                    background: isDark ? "#0f172a" : "white",
+                    color: isDark ? "#e2e8f0" : "#111827"
+                  }}
+                  onFocus={e => { e.target.style.borderColor = isDark ? "#4ade80" : G }}
+                  onBlur={e => { e.target.style.borderColor = errors.massCardContext ? "#fca5a5" : isDark ? "#334155" : "#d1fae5" }}
+                />
+                <p className="text-[11px] leading-snug mt-2 m-0" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
+                  This note is saved with the order so staff can prepare the Mass card correctly.
+                </p>
+              </div>
+            )}
           </div>
           <DeliverySection {...deliveryProps}/>
         </div>
@@ -1931,7 +2008,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
 
         {isCard ? (
           <div className="pm-step-anim flex-1 min-h-0 overflow-hidden">
-            <CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate} isMobile/>
+            <CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate} isMobile cartItemKey={cartItemKey}/>
           </div>
         ) : isQuote ? (
           <div className="pm-step-anim flex-1 min-h-0 overflow-hidden">
@@ -2043,7 +2120,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
 
           {isCard && (
             <div className="pm-step-anim w-full h-full overflow-hidden">
-              <CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate}/>
+              <CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate} cartItemKey={cartItemKey}/>
             </div>
           )}
 

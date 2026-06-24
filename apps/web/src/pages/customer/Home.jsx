@@ -113,29 +113,39 @@ export default function Home({ onNavigate, isCustomizationEnabled }) {
 
       {/* 🚀 Map over the branch-filtered flash sales */}
       {branchFlashSales.length > 0 && (
-        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 pb-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-7">
-            <div className="flex items-center gap-3">
-              <span className="flex items-center justify-center w-11 h-11 rounded-2xl flex-shrink-0"
-                style={{ background: "linear-gradient(135deg, #fb923c, #ef4444)", boxShadow: "0 6px 16px rgba(239,68,68,0.35)" }}>
-                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M12.832 2.072c.55-.348 1.27.041 1.27.69 0 1.65.61 3.61 1.93 4.93 1.04 1.04 1.97 2.42 1.97 4.31a6 6 0 11-10.83-3.56c.27-.36.83-.27.99.15.27.71.74 1.34 1.46 1.66.04-1.62.5-3.78 1.86-5.62.66-.9 1.42-1.69 2.18-2.27.35-.27.7-.55 1-.85.04-.05.07-.1.1-.15z" />
-                </svg>
-              </span>
+        <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 pb-4">
+          <div className="relative overflow-hidden rounded-2xl px-4 py-6 sm:px-6 sm:py-7"
+            style={{
+              background: isDark
+                ? "linear-gradient(135deg,#2a1512 0%,#1f1b16 50%,#1e293b 100%)"
+                : "linear-gradient(135deg,#fff7ed 0%,#ffffff 48%,#fef2f2 100%)",
+              border: `1px solid ${isDark ? "rgba(251,146,60,0.24)" : "#fed7aa"}`,
+              boxShadow: isDark ? "0 18px 40px rgba(0,0,0,0.35)" : "0 18px 42px rgba(239,68,68,0.08)",
+            }}>
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider mb-2"
+                style={{
+                  backgroundColor: isDark ? "rgba(251,146,60,0.14)" : "#ffedd5",
+                  color: isDark ? "#fdba74" : "#c2410c",
+                }}>
+                <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: isDark ? "#fdba74" : "#f97316" }} />
+                Limited-time deals
+              </div>
               <div>
-                <h2 className="text-2xl font-bold leading-tight" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>
+                <h2 className="text-2xl sm:text-3xl font-extrabold leading-tight" style={{ color: isDark ? "#f8fafc" : "#111827" }}>
                   Flash Sale
                 </h2>
-                <p className="text-sm" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>
-                  Limited-time deals, grab them before they're gone
+                <p className="text-sm mt-1 max-w-xl" style={{ color: isDark ? "#cbd5e1" : "#64748b" }}>
+                  Branch-ready deals with live markdowns and fresh availability.
                 </p>
               </div>
             </div>
             {flashEndsAt && <FlashCountdown endTime={flashEndsAt} isDark={isDark} />}
           </div>
-          <div className="flex flex-wrap justify-center gap-5">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             {branchFlashSales.map(product => (
-              <div key={product.id} className="w-[calc(50%-0.5rem)] sm:w-[230px]">
+              <div key={product.id} className="min-w-0">
                 <GridCard
                   product={product}
                   wishlist={[]}
@@ -144,6 +154,7 @@ export default function Home({ onNavigate, isCustomizationEnabled }) {
                 />
               </div>
             ))}
+          </div>
           </div>
         </section>
       )}

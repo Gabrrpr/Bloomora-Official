@@ -367,7 +367,8 @@ export default function Register({ onNavigate }) {
         sessionStorage.removeItem(STORAGE_KEY)
         sessionStorage.setItem("registerEmail", form.email)
         sessionStorage.setItem("registerPassword", form.password)
-        localStorage.setItem("preferred_currency", form.preferred_currency) // Remember their currency choice for the login step
+        localStorage.setItem(`preferred_currency:${form.email.toLowerCase()}`, form.preferred_currency) // Remember their currency choice for this account
+        localStorage.removeItem("preferred_currency")
         localStorage.removeItem("preferredCurrency")
         onNavigate("login")
       } else { setError(result.message || "Registration failed. Please try again.") }

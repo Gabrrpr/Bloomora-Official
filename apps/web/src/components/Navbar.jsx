@@ -17,6 +17,28 @@ const DARK_GREEN = "#0C573E";
 const VIBRANT_GREEN = "#16a34a";
 
 const STANDARD_CATEGORIES = ["flower", "vase", "wrapping", "accessory", "arrangement", "add-on"];
+const SHOP_MENU_EXCLUDED_CATEGORY_WORDS = [
+  "ribbon",
+  "filler",
+  "fillers",
+  "wrapping",
+  "wrapper",
+  "wrap",
+  "accessory",
+  "accessories",
+  "floral foam",
+  "foam",
+  "supply",
+  "supplies",
+  "material",
+  "materials",
+]
+
+function isCustomerShopCategory(value) {
+  const label = String(value || "").trim().toLowerCase()
+  if (!label) return false
+  return !SHOP_MENU_EXCLUDED_CATEGORY_WORDS.some(word => label.includes(word))
+}
 
 // ── Admin announcements ──
 const ANNOUNCE_KEY = "bloomora_announcements";
@@ -988,16 +1010,19 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
     { label: "Home", page: "home" },
     {
       label: "Shop", page: "shop", categorized: true,
-      categories: dynamicShopCategories.map(cat => ({
+      categories: dynamicShopCategories
+      .filter(cat => isCustomerShopCategory(cat.title))
+      .map(cat => ({
         heading: cat.title,
         headingPage: "shop",
         headingParam: cat.title,
-        items: (cat.items || []).map(subItem => ({
+        items: (cat.items || []).filter(isCustomerShopCategory).map(subItem => ({
           label: subItem,
           page: "shop",
           param: subItem
         }))
       }))
+      .filter(cat => cat.items.length > 0 || cat.heading)
     },
     {
       label: "Occasions", page: "occasions",
@@ -1027,7 +1052,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
         if (data && data.length > 0) {
           const allCats = data.map(p => p.category?.toLowerCase().trim()).filter(Boolean);
           const uniqueCats = Array.from(new Set(allCats));
-          const custom = uniqueCats.filter(c => !STANDARD_CATEGORIES.includes(c));
+          const custom = uniqueCats.filter(c => !STANDARD_CATEGORIES.includes(c) && isCustomerShopCategory(c));
           setCustomCategories(custom);
         }
       })

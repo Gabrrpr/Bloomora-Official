@@ -53,7 +53,8 @@ export default function GridCard({ product, wishlist, toggleWishlist, onPreview 
     currency: "PHP",
   }).format(Number(price || 0)));
   
-  const isOutOfStock = product.stock <= 0 || !product.is_available || product.status === "inactive";
+  const hasStockValue = product.stock !== undefined && product.stock !== null;
+  const isOutOfStock = (hasStockValue && Number(product.stock) <= 0) || product.is_available === false || product.status === "inactive";
 
   return (
     <div

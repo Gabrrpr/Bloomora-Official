@@ -132,6 +132,16 @@ export default function AdminPromotions() {
     return () => clearTimeout(t)
   }, [])
 
+  // 🚀 NEW: Strict Branch Matcher Function for Promotions
+  const matchesBranch = (p) => {
+    if (!p) return false;
+    const b = branch.toLowerCase();
+    if (Array.isArray(p.branches)) return p.branches.map(x => x.toLowerCase()).includes(b);
+    if (p.branch) return p.branch.toLowerCase() === b;
+    if (p.branch_name) return p.branch_name.toLowerCase() === b;
+    return false;
+  }
+
   // Category options for the filter dropdown
   const promoCategories = ["All", ...Array.from(new Set(products.map(p => {
     const c = p.category?.trim().toLowerCase();
@@ -140,10 +150,22 @@ export default function AdminPromotions() {
 
   // Show only products that match the selected branch and category
   const filteredPromoProducts = products.filter(p => {
-    const matchesBranch = p.branches?.includes(branch);
     const matchesCategory = promoCategory === "All" || p.category?.trim().toLowerCase() === promoCategory.toLowerCase();
-    return matchesBranch && matchesCategory;
+    return matchesBranch(p) && matchesCategory;
   });
+
+  const branchSaleProducts = products.filter(p => {
+    const currentPrice = Number(p.price || 0)
+    const originalPrice = Number(p.original_price || 0)
+    return matchesBranch(p) && originalPrice > currentPrice
+  })
+
+  const salePercent = (p) => {
+    const currentPrice = Number(p.price || 0)
+    const originalPrice = Number(p.original_price || 0)
+    if (!originalPrice || originalPrice <= currentPrice) return 0
+    return Math.round((1 - currentPrice / originalPrice) * 100)
+  }
 
   const isEditing = editingCode !== null
   const set = (k) => (v) => { setForm(p => ({ ...p, [k]: v })); if (formError) setFormError("") }
@@ -517,6 +539,52 @@ export default function AdminPromotions() {
         </div>
 
         <div className="p-5 space-y-4">
+          <div className="rounded-xl p-4"
+            style={{ background: isDark ? "rgba(249,115,22,0.08)" : "#fff7ed", border: `1px solid ${isDark ? "rgba(251,146,60,0.25)" : "#fed7aa"}` }}>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-widest" style={{ color: isDark ? "#fdba74" : "#c2410c" }}>
+                  On sale in {branch}
+                </p>
+                <p className="text-[11px] mt-0.5" style={{ color: mutedTxt }}>
+                  Products already discounted for this branch.
+                </p>
+              </div>
+              <span className="text-xs font-bold px-2.5 py-1 rounded-full"
+                style={{ color: isDark ? "#fdba74" : "#c2410c", background: isDark ? "rgba(251,146,60,0.12)" : "#ffedd5" }}>
+                {branchSaleProducts.length}
+              </span>
+            </div>
+
+            {branchSaleProducts.length === 0 ? (
+              <p className="text-xs" style={{ color: mutedTxt }}>No products are currently on sale in {branch}.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2.5">
+                {branchSaleProducts.map(p => (
+                  <button key={p.id}
+                    onClick={() => togglePromoProduct(p.id)}
+                    className="flex items-center gap-3 p-2.5 rounded-lg text-left transition-all"
+                    style={{
+                      background: selectedPromoIds.includes(p.id) ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : cardBg,
+                      border: `1px solid ${selectedPromoIds.includes(p.id) ? accentG : inputBdr}`
+                    }}>
+                    <img src={p.image_url} alt="" className="w-11 h-11 rounded-md object-cover flex-shrink-0" style={{ border: `1px solid ${inputBdr}` }} />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold truncate" style={{ color: bodyTxt }}>{p.name}</p>
+                      <p className="text-[10px] truncate" style={{ color: mutedTxt }}>{p.category || "Uncategorized"}</p>
+                      <p className="text-[11px] font-semibold mt-0.5" style={{ color: accentG }}>
+                        ₱{Number(p.price || 0).toLocaleString()} <span className="line-through font-normal" style={{ color: mutedTxt }}>₱{Number(p.original_price || 0).toLocaleString()}</span>
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-bold px-2 py-1 rounded-full text-white flex-shrink-0" style={{ background: "#f97316" }}>
+                      -{salePercent(p)}%
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="flex flex-col md:flex-row gap-4 items-start">
             
             {/* Category Filter */}

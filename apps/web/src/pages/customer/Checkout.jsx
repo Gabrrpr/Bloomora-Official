@@ -203,9 +203,22 @@ export default function Checkout({ onNavigate }) {
 
   const rawStoreBranch = localStorage.getItem("bloomora_active_branch") || "Manila";
   const selectedStoreBranch = rawStoreBranch.charAt(0).toUpperCase() + rawStoreBranch.slice(1).toLowerCase();
-  const pickupBranch = PICKUP_BRANCHES[selectedStoreBranch] || PICKUP_BRANCHES.Manila;
 
   const selectedAddress = addresses.find(a => a.id === selectedAddressId)
+
+  const provinceToBranch = (provinceOrAddress) => {
+    const p = (provinceOrAddress || "").toLowerCase()
+    if (!p) return null
+    if (p.includes("pampanga") || p.includes("angeles") || p.includes("mabalacat") || p.includes("san fernando")) return "Pampanga"
+    if (p.includes("manila") || p.includes("ncr") || p.includes("quezon") || p.includes("makati") || p.includes("pasig") || p.includes("taguig") || p.includes("caloocan") || p.includes("paranaque") || p.includes("valenzuela") || p.includes("muntinlupa") || p.includes("mandaluyong") || p.includes("marikina") || p.includes("pasay")) return "Manila"
+    return null
+  }
+
+  const pickupAddressSource = selectedAddress
+    ? [selectedAddress.street, selectedAddress.barangay, selectedAddress.city, selectedAddress.province, selectedAddress.zip_code].filter(Boolean).join(", ")
+    : (customer?.address || user?.address || "")
+  const pickupBranchName = provinceToBranch(selectedAddress?.province || pickupAddressSource) || selectedStoreBranch
+  const pickupBranch = PICKUP_BRANCHES[pickupBranchName] || PICKUP_BRANCHES.Manila;
 
   const getDeliveryDetails = () => {
     if (fulfillmentMethod === "pickup") {
@@ -246,16 +259,8 @@ export default function Checkout({ onNavigate }) {
 
   const deliveryDetails = getDeliveryDetails()
 
-  const provinceToBranch = (provinceOrAddress) => {
-    const p = (provinceOrAddress || "").toLowerCase()
-    if (!p) return null
-    if (p.includes("pampanga") || p.includes("angeles") || p.includes("mabalacat") || p.includes("san fernando")) return "Pampanga"
-    if (p.includes("manila") || p.includes("ncr") || p.includes("quezon") || p.includes("makati") || p.includes("pasig") || p.includes("taguig") || p.includes("caloocan") || p.includes("paranaque") || p.includes("valenzuela") || p.includes("muntinlupa") || p.includes("mandaluyong") || p.includes("marikina") || p.includes("pasay")) return "Manila"
-    return null
-  }
-
   const addressBranch = (fulfillmentMethod === "pickup")
-    ? selectedStoreBranch
+    ? pickupBranchName
     : (fulfillmentMethod === "lalamove")
       ? selectedStoreBranch
       : provinceToBranch(
@@ -272,6 +277,8 @@ export default function Checkout({ onNavigate }) {
 
   const buildOrderData = (orderIds) => ({
     orderIds,
+    payment_method: paymentMethod,
+    payment_status: paymentMethod === "paymongo" ? "pending" : "pending",
     items: cartItems,
     subtotal,
     shipping,
@@ -320,13 +327,16 @@ export default function Checkout({ onNavigate }) {
           price: i.price,
           qty: i.qty,
           img: i.img || i.image || i.image_url || i.generated_image_url || "",
-          card_message: i.cardMessage || i.card_message || null,
+          card_message: i.massCardContext
+            ? `Mass card context: ${i.massCardContext}`
+            : (i.cardMessage || i.card_message || null),
         })),
         delivery_address: deliveryDetails.address,
         delivery_notes: buildDeliveryNotes(),
         scheduled_at: deliveryDate.toISOString(),
         payment_method: paymentMethod,
         payment_reference: referenceNumber.trim(),
+        fulfillment_method: fulfillmentMethod,
         special_note: orderNote.trim() || null,
         
         // 🚀 THE FIX: Force these to strictly lowercase so the Database Enum accepts them!
@@ -350,8 +360,8 @@ export default function Checkout({ onNavigate }) {
           },
           body: JSON.stringify({
             order_ids: orderIds,
-            success_url: `${window.location.origin}/`,
-            cancel_url: `${window.location.origin}/checkout`
+            success_url: `${window.location.origin}/confirmation?payment=success&order_id=${encodeURIComponent(orderIds[0])}`,
+            cancel_url: `${window.location.origin}/checkout?payment=cancelled`
           })
         });
 
@@ -435,12 +445,26 @@ export default function Checkout({ onNavigate }) {
       setError("Your cart is empty! Please go back and select items to checkout.");
       return;
     }
-    if (!deliveryDetails.address || !deliveryDetails.phone) {
-      setError("Please select or add a complete delivery address and phone number.");
-      return;
-    }
-    if (!addressBranch) {
-      setError("Sorry, we only deliver to Metro Manila and Pampanga. Please provide a valid address within our coverage.");
+    if (fulfillmentMethod === "delivery") {
+      if (!deliveryDetails.address || !deliveryDetails.phone) {
+        setError("Please select or add a complete delivery address and phone number.");
+        return;
+      }
+      if (!addressBranch) {
+        setError("Sorry, we only deliver to Metro Manila and Pampanga. Please provide a valid address within our coverage.");
+        return;
+      }
+    } else if (fulfillmentMethod === "lalamove") {
+      if (!deliveryDetails.address || !deliveryDetails.phone) {
+        setError("Please provide a complete delivery address and phone number for Lalamove delivery.");
+        return;
+      }
+      if (!addressBranch) {
+        setError("Lalamove is only available within Metro Manila. Please provide a valid Manila address.");
+        return;
+      }
+    } else if (!deliveryDetails.phone) {
+      setError("Please provide a phone number for pickup.");
       return;
     }
     if (needsBranchConfirm) {

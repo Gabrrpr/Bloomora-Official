@@ -30,18 +30,59 @@ function getLegacyAccountCartKey() {
   }
 }
 
+function getAccountCartBackupKey() {
+  try {
+    const user = JSON.parse(localStorage.getItem("user"))
+    const key = user?.id || user?.email
+    return key ? `bloomora_cart_account_${key}` : null
+  } catch {
+    return null
+  }
+}
+
+function readAccountCartBackup() {
+  const key = getAccountCartBackupKey()
+  if (!key) return []
+  try {
+    return JSON.parse(localStorage.getItem(key)) || []
+  } catch {
+    return []
+  }
+}
+
+function writeAccountCartBackup(items) {
+  const key = getAccountCartBackupKey()
+  if (key) localStorage.setItem(key, JSON.stringify(items))
+}
+
 function writeGuestCart(items) {
   localStorage.setItem(GUEST_CART_KEY, JSON.stringify(items))
   broadcastCartUpdate(items)
   return items
 }
 
+function normalizeCartItem(entry) {
+  const product = entry?.product || {}
+  const webItem = entry?.web_item || {}
+  const id = webItem.id || product.id || entry?.product_id || entry?.id
+  const qty = Number(entry?.quantity || webItem.qty || 1)
+
+  return {
+    ...webItem,
+    id,
+    cartItemId: webItem.cartItemId || entry?.id,
+    group: webItem.group || product.product_group || product.category || "Catalog",
+    name: webItem.name || product.name || "Cart item",
+    desc: webItem.desc || product.description || product.category || "",
+    price: Number(webItem.price ?? product.price ?? 0),
+    img: webItem.img || webItem.image || webItem.image_url || product.image_url || "",
+    checked: webItem.checked !== false,
+    qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
+  }
+}
+
 function mapResponse(response) {
-  return (response?.items || []).map((entry) => ({
-    ...(entry.web_item || {}),
-    cartItemId: entry.id,
-    qty: entry.quantity || entry.web_item?.qty || 1,
-  }))
+  return (response?.items || []).map(normalizeCartItem).filter(item => item.id)
 }
 
 export function getCachedCart() {
@@ -54,9 +95,20 @@ export async function getCart() {
     cartCache = items
     return items
   }
-  const items = mapResponse(await api.get("/cart/"))
-  cartCache = items
-  return items
+  try {
+    const items = mapResponse(await api.get("/cart/"))
+    cartCache = items
+    writeAccountCartBackup(items)
+    return items
+  } catch (error) {
+    const backup = readAccountCartBackup()
+    cartCache = backup
+    if (backup.length) {
+      broadcastCartUpdate(backup)
+      return backup
+    }
+    throw error
+  }
 }
 
 export async function clearCart() {
@@ -70,6 +122,7 @@ export async function setCart(items) {
   const nextItems = mapResponse(await api.put("/cart/web", { items }))
 
   broadcastCartUpdate(nextItems)
+  writeAccountCartBackup(nextItems)
   return nextItems
 }
 
@@ -81,7 +134,7 @@ export async function addToCart(item) {
   if (!isAuthenticated()) {
     const cart = readGuestCart()
     const existing = cart.find((entry) => entry.id === item.id && entry.group === item.group)
-    if (existing) existing.qty += item.qty || 1
+    if (existing) Object.assign(existing, item, { qty: (existing.qty || 1) + (item.qty || 1), checked: true })
     else cart.push({ ...item, checked: true, qty: item.qty || 1 })
     writeGuestCart(cart)
     return cart
@@ -94,6 +147,7 @@ export async function addToCart(item) {
     
     const nextItems = mapResponse(response);
     broadcastCartUpdate(nextItems);
+    writeAccountCartBackup(nextItems);
     return nextItems;
     
   } catch (error) {

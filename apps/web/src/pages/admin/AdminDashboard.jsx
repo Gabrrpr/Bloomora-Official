@@ -1384,12 +1384,92 @@ function DashboardPanel({ user, onNavigate }) {
 // ─── My Profile Panel ─────────────────────────────────────────────────────────
 function MyProfilePanel({ user, onBack }) {
   const { isDark } = useTheme()
+  const { setUserFromToken } = useAuth()
   const t = useTokens(isDark)
   const [editMode, setEditMode] = useState(false)
-  const [form, setForm] = useState({ firstName: user?.firstName || "", lastName: user?.lastName || "", email: user?.email || "", phone: user?.phone || "" })
+  const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "" })
+  const [avatarUrl, setAvatarUrl] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [notice, setNotice] = useState("")
+  const [error, setError] = useState("")
   const s = k => v => setForm(p => ({ ...p, [k]: v }))
 
-  function FRow({ label, value, onChange, type = "text", editable }) {
+  useEffect(() => {
+    setForm({
+      firstName: user?.firstName || "",
+      lastName: user?.lastName || "",
+      email: user?.email || "",
+      phone: user?.phoneNumber || user?.phone || ""
+    })
+    setAvatarUrl(user?.profilePictureUrl || "")
+    setNotice("")
+    setError("")
+  }, [user])
+
+  const refreshCurrentUser = async () => {
+    const token = localStorage.getItem("access_token")
+    if (token) await setUserFromToken(token)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setNotice("")
+    setError("")
+    try {
+      await api.updateProfile({
+        first_name: form.firstName.trim(),
+        last_name: form.lastName.trim(),
+        phone_number: form.phone.trim() || null
+      })
+      await refreshCurrentUser()
+      setNotice("Profile updated.")
+      setEditMode(false)
+    } catch (err) {
+      setError(err.message || "Failed to update profile")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleAvatarChange = async (e) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+    setUploading(true)
+    setNotice("")
+    setError("")
+    try {
+      const fd = new FormData()
+      fd.append("file", file)
+      const result = await api.uploadProfilePicture(fd)
+      setAvatarUrl(result.url || "")
+      await refreshCurrentUser()
+      setNotice("Profile picture updated.")
+    } catch (err) {
+      setError(err.message || "Failed to upload profile picture")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleRemoveAvatar = async () => {
+    setUploading(true)
+    setNotice("")
+    setError("")
+    try {
+      await api.removeProfilePicture()
+      setAvatarUrl("")
+      await refreshCurrentUser()
+      setNotice("Profile picture removed.")
+    } catch (err) {
+      setError(err.message || "Failed to remove profile picture")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  function FRow({ label, value, onChange, type = "text", editable, readOnlyNote }) {
     return (
       <div>
         <label className="block text-xs font-semibold mb-1" style={{ color: t.textMuted }}>{label}</label>
@@ -1398,9 +1478,12 @@ function MyProfilePanel({ user, onBack }) {
           style={{ borderColor: editable ? t.inputBorder : t.divider, backgroundColor: editable ? t.inputBg : t.surfaceAlt, color: t.textPrimary }}
           onFocus={e => { if (editable) { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.15)` } }}
           onBlur={e => { e.target.style.borderColor = editable ? t.inputBorder : t.divider; e.target.style.boxShadow = "none" }} />
+        {readOnlyNote && <p className="mt-1 text-[11px]" style={{ color: t.textMuted }}>{readOnlyNote}</p>}
       </div>
     )
   }
+
+  const initials = `${form.firstName?.[0] || ""}${form.lastName?.[0] || ""}`.trim().toUpperCase() || "A"
 
   return (
     <div className="space-y-5">
@@ -1412,12 +1495,33 @@ function MyProfilePanel({ user, onBack }) {
       <div className="rounded-xl overflow-hidden" style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
         <div className="h-28 w-full" style={{ background: `linear-gradient(135deg,${DG},${G})` }} />
         <div className="px-6 pb-5">
-          <div className="flex items-end justify-between" style={{ marginTop: "-36px" }}>
-            <div className="w-16 h-16 rounded-xl flex items-center justify-center text-2xl font-bold text-white ring-4 flex-shrink-0"
-              style={{ background: `linear-gradient(135deg,${DG},${G})`, ringColor: t.cardBg }}>
-              {(form.firstName?.[0] || "A").toUpperCase()}
+          <div className="flex items-end justify-between gap-4" style={{ marginTop: "-36px" }}>
+            <div className="flex items-end gap-3">
+              <div className="w-16 h-16 rounded-xl flex items-center justify-center text-2xl font-bold text-white ring-4 flex-shrink-0 overflow-hidden"
+                style={{ background: `linear-gradient(135deg,${DG},${G})`, ringColor: t.cardBg }}>
+                {avatarUrl
+                  ? <img src={avatarUrl} alt="Admin profile" className="w-full h-full object-cover" />
+                  : initials}
+              </div>
+              {editMode && (
+                <div className="flex flex-wrap gap-2 pb-1">
+                  <input id="admin-profile-picture" type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleAvatarChange} />
+                  <label htmlFor="admin-profile-picture"
+                    className="px-3 py-2 text-xs font-semibold border rounded-md cursor-pointer transition-all"
+                    style={{ borderColor: t.cardBorder, color: t.textPrimary, backgroundColor: t.cardBg }}>
+                    {uploading ? "Uploading..." : "Change Photo"}
+                  </label>
+                  {avatarUrl && (
+                    <button type="button" onClick={handleRemoveAvatar} disabled={uploading}
+                      className="px-3 py-2 text-xs font-semibold border rounded-md transition-all disabled:opacity-60"
+                      style={{ borderColor: isDark ? "rgba(248,113,113,0.35)" : "#fecaca", color: isDark ? "#fca5a5" : "#b91c1c", backgroundColor: isDark ? "rgba(248,113,113,0.08)" : "#fff1f2" }}>
+                      Remove
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
-            <button onClick={() => setEditMode(p => !p)}
+            <button onClick={() => { setEditMode(p => !p); setNotice(""); setError("") }}
               className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all active:scale-95"
               style={editMode
                 ? { borderColor: G, color: isDark ? "#4ade80" : G, backgroundColor: isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4" }
@@ -1431,6 +1535,14 @@ function MyProfilePanel({ user, onBack }) {
             <p className="text-base font-bold" style={{ color: t.textPrimary }}>{form.firstName} {form.lastName}</p>
             <p className="text-xs mt-0.5" style={{ color: t.textMuted }}>{user?.role || "Administrator"} · {user?.branch || "—"}</p>
           </div>
+          {(notice || error) && (
+            <div className="mt-3 rounded-md px-3 py-2 text-xs font-semibold"
+              style={error
+                ? { color: isDark ? "#fca5a5" : "#b91c1c", backgroundColor: isDark ? "rgba(248,113,113,0.08)" : "#fff1f2", border: `1px solid ${isDark ? "rgba(248,113,113,0.25)" : "#fecaca"}` }
+                : { color: isDark ? "#86efac" : DG, backgroundColor: isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4", border: `1px solid ${isDark ? "rgba(74,222,128,0.25)" : "#bbf7d0"}` }}>
+              {error || notice}
+            </div>
+          )}
         </div>
       </div>
       <div className="rounded-xl p-5" style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
@@ -1438,17 +1550,18 @@ function MyProfilePanel({ user, onBack }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <FRow label="First Name" value={form.firstName} onChange={s("firstName")} editable={editMode} />
           <FRow label="Last Name"  value={form.lastName}  onChange={s("lastName")}  editable={editMode} />
-          <FRow label="Email Address" value={form.email} onChange={s("email")} type="email" editable={editMode} />
+          <FRow label="Email Address" value={form.email} type="email" editable={false} readOnlyNote={editMode ? "Email changes are managed through account security." : ""} />
           <FRow label="Phone Number" value={form.phone} onChange={s("phone")} editable={editMode} />
           <FRow label="Role"   value={user?.role || "Administrator"} editable={false} />
           <FRow label="Branch" value={user?.branch || "—"}            editable={false} />
         </div>
         {editMode && (
           <div className="flex justify-end mt-5">
-            <button className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95"
+            <button onClick={handleSave} disabled={saving || uploading}
+              className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-60 disabled:cursor-not-allowed"
               style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7"/></svg>
-              Save Changes
+              {saving ? "Saving..." : "Save Changes"}
             </button>
           </div>
         )}

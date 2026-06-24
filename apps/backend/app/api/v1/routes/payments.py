@@ -52,6 +52,35 @@ def _line_item_name(order: Order) -> str:
             return f"{first_item.product.name}{suffix}"
     return f"Bloomora order {_order_number(order)}"
 
+def _paymongo_images(*urls: str | None) -> list[str]:
+    images: list[str] = []
+    for url in urls:
+        value = str(url or "").strip()
+        if value.startswith(("https://", "http://")):
+            images.append(value)
+            break
+    return images
+
+def _order_item_image(item: Any) -> list[str]:
+    product = getattr(item, "product", None)
+    arrangement = getattr(item, "arrangement", None)
+    return _paymongo_images(
+        getattr(product, "image_url", None),
+        getattr(arrangement, "generated_image_url", None),
+        getattr(arrangement, "image_url", None),
+    )
+
+def _order_image(order: Order) -> list[str]:
+    product = getattr(order, "product", None)
+    arrangement = getattr(order, "arrangement", None)
+    first_item = order.items[0] if getattr(order, "items", None) else None
+    return _paymongo_images(
+        getattr(product, "image_url", None),
+        getattr(arrangement, "generated_image_url", None),
+        getattr(arrangement, "image_url", None),
+        *(_order_item_image(first_item) if first_item else []),
+    )
+
 def _get_owned_orders(
     db: Session,
     order_ids: list[str],
@@ -116,12 +145,16 @@ async def create_paymongo_checkout(
         if order.items:
             for item in order.items:
                 name = item.product.name if item.product else (item.arrangement.name or "Custom Arrangement")
-                line_items.append({
+                line_item = {
                     "name": name,
                     "amount": to_paymongo_amount(Decimal(item.price_at_purchase)),
                     "currency": "PHP",
                     "quantity": item.quantity,
-                })
+                }
+                images = _order_item_image(item)
+                if images:
+                    line_item["images"] = images
+                line_items.append(line_item)
             if Decimal(order.delivery_fee or 0) > 0:
                 line_items.append({
                     "name": "Delivery fee",
@@ -138,12 +171,16 @@ async def create_paymongo_checkout(
             print("⚠️ WARNING: Database amount is 0! Forcing amount to 500 for testing.")
             amount_val = Decimal("500.00")
             
-        line_items.append({
+        line_item = {
             "name": _line_item_name(order),
             "amount": to_paymongo_amount(Decimal(amount_val)),
             "currency": "PHP",
-                "quantity": 1,
-            })
+            "quantity": 1,
+        }
+        images = _order_image(order)
+        if images:
+            line_item["images"] = images
+        line_items.append(line_item)
         if Decimal(order.delivery_fee or 0) > 0:
             line_items.append({
                 "name": "Delivery fee",

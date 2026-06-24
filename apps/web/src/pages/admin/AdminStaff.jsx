@@ -763,7 +763,7 @@ export default function AdminStaff() {
   const fetchStaff = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const params = { role:"staff" }
+      const params = { limit: 500 }
       if (search.trim()) params.search = search.trim()
       if (branchFilter) params.branch = branchFilter.toLowerCase()
       if (roleFilter)   params.role   = roleFilter.toLowerCase()
@@ -772,7 +772,12 @@ export default function AdminStaff() {
         params.status = m[statusFilter]||statusFilter.toLowerCase()
       }
       const data = await api.getUsers(params)
-      setStaff(data.users||[]); setTotal(data.total||0)
+      const users = data.users || []
+      const staffRoles = new Set(["admin", "staff", "delivery"])
+      const visibleUsers = roleFilter
+        ? users
+        : users.filter(user => staffRoles.has(String(user.role || "").toLowerCase()))
+      setStaff(visibleUsers); setTotal(roleFilter ? (data.total || visibleUsers.length) : visibleUsers.length)
     } catch(err){setError(err.message||"Failed to load staff")} finally{setLoading(false)}
   }, [search,branchFilter,roleFilter,statusFilter])
 

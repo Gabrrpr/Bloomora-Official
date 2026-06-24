@@ -4,6 +4,8 @@ import { api } from "../../services/api.js"
 import { DG, G, StatusBadge } from "./_adminShared"
 import { Pagination } from "./_adminShared"
 import estingsWordmark from "../../assets/Estings.svg"
+// 🚀 NEW: Import Fallback Image
+import ImageNotFound from "../../assets/default-img/ImageNotFound.webp"
 
 const ORDER_STATUSES = ["All", "Pending", "Preparing", "Out for Delivery", "Delivered", "Cancelled"]
 
@@ -12,12 +14,12 @@ const BRANCHES       = ["All Branches", "Manila", "Pampanga"]
 const DATE_RANGES    = ["All Time", "Today", "This Week", "This Month", "Last 30 Days"]
 
 const PRINT_STATUS_META = [
-  { key: "Pending",          label: "Pending",          cls: "s-pending"   },
-  { key: "Confirmed",        label: "Confirmed",        cls: "s-confirmed" },
-  { key: "Preparing",        label: "Preparing",        cls: "s-preparing" },
+  { key: "Pending",         label: "Pending",         cls: "s-pending"   },
+  { key: "Confirmed",       label: "Confirmed",       cls: "s-confirmed" },
+  { key: "Preparing",       label: "Preparing",       cls: "s-preparing" },
   { key: "Out For Delivery", label: "Out for Delivery", cls: "s-ofd"       },
-  { key: "Delivered",        label: "Delivered",        cls: "s-delivered" },
-  { key: "Cancelled",        label: "Cancelled",        cls: "s-cancelled" },
+  { key: "Delivered",       label: "Delivered",       cls: "s-delivered" },
+  { key: "Cancelled",       label: "Cancelled",       cls: "s-cancelled" },
 ]
 
 function FlowerLoader({ message = "Loading...", isDark = false }) {
@@ -140,18 +142,21 @@ export default function AdminOrders() {
   const [posLoading, setPosLoading] = useState(false)
   const [posSearch, setPosSearch] = useState("")
   
-  // 🚀 NEW: POS Category State
+  // 🚀 NEW: POS Resizer State
+  const [posWidth, setPosWidth] = useState(1152); // Default max-w-6xl size
+
   const [posCategory, setPosCategory] = useState("All")
   const [posToast, setPosToast] = useState(null)
   const [posSuccess, setPosSuccess] = useState(false)
 
-  // 🚀 NEW: Customer & Fulfillment State
-  const [fulfillmentMethod, setFulfillmentMethod] = useState("pickup"); // default to pickup for walk-ins
+  const [fulfillmentMethod, setFulfillmentMethod] = useState("pickup");
   const [customerName, setCustomerName] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
   const [deliveryDate, setDeliveryDate] = useState("");
   const [recipientName, setRecipientName] = useState("");
+  const [pickupMode, setPickupMode] = useState("walkin");
+  const [pickupDate, setPickupDate] = useState("");
 
   const fetchOrders = useCallback(async () => {
     setLoading(true); setError(null)
@@ -168,9 +173,19 @@ export default function AdminOrders() {
     if (posOpen && posProducts.length === 0) {
       const loadCatalog = async () => {
         try {
-          const res = await (api.getProducts ? api.getProducts() : api.get("/products/"));
-          let list = Array.isArray(res) ? res : (res.data || []);
-          setPosProducts(list.filter(p => p.is_available !== false));
+          const [adminRes, customizationRes] = await Promise.all([
+            api.getAdminProducts ? api.getAdminProducts() : api.get("/products/admin/all"),
+            api.getCustomizationProducts ? api.getCustomizationProducts() : api.get("/products/customization/all"),
+          ]);
+          const adminList = Array.isArray(adminRes) ? adminRes : (adminRes.data || []);
+          const customizationList = Array.isArray(customizationRes) ? customizationRes : (customizationRes.data || []);
+          const byId = new Map();
+          [...adminList, ...customizationList].forEach(item => {
+            if (!item?.id || item.is_available === false || item.status === "inactive") return;
+            const previous = byId.get(item.id) || {};
+            byId.set(item.id, { ...previous, ...item });
+          });
+          setPosProducts([...byId.values()]);
         } catch (e) {
           console.warn("Failed to load POS catalog:", e);
         }
@@ -248,24 +263,72 @@ export default function AdminOrders() {
     modalFtrBdr: isDark ? "#1e293b" : "#f1f5f9",
   }
 
-  // Extract unique categories dynamically based on the products loaded
+  const posItemCategory = (p) => {
+    const raw = String(p?.product_group || p?.product_type || p?.category_name || p?.category || "Other").toLowerCase();
+    if (raw.includes("flower") || raw.includes("rose") || raw.includes("tulip") || raw.includes("carnation")) return "Flowers";
+    if (raw.includes("vase")) return "Vases";
+    if (raw.includes("wrap")) return "Wrapping";
+    if (raw.includes("accessor") || raw.includes("add")) return "Add-ons";
+    if (raw.includes("arrangement") || raw.includes("bouquet") || raw.includes("floral")) return "Arrangements";
+    return raw ? raw.replace(/(^|\s|-)\w/g, c => c.toUpperCase()).replace(/-/g, " ") : "Other";
+  };
+
+  const posItemKind = (p) => ["Flowers", "Vases", "Wrapping", "Add-ons"].includes(posItemCategory(p)) ? "Material" : "Product";
+
+  // 🚀 NEW: Get Strictly Branch-based Stock from adminInventory/inventory Array
+  const getBranchStock = (p) => {
+    const checkBranch = posBranch.toLowerCase();
+    
+    // Check if there is an adminInventory or inventory array
+    const invArray = p.adminInventory || p.inventory;
+    if (invArray && Array.isArray(invArray)) {
+        const branchStockObj = invArray.find(i => 
+            (i.branch && i.branch.toLowerCase() === checkBranch) || 
+            (i.branch_name && i.branch_name.toLowerCase() === checkBranch)
+        );
+        if (branchStockObj) {
+            return branchStockObj.stock ?? branchStockObj.quantity ?? 0;
+        }
+    }
+    
+    // Fallback if stock is stored flat but tied strictly to a specific branch property
+    if ((p.branch && p.branch.toLowerCase() === checkBranch) || 
+        (p.branch_name && p.branch_name.toLowerCase() === checkBranch)) {
+        return p.stock ?? p.current_stock ?? p.quantity ?? 0;
+    }
+
+    // Default return 0 if no specific stock for this branch is found to ensure strict distinction
+    return 0;
+  }
+
+  // Handle Drag / Resize logic for the POS Drawer
+  const startResizing = useCallback((e) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = posWidth;
+
+    const onMouseMove = (moveEvent) => {
+      const deltaX = startX - moveEvent.clientX;
+      const newWidth = Math.min(window.innerWidth * 0.95, Math.max(700, startWidth + deltaX));
+      setPosWidth(newWidth);
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
+    };
+
+    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mouseup", onMouseUp);
+  }, [posWidth]);
+
   const posCategories = ["All", ...new Set(posProducts.map(p => {
-    if (!p) return "Other";
-    if (typeof p.category === 'string') return p.category;
-    if (typeof p.category_name === 'string') return p.category_name;
-    if (p.category && p.category.name) return p.category.name;
-    return "Other";
+    return posItemCategory(p);
   }))].filter(Boolean);
 
-  // Filter products by both search query AND category
   const filteredPosProducts = posProducts.filter(p => {
     const matchSearch = !posSearch || p.name?.toLowerCase().includes(posSearch.toLowerCase());
-    
-    let pCat = "Other";
-    if (typeof p.category === 'string') pCat = p.category;
-    else if (typeof p.category_name === 'string') pCat = p.category_name;
-    else if (p.category && p.category.name) pCat = p.category.name;
-
+    const pCat = posItemCategory(p);
     const matchCategory = posCategory === "All" || pCat === posCategory;
     
     return matchSearch && matchCategory;
@@ -275,7 +338,7 @@ export default function AdminOrders() {
     setPosCart(prev => {
       const existing = prev.find(i => i.id === prod.id);
       if (existing) return prev.map(i => i.id === prod.id ? { ...i, qty: i.qty + 1 } : i);
-      return [...prev, { id: prod.id, name: prod.name, price: parseFloat(prod.price || 500), qty: 1 }];
+      return [...prev, { id: prod.id, name: prod.name, price: parseFloat(prod.price || 500), qty: 1, category: posItemCategory(prod), kind: posItemKind(prod) }];
     });
   }
 
@@ -302,22 +365,27 @@ export default function AdminOrders() {
     if (posCart.length === 0) return showPosToast("warning", "Add at least one item before checking out.");
     if (!customerName.trim()) return showPosToast("warning", "Customer name is required.");
     if (fulfillmentMethod === "delivery" && !deliveryAddress.trim()) return showPosToast("warning", "Delivery address is required.");
+    if (fulfillmentMethod === "pickup" && pickupMode === "scheduled" && !pickupDate) return showPosToast("warning", "Select a pickup date.");
     
-    // 🚀 REMOVED: We no longer require manual reference numbers for GCash/Bank!
-
     setPosLoading(true);
     try {
+      const isPickup = fulfillmentMethod === "pickup";
+      const scheduleValue = isPickup
+        ? (pickupMode === "walkin" ? new Date().toISOString() : pickupDate)
+        : (deliveryDate || undefined);
+      const pickupLabel = isPickup
+        ? (pickupMode === "walkin" ? "Walk-in / on-the-spot pickup" : `Scheduled pickup: ${pickupDate}`)
+        : "Delivery";
       const payload = {
         items: posCart.map(i => ({ id: i.id, qty: i.qty })),
         customer_name: customerName,
         customer_phone: customerPhone,
         fulfillment_method: fulfillmentMethod,
         delivery_address: fulfillmentMethod === "delivery" ? deliveryAddress : "PICKUP",
-        delivery_notes: `[BRANCH:${posBranch}] POS Walk-In Transaction`,
-        scheduled_at: deliveryDate || undefined,
+        delivery_notes: `[BRANCH:${posBranch}] POS Transaction | ${pickupLabel}`,
+        scheduled_at: scheduleValue,
         recipient_name: recipientName || customerName,
         payment_method: posPayMethod,
-        // 🚀 UPDATED: Send a placeholder since PayMongo will generate the real reference
         payment_reference: posPayMethod === "cash" ? "CASH-WALK-IN" : "PAYMONGO-PENDING", 
         branch_name: posBranch
       };
@@ -327,18 +395,16 @@ export default function AdminOrders() {
         responseData = await api.createOrder(payload);
       } else if (api.post) {
         const res = await api.post("/orders/", payload);
-        responseData = res.data || res; // Handle Axios vs Fetch wrappers
+        responseData = res.data || res;
       } else {
         responseData = await api.request({ method: "POST", url: "/orders/", data: payload });
       }
 
-      // 🚀 THE REDIRECT MAGIC: If PayMongo generated a URL, redirect the POS screen immediately!
-      if (posPayMethod === "qrph" && responseData && responseData.checkout_url) {
+      if (posPayMethod !== "cash" && responseData && responseData.checkout_url) {
         window.location.href = responseData.checkout_url;
-        return; // Stop execution here so the UI doesn't reset while redirecting
+        return; 
       }
 
-      // If it's a cash transaction, show the success animation and reset
       setPosSuccess(true);
       fetchOrders();
       setTimeout(() => {
@@ -348,6 +414,8 @@ export default function AdminOrders() {
         setCustomerPhone("");
         setDeliveryAddress("");
         setDeliveryDate("");
+        setPickupMode("walkin");
+        setPickupDate("");
         setRecipientName("");
         setPosSuccess(false);
         setPosOpen(false);
@@ -472,101 +540,6 @@ export default function AdminOrders() {
         
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-        @media print {
-          @page { margin: 12mm 10mm; }
-          body * { visibility: hidden !important; }
-          #orders-print-area, #orders-print-area * { visibility: visible !important; }
-          #orders-print-area {
-            position: absolute; top: 0; left: 0; width: 100%;
-            font-family: "Helvetica Neue", Arial, sans-serif; color: #1f2937;
-          }
-          .no-print { display: none !important; }
-          .print-only { display: block !important; }
-          .print-letterhead, .print-doc-title, .print-summary, .print-health { break-inside: avoid; page-break-inside: avoid; }
-          .print-letterhead { display: flex !important; align-items: center; justify-content: space-between; gap: 16px; padding: 13px 18px; border-radius: 12px; background: linear-gradient(135deg,#0C573E 0%,#15724B 55%,#2E8B34 100%) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-logo-word { height: 34px; width: auto; max-width: 240px; display: block; object-fit: contain; filter: brightness(0) invert(1); }
-          .print-tagline { margin: 5px 0 0; font-size: 8px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: rgba(255,255,255,0.82) !important; }
-          .print-meta { text-align: right; flex-shrink: 0; }
-          .print-meta .ref { display: inline-block; margin: 0; padding: 3px 10px; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.12) !important; color: #ffffff !important; font-size: 8.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-meta .gen { margin: 6px 0 0; font-size: 9px; color: rgba(255,255,255,0.85) !important; }
-          .print-meta .gen strong { color: #ffffff !important; font-weight: 700; }
-          .print-doc-title { display: flex !important; flex-direction: column; align-items: center; margin: 16px 0 2px; }
-          .print-doc-title .t { margin: 0; font-size: 15px; font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: #0C573E !important; }
-          .print-doc-title .rule { width: 54px; height: 3px; border-radius: 9999px; margin: 7px 0 6px; background: linear-gradient(90deg,#0C573E,#2E8B34) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-doc-title .scope { margin: 0; font-size: 9px; color: #6b7280 !important; letter-spacing: 0.02em; text-align: center; }
-          .print-summary { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 0; }
-          .print-summary-card { border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px; background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-summary-card.c-total { border-top-color: #0C573E !important; }
-          .print-summary-card.c-value { border-top-color: #2E8B34 !important; }
-          .print-summary-card.c-low   { border-top-color: #d97706 !important; }
-          .print-summary-card.c-out   { border-top-color: #dc2626 !important; }
-          .print-summary-card .label { margin: 0; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9ca3af !important; }
-          .print-summary-card .value { margin: 3px 0 0; font-size: 19px; font-weight: 800; color: #111827 !important; }
-          .print-summary-card .value.green { color: #16a34a !important; }
-          .print-summary-card .value.amber { color: #d97706 !important; }
-          .print-summary-card .value.red   { color: #dc2626 !important; }
-          .print-summary-card .cap { margin: 3px 0 0; font-size: 8px; color: #9ca3af !important; }
-          .print-health { margin: 10px 0 0; border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 12px 11px; background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-health .head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; }
-          .print-health .hk { margin: 0; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9ca3af !important; }
-          .print-health .hv { margin: 0; font-size: 8.5px; color: #6b7280 !important; }
-          .print-health .bar { display: flex; height: 10px; border-radius: 9999px; overflow: hidden; background: #f1f5f9 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-health .seg { display: block; height: 100%; }
-          .print-health .s-pending   { background: #f59e0b !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-health .s-confirmed { background: #06b6d4 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-health .s-preparing { background: #3b82f6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-health .s-ofd       { background: #8b5cf6 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-health .s-delivered { background: #2E8B34 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-health .s-cancelled { background: #ef4444 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-health .s-other     { background: #94a3b8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-health .legend { display: flex; flex-wrap: wrap; gap: 12px 16px; margin: 7px 0 0; }
-          .print-health .li { display: flex; align-items: center; gap: 5px; font-size: 8.5px; color: #374151 !important; }
-          .print-health .dot { width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; }
-          .print-detail { display: block !important; margin-top: 14px; }
-          .print-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; padding: 0 2px; }
-          .print-section-title { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #0C573E !important; }
-          .print-section-sub { margin: 0; font-size: 8.5px; color: #9ca3af !important; }
-          .print-detail .twrap { border: 1px solid #dbe3df; border-radius: 10px; overflow: hidden; }
-          .print-detail table { width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; }
-          .print-detail thead { display: table-header-group; }
-          .print-detail tr { page-break-inside: avoid; }
-          .print-detail th { background: #0C573E !important; color: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border: none; padding: 7px; text-align: left; font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; line-height: 1.25; }
-          .print-detail th.col-idx    { width: 4%; }
-          .print-detail th.col-id     { width: 12%; }
-          .print-detail th.col-cust   { width: 23%; }
-          .print-detail th.col-item   { width: 17%; }
-          .print-detail th.col-branch { width: 9%; }
-          .print-detail th.col-pay    { width: 11%; }
-          .print-detail th.col-date   { width: 12%; }
-          .print-detail th.col-total  { width: 12%; }
-          .print-detail td { border-bottom: 1px solid #eef1f4; padding: 6.5px 7px; font-size: 9.5px; color: #1f2937 !important; vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
-          .print-detail .num { text-align: right; }
-          .print-detail .center { text-align: center; }
-          .print-detail .nowrap { white-space: nowrap !important; }
-          .print-detail .muted { color: #6b7280 !important; }
-          .print-detail .item-name { font-weight: 600; color: #0f172a !important; line-height: 1.3; }
-          .print-detail .cust-mail { display: block; font-size: 8px; color: #9ca3af !important; margin-top: 1px; }
-          .print-detail .mono { font-family: "Courier New", Courier, monospace; font-size: 8.5px; }
-          .print-detail tr.alt td { background: #f7faf8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-detail tbody tr:last-child td { border-bottom: none; }
-          .print-detail tr.cat-row { page-break-after: avoid; break-after: avoid; }
-          .print-detail tr.cat-row td { background: #eaf5ee !important; color: #0C573E !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border-top: 1px solid #d8ebdd; border-bottom: 1px solid #d8ebdd; padding: 6px 8px; font-size: 8.5px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
-          .print-detail tr.cat-row .cat-meta { float: right; font-weight: 600; letter-spacing: 0; text-transform: none; color: #15724B !important; }
-          .print-detail tr.grand td { background: #0C573E !important; color: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border: none; padding: 8px 7px; font-size: 9.5px; font-weight: 800; }
-          .print-pill { display: inline-block !important; padding: 2px 8px; border-radius: 9999px; font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; white-space: nowrap; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .print-pill.active  { background: #dcfce7 !important; color: #15803d !important; }
-          .print-pill.low     { background: #fef3c7 !important; color: #b45309 !important; }
-          .print-pill.out     { background: #fee2e2 !important; color: #b91c1c !important; }
-          .print-pill.neutral { background: #e2e8f0 !important; color: #475569 !important; }
-          .print-footer { display: flex !important; align-items: flex-end; justify-content: space-between; gap: 24px; margin-top: 20px; padding-top: 11px; border-top: 2px solid #e5e7eb; }
-          .print-footer .note { margin: 0; font-size: 8.5px; color: #9ca3af !important; max-width: 46%; line-height: 1.55; }
-          .print-footer .note strong { color: #6b7280 !important; }
-          .print-signs { display: flex; gap: 34px; }
-          .print-sign { text-align: center; }
-          .print-sign .line { width: 170px; border-top: 1px solid #6b7280; margin: 20px 0 5px; }
-          .print-sign .cap { margin: 0; font-size: 8.5px; color: #6b7280 !important; text-transform: uppercase; letter-spacing: 0.1em; }
-        }
       `}</style>
 
       {/* ── Order Detail Modal ── */}
@@ -591,7 +564,6 @@ export default function AdminOrders() {
             
             {/* Body */}
             <div className="p-6 space-y-6 overflow-y-auto">
-              {/* SECTION 1: CUSTOMER PROFILE */}
               <div className="p-4 rounded-xl" style={{ backgroundColor: isDark ? "#1e293b" : "#f1f5f9" }}>
                 <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: subTxt }}>Customer Profile</p>
                 <div className="space-y-1">
@@ -601,7 +573,6 @@ export default function AdminOrders() {
                 </div>
               </div>
 
-              {/* SECTION 2: ORDER & DELIVERY */}
               <div className="space-y-4">
                 <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: subTxt }}>Order Information</p>
                 
@@ -609,6 +580,34 @@ export default function AdminOrders() {
                   <p className="text-sm" style={{ color: isDark ? "#e2e8f0" : "#334155" }}>{viewingOrder.product_name}</p>
                   <p className="text-sm font-semibold" style={{ color: isDark ? "#4ade80" : DG }}>₱{viewingOrder.total_amount.toLocaleString()}</p>
                 </div>
+
+                {Array.isArray(viewingOrder.items) && viewingOrder.items.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: subTxt }}>Items & Card Notes</p>
+                    <div className="space-y-2">
+                      {viewingOrder.items.map(item => (
+                        <div key={item.id} className="p-3 rounded-lg border"
+                          style={{ borderColor: isDark ? "#334155" : "#e2e8f0", background: isDark ? "#0f172a" : "#f8fafc" }}>
+                          <div className="flex justify-between gap-3">
+                            <p className="text-sm font-semibold" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{item.product_name}</p>
+                            <p className="text-xs font-semibold" style={{ color: subTxt }}>x{item.quantity}</p>
+                          </div>
+                          {item.card_message && (
+                            <div className="mt-2 p-2.5 rounded-md"
+                              style={{ background: isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4", border: `1px solid ${isDark ? "rgba(74,222,128,0.25)" : "#bbf7d0"}` }}>
+                              <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: isDark ? "#86efac" : DG }}>
+                                {String(item.card_message).toLowerCase().includes("mass card") ? "Mass Card Context" : "Greeting Card"}
+                              </p>
+                              <p className="text-xs whitespace-pre-wrap leading-relaxed" style={{ color: isDark ? "#d1fae5" : "#14532d" }}>
+                                {item.card_message}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-1">
                   <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: subTxt }}>Delivery To</p>
@@ -628,40 +627,8 @@ export default function AdminOrders() {
               </div>
             </div>
             
-            {/* Footer (Demo Buttons) */}
+            {/* Footer */}
             <div className="px-6 py-4 border-t flex flex-col gap-2" style={{ borderColor: modalD.modalFtrBdr, backgroundColor: modalD.modalFtr }}>
-              <div className="flex gap-2">
-                {viewingOrder.payment_status?.toLowerCase() === "pending" && (
-                  <button 
-                    onClick={async () => {
-                      await fetch(`http://localhost:8000/api/v1/orders/${viewingOrder.id}/force-status`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('access_token')}` },
-                        body: JSON.stringify({ status: "paid" })
-                      });
-                      setViewingOrder(null); fetchOrders();
-                    }}
-                    className="flex-1 py-2 text-sm font-bold rounded-lg text-white transition-all hover:opacity-90 active:scale-95"
-                    style={{ backgroundColor: G }}>
-                    Mark as Paid
-                  </button>
-                )}
-                {["preparing", "confirmed"].includes(viewingOrder.status?.toLowerCase()) && (
-                  <button 
-                    onClick={async () => {
-                      await fetch(`http://localhost:8000/api/v1/orders/${viewingOrder.id}/force-status`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('access_token')}` },
-                        body: JSON.stringify({ status: "delivered" })
-                      });
-                      setViewingOrder(null); fetchOrders();
-                    }}
-                    className="flex-1 py-2 text-sm font-bold rounded-lg text-white transition-all hover:opacity-90 active:scale-95"
-                    style={{ backgroundColor: "#3b82f6" }}>
-                    Mark as Delivered
-                  </button>
-                )}
-              </div>
               <button onClick={() => setViewingOrder(null)}
                 className="w-full py-2 text-sm font-semibold border rounded-lg transition-all"
                 style={{ borderColor: modalD.modalBdr, color: isDark ? "#94a3b8" : "#64748b", backgroundColor: modalD.modalBg }}>
@@ -677,10 +644,18 @@ export default function AdminOrders() {
         <div className="fixed inset-0 z-[60] flex justify-end no-print" style={{ backgroundColor: "rgba(15,23,42,0.6)", backdropFilter: "blur(2px)" }}>
           <div className="absolute inset-0" onClick={() => setPosOpen(false)} />
           
-          <div className="relative pos-drawer flex flex-col w-full max-w-6xl h-full shadow-2xl"
-            style={{ backgroundColor: isDark ? "#0f172a" : "#f8fafc", borderLeft: `1px solid ${isDark ? "#334155" : "#e2e8f0"}` }}>
+          <div className="relative pos-drawer flex flex-col h-full shadow-2xl ml-auto"
+            style={{ width: `${posWidth}px`, maxWidth: '100%', backgroundColor: isDark ? "#0f172a" : "#f8fafc", borderLeft: `1px solid ${isDark ? "#334155" : "#e2e8f0"}` }}>
             
-            <div className="flex items-center justify-between px-6 py-4 flex-shrink-0 border-b"
+            {/* 🚀 NEW: Resizer Handle */}
+            <div 
+              onMouseDown={startResizing} 
+              className="absolute left-0 top-0 bottom-0 w-3 cursor-col-resize z-[70] flex flex-col justify-center items-center hover:bg-green-500/10 group transition-colors"
+            >
+              <div className="h-16 w-1 bg-gray-300 dark:bg-gray-600 rounded-full group-hover:bg-green-500" />
+            </div>
+
+            <div className="flex items-center justify-between px-6 py-4 flex-shrink-0 border-b pl-8"
               style={{ backgroundColor: isDark ? "#1e293b" : "white", borderColor: isDark ? "#334155" : "#e2e8f0" }}>
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
@@ -706,7 +681,7 @@ export default function AdminOrders() {
               </div>
             </div>
 
-            <div className="flex flex-1 overflow-hidden">
+            <div className="flex flex-1 overflow-hidden pl-3">
               
               <div className="flex-1 flex flex-col border-r min-w-0" style={{ borderColor: isDark ? "#334155" : "#e2e8f0", backgroundColor: isDark ? "#0f172a" : "#f1f5f9" }}>
                 
@@ -724,7 +699,7 @@ export default function AdminOrders() {
                   </select>
                 </div>
 
-                {/* 🚀 NEW: Categories Scroll Bar */}
+                {/* Categories Scroll Bar */}
                 <div className="px-4 py-3 bg-white dark:bg-slate-800 border-b dark:border-slate-700 overflow-x-auto whitespace-nowrap flex gap-2 no-scrollbar flex-shrink-0">
                   {posCategories.map(c => (
                     <button key={c} onClick={() => setPosCategory(c)}
@@ -740,9 +715,13 @@ export default function AdminOrders() {
 
                 {/* Grid */}
                 <div className="flex-1 overflow-y-auto p-4">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                     {filteredPosProducts.map(p => {
                       const inCartQty = posCart.find(i => i.id === p.id)?.qty || 0
+                      const itemCategory = posItemCategory(p)
+                      const itemKind = posItemKind(p)
+                      const currentBranchStock = getBranchStock(p) // 🚀 NEW: Fetch proper branch stock
+
                       return (
                         <button key={p.id} onClick={() => handleAddToCart(p)}
                           className="relative flex flex-col items-center p-3 rounded-xl border transition-all active:scale-95"
@@ -759,13 +738,23 @@ export default function AdminOrders() {
                           )}
                           <div className="relative w-full aspect-square rounded-md mb-2 flex items-center justify-center overflow-hidden group"
                             style={{ backgroundColor: isDark ? "#0f172a" : "#f1f5f9" }}>
-                            {p.image_url || p.image ? (
-                              <img src={p.image_url || p.image} alt={p.name} className="w-full h-full object-cover" />
-                            ) : (
-                              <svg className="w-8 h-8" style={{ color: isDark ? "#475569" : "#cbd5e1" }} fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                            )}
+                            {/* 🚀 NEW: Added ImageNotFound Fallback */}
+                            <img src={p.image_url || p.image || ImageNotFound} alt={p.name} className="w-full h-full object-cover" />
                           </div>
                           <p className="text-xs font-bold text-center leading-tight line-clamp-2 w-full" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{p.name}</p>
+                          <div className="flex items-center justify-center gap-1.5 mt-1 flex-wrap">
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide"
+                              style={{ backgroundColor: isDark ? "#0f172a" : "#f1f5f9", color: isDark ? "#94a3b8" : "#64748b" }}>
+                              {itemCategory}
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide"
+                              style={{ backgroundColor: itemKind === "Material" ? (isDark ? "rgba(59,130,246,0.14)" : "#eff6ff") : (isDark ? "rgba(74,222,128,0.14)" : "#f0fdf4"), color: itemKind === "Material" ? (isDark ? "#93c5fd" : "#1d4ed8") : (isDark ? "#4ade80" : DG) }}>
+                              {itemKind}
+                            </span>
+                          </div>
+                          <p className="text-[10px] mt-1" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
+                            Stock: {currentBranchStock}
+                          </p>
                           <p className="text-sm font-semibold mt-1" style={{ color: isDark ? "#4ade80" : DG }}>₱{(p.price || 500).toLocaleString()}</p>
                         </button>
                       )
@@ -854,7 +843,6 @@ export default function AdminOrders() {
                   )}
                 </div>
 
-                {/* --- NEW FORM FIELDS --- */}
                 <div className="p-5 space-y-5 border-t" style={{ borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
                   
                   <div className="space-y-2">
@@ -887,6 +875,52 @@ export default function AdminOrders() {
                         className="w-full px-3 py-2 text-sm border rounded-lg outline-none" style={{ borderColor: isDark ? "#334155" : "#e2e8f0", backgroundColor: isDark ? "#1e293b" : "white", color: isDark ? "#e2e8f0" : "#1e293b" }} />
                     </div>
                   )}
+
+                  {fulfillmentMethod === "pickup" && (
+                    <div className="space-y-3 border-t pt-4" style={{ borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
+                      <label className="text-[10px] font-bold uppercase tracking-wider" style={{ color: subTxt }}>Pickup Timing</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setPickupMode("walkin")}
+                          className="py-2.5 px-2 text-xs font-bold rounded-lg border transition-all"
+                          style={{
+                            backgroundColor: pickupMode === "walkin" ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : "transparent",
+                            borderColor: pickupMode === "walkin" ? (isDark ? "#4ade80" : G) : (isDark ? "#334155" : "#e2e8f0"),
+                            color: pickupMode === "walkin" ? (isDark ? "#4ade80" : DG) : (isDark ? "#94a3b8" : "#64748b"),
+                          }}
+                        >
+                          Walk-in / On the spot
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPickupMode("scheduled")}
+                          className="py-2.5 px-2 text-xs font-bold rounded-lg border transition-all"
+                          style={{
+                            backgroundColor: pickupMode === "scheduled" ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : "transparent",
+                            borderColor: pickupMode === "scheduled" ? (isDark ? "#4ade80" : G) : (isDark ? "#334155" : "#e2e8f0"),
+                            color: pickupMode === "scheduled" ? (isDark ? "#4ade80" : DG) : (isDark ? "#94a3b8" : "#64748b"),
+                          }}
+                        >
+                          Schedule Pickup
+                        </button>
+                      </div>
+                      {pickupMode === "scheduled" ? (
+                        <input
+                          type="date"
+                          value={pickupDate}
+                          min={new Date().toISOString().slice(0, 10)}
+                          onChange={e => setPickupDate(e.target.value)}
+                          className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
+                          style={{ borderColor: isDark ? "#334155" : "#e2e8f0", backgroundColor: isDark ? "#1e293b" : "white", color: isDark ? "#e2e8f0" : "#1e293b" }}
+                        />
+                      ) : (
+                        <p className="text-[11px] leading-relaxed" style={{ color: subTxt }}>
+                          Use this for customers taking the bouquet immediately from the store.
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Footer (Payment & Submit) */}
@@ -908,21 +942,20 @@ export default function AdminOrders() {
                         }}>
                         Cash
                       </button>
-                      <button onClick={() => setPosPayMethod("qrph")}
+                      <button onClick={() => setPosPayMethod("gcash")}
                         className="flex items-center justify-center gap-1.5 py-2.5 text-sm font-bold rounded-lg border transition-all"
                         style={{
-                          backgroundColor: posPayMethod === "qrph" ? (isDark ? "rgba(59,130,246,0.12)" : "#eff6ff") : (isDark ? "#1e293b" : "white"),
-                          borderColor: posPayMethod === "qrph" ? "#3b82f6" : (isDark ? "#334155" : "#e2e8f0"),
-                          color: posPayMethod === "qrph" ? (isDark ? "#93c5fd" : "#1d4ed8") : (isDark ? "#94a3b8" : "#64748b"),
+                          backgroundColor: posPayMethod === "gcash" ? (isDark ? "rgba(59,130,246,0.12)" : "#eff6ff") : (isDark ? "#1e293b" : "white"),
+                          borderColor: posPayMethod === "gcash" ? "#3b82f6" : (isDark ? "#334155" : "#e2e8f0"),
+                          color: posPayMethod === "gcash" ? (isDark ? "#93c5fd" : "#1d4ed8") : (isDark ? "#94a3b8" : "#64748b"),
                         }}>
                         GCash / Bank
                       </button>
                     </div>
-                    {posPayMethod === "qrph" && (
-                      <input type="text" placeholder="Reference number" value={posRef} onChange={e => setPosRef(e.target.value)}
-                        className="w-full px-3 py-2.5 text-sm border rounded-lg outline-none transition-all mt-2"
-                        style={{ borderColor: isDark ? "#334155" : "#e2e8f0", backgroundColor: isDark ? "#1e293b" : "white", color: isDark ? "#e2e8f0" : "#1e293b" }}
-                      />
+                    {posPayMethod === "gcash" && (
+                      <p className="text-[11px] leading-relaxed mt-2" style={{ color: subTxt }}>
+                        Checkout will open PayMongo so the customer can pay with GCash, Maya, card, or QRPh.
+                      </p>
                     )}
                   </div>
 
@@ -973,39 +1006,6 @@ export default function AdminOrders() {
         ))}
       </div>
 
-      {/* ── Active filters ── */}
-      {(statusFilter !== "All" || branch !== "All Branches" || dateRange !== "All Time" || search) && (
-        <div className="flex items-center gap-2 flex-wrap no-print">
-          <span className="text-xs font-medium" style={{ color: subTxt }}>Active filters:</span>
-          {statusFilter !== "All" && (
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
-              style={{ backgroundColor: isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4", color: isDark ? "#4ade80" : DG, border: `1px solid ${isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0"}` }}>
-              Status: {statusFilter}
-              <button onClick={() => setStatus("All")} style={{ color: isDark ? "#4ade80" : "#16a34a" }}>×</button>
-            </span>
-          )}
-          {branch !== "All Branches" && (
-            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold"
-              style={{ backgroundColor: isDark ? "rgba(59,130,246,0.12)" : "#eff6ff", color: isDark ? "#93c5fd" : "#1d4ed8", border: `1px solid ${isDark ? "rgba(59,130,246,0.3)" : "#bfdbfe"}` }}>
-              Branch: {branch}
-              <button onClick={() => setBranch("All Branches")}>×</button>
-            </span>
-          )}
-          <button onClick={() => { setStatus("All"); setBranch("All Branches"); setDateRange("All Time"); setSearch("") }}
-            className="text-xs font-semibold ml-1" style={{ color: "#f87171" }}>Clear all</button>
-        </div>
-      )}
-
-      {error && (
-        <div className="px-4 py-3 text-sm rounded-md border no-print" style={{ color: errTxt, backgroundColor: errBg, borderColor: errBdr }}>{error}</div>
-      )}
-
-      {/* ── Printable area ── */}
-      <div id="orders-print-area">
-        {/* ... (Keep your existing print template) ... */}
-      </div>
-
-      {/* ── Screen table card ── */}
       <div className={`no-print rounded-xl overflow-hidden ${entered ? "" : "orders-rise"}`}
         style={{ border: `1px solid ${isDark ? "#1e293b" : "#e8edf2"}`, backgroundColor: isDark ? "#1a2332" : "white", boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)", animationDelay: "0.36s" }}>
         

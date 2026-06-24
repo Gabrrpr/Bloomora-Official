@@ -30,6 +30,7 @@ export function AuthProvider({ children }) {
       const profile = await profileRes.json();
       const userData = {
         token,
+        id: profile.id,
         role: profile.role,
         firstName: profile.first_name,
         lastName: profile.last_name,

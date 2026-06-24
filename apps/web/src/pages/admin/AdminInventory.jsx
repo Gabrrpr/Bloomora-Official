@@ -145,7 +145,6 @@ function ViewInventoryModal({ item, onClose, isDark }) {
 
   const statusLabel = item.status === "inactive" ? "Discontinued" : "Active"
 
-  // Stock numbers get their own highlighted tiles; everything else goes in the detail grid.
   const stockTiles = [
     { label: "Manila", value: item.stock_manila ?? 0 },
     { label: "Pampanga", value: item.stock_pampanga ?? 0 },
@@ -178,7 +177,6 @@ function ViewInventoryModal({ item, onClose, isDark }) {
         </div>
 
         <div className="p-6 space-y-5 overflow-y-auto">
-          {/* Item name, category and status */}
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
               <p className="text-lg font-bold leading-snug" style={{ color: d.headC }}>{item.name}</p>
@@ -192,7 +190,6 @@ function ViewInventoryModal({ item, onClose, isDark }) {
             </span>
           </div>
 
-          {/* Stock per branch + total */}
           <div className="grid grid-cols-3 gap-3">
             {stockTiles.map(t => (
               <div key={t.label} className="rounded-lg p-3 text-center"
@@ -206,7 +203,6 @@ function ViewInventoryModal({ item, onClose, isDark }) {
             ))}
           </div>
 
-          {/* Remaining details */}
           <div className="grid grid-cols-2 gap-x-4 gap-y-3 pt-1" style={{ borderTop: `1px solid ${d.modalHdrBdr}` }}>
             {details.map(row => (
               <div key={row.label} className="pt-1">
@@ -232,7 +228,6 @@ function ViewInventoryModal({ item, onClose, isDark }) {
 
 // ── Edit Inventory Form ──
 function EditItemForm({ item, onBack, onSaveSuccess, isDark }) {
-  // 🚀 Start on "All Branches" by default so they see the total first
   const [activeBranch, setActiveBranch] = useState("All Branches");
 
   const [branchStocks, setBranchStocks] = useState({
@@ -255,7 +250,6 @@ function EditItemForm({ item, onBack, onSaveSuccess, isDark }) {
   const UNITS      = ["piece", "bunch", "stem", "box", "pack", "roll", "sheet", "kg", "g", "L", "mL"]
   const STATUSES   = ["Active", "Low Stock", "Out of Stock", "Discontinued"]
 
-  // 🚀 Helpers to handle the "All Branches" dynamic display
   const isAllBranches = activeBranch === "All Branches";
   const displayStockValue = isAllBranches 
     ? (parseInt(branchStocks.Manila) || 0) + (parseInt(branchStocks.Pampanga) || 0)
@@ -339,7 +333,6 @@ function EditItemForm({ item, onBack, onSaveSuccess, isDark }) {
           <div className="mb-4 p-4 rounded-lg" style={{ backgroundColor: isDark ? "#111827" : "#f9fafb", border: `1px solid ${isDark ? "#374151" : "#e5e7eb"}` }}>
             <FL isDark={isDark}>Select Branch to View/Edit Stock</FL>
             <div className="flex gap-6 mt-2">
-              {/* 🚀 ADDED ALL BRANCHES OPTION */}
               {["All Branches", "Manila", "Pampanga"].map(b => (
                 <label key={b} className="flex items-center gap-2 cursor-pointer">
                   <input 
@@ -369,11 +362,10 @@ function EditItemForm({ item, onBack, onSaveSuccess, isDark }) {
                     setBranchStocks(prev => ({ ...prev, [activeBranch]: val }))
                   }
                 }}
-                disabled={isAllBranches} // 🚀 Disabled if viewing "All Branches"
+                disabled={isAllBranches}
                 isDark={isDark} 
               />
               
-              {/* 🚀 Dynamic Warning Messages */}
               {!isAllBranches ? (
                 <p className="text-[10px] mt-1.5 p-2 rounded-lg bg-amber-50 text-amber-700 font-medium leading-snug border border-amber-200 dark:bg-amber-900/20 dark:border-amber-700/30 dark:text-amber-500">
                   ⚠️ <strong>Warning:</strong> Manually changing stock here bypasses restock logs. Use "Invoice".
@@ -454,6 +446,7 @@ function DeleteInventoryModal({ item, onClose, onConfirm, isDeleting, isDark }) 
   )
 }
 
+// ── REDESIGNED INVOICE MODAL ──
 function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
   const [search, setSearch] = useState("");
   const [lines, setLines] = useState({});
@@ -471,10 +464,11 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
     head: isDark ? "#f1f5f9" : "#111827",
     sub: isDark ? "#94a3b8" : "#6b7280",
     cell: isDark ? "#e2e8f0" : "#1e293b",
-    inputBg: isDark ? "#1e293b" : "white",
+    inputBg: isDark ? "#0f172a" : "#f9fafb", // Lighter/darker contrast for inputs inside table
     inputBdr: isDark ? "#374151" : "#dde3ec",
     inputTxt: isDark ? "#e2e8f0" : "#0f172a",
-    rowBg: isDark ? "#111827" : "#fafbfc",
+    rowBg: isDark ? "#111827" : "#ffffff",
+    hdrBg: isDark ? "#162032" : "#f8fafc",
   };
 
   const selectedIds = Object.keys(lines);
@@ -565,14 +559,15 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
     if (failed.length === 0) onSaved(ok.length, updatedItemsForState);
   };
 
-  const totalUnits = validLines.reduce((s, id) => s + (parseInt(lines[id].qty) || 0), 0)
+  const totalUnits = validLines.reduce((s, id) => s + (parseInt(lines[id].qty) || 0), 0);
+  const totalInvoiceValue = validLines.reduce((s, id) => s + (parseFloat(lines[id].cost) || 0), 0);
 
   return createPortal(
     <div className="fixed inset-0 flex items-center justify-center p-3 sm:p-4 no-print"
       style={{ backgroundColor: c.overlay, backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: 9999, position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh" }}
       onClick={e => { if (e.target === e.currentTarget && !saving) onClose() }}>
       <div className="rounded-xl w-full overflow-hidden flex flex-col relative"
-        style={{ maxWidth: "640px", height: "min(88vh, 720px)", maxHeight: "88vh", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${c.bdr}`, backgroundColor: c.bg }}>
+        style={{ maxWidth: "860px", height: "min(88vh, 720px)", maxHeight: "88vh", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${c.bdr}`, backgroundColor: c.bg }}>
 
         {saving && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3"
@@ -588,22 +583,21 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
           </div>
         )}
 
-        <div className="px-6 py-4 flex items-start justify-between" style={{ borderBottom: `1px solid ${c.bdr}` }}>
+        {/* Modal Header */}
+        <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: `1px solid ${c.bdr}` }}>
           <div className="flex items-center gap-3">
             <span className="w-10 h-10 rounded-lg flex items-center justify-center text-white flex-shrink-0"
-              style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+              style={{ background: `linear-gradient(135deg,${DG},${G})`, boxShadow: "0 2px 8px rgba(46,139,52,0.3)" }}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </span>
             <div>
-              <h3 className="text-lg font-bold" style={{ color: c.head }}>Receive Stock</h3>
-              <p className="text-xs" style={{ color: c.sub }}>Record a delivery. Quantities are added to current stock.</p>
+              <h3 className="text-lg font-bold" style={{ color: c.head }}>Stock Delivery Invoice</h3>
+              <p className="text-xs" style={{ color: c.sub }}>Record inbound inventory and supplier costs.</p>
             </div>
           </div>
-          <button onClick={onClose} disabled={saving} className="p-1.5 rounded-md transition-colors" style={{ color: c.sub }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = c.rowBg}
-            onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+          <button onClick={onClose} disabled={saving} className="p-2 rounded-md transition-colors hover:bg-gray-100 dark:hover:bg-slate-800" style={{ color: c.sub }}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
@@ -616,133 +610,175 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
           </div>
         )}
 
-        <div className="px-6 py-4 overflow-y-auto" style={{ flex: 1 }}>
+        <div className="px-6 py-5 overflow-y-auto" style={{ flex: 1 }}>
           
-          <div className="mb-5">
-            <label className="block text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: c.sub }}>
-              Fulfillment Branch <span className="text-red-500">*</span>
-            </label>
-            <div className="relative">
-              <select 
-                value={branch} 
-                onChange={e => setBranch(e.target.value)}
-                className="w-full appearance-none px-3 py-2.5 text-sm border rounded-md cursor-pointer outline-none transition-all"
-                style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }}
-                onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
-                onBlur={e => { e.target.style.borderColor = c.inputBdr; e.target.style.boxShadow = "none" }}
-              >
-                <option value="Manila">Manila</option>
-                <option value="Pampanga">Pampanga</option>
-              </select>
-              <svg className="w-3.5 h-3.5 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: c.sub }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
-              </svg>
-            </div>
-            <p className="text-[10px] mt-1" style={{ color: c.sub }}>Select which location is receiving this delivery.</p>
-          </div>
-
-          <div className="relative mb-4">
-            <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
-            </svg>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search a product to add to this delivery"
-              className="w-full pl-9 pr-4 py-2.5 text-sm border rounded-md outline-none transition-all"
-              style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }}
-              onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
-              onBlur={e => { e.target.style.borderColor = c.inputBdr; e.target.style.boxShadow = "none" }} />
-            {matches.length > 0 && (
-              <div className="absolute left-0 right-0 mt-1 rounded-md overflow-hidden z-10"
-                style={{ backgroundColor: c.bg, border: `1px solid ${c.bdr}`, boxShadow: "0 12px 32px rgba(0,0,0,0.18)" }}>
-                {matches.map(it => (
-                  <button key={it.id} onClick={() => addLine(it)}
-                    className="w-full flex items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors"
-                    style={{ color: c.cell }}
-                    onMouseEnter={e => e.currentTarget.style.backgroundColor = c.rowBg}
-                    onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
-                    <span className="text-sm font-medium truncate">{it.name}</span>
-                    <span className="text-xs flex-shrink-0" style={{ color: c.sub }}>In stock: {it.stock ?? 0}</span>
-                  </button>
-                ))}
+          {/* Controls: Branch Toggle & Search */}
+          <div className="flex flex-col sm:flex-row gap-5 mb-6">
+            
+            {/* Branch Selector Pill */}
+            <div className="flex-shrink-0">
+              <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: c.sub }}>
+                Receiving Branch <span className="text-red-500">*</span>
+              </label>
+              <div className="flex items-center p-1 rounded-lg" style={{ backgroundColor: isDark ? "#0f172a" : "#f1f5f9", border: `1px solid ${c.inputBdr}` }}>
+                {["Manila", "Pampanga"].map(b => {
+                  const isActive = branch === b;
+                  return (
+                    <button key={b} onClick={() => setBranch(b)}
+                      className="px-6 py-2 text-sm font-bold rounded-md transition-all"
+                      style={{
+                        backgroundColor: isActive ? (isDark ? "#1e293b" : "white") : "transparent",
+                        color: isActive ? (isDark ? "#4ade80" : DG) : c.sub,
+                        boxShadow: isActive ? (isDark ? "0 1px 3px rgba(0,0,0,0.4)" : "0 1px 3px rgba(0,0,0,0.1)") : "none"
+                      }}>
+                      {b}
+                    </button>
+                  )
+                })}
               </div>
-            )}
+            </div>
+
+            {/* Search Input */}
+            <div className="flex-1 relative">
+              <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: c.sub }}>
+                Search Item to Add
+              </label>
+              <div className="relative">
+                <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: isDark ? "#64748b" : "#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
+                </svg>
+                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Type product name or SKU..."
+                  className="w-full pl-9 pr-4 py-2.5 text-sm border rounded-lg outline-none transition-all"
+                  style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }}
+                  onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
+                  onBlur={e => { e.target.style.borderColor = c.inputBdr; e.target.style.boxShadow = "none" }} />
+              </div>
+              
+              {/* Search Dropdown */}
+              {matches.length > 0 && (
+                <div className="absolute left-0 right-0 mt-1 rounded-lg overflow-hidden z-20"
+                  style={{ backgroundColor: c.bg, border: `1px solid ${c.bdr}`, boxShadow: "0 12px 32px rgba(0,0,0,0.18)" }}>
+                  {matches.map(it => (
+                    <button key={it.id} onClick={() => addLine(it)}
+                      className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors border-b last:border-b-0"
+                      style={{ color: c.cell, borderBottomColor: c.bdr }}
+                      onMouseEnter={e => e.currentTarget.style.backgroundColor = c.hdrBg}
+                      onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+                      <span className="text-sm font-semibold truncate">{it.name}</span>
+                      <span className="text-xs font-medium px-2 py-1 rounded-md" style={{ backgroundColor: isDark ? "#0f172a" : "#f1f5f9", color: c.sub }}>
+                        Stock: {it.stock ?? 0}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
+          {/* Invoice Lines Table */}
           {selectedIds.length === 0 ? (
-            <div className="text-center py-10 rounded-lg" style={{ backgroundColor: c.rowBg, border: `1px dashed ${c.bdr}` }}>
-              <p className="text-sm font-medium" style={{ color: c.sub }}>No products added yet.</p>
-              <p className="text-xs mt-1" style={{ color: c.sub }}>Search above to add the items that arrived in this delivery.</p>
+            <div className="flex flex-col items-center justify-center py-16 text-center rounded-xl border-2 border-dashed" style={{ borderColor: c.bdr, backgroundColor: isDark ? "rgba(0,0,0,0.2)" : "#f8fafc" }}>
+              <svg className="w-12 h-12 mb-3" style={{ color: isDark ? "#334155" : "#cbd5e1" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              <p className="text-sm font-semibold" style={{ color: c.sub }}>Invoice is empty.</p>
+              <p className="text-xs mt-1" style={{ color: c.sub }}>Search and select products above to add them to this delivery receipt.</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              <div className="hidden sm:flex items-center gap-2 px-3 text-[11px] font-bold uppercase tracking-wider" style={{ color: c.sub }}>
-                <span className="flex-1 min-w-0">Product</span>
-                <span style={{ width: 96, textAlign: "center", flexShrink: 0 }}>Qty Received</span>
-                <span style={{ width: 130, textAlign: "center", flexShrink: 0 }}>Total Paid (₱)</span>
-                <span style={{ width: 120, textAlign: "right", flexShrink: 0 }}>New Total</span>
-                <span style={{ width: 32, flexShrink: 0 }} />
+            <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${c.bdr}` }}>
+              
+              {/* Table Header (Hidden on small mobile) */}
+              <div className="hidden sm:flex items-center gap-3 px-4 py-3 text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: c.hdrBg, color: c.sub, borderBottom: `1px solid ${c.bdr}` }}>
+                <div className="flex-1 min-w-0">Product Details</div>
+                <div className="w-24 text-center">Qty Received</div>
+                <div className="w-28 text-center">Total Paid (₱)</div>
+                <div className="w-32 text-center">Date</div>
+                <div className="w-24 text-right">New Stock</div>
+                <div className="w-8"></div>
               </div>
-              {selectedIds.map(id => {
-                const item = itemById(id)
-                if (!item) return null
-                const received = parseInt(lines[id].qty) || 0
-                const currentBranchStock = branch === "Manila" ? (parseInt(item.stock_manila ?? 0)) : parseInt(item.stock_pampanga ?? 0);
-                const newTotal = currentBranchStock + received;
 
-                return (
-                  <div key={id} className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-2 p-3 sm:pb-6 rounded-lg"
-                    style={{ backgroundColor: c.rowBg, border: `1px solid ${c.bdr}` }}>
-                    <div className="flex items-start justify-between gap-2 flex-1 min-w-0">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold truncate" style={{ color: c.cell }}>{item.name}</p>
-                        <p className="text-xs" style={{ color: c.sub }}>Current {branch} Stock: {currentBranchStock} {item.unit_type || "piece"}</p>
+              {/* Table Body */}
+              <div className="divide-y" style={{ borderColor: c.bdr, backgroundColor: c.rowBg }}>
+                {selectedIds.map(id => {
+                  const item = itemById(id)
+                  if (!item) return null
+                  const received = parseInt(lines[id].qty) || 0
+                  const currentBranchStock = branch === "Manila" ? (parseInt(item.stock_manila ?? 0)) : parseInt(item.stock_pampanga ?? 0);
+                  const newTotal = currentBranchStock + received;
+
+                  return (
+                    <div key={id} className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-3 p-4 sm:py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                      
+                      {/* Product Info */}
+                      <div className="flex-1 min-w-0 flex items-start sm:items-center justify-between sm:justify-start">
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold truncate" style={{ color: c.cell }}>{item.name}</p>
+                          <p className="text-[11px] font-medium mt-0.5" style={{ color: c.sub }}>Current {branch}: {currentBranchStock} {item.unit_type || "pc"}</p>
+                        </div>
+                        {/* Mobile Delete Button */}
+                        <button onClick={() => removeLine(id)} className="sm:hidden p-1.5 rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
                       </div>
-                      <button onClick={() => removeLine(id)} className="sm:hidden p-1.5 rounded-md flex-shrink-0 transition-colors" style={{ color: c.sub }}
-                        onMouseEnter={e => { e.currentTarget.style.backgroundColor = isDark ? "rgba(239,68,68,0.12)" : "#fee2e2"; e.currentTarget.style.color = "#ef4444" }}
-                        onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = c.sub }}>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                      </button>
+
+                      {/* Inputs Grid */}
+                      <div className="flex gap-3 sm:contents">
+                        <div className="flex-1 sm:w-24 sm:flex-none">
+                          <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1 text-slate-500">Qty</label>
+                          <input type="number" min="0" value={lines[id].qty} onChange={e => setQty(id, e.target.value)} placeholder="0"
+                            className="w-full px-2.5 py-2 text-sm border rounded-md text-center outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500" 
+                            style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }} />
+                        </div>
+
+                        <div className="flex-1 sm:w-28 sm:flex-none">
+                          <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1 text-slate-500">Total Paid</label>
+                          <input type="number" min="0" step="0.01" value={lines[id].cost} onChange={e => setCost(id, e.target.value)} placeholder="0.00"
+                            className="w-full px-2.5 py-2 text-sm border rounded-md text-center outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500" 
+                            style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }} />
+                        </div>
+
+                        <div className="flex-1 sm:w-32 sm:flex-none">
+                          <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1 text-slate-500">Date</label>
+                          <input type="date" value={lines[id].date} onChange={e => setDate(id, e.target.value)}
+                            className="w-full px-2.5 py-2 text-sm border rounded-md outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
+                            style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }} />
+                        </div>
+                      </div>
+
+                      {/* Resulting Stock & Desktop Delete */}
+                      <div className="flex items-center justify-between sm:w-24 sm:justify-end flex-shrink-0 pt-2 border-t sm:pt-0 sm:border-0" style={{ borderColor: c.bdr }}>
+                        <span className="sm:hidden text-[10px] font-bold uppercase tracking-wider text-slate-500">New Total</span>
+                        <div className="text-right">
+                          <span className="text-sm font-bold" style={{ color: received > 0 ? (isDark ? "#4ade80" : "#16a34a") : c.sub }}>
+                            {received > 0 ? `${newTotal}` : "—"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="hidden sm:flex w-8 justify-end flex-shrink-0">
+                        <button onClick={() => removeLine(id)} className="p-1.5 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                      </div>
+
                     </div>
+                  )
+                })}
+              </div>
+              
+              {/* Grand Total Footer */}
+              <div className="px-4 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2" style={{ backgroundColor: c.hdrBg, borderTop: `1px solid ${c.bdr}` }}>
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Invoice Summary</span>
+                <div className="flex items-center gap-6">
+                   <div className="text-right">
+                     <p className="text-[10px] uppercase font-bold text-slate-500">Total Items</p>
+                     <p className="text-sm font-bold" style={{ color: c.cell }}>{totalUnits} units</p>
+                   </div>
+                   <div className="text-right pl-6 border-l" style={{ borderColor: c.bdr }}>
+                     <p className="text-[10px] uppercase font-bold text-slate-500">Total Invoice Value</p>
+                     <p className="text-lg font-bold" style={{ color: DG }}>₱ {totalInvoiceValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+                   </div>
+                </div>
+              </div>
 
-                    <div className="flex gap-3 sm:contents">
-                      <div className="w-24">
-                        <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1">Qty</label>
-                        <input type="number" min="0" value={lines[id].qty} onChange={e => setQty(id, e.target.value)} placeholder="0"
-                          className="w-full px-2 py-2 text-sm border rounded-md text-center" 
-                          style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg }} />
-                      </div>
-
-                      <div className="w-32">
-                        <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1">Total Paid (₱)</label>
-                        <input type="number" min="0" value={lines[id].cost} onChange={e => setCost(id, e.target.value)} placeholder="0.00"
-                          className="w-full px-2 py-2 text-sm border rounded-md text-center" 
-                          style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg }} />
-                      </div>
-
-                      <div className="w-36">
-                        <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1">Date Issued</label>
-                        <input type="date" value={lines[id].date} onChange={e => setDate(id, e.target.value)}
-                          className="w-full px-2 py-2 text-sm border rounded-md"
-                          style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }} />
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between sm:block sm:w-auto" style={{ minWidth: 0 }}>
-                      <span className="sm:hidden text-[10px] font-bold uppercase tracking-wider" style={{ color: c.sub }}>New Total</span>
-                      <div className="sm:w-[120px]" style={{ textAlign: "right" }}>
-                        <span className="text-sm font-bold" style={{ color: received > 0 ? (isDark ? "#4ade80" : "#16a34a") : c.sub }}>
-                          {currentBranchStock}{received > 0 ? ` → ${newTotal}` : ""}
-                        </span>
-                      </div>
-                    </div>
-
-                    <button onClick={() => removeLine(id)} className="hidden sm:block p-1.5 rounded-md transition-colors" style={{ color: c.sub, flexShrink: 0 }}
-                      onMouseEnter={e => { e.currentTarget.style.backgroundColor = isDark ? "rgba(239,68,68,0.12)" : "#fee2e2"; e.currentTarget.style.color = "#ef4444" }}
-                      onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; e.currentTarget.style.color = c.sub }}>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                  </div>
-                )
-              })}
             </div>
           )}
 
@@ -755,23 +791,19 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
           )}
         </div>
 
-        <div className="px-6 py-4 flex items-center justify-between gap-3" style={{ borderTop: `1px solid ${c.bdr}`, backgroundColor: c.rowBg }}>
-          <p className="text-sm" style={{ color: c.sub }}>
-            {validLines.length > 0
-              ? <span><strong style={{ color: c.cell }}>{validLines.length}</strong> item{validLines.length > 1 ? "s" : ""}, <strong style={{ color: c.cell }}>{totalUnits}</strong> units</span>
-              : "Add items and enter quantities"}
-          </p>
-          <div className="flex gap-2">
+        {/* Modal Footer Controls */}
+        <div className="px-6 py-4 flex flex-col-reverse sm:flex-row sm:items-center justify-end gap-3" style={{ borderTop: `1px solid ${c.bdr}`, backgroundColor: c.bg }}>
+          <div className="flex gap-3 w-full sm:w-auto">
             <button onClick={onClose} disabled={saving}
-              className="px-4 py-2.5 text-sm font-semibold border rounded-md transition-all"
+              className="flex-1 sm:flex-none px-6 py-2.5 text-sm font-semibold border rounded-lg transition-all hover:bg-slate-50 dark:hover:bg-slate-800"
               style={{ borderColor: c.inputBdr, color: c.sub, backgroundColor: c.bg }}>
               Cancel
             </button>
             <button onClick={handleSave} disabled={saving || validLines.length === 0}
-              className="flex items-center gap-1.5 px-5 py-2.5 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 sm:flex-none flex justify-center items-center gap-2 px-8 py-2.5 text-sm font-bold text-white rounded-lg transition-all hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed shadow-md shadow-green-900/10"
               style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-              {saving ? "Saving..." : `Save${validLines.length > 0 ? ` (${validLines.length})` : ""}`}
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+              {saving ? "Saving..." : `Confirm Receipt`}
             </button>
           </div>
         </div>
@@ -855,14 +887,14 @@ export default function AdminInventory() {
   
   // States
   const [inventory, setInventory] = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [page, setPage]           = useState(1)
+  const [loading, setLoading]      = useState(true)
+  const [page, setPage]            = useState(1)
   // Controls the one-time entrance animation; dropped once it plays so it never replays.
-  const [entered, setEntered]     = useState(false)
+  const [entered, setEntered]      = useState(false)
   // Animated placeholder text for the search box (typewriter hint).
-  const [phText, setPhText]       = useState("")
+  const [phText, setPhText]        = useState("")
 
-  const [search, setSearch]       = useState("")
+  const [search, setSearch]        = useState("")
   const [branchFilter, setBranchFilter] = useState("") 
   const [statusFilter, setStatus] = useState("")
   const [category, setCategory] = useState("")
@@ -893,7 +925,6 @@ export default function AdminInventory() {
     }
   }
 
-  // 🚀 DYNAMIC DATA PREP: Determine which stock to display per row based on Branch Filter
   const mappedInventory = inventory.map(item => {
     let displayStock = parseInt(item.stock || 0); // Default to global shared stock
     
@@ -985,7 +1016,6 @@ export default function AdminInventory() {
     return () => clearTimeout(timer)
   }, [search])
 
-  // 🚀 SUMMARY METRICS NOW REACT TO THE FILTER
   const totalItems = filtered.length;
   const totalValue = filtered.reduce((s, i) => {
       const cost = parseFloat(i.cost_per_unit || 0);
@@ -1117,24 +1147,26 @@ export default function AdminInventory() {
         .inv-rise { animation: invRise 0.85s ease-out both; }
 
         @media print {
-          @page { margin: 12mm 10mm; }
+          @page { size: A4 landscape; margin: 10mm; }
+          html, body { background: #ffffff !important; }
           body * { visibility: hidden !important; }
           #inventory-print-area, #inventory-print-area * { visibility: visible !important; }
           #inventory-print-area {
             position: absolute; top: 0; left: 0; width: 100%;
             font-family: "Helvetica Neue", Arial, sans-serif; color: #1f2937;
+            box-sizing: border-box;
           }
           .no-print { display: none !important; }
           .print-only { display: block !important; }
           .print-letterhead, .print-doc-title, .print-summary, .print-health { break-inside: avoid; page-break-inside: avoid; }
 
           .print-letterhead {
-            display: flex !important; align-items: center; justify-content: space-between; gap: 16px;
-            padding: 13px 18px; border-radius: 12px;
+            display: flex !important; align-items: center; justify-content: space-between; gap: 18px;
+            min-height: 62px; padding: 12px 18px; border-radius: 12px;
             background: linear-gradient(135deg,#0C573E 0%,#15724B 55%,#2E8B34 100%) !important;
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
           }
-          .print-logo-word { height: 34px; width: auto; max-width: 240px; display: block; object-fit: contain; filter: brightness(0) invert(1); }
+          .print-logo-word { height: 32px; width: auto; max-width: 260px; display: block; object-fit: contain; filter: brightness(0) invert(1); }
           .print-tagline { margin: 5px 0 0; font-size: 8px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: rgba(255,255,255,0.82) !important; }
           .print-meta { text-align: right; flex-shrink: 0; }
           .print-meta .ref { display: inline-block; margin: 0; padding: 3px 10px; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.12) !important; color: #ffffff !important; font-size: 8.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -1147,7 +1179,7 @@ export default function AdminInventory() {
           .print-doc-title .scope { margin: 0; font-size: 9px; color: #6b7280 !important; letter-spacing: 0.02em; text-align: center; }
 
           .print-summary { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 0; }
-          .print-summary-card { border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px; background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-summary-card { min-width: 0; border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px; background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-summary-card.c-total { border-top-color: #0C573E !important; }
           .print-summary-card.c-value { border-top-color: #2E8B34 !important; }
           .print-summary-card.c-low   { border-top-color: #d97706 !important; }
@@ -1180,7 +1212,7 @@ export default function AdminInventory() {
           .print-detail table { width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; }
           .print-detail thead { display: table-header-group; }
           .print-detail tr { page-break-inside: avoid; }
-          .print-detail th { background: #0C573E !important; color: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border: none; padding: 7px; text-align: left; font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; line-height: 1.25; }
+          .print-detail th { background: #0C573E !important; color: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border: none; padding: 7px 6px; text-align: left; font-size: 8.3px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; line-height: 1.25; }
           .print-detail th.col-idx    { width: 4.5%; }
           .print-detail th.col-name   { width: 30%; }
           .print-detail th.col-unit   { width: 8.5%; }
@@ -1189,7 +1221,7 @@ export default function AdminInventory() {
           .print-detail th.col-cost   { width: 12.5%; }
           .print-detail th.col-val    { width: 13.5%; }
           .print-detail th.col-status { width: 12.5%; }
-          .print-detail td { border-bottom: 1px solid #eef1f4; padding: 6.5px 7px; font-size: 9.5px; color: #1f2937 !important; vertical-align: top; word-break: break-word; overflow-wrap: anywhere; }
+          .print-detail td { border-bottom: 1px solid #eef1f4; padding: 6px; font-size: 9px; color: #1f2937 !important; vertical-align: top; word-break: normal; overflow-wrap: anywhere; }
           .print-detail .num { text-align: right; }
           .print-detail .center { text-align: center; }
           .print-detail .nowrap { white-space: nowrap !important; }
@@ -1297,8 +1329,8 @@ export default function AdminInventory() {
         </div>
         {[
           { label: "Est. Inventory Value", val: `₱${totalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}`, accent: "#3b82f6" },
-          { label: "Low Stock Items",      val: lowStockCount,    accent: "#f59e0b", action: () => setStatus("Low Stock"),    actionLabel: "Review Needs" },
-          { label: "Out of Stock Items",   val: outOfStockCount,  accent: "#ef4444", action: () => setStatus("Out of Stock"), actionLabel: "Action Required", red: true },
+          { label: "Low Stock Items",      val: lowStockCount,     accent: "#f59e0b", action: () => setStatus("Low Stock"),    actionLabel: "Review Needs" },
+          { label: "Out of Stock Items",   val: outOfStockCount,   accent: "#ef4444", action: () => setStatus("Out of Stock"), actionLabel: "Action Required", red: true },
         ].map(({ label, val, accent, action, actionLabel, red }) => (
           <div key={label} className="rounded-xl p-4 sm:p-5 flex flex-col justify-between relative overflow-hidden transition-transform duration-200 hover:scale-[1.02]"
             style={{ backgroundColor: d.cardBg, border: `1px solid ${d.cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)" }}>
