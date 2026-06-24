@@ -54,7 +54,7 @@ export default function AboutScreen() {
     Animated.timing(cardAnimation, {
       duration: 720,
       toValue: 1,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   }, [activeStatIndex, cardAnimation]);
 

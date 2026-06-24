@@ -129,7 +129,7 @@ export function ChatFloatingBubble() {
       RNAnimated.timing(previewAnim, {
         duration: 180,
         toValue: 0,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }).start();
     },
     [previewAnim],
@@ -145,7 +145,7 @@ export function ChatFloatingBubble() {
       mass: 0.7,
       stiffness: 160,
       toValue: 1,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
 
     previewHideTimerRef.current = setTimeout(() => {
@@ -194,7 +194,7 @@ export function ChatFloatingBubble() {
       mass: 0.75,
       stiffness: 170,
       toValue: isDragging ? 1 : 0,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   }, [isDragging, removeTargetAnim]);
 

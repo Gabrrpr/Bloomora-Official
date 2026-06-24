@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { router } from 'expo-router';
+import { router, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import {
   Animated,
@@ -12,7 +12,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Search, Star, Store, WifiOff, X, Zap } from 'lucide-react-native';
+import { Search, Star, WifiOff, X, Zap } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppBrandHeader } from '@/components/app-brand-header';
@@ -22,10 +22,14 @@ import { formatPhp, type Product } from '@/constants/shop';
 import { theme } from '@/constants/theme';
 import { shopApi } from '@/services/shop-api';
 import { getStoreBranch, setStoreBranch, type StoreBranch } from '@/services/branch-preference';
+import {
+  mobileContentService,
+  type CategoryBanner,
+} from '@/services/mobile-content-service';
 import { buildDiscoveryProductOrder, createRecommendationSeed } from '@/utils/product-recommendations';
+import type { CategoryHierarchyGroup } from '@/services/shop-api';
 
 const imageNotFound = require('@/assets/images/default-img/ImageNotFound.webp');
-const makeItPersonalBanner = require('@/assets/images/banners/MakeItPersonal_Banner.png');
 const pageBackground = '#F5F5F5';
 const hairlineColor = 'rgba(31, 42, 36, 0.09)';
 const softText = '#2F3A34';
@@ -33,14 +37,14 @@ type ProductSectionKind =
   | 'flash-sale'
   | 'featured'
   | 'new-arrivals'
-  | 'random'
-  | 'floral-products'
-  | 'non-floral-products';
+  | 'random';
+type ProductSectionId = ProductSectionKind | `category:${string}`;
 
 type ProductSectionConfig = {
-  id: ProductSectionKind;
+  id: ProductSectionId;
   isVisible: boolean;
   order: number;
+  category?: string;
   title: string;
 };
 
@@ -49,10 +53,30 @@ const productSectionConfig: ProductSectionConfig[] = [
   { id: 'featured', isVisible: true, order: 10, title: 'Featured Products' },
   { id: 'new-arrivals', isVisible: true, order: 20, title: 'New Arrivals' },
   { id: 'random', isVisible: true, order: 30, title: 'Discover Something New' },
-  { id: 'floral-products', isVisible: true, order: 40, title: 'Floral Products' },
-  { id: 'non-floral-products', isVisible: true, order: 50, title: 'Non Floral Products' },
 ];
 const productSectionPreviewLimit = 12;
+const preferredFloralCategoryOrder = [
+  'bouquet',
+  'funerary arrangement',
+  'funeral arrangement',
+  'inaugural arrangement',
+  'tabletop arrangement',
+  'boxed arrangement',
+  'box arrangement',
+  'vase arrangement',
+];
+const preferredNonFloralCategoryOrder = [
+  'vase',
+  'candles',
+  'candle',
+  'pot',
+  'pot fillers',
+  'pot filler',
+  'baskets',
+  'basket',
+  'accessory',
+  'accessories',
+];
 
 export default function CategoriesScreen() {
   const insets = useSafeAreaInsets();
@@ -62,10 +86,15 @@ export default function CategoriesScreen() {
   const [isSearchBarMounted, setIsSearchBarMounted] = useState(false);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categoryBanners, setCategoryBanners] = useState<CategoryBanner[]>([]);
+  const [categoryHierarchy, setCategoryHierarchy] = useState<CategoryHierarchyGroup[]>([]);
   const [productOrderSeed, setProductOrderSeed] = useState(() => createRecommendationSeed());
   const [query, setQuery] = useState('');
   const [branch, setBranch] = useState<StoreBranch>('manila');
   const [isBranchPickerOpen, setIsBranchPickerOpen] = useState(false);
+  const [isCategorySheetMounted, setIsCategorySheetMounted] = useState(false);
+  const [isCategorySheetOpen, setIsCategorySheetOpen] = useState(false);
+  const categorySheetProgress = useRef(new Animated.Value(0)).current;
   const searchBarProgress = useRef(new Animated.Value(0)).current;
 
   const loadCatalog = useCallback(async (showRefresh = false) => {
@@ -99,6 +128,44 @@ export default function CategoriesScreen() {
     void loadCatalog();
   }, [loadCatalog]);
 
+  useEffect(() => {
+    let active = true;
+    void mobileContentService.getCategoryBanners(branch)
+      .then((banners) => {
+        if (active) {
+          setCategoryBanners(banners);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setCategoryBanners([]);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [branch]);
+
+  useEffect(() => {
+    let active = true;
+
+    void shopApi.getCategoryHierarchy({ branch })
+      .then((hierarchy) => {
+        if (active) {
+          setCategoryHierarchy(hierarchy);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setCategoryHierarchy(buildCategoryHierarchyFromProducts(products));
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [branch, products]);
+
   const handleRefreshCatalog = useCallback(() => {
     setProductOrderSeed(createRecommendationSeed());
     loadCatalog(true);
@@ -110,9 +177,13 @@ export default function CategoriesScreen() {
       seed: productOrderSeed,
     });
   }, [productOrderSeed, products]);
+  const visibleCategoryHierarchy = useMemo(
+    () => (categoryHierarchy.length > 0 ? categoryHierarchy : buildCategoryHierarchyFromProducts(products)),
+    [categoryHierarchy, products],
+  );
   const productSections = useMemo(
-    () => buildProductSections(filteredProducts, products, productOrderSeed),
-    [filteredProducts, productOrderSeed, products],
+    () => buildProductSections(filteredProducts, products, productOrderSeed, visibleCategoryHierarchy),
+    [filteredProducts, productOrderSeed, products, visibleCategoryHierarchy],
   );
   const hasRenderableSections = productSections.some(shouldRenderProductSection);
 
@@ -125,6 +196,9 @@ export default function CategoriesScreen() {
   }, [branch, query]);
 
   const handleOpenSearch = useCallback(() => {
+    setIsBranchPickerOpen(false);
+    setIsCategorySheetOpen(false);
+    setIsCategorySheetMounted(false);
     setIsSearchOpen(true);
     setIsSearchBarMounted(true);
     searchBarProgress.stopAnimation();
@@ -132,9 +206,39 @@ export default function CategoriesScreen() {
       duration: 220,
       easing: Easing.out(Easing.cubic),
       toValue: 1,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start();
   }, [searchBarProgress]);
+
+  const handleOpenCategorySheet = useCallback(() => {
+    setIsBranchPickerOpen(false);
+    setIsCategorySheetOpen(true);
+    setIsCategorySheetMounted(true);
+    categorySheetProgress.stopAnimation();
+    Animated.timing(categorySheetProgress, {
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: false,
+    }).start();
+  }, [categorySheetProgress]);
+
+  const handleCloseCategorySheet = useCallback(() => {
+    categorySheetProgress.stopAnimation();
+    Animated.timing(categorySheetProgress, {
+      duration: 180,
+      easing: Easing.in(Easing.cubic),
+      toValue: 0,
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (!finished) {
+        return;
+      }
+
+      setIsCategorySheetOpen(false);
+      setIsCategorySheetMounted(false);
+    });
+  }, [categorySheetProgress]);
 
   const handleCloseSearch = useCallback(() => {
     searchBarProgress.stopAnimation();
@@ -142,7 +246,7 @@ export default function CategoriesScreen() {
       duration: 180,
       easing: Easing.in(Easing.cubic),
       toValue: 0,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start(({ finished }) => {
       if (!finished) {
         return;
@@ -158,36 +262,36 @@ export default function CategoriesScreen() {
     router.push(buildProductListRoute({ ...params, branch }));
   }, [branch]);
 
+  const handleSelectBranch = useCallback((nextBranch: StoreBranch) => {
+    setBranch(nextBranch);
+    void setStoreBranch(nextBranch);
+    setIsBranchPickerOpen(false);
+  }, []);
+
+  const handleSelectCategory = useCallback((category?: string) => {
+    setIsCategorySheetOpen(false);
+    setIsCategorySheetMounted(false);
+    router.push(buildProductListRoute(category ? { branch, category, title: category } : { branch, title: 'All Products' }));
+  }, [branch]);
+
   return (
     <View style={styles.screen}>
       <View style={styles.stickyHeader}>
-        <AppBrandHeader onSearchPress={handleOpenSearch} />
-        <Pressable
-          accessibilityLabel={`Change store branch. Current branch ${branch}`}
-          onPress={() => setIsBranchPickerOpen((current) => !current)}
-          style={styles.branchButton}>
-          <Store color={theme.colors.primary} size={17} />
-          <Text style={styles.branchButtonText}>{branch === 'manila' ? 'Manila' : 'Pampanga'}</Text>
-        </Pressable>
-
+        <AppBrandHeader
+          onMenuPress={handleOpenCategorySheet}
+          onSearchPress={handleOpenSearch}
+          onStorePress={() => {
+            setIsCategorySheetOpen(false);
+            setIsCategorySheetMounted(false);
+            setIsBranchPickerOpen((current) => !current);
+          }}
+          showMenuAction
+          showStoreAction
+        />
+        <AnnouncementStrip branch={branch} />
       </View>
       {isBranchPickerOpen ? (
-        <View style={styles.branchPicker}>
-          {(['manila', 'pampanga'] as StoreBranch[]).map((option) => (
-            <Pressable
-              key={option}
-              onPress={() => {
-                setBranch(option);
-                void setStoreBranch(option);
-                setIsBranchPickerOpen(false);
-              }}
-              style={[styles.branchOption, branch === option && styles.branchOptionActive]}>
-              <Text style={[styles.branchOptionText, branch === option && styles.branchOptionTextActive]}>
-                {option === 'manila' ? 'Manila' : 'Pampanga'}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        <BranchPopover branch={branch} onClose={() => setIsBranchPickerOpen(false)} onSelect={handleSelectBranch} topInset={insets.top} />
       ) : null}
 
       {isSearchBarMounted ? (
@@ -202,6 +306,16 @@ export default function CategoriesScreen() {
         />
       ) : null}
 
+      {isCategorySheetMounted ? (
+        <CategorySelectorSheet
+          hierarchy={categoryHierarchy}
+          isOpen={isCategorySheetOpen}
+          onClose={handleCloseCategorySheet}
+          onSelectCategory={handleSelectCategory}
+          progress={categorySheetProgress}
+        />
+      ) : null}
+
       <ScrollView
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefreshCatalog} tintColor={theme.colors.primary} />}
         showsVerticalScrollIndicator={false}
@@ -212,7 +326,7 @@ export default function CategoriesScreen() {
         ) : errorMessage ? (
           <CatalogUnavailableState message={errorMessage} onRetry={() => loadCatalog(true)} />
         ) : (
-          <MakeItPersonalBanner />
+          <CategoryBannerCarousel banners={categoryBanners} />
         )}
 
       {isLoading || errorMessage ? null : hasRenderableSections ? (
@@ -220,7 +334,13 @@ export default function CategoriesScreen() {
           shouldRenderProductSection(section) ? (
             <ProductSection
               key={section.id}
-              onViewMore={() => handleOpenProductList({ section: section.id, title: section.title })}
+              onViewMore={() =>
+                handleOpenProductList(
+                  section.category
+                    ? { category: section.category, title: section.title }
+                    : { section: section.id as ProductSectionKind, title: section.title },
+                )
+              }
               products={section.products}
               sectionId={section.id}
               title={section.title}
@@ -240,15 +360,238 @@ export default function CategoriesScreen() {
   );
 }
 
-function MakeItPersonalBanner() {
+function BranchPopover({
+  branch,
+  onClose,
+  onSelect,
+  topInset,
+}: {
+  branch: StoreBranch;
+  onClose: () => void;
+  onSelect: (branch: StoreBranch) => void;
+  topInset: number;
+}) {
+  return (
+    <View pointerEvents="box-none" style={styles.branchOverlay}>
+      <Pressable accessibilityLabel="Close branch selector" onPress={onClose} style={StyleSheet.absoluteFill} />
+      <View style={[styles.branchPicker, { top: topInset + 66 }]}>
+        {(['manila', 'pampanga'] as StoreBranch[]).map((option) => {
+          const isSelected = branch === option;
+          const label = option === 'manila' ? 'Manila' : 'Pampanga';
+
+          return (
+            <Pressable
+              key={option}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
+              onPress={() => onSelect(option)}
+              style={({ pressed }) => [
+                styles.branchOption,
+                isSelected && styles.branchOptionActive,
+                pressed && styles.productTilePressed,
+              ]}>
+              <Text style={[styles.branchOptionText, isSelected && styles.branchOptionTextActive]}>{label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function CategorySelectorSheet({
+  hierarchy,
+  isOpen,
+  onClose,
+  onSelectCategory,
+  progress,
+}: {
+  hierarchy: CategoryHierarchyGroup[];
+  isOpen: boolean;
+  onClose: () => void;
+  onSelectCategory: (category?: string) => void;
+  progress: Animated.Value;
+}) {
+  const backdropOpacity = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 0.34],
+  });
+  const translateX = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-320, 0],
+  });
+
+  return (
+    <View pointerEvents={isOpen ? 'auto' : 'none'} style={styles.categorySheetOverlay}>
+      <Animated.View style={[styles.categorySheetBackdrop, { opacity: backdropOpacity }]}>
+        <Pressable accessibilityLabel="Close categories" onPress={onClose} style={StyleSheet.absoluteFill} />
+      </Animated.View>
+      <Animated.View style={[styles.categorySheet, { transform: [{ translateX }] }]}>
+        <View style={styles.categorySheetHeader}>
+          <Text style={styles.categorySheetTitle}>All Categories</Text>
+          <Pressable accessibilityLabel="Close categories" accessibilityRole="button" hitSlop={8} onPress={onClose}>
+            <X size={theme.icon.sm} color={theme.colors.textMuted} />
+          </Pressable>
+        </View>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.categorySheetContent}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => onSelectCategory()}
+            style={({ pressed }) => [styles.allProductsButton, pressed && styles.categoryMenuItemPressed]}>
+            <Text style={styles.allProductsText}>All Products</Text>
+          </Pressable>
+
+          {hierarchy.length > 0 ? (
+            hierarchy.map((group) => (
+              <View key={group.title} style={styles.categoryGroup}>
+                <Text style={styles.categoryGroupTitle}>{formatCategoryGroupTitle(group.title)}</Text>
+                {group.items.map((category) => (
+                  <Pressable
+                    key={`${group.title}-${category}`}
+                    accessibilityRole="button"
+                    onPress={() => onSelectCategory(category)}
+                    style={({ pressed }) => [styles.categoryMenuItem, pressed && styles.categoryMenuItemPressed]}>
+                    <Text numberOfLines={2} style={styles.categoryMenuItemText}>{category}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ))
+          ) : (
+            <Text style={styles.categoryEmptyText}>Categories are unavailable.</Text>
+          )}
+        </ScrollView>
+      </Animated.View>
+    </View>
+  );
+}
+
+function AnnouncementStrip({ branch }: { branch: StoreBranch }) {
+  const [activeMessage, setActiveMessage] = useState<0 | 1>(0);
+  const opacity = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      Animated.timing(opacity, {
+        duration: 180,
+        easing: Easing.inOut(Easing.cubic),
+        toValue: 0,
+        useNativeDriver: false,
+      }).start(({ finished }) => {
+        if (!finished) {
+          return;
+        }
+
+        setActiveMessage((current) => (current === 0 ? 1 : 0));
+        Animated.timing(opacity, {
+          duration: 220,
+          easing: Easing.out(Easing.cubic),
+          toValue: 1,
+          useNativeDriver: false,
+        }).start();
+      });
+    }, 4000);
+
+    return () => {
+      clearInterval(interval);
+      opacity.stopAnimation();
+    };
+  }, [opacity]);
+
+  const isBouquetMessage = activeMessage === 0;
+  const branchName = branch === 'manila' ? 'Manila' : 'Pampanga';
+
   return (
     <Pressable
-      accessibilityLabel="Try Make it Personal"
-      accessibilityRole="button"
+      accessibilityLabel={
+        isBouquetMessage
+          ? 'Build your own bouquet. Build now.'
+          : `You are currently viewing our ${branchName} branch`
+      }
+      accessibilityRole={isBouquetMessage ? 'button' : 'text'}
+      disabled={!isBouquetMessage}
       onPress={() => router.push({ pathname: '/(tabs)/generate', params: { frame: 'selection' } })}
-      style={({ pressed }) => [styles.bannerButton, pressed && styles.productTilePressed]}>
-      <Image contentFit="cover" source={makeItPersonalBanner} style={styles.makeItPersonalBanner} />
+      style={({ pressed }) => [styles.announcementStrip, pressed && styles.announcementStripPressed]}>
+      <Animated.Text style={[styles.announcementText, { opacity }]}>
+        {isBouquetMessage ? (
+          <>
+            Build your own bouquet - <Text style={styles.announcementLink}>BUILD NOW!</Text>
+          </>
+        ) : (
+          `You are currently viewing our ${branchName} branch`
+        )}
+      </Animated.Text>
     </Pressable>
+  );
+}
+
+function CategoryBannerCarousel({ banners }: { banners: CategoryBanner[] }) {
+  const [width, setWidth] = useState(0);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  const openBanner = useCallback((banner: CategoryBanner) => {
+    const action = banner.action;
+    if (action.type === 'product') {
+      router.push(`/product-details?id=${encodeURIComponent(action.targetId)}`);
+      return;
+    }
+    if (action.type === 'voucher') {
+      router.push(`/(tabs)/cart?voucher=${encodeURIComponent(action.code)}` as Href);
+      return;
+    }
+    if (action.type === 'feature') {
+      router.push(action.route as Href);
+    }
+  }, []);
+
+  return (
+    <View
+      onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+      style={styles.bannerCarousel}>
+      {banners.length === 0 ? (
+        <View style={styles.makeItPersonalBanner} />
+      ) : width > 0 ? (
+        <ScrollView
+          horizontal
+          pagingEnabled
+          decelerationRate="fast"
+          onMomentumScrollEnd={(event) => {
+            setActiveIndex(Math.round(event.nativeEvent.contentOffset.x / width));
+          }}
+          showsHorizontalScrollIndicator={false}>
+          {banners.map((banner) => (
+            <Pressable
+              key={banner.id}
+              accessibilityLabel={banner.accessibleLabel}
+              accessibilityRole={banner.action.type === 'none' ? 'image' : 'button'}
+              disabled={banner.action.type === 'none'}
+              onPress={() => openBanner(banner)}
+              style={({ pressed }) => [
+                styles.bannerButton,
+                { width },
+                pressed && styles.productTilePressed,
+              ]}>
+              <Image
+                contentFit="cover"
+                recyclingKey={banner.media.id}
+                source={{ uri: banner.media.url }}
+                style={styles.makeItPersonalBanner}
+                transition={180}
+              />
+            </Pressable>
+          ))}
+        </ScrollView>
+      ) : null}
+      {banners.length > 1 ? (
+        <View style={styles.bannerDots}>
+          {banners.map((banner, index) => (
+            <View
+              key={banner.id}
+              style={[styles.bannerDot, activeIndex === index && styles.bannerDotActive]}
+            />
+          ))}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -334,7 +677,7 @@ function FloatingSearchBar({
         styles.searchOverlay,
         {
           opacity,
-          top: topInset + 74,
+          top: topInset + 104,
           transform: [{ translateY }, { scale }],
         },
       ]}>
@@ -373,7 +716,7 @@ function ProductSection({
 }: {
   onViewMore: () => void;
   products: Product[];
-  sectionId: ProductSectionKind;
+  sectionId: ProductSectionId;
   title: string;
 }) {
   const isFlashSale = sectionId === 'flash-sale';
@@ -496,6 +839,8 @@ function SectionTitle({
   onViewMore?: () => void;
   title: string;
 }) {
+  const flashCountdown = usePhilippineMidnightCountdown();
+
   return (
     <View style={[styles.sectionHeader, isFlashSale && styles.flashSaleHeader]}>
       <View style={styles.sectionTitleWrap}>
@@ -505,7 +850,7 @@ function SectionTitle({
         </View>
         {isFlashSale ? (
           <View style={styles.flashCountdown}>
-            {['00', '00', '00'].map((value, index) => (
+            {flashCountdown.map((value, index) => (
               <View key={`${value}-${index}`} style={styles.flashCountdownBox}>
                 <Text style={styles.flashCountdownText}>{value}</Text>
               </View>
@@ -523,18 +868,157 @@ function SectionTitle({
   );
 }
 
-function buildProductSections(products: Product[], allProducts: Product[], seed: string) {
-  return productSectionConfig
+function usePhilippineMidnightCountdown() {
+  const [parts, setParts] = useState(() => getPhilippineMidnightCountdownParts());
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setParts(getPhilippineMidnightCountdownParts());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  return parts;
+}
+
+function getPhilippineMidnightCountdownParts() {
+  const phOffsetMs = 8 * 60 * 60 * 1000;
+  const phNowMs = Date.now() + phOffsetMs;
+  const phNow = new Date(phNowMs);
+  const nextMidnightPhMs = Date.UTC(phNow.getUTCFullYear(), phNow.getUTCMonth(), phNow.getUTCDate() + 1, 0, 0, 0);
+  const diffSeconds = Math.max(0, Math.floor((nextMidnightPhMs - phNowMs) / 1000));
+  const hours = Math.floor(diffSeconds / 3600);
+  const minutes = Math.floor((diffSeconds % 3600) / 60);
+  const seconds = diffSeconds % 60;
+
+  return [hours, minutes, seconds].map((value) => value.toString().padStart(2, '0'));
+}
+
+function buildCategoryHierarchyFromProducts(products: Product[]): CategoryHierarchyGroup[] {
+  const groups = new Map<string, Set<string>>();
+
+  for (const product of products) {
+    const category = product.categoryName?.trim() || product.tag?.trim();
+
+    if (!category || /^add[\s-]?on$/i.test(category)) {
+      continue;
+    }
+
+    const groupTitle = product.productGroup?.trim() || (isLikelyNonFloralCategory(category) ? 'Non-Floral' : 'Floral');
+    const groupCategories = groups.get(groupTitle) ?? new Set<string>();
+    groupCategories.add(category);
+    groups.set(groupTitle, groupCategories);
+  }
+
+  return Array.from(groups, ([title, items]) => ({
+    title,
+    items: Array.from(items).sort((first, second) => compareCategoryNames(first, second, title)),
+  })).sort(compareCategoryGroups);
+}
+
+function compareCategoryGroups(first: CategoryHierarchyGroup, second: CategoryHierarchyGroup) {
+  return getCategoryGroupPriority(first.title) - getCategoryGroupPriority(second.title) || first.title.localeCompare(second.title);
+}
+
+function compareCategoryNames(first: string, second: string, groupTitle: string) {
+  const firstPriority = getCategoryNamePriority(first, groupTitle);
+  const secondPriority = getCategoryNamePriority(second, groupTitle);
+
+  return firstPriority - secondPriority || first.localeCompare(second);
+}
+
+function getCategoryNamePriority(category: string, groupTitle: string) {
+  const normalizedCategory = normalizeCategoryValue(category);
+  const order = getCategoryGroupPriority(groupTitle) === 1 ? preferredNonFloralCategoryOrder : preferredFloralCategoryOrder;
+  const index = order.indexOf(normalizedCategory);
+
+  return index === -1 ? order.length : index;
+}
+
+function getCategoryGroupPriority(title: string) {
+  const normalizedTitle = title.toLowerCase();
+
+  if (normalizedTitle.includes('floral') && !normalizedTitle.includes('non')) {
+    return 0;
+  }
+
+  if (normalizedTitle.includes('non')) {
+    return 1;
+  }
+
+  return 2;
+}
+
+function formatCategoryGroupTitle(title: string) {
+  return title.replace(/\s*-\s*/g, '-').toUpperCase();
+}
+
+function normalizeCategoryValue(value?: string) {
+  return value?.trim().toLowerCase().replace(/\s+/g, ' ') ?? '';
+}
+
+function isLikelyNonFloralCategory(category: string) {
+  return /\b(non[\s-]?floral|accessory|basket|candle|card|gift|pot|ribbon|tool|vase|wrapper|wrapping)\b/i.test(category);
+}
+
+function buildProductSections(
+  products: Product[],
+  allProducts: Product[],
+  seed: string,
+  categoryHierarchy: CategoryHierarchyGroup[],
+) {
+  const staticSections = productSectionConfig
     .filter((section) => section.isVisible)
     .sort((first, second) => first.order - second.order)
     .map((section) => ({
       ...section,
-      products: prioritizeProductsWithImages(getProductsForSection(section.id, products, seed, allProducts)),
+      products: prioritizeProductsWithImages(getProductsForSection(section.id as ProductSectionKind, products, seed, allProducts)),
     }));
+
+  return [
+    ...staticSections,
+    ...buildCategoryProductSections(products, categoryHierarchy),
+  ];
 }
 
 function shouldRenderProductSection(section: ProductSectionConfig & { products: Product[] }) {
   return section.id === 'flash-sale' || section.products.length > 0;
+}
+
+function buildCategoryProductSections(products: Product[], hierarchy: CategoryHierarchyGroup[]) {
+  const addedCategories = new Set<string>();
+  const sections: (ProductSectionConfig & { products: Product[] })[] = [];
+
+  for (const group of hierarchy) {
+    const orderedCategories = [...group.items].sort((first, second) => compareCategoryNames(first, second, group.title));
+
+    for (const category of orderedCategories) {
+      const normalizedCategory = normalizeCategoryValue(category);
+
+      if (!normalizedCategory || addedCategories.has(normalizedCategory)) {
+        continue;
+      }
+
+      const categoryProducts = products.filter((product) => normalizeCategoryValue(product.categoryName || product.tag) === normalizedCategory);
+
+      if (categoryProducts.length === 0) {
+        continue;
+      }
+
+      addedCategories.add(normalizedCategory);
+      sections.push({
+        category,
+        id: `category:${normalizedCategory}`,
+        isVisible: true,
+        order: getCategoryGroupPriority(group.title),
+        products: prioritizeProductsWithImages(categoryProducts),
+        title: category,
+      });
+    }
+  }
+
+  return sections;
 }
 
 function getProductsForSection(sectionId: ProductSectionKind, products: Product[], seed: string, allProducts: Product[] = products) {
@@ -550,10 +1034,6 @@ function getProductsForSection(sectionId: ProductSectionKind, products: Product[
         (first, second) =>
           getStableRandomValue(`${seed}:discover:${first.id}`) - getStableRandomValue(`${seed}:discover:${second.id}`),
       );
-    case 'floral-products':
-      return products.filter(isFloralProduct);
-    case 'non-floral-products':
-      return products.filter((product) => !isFloralProduct(product));
     default:
       return products;
   }
@@ -601,20 +1081,6 @@ function isNewArrivalProduct(product: Product) {
   const isRecentlyCreated = Number.isFinite(createdTime) && Date.now() - createdTime <= 1000 * 60 * 60 * 24 * 30;
 
   return Boolean(metadata.isNew || /\b(new|arrival|fresh)\b/i.test(product.tag) || isRecentlyCreated);
-}
-
-function isFloralProduct(product: Product) {
-  const searchableText = [product.categoryName, product.productGroup, product.productType, product.tag, product.name]
-    .filter(Boolean)
-    .join(' ');
-
-  if (/\b(non[\s-]?floral|add[\s-]?on|gift|chocolate|teddy|balloon|vase|wrapper|ribbon|card|cake)\b/i.test(searchableText)) {
-    return false;
-  }
-
-  return /\b(floral|flower|flowers|bouquet|arrangement|rose|roses|orchid|orchids|tulip|tulips|lily|lilies|sunflower|carnation|stems?)\b/i.test(
-    searchableText,
-  );
 }
 
 function splitIntoColumns<T>(items: T[]) {
@@ -683,13 +1149,13 @@ function SkeletonBlock({ style }: { style: object }) {
           duration: 760,
           easing: Easing.inOut(Easing.quad),
           toValue: 0.78,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
         Animated.timing(opacity, {
           duration: 760,
           easing: Easing.inOut(Easing.quad),
           toValue: 0.42,
-          useNativeDriver: true,
+          useNativeDriver: false,
         }),
       ]),
     );
@@ -709,46 +1175,56 @@ const styles = StyleSheet.create({
   },
   stickyHeader: {
     backgroundColor: 'rgba(255, 255, 255, 0.85)',
-    borderBottomColor: hairlineColor,
-    borderBottomWidth: 1,
-    paddingBottom: theme.spacing.sm,
     zIndex: 20,
   },
-  branchButton: {
+  announcementStrip: {
     alignItems: 'center',
-    alignSelf: 'flex-end',
-    backgroundColor: theme.colors.greenSoft,
-    borderColor: 'rgba(46, 139, 52, 0.22)',
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    flexDirection: 'row',
-    gap: 6,
-    marginHorizontal: theme.spacing.lg,
-    minHeight: 36,
-    paddingHorizontal: 12,
+    backgroundColor: theme.colors.primary,
+    justifyContent: 'center',
+    minHeight: 28,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: 6,
   },
-  branchButtonText: {
-    color: theme.colors.primary,
-    fontFamily: 'Inter_600SemiBold',
-    fontSize: 12,
+  announcementStripPressed: {
+    backgroundColor: theme.colors.primaryDark,
+  },
+  announcementText: {
+    color: theme.colors.white,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 10,
+    lineHeight: 14,
+    textAlign: 'center',
+  },
+  announcementLink: {
+    fontFamily: 'Inter_700Bold',
+    textDecorationLine: 'underline',
+  },
+  branchOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 70,
   },
   branchPicker: {
     backgroundColor: theme.colors.white,
-    borderBottomColor: hairlineColor,
-    borderBottomWidth: 1,
-    flexDirection: 'row',
+    borderColor: hairlineColor,
+    borderRadius: 16,
+    borderWidth: 1,
+    boxShadow: '0 18px 36px rgba(31, 42, 36, 0.16)',
+    elevation: 8,
     gap: 8,
-    padding: 12,
-    zIndex: 19,
+    padding: 10,
+    position: 'absolute',
+    right: theme.spacing.md,
+    width: 176,
+    zIndex: 71,
   },
   branchOption: {
     alignItems: 'center',
     borderColor: hairlineColor,
-    borderRadius: theme.radius.pill,
+    borderRadius: 12,
     borderWidth: 1,
-    flex: 1,
     minHeight: 40,
     justifyContent: 'center',
+    paddingHorizontal: theme.spacing.md,
   },
   branchOptionActive: {
     backgroundColor: theme.colors.primary,
@@ -762,18 +1238,126 @@ const styles = StyleSheet.create({
   branchOptionTextActive: {
     color: theme.colors.white,
   },
+  categorySheetOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 80,
+  },
+  categorySheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000000',
+  },
+  categorySheet: {
+    backgroundColor: theme.colors.white,
+    borderRightColor: hairlineColor,
+    borderRightWidth: 1,
+    bottom: 0,
+    left: 0,
+    maxWidth: 330,
+    position: 'absolute',
+    top: 0,
+    width: '84%',
+  },
+  categorySheetHeader: {
+    alignItems: 'center',
+    borderBottomColor: hairlineColor,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 72,
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: theme.spacing.md,
+  },
+  categorySheetTitle: {
+    color: '#111827',
+    fontFamily: 'Inter_800ExtraBold',
+    fontSize: 18,
+    letterSpacing: 0,
+  },
+  categorySheetContent: {
+    gap: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.xl,
+    paddingBottom: 44,
+    paddingTop: theme.spacing.lg,
+  },
+  allProductsButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 10,
+    minHeight: 38,
+    justifyContent: 'center',
+    paddingHorizontal: 2,
+  },
+  allProductsText: {
+    color: theme.colors.primary,
+    fontFamily: 'Inter_800ExtraBold',
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  categoryGroup: {
+    gap: theme.spacing.sm,
+  },
+  categoryGroupTitle: {
+    color: '#9CA3AF',
+    fontFamily: 'Inter_800ExtraBold',
+    fontSize: 13,
+    letterSpacing: 0.8,
+    lineHeight: 18,
+  },
+  categoryMenuItem: {
+    borderRadius: 10,
+    justifyContent: 'center',
+    minHeight: 32,
+    paddingHorizontal: 2,
+    paddingVertical: 4,
+  },
+  categoryMenuItemPressed: {
+    backgroundColor: 'rgba(46, 139, 52, 0.08)',
+  },
+  categoryMenuItemText: {
+    color: '#4B5563',
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  categoryEmptyText: {
+    color: theme.colors.textMuted,
+    fontFamily: 'Inter_500Medium',
+    fontSize: 14,
+    lineHeight: 20,
+  },
   catalogScroll: {
     backgroundColor: pageBackground,
     flex: 1,
   },
   content: {
-    gap: theme.spacing.md,
+    gap: 0,
     paddingTop: 0,
   },
   bannerButton: {
     backgroundColor: theme.colors.white,
     overflow: 'hidden',
     width: '100%',
+  },
+  bannerCarousel: {
+    backgroundColor: theme.colors.white,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  bannerDots: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'center',
+    paddingVertical: 9,
+  },
+  bannerDot: {
+    backgroundColor: '#CBD5E1',
+    borderRadius: 999,
+    height: 6,
+    width: 6,
+  },
+  bannerDotActive: {
+    backgroundColor: theme.colors.primary,
+    width: 18,
   },
   makeItPersonalBanner: {
     aspectRatio: 1088 / 503,

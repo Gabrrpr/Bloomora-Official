@@ -30,7 +30,7 @@ export function FloatingProductSearch({ onClose, visible }: FloatingProductSearc
       duration: visible ? 240 : 180,
       easing: visible ? Easing.out(Easing.cubic) : Easing.in(Easing.cubic),
       toValue: visible ? 1 : 0,
-      useNativeDriver: true,
+      useNativeDriver: false,
     }).start(({ finished }) => {
       if (finished && !visible) {
         setMounted(false);

@@ -4,6 +4,12 @@ import { Platform } from 'react-native';
 import type { Product } from '@/constants/shop';
 import { ApiError, apiFetch } from '@/services/api-client';
 import { getAuthSession } from '@/services/auth-session';
+import {
+  isMockMobileContent,
+  mobileContentService,
+  type ContentAction,
+  type FeedPost,
+} from '@/services/mobile-content-service';
 
 export type FeedTab = 'explore' | 'new' | 'for-you';
 export type FeedBranch = 'all' | 'manila' | 'pampanga';
@@ -36,8 +42,9 @@ export type PromotionFeedEntry = {
   id: string;
   type: 'promotion';
   promotion: {
+    action?: ContentAction;
     badge?: string | null;
-    can_add_to_cart: boolean;
+    can_add_to_cart?: boolean;
     cta_destination?: string | null;
     cta_label?: string | null;
     description?: string | null;
@@ -74,11 +81,13 @@ export type FeedAnalyticsEvent = {
 
 const installationFileUri = `${FileSystem.documentDirectory}feed-installation-id.txt`;
 const installationStorageKey = 'estings.feed-installation-id';
-const feedSchemaVersion = 1;
+const feedSchemaVersion = 2;
+const supportedFeedSchemaVersions = new Set([1, 2]);
 const feedCacheFileUri = `${FileSystem.documentDirectory}mobile-feed-cache-v${feedSchemaVersion}.json`;
 const feedCacheStorageKey = `estings.mobile-feed-cache-v${feedSchemaVersion}`;
 let installationIdPromise: Promise<string> | null = null;
 let feedCacheWriteQueue = Promise.resolve();
+const mockCampaignLikes = new Map<string, { is_liked: boolean; like_count: number }>();
 
 type FeedCache = Record<string, { cached_at: string; response: FeedResponse }>;
 
@@ -116,7 +125,7 @@ async function writeFeedCache(tab: FeedTab, branch: FeedBranch, response: FeedRe
 
 async function getCachedFeed(tab: FeedTab, branch: FeedBranch) {
   const cached = (await readFeedCache())[feedCacheKey(tab, branch)]?.response;
-  return cached?.schema_version === feedSchemaVersion ? cached : null;
+  return cached && supportedFeedSchemaVersions.has(cached.schema_version) ? cached : null;
 }
 
 async function authOptions(method: string, body?: unknown) {
@@ -177,13 +186,45 @@ export function mapFeedProduct(entry: ProductFeedEntry): Product {
   };
 }
 
+function mapContentPost(post: FeedPost): PromotionFeedEntry {
+  return {
+    id: post.id,
+    type: 'promotion',
+    promotion: {
+      id: post.id,
+      title: post.title,
+      description: post.caption,
+      badge: post.badge,
+      media_type: post.media.kind,
+      media_url: post.media.url,
+      poster_url: post.media.posterUrl,
+      like_count: post.likeCount,
+      is_liked: Boolean(post.isLiked),
+      action: post.action,
+    },
+  };
+}
+
 export const mobileFeedApi = {
   async getFeed(input: {
     branch: FeedBranch;
     cursor?: string | null;
+    forceRefresh?: boolean;
     limit?: number;
     tab: FeedTab;
   }) {
+    if (isMockMobileContent && mobileContentService.mode === 'mock') {
+      const response = await mobileContentService.getFeed(input) as FeedResponse;
+      response.items.forEach((item) => {
+        if (item.type === 'promotion' && !mockCampaignLikes.has(item.id)) {
+          mockCampaignLikes.set(item.id, {
+            is_liked: item.promotion.is_liked,
+            like_count: item.promotion.like_count,
+          });
+        }
+      });
+      return response;
+    }
     const params = new URLSearchParams({
       branch: input.branch,
       limit: String(input.limit ?? 10),
@@ -194,8 +235,20 @@ export const mobileFeedApi = {
     }
     try {
       const response = await apiFetch<FeedResponse>(`/mobile-feed?${params.toString()}`, await authOptions('GET'));
-      if (response.schema_version !== feedSchemaVersion) {
-        throw new ApiError(426, 'Feed update required. Please update the app and try again.');
+      if (!supportedFeedSchemaVersions.has(response.schema_version)) {
+        throw new ApiError(426, 'Feed is temporarily unavailable. Please try again later.');
+      }
+      if (!input.cursor && mobileContentService.mode === 'api') {
+        const posts = await mobileContentService.getActiveFeedPosts(input.tab, input.branch).catch((error) => {
+          if (error instanceof ApiError && error.status === 404) {
+            console.warn('Mobile content feed posts endpoint is not available on this backend.');
+            return [];
+          }
+
+          throw error;
+        });
+        const productItems = response.items.filter((item) => item.type === 'product');
+        response.items = [...posts.map(mapContentPost), ...productItems];
       }
       if (!input.cursor) {
         await writeFeedCache(input.tab, input.branch, response);
@@ -203,7 +256,7 @@ export const mobileFeedApi = {
       return response;
     } catch (error) {
       if (error instanceof ApiError && error.status === 404) {
-        throw new ApiError(426, 'Feed update required. The server must be updated before Home Feed can load.');
+        throw new ApiError(404, 'We could not load the feed right now. Please try again.');
       }
       if (
         !input.cursor
@@ -220,17 +273,35 @@ export const mobileFeedApi = {
   },
 
   async likeCampaign(campaignId: string) {
+    if (isMockMobileContent) {
+      const current = mockCampaignLikes.get(campaignId) ?? { is_liked: false, like_count: 0 };
+      const next = {
+        is_liked: true,
+        like_count: current.like_count + (current.is_liked ? 0 : 1),
+      };
+      mockCampaignLikes.set(campaignId, next);
+      return next;
+    }
     const installationId = await getFeedInstallationId();
     return apiFetch<{ is_liked: boolean; like_count: number }>(
-      `/mobile-feed/campaigns/${encodeURIComponent(campaignId)}/like`,
+      `/mobile-content/feed-posts/${encodeURIComponent(campaignId)}/like`,
       await authOptions('PUT', { installation_id: installationId }),
     );
   },
 
   async unlikeCampaign(campaignId: string) {
+    if (isMockMobileContent) {
+      const current = mockCampaignLikes.get(campaignId) ?? { is_liked: true, like_count: 1 };
+      const next = {
+        is_liked: false,
+        like_count: Math.max(0, current.like_count - (current.is_liked ? 1 : 0)),
+      };
+      mockCampaignLikes.set(campaignId, next);
+      return next;
+    }
     const installationId = await getFeedInstallationId();
     return apiFetch<{ is_liked: boolean; like_count: number }>(
-      `/mobile-feed/campaigns/${encodeURIComponent(campaignId)}/like?installation_id=${encodeURIComponent(installationId)}`,
+      `/mobile-content/feed-posts/${encodeURIComponent(campaignId)}/like?installation_id=${encodeURIComponent(installationId)}`,
       await authOptions('DELETE'),
     );
   },

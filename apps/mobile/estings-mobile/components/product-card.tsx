@@ -27,6 +27,8 @@ export const ProductCard = memo(function ProductCard({ product, style }: Product
     hasSalePrice && product.originalPriceCents
       ? Math.round(((product.originalPriceCents - product.priceCents) / product.originalPriceCents) * 100)
       : 0;
+  const averageRating = Math.max(0, Math.min(5, Number(product.averageRating ?? 0)));
+  const reviewCount = Math.max(0, Number(product.reviewCount ?? 0));
   const handlePress = useCallback(() => {
     router.push(`/product-details?id=${encodeURIComponent(product.id)}`);
   }, [product.id]);
@@ -74,13 +76,15 @@ export const ProductCard = memo(function ProductCard({ product, style }: Product
               <Star
                 key={star}
                 size={11}
-                color="#DDE0DD"
-                fill="transparent"
+                color={averageRating >= star - 0.25 ? '#F2B950' : '#DDE0DD'}
+                fill={averageRating >= star - 0.25 ? '#F2B950' : 'transparent'}
                 strokeWidth={2}
               />
             ))}
           </View>
-          <Text style={styles.ratingText}>(0)</Text>
+          <Text numberOfLines={1} style={styles.ratingText}>
+            {averageRating.toFixed(1)} ({reviewCount} {reviewCount === 1 ? 'Review' : 'Reviews'})
+          </Text>
         </View>
       </View>
     </Pressable>

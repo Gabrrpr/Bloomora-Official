@@ -146,7 +146,9 @@ export async function removeGuestCartItem(productId: string) {
 }
 
 export type AiArrangementCartInput = {
+  addOns?: Product[];
   arrangementId?: string;
+  cardMessage?: string;
   description: string;
   imageUrl?: string;
   name: string;
@@ -171,7 +173,14 @@ export async function addAiArrangementToCart(input: AiArrangementCartInput) {
   };
 
   const items = await getGuestCartItems();
-  const nextItems = [...items, createCartItem(syntheticProduct, 1)];
+  const nextItems = [
+    ...items,
+    {
+      ...createCartItem(syntheticProduct, 1),
+      addOns: input.addOns,
+      cardMessage: input.cardMessage?.trim() || undefined,
+    },
+  ];
 
   await writeGuestCart(nextItems);
   return nextItems;

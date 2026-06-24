@@ -12,7 +12,7 @@ import {
   ShoppingBag,
   Upload,
 } from 'lucide-react-native';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import QRCode from 'react-native-qrcode-svg';
@@ -27,6 +27,7 @@ import { formatPhp } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { getAuthSession } from '@/services/auth-session';
 import { getOrderById, type CustomerOrder, type CustomerOrderItem } from '@/services/orders-api';
+import { isPayMongoOrderPaid } from '@/services/paymongo-confirmation';
 import { createPayMongoCheckout, getPayMongoPaymentStatus } from '@/services/payments-api';
 
 type PaymentMethod = 'paymongo' | 'gcash' | 'bank';
@@ -54,20 +55,53 @@ export default function PaymentScreen() {
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
+  const allowLeaveRef = useRef(false);
+  const isCheckingLeaveRef = useRef(false);
 
   useEffect(() => {
     const removeBefore = navigation.addListener('beforeRemove', (event) => {
+      if (allowLeaveRef.current) return;
       if (order?.paymentStatus === 'paid') return;
       event.preventDefault();
-      Alert.alert('Leave payment?', 'Your order is not paid yet.', [
-        { style: 'cancel', text: 'Stay' },
-        { style: 'destructive', text: 'Leave', onPress: () => navigation.dispatch(event.data.action) },
-      ]);
+
+      if (isCheckingLeaveRef.current) return;
+      isCheckingLeaveRef.current = true;
+      void (async () => {
+        try {
+          const session = await getAuthSession();
+          if (session && orderId) {
+            const isPaid = await isPayMongoOrderPaid({ orderId, session });
+            if (isPaid) {
+              const refreshedOrder = await getOrderById({ orderId, session });
+              setOrder(refreshedOrder);
+              allowLeaveRef.current = true;
+              navigation.dispatch(event.data.action);
+              return;
+            }
+          }
+        } catch {
+          // Fall back to the explicit confirmation dialog below.
+        } finally {
+          isCheckingLeaveRef.current = false;
+        }
+
+        Alert.alert('Leave payment?', 'Your order is not paid yet.', [
+          { style: 'cancel', text: 'Stay' },
+          {
+            style: 'destructive',
+            text: 'Leave',
+            onPress: () => {
+              allowLeaveRef.current = true;
+              navigation.dispatch(event.data.action);
+            },
+          },
+        ]);
+      })();
     });
     return () => {
       removeBefore();
     };
-  }, [navigation, order?.paymentStatus]);
+  }, [navigation, order?.paymentStatus, orderId]);
 
   useEffect(() => {
     let active = true;

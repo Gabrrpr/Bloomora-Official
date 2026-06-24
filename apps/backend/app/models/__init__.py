@@ -16,3 +16,4 @@ from .order_item import OrderItem, StockReservation
 from .cart import CartItem
 from .commerce import Advertisement, CommerceSetting
 from .mobile_feed import CampaignReaction, FeedEvent, FeedPlacement, ProductFeedControl
+from .mobile_content import CategoryBanner, FeedPost, FeedPostReaction

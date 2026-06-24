@@ -50,7 +50,8 @@ import {
   type BiometricsAvailability,
 } from '@/services/biometrics';
 import { clearAuthSession, getAuthSession, type AuthSession } from '@/services/auth-session';
-import { isValidEmail, isValidPhilippinePhone, required } from '@/utils/auth-validation';
+import { resetForgotPassword, sendForgotPasswordOtp } from '@/services/auth-api';
+import { isSixDigitOtp, isValidEmail, isValidPhilippinePhone, required } from '@/utils/auth-validation';
 
 type RowIcon = typeof Pencil;
 type ActiveView =
@@ -67,6 +68,7 @@ type ActiveView =
   | 'password';
 type EditableAccountField = 'displayName' | 'email' | 'phone' | 'username';
 type PasswordStrength = 'Weak' | 'Fair' | 'Good' | 'Strong';
+type PasswordResetStep = 'email' | 'otp' | 'reset';
 
 const pastelDanger = '#D96B6B';
 const languageOptions = ['English', 'Filipino'];
@@ -112,6 +114,11 @@ export default function SettingsScreen() {
   const [draftEmail, setDraftEmail] = useState(email);
   const [draftPhone, setDraftPhone] = useState(phone);
   const [draftUsername, setDraftUsername] = useState(username);
+  const [passwordStep, setPasswordStep] = useState<PasswordResetStep>('email');
+  const [passwordEmail, setPasswordEmail] = useState(email);
+  const [passwordOtp, setPasswordOtp] = useState('');
+  const [passwordMessage, setPasswordMessage] = useState<string | null>(null);
+  const [isPasswordSubmitting, setIsPasswordSubmitting] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const insets = useSafeAreaInsets();
@@ -151,6 +158,7 @@ export default function SettingsScreen() {
             setDraftEmail(nextEmail);
             setDraftPhone(nextPhone);
             setDraftUsername(nextUsername);
+            setPasswordEmail(nextEmail);
           }
         })
         .catch(() => {
@@ -256,6 +264,10 @@ export default function SettingsScreen() {
     }
 
     if (field === 'password') {
+      setPasswordStep('email');
+      setPasswordEmail(email);
+      setPasswordOtp('');
+      setPasswordMessage(null);
       setNewPassword('');
       setConfirmPassword('');
     }
@@ -293,14 +305,66 @@ export default function SettingsScreen() {
     );
   }
 
-  function handleSavePassword() {
-    if (!isPasswordValid || confirmPassword !== newPassword) {
+  async function handleSavePassword() {
+    if (isPasswordSubmitting) {
       return;
     }
 
-    setNewPassword('');
-    setConfirmPassword('');
-    setActiveView('account');
+    setPasswordMessage(null);
+
+    if (passwordStep === 'email') {
+      if (!isValidEmail(passwordEmail)) {
+        setPasswordMessage('Enter the email address linked to your account.');
+        return;
+      }
+
+      setIsPasswordSubmitting(true);
+      try {
+        await sendForgotPasswordOtp(passwordEmail);
+        setPasswordStep('otp');
+        setPasswordMessage('We sent a 6-digit code to your email.');
+      } catch (error) {
+        setPasswordMessage(error instanceof Error ? error.message : 'Unable to send OTP.');
+      } finally {
+        setIsPasswordSubmitting(false);
+      }
+      return;
+    }
+
+    if (passwordStep === 'otp') {
+      if (!isSixDigitOtp(passwordOtp)) {
+        setPasswordMessage('Enter the 6-digit code from your email.');
+        return;
+      }
+
+      setPasswordStep('reset');
+      setPasswordMessage('Code accepted. Create a strong new password.');
+      return;
+    }
+
+    if (!isPasswordValid || confirmPassword !== newPassword) {
+      setPasswordMessage('Enter a strong password and make sure both passwords match.');
+      return;
+    }
+
+    setIsPasswordSubmitting(true);
+    try {
+      await resetForgotPassword({
+        email: passwordEmail,
+        newPassword,
+        otp: passwordOtp,
+      });
+      setPasswordMessage('Password changed successfully.');
+      setNewPassword('');
+      setConfirmPassword('');
+      setPasswordOtp('');
+      setPasswordStep('email');
+      setActiveView('account');
+    } catch (error) {
+      setPasswordMessage(error instanceof Error ? error.message : 'Unable to change password.');
+    } finally {
+      setIsPasswordSubmitting(false);
+    }
   }
 
   async function confirmSensitiveAction(action: () => void, promptMessage: string) {
@@ -564,12 +628,19 @@ export default function SettingsScreen() {
         {activeView === 'password' ? (
           <PasswordEditView
             confirmPassword={confirmPassword}
+            email={passwordEmail}
             isPasswordValid={isPasswordValid}
+            isSubmitting={isPasswordSubmitting}
+            message={passwordMessage}
             newPassword={newPassword}
+            otp={passwordOtp}
             passwordRules={passwordRules}
             passwordStrength={passwordStrength}
+            step={passwordStep}
             onChangeConfirmPassword={setConfirmPassword}
+            onChangeEmail={setPasswordEmail}
             onChangeNewPassword={setNewPassword}
+            onChangeOtp={setPasswordOtp}
             onSave={handleSavePassword}
           />
         ) : null}
@@ -949,65 +1020,126 @@ function NameEditView({
 
 function PasswordEditView({
   confirmPassword,
+  email,
   isPasswordValid,
+  isSubmitting,
+  message,
   newPassword,
+  otp,
   passwordRules,
   passwordStrength,
+  step,
   onChangeConfirmPassword,
+  onChangeEmail,
   onChangeNewPassword,
+  onChangeOtp,
   onSave,
 }: {
   confirmPassword: string;
+  email: string;
   isPasswordValid: boolean;
+  isSubmitting: boolean;
+  message: string | null;
   newPassword: string;
+  otp: string;
   passwordRules: ReturnType<typeof getPasswordRules>;
   passwordStrength: PasswordStrength;
+  step: PasswordResetStep;
   onChangeConfirmPassword: (value: string) => void;
+  onChangeEmail: (value: string) => void;
   onChangeNewPassword: (value: string) => void;
+  onChangeOtp: (value: string) => void;
   onSave: () => void;
 }) {
   const passwordsMatch = confirmPassword.length > 0 && confirmPassword === newPassword;
-  const canSave = isPasswordValid && passwordsMatch;
+  const canSave =
+    step === 'email'
+      ? isValidEmail(email)
+      : step === 'otp'
+        ? isSixDigitOtp(otp)
+        : isPasswordValid && passwordsMatch;
+  const buttonLabel = step === 'email' ? 'Send OTP' : step === 'otp' ? 'Continue' : 'Save password';
 
   return (
     <SettingsSection title="Password">
       <View style={styles.formCard}>
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChangeText={onChangeNewPassword}
-          placeholder="Create a secure password"
-          placeholderTextColor={theme.colors.textMuted}
-          secureTextEntry
-          style={styles.usernameInput}
-          value={newPassword}
-        />
-        <PasswordStrengthMeter strength={passwordStrength} />
-        <View style={styles.requirements}>
-          {passwordRules.map((rule) => (
-            <RequirementRow key={rule.label} isValid={rule.isValid} label={rule.label} />
-          ))}
-        </View>
+        {step === 'email' ? (
+          <>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="email-address"
+              onChangeText={onChangeEmail}
+              placeholder="Account email"
+              placeholderTextColor={theme.colors.textMuted}
+              style={styles.usernameInput}
+              value={email}
+            />
+            {email && !isValidEmail(email) ? <Text style={styles.errorText}>Enter a valid email address.</Text> : null}
+            <Text style={styles.helperText}>Confirm the email address where the password reset OTP should be sent.</Text>
+          </>
+        ) : null}
 
-        <TextInput
-          autoCapitalize="none"
-          autoCorrect={false}
-          onChangeText={onChangeConfirmPassword}
-          placeholder="Re-enter your password"
-          placeholderTextColor={theme.colors.textMuted}
-          secureTextEntry
-          style={styles.usernameInput}
-          value={confirmPassword}
-        />
-        {confirmPassword && !passwordsMatch ? <Text style={styles.errorText}>Passwords must match.</Text> : null}
-        {passwordsMatch ? <Text style={styles.matchText}>Passwords match.</Text> : null}
+        {step === 'otp' ? (
+          <>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="number-pad"
+              maxLength={6}
+              onChangeText={(value) => onChangeOtp(value.replace(/\D/g, '').slice(0, 6))}
+              placeholder="6-digit OTP"
+              placeholderTextColor={theme.colors.textMuted}
+              style={styles.usernameInput}
+              value={otp}
+            />
+            {otp && !isSixDigitOtp(otp) ? <Text style={styles.errorText}>Enter the 6-digit code.</Text> : null}
+            <Text style={styles.helperText}>Use the code sent to {email}.</Text>
+          </>
+        ) : null}
+
+        {step === 'reset' ? (
+          <>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              onChangeText={onChangeNewPassword}
+              placeholder="Create a secure password"
+              placeholderTextColor={theme.colors.textMuted}
+              secureTextEntry
+              style={styles.usernameInput}
+              value={newPassword}
+            />
+            <PasswordStrengthMeter strength={passwordStrength} />
+            <View style={styles.requirements}>
+              {passwordRules.map((rule) => (
+                <RequirementRow key={rule.label} isValid={rule.isValid} label={rule.label} />
+              ))}
+            </View>
+
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              onChangeText={onChangeConfirmPassword}
+              placeholder="Re-enter your password"
+              placeholderTextColor={theme.colors.textMuted}
+              secureTextEntry
+              style={styles.usernameInput}
+              value={confirmPassword}
+            />
+            {confirmPassword && !passwordsMatch ? <Text style={styles.errorText}>Passwords must match.</Text> : null}
+            {passwordsMatch ? <Text style={styles.matchText}>Passwords match.</Text> : null}
+          </>
+        ) : null}
+
+        {message ? <Text style={styles.helperText}>{message}</Text> : null}
 
         <Pressable
           accessibilityRole="button"
-          disabled={!canSave}
-          style={[styles.saveButton, !canSave && styles.saveButtonDisabled]}
+          disabled={!canSave || isSubmitting}
+          style={[styles.saveButton, (!canSave || isSubmitting) && styles.saveButtonDisabled]}
           onPress={onSave}>
-          <Text style={styles.saveButtonText}>Save password</Text>
+          <Text style={styles.saveButtonText}>{isSubmitting ? 'Please wait...' : buttonLabel}</Text>
         </Pressable>
       </View>
     </SettingsSection>
@@ -1067,12 +1199,12 @@ function SettingsSection({
       Animated.timing(fadeAnim, {
         duration: 180,
         toValue: 1,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
       Animated.timing(slideAnim, {
         duration: 180,
         toValue: 0,
-        useNativeDriver: true,
+        useNativeDriver: false,
       }),
     ]).start();
   }, [fadeAnim, slideAnim]);

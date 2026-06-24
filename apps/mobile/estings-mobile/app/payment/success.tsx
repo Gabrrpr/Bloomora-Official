@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AppState, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { formatPhp } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { getAuthSession } from '@/services/auth-session';
 import { removeCartItem } from '@/services/cart-storage';
 import { notifyCartUpdated } from '@/services/guest-cart';
-import { getPayMongoPaymentStatus, type PayMongoPaymentStatusResponse } from '@/services/payments-api';
+import { confirmPayMongoOrders, type PayMongoConfirmationResult } from '@/services/paymongo-confirmation';
 
 type ConfirmationState = 'checking' | 'confirmed' | 'pending' | 'unavailable';
 
@@ -20,7 +21,7 @@ export default function PaymentSuccessScreen() {
     [params.orderIds],
   );
   const [confirmationState, setConfirmationState] = useState<ConfirmationState>(orderIds.length > 0 ? 'checking' : 'pending');
-  const [statusResult, setStatusResult] = useState<PayMongoPaymentStatusResponse | null>(null);
+  const [confirmation, setConfirmation] = useState<PayMongoConfirmationResult | null>(null);
   const isConfirmed = confirmationState === 'confirmed';
 
   const checkPaymentStatus = useCallback(async () => {
@@ -35,28 +36,16 @@ export default function PaymentSuccessScreen() {
       return false;
     }
 
-    const statuses = await Promise.all(
-      orderIds.map((orderId) =>
-        getPayMongoPaymentStatus({
-          orderId,
-          session,
-        }),
-      ),
-    );
-    const firstStatus = statuses[0] ?? null;
-    setStatusResult(firstStatus);
+    const result = await confirmPayMongoOrders({ orderIds, session });
+    setConfirmation(result);
+    setConfirmationState(result.allPaid ? 'confirmed' : 'pending');
 
-    const allPaid = statuses.every((status) => status.payment_status === 'paid' || status.order?.payment_status === 'paid');
-    setConfirmationState(allPaid ? 'confirmed' : 'pending');
-    if (allPaid) {
-      const purchasedIds = statuses.flatMap((status) =>
-        status.order?.items?.map((item) => item.product_id).filter((id): id is string => Boolean(id)) ?? [],
-      );
-      await Promise.all([...new Set(purchasedIds)].map((productId) => removeCartItem(productId)));
+    if (result.allPaid) {
+      await Promise.all(result.purchasedProductIds.map((productId) => removeCartItem(productId)));
       notifyCartUpdated();
     }
 
-    return allPaid;
+    return result.allPaid;
   }, [orderIds]);
 
   useEffect(() => {
@@ -69,7 +58,7 @@ export default function PaymentSuccessScreen() {
 
       try {
         const isPaid = await checkPaymentStatus();
-        if (!isActive || isPaid || attempts >= 8) {
+        if (!isActive || isPaid || attempts >= 12) {
           return;
         }
       } catch {
@@ -114,10 +103,10 @@ export default function PaymentSuccessScreen() {
           )}
         </View>
         <Text style={styles.title}>
-          {isConfirmed ? 'Thank you for your purchase!' : 'Payment pending confirmation'}
+          {isConfirmed ? 'Payment successful' : 'Payment processing'}
         </Text>
         <Text style={styles.body}>{getStatusMessage(confirmationState)}</Text>
-        {statusResult?.order?.order_number ? <Text style={styles.referenceText}>{statusResult.order.order_number}</Text> : null}
+        {confirmation ? <ReceiptPanel confirmation={confirmation} /> : null}
         <Pressable
           accessibilityRole="button"
           onPress={() => void checkPaymentStatus()}
@@ -136,20 +125,65 @@ export default function PaymentSuccessScreen() {
   );
 }
 
+function ReceiptPanel({ confirmation }: { confirmation: PayMongoConfirmationResult }) {
+  const receipt = confirmation.receipt;
+  const orderNumbers = receipt.orderNumbers.length ? receipt.orderNumbers.join(', ') : confirmation.order?.orderNumber;
+
+  return (
+    <View style={styles.receiptPanel}>
+      <ReceiptRow label="Order" value={orderNumbers || 'Processing'} />
+      <ReceiptRow label="Status" value={toLabel(receipt.paymentStatus)} />
+      <ReceiptRow label="Method" value={toLabel(receipt.paymentMethod || 'PayMongo')} />
+      <ReceiptRow label="Reference" value={receipt.reference || 'Processing'} />
+      <ReceiptRow label="Transaction ID" value={receipt.transactionId || 'Processing'} />
+      <ReceiptRow label="Amount" value={formatPhp(Math.round(receipt.amount * 100))} />
+      <ReceiptRow label="Paid date" value={formatDate(receipt.paidAt)} />
+    </View>
+  );
+}
+
+function ReceiptRow({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.receiptRow}>
+      <Text style={styles.receiptLabel}>{label}</Text>
+      <Text numberOfLines={2} style={styles.receiptValue}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function formatDate(value?: string | null) {
+  if (!value) return 'Processing';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Processing';
+  return date.toLocaleString('en-PH', {
+    day: '2-digit',
+    hour: 'numeric',
+    minute: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
+function toLabel(value: string) {
+  return value.replace(/[_-]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function getStatusMessage(state: ConfirmationState) {
   if (state === 'confirmed') {
-    return 'Payment successful. Your order is confirmed and is now queued for preparation.';
+    return 'Your order is confirmed and queued for preparation.';
   }
 
   if (state === 'checking') {
-    return "PayMongo returned you to the app. We're checking the database for the paid transaction.";
+    return "PayMongo returned you to the app. We're checking the paid transaction.";
   }
 
   if (state === 'unavailable') {
     return 'We could not check the payment status right now. Open your orders or try checking again.';
   }
 
-  return 'PayMongo returned you to the app, but the database has not marked the transaction as paid yet.';
+  return 'The payment provider returned successfully, but the backend is still processing the payment.';
 }
 
 const styles = StyleSheet.create({
@@ -169,7 +203,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.lg,
     borderWidth: 1,
     gap: theme.spacing.md,
-    padding: theme.spacing.xxl,
+    padding: theme.spacing.xl,
   },
   iconRing: {
     alignItems: 'center',
@@ -196,12 +230,6 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     textAlign: 'center',
   },
-  referenceText: {
-    color: theme.colors.primary,
-    fontFamily: Fonts.sansBold,
-    fontSize: 13,
-    lineHeight: 18,
-  },
   primaryButton: {
     alignItems: 'center',
     backgroundColor: theme.colors.primary,
@@ -218,6 +246,31 @@ const styles = StyleSheet.create({
     color: theme.colors.white,
     fontFamily: Fonts.sansBold,
     fontSize: 15,
+  },
+  receiptLabel: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 12,
+  },
+  receiptPanel: {
+    alignSelf: 'stretch',
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: theme.radius.md,
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+  },
+  receiptRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    justifyContent: 'space-between',
+  },
+  receiptValue: {
+    color: theme.colors.text,
+    flex: 1,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 12,
+    textAlign: 'right',
   },
   secondaryButton: {
     alignItems: 'center',

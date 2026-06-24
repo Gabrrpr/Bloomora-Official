@@ -9,6 +9,7 @@ from app.api.v1.routes.mobile_feed import (
     _campaign_state,
     _decode_cursor,
     _encode_cursor,
+    _for_you_product_bucket,
     _product_tie_breaker,
 )
 
@@ -62,7 +63,7 @@ class MobileFeedHelperTests(unittest.TestCase):
         self.assertNotEqual(first, second)
 
     def test_feed_schema_version_is_explicit(self):
-        self.assertEqual(FEED_SCHEMA_VERSION, 1)
+        self.assertEqual(FEED_SCHEMA_VERSION, 2)
 
     def test_tab_tie_breakers_are_deterministic_and_distinct(self):
         product_id = "11111111-1111-1111-1111-111111111111"
@@ -80,6 +81,60 @@ class MobileFeedHelperTests(unittest.TestCase):
         self.assertEqual(BOOSTS["medium"], 0.10)
         self.assertEqual(BOOSTS["high"], 0.15)
         self.assertLessEqual(max(BOOSTS.values()), 0.15)
+
+    def test_for_you_allows_bouquets_and_gifts(self):
+        bouquet = SimpleNamespace(
+            category="bouquet",
+            product_group="floral",
+            product_type="rose",
+            name="BQT 1001",
+            description="Fresh birthday bouquet",
+            tags=["rose", "bouquet"],
+            occasions=["Birthday"],
+        )
+        gift = SimpleNamespace(
+            category="add-on",
+            product_group="non-floral",
+            product_type=None,
+            name="Ferrero Rocher 24pc",
+            description="Chocolate gift box",
+            tags=["chocolate"],
+            occasions=[],
+        )
+        self.assertEqual(_for_you_product_bucket(bouquet), 0)
+        self.assertEqual(_for_you_product_bucket(gift), 1)
+
+    def test_for_you_excludes_sensitive_and_event_display_products(self):
+        products = [
+            SimpleNamespace(
+                category="funerary arrangement",
+                product_group="floral",
+                product_type=None,
+                name="SYM 1005 - Ivory Circle",
+                description="A sympathy wreath",
+                tags=["sympathy", "wreath"],
+                occasions=["Sympathy"],
+            ),
+            SimpleNamespace(
+                category="inaugural arrangement",
+                product_group="floral",
+                product_type=None,
+                name="Opening stand",
+                description="Standing arrangement for a store opening",
+                tags=["inaugural", "standing arrangement"],
+                occasions=["Congratulation"],
+            ),
+            SimpleNamespace(
+                category="bouquet",
+                product_group="floral",
+                product_type="rose",
+                name="White sympathy bouquet",
+                description="A soft bouquet",
+                tags=["bouquet"],
+                occasions=["Sympathy"],
+            ),
+        ]
+        self.assertTrue(all(_for_you_product_bucket(product) is None for product in products))
 
 
 if __name__ == "__main__":
