@@ -46,9 +46,10 @@ def upgrade():
         sa.CheckConstraint("branch in ('all','manila','pampanga')", name="ck_feed_posts_branch"),
         sa.CheckConstraint("status in ('draft','published')", name="ck_feed_posts_status"),
         sa.PrimaryKeyConstraint("id"),
+        if_not_exists=True,
     )
     for column in ["tab", "branch", "status", "scheduled_at", "expires_at"]:
-        op.create_index(f"ix_feed_posts_{column}", "feed_posts", [column])
+        op.create_index(f"ix_feed_posts_{column}", "feed_posts", [column], if_not_exists=True)
 
     op.create_table(
         "feed_post_reactions",
@@ -62,9 +63,10 @@ def upgrade():
         sa.ForeignKeyConstraint(["user_id"], ["users.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("feed_post_id", "actor_key", name="uq_feed_post_reaction_actor"),
+        if_not_exists=True,
     )
-    op.create_index("ix_feed_post_reactions_feed_post_id", "feed_post_reactions", ["feed_post_id"])
-    op.create_index("ix_feed_post_reactions_user_id", "feed_post_reactions", ["user_id"])
+    op.create_index("ix_feed_post_reactions_feed_post_id", "feed_post_reactions", ["feed_post_id"], if_not_exists=True)
+    op.create_index("ix_feed_post_reactions_user_id", "feed_post_reactions", ["user_id"], if_not_exists=True)
 
     op.create_table(
         "category_banners",
@@ -87,9 +89,10 @@ def upgrade():
         sa.CheckConstraint("branch in ('all','manila','pampanga')", name="ck_category_banners_branch"),
         sa.CheckConstraint("status in ('draft','published')", name="ck_category_banners_status"),
         sa.PrimaryKeyConstraint("id"),
+        if_not_exists=True,
     )
     for column in ["branch", "status", "scheduled_at", "expires_at"]:
-        op.create_index(f"ix_category_banners_{column}", "category_banners", [column])
+        op.create_index(f"ix_category_banners_{column}", "category_banners", [column], if_not_exists=True)
 
     op.execute(
         """
