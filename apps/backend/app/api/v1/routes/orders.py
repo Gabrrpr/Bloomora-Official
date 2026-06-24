@@ -21,7 +21,14 @@ from app.services.paymongo_service import PayMongoError, create_checkout_session
 from app.api.v1.routes.commerce import get_delivery_settings, validate_voucher
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
-MANILA_TZ = ZoneInfo("Asia/Manila")
+
+# ZoneInfo can crash on some environments if tzdata isn't installed.
+# This must NOT break importing the router.
+try:
+    MANILA_TZ = ZoneInfo("Asia/Manila")
+except Exception:
+    MANILA_TZ = timezone.utc
+
 
 
 def _created_order_response(order: Order) -> dict:

@@ -88,7 +88,16 @@ function Toast({ message }) {
 }
 
 // ── OverviewPanel ─────────────────────────────────────────────────────────────
-function OverviewPanel({ user, setPanel, isDark }) {
+function OverviewPanel({ user, setPanel, isDark, showToast }) {
+  const { logout } = useAuth()
+  const [showDelete, setShowDelete] = useState(false)
+  const [deletePassword, setDeletePassword] = useState("")
+  const [deleteConfirmName, setDeleteConfirmName] = useState("")
+  const [deleteError, setDeleteError] = useState("")
+  const [deleting, setDeleting] = useState(false)
+
+  const fullName = [user?.firstName, user?.lastName].filter(Boolean).join(" ")
+
   // User info card — clearly distinct from page bg
   const infoBg  = isDark ? "#0f172a" : "#f8f9fa"
   const infoBdr = isDark ? "#334155" : "#efefef"
@@ -100,6 +109,24 @@ function OverviewPanel({ user, setPanel, isDark }) {
   const cardBdr = isDark ? "#334155" : "#efefef"
   const cardTxt = isDark ? "#f1f5f9" : "#374151"     // very bright text
   const cardIcon= isDark ? "#4ade80" : G             // neon green icons
+
+  const handleDeleteAccount = async (e) => {
+    e.preventDefault()
+    if (!deletePassword) { setDeleteError("Please enter your password to confirm."); return }
+    if (!deleteConfirmName || deleteConfirmName.trim() !== fullName) {
+      setDeleteError(`Please type your full name exactly as "${fullName}" to confirm deletion.`); return }
+    setDeleting(true)
+    setDeleteError("")
+    try {
+      await api.deleteAccount(deletePassword, deleteConfirmName.trim())
+      showToast("Account deleted successfully.")
+      logout()
+    } catch (err) {
+      setDeleteError(err.message || "Failed to delete account.")
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   return (
     <div className="space-y-6 sm:space-y-8">
@@ -143,8 +170,56 @@ function OverviewPanel({ user, setPanel, isDark }) {
               <path strokeLinecap="round" strokeLinejoin="round" d={item.d}/>
             </svg>
             <span className="text-sm font-semibold" style={{ color:cardTxt }}>{item.label}</span>
-          </button>
-        ))}
+            </button>
+          ))}
+      </div>
+
+      {/* Danger Zone */}
+      <div className="p-5 sm:p-6 rounded-xl" style={{ backgroundColor: isDark ? "rgba(239,68,68,0.08)" : "#fff1f2", border: `1px solid ${isDark ? "rgba(239,68,68,0.25)" : "#fecdd3"}` }}>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div>
+            <p className="text-sm font-bold" style={{ color: isDark ? "#fca5a5" : "#991b1b" }}>Delete Account</p>
+            <p className="text-xs mt-1" style={{ color: isDark ? "#f87171" : "#be123c" }}>
+              Permanently remove your account, orders, and saved data. This action cannot be undone.
+            </p>
+          </div>
+          {!showDelete ? (
+            <button
+              onClick={() => setShowDelete(true)}
+              className="px-4 py-2 text-xs font-bold text-white rounded-lg transition-all hover:opacity-90"
+              style={{ backgroundColor: "#dc2626" }}>
+              Delete Account
+            </button>
+          ) : (
+            <form onSubmit={handleDeleteAccount} className="flex flex-col gap-2 w-full sm:w-auto">
+              {deleteError && <p className="text-xs font-medium text-red-500">{deleteError}</p>}
+              <input
+                type="password"
+                value={deletePassword}
+                onChange={(e) => { setDeletePassword(e.target.value); setDeleteError("") }}
+                placeholder="Enter your password to confirm"
+                className="px-3 py-2 text-sm rounded-lg border outline-none"
+                style={{ borderColor: isDark ? "#7f1d1d" : "#fecdd3", backgroundColor: isDark ? "#1f1315" : "white", color: isDark ? "#fef2f2" : "#7f1d1d" }}
+              />
+              <input
+                type="text"
+                value={deleteConfirmName}
+                onChange={(e) => { setDeleteConfirmName(e.target.value); setDeleteError("") }}
+                placeholder={`Type your full name "${fullName}" to confirm`}
+                className="px-3 py-2 text-sm rounded-lg border outline-none"
+                style={{ borderColor: isDark ? "#7f1d1d" : "#fecdd3", backgroundColor: isDark ? "#1f1315" : "white", color: isDark ? "#fef2f2" : "#7f1d1d" }}
+              />
+              <div className="flex gap-2">
+                <button type="submit" disabled={deleting} className="px-4 py-2 text-xs font-bold text-white rounded-lg transition-all hover:opacity-90 disabled:opacity-50" style={{ backgroundColor: "#dc2626" }}>
+                  {deleting ? "Deleting..." : "Confirm Delete"}
+                </button>
+                <button type="button" onClick={() => { setShowDelete(false); setDeletePassword(""); setDeleteConfirmName(""); setDeleteError("") }} className="px-4 py-2 text-xs font-bold rounded-lg border transition-all" style={{ borderColor: isDark ? "#7f1d1d" : "#fecdd3", color: isDark ? "#fca5a5" : "#be123c", backgroundColor: "transparent" }}>
+                  Cancel
+                </button>
+              </div>
+            </form>
+          )}
+        </div>
       </div>
     </div>
   )

@@ -109,6 +109,7 @@ def search_products(q: str = "", db: Session = Depends(get_db)):
                     func.lower(Product.description).ilike(search_term),
                 ),
                 Product.tags.cast(String).ilike(search_term),
+                Product.composition.cast(String).ilike(search_term),
             )
         )
         .all()

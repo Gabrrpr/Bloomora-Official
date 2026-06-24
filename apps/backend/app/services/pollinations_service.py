@@ -22,15 +22,13 @@ class PollinationsService:
         if not arrangement:
             return None
 
-        # Create safe, high-quality prompt constraints
+
         safe_prompt = f"{optimized_prompt}, elegant floral arrangement, professional photography, clean background, highly detailed, no people, no text, no watermarks, safe for work"
         encoded_prompt = quote(safe_prompt)
         clean_key = settings.POLLINATIONS_API_KEY.strip()
         pollinations_url = f"{self.base_url}{encoded_prompt}?width=1024&height=1024&model={self.model}&nologo=true&seed=42&key={clean_key}"
 
-        # ==========================================
-        # 1. POLLINATIONS TRY BLOCK
-        # ==========================================
+
         try:
             async with httpx.AsyncClient() as client:
                 resp = await client.get(pollinations_url, timeout=60.0)
@@ -40,9 +38,7 @@ class PollinationsService:
             print(f"❌ POLLINATIONS ERROR: {e}")
             return None
 
-        # ==========================================
-        # 2. IMAGE WATERMARKING (Logo + Text)
-        # ==========================================
+
         img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
         
         # --- A. APPLY ESTING'S LOGO (Top-Left) ---

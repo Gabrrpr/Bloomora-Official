@@ -1640,12 +1640,6 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   }
 
   const startFlow = async d => {
-    // 🚀 THE FIX: Block guests from running the logic
-    if (!isLoggedIn) {
-      window.location.href = '/login';
-      return;
-    }
-
     if (!validate()) return
 
     const selectedAddOnObjects = addOns.map(id => {

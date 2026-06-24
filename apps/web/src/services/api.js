@@ -454,8 +454,11 @@ export const api = {
   async getMobileFeedAnalytics(tab, branch) {
     return api.get(`/mobile-feed/admin/analytics?tab=${encodeURIComponent(tab)}&branch=${encodeURIComponent(branch)}`);
   },
-  async deleteAccount() {
-    return api.delete('/users/me');
+  async deleteAccount(password, confirmName) {
+    return api.request('/users/me', {
+      method: 'DELETE',
+      body: JSON.stringify({ password, confirm_name: confirmName }),
+    });
   },
 
   async getWishlist() {

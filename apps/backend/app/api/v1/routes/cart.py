@@ -9,7 +9,7 @@ from app.core.dependencies import get_current_user
 from app.core.database import get_db
 from app.models import CartItem, Inventory, Product, User
 
-router = APIRouter(prefix="/cart", tags=["Cart"])
+router = APIRouter(tags=["Cart"])
 
 
 class CartItemPayload(BaseModel):
@@ -234,15 +234,27 @@ def _web_item_key(item: dict[str, Any]) -> str:
 
 
 def _optional_product(db: Session, item: dict[str, Any]) -> tuple[Optional[uuid.UUID], Optional[Product]]:
+    item_id = str(item.get("id") or "")
+    
+    # 🚀 THE FIX: If the ID looks like a custom AI arrangement (doesn't look like a standard UUID), 
+    # skip the database lookup entirely.
+    if item_id.startswith("arr-") or len(item_id) < 30: 
+        return None, None
+        
     try:
-        candidate_id = uuid.UUID(str(item.get("id") or ""))
+        product_id = uuid.UUID(item_id)
+        # Check if the product exists and is available
+        product = (
+            db.query(Product)
+            .options(joinedload(Product.inventory))
+            .filter(Product.id == product_id)
+            .first()
+        )
+        if not product or not product.is_available or not product.is_visible:
+            return None, None # Don't crash, just return None
+        return product_id, product
     except ValueError:
         return None, None
-
-    product = _available_product(db, candidate_id)
-    if not product:
-        return None, None
-    return candidate_id, product
 
 
 def _upsert_web_item(db: Session, user_id: uuid.UUID, incoming: dict[str, Any]) -> CartItem:

@@ -75,6 +75,7 @@ class RegisterRequest(BaseModel):
     phone_number: Optional[str] = None
     address: Optional[str] = None
     username: Optional[str] = None
+    preferred_currency: Optional[str] = "PHP"
     
     @field_validator('password')
     @classmethod
@@ -256,6 +257,7 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
         user.password_hash = hash_password(payload.password)
         user.phone_number = payload.phone_number
         user.address = payload.address
+        user.preferred_currency = payload.preferred_currency or "PHP"
         user.is_verified = True
         user.is_active = True
         user.role = RoleEnum.customer
@@ -452,6 +454,7 @@ def get_me(current_user: User = Depends(get_current_user)):
         "id": str(current_user.id),
         "email": current_user.email,
         "profile_picture_url": getattr(current_user, 'profile_picture_url', None),
+        "preferred_currency": getattr(current_user, 'preferred_currency', "PHP"),
         "first_name": current_user.first_name,
         "last_name": current_user.last_name,
         "role": current_user.role.value if hasattr(current_user.role, 'value') else current_user.role,

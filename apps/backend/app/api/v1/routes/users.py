@@ -9,8 +9,9 @@ from PIL import Image
 
 from app.api.v1.routes.auth import hash_password, generate_username 
 from app.core.dependencies import get_db, get_current_user, require_staff
+from app.core.security import verify_password
 from app.core.supabase import supabase
-from app.models import User, RoleEnum, BranchEnum, ActivityLog, WishListItem, Product
+from app.models import User, RoleEnum, BranchEnum, ActivityLog, WishListItem, Product, CartItem, Order, OrderItem, Review, Chat, AIUsageLog, Arrangement, Notification
 from pydantic import BaseModel, EmailStr
 from app.services.email_service import send_otp_email, send_staff_confirm_email
 from app.utils.logger import log_activity
@@ -54,6 +55,7 @@ def serialize_user(u: User) -> dict:
         "must_change_password": getattr(u, 'must_change_password', False),
         
         "profile_picture_url": getattr(u, 'profile_picture_url', None),
+        "preferred_currency": getattr(u, 'preferred_currency', "PHP"),
         
         "created_at": u.created_at.isoformat() if getattr(u, 'created_at', None) else None,
         "updated_at": u.updated_at.isoformat() if getattr(u, 'updated_at', None) else None,
@@ -82,13 +84,16 @@ class UserUpdateRequest(BaseModel):
     first_name: Optional[str] = None
     middle_name: Optional[str] = None
     last_name: Optional[str] = None
-    role: Optional[str] = None
-    branch: Optional[str] = None
+    email: Optional[str] = None
     phone_number: Optional[str] = None
+    username: Optional[str] = None
     address: Optional[str] = None
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None
+    role: Optional[str] = None
+    branch: Optional[str] = None
     must_change_password: Optional[bool] = None
+    preferred_currency: Optional[str] = None
     
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -433,6 +438,7 @@ def update_user(
     if payload.is_active is not None: user.is_active = payload.is_active
     if payload.is_verified is not None: user.is_verified = payload.is_verified
     if payload.must_change_password is not None: user.must_change_password = payload.must_change_password
+    if payload.preferred_currency is not None: user.preferred_currency = payload.preferred_currency
     if payload.role is not None:
         try: user.role = RoleEnum(payload.role.lower())
         except ValueError: raise HTTPException(status_code=400, detail=f"Invalid role: {payload.role}")
@@ -448,11 +454,22 @@ def update_user(
 
     return {"status": "success", "message": "User updated successfully.", "user": serialize_user(user)}
 
+class DeleteAccountRequest(BaseModel):
+    password: str = ""
+    confirm_name: str = ""
+
 @router.delete("/me", response_model=dict)
 def delete_my_account(
+    payload: DeleteAccountRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
+    full_name = f"{current_user.first_name} {current_user.last_name}".strip()
+    if not payload.password or not verify_password(payload.password, current_user.password_hash):
+        raise HTTPException(status_code=403, detail="Incorrect password.")
+    if payload.confirm_name and payload.confirm_name.strip() != full_name:
+        raise HTTPException(status_code=400, detail="Full name confirmation does not match your account name.")
+
     try:
         # 1. Attempt to delete avatar from Supabase to free up space
         if current_user.profile_picture_url:
@@ -463,8 +480,20 @@ def delete_my_account(
                     supabase.storage.from_("avatars").remove(paths)
             except Exception:
                 pass
-        
-        # 2. Delete the user from the database
+
+        # 2. Delete all user-related data before removing the account
+        db.query(Chat).filter(Chat.user_id == current_user.id).delete(synchronize_session=False)
+        db.query(Review).filter(Review.user_id == current_user.id).delete(synchronize_session=False)
+        db.query(AIUsageLog).filter(AIUsageLog.user_id == current_user.id).delete(synchronize_session=False)
+        db.query(ActivityLog).filter(ActivityLog.user_id == current_user.id).delete(synchronize_session=False)
+
+        # 3. Delete user's arrangements (they may have related order_items, but orders will be deleted next)
+        db.query(Arrangement).filter(Arrangement.user_id == current_user.id).delete(synchronize_session=False)
+
+        # 4. Delete all user orders — this cascades to OrderItems and StockReservations
+        db.query(Order).filter(Order.user_id == current_user.id).delete(synchronize_session=False)
+
+        # 5. Finally delete the user — Address, WishlistItem, Notification, CartItem cascade automatically
         db.delete(current_user)
         db.commit()
         return {"status": "success", "message": "Account deleted permanently."}

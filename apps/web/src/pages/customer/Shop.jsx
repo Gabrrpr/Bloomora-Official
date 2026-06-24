@@ -915,6 +915,28 @@ export default function Shop({ onNavigate, initialCategory }) {
           </aside>
 
           <div className="flex-1 min-w-0">
+            <div className="relative mb-4" style={{ animation:"shopRise 0.5s ease 0.1s both" }}>
+              <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color:"#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/></svg>
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                placeholder="Search for bouquets, flowers, occasions..."
+                className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border outline-none transition-all"
+                style={{ borderColor:"#e5e7eb", backgroundColor:"white" }}
+                onFocus={e => { e.target.style.borderColor=G; e.target.style.boxShadow="0 0 0 3px rgba(74,222,128,0.15)" }}
+                onBlur={e => { e.target.style.borderColor="#e5e7eb"; e.target.style.boxShadow="none" }}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => { setSearchQuery(""); window.history.pushState({}, '', window.location.pathname); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2"
+                  style={{ color:"#9ca3af", background:"none", border:"none", cursor:"pointer" }}>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+              )}
+            </div>
+
             <div className="flex items-center justify-between gap-2 mb-4 pb-4" style={{ borderBottom:"1px solid #f0f0f0", animation:"shopRise 0.5s ease 0.12s both" }}>
               <div className="flex items-center gap-2">
                 <button onClick={() => setFilterOpen(true)}

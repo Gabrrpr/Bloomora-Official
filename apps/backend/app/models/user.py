@@ -47,6 +47,7 @@ class User(Base):
     staff_verification_token = Column(String(255), nullable=True)
     staff_token_expires_at = Column(DateTime(timezone=True), nullable=True)
     profile_picture_url = Column(String(255), nullable=True)
+    preferred_currency = Column(String(10), nullable=True, default="PHP")
     wishlist_items = relationship("WishlistItem", back_populates="user", cascade="all, delete-orphan")
 
     # Relationships

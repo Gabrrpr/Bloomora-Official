@@ -38,6 +38,7 @@ export function AuthProvider({ children }) {
         address: profile.address,
         is_profile_complete: profile.is_profile_complete,
         profilePictureUrl: profile.profile_picture_url,
+        preferredCurrency: profile.preferred_currency || "PHP",
       };
       
       localStorage.setItem("user", JSON.stringify(userData));
@@ -98,6 +99,8 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("user");
+    localStorage.removeItem("preferred_currency");
+    localStorage.removeItem("preferredCurrency");
     setUser(null);
     window.location.reload();
   };

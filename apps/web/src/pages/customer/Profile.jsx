@@ -3,6 +3,7 @@ import { useAuth } from "../../context/AuthContext.jsx";
 import { api } from "../../services/api.js";
 import { useTheme } from "../../context/ThemeContext.jsx";
 import { API_BASE } from "../../config/api.js";
+import { useCurrency } from "../../context/CuurencyContext.jsx";
 
 const G = "#2E8B34";
 const DG = "#0C573E";
@@ -33,7 +34,7 @@ const EMPTY_ADDRESS = {
 };
 
 export default function Profile({ onNavigate }) {
-  const { user, updateUserContext } = useAuth();
+  const { user, setUserFromToken } = useAuth();
 
   const [pwdStep, setPwdStep] = useState(1);
   const setupMode = user && !user.is_profile_complete;
@@ -56,6 +57,7 @@ export default function Profile({ onNavigate }) {
     confirmPassword: "",
     address: user?.address || "",
     birthdate: "",
+    preferredCurrency: user?.preferredCurrency || user?.preferred_currency || "PHP",
   });
 
   const [savedForm, setSavedForm] = useState({ ...form });
@@ -688,6 +690,31 @@ export default function Profile({ onNavigate }) {
             </div>
           )}
         </div>
+
+          {/* Currency Preference */}
+          <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5" style={{ animation: "profileRise 0.5s ease 0.36s both" }}>
+            <h3 className="text-sm font-semibold text-gray-700 mb-1">Currency</h3>
+            <p className="text-xs text-gray-400 mb-4">Choose how product prices are displayed</p>
+            <select
+              value={form.preferredCurrency}
+              onChange={(e) => {
+                const next = e.target.value;
+                setForm({ ...form, preferredCurrency: next });
+                useCurrency().setCurrency(next);
+              }}
+              className="w-full sm:w-auto px-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600"
+              style={{ color: "#111827", backgroundColor: "white" }}
+            >
+              <option value="PHP">Philippines (PHP)</option>
+              <option value="USD">United States (USD)</option>
+              <option value="EUR">European Union (EUR)</option>
+              <option value="GBP">United Kingdom (GBP)</option>
+              <option value="AUD">Australia (AUD)</option>
+              <option value="CAD">Canada (CAD)</option>
+              <option value="SGD">Singapore (SGD)</option>
+            </select>
+            <p className="text-xs text-gray-400 mt-2">Product prices will be shown in this currency across the site.</p>
+          </div>
 
         <div className="bg-white border border-gray-200 rounded-xl p-6 mb-5" style={{ animation: "profileRise 0.5s ease 0.40s both" }}>
           <div className="flex items-start justify-between mb-4">

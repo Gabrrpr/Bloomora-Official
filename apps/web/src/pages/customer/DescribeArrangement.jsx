@@ -362,15 +362,14 @@ export default function DescribeArrangement({ onNavigate }) {
   const grandTotal = baseTotal + addOnTotal;
 
   const handleAddToCart = async (destination = "cart") => {
-    // 🚀 NEW: Redirect guests to login
     if (!localStorage.getItem('access_token')) {
       window.location.href = '/login';
       return;
     }
 
-    if (!result) return
+    if (!result) return;
     
-    const breakdownNames = result.price_breakdown?.items?.map(i => `${i.quantity}x ${i.product_name}`).join(", ") || "Custom arrangement"
+    const breakdownNames = result.price_breakdown?.items?.map(i => `${i.quantity}x ${i.product_name}`).join(", ") || "Custom arrangement";
     
     const compositionArray = result.price_breakdown?.items?.map(i => ({
       product_id: i.product_id,
@@ -379,8 +378,8 @@ export default function DescribeArrangement({ onNavigate }) {
     })) || [];
 
     const selectedAddOnObjects = selectedAddOns.map(id => {
-      const addon = liveAddOns.find(a => a.id === id)
-      return { id: addon.id, name: addon.name, price: parseFloat(addon.price), qty: 1 }
+      const addon = liveAddOns.find(a => a.id === id);
+      return { id: addon.id, name: addon.name, price: parseFloat(addon.price), qty: 1 };
     });
 
     const cartItem = {
@@ -399,10 +398,21 @@ export default function DescribeArrangement({ onNavigate }) {
       img: result.generated_image_url,
       imgLabel: null,
       branch: currentBranch
-    }
+    };
     
-    await addToCart(cartItem)
-    onNavigate(destination)
+    // 🚀 THE FIX: Wrap the API call in try/catch so it doesn't fail silently
+    try {
+      console.log("Attempting to add to cart:", cartItem);
+      await addToCart(cartItem);
+      
+      // If it succeeds, navigate to the cart/checkout!
+      console.log("Success! Navigating to:", destination);
+      onNavigate(destination);
+      
+    } catch (error) {
+      console.error("Cart API Error:", error);
+      alert("Something went wrong adding this to your cart. Please check the console.");
+    }
   }
 
   const handleTryAlternative = (field, productId) => {

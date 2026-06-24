@@ -91,18 +91,18 @@ async def get_homepage_recommendations(
         bought_product_ids = list(bought_product_ids)
         
         if not bought_product_ids:
-            return df.head(limit).drop(columns=["metadata_soup", "name_clean", "cat_clean"]).to_dict(orient="records")
+            return []
 
         # 5. Build Customer Taste Profile
         bought_items_df = df[df["id"].isin(bought_product_ids)]
         
         if bought_items_df.empty:
-            return df.head(limit).drop(columns=["metadata_soup", "name_clean", "cat_clean"]).to_dict(orient="records")
+            return []
 
         user_profile_string = " ".join(bought_items_df["metadata_soup"].tolist()).strip()
 
         if not user_profile_string:
-            return df.head(limit).drop(columns=["metadata_soup", "name_clean", "cat_clean"]).to_dict(orient="records")
+            return []
 
         # 6. TF-IDF and Cosine Similarity
         tfidf = TfidfVectorizer(stop_words="english")

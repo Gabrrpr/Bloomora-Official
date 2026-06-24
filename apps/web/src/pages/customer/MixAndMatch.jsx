@@ -510,12 +510,6 @@ export default function MixAndMatch({ onNavigate }) {
   }
 
   const addToBag = async () => {
-    // 🚀 NEW: Redirect guests to login
-    if (!localStorage.getItem('access_token')) {
-      window.location.href = '/login';
-      return;
-    }
-
     if (!result) return
     const names = result.price_breakdown?.items?.map(i => i.product_name).join(", ") || "Custom"
     await addToCart({

@@ -68,6 +68,7 @@ export async function setCart(items) {
     return writeGuestCart(items)
   }
   const nextItems = mapResponse(await api.put("/cart/web", { items }))
+
   broadcastCartUpdate(nextItems)
   return nextItems
 }
@@ -85,9 +86,20 @@ export async function addToCart(item) {
     writeGuestCart(cart)
     return cart
   }
-  const nextItems = mapResponse(await api.post("/cart/items", { item }))
-  broadcastCartUpdate(nextItems)
-  return nextItems
+
+  try {
+    // 🚀 CRITICAL FIX: Use /cart/web/items and send { item } as the payload
+    // This allows the backend WebCartItemPayload to accept custom "arr-..." IDs!
+    const response = await api.post("/cart/web/items", { item });
+    
+    const nextItems = mapResponse(response);
+    broadcastCartUpdate(nextItems);
+    return nextItems;
+    
+  } catch (error) {
+    console.error("addToCart failed:", error);
+    throw error; // Passes the error to DescribeArrangement.jsx so the alert works
+  }
 }
 
 export async function removeFromCart(id, group) {
