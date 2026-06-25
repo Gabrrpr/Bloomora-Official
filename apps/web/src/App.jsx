@@ -77,7 +77,22 @@ function AppContent() {
   const [showAdPopup, setShowAdPopup] = useState(false);
   const [activeAdId, setActiveAdId] = useState("1");
   const [activeAdvertisement, setActiveAdvertisement] = useState(null);
+  const [authTransition, setAuthTransition] = useState(null);
   const pageRef = useRef(page);
+
+  useEffect(() => {
+    const handleAuthTransition = (event) => {
+      const type = event.detail?.type || "auth"
+      setAuthTransition(type)
+      window.clearTimeout(window.__bloomoraAuthTransitionTimer)
+      window.__bloomoraAuthTransitionTimer = window.setTimeout(() => setAuthTransition(null), 900)
+    }
+    window.addEventListener("bloomora:auth-transition", handleAuthTransition)
+    return () => {
+      window.removeEventListener("bloomora:auth-transition", handleAuthTransition)
+      window.clearTimeout(window.__bloomoraAuthTransitionTimer)
+    }
+  }, [])
 
   useEffect(() => {
     api.getActiveAdvertisement()
@@ -245,6 +260,34 @@ function AppContent() {
 
   return (
     <>
+      <style>{`
+        @keyframes adminPetalBloom {
+          0%, 100% { opacity: 0.2; }
+          50% { opacity: 1; }
+        }
+      `}</style>
+      {authTransition && (
+        <div
+          className="fixed inset-0 z-[99999] flex items-center justify-center pointer-events-none bg-white/95"
+        >
+          <div className="flex flex-col items-center gap-3">
+            <svg width="96" height="96" viewBox="0 0 100 100">
+              {[0, 60, 120, 180, 240, 300].map((angle, i) => (
+                <g key={angle} transform={`rotate(${angle} 50 50)`}>
+                  <ellipse cx="50" cy="27" rx="9.5" ry="21" fill={["#f48fb1", "#ec407a", "#e91e63", "#f06292", "#c2185b", "#f48fb1"][i]}
+                    style={{ animation: `adminPetalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`, animationFillMode: "both" }} />
+                </g>
+              ))}
+              <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+              <circle cx="50" cy="50" r="7" fill="#f9c6d0" />
+              <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+            </svg>
+            <p className="text-sm font-semibold" style={{ color: "#0C573E" }}>
+              Signing you out...
+            </p>
+          </div>
+        </div>
+      )}
       {renderContent()}
       {!AUTH_PAGES.includes(page) && page !== "admin" && !isPreview && (
         <>

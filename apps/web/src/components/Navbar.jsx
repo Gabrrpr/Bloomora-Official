@@ -1122,6 +1122,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
     } else {
       localStorage.removeItem("bloomora_active_campaign");
     }
+    window.dispatchEvent(new CustomEvent("bloomora:campaign-updated", { detail: link.isCampaign ? { campaignKey: link.campaignKey } : null }));
     if (link.page) onNavigate?.(link.page);
     setMobileOpen(false);
   };

@@ -131,9 +131,11 @@ class Delivery(Base):
     delivered_at = Column(DateTime(timezone=True), nullable=True)
     proof_photo_url = Column(Text, nullable=True)
     proof_note = Column(Text, nullable=True)
+    vehicle_id = Column(UUID(as_uuid=True), ForeignKey("vehicles.id"), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
     # Relationships
     order = relationship("Order", back_populates="delivery")
     rider = relationship("User", back_populates="deliveries", foreign_keys=[rider_id])
+    vehicle = relationship("Vehicle", foreign_keys=[vehicle_id])

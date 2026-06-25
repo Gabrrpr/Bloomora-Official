@@ -302,8 +302,8 @@ export const api = {
     return api.delete(`/campaigns/${campaignId}`);
   },
 
-  async setCampaignProducts(campaignId, product_ids) {
-    return api.post(`/campaigns/${campaignId}/products`, { product_ids });
+  async setCampaignProducts(campaignId, product_ids, discount = {}) {
+    return api.post(`/campaigns/${campaignId}/products`, { product_ids, ...discount });
   },
 
   async getCategoryHierarchy() {
@@ -395,7 +395,7 @@ export const api = {
   },
 
   async getLalamoveEnabled() {
-    return api.get('/settings/lalamove');
+    return api.get('/products/admin/settings/lalamove');
   },
 
   async updateDeliverySettings(data) {
@@ -514,6 +514,31 @@ export const api = {
 
   async markAllNotificationsRead() {
     return api.request('/notifications/read-all', { method: 'PATCH' });
+  },
+
+  // ── Vehicles (Admin Delivery) ─────────────────────────────────────────────
+  async getVehicles(branch = null, isActive = null) {
+    const params = new URLSearchParams();
+    if (branch && branch !== 'All') params.append('branch', branch.toLowerCase());
+    if (isActive !== null) params.append('is_active', String(isActive));
+    const q = params.toString();
+    return api.get(`/deliveries/vehicles${q ? `?${q}` : ''}`);
+  },
+
+  async createVehicle(data) {
+    return api.post(`/deliveries/vehicles`, data);
+  },
+
+  async updateVehicle(vehicleId, data) {
+    return api.put(`/deliveries/vehicles/${vehicleId}`, data);
+  },
+
+  async deleteVehicle(vehicleId) {
+    return api.delete(`/deliveries/vehicles/${vehicleId}`);
+  },
+
+  async assignVehicleRider(vehicleId, riderId) {
+    return api.patch(`/deliveries/vehicles/${vehicleId}/assign-rider`, riderId ? { rider_id: riderId } : {});
   },
 };
 

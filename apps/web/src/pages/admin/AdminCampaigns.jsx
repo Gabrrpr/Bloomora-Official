@@ -153,6 +153,8 @@ function AdminCampaignsModal({ mode, campaign, onClose, onSaved, allProducts, is
       start_at: campaign?.start_at ? toDatetimeLocalValue(campaign.start_at) : toDatetimeLocalValue(now),
       end_at: campaign?.end_at ? toDatetimeLocalValue(campaign.end_at) : toDatetimeLocalValue(new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)),
       is_active: campaign?.is_active ?? true,
+      discount_type: campaign?.discount_type || "percent",
+      discount_value: campaign?.discount_value != null ? String(campaign.discount_value) : "",
     }
   })
 
@@ -185,6 +187,9 @@ function AdminCampaignsModal({ mode, campaign, onClose, onSaved, allProducts, is
       const s = new Date(form.start_at), e = new Date(form.end_at)
       if (!isNaN(s) && !isNaN(e) && e < s) errs.end_at = "End must be after start"
     }
+    const discountValue = Number(form.discount_value || 0)
+    if (discountValue < 0) errs.discount_value = "Discount cannot be negative"
+    if (form.discount_type === "percent" && discountValue > 100) errs.discount_value = "Percentage discount cannot exceed 100%"
     return errs
   }
 
@@ -198,14 +203,22 @@ function AdminCampaignsModal({ mode, campaign, onClose, onSaved, allProducts, is
       start_at: new Date(form.start_at).toISOString(),
       end_at: new Date(form.end_at).toISOString(),
       is_active: !!form.is_active,
+      discount_type: Number(form.discount_value || 0) > 0 ? form.discount_type : null,
+      discount_value: Number(form.discount_value || 0) > 0 ? Number(form.discount_value) : null,
     }
     try {
       if (mode === "create") {
         const created = await api.createCampaign(payload)
-        if (selectedProductIds.length) await api.setCampaignProducts(created.id, selectedProductIds)
+        await api.setCampaignProducts(created.id, selectedProductIds, {
+          discount_type: payload.discount_type,
+          discount_value: payload.discount_value,
+        })
       } else {
         const updated = await api.updateCampaign(campaign.id, payload)
-        if (selectedProductIds.length) await api.setCampaignProducts(updated.id, selectedProductIds)
+        await api.setCampaignProducts(updated.id, selectedProductIds, {
+          discount_type: payload.discount_type,
+          discount_value: payload.discount_value,
+        })
       }
       onSaved?.()
       onClose?.()
@@ -254,6 +267,31 @@ function AdminCampaignsModal({ mode, campaign, onClose, onSaved, allProducts, is
             Set as Active
           </label>
         </div>
+        <div>
+          <label className="block text-sm font-semibold mb-1.5" style={{ color: isDark ? "#94a3b8" : "#374151" }}>
+            Campaign Discount Type
+          </label>
+          <select
+            value={form.discount_type}
+            onChange={e => set("discount_type")(e.target.value)}
+            className="w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all"
+            style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}
+          >
+            <option value="percent">Percent off</option>
+            <option value="fixed">Fixed amount off</option>
+          </select>
+        </div>
+        <FInput
+          label={form.discount_type === "percent" ? "Discount (%)" : "Discount (PHP)"}
+          value={form.discount_value}
+          onChange={set("discount_value")}
+          placeholder={form.discount_type === "percent" ? "e.g. 15" : "e.g. 250"}
+          type="number"
+          isDark={isDark}
+          inputBg={inputBg}
+          inputBdr={inputBdr}
+          inputTxt={inputTxt}
+        />
 
         {Object.keys(errors).length > 0 && (
           <div className="md:col-span-2">
@@ -607,12 +645,12 @@ export default function AdminCampaigns() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full" style={{ minWidth: "740px" }}>
+            <table className="w-full" style={{ minWidth: "980px" }}>
               <thead style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
                 <tr>
-                  {["Campaign", "Key", "Status", "Start", "End", "Action"].map((h, i) => (
+                  {["Campaign", "Key", "Status", "Discount", "Products", "Start", "End", "Action"].map((h, i) => (
                     <th key={h}
-                      className={`px-5 py-3 text-xs font-semibold uppercase tracking-wider ${i === 5 ? "text-right" : "text-left"}`}
+                      className={`px-5 py-3 text-xs font-semibold uppercase tracking-wider ${i === 7 ? "text-right" : "text-left"}`}
                       style={{ color: isDark ? "#64748b" : "#94a3b8" }}>
                       {h}
                     </th>
@@ -640,6 +678,14 @@ export default function AdminCampaigns() {
                       </span>
                     </td>
                     <td className="px-5 py-3">
+                      <span className="text-sm font-semibold" style={{ color: subTxt }}>
+                        {c.discount_value ? (c.discount_type === "percent" ? `${Number(c.discount_value)}% off` : `PHP ${Number(c.discount_value).toLocaleString()} off`) : "None"}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className="text-sm" style={{ color: subTxt }}>{c.product_ids?.length || 0}</span>
+                    </td>
+                    <td className="px-5 py-3">
                       <span className="text-sm" style={{ color: subTxt }}>{new Date(c.start_at).toLocaleString()}</span>
                     </td>
                     <td className="px-5 py-3">
@@ -659,7 +705,7 @@ export default function AdminCampaigns() {
                   </tr>
                 )) : (
                   <tr>
-                    <td colSpan={6}>
+                    <td colSpan={8}>
                       <div className="flex flex-col items-center justify-center py-14">
                         <div className="w-11 h-11 rounded-lg flex items-center justify-center mb-3"
                           style={{ background: isDark ? "rgba(34,197,94,0.1)" : "linear-gradient(135deg,#f0fdf4,#dcfce7)", border: `1px solid ${isDark ? "rgba(34,197,94,0.2)" : "#bbf7d0"}` }}>

@@ -97,17 +97,26 @@ export function AuthProvider({ children }) {
   };
 
   const logout = () => {
+    window.dispatchEvent(new CustomEvent("bloomora:auth-transition", { detail: { type: "logout" } }));
     localStorage.removeItem("access_token");
     localStorage.removeItem("refresh_token");
     localStorage.removeItem("user");
     localStorage.removeItem("preferred_currency");
     localStorage.removeItem("preferredCurrency");
     setUser(null);
-    window.location.reload();
+  };
+
+  const updateUserContext = (updates) => {
+    setUser((current) => {
+      if (!current) return current;
+      const nextUser = { ...current, ...updates };
+      localStorage.setItem("user", JSON.stringify(nextUser));
+      return nextUser;
+    });
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, googleLogin: googleLoginApi, facebookLogin: facebookLoginApi, setUserFromToken }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, googleLogin: googleLoginApi, facebookLogin: facebookLoginApi, setUserFromToken, updateUserContext }}>
       {children}
     </AuthContext.Provider>
   );

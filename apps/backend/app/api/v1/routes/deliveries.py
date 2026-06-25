@@ -20,6 +20,8 @@ from app.models import (
     RoleEnum,
     Transaction,
     User,
+    Vehicle,
+    VehicleTypeEnum,
 )
 
 router = APIRouter(prefix="/deliveries", tags=["Deliveries"])
@@ -27,6 +29,7 @@ router = APIRouter(prefix="/deliveries", tags=["Deliveries"])
 RIDER_STATUS_ORDER = [
     DeliveryStatusEnum.assigned,
     DeliveryStatusEnum.picked_up,
+    DeliveryStatusEnum.in_transit,
     DeliveryStatusEnum.out_for_delivery,
     DeliveryStatusEnum.arrived,
     DeliveryStatusEnum.delivered,
@@ -51,6 +54,7 @@ def _delivery_query(db: Session):
         joinedload(Delivery.order).joinedload(Order.items).joinedload(OrderItem.product),
         joinedload(Delivery.order).joinedload(Order.items).joinedload(OrderItem.arrangement),
         joinedload(Delivery.rider),
+        joinedload(Delivery.vehicle),
     )
 
 
@@ -62,6 +66,25 @@ def _serialize_rider(delivery: Delivery) -> dict | None:
         "id": str(rider.id),
         "name": f"{rider.first_name} {rider.last_name}".strip() or rider.username,
         "phoneNumber": rider.phone_number,
+    }
+
+
+def _vehicle_type_value(vehicle_type) -> str:
+    return vehicle_type.value if hasattr(vehicle_type, "value") else str(vehicle_type)
+
+
+def _serialize_vehicle(delivery: Delivery) -> dict | None:
+    vehicle = delivery.vehicle
+    if not vehicle:
+        return None
+    return {
+        "id": str(vehicle.id),
+        "plateNumber": vehicle.plate_number,
+        "vehicleType": _vehicle_type_value(vehicle.vehicle_type),
+        "brand": vehicle.brand,
+        "model": vehicle.model,
+        "color": vehicle.color,
+        "capacity": vehicle.capacity,
     }
 
 
@@ -118,6 +141,7 @@ def serialize_delivery(delivery: Delivery) -> dict:
         "status": _delivery_status_value(delivery.status),
         "orderStatus": _order_status_value(order.status),
         "assignedRider": _serialize_rider(delivery),
+        "assignedVehicle": _serialize_vehicle(delivery),
         "assignedArea": delivery.assigned_area,
         "scheduledAt": order.scheduled_at.isoformat() if order.scheduled_at else None,
         "estimatedArrival": delivery.estimated_arrival.isoformat() if delivery.estimated_arrival else None,
@@ -154,6 +178,26 @@ def _serialize_assignable_order(order: Order) -> dict:
     }
 
 
+def _serialize_vehicle_item(vehicle: Vehicle) -> dict:
+    rider = vehicle.assigned_rider
+    return {
+        "id": str(vehicle.id),
+        "plateNumber": vehicle.plate_number,
+        "vehicleType": _vehicle_type_value(vehicle.vehicle_type),
+        "brand": vehicle.brand,
+        "model": vehicle.model,
+        "color": vehicle.color,
+        "capacity": vehicle.capacity,
+        "documentUrl": vehicle.document_url,
+        "assignedRiderId": str(rider.id) if rider else None,
+        "assignedRiderName": f"{rider.first_name} {rider.last_name}".strip() if rider else None,
+        "branch": vehicle.branch,
+        "isActive": vehicle.is_active,
+        "createdAt": vehicle.created_at.isoformat() if vehicle.created_at else None,
+        "updatedAt": vehicle.updated_at.isoformat() if vehicle.updated_at else None,
+    }
+
+
 def _serialize_admin_rider(db: Session, rider: User) -> dict:
     active_statuses = [
         DeliveryStatusEnum.assigned,
@@ -169,17 +213,30 @@ def _serialize_admin_rider(db: Session, rider: User) -> dict:
         Delivery.rider_id == rider.id,
     ).order_by(Delivery.updated_at.desc()).first()
 
+    active_deliveries = _delivery_query(db).filter(
+        Delivery.rider_id == rider.id,
+        Delivery.status.in_(active_statuses),
+    ).order_by(Delivery.created_at.asc()).all()
+
+    assigned_vehicle = db.query(Vehicle).filter(
+        Vehicle.assigned_rider_id == rider.id,
+        Vehicle.is_active == True,
+    ).first()
+
     return {
         "id": str(rider.id),
         "name": f"{rider.first_name} {rider.last_name}".strip() or rider.username,
         "email": rider.email,
         "phoneNumber": rider.phone_number,
+        "profilePictureUrl": rider.profile_picture_url,
         "branch": rider.branch.value if hasattr(rider.branch, "value") else rider.branch,
         "isActive": rider.is_active,
         "isVerified": rider.is_verified and rider.is_staff_verified,
         "activeDeliveries": active_count,
         "availability": "available" if active_count == 0 else "assigned",
         "lastAssignedAt": last_delivery.updated_at.isoformat() if last_delivery and last_delivery.updated_at else None,
+        "assignedVehicle": _serialize_vehicle_item(assigned_vehicle) if assigned_vehicle else None,
+        "activeDeliveryDetails": [serialize_delivery(d) for d in active_deliveries],
     }
 
 
@@ -201,6 +258,8 @@ def _get_delivery_for_user(db: Session, delivery_id: str, user: User) -> Deliver
 
     return delivery
 
+
+# ── Rider Endpoints ──────────────────────────────────────────────────────────
 
 @router.get("/rider/me", response_model=list[dict])
 def get_my_deliveries(
@@ -233,6 +292,208 @@ def get_my_delivery_history(
     ).order_by(Delivery.updated_at.desc()).limit(limit).all()
     return [serialize_delivery(delivery) for delivery in deliveries]
 
+
+# ── Vehicle Management (MUST come BEFORE /{delivery_id} to avoid shadowing) ──
+
+@router.get("/vehicles", response_model=list[dict])
+def list_vehicles(
+    branch: Optional[str] = Query(None),
+    is_active: Optional[bool] = Query(None),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    query = db.query(Vehicle)
+    if branch:
+        branch_lower = str(branch).lower()
+        query = query.filter(func.lower(Vehicle.branch) == branch_lower)
+    if is_active is not None:
+        query = query.filter(Vehicle.is_active == is_active)
+    vehicles = query.order_by(Vehicle.plate_number.asc()).all()
+    return [_serialize_vehicle_item(v) for v in vehicles]
+
+
+@router.post("/vehicles", response_model=dict)
+def create_vehicle(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    plate_number = str(payload.get("plate_number") or "").strip().upper()
+    if not plate_number:
+        raise HTTPException(status_code=400, detail="Plate number is required.")
+
+    existing = db.query(Vehicle).filter(Vehicle.plate_number == plate_number).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="A vehicle with this plate number already exists.")
+
+    vehicle_type_raw = str(payload.get("vehicle_type") or "").strip().lower()
+    try:
+        vehicle_type = VehicleTypeEnum(vehicle_type_raw)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid vehicle type.")
+
+        branch_raw = str(payload.get("branch") or "pampanga").strip().lower()
+
+    vehicle = Vehicle(
+        plate_number=plate_number,
+        vehicle_type=vehicle_type,
+        brand=str(payload.get("brand") or "").strip() or None,
+        model=str(payload.get("model") or "").strip() or None,
+        color=str(payload.get("color") or "").strip() or None,
+        capacity=str(payload.get("capacity") or "").strip() or None,
+        document_url=str(payload.get("document_url") or "").strip() or None,
+        branch=branch_raw,
+        is_active=payload.get("is_active", True),
+    )
+
+    assigned_rider_id = payload.get("assigned_rider_id") or payload.get("assignedRiderId")
+    if assigned_rider_id:
+        try:
+            rider_uuid = uuid.UUID(str(assigned_rider_id))
+            rider = db.query(User).filter(User.id == rider_uuid, User.role == RoleEnum.delivery).first()
+            if not rider:
+                raise HTTPException(status_code=400, detail="Invalid rider ID.")
+            vehicle.assigned_rider_id = rider.id
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid rider ID.")
+
+    db.add(vehicle)
+    db.commit()
+    db.refresh(vehicle)
+    return _serialize_vehicle_item(vehicle)
+
+
+@router.put("/vehicles/{vehicle_id}", response_model=dict)
+def update_vehicle(
+    vehicle_id: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    try:
+        vehicle_uuid = uuid.UUID(vehicle_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid vehicle ID.")
+
+    vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_uuid).first()
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found.")
+
+    if "plate_number" in payload:
+        plate_number = str(payload.get("plate_number") or "").strip().upper()
+        if not plate_number:
+            raise HTTPException(status_code=400, detail="Plate number is required.")
+        duplicate = db.query(Vehicle).filter(Vehicle.plate_number == plate_number, Vehicle.id != vehicle.id).first()
+        if duplicate:
+            raise HTTPException(status_code=400, detail="A vehicle with this plate number already exists.")
+        vehicle.plate_number = plate_number
+
+    if "vehicle_type" in payload:
+        vehicle_type_raw = str(payload.get("vehicle_type") or "").strip().lower()
+        try:
+            vehicle.vehicle_type = VehicleTypeEnum(vehicle_type_raw)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid vehicle type.")
+
+    for field in ["brand", "model", "color", "capacity", "document_url"]:
+        if field in payload:
+            setattr(vehicle, field, str(payload.get(field) or "").strip() or None)
+
+    if "branch" in payload:
+        branch_raw = str(payload.get("branch") or "pampanga").strip().lower()
+        vehicle.branch = branch_raw
+
+    if "is_active" in payload:
+        vehicle.is_active = bool(payload.get("is_active"))
+
+    if "assigned_rider_id" in payload or "assignedRiderId" in payload:
+        rider_id = payload.get("assigned_rider_id") or payload.get("assignedRiderId")
+        if rider_id:
+            try:
+                rider_uuid = uuid.UUID(str(rider_id))
+                rider = db.query(User).filter(User.id == rider_uuid, User.role == RoleEnum.delivery).first()
+                if not rider:
+                    raise HTTPException(status_code=400, detail="Invalid rider ID.")
+                vehicle.assigned_rider_id = rider.id
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Invalid rider ID.")
+        else:
+            vehicle.assigned_rider_id = None
+
+    db.commit()
+    db.refresh(vehicle)
+    return _serialize_vehicle_item(vehicle)
+
+
+@router.delete("/vehicles/{vehicle_id}")
+def delete_vehicle(
+    vehicle_id: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    try:
+        vehicle_uuid = uuid.UUID(vehicle_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid vehicle ID.")
+
+    vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_uuid).first()
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found.")
+
+    active_delivery = db.query(Delivery).filter(
+        Delivery.vehicle_id == vehicle.id,
+        Delivery.status.in_([
+            DeliveryStatusEnum.assigned,
+            DeliveryStatusEnum.picked_up,
+            DeliveryStatusEnum.in_transit,
+            DeliveryStatusEnum.out_for_delivery,
+            DeliveryStatusEnum.arrived,
+            DeliveryStatusEnum.issue_reported,
+        ]),
+    ).first()
+    if active_delivery:
+        raise HTTPException(status_code=400, detail="Cannot delete vehicle that is currently assigned to an active delivery.")
+
+    db.delete(vehicle)
+    db.commit()
+    return {"message": "Vehicle deleted successfully."}
+
+
+@router.patch("/vehicles/{vehicle_id}/assign-rider", response_model=dict)
+def assign_vehicle_rider(
+    vehicle_id: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    try:
+        vehicle_uuid = uuid.UUID(vehicle_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid vehicle ID.")
+
+    vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_uuid).first()
+    if not vehicle:
+        raise HTTPException(status_code=404, detail="Vehicle not found.")
+
+    rider_id = payload.get("rider_id") or payload.get("riderId")
+    if rider_id:
+        try:
+            rider_uuid = uuid.UUID(str(rider_id))
+            rider = db.query(User).filter(User.id == rider_uuid, User.role == RoleEnum.delivery).first()
+            if not rider:
+                raise HTTPException(status_code=400, detail="Invalid rider ID.")
+            vehicle.assigned_rider_id = rider.id
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid rider ID.")
+    else:
+        vehicle.assigned_rider_id = None
+
+    db.commit()
+    db.refresh(vehicle)
+    return _serialize_vehicle_item(vehicle)
+
+
+# ── Delivery Detail & Status (catch-all must come AFTER /vehicles) ────────────
 
 @router.get("/{delivery_id}", response_model=dict)
 def get_delivery(
@@ -389,6 +650,17 @@ def assign_delivery(
     delivery.assigned_area = str(payload.get("assigned_area") or payload.get("assignedArea") or "").strip() or None
     delivery.status = DeliveryStatusEnum.assigned
     order.status = OrderStatusEnum.ready_for_pickup
+
+    vehicle_id = payload.get("vehicle_id") or payload.get("vehicleId")
+    if vehicle_id:
+        try:
+            vehicle_uuid = uuid.UUID(str(vehicle_id))
+            vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_uuid, Vehicle.is_active == True).first()
+            if not vehicle:
+                raise HTTPException(status_code=400, detail="Selected vehicle not found or inactive.")
+            delivery.vehicle_id = vehicle.id
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid vehicle ID.")
 
     db.commit()
     db.refresh(delivery)

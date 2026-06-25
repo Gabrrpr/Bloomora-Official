@@ -219,6 +219,27 @@ export default function Checkout({ onNavigate }) {
     : (customer?.address || user?.address || "")
   const pickupBranchName = provinceToBranch(selectedAddress?.province || pickupAddressSource) || selectedStoreBranch
   const pickupBranch = PICKUP_BRANCHES[pickupBranchName] || PICKUP_BRANCHES.Manila;
+  const selectedAddressText = selectedAddress
+    ? [selectedAddress.street, selectedAddress.barangay, selectedAddress.city, selectedAddress.province, selectedAddress.zip_code].filter(Boolean).join(", ")
+    : (customer?.address || user?.address || "")
+  const manualAddressText = [manualForm.street, manualForm.barangay, manualForm.city, manualForm.province, manualForm.zip].filter(Boolean).join(", ")
+  const deliveryAddressText = recipientType === "myself" ? selectedAddressText : manualAddressText
+  const deliveryAddressBranch = provinceToBranch(
+    recipientType === "myself"
+      ? (selectedAddress ? selectedAddress.province || selectedAddressText : selectedAddressText)
+      : manualForm.province || manualAddressText
+  )
+  const isManilaAddress = deliveryAddressBranch === "Manila"
+  const isLalamoveAvailable = lalamoveEnabled && isManilaAddress
+  const showStandardDelivery = !isLalamoveAvailable
+
+  useEffect(() => {
+    if (fulfillmentMethod === "lalamove" && !isLalamoveAvailable) {
+      setFulfillmentMethod("pickup")
+    } else if (fulfillmentMethod === "delivery" && isLalamoveAvailable) {
+      setFulfillmentMethod("lalamove")
+    }
+  }, [fulfillmentMethod, isLalamoveAvailable])
 
   const getDeliveryDetails = () => {
     if (fulfillmentMethod === "pickup") {
@@ -232,7 +253,7 @@ export default function Checkout({ onNavigate }) {
       return {
         name: fullName,
         phone: customer?.phone_number || user?.phoneNumber || "",
-        address: customer?.address || user?.address || "",
+        address: deliveryAddressText,
       }
     }
     if (recipientType === "myself") {
@@ -252,7 +273,7 @@ export default function Checkout({ onNavigate }) {
       return {
         name: manualForm.recipient_name,
         phone: manualForm.phone,
-        address: [manualForm.street, manualForm.barangay, manualForm.city, manualForm.province, manualForm.zip].filter(Boolean).join(", "),
+        address: manualAddressText,
       }
     }
   }
@@ -262,14 +283,14 @@ export default function Checkout({ onNavigate }) {
   const addressBranch = (fulfillmentMethod === "pickup")
     ? pickupBranchName
     : (fulfillmentMethod === "lalamove")
-      ? selectedStoreBranch
+      ? deliveryAddressBranch
       : provinceToBranch(
         recipientType === "myself" 
           ? (selectedAddress ? selectedAddress.province : (customer?.address || user?.address)) 
           : manualForm.province
       )
   
-  const needsBranchConfirm = (fulfillmentMethod === "delivery" || fulfillmentMethod === "lalamove") && selectedStoreBranch && addressBranch && (selectedStoreBranch.toLowerCase() !== addressBranch.toLowerCase())
+  const needsBranchConfirm = fulfillmentMethod === "delivery" && selectedStoreBranch && addressBranch && (selectedStoreBranch.toLowerCase() !== addressBranch.toLowerCase())
   const [branchConfirmOpen, setBranchConfirmOpen] = useState(false)
 
   const buildDeliveryNotes = () =>
@@ -416,7 +437,7 @@ export default function Checkout({ onNavigate }) {
         setError("Please provide a complete delivery address and phone number for Lalamove delivery.");
         return;
       }
-      if (!addressBranch) {
+      if (!isLalamoveAvailable) {
         setError("Lalamove is only available within Metro Manila. Please provide a valid Manila address.");
         return;
       }
@@ -459,7 +480,7 @@ export default function Checkout({ onNavigate }) {
         setError("Please provide a complete delivery address and phone number for Lalamove delivery.");
         return;
       }
-      if (!addressBranch) {
+      if (!isLalamoveAvailable) {
         setError("Lalamove is only available within Metro Manila. Please provide a valid Manila address.");
         return;
       }
@@ -672,24 +693,26 @@ export default function Checkout({ onNavigate }) {
 
               {/* Delivery option */}
               <p className="text-xs font-medium text-gray-500 mb-3">Fulfillment method</p>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
-                <div
-                  onClick={() => { setFulfillmentMethod("delivery") }}
-                  className={`border-2 rounded-lg p-3.5 cursor-pointer transition ${fulfillmentMethod === "delivery" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200 hover:border-gray-300"}`}
-                >
-                  <div className="flex items-center gap-2 mb-1">
-                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${fulfillmentMethod === "delivery" ? "border-[#2E8B34]" : "border-gray-300"}`}>
-                      {fulfillmentMethod === "delivery" && <div className="w-2.5 h-2.5 rounded-full bg-[#2E8B34]" />}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+                {showStandardDelivery && (
+                  <div
+                    onClick={() => { setFulfillmentMethod("delivery") }}
+                    className={`border-2 rounded-lg p-3.5 cursor-pointer transition ${fulfillmentMethod === "delivery" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200 hover:border-gray-300"}`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${fulfillmentMethod === "delivery" ? "border-[#2E8B34]" : "border-gray-300"}`}>
+                        {fulfillmentMethod === "delivery" && <div className="w-2.5 h-2.5 rounded-full bg-[#2E8B34]" />}
+                      </div>
+                      <span className={`text-sm font-semibold ${fulfillmentMethod === "delivery" ? "text-[#2E8B34]" : "text-gray-700"}`}>Standard</span>
                     </div>
-                    <span className={`text-sm font-semibold ${fulfillmentMethod === "delivery" ? "text-[#2E8B34]" : "text-gray-700"}`}>Standard</span>
+                    <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">Metro Manila or Pampanga coverage<br />Scheduled by branch team</p>
                   </div>
-                  <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">Guaranteed by {fmt(deliveryDate)}<br />{fmtDay(deliveryDate).toUpperCase()} (Anytime)</p>
-                </div>
+                )}
 
                 {lalamoveEnabled && (
                   <div
-                    onClick={() => setFulfillmentMethod("lalamove")}
-                    className={`border-2 rounded-lg p-3.5 cursor-pointer transition ${fulfillmentMethod === "lalamove" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200 hover:border-gray-300"}`}
+                    onClick={() => { if (isLalamoveAvailable) setFulfillmentMethod("lalamove") }}
+                    className={`border-2 rounded-lg p-3.5 transition ${isLalamoveAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-60"} ${fulfillmentMethod === "lalamove" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200 hover:border-gray-300"}`}
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${fulfillmentMethod === "lalamove" ? "border-[#2E8B34]" : "border-gray-300"}`}>
@@ -697,7 +720,9 @@ export default function Checkout({ onNavigate }) {
                       </div>
                       <span className={`text-sm font-semibold ${fulfillmentMethod === "lalamove" ? "text-[#2E8B34]" : "text-gray-700"}`}>Lalamove</span>
                     </div>
-                    <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">Within Metro Manila only<br />Fast same-day delivery</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">
+                      {isLalamoveAvailable ? "Manila eligible address" : "Available only for Manila addresses"}<br />Fast same-day delivery
+                    </p>
                   </div>
                 )}
 

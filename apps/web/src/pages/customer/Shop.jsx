@@ -583,6 +583,8 @@ export default function Shop({ onNavigate, initialCategory }) {
   });
   const [selectedOccasions, setSelectedOccasions] = useState([])
   const [searchQuery, setSearchQuery] = useState("");
+  const [activeCampaignKey, setActiveCampaignKey] = useState(() => localStorage.getItem("bloomora_active_campaign") || "")
+  const [activeCampaign, setActiveCampaign] = useState(null)
 
   const [priceRange, setPriceRange]           = useState([0, 999999])
   const [wishlist, setWishlist]               = useState([])
@@ -602,6 +604,11 @@ export default function Shop({ onNavigate, initialCategory }) {
   }, []);
 
   useEffect(() => {
+    if (activeCampaignKey) {
+      setActiveCategory("All")
+      setSelectedOccasions([])
+      return
+    }
     if (initialCategory && initialCategory !== "All") {
       setActiveCategory(initialCategory);
     } 
@@ -621,7 +628,18 @@ export default function Shop({ onNavigate, initialCategory }) {
       setSelectedOccasions([redirectedOccasion]);
       localStorage.removeItem("bloomora_active_occasion");
     }
-  }, [initialCategory]);
+  }, [initialCategory, activeCampaignKey]);
+
+  useEffect(() => {
+    const handleCampaignUpdate = (event) => {
+      const nextKey = event.detail?.campaignKey || localStorage.getItem("bloomora_active_campaign") || ""
+      setActiveCampaignKey(nextKey)
+      setSearchQuery("")
+      setPriceRange([0, 999999])
+    }
+    window.addEventListener("bloomora:campaign-updated", handleCampaignUpdate)
+    return () => window.removeEventListener("bloomora:campaign-updated", handleCampaignUpdate)
+  }, [])
 
   useEffect(() => {
     const handleUrlChange = () => {
@@ -636,11 +654,27 @@ export default function Shop({ onNavigate, initialCategory }) {
   }, []);
 
   useEffect(() => {
+    setProductsLoading(true)
     api.get("/products/categories/hierarchy") 
       .then(data => { if (data) setCategoryHierarchy(data); })
       .catch(err => console.error("Failed to load hierarchy", err));
 
-    api.get("/products/")
+    const productEndpoint = activeCampaignKey
+      ? `/products/?campaign_key=${encodeURIComponent(activeCampaignKey)}`
+      : "/products/"
+
+    if (activeCampaignKey) {
+      api.getActiveCampaigns()
+        .then(data => {
+          const list = data?.campaigns ? data.campaigns : data || []
+          setActiveCampaign(Array.isArray(list) ? list.find(c => c.campaign_key === activeCampaignKey) || null : null)
+        })
+        .catch(() => setActiveCampaign(null))
+    } else {
+      setActiveCampaign(null)
+    }
+
+    api.get(productEndpoint)
       .then(data => {
         if (data && data.length > 0) {
           const mapped = data.map(p => ({
@@ -660,7 +694,7 @@ export default function Shop({ onNavigate, initialCategory }) {
         setProducts([]);
       })
       .finally(() => setProductsLoading(false));
-  }, []);
+  }, [activeCampaignKey]);
   
 
   useEffect(() => {
@@ -751,7 +785,7 @@ export default function Shop({ onNavigate, initialCategory }) {
     let alive = true
     const q = (searchQuery || "").trim()
 
-    if (!q) {
+    if (!q || activeCampaignKey) {
       setSearchResults(null)
       setSearchLoading(false)
       return
@@ -787,7 +821,7 @@ export default function Shop({ onNavigate, initialCategory }) {
     return () => {
       alive = false
     }
-  }, [searchQuery])
+  }, [searchQuery, activeCampaignKey])
 
   const baseList = (searchResults !== null ? searchResults : products)
 
@@ -915,6 +949,27 @@ export default function Shop({ onNavigate, initialCategory }) {
           </aside>
 
           <div className="flex-1 min-w-0">
+            {activeCampaignKey && (
+              <div className="mb-4 rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
+                style={{ backgroundColor:"#f0fdf4", border:`1px solid ${G}33`, animation:"shopRise 0.5s ease 0.08s both" }}>
+                <div>
+                  <p className="text-sm font-bold" style={{ color:DG }}>{activeCampaign?.name || "Campaign Products"}</p>
+                  <p className="text-xs mt-0.5" style={{ color:"#4b5563" }}>
+                    Showing products assigned to this campaign{activeCampaign?.discount_value ? ` with ${activeCampaign.discount_type === "percent" ? `${Number(activeCampaign.discount_value)}%` : `PHP ${Number(activeCampaign.discount_value).toLocaleString()}`} off` : ""}.
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    localStorage.removeItem("bloomora_active_campaign")
+                    setActiveCampaignKey("")
+                    setActiveCampaign(null)
+                  }}
+                  className="px-3 py-1.5 text-xs font-bold rounded-md border transition-all"
+                  style={{ color:DG, borderColor:`${G}55`, backgroundColor:"white" }}>
+                  View All Products
+                </button>
+              </div>
+            )}
             <div className="relative mb-4" style={{ animation:"shopRise 0.5s ease 0.1s both" }}>
               <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color:"#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/></svg>
               <input

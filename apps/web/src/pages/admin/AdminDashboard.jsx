@@ -1324,7 +1324,7 @@ function FRow({ label, value, onChange, type = "text", editable, readOnlyNote, t
 // ─── My Profile Panel ─────────────────────────────────────────────────────────
 function MyProfilePanel({ user, onBack }) {
   const { isDark } = useTheme()
-  const { setUserFromToken } = useAuth()
+  const { setUserFromToken, updateUserContext } = useAuth()
   const t = useTokens(isDark)
   const [editMode, setEditMode] = useState(false)
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "" })
@@ -1336,6 +1336,7 @@ function MyProfilePanel({ user, onBack }) {
   const s = k => v => setForm(p => ({ ...p, [k]: v }))
 
   useEffect(() => {
+    if (editMode) return
     setForm({
       firstName: user?.firstName || "",
       lastName: user?.lastName || "",
@@ -1345,7 +1346,7 @@ function MyProfilePanel({ user, onBack }) {
     setAvatarUrl(user?.profilePictureUrl || "")
     setNotice("")
     setError("")
-  }, [user])
+  }, [user, editMode])
 
   const refreshCurrentUser = async () => {
     const token = localStorage.getItem("access_token")
@@ -1361,6 +1362,11 @@ function MyProfilePanel({ user, onBack }) {
         first_name: form.firstName.trim(),
         last_name: form.lastName.trim(),
         phone_number: form.phone.trim() || null
+      })
+      updateUserContext?.({
+        firstName: form.firstName.trim(),
+        lastName: form.lastName.trim(),
+        phoneNumber: form.phone.trim() || null,
       })
       await refreshCurrentUser()
       setNotice("Profile updated.")
@@ -1383,7 +1389,9 @@ function MyProfilePanel({ user, onBack }) {
       const fd = new FormData()
       fd.append("file", file)
       const result = await api.uploadProfilePicture(fd)
-      setAvatarUrl(result.url || "")
+      const nextAvatarUrl = result.url || ""
+      setAvatarUrl(nextAvatarUrl)
+      updateUserContext?.({ profilePictureUrl: nextAvatarUrl })
       await refreshCurrentUser()
       setNotice("Profile picture updated.")
     } catch (err) {
@@ -1400,6 +1408,7 @@ function MyProfilePanel({ user, onBack }) {
     try {
       await api.removeProfilePicture()
       setAvatarUrl("")
+      updateUserContext?.({ profilePictureUrl: "" })
       await refreshCurrentUser()
       setNotice("Profile picture removed.")
     } catch (err) {

@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
@@ -30,6 +30,30 @@ def require_admin_or_staff(current_user):
         raise HTTPException(status_code=403, detail="Admin or staff access required.")
 
 
+def _validate_discount(discount_type: Optional[str], discount_value: Optional[float]) -> tuple[Optional[str], Optional[float]]:
+    if not discount_type or not discount_value:
+        return None, None
+    if discount_type not in {"percent", "fixed"}:
+        raise HTTPException(status_code=400, detail="Campaign discount type must be percent or fixed.")
+    if discount_type == "percent" and discount_value > 100:
+        raise HTTPException(status_code=400, detail="Campaign percent discount cannot exceed 100.")
+    return discount_type, discount_value
+
+
+def serialize_campaign(campaign: Campaign) -> dict:
+    return {
+        "id": campaign.id,
+        "name": campaign.name,
+        "campaign_key": campaign.campaign_key,
+        "start_at": campaign.start_at,
+        "end_at": campaign.end_at,
+        "is_active": campaign.is_active,
+        "discount_type": campaign.discount_type,
+        "discount_value": float(campaign.discount_value) if campaign.discount_value is not None else None,
+        "product_ids": [p.id for p in campaign.products or []],
+    }
+
+
 @router.get("/", response_model=List[CampaignOut])
 def list_campaigns(
     db: Session = Depends(get_db),
@@ -38,7 +62,7 @@ def list_campaigns(
     q = db.query(Campaign)
     if only_active:
         q = q.filter(Campaign.is_active == True)
-    return q.order_by(Campaign.start_at.desc()).all()
+    return [serialize_campaign(campaign) for campaign in q.order_by(Campaign.start_at.desc()).all()]
 
 
 @router.post("/", response_model=CampaignOut, status_code=201)
@@ -53,17 +77,21 @@ def create_campaign(
     if exists:
         raise HTTPException(status_code=409, detail="campaign_key already exists")
 
+    discount_type, discount_value = _validate_discount(payload.discount_type, payload.discount_value)
+
     campaign = Campaign(
         name=payload.name,
         campaign_key=payload.campaign_key,
         start_at=payload.start_at,
         end_at=payload.end_at,
         is_active=payload.is_active,
+        discount_type=discount_type,
+        discount_value=discount_value,
     )
     db.add(campaign)
     db.commit()
     db.refresh(campaign)
-    return campaign
+    return serialize_campaign(campaign)
 
 
 @router.put("/{campaign_id}", response_model=CampaignOut)
@@ -89,10 +117,13 @@ def update_campaign(
         val = getattr(payload, field)
         if val is not None:
             setattr(campaign, field, val)
+    fields_set = getattr(payload, "model_fields_set", getattr(payload, "__fields_set__", set()))
+    if "discount_type" in fields_set or "discount_value" in fields_set:
+        campaign.discount_type, campaign.discount_value = _validate_discount(payload.discount_type, payload.discount_value)
 
     db.commit()
     db.refresh(campaign)
-    return campaign
+    return serialize_campaign(campaign)
 
 
 @router.delete("/{campaign_id}", status_code=204)
@@ -126,20 +157,16 @@ def set_campaign_products(
         raise HTTPException(status_code=404, detail="Campaign not found")
 
     # 👈 Access product_ids through payload
-    products = db.query(Product).filter(Product.id.in_(payload.product_ids)).all()
+    products = db.query(Product).filter(Product.id.in_(payload.product_ids)).all() if payload.product_ids else []
     campaign.products = products
+    fields_set = getattr(payload, "model_fields_set", getattr(payload, "__fields_set__", set()))
+    if "discount_type" in fields_set or "discount_value" in fields_set:
+        campaign.discount_type, campaign.discount_value = _validate_discount(payload.discount_type, payload.discount_value)
     db.commit()
     db.refresh(campaign)
 
     return {
-        "campaign": {
-            "id": campaign.id,
-            "name": campaign.name,
-            "campaign_key": campaign.campaign_key,
-            "start_at": campaign.start_at,
-            "end_at": campaign.end_at,
-            "is_active": campaign.is_active
-        },
+        "campaign": serialize_campaign(campaign),
         "product_ids": [p.id for p in campaign.products]
     }
 
@@ -153,5 +180,5 @@ def get_active_campaigns(db: Session = Depends(get_db)):
         .filter(Campaign.start_at <= now)
         .filter(or_(Campaign.end_at.is_(None), Campaign.end_at >= now))
     )
-    return q.order_by(Campaign.start_at.desc()).all()
+    return [serialize_campaign(campaign) for campaign in q.order_by(Campaign.start_at.desc()).all()]
 

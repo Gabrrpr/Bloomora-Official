@@ -20,7 +20,62 @@ const OCCASIONS_LIST = [
   "New Baby", "Sympathy", "Thank You", "Valentine's Day", "Wedding"
 ]
 
+const recipeStockStatus = (item, products = []) => {
+  const material = products.find(p => p.id === item.product_id)
+  const stock = Number(material?.stock ?? 0)
+  const reorderPoint = Number(material?.reorder_point ?? 10)
+  const required = Number(item.quantity || 0)
+  const remainingAfterUse = stock - required
+
+  if (!material) {
+    return { level: "missing", label: "Material not found", detail: "This recipe item is no longer in inventory." }
+  }
+  if (stock <= 0) {
+    return { level: "out", label: "Out of stock - restock now", detail: "This arrangement will be out of stock until this item is restocked." }
+  }
+  if (stock < required) {
+    return { level: "short", label: `Short by ${required - stock} - restock`, detail: "Not enough stock to build one arrangement with this recipe quantity." }
+  }
+  if (stock <= reorderPoint || remainingAfterUse <= reorderPoint) {
+    return { level: "low", label: "Running low - restock soon", detail: `Only ${stock} available; recipe needs ${required}.` }
+  }
+  return { level: "ok", label: `${stock} available`, detail: "" }
+}
+
+const recipeStockBadgeStyle = (level, isDark = false) => {
+  if (level === "ok") {
+    return {
+      color: isDark ? "#86efac" : "#15803d",
+      backgroundColor: isDark ? "rgba(34,197,94,0.12)" : "#f0fdf4",
+      borderColor: isDark ? "rgba(134,239,172,0.25)" : "#bbf7d0",
+    }
+  }
+  if (level === "low") {
+    return {
+      color: isDark ? "#fde68a" : "#92400e",
+      backgroundColor: isDark ? "rgba(245,158,11,0.12)" : "#fffbeb",
+      borderColor: isDark ? "rgba(253,230,138,0.25)" : "#fde68a",
+    }
+  }
+  return {
+    color: isDark ? "#fca5a5" : "#b91c1c",
+    backgroundColor: isDark ? "rgba(248,113,113,0.12)" : "#fff1f2",
+    borderColor: isDark ? "rgba(252,165,165,0.25)" : "#fecaca",
+  }
+}
+
 // ── Flower petal loader ──
+const productStockInfo = (product) => {
+  const stock = Number(product?.stock ?? 0)
+  const reorderPoint = Number(product?.reorder_point ?? 10)
+  const status = String(product?.status || "").toLowerCase()
+
+  if (status === "inactive") return { label: "Out of stock", level: "out" }
+  if (stock <= 0) return { label: "Out of stock", level: "out" }
+  if (stock <= reorderPoint) return { label: "Low stock", level: "low" }
+  return { label: "In stock", level: "ok" }
+}
+
 function FlowerLoader({ message = "Loading products...", isDark = false }) {
   const petals = [
     { angle: 0,   color: "#f48fb1" },
@@ -206,7 +261,7 @@ function ExportProductsBtn({ data=[], d }) {
     const headers = ["id","name","category","status","availability","price","original_price","stock","reorder_point"]
     const rows = data.length ? data.map(p => {  
       const displayOriginal = (Number(p.original_price) > Number(p.price)) ? p.original_price : "";
-      const avail = !p.is_available?"Out of stock":(p.stock??0)<=(p.reorder_point??10)?"Low stock":"In stock"
+      const avail = productStockInfo(p).label
       return [p.id??"",p.name??"",p.category??"",p.status??"",avail,p.price??0,p.original_price??"",p.stock??0,p.reorder_point??10]
         .map(v => { const s=String(v??""); return (s.includes(",")||s.includes("\n")||s.includes('"'))?`"${s.replace(/"/g,'""')}"`:s }).join(",")
     }) : [headers.map(()=>"N/A").join(",")]
@@ -402,10 +457,6 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     if (!compSelection || compQty <= 0) return;
     const material = products.find(p => p.id === compSelection);
     if (!material) return;
-    if (compQty > material.stock) {
-      alert(`Inventory limit reached! You only have ${material.stock} pieces of "${material.name}" in the warehouse.`);
-      return;
-    }
     if (form.composition.some(item => item.product_id === material.id)) {
       alert("This material is already in the recipe!");
       return;
@@ -923,7 +974,6 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
                 <input 
                   type="number" 
                   min="1" 
-                  max={selectedMaterial ? selectedMaterial.stock : undefined} 
                   value={compQty} 
                   onChange={e => {
                     if (e.target.value === "") {
@@ -931,8 +981,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
                       return;
                     }
                     const val = parseInt(e.target.value, 10);
-                    const maxAvailable = selectedMaterial ? selectedMaterial.stock : 9999;
-                    setCompQty(val > maxAvailable ? maxAvailable : val);
+                    setCompQty(val);
                   }}
                   onBlur={e => {
                     if (e.target.value === "" || Number(e.target.value) < 1) {
@@ -945,7 +994,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
               </div>
               
               <button type="button" onClick={handleAddCompositionItem}
-                disabled={!compSelection || selectedMaterial?.stock === 0}
+                disabled={!compSelection}
                 className="px-4 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed mt-[18px]"
                 style={{ background:`linear-gradient(135deg,${DG},${G})`, height: "42px" }}>
                 Add
@@ -954,8 +1003,11 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
 
             {form.composition.length > 0 && (
               <div className="space-y-2 mt-4 pt-4" style={{ borderTop: `1px solid ${d.divider}` }}>
-                {form.composition.map((item) => (
-                  <div key={item.product_id} className="flex items-center justify-between p-2 rounded-lg border" style={{ backgroundColor: d.cardBg, borderColor: d.cardBdr }}>
+                {form.composition.map((item) => {
+                  const stockState = recipeStockStatus(item, products)
+                  const badgeStyle = recipeStockBadgeStyle(stockState.level, d.isDark)
+                  return (
+                  <div key={item.product_id} className="flex items-center justify-between p-2 rounded-lg border" style={{ backgroundColor: d.cardBg, borderColor: stockState.level === "ok" ? d.cardBdr : badgeStyle.borderColor }}>
                     <div className="flex items-center gap-3">
                       <input 
                         type="number" 
@@ -970,14 +1022,24 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
                         className="w-12 h-8 rounded-md text-center text-xs font-bold border"
                         style={{ backgroundColor: `${G}15`, color: G, borderColor: G }}
                       />
-                      <span className="text-sm font-semibold" style={{ color: d.cellC }}>{item.name}</span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold" style={{ color: d.cellC }}>{item.name}</span>
+                          <span className="px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide" style={badgeStyle}>
+                            {stockState.label}
+                          </span>
+                        </div>
+                        {stockState.detail && (
+                          <p className="text-[11px] mt-1" style={{ color: badgeStyle.color }}>{stockState.detail}</p>
+                        )}
+                      </div>
                     </div>
 
                     <button type="button" onClick={() => handleRemoveCompositionItem(item.product_id)} className="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                     </button>
                   </div>
-                ))}
+                )})}
               </div>
             )}
           </div>
@@ -1200,10 +1262,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     if (!compSelection || compQty <= 0) return;
     const material = products.find(p => p.id === compSelection);
     if (!material) return;
-    if (compQty > material.stock) {
-      alert(`Inventory limit reached! You only have ${material.stock} pieces of "${material.name}" in the warehouse.`);
-      return;
-    }
     if (form.composition.some(item => item.product_id === material.id)) {
       alert("This material is already in the recipe!");
       return;
@@ -1732,7 +1790,6 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
                 <input 
                   type="number" 
                   min="1" 
-                  max={selectedMaterial ? selectedMaterial.stock : undefined} 
                   value={compQty} 
                   onChange={e => {
                     if (e.target.value === "") {
@@ -1740,8 +1797,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
                       return;
                     }
                     const val = parseInt(e.target.value, 10);
-                    const maxAvailable = selectedMaterial ? selectedMaterial.stock : 9999;
-                    setCompQty(val > maxAvailable ? maxAvailable : val);
+                    setCompQty(val);
                   }}
                   onBlur={e => {
                     if (e.target.value === "" || Number(e.target.value) < 1) {
@@ -1754,7 +1810,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
               </div>
               
               <button type="button" onClick={handleAddCompositionItem}
-                disabled={!compSelection || selectedMaterial?.stock === 0}
+                disabled={!compSelection}
                 className="px-4 py-2 text-sm font-bold text-white rounded-md transition-all hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed mt-[18px]"
                 style={{ background:`linear-gradient(135deg,${DG},${G})`, height: "42px" }}>
                 Add
@@ -1763,8 +1819,11 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
 
             {form.composition.length > 0 && (
               <div className="space-y-2 mt-4 pt-4" style={{ borderTop: `1px solid ${d.divider}` }}>
-                {form.composition.map((item) => (
-                  <div key={item.product_id} className="flex items-center justify-between p-2 rounded-lg border" style={{ backgroundColor: d.cardBg, borderColor: d.cardBdr }}>
+                {form.composition.map((item) => {
+                  const stockState = recipeStockStatus(item, products)
+                  const badgeStyle = recipeStockBadgeStyle(stockState.level, d.isDark)
+                  return (
+                  <div key={item.product_id} className="flex items-center justify-between p-2 rounded-lg border" style={{ backgroundColor: d.cardBg, borderColor: stockState.level === "ok" ? d.cardBdr : badgeStyle.borderColor }}>
                     <div className="flex items-center gap-3">
                       <input 
                         type="number" 
@@ -1779,14 +1838,24 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
                         className="w-12 h-8 rounded-md text-center text-xs font-bold border"
                         style={{ backgroundColor: `${G}15`, color: G, borderColor: G }}
                       />
-                      <span className="text-sm font-semibold" style={{ color: d.cellC }}>{item.name}</span>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-semibold" style={{ color: d.cellC }}>{item.name}</span>
+                          <span className="px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wide" style={badgeStyle}>
+                            {stockState.label}
+                          </span>
+                        </div>
+                        {stockState.detail && (
+                          <p className="text-[11px] mt-1" style={{ color: badgeStyle.color }}>{stockState.detail}</p>
+                        )}
+                      </div>
                     </div>
 
                     <button type="button" onClick={() => handleRemoveCompositionItem(item.product_id)} className="p-2 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors">
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
                     </button>
                   </div>
-                ))}
+                )})}
               </div>
             )}
           </div>
@@ -2115,7 +2184,7 @@ export default function AdminProducts({ onNavigate }) {
       const productsRes = await api.getAdminProducts();
       const prods = productsRes.data || productsRes
       setProducts(prods);
-      setLowCount(prods.filter(p => p.stock<=(p.reorder_point||10)).length);
+      setLowCount(prods.filter(p => productStockInfo(p).level === "low").length);
       setTotalCount(prods.length);
     } catch (e) { 
       console.error("Failed to fetch products",e);
@@ -2337,7 +2406,7 @@ export default function AdminProducts({ onNavigate }) {
               {loading ? (
                 <tr><td colSpan={7} className="px-5 py-12 text-center text-sm" style={{ color:d.subC }}>Loading products...</td></tr>
               ) : paginated.length > 0 ? paginated.map((p, idx) => {
-                const avail = !p.is_available?"Out of stock":p.stock<=(p.reorder_point||10)?"Low stock":"In stock"
+                const avail = productStockInfo(p).label
                 return (
                   <tr key={p.id}
                     style={{ borderBottom:`1px solid ${d.divider}`, backgroundColor:idx%2===0?d.rowEven:d.rowOdd }}

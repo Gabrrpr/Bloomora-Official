@@ -949,12 +949,12 @@ export default function AdminOrders() {
                           borderColor: posPayMethod === "gcash" ? "#3b82f6" : (isDark ? "#334155" : "#e2e8f0"),
                           color: posPayMethod === "gcash" ? (isDark ? "#93c5fd" : "#1d4ed8") : (isDark ? "#94a3b8" : "#64748b"),
                         }}>
-                        GCash / Bank
+                        GCash via PayMongo
                       </button>
                     </div>
                     {posPayMethod === "gcash" && (
                       <p className="text-[11px] leading-relaxed mt-2" style={{ color: subTxt }}>
-                        Checkout will open PayMongo so the customer can pay with GCash, Maya, card, or QRPh.
+                        Checkout opens a PayMongo payment page. Use this when the walk-in customer wants to pay with GCash.
                       </p>
                     )}
                   </div>
@@ -962,7 +962,7 @@ export default function AdminOrders() {
                   <button onClick={handlePOSCheckout} disabled={posLoading || posCart.length === 0}
                     className="w-full py-3.5 rounded-lg text-white font-bold tracking-wide transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 active:scale-[0.98]"
                     style={{ background: `linear-gradient(135deg, ${DG}, ${G})`, boxShadow: posCart.length > 0 ? "0 4px 14px rgba(46,139,52,0.3)" : "none" }}>
-                    {posLoading ? "Processing..." : "Complete Checkout"}
+                    {posLoading ? "Processing..." : posPayMethod === "gcash" ? "Create PayMongo Checkout" : "Complete Cash Checkout"}
                   </button>
                 </div>
               </div>

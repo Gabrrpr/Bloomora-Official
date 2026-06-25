@@ -13,6 +13,7 @@ from supabase import create_client, Client
 from app.core.config import settings
 from app.core.dependencies import get_db, get_current_user, require_staff
 from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum, Review, Order, OrderItem, ProductRecipe
+from app.models.campaigns import Campaign
 from app.utils.logger import log_activity
 
 class StockLogCreate(BaseModel):
@@ -31,6 +32,34 @@ router = APIRouter()
 
 MAX_FILE_SIZE = 5 * 1024 * 1024
 ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp", "gif"}
+
+def product_status_value(product: Product) -> str:
+    return product.status.value if hasattr(product.status, "value") else str(product.status)
+
+def stock_from_inventory(inv) -> int:
+    if not inv:
+        return 0
+    if isinstance(inv, dict):
+        return int(inv.get("current_stock") or 0)
+    return int(getattr(inv, "current_stock", 0) or 0)
+
+def effective_is_available(product: Product, inv=None) -> bool:
+    status = product_status_value(product)
+    if status == ProductStatusEnum.inactive.value:
+        return False
+    return stock_from_inventory(inv or product.inventory) > 0
+
+def sync_product_availability(product: Product, inv=None) -> None:
+    if product_status_value(product) == ProductStatusEnum.inactive.value:
+        product.is_available = False
+        return
+
+    has_stock = stock_from_inventory(inv or product.inventory) > 0
+    product.is_available = has_stock
+    if has_stock and product_status_value(product) == ProductStatusEnum.out_of_stock.value:
+        product.status = ProductStatusEnum.active
+    elif not has_stock and product_status_value(product) == ProductStatusEnum.active.value:
+        product.status = ProductStatusEnum.out_of_stock
 
 def serialize_product(p: Product) -> dict:
     inv = p.inventory
@@ -52,8 +81,8 @@ def serialize_product(p: Product) -> dict:
         "product_type": p.product_type,
         "category": p.category,
         "image_url": p.image_url,
-        "is_available": p.is_available,
-        "status": p.status.value if hasattr(p.status, "value") else p.status,
+        "is_available": effective_is_available(p, inv),
+        "status": product_status_value(p),
         
         "stock": inv.current_stock if inv else 0,
         "stock_manila": getattr(inv, "stock_manila", 0) if inv else 0,
@@ -75,6 +104,34 @@ def serialize_product(p: Product) -> dict:
         "limited_start_at": getattr(p, "limited_start_at", None),
         "limited_end_at": getattr(p, "limited_end_at", None),
     }
+
+
+def apply_campaign_discount(product_data: dict, campaign: Optional[Campaign]) -> dict:
+    if not campaign or not campaign.discount_type or not campaign.discount_value:
+        return product_data
+
+    base_price = float(product_data.get("price") or 0)
+    if base_price <= 0:
+        return product_data
+
+    discount_value = float(campaign.discount_value or 0)
+    if campaign.discount_type == "percent":
+        campaign_price = base_price * max(0, 100 - discount_value) / 100
+    elif campaign.discount_type == "fixed":
+        campaign_price = max(0, base_price - discount_value)
+    else:
+        return product_data
+
+    product_data["original_price"] = product_data.get("original_price") or base_price
+    product_data["price"] = round(campaign_price, 2)
+    product_data["campaign"] = {
+        "id": str(campaign.id),
+        "name": campaign.name,
+        "campaign_key": campaign.campaign_key,
+        "discount_type": campaign.discount_type,
+        "discount_value": discount_value,
+    }
+    return product_data
 
 
 def get_review_summaries(db: Session, product_ids: list[uuid.UUID]) -> dict[uuid.UUID, dict[str, float | int]]:
@@ -188,7 +245,7 @@ def get_customization_products(db: Session = Depends(get_db)):
             "price": float(p.price) if p.price else 0,
             "category": clean_category,
             "image_url": p.image_url,
-            "is_available": p.is_available,
+            "is_available": effective_is_available(p, inv),
             "stock": stock,
             "stock_status": stock_status,
         }
@@ -223,7 +280,7 @@ def get_customization_products(db: Session = Depends(get_db)):
 
 @router.get("/categories/hierarchy", response_model=List[dict])
 def get_category_hierarchy(db: Session = Depends(get_db)):
-    products = db.query(Product).filter(Product.is_available == True).all()
+    products = db.query(Product).filter(Product.status != ProductStatusEnum.inactive).all()
     hierarchy_dict = {}
     NON_FLORAL_CATS = ["wrapping", "accessory", "vase", "tools", "pot", "pot fillers", "candles"]
 
@@ -280,7 +337,11 @@ def get_product_reviews(product_id: str, db: Session = Depends(get_db)):
     ]
 
 @router.get("/", response_model=List[dict])
-def get_products(branch: Optional[str] = Query(None), db: Session = Depends(get_db)):
+def get_products(
+    branch: Optional[str] = Query(None),
+    campaign_key: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
     query = (
         db.query(Product)
         .outerjoin(Inventory, Product.id == Inventory.product_id)
@@ -302,11 +363,31 @@ def get_products(branch: Optional[str] = Query(None), db: Session = Depends(get_
                 Product.branches.cast(String).ilike(f'%"{normalized_branch.title()}"%'),
             )
         )
+
+    active_campaign = None
+    normalized_campaign_key = (campaign_key or "").strip()
+    if normalized_campaign_key:
+        now = datetime.now(timezone.utc)
+        active_campaign = (
+            db.query(Campaign)
+            .filter(
+                Campaign.campaign_key == normalized_campaign_key,
+                Campaign.is_active == True,
+                Campaign.start_at <= now,
+                or_(Campaign.end_at.is_(None), Campaign.end_at >= now),
+            )
+            .first()
+        )
+        if not active_campaign:
+            return []
+        query = query.filter(Product.campaigns.any(Campaign.id == active_campaign.id))
+
     products = query.all()
     review_summaries = get_review_summaries(db, [p.id for p in products])
 
-    return [
-        {
+    rows = []
+    for p in products:
+        product_data = {
             "id": str(p.id),
             "name": p.name,
             "description": p.description,
@@ -317,9 +398,9 @@ def get_products(branch: Optional[str] = Query(None), db: Session = Depends(get_
             "product_type": p.product_type.lower().strip() if p.product_type else "",
             "original_price": float(p.original_price) if getattr(p, "original_price", None) else None,
             "image_url": p.image_url,
-            "is_available": p.is_available,
+            "is_available": effective_is_available(p, p.inventory),
             "is_visible": p.is_visible,
-            "status": p.status.value if hasattr(p.status, "value") else p.status,
+            "status": product_status_value(p),
             "stock": p.inventory.current_stock if p.inventory else 0,
             
             "stock_manila": getattr(p.inventory, "stock_manila", 0) if p.inventory else 0,
@@ -334,8 +415,8 @@ def get_products(branch: Optional[str] = Query(None), db: Session = Depends(get_
             "average_rating": review_summaries.get(p.id, {}).get("average_rating", 0),
             "review_count": review_summaries.get(p.id, {}).get("review_count", 0),
         }
-        for p in products
-    ]
+        rows.append(apply_campaign_discount(product_data, active_campaign))
+    return rows
 
 @router.get("/admin/all", response_model=List[dict])
 def get_admin_products(
@@ -386,8 +467,8 @@ def get_admin_products(
                 "price": current_price,
                 "category": p.category.value if hasattr(p.category, "value") else p.category,
                 "image_url": p.image_url,
-                "is_available": p.is_available,
-                "status": p.status.value if hasattr(p.status, "value") else p.status,
+                "is_available": effective_is_available(p, inv),
+                "status": product_status_value(p),
                 "created_at": p.created_at.isoformat() if p.created_at else None,
                 "updated_at": p.updated_at.isoformat() if p.updated_at else None,
                 "stock": int(inv.get("current_stock") or 0) if inv else 0,
@@ -594,6 +675,7 @@ def create_product(
         cost_per_unit=cost_val, 
     )
     db.add(inventory)
+    sync_product_availability(new_product, inventory)
     db.commit()
     db.refresh(new_product)
 
@@ -729,6 +811,9 @@ def update_product(
             if stock_pampanga is not None: inv.stock_pampanga = stock_pampanga 
             if unit_type is not None: inv.unit_type = unit_type
             if cost_val is not None: inv.cost_per_unit = cost_val
+            sync_product_availability(product, inv)
+        elif is_available is not None or status is not None:
+            sync_product_availability(product)
 
         db.commit()
         db.refresh(product)
@@ -888,8 +973,8 @@ def get_product(product_id: str, db: Session = Depends(get_db)):
         "price": float(product.price) if product.price else 0,
         "category": product.category.value if hasattr(product.category, "value") else product.category,
         "image_url": product.image_url,
-        "is_available": product.is_available,
-        "status": product.status.value if hasattr(product.status, "value") else product.status,
+        "is_available": effective_is_available(product),
+        "status": product_status_value(product),
     }
     
 @router.post("/admin/rename-category")

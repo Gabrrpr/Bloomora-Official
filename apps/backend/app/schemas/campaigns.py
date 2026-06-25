@@ -10,6 +10,8 @@ class CampaignCreateRequest(BaseModel):
     start_at: datetime
     end_at: Optional[datetime] = None
     is_active: bool = True
+    discount_type: Optional[str] = Field(None, max_length=20)
+    discount_value: Optional[float] = Field(None, ge=0)
 
 
 class CampaignUpdateRequest(BaseModel):
@@ -18,9 +20,13 @@ class CampaignUpdateRequest(BaseModel):
     start_at: Optional[datetime] = None
     end_at: Optional[datetime] = None
     is_active: Optional[bool] = None
+    discount_type: Optional[str] = Field(None, max_length=20)
+    discount_value: Optional[float] = Field(None, ge=0)
     
 class CampaignProductsRequest(BaseModel):
     product_ids: List[UUID]
+    discount_type: Optional[str] = Field(None, max_length=20)
+    discount_value: Optional[float] = Field(None, ge=0)
 
 
 class CampaignOut(BaseModel):
@@ -30,6 +36,9 @@ class CampaignOut(BaseModel):
     start_at: datetime
     end_at: Optional[datetime] = None
     is_active: bool
+    discount_type: Optional[str] = None
+    discount_value: Optional[float] = None
+    product_ids: List[UUID] = []
 
 
 class CampaignsListResponse(BaseModel):
