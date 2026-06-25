@@ -4,6 +4,8 @@ import { Image } from 'expo-image';
 import {
   Animated,
   Easing,
+  FlatList,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -185,7 +187,10 @@ export default function CategoriesScreen() {
     () => buildProductSections(filteredProducts, products, productOrderSeed, visibleCategoryHierarchy),
     [filteredProducts, productOrderSeed, products, visibleCategoryHierarchy],
   );
-  const hasRenderableSections = productSections.some(shouldRenderProductSection);
+  const renderableSections = useMemo(
+    () => productSections.filter(shouldRenderProductSection),
+    [productSections],
+  );
 
   const handleSubmitSearch = useCallback(() => {
     const nextQuery = query.trim();
@@ -273,6 +278,36 @@ export default function CategoriesScreen() {
     setIsCategorySheetMounted(false);
     router.push(buildProductListRoute(category ? { branch, category, title: category } : { branch, title: 'All Products' }));
   }, [branch]);
+  const renderCatalogSection = useCallback(
+    ({ item: section }: { item: ProductSectionConfig & { products: Product[] } }) => (
+      <ProductSection
+        onViewMore={() =>
+          handleOpenProductList(
+            section.category
+              ? { category: section.category, title: section.title }
+              : { section: section.id as ProductSectionKind, title: section.title },
+          )
+        }
+        products={section.products}
+        sectionId={section.id}
+        title={section.title}
+      />
+    ),
+    [handleOpenProductList],
+  );
+  const listHeader = isLoading ? (
+    <CatalogSkeleton />
+  ) : errorMessage ? (
+    <CatalogUnavailableState message={errorMessage} onRetry={() => loadCatalog(true)} />
+  ) : (
+    <CategoryBannerCarousel banners={categoryBanners} />
+  );
+  const listEmpty = isLoading || errorMessage ? null : (
+    <EmptyState
+      title="No products found"
+      description="Try another category or search term."
+    />
+  );
 
   return (
     <View style={styles.screen}>
@@ -316,46 +351,22 @@ export default function CategoriesScreen() {
         />
       ) : null}
 
-      <ScrollView
+      <FlatList
+        data={isLoading || errorMessage ? [] : renderableSections}
+        keyExtractor={(section) => section.id}
+        ListEmptyComponent={listEmpty}
+        ListHeaderComponent={listHeader}
+        initialNumToRender={Platform.OS === 'android' ? 3 : 4}
+        maxToRenderPerBatch={Platform.OS === 'android' ? 2 : 3}
         refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={handleRefreshCatalog} tintColor={theme.colors.primary} />}
+        removeClippedSubviews={Platform.OS === 'android'}
+        renderItem={renderCatalogSection}
         showsVerticalScrollIndicator={false}
         style={styles.catalogScroll}
-        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 104 }]}>
-        {isLoading ? (
-          <CatalogSkeleton />
-        ) : errorMessage ? (
-          <CatalogUnavailableState message={errorMessage} onRetry={() => loadCatalog(true)} />
-        ) : (
-          <CategoryBannerCarousel banners={categoryBanners} />
-        )}
-
-      {isLoading || errorMessage ? null : hasRenderableSections ? (
-        productSections.map((section) =>
-          shouldRenderProductSection(section) ? (
-            <ProductSection
-              key={section.id}
-              onViewMore={() =>
-                handleOpenProductList(
-                  section.category
-                    ? { category: section.category, title: section.title }
-                    : { section: section.id as ProductSectionKind, title: section.title },
-                )
-              }
-              products={section.products}
-              sectionId={section.id}
-              title={section.title}
-            />
-          ) : null,
-        )
-      ) : (
-        <EmptyState
-          title="No products found"
-          description={
-            'Try another category or search term.'
-          }
-        />
-      )}
-      </ScrollView>
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 104 }]}
+        updateCellsBatchingPeriod={70}
+        windowSize={Platform.OS === 'android' ? 5 : 7}
+      />
     </View>
   );
 }
@@ -1140,32 +1151,7 @@ function CatalogSkeleton() {
 }
 
 function SkeletonBlock({ style }: { style: object }) {
-  const opacity = useRef(new Animated.Value(0.42)).current;
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, {
-          duration: 760,
-          easing: Easing.inOut(Easing.quad),
-          toValue: 0.78,
-          useNativeDriver: false,
-        }),
-        Animated.timing(opacity, {
-          duration: 760,
-          easing: Easing.inOut(Easing.quad),
-          toValue: 0.42,
-          useNativeDriver: false,
-        }),
-      ]),
-    );
-
-    animation.start();
-
-    return () => animation.stop();
-  }, [opacity]);
-
-  return <Animated.View style={[styles.skeletonBase, style, { opacity }]} />;
+  return <View style={[styles.skeletonBase, style]} />;
 }
 
 const styles = StyleSheet.create({

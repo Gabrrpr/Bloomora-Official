@@ -1,5 +1,4 @@
-import { useEffect, useRef } from 'react';
-import { Animated, Easing, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 
 import { ProductCard } from '@/components/product-card';
 import { type Product } from '@/constants/shop';
@@ -98,32 +97,7 @@ function splitIntoColumns<T>(items: T[]) {
 }
 
 function SkeletonBlock({ style }: { style: object }) {
-  const opacity = useRef(new Animated.Value(0.42)).current;
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, {
-          duration: 760,
-          easing: Easing.inOut(Easing.quad),
-          toValue: 0.78,
-          useNativeDriver: false,
-        }),
-        Animated.timing(opacity, {
-          duration: 760,
-          easing: Easing.inOut(Easing.quad),
-          toValue: 0.42,
-          useNativeDriver: false,
-        }),
-      ]),
-    );
-
-    animation.start();
-
-    return () => animation.stop();
-  }, [opacity]);
-
-  return <Animated.View style={[styles.skeletonBase, style, { opacity }]} />;
+  return <View style={[styles.skeletonBase, style]} />;
 }
 
 const styles = StyleSheet.create({

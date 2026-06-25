@@ -42,7 +42,10 @@ class DeliveryStatusEnum(str, enum.Enum):
     assigned = "assigned"
     picked_up = "picked_up"
     in_transit = "in_transit"
+    out_for_delivery = "out_for_delivery"
+    arrived = "arrived"
     delivered = "delivered"
+    issue_reported = "issue_reported"
     failed = "failed"
 
 
@@ -122,7 +125,12 @@ class Delivery(Base):
     lalamove_order_id = Column(String(255), nullable=True)
     delivery_fee = Column(Numeric(10, 2), nullable=True)
     estimated_arrival = Column(DateTime(timezone=True), nullable=True)
+    picked_up_at = Column(DateTime(timezone=True), nullable=True)
+    in_transit_at = Column(DateTime(timezone=True), nullable=True)
+    arrived_at = Column(DateTime(timezone=True), nullable=True)
     delivered_at = Column(DateTime(timezone=True), nullable=True)
+    proof_photo_url = Column(Text, nullable=True)
+    proof_note = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 

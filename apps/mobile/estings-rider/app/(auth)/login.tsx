@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DeliveryVehicleIcon } from '@/components/rider/delivery-vehicle-icon';
 import { Fonts, theme } from '@/constants/theme';
+import { loginWithPassword } from '@/services/auth-api';
 
 const logo = require('@/assets/images/branding/estings-logo.png');
 
@@ -25,12 +26,28 @@ export default function LoginScreen() {
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isUsernameFocused, setIsUsernameFocused] = useState(false);
   const [isPasswordFocused, setIsPasswordFocused] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const canLogin = username.trim().length > 0 && password.trim().length > 0;
+  const canLogin = username.trim().length > 0 && password.trim().length > 0 && !isSubmitting;
 
-  function handleLogin() {
-    router.replace('/(tabs)');
+  async function handleLogin() {
+    if (!canLogin) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setLoginError(null);
+
+    try {
+      await loginWithPassword(username, password);
+      router.replace('/(tabs)');
+    } catch (error) {
+      setLoginError(error instanceof Error ? error.message : 'Login failed. Try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   function handleSwitchAccount() {
@@ -111,6 +128,13 @@ export default function LoginScreen() {
           <Pressable accessibilityRole="button" style={({ pressed }) => [styles.forgotButton, pressed && styles.pressed]}>
             <Text style={styles.forgotText}>Forgot your password?</Text>
           </Pressable>
+
+          {loginError ? (
+            <View style={styles.errorPanel}>
+              <Feather color={theme.colors.danger} name="alert-circle" size={17} />
+              <Text selectable style={styles.errorText}>{loginError}</Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.bottomArea}>
@@ -133,7 +157,7 @@ export default function LoginScreen() {
           disabled={!canLogin}
           style={({ pressed }) => [styles.loginButton, !canLogin && styles.loginButtonDisabled, pressed && canLogin && styles.pressed]}
           onPress={handleLogin}>
-          <Text style={styles.loginButtonText}>Log in</Text>
+          <Text style={styles.loginButtonText}>{isSubmitting ? 'Logging in...' : 'Log in'}</Text>
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -220,6 +244,22 @@ const styles = StyleSheet.create({
   },
   fieldActive: {
     borderColor: '#BBBBBB',
+  },
+  errorPanel: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.dangerBorder,
+    borderRadius: 14,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  errorText: {
+    color: theme.colors.danger,
+    flex: 1,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 12,
+    lineHeight: 17,
   },
   fieldLabel: {
     color: theme.colors.primary,

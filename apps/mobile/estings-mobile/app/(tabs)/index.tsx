@@ -388,7 +388,6 @@ function FeedColumn({
           <ProductFeedCard
             entry={item}
             height={height}
-            isActive={isActive && activeItemId === item.id}
             isWishlisted={wishlistIds.has(item.id) || item.product.is_wishlisted}
             layout={layout}
             onWishlist={() => void handleWishlist(item)}
@@ -427,7 +426,6 @@ const ProductFeedCard = memo(function ProductFeedCard({
 }: {
   entry: ProductFeedEntry;
   height: number;
-  isActive: boolean;
   isWishlisted: boolean;
   layout: HomeLayout;
   onWishlist: () => void;
@@ -455,17 +453,7 @@ const ProductFeedCard = memo(function ProductFeedCard({
 
   return (
     <View style={[styles.item, { height, width }]}>
-      <View style={styles.productBackdrop}>
-        {entry.product.image_url ? (
-          <Image
-            blurRadius={12}
-            contentFit="cover"
-            recyclingKey={`backdrop-${entry.id}`}
-            source={{ uri: entry.product.image_url }}
-            style={styles.productBackdropImage}
-          />
-        ) : null}
-      </View>
+      <View style={styles.productBackdrop} />
       <BottomScreenGradient height={height} />
       <Pressable
         accessibilityLabel={`View ${entry.product.name}`}
@@ -628,6 +616,9 @@ const PromotionFeedCard = memo(function PromotionFeedCard({
 function PromotionMedia({ entry, isActive }: { entry: PromotionFeedEntry; isActive: boolean }) {
   const promotion = entry.promotion;
   if (promotion.media_type === 'video') {
+    if (!isActive) {
+      return posterOrFallback(promotion.poster_url);
+    }
     return <PromotionVideo active={isActive} posterUrl={promotion.poster_url} source={promotion.media_url} />;
   }
   return (
@@ -638,6 +629,14 @@ function PromotionMedia({ entry, isActive }: { entry: PromotionFeedEntry; isActi
       style={StyleSheet.absoluteFill}
       transition={180}
     />
+  );
+}
+
+function posterOrFallback(posterUrl?: string | null) {
+  return posterUrl ? (
+    <Image contentFit="cover" source={{ uri: posterUrl }} style={StyleSheet.absoluteFill} />
+  ) : (
+    <View style={styles.promotionVideoFallback} />
   );
 }
 
@@ -982,7 +981,6 @@ const styles = StyleSheet.create({
   screen: { backgroundColor: '#171717', flex: 1, overflow: 'hidden' },
   item: { backgroundColor: '#171717', overflow: 'hidden' },
   productBackdrop: { ...StyleSheet.absoluteFillObject, backgroundColor: '#1C1C1C' },
-  productBackdropImage: { ...StyleSheet.absoluteFillObject, opacity: 0.25 },
   productImagePanel: {
     backgroundColor: '#FFFFFF',
     overflow: 'hidden',
@@ -1041,6 +1039,7 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   promotionCtaText: { color: theme.colors.primaryDark, fontFamily: Fonts.sansBold, fontSize: 13 },
+  promotionVideoFallback: { ...StyleSheet.absoluteFillObject, backgroundColor: '#111111' },
   voucherButton: {
     alignSelf: 'flex-start',
     backgroundColor: 'rgba(0,0,0,0.42)',

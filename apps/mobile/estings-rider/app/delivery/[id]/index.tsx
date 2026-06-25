@@ -1,43 +1,129 @@
 import Feather from '@expo/vector-icons/Feather';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useMemo, useRef, useState } from 'react';
-import { Alert, Animated, Linking, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { getDeliveryTask, getStatusLabel, type DeliveryTaskStatus } from '@/constants/mock-deliveries';
 import { Fonts, theme } from '@/constants/theme';
+import {
+  getDeliveryById,
+  submitDeliveryProof,
+  updateDeliveryStatus,
+  type RiderDelivery,
+  type RiderDeliveryStatus,
+} from '@/services/deliveries-api';
+import { getRiderStatusLabel } from '@/utils/delivery-format';
 
-const progressSteps: { label: string; status: DeliveryTaskStatus }[] = [
-  { label: 'Assigned', status: 'ready_for_pickup' },
+const progressSteps: { label: string; status: RiderDeliveryStatus }[] = [
+  { label: 'Assigned', status: 'assigned' },
   { label: 'Picked Up', status: 'picked_up' },
-  { label: 'On The Way', status: 'on_the_way' },
-  { label: 'Delivered', status: 'completed' },
+  { label: 'Out for Delivery', status: 'out_for_delivery' },
+  { label: 'Arrived', status: 'arrived' },
+  { label: 'Delivered', status: 'delivered' },
+];
+
+const issuePresets = [
+  'Recipient unavailable',
+  'Wrong or incomplete address',
+  'Delivery delayed',
+  'Item concern',
+  'Other issue',
 ];
 
 export default function DeliveryDetailsScreen() {
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ id?: string }>();
-  const task = useMemo(() => getDeliveryTask(params.id ?? '1024'), [params.id]);
-  const [status, setStatus] = useState<DeliveryTaskStatus>(task.status);
-  const [proofPhotoUri, setProofPhotoUri] = useState<string | null>(null);
-  const [completionTime, setCompletionTime] = useState<string | null>(task.completionTime ?? null);
+  const deliveryId = params.id ?? '';
+  const [delivery, setDelivery] = useState<RiderDelivery | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isUpdating, setIsUpdating] = useState(false);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
+  const [isIssueOpen, setIsIssueOpen] = useState(false);
+  const [issueNote, setIssueNote] = useState(issuePresets[0]);
+  const [proofNote, setProofNote] = useState('Received by recipient');
   const [permission, requestPermission] = useCameraPermissions();
-  const statusLabel = getStatusLabel(status);
-  const isCompleted = status === 'completed';
+
+  const status = delivery?.status ?? 'assigned';
+  const isCompleted = status === 'delivered';
+  const needsProof = status === 'arrived' && !delivery?.proofPhotoUrl;
+  const nextAction = useMemo(() => getNextAction(status, Boolean(delivery?.proofPhotoUrl)), [delivery?.proofPhotoUrl, status]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    if (!deliveryId) {
+      setError('Delivery ID is missing.');
+      setIsLoading(false);
+      return;
+    }
+
+    getDeliveryById(deliveryId)
+      .then((nextDelivery) => {
+        if (isMounted) {
+          setDelivery(nextDelivery);
+          setError(null);
+        }
+      })
+      .catch((nextError) => {
+        if (isMounted) {
+          setError(nextError instanceof Error ? nextError.message : 'Unable to load this delivery.');
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [deliveryId]);
 
   async function handleCallRecipient() {
-    await Linking.openURL(`tel:${task.phoneNumber}`);
+    if (!delivery?.recipientPhone) {
+      Alert.alert('No phone number', 'This delivery has no recipient phone number.');
+      return;
+    }
+
+    await Linking.openURL(`tel:${delivery.recipientPhone}`);
   }
 
   async function handleOpenMaps() {
-    const encodedAddress = encodeURIComponent(task.address);
-    Alert.alert('Open navigation', task.address, [
+    if (!delivery?.address) {
+      Alert.alert('No address', 'This delivery has no address.');
+      return;
+    }
+
+    const encodedAddress = encodeURIComponent(delivery.address);
+    Alert.alert('Open map', delivery.address, [
       { text: 'Google Maps', onPress: () => void Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${encodedAddress}`) },
       { text: 'Waze', onPress: () => void Linking.openURL(`https://waze.com/ul?q=${encodedAddress}&navigate=yes`) },
       { style: 'cancel', text: 'Cancel' },
     ]);
+  }
+
+  async function handlePrimaryAction() {
+    if (!delivery || !nextAction) {
+      return;
+    }
+
+    if (needsProof) {
+      await handleProofPhoto();
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      const nextDelivery = await updateDeliveryStatus(delivery.id, nextAction.status);
+      setDelivery(nextDelivery);
+    } catch (nextError) {
+      Alert.alert('Update failed', nextError instanceof Error ? nextError.message : 'Try again.');
+    } finally {
+      setIsUpdating(false);
+    }
   }
 
   async function handleProofPhoto() {
@@ -52,31 +138,42 @@ export default function DeliveryDetailsScreen() {
     setIsCameraOpen(true);
   }
 
-  function handleCaptureMockProof() {
-    setProofPhotoUri('proof-photo-added');
-    setIsCameraOpen(false);
+  async function handleUseProofPhoto() {
+    if (!delivery) {
+      return;
+    }
+
+    setIsUpdating(true);
+    try {
+      const proofPhotoUrl = `rider-proof://${delivery.id}/${Date.now()}`;
+      const nextDelivery = await submitDeliveryProof({
+        deliveryId: delivery.id,
+        proofNote,
+        proofPhotoUrl,
+      });
+      setDelivery(nextDelivery);
+      setIsCameraOpen(false);
+    } catch (nextError) {
+      Alert.alert('Proof failed', nextError instanceof Error ? nextError.message : 'Try again.');
+    } finally {
+      setIsUpdating(false);
+    }
   }
 
-  function handleNextAction() {
-    if (status === 'ready_for_pickup') {
-      setStatus('picked_up');
+  async function handleReportIssue() {
+    if (!delivery || !issueNote.trim()) {
       return;
     }
 
-    if (status === 'picked_up') {
-      setStatus('on_the_way');
-      return;
-    }
-
-    if (status === 'on_the_way') {
-      setStatus('arrived');
-      return;
-    }
-
-    if (status === 'arrived' && proofPhotoUri) {
-      setStatus('completed');
-      setCompletionTime(formatCompletionTime());
-      return;
+    setIsUpdating(true);
+    try {
+      const nextDelivery = await updateDeliveryStatus(delivery.id, 'issue_reported', issueNote.trim());
+      setDelivery(nextDelivery);
+      setIsIssueOpen(false);
+    } catch (nextError) {
+      Alert.alert('Issue report failed', nextError instanceof Error ? nextError.message : 'Try again.');
+    } finally {
+      setIsUpdating(false);
     }
   }
 
@@ -97,102 +194,177 @@ export default function DeliveryDetailsScreen() {
             <Feather color={theme.colors.text} name="chevron-left" size={24} />
           </Pressable>
           <View style={styles.headerCopy}>
-            <Text style={styles.orderTitle}>Order #{task.orderNumber}</Text>
+            <Text style={styles.orderTitle}>{delivery?.orderNumber ?? 'Delivery'}</Text>
             <Text style={styles.orderSubtitle}>Delivery task workspace</Text>
           </View>
           <View style={styles.statusBadge}>
-            <Text style={styles.statusBadgeText}>{statusLabel}</Text>
+            <Text style={styles.statusBadgeText}>{getRiderStatusLabel(status)}</Text>
           </View>
         </View>
 
-        {isCompleted ? (
-          <View style={styles.completedPanel}>
-            <Feather color={theme.colors.primary} name="check-circle" size={30} />
-            <View style={styles.completedCopy}>
-              <Text style={styles.completedTitle}>Delivery Completed</Text>
-              <Text style={styles.completedText}>{completionTime ? `Completed at ${completionTime}` : 'Completion time recorded'}</Text>
-            </View>
-          </View>
-        ) : null}
+        {isLoading ? <StateCard message="Loading delivery details..." /> : null}
+        {error ? <StateCard message={error} /> : null}
 
-        <SectionCard title="Delivery Progress">
-          <View style={styles.timeline}>
-            {progressSteps.map((step, index) => {
-              const currentIndex = getProgressIndex(status);
-              const isDone = index <= currentIndex;
-              const isCurrent = index === currentIndex;
-
-              return (
-                <View key={step.label} style={styles.timelineRow}>
-                  <View style={styles.timelineMarkColumn}>
-                    <View style={[styles.timelineDot, isDone && styles.timelineDotDone]}>
-                      {isDone ? <Feather color={theme.colors.white} name="check" size={12} /> : null}
-                    </View>
-                    {index < progressSteps.length - 1 ? <View style={[styles.timelineLine, isDone && styles.timelineLineDone]} /> : null}
-                  </View>
-                  <Text style={[styles.timelineLabel, isCurrent && styles.timelineLabelCurrent]}>{step.label}</Text>
+        {delivery ? (
+          <>
+            {isCompleted ? (
+              <View style={styles.completedPanel}>
+                <Feather color={theme.colors.primary} name="check-circle" size={30} />
+                <View style={styles.completedCopy}>
+                  <Text style={styles.completedTitle}>Delivery Completed</Text>
+                  <Text style={styles.completedText}>{delivery.deliveredAt ? `Completed at ${formatDisplayTime(delivery.deliveredAt)}` : 'Completion time recorded'}</Text>
                 </View>
-              );
-            })}
-          </View>
-        </SectionCard>
-
-        <SectionCard title="Item Information">
-          <View style={styles.itemRow}>
-            <View style={styles.productImage}>
-              <Feather color={theme.colors.primary} name="gift" size={38} />
-            </View>
-            <View style={styles.itemCopy}>
-              <Text style={styles.itemName}>{task.item.name}</Text>
-              <Text style={styles.itemMeta}>Quantity: {task.item.quantity}</Text>
-            </View>
-          </View>
-          <View style={styles.handlingList}>
-            <Text style={styles.cardLabel}>Special handling</Text>
-            {task.item.handling.map((instruction) => (
-              <View key={instruction} style={styles.handlingRow}>
-                <Feather color={theme.colors.primary} name="alert-circle" size={15} />
-                <Text style={styles.handlingText}>{instruction}</Text>
               </View>
-            ))}
-          </View>
-        </SectionCard>
+            ) : null}
 
-        <SectionCard title="Recipient Information">
-          <InfoAction icon="user" label="Recipient Name" value={task.recipientName} />
-          <InfoAction icon="phone" label="Phone Number" value={task.phoneNumber} onPress={handleCallRecipient} />
-          <InfoAction icon="map-pin" label="Address" value={task.address} onPress={handleOpenMaps} />
-        </SectionCard>
+            <SectionCard title="Delivery Progress">
+              <View style={styles.timeline}>
+                {progressSteps.map((step, index) => {
+                  const currentIndex = getProgressIndex(status);
+                  const isDone = index <= currentIndex;
+                  const isCurrent = index === currentIndex;
 
-        <SectionCard title="Delivery Notes">
-          <Text style={styles.notesText}>{task.customerNotes}</Text>
-        </SectionCard>
+                  return (
+                    <View key={step.label} style={styles.timelineRow}>
+                      <View style={styles.timelineMarkColumn}>
+                        <View style={[styles.timelineDot, isDone && styles.timelineDotDone]}>
+                          {isDone ? <Feather color={theme.colors.white} name="check" size={12} /> : null}
+                        </View>
+                        {index < progressSteps.length - 1 ? <View style={[styles.timelineLine, isDone && styles.timelineLineDone]} /> : null}
+                      </View>
+                      <Text style={[styles.timelineLabel, isCurrent && styles.timelineLabelCurrent]}>{step.label}</Text>
+                    </View>
+                  );
+                })}
+              </View>
+            </SectionCard>
 
-        {proofPhotoUri ? (
-          <SectionCard title="Proof Photo">
-            <View style={styles.proofPreview}>
-              <Feather color={theme.colors.primary} name="camera" size={28} />
-              <Text style={styles.proofText}>Proof photo added</Text>
-            </View>
-          </SectionCard>
+            <SectionCard title="Recipient">
+              <InfoAction icon="user" label="Recipient Name" value={delivery.recipientName} />
+              <InfoAction icon="phone" label="Phone Number" value={delivery.recipientPhone || 'No phone number'} onPress={handleCallRecipient} />
+              <InfoAction icon="map-pin" label="Address" value={delivery.address || 'No address'} onPress={handleOpenMaps} />
+            </SectionCard>
+
+            <SectionCard title="Order Items">
+              <View style={styles.itemRow}>
+                <View style={styles.productImage}>
+                  <Feather color={theme.colors.primary} name="gift" size={38} />
+                </View>
+                <View style={styles.itemCopy}>
+                  <Text style={styles.itemName}>{delivery.itemSummary}</Text>
+                  <Text style={styles.itemMeta}>{delivery.branch ? `${delivery.branch} branch` : 'Assigned branch'}</Text>
+                </View>
+              </View>
+              {delivery.handlingNotes.length > 0 ? (
+                <View style={styles.handlingList}>
+                  <Text style={styles.cardLabel}>Handling notes</Text>
+                  {delivery.handlingNotes.map((instruction) => (
+                    <View key={instruction} style={styles.handlingRow}>
+                      <Feather color={theme.colors.primary} name="alert-circle" size={15} />
+                      <Text style={styles.handlingText}>{instruction}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </SectionCard>
+
+            <SectionCard title="Delivery Notes">
+              <Text style={styles.notesText}>{delivery.deliveryNotes || delivery.customerNotes || 'No special notes for this delivery.'}</Text>
+            </SectionCard>
+
+            {delivery.proofPhotoUrl ? (
+              <SectionCard title="Proof Photo">
+                <View style={styles.proofPreview}>
+                  <Feather color={theme.colors.primary} name="camera" size={28} />
+                  <View style={styles.proofCopy}>
+                    <Text style={styles.proofText}>Proof photo added</Text>
+                    {delivery.proofNote ? <Text style={styles.proofNote}>{delivery.proofNote}</Text> : null}
+                  </View>
+                </View>
+              </SectionCard>
+            ) : null}
+          </>
         ) : null}
       </ScrollView>
 
       <View style={[styles.actionFooter, { paddingBottom: Math.max(insets.bottom, theme.spacing.sm) + theme.spacing.sm }]}>
-        {renderFooterAction({ handleNextAction, handleProofPhoto, isCompleted, proofPhotoUri, status })}
+        <View style={styles.footerActions}>
+          <Pressable
+            accessibilityRole="button"
+            disabled={!delivery || isCompleted || isUpdating}
+            style={({ pressed }) => [styles.issueButton, (!delivery || isCompleted) && styles.disabledButton, pressed && styles.pressed]}
+            onPress={() => setIsIssueOpen(true)}>
+            <Feather color={theme.colors.text} name="alert-circle" size={19} />
+            <Text style={styles.issueButtonText}>Report Issue</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            disabled={!delivery || isCompleted || isUpdating}
+            style={({ pressed }) => [styles.primaryButton, (!delivery || isCompleted) && styles.disabledPrimary, pressed && styles.pressed]}
+            onPress={handlePrimaryAction}>
+            <Text style={styles.primaryButtonText}>{isCompleted ? 'Delivery Completed' : isUpdating ? 'Updating...' : nextAction?.label ?? 'No Action'}</Text>
+          </Pressable>
+        </View>
       </View>
 
       <Modal animationType="slide" visible={isCameraOpen} onRequestClose={() => setIsCameraOpen(false)}>
         <View style={styles.cameraScreen}>
           <CameraView style={styles.cameraPreview} facing="back" />
+          <View style={styles.proofForm}>
+            <Text style={styles.proofFormLabel}>Proof note</Text>
+            <TextInput
+              multiline
+              placeholder="Add a short handoff note"
+              placeholderTextColor="#A3A3A3"
+              style={styles.proofInput}
+              value={proofNote}
+              onChangeText={setProofNote}
+            />
+          </View>
           <View style={styles.cameraFooter}>
             <Pressable accessibilityRole="button" style={styles.cameraCancelButton} onPress={() => setIsCameraOpen(false)}>
               <Text style={styles.cameraCancelText}>Cancel</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" style={styles.cameraCaptureButton} onPress={handleCaptureMockProof}>
+            <Pressable accessibilityRole="button" disabled={isUpdating} style={styles.cameraCaptureButton} onPress={handleUseProofPhoto}>
               <Feather color={theme.colors.white} name="camera" size={22} />
-              <Text style={styles.cameraCaptureText}>Use Proof Photo</Text>
+              <Text style={styles.cameraCaptureText}>{isUpdating ? 'Saving...' : 'Use Proof Photo'}</Text>
             </Pressable>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal animationType="slide" transparent visible={isIssueOpen} onRequestClose={() => setIsIssueOpen(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.issueModal}>
+            <Text style={styles.issueTitle}>Report Issue</Text>
+            <Text style={styles.issueText}>Choose the closest reason so dispatch can help quickly.</Text>
+            <View style={styles.issueOptions}>
+              {issuePresets.map((preset) => (
+                <Pressable
+                  key={preset}
+                  accessibilityRole="button"
+                  style={[styles.issueOption, issueNote === preset && styles.issueOptionActive]}
+                  onPress={() => setIssueNote(preset)}>
+                  <Text style={[styles.issueOptionText, issueNote === preset && styles.issueOptionTextActive]}>{preset}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <TextInput
+              multiline
+              placeholder="Add details if needed"
+              placeholderTextColor="#A3A3A3"
+              style={styles.issueInput}
+              value={issueNote}
+              onChangeText={setIssueNote}
+            />
+            <View style={styles.issueFooter}>
+              <Pressable accessibilityRole="button" style={styles.issueCancelButton} onPress={() => setIsIssueOpen(false)}>
+                <Text style={styles.issueCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" disabled={isUpdating || !issueNote.trim()} style={styles.issueSubmitButton} onPress={handleReportIssue}>
+                <Text style={styles.issueSubmitText}>{isUpdating ? 'Sending...' : 'Send Issue'}</Text>
+              </Pressable>
+            </View>
           </View>
         </View>
       </Modal>
@@ -200,91 +372,10 @@ export default function DeliveryDetailsScreen() {
   );
 }
 
-function renderFooterAction({
-  handleNextAction,
-  handleProofPhoto,
-  isCompleted,
-  proofPhotoUri,
-  status,
-}: {
-  handleNextAction: () => void;
-  handleProofPhoto: () => void;
-  isCompleted: boolean;
-  proofPhotoUri: string | null;
-  status: DeliveryTaskStatus;
-}) {
-  if (isCompleted) {
-    return (
-      <View style={styles.completedFooter}>
-        <Feather color={theme.colors.primary} name="check-circle" size={20} />
-        <Text style={styles.completedFooterText}>Delivery Completed</Text>
-      </View>
-    );
-  }
-
-  if (status === 'arrived' && !proofPhotoUri) {
-    return (
-      <Pressable accessibilityRole="button" style={({ pressed }) => [styles.proofButton, pressed && styles.pressed]} onPress={handleProofPhoto}>
-        <Feather color={theme.colors.white} name="camera" size={22} />
-        <Text style={styles.proofButtonText}>Take Proof Photo</Text>
-      </Pressable>
-    );
-  }
-
-  const label =
-    status === 'ready_for_pickup'
-      ? 'Slide to Confirm Pickup'
-      : status === 'picked_up'
-        ? 'Slide to Start Delivery'
-        : status === 'on_the_way'
-          ? 'Slide to Mark Arrived'
-          : 'Slide to Complete Delivery';
-
-  return <SlideAction label={label} onPress={handleNextAction} />;
-}
-
-function SlideAction({ label, onPress }: { label: string; onPress: () => void }) {
-  const translateX = useRef(new Animated.Value(0)).current;
-  const hasCompletedSwipe = useRef(false);
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) > 8,
-        onPanResponderMove: (_, gesture) => {
-          translateX.setValue(Math.max(0, Math.min(gesture.dx, 188)));
-        },
-        onPanResponderRelease: (_, gesture) => {
-          if (gesture.dx > 142 && !hasCompletedSwipe.current) {
-            hasCompletedSwipe.current = true;
-            Animated.timing(translateX, {
-              duration: 140,
-              toValue: 188,
-              useNativeDriver: true,
-            }).start(() => {
-              onPress();
-              translateX.setValue(0);
-              hasCompletedSwipe.current = false;
-            });
-            return;
-          }
-
-          Animated.spring(translateX, {
-            friction: 7,
-            tension: 80,
-            toValue: 0,
-            useNativeDriver: true,
-          }).start();
-        },
-      }),
-    [onPress, translateX],
-  );
-
+function StateCard({ message }: { message: string }) {
   return (
-    <View accessibilityRole="button" style={styles.slideAction}>
-      <Animated.View style={[styles.slideThumb, { transform: [{ translateX }] }]} {...panResponder.panHandlers}>
-        <Feather color={theme.colors.primary} name="chevrons-right" size={22} />
-      </Animated.View>
-      <Text style={styles.slideText}>{label}</Text>
+    <View style={styles.stateCard}>
+      <Text selectable style={styles.stateText}>{message}</Text>
     </View>
   );
 }
@@ -306,19 +397,23 @@ function InfoAction({ icon, label, onPress, value }: { icon: React.ComponentProp
       </View>
       <View style={styles.infoCopy}>
         <Text style={styles.infoLabel}>{label}</Text>
-        <Text style={styles.infoValue}>{value}</Text>
+        <Text selectable style={styles.infoValue}>{value}</Text>
       </View>
       {onPress ? <Feather color={theme.colors.textMuted} name="external-link" size={17} /> : null}
     </Pressable>
   );
 }
 
-function getProgressIndex(status: DeliveryTaskStatus) {
-  if (status === 'completed') {
+function getProgressIndex(status: RiderDeliveryStatus) {
+  if (status === 'delivered') {
+    return 4;
+  }
+
+  if (status === 'arrived' || status === 'issue_reported' || status === 'failed') {
     return 3;
   }
 
-  if (status === 'arrived' || status === 'on_the_way') {
+  if (status === 'out_for_delivery') {
     return 2;
   }
 
@@ -329,11 +424,40 @@ function getProgressIndex(status: DeliveryTaskStatus) {
   return 0;
 }
 
-function formatCompletionTime() {
+function getNextAction(status: RiderDeliveryStatus, hasProof: boolean) {
+  if (status === 'assigned') {
+    return { label: 'Confirm Pickup', status: 'picked_up' as const };
+  }
+
+  if (status === 'picked_up') {
+    return { label: 'Mark Out for Delivery', status: 'out_for_delivery' as const };
+  }
+
+  if (status === 'out_for_delivery') {
+    return { label: 'Mark Arrived', status: 'arrived' as const };
+  }
+
+  if (status === 'arrived' && !hasProof) {
+    return { label: 'Take Proof Photo', status: 'arrived' as const };
+  }
+
+  if (status === 'arrived' && hasProof) {
+    return { label: 'Complete Delivery', status: 'delivered' as const };
+  }
+
+  return null;
+}
+
+function formatDisplayTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
   return new Intl.DateTimeFormat('en-PH', {
     hour: 'numeric',
     minute: '2-digit',
-  }).format(new Date());
+  }).format(date);
 }
 
 const styles = StyleSheet.create({
@@ -417,20 +541,6 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
-  completedFooter: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.greenSoft,
-    borderRadius: 18,
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'center',
-    minHeight: 58,
-  },
-  completedFooterText: {
-    color: theme.colors.primaryDark,
-    fontFamily: Fonts.sansExtraBold,
-    fontSize: 15,
-  },
   completedPanel: {
     alignItems: 'center',
     backgroundColor: theme.colors.greenSoft,
@@ -456,9 +566,15 @@ const styles = StyleSheet.create({
     gap: theme.spacing.lg,
     paddingHorizontal: theme.spacing.lg,
   },
-  fieldDivider: {
-    backgroundColor: 'rgba(31, 42, 36, 0.08)',
-    height: 1,
+  disabledButton: {
+    opacity: 0.46,
+  },
+  disabledPrimary: {
+    backgroundColor: '#BBDDC0',
+  },
+  footerActions: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
   },
   handlingList: {
     gap: theme.spacing.sm,
@@ -514,6 +630,98 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
   },
+  issueButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: 18,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    justifyContent: 'center',
+    minHeight: 58,
+    paddingHorizontal: theme.spacing.md,
+  },
+  issueButtonText: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 13,
+  },
+  issueCancelButton: {
+    alignItems: 'center',
+    flex: 1,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  issueCancelText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 14,
+  },
+  issueFooter: {
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+  },
+  issueInput: {
+    borderColor: theme.colors.border,
+    borderRadius: 14,
+    borderWidth: 1,
+    color: theme.colors.text,
+    fontFamily: Fonts.sans,
+    fontSize: 14,
+    minHeight: 78,
+    padding: theme.spacing.md,
+    textAlignVertical: 'top',
+  },
+  issueModal: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 22,
+    gap: theme.spacing.md,
+    padding: theme.spacing.lg,
+  },
+  issueOption: {
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: 14,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 10,
+  },
+  issueOptionActive: {
+    backgroundColor: theme.colors.greenSoft,
+  },
+  issueOptionText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 13,
+  },
+  issueOptionTextActive: {
+    color: theme.colors.primaryDark,
+  },
+  issueOptions: {
+    gap: theme.spacing.sm,
+  },
+  issueSubmitButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: 14,
+    flex: 1,
+    minHeight: 48,
+    justifyContent: 'center',
+  },
+  issueSubmitText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 14,
+  },
+  issueText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 13,
+    lineHeight: 19,
+  },
+  issueTitle: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 20,
+    lineHeight: 25,
+  },
   itemCopy: {
     flex: 1,
     gap: 4,
@@ -534,6 +742,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.md,
+  },
+  modalBackdrop: {
+    backgroundColor: 'rgba(0, 0, 0, 0.28)',
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: theme.spacing.lg,
   },
   notesText: {
     color: theme.colors.text,
@@ -557,6 +771,22 @@ const styles = StyleSheet.create({
     opacity: 0.76,
     transform: [{ scale: 0.99 }],
   },
+  primaryButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: 18,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 58,
+    paddingHorizontal: theme.spacing.md,
+  },
+  primaryButtonText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 15,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
   productImage: {
     alignItems: 'center',
     backgroundColor: theme.colors.greenSoft,
@@ -565,20 +795,35 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 76,
   },
-  proofButton: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.primary,
-    borderRadius: 18,
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    justifyContent: 'center',
-    minHeight: 58,
+  proofCopy: {
+    flex: 1,
+    gap: 2,
   },
-  proofButtonText: {
+  proofForm: {
+    backgroundColor: '#111111',
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: theme.spacing.lg,
+  },
+  proofFormLabel: {
     color: theme.colors.white,
     fontFamily: Fonts.sansExtraBold,
-    fontSize: 15,
-    lineHeight: 20,
+    fontSize: 14,
+  },
+  proofInput: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 14,
+    color: theme.colors.text,
+    fontFamily: Fonts.sans,
+    minHeight: 64,
+    padding: theme.spacing.md,
+    textAlignVertical: 'top',
+  },
+  proofNote: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 12,
+    lineHeight: 17,
   },
   proofPreview: {
     alignItems: 'center',
@@ -598,30 +843,18 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.white,
     flex: 1,
   },
-  slideAction: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.primary,
-    borderRadius: 18,
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    minHeight: 58,
-    paddingHorizontal: theme.spacing.sm,
+  stateCard: {
+    backgroundColor: theme.colors.surface,
+    borderColor: 'rgba(31, 42, 36, 0.08)',
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: theme.spacing.lg,
   },
-  slideText: {
-    color: theme.colors.white,
-    flex: 1,
-    fontFamily: Fonts.sansExtraBold,
-    fontSize: 15,
+  stateText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 14,
     lineHeight: 20,
-    textAlign: 'center',
-  },
-  slideThumb: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.white,
-    borderRadius: 14,
-    height: 46,
-    justifyContent: 'center',
-    width: 58,
   },
   statusBadge: {
     backgroundColor: theme.colors.greenSoft,

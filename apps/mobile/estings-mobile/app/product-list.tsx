@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { ArrowLeft, ChevronDown, Search, X } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, FlatList, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppBrandHeader } from '@/components/app-brand-header';
@@ -115,14 +115,56 @@ export default function ProductListScreen() {
 
     return sortProducts(filteredProducts, selectedSort);
   }, [baseProducts, normalizedQuery, selectedBudget, selectedSort]);
-  const productColumns = splitIntoColumns(visibleProducts);
-  const occasionColumns = splitIntoColumns(occasionAssets);
   const scopeLabel = isOccasionIndex ? 'Occasions' : title;
   const resultTitle = normalizedQuery ? `"${normalizedQuery}"` : title;
   const resultContext = normalizedQuery ? `Searching in ${scopeLabel}` : `Browsing ${scopeLabel}`;
   const resultCountLabel = isOccasionIndex
     ? `${occasionAssets.length} moments`
     : `${visibleProducts.length} ${visibleProducts.length === 1 ? 'product' : 'products'}`;
+  const renderProduct = useCallback(
+    ({ item }: { item: Product }) => (
+      <View style={styles.gridCell}>
+        <ProductCard product={item} style={styles.productCard} />
+      </View>
+    ),
+    [],
+  );
+  const renderOccasion = useCallback(
+    ({ item }: { item: OccasionAsset }) => (
+      <View style={styles.gridCell}>
+        <OccasionPickerCard
+          occasion={item}
+          onPress={() =>
+            router.push(
+              `/product-list?title=${encodeURIComponent(item.label)}&category=${encodeURIComponent(
+                item.label,
+              )}&group=occasions`,
+            )
+          }
+        />
+      </View>
+    ),
+    [],
+  );
+  const listHeader = (
+    <View style={styles.resultsHeader}>
+      <View style={styles.scopePill}>
+        <Text numberOfLines={1} style={styles.scopePillText}>{resultContext}</Text>
+      </View>
+      <Text numberOfLines={2} style={styles.title}>{resultTitle}</Text>
+      <Text style={styles.subtitle}>{resultCountLabel}</Text>
+    </View>
+  );
+  const listEmpty = isLoading ? (
+    <View style={styles.loadingState}>
+      <ActivityIndicator color={theme.colors.primary} />
+      <Text style={styles.loadingText}>Loading products</Text>
+    </View>
+  ) : errorMessage ? (
+    <EmptyState title="Products unavailable" description={errorMessage} />
+  ) : (
+    <EmptyState title="No products found" description="Try another category or section." />
+  );
 
   return (
     <View style={styles.screen}>
@@ -181,56 +223,47 @@ export default function ProductListScreen() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 36 }]}>
-        <View style={styles.resultsHeader}>
-          <View style={styles.scopePill}>
-            <Text numberOfLines={1} style={styles.scopePillText}>{resultContext}</Text>
-          </View>
-          <Text numberOfLines={2} style={styles.title}>{resultTitle}</Text>
-          <Text style={styles.subtitle}>{resultCountLabel}</Text>
-        </View>
-
-        {isLoading ? (
-          <View style={styles.loadingState}>
-            <ActivityIndicator color={theme.colors.primary} />
-            <Text style={styles.loadingText}>Loading products</Text>
-          </View>
-        ) : errorMessage ? (
-          <EmptyState title="Products unavailable" description={errorMessage} />
-        ) : isOccasionIndex ? (
-          <View style={styles.occasionGrid}>
-            {occasionColumns.map((column, columnIndex) => (
-              <View key={`occasion-column-${columnIndex}`} style={styles.occasionColumn}>
-                {column.map((occasion) => (
-                  <OccasionPickerCard
-                    key={occasion.label}
-                    occasion={occasion}
-                    onPress={() =>
-                      router.push(
-                        `/product-list?title=${encodeURIComponent(occasion.label)}&category=${encodeURIComponent(
-                          occasion.label,
-                        )}&group=occasions`,
-                      )
-                    }
-                  />
-                ))}
-              </View>
-            ))}
-          </View>
-        ) : visibleProducts.length > 0 ? (
-          <View style={styles.productGrid}>
-            {productColumns.map((column, columnIndex) => (
-              <View key={`products-${columnIndex}`} style={styles.productColumn}>
-                {column.map((product) => (
-                  <ProductCard key={product.id} product={product} style={styles.productCard} />
-                ))}
-              </View>
-            ))}
-          </View>
-        ) : (
-          <EmptyState title="No products found" description="Try another category or section." />
-        )}
-      </ScrollView>
+      {isOccasionIndex ? (
+        <FlatList
+          columnWrapperStyle={styles.gridRow}
+          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 36 }]}
+          contentInsetAdjustmentBehavior="automatic"
+          data={isLoading || errorMessage ? [] : occasionAssets}
+          initialNumToRender={8}
+          key="occasions"
+          keyExtractor={(item) => item.label}
+          ListEmptyComponent={listEmpty}
+          ListHeaderComponent={listHeader}
+          ListHeaderComponentStyle={styles.listHeader}
+          maxToRenderPerBatch={6}
+          numColumns={2}
+          removeClippedSubviews={Platform.OS === 'android'}
+          renderItem={renderOccasion}
+          showsVerticalScrollIndicator={false}
+          updateCellsBatchingPeriod={50}
+          windowSize={Platform.OS === 'android' ? 7 : 9}
+        />
+      ) : (
+        <FlatList
+          columnWrapperStyle={styles.gridRow}
+          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 36 }]}
+          contentInsetAdjustmentBehavior="automatic"
+          data={isLoading || errorMessage ? [] : visibleProducts}
+          initialNumToRender={Platform.OS === 'android' ? 8 : 10}
+          key="products"
+          keyExtractor={(item) => item.id}
+          ListEmptyComponent={listEmpty}
+          ListHeaderComponent={listHeader}
+          ListHeaderComponentStyle={styles.listHeader}
+          maxToRenderPerBatch={Platform.OS === 'android' ? 6 : 8}
+          numColumns={2}
+          removeClippedSubviews={Platform.OS === 'android'}
+          renderItem={renderProduct}
+          showsVerticalScrollIndicator={false}
+          updateCellsBatchingPeriod={50}
+          windowSize={Platform.OS === 'android' ? 7 : 9}
+        />
+      )}
     </View>
   );
 }
@@ -387,13 +420,6 @@ function isFloralProduct(product: Product) {
   return /\b(floral|flower|flowers|bouquet|arrangement|rose|roses|orchid|orchids|tulip|tulips|lily|lilies|sunflower|carnation|stems?)\b/i.test(
     searchableText,
   );
-}
-
-function splitIntoColumns<T>(items: T[]) {
-  return [
-    items.filter((_, index) => index % 2 === 0),
-    items.filter((_, index) => index % 2 === 1),
-  ];
 }
 
 function matchesBudget(price: number, budget: BudgetOption) {
@@ -598,7 +624,11 @@ const styles = StyleSheet.create({
   },
   content: {
     gap: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.lg,
     paddingTop: theme.spacing.lg,
+  },
+  listHeader: {
+    marginBottom: theme.spacing.lg,
   },
   loadingState: {
     alignItems: 'center',
@@ -609,15 +639,6 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontFamily: Fonts.sansMedium,
     fontSize: 13,
-  },
-  occasionGrid: {
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  occasionColumn: {
-    flex: 1,
-    gap: theme.spacing.md,
   },
   occasionPickerCard: {
     alignItems: 'center',
@@ -677,14 +698,13 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sansBold,
     fontSize: 11,
   },
-  productGrid: {
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  productColumn: {
+  gridCell: {
     flex: 1,
+    maxWidth: '48.7%',
+  },
+  gridRow: {
     gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
   },
   productCard: {
     borderColor: theme.colors.white,

@@ -264,10 +264,10 @@ export function ChatFloatingBubble() {
     return () => {
       isMounted = false;
     };
-  }, [clearBubbleSession, pathname]);
+  }, [clearBubbleSession]);
 
   useEffect(() => {
-    if (!chatSession || isLiveChatRoute || !isAppActive) {
+    if (!chatSession || isAuthRoute || isHidden || isChatOverlayVisible || isLiveChatRoute || !isAppActive) {
       wsRef.current?.close();
       wsRef.current = null;
       return;
@@ -341,7 +341,7 @@ export function ChatFloatingBubble() {
       wsRef.current?.close();
       wsRef.current = null;
     };
-  }, [chatSession, isAppActive, isLiveChatRoute, showPreviewBubble]);
+  }, [chatSession, isAppActive, isAuthRoute, isChatOverlayVisible, isHidden, isLiveChatRoute, showPreviewBubble]);
 
   useEffect(() => {
     if (isLiveChatRoute) {

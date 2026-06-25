@@ -1,53 +1,67 @@
 import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 import { DeliveryCard } from '@/components/rider/delivery-card';
 import { RiderScreen, SectionHeader } from '@/components/rider/screen';
 import { Fonts, theme } from '@/constants/theme';
-
-const activeDeliveries = [
-  {
-    address: '17 Dahlia Ave., Marikina Heights',
-    customer: 'Aileen Cruz',
-    eta: 'Pickup ready',
-    id: 'ORD-2051',
-    items: 'Sunflower wrap',
-    status: 'Assigned' as const,
-  },
-  {
-    address: 'Lobby, Greenfield Tower, Mandaluyong',
-    customer: 'Joel Ramirez',
-    eta: 'ETA 24 min',
-    id: 'ORD-2050',
-    items: 'Anniversary bouquet',
-    status: 'In Transit' as const,
-  },
-  {
-    address: 'Block 8 Lot 3, Fairview, Quezon City',
-    customer: 'Nina Reyes',
-    eta: 'ETA 41 min',
-    id: 'ORD-2049',
-    items: 'Orchid basket',
-    status: 'Assigned' as const,
-  },
-];
+import { getMyDeliveries, type RiderDelivery } from '@/services/deliveries-api';
+import { getDeliveryCardStatus, getDeliveryEta } from '@/utils/delivery-format';
 
 export default function DeliveriesScreen() {
+  const [deliveries, setDeliveries] = useState<RiderDelivery[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getMyDeliveries()
+      .then((nextDeliveries) => {
+        if (isMounted) {
+          setDeliveries(nextDeliveries);
+          setError(null);
+        }
+      })
+      .catch((nextError) => {
+        if (isMounted) {
+          setError(nextError instanceof Error ? nextError.message : 'Unable to load deliveries.');
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   return (
     <RiderScreen subtitle="Active route and assigned orders" title="Deliveries">
       <View style={styles.routePanel}>
         <Text style={styles.routeLabel}>Current route</Text>
-        <Text style={styles.routeTitle}>Shop to North Metro</Text>
-        <Text style={styles.routeText}>{"3 active stops grouped by distance from Esting's Flower Shop."}</Text>
+        <Text style={styles.routeTitle}>{deliveries.length > 0 ? `${deliveries.length} active stop${deliveries.length === 1 ? '' : 's'}` : 'No active route'}</Text>
+        <Text style={styles.routeText}>{"Assignments are grouped by Esting's dispatch based on area and availability."}</Text>
       </View>
 
       <SectionHeader title="Assigned Orders" />
       <View style={styles.list}>
-        {activeDeliveries.map((delivery) => (
+        {isLoading ? <Text style={styles.stateText}>Loading assigned deliveries...</Text> : null}
+        {error ? <Text selectable style={styles.stateText}>{error}</Text> : null}
+        {!isLoading && !error && deliveries.length === 0 ? <Text style={styles.stateText}>No assigned deliveries right now.</Text> : null}
+        {deliveries.map((delivery) => (
           <DeliveryCard
             key={delivery.id}
-            {...delivery}
-            onOpen={() => router.push({ pathname: '/delivery/[id]/index', params: { id: delivery.id.replace('ORD-', '') } })}
+            address={delivery.address}
+            customer={delivery.recipientName}
+            eta={getDeliveryEta(delivery)}
+            id={delivery.orderNumber}
+            items={delivery.itemSummary}
+            status={getDeliveryCardStatus(delivery.status)}
+            onOpen={() => router.push({ pathname: '/delivery/[id]/index', params: { id: delivery.id } })}
           />
         ))}
       </View>
@@ -85,5 +99,11 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sansExtraBold,
     fontSize: 22,
     lineHeight: 27,
+  },
+  stateText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 14,
+    lineHeight: 20,
   },
 });
