@@ -26,6 +26,7 @@ from app.api.v1.routes import (
     chats,
     customization,
     dashboard,
+    deliveries,
     orders,
     payments,
     products,
@@ -50,6 +51,9 @@ LOCAL_ORIGINS = {
     "http://localhost:5178",
     "http://localhost:5179",
     "http://localhost:8081",
+    "http://localhost:8082",
+    "http://127.0.0.1:8081",
+    "http://127.0.0.1:8082",
     "http://localhost:19006",
 }
 
@@ -122,6 +126,7 @@ app.include_router(products.router, prefix="/api/v1/products", tags=["Products"]
 app.include_router(customization.router, prefix="/api/v1", tags=["customization"])
 app.include_router(chats.router, prefix="/api/v1", tags=["chats"])
 app.include_router(orders.router, prefix="/api/v1", tags=["orders"])
+app.include_router(deliveries.router, prefix="/api/v1", tags=["deliveries"])
 app.include_router(payments.router, prefix="/api/v1", tags=["payments"])
 app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
 app.include_router(site_customization.router, prefix="/api/v1", tags=["site-customization"])

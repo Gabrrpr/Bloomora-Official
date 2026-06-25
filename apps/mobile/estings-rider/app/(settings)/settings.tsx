@@ -5,6 +5,7 @@ import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-nat
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts, theme } from '@/constants/theme';
+import { logout } from '@/services/auth-api';
 
 type FeatherIconName = ComponentProps<typeof Feather>['name'];
 
@@ -36,6 +37,11 @@ const settingsGroups: {
 
 export default function RiderSettingsScreen() {
   const insets = useSafeAreaInsets();
+
+  async function handleLogout() {
+    await logout();
+    router.replace('/login');
+  }
 
   return (
     <ScrollView
@@ -85,7 +91,7 @@ export default function RiderSettingsScreen() {
         </View>
       ))}
 
-      <Pressable accessibilityRole="button" style={({ pressed }) => [styles.logoutButton, pressed && styles.pressed]} onPress={() => router.replace('/login')}>
+      <Pressable accessibilityRole="button" style={({ pressed }) => [styles.logoutButton, pressed && styles.pressed]} onPress={handleLogout}>
         <Feather color={theme.colors.danger} name="log-out" size={19} />
         <Text style={styles.logoutText}>Log out</Text>
       </Pressable>

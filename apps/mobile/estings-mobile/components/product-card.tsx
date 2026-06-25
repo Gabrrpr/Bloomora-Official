@@ -1,13 +1,14 @@
 import { router } from 'expo-router';
 import { Image } from 'expo-image';
 import { Star } from 'lucide-react-native';
-import { memo, useCallback } from 'react';
+import { memo, useCallback, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { formatPhp, type Product } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 
 const imageNotFound = require('@/assets/images/default-img/ImageNotFound.webp');
+const ratingStars = [1, 2, 3, 4, 5] as const;
 
 /**
  * Shared product card used across the entire app:
@@ -21,14 +22,32 @@ type ProductCardProps = {
 };
 
 export const ProductCard = memo(function ProductCard({ product, style }: ProductCardProps) {
-  const isSoldOut = (product.stock ?? 0) <= 0;
-  const hasSalePrice = Boolean(product.originalPriceCents && product.originalPriceCents > product.priceCents);
-  const discountPercent =
-    hasSalePrice && product.originalPriceCents
-      ? Math.round(((product.originalPriceCents - product.priceCents) / product.originalPriceCents) * 100)
-      : 0;
-  const averageRating = Math.max(0, Math.min(5, Number(product.averageRating ?? 0)));
-  const reviewCount = Math.max(0, Number(product.reviewCount ?? 0));
+  const display = useMemo(() => {
+    const isSoldOut = (product.stock ?? 0) <= 0;
+    const hasSalePrice = Boolean(product.originalPriceCents && product.originalPriceCents > product.priceCents);
+    const discountPercent =
+      hasSalePrice && product.originalPriceCents
+        ? Math.round(((product.originalPriceCents - product.priceCents) / product.originalPriceCents) * 100)
+        : 0;
+    const averageRating = Math.max(0, Math.min(5, Number(product.averageRating ?? 0)));
+    const reviewCount = Math.max(0, Number(product.reviewCount ?? 0));
+
+    return {
+      averageRating,
+      discountPercent,
+      hasSalePrice,
+      isSoldOut,
+      price: formatPhp(product.priceCents),
+      originalPrice: hasSalePrice && product.originalPriceCents ? formatPhp(product.originalPriceCents) : '',
+      reviewCount,
+    };
+  }, [
+    product.averageRating,
+    product.originalPriceCents,
+    product.priceCents,
+    product.reviewCount,
+    product.stock,
+  ]);
   const handlePress = useCallback(() => {
     router.push(`/product-details?id=${encodeURIComponent(product.id)}`);
   }, [product.id]);
@@ -50,14 +69,14 @@ export const ProductCard = memo(function ProductCard({ product, style }: Product
       ) : (
         <Image contentFit="cover" source={imageNotFound} style={styles.image} />
       )}
-      {isSoldOut ? (
+      {display.isSoldOut ? (
         <View style={styles.soldOutBadge}>
           <Text style={styles.soldOutText}>Sold out</Text>
         </View>
       ) : null}
-      {hasSalePrice ? (
+      {display.hasSalePrice ? (
         <View style={styles.discountBadge}>
-          <Text style={styles.discountText}>-{discountPercent}%</Text>
+          <Text style={styles.discountText}>-{display.discountPercent}%</Text>
         </View>
       ) : null}
       <View style={styles.body}>
@@ -65,25 +84,25 @@ export const ProductCard = memo(function ProductCard({ product, style }: Product
           {product.name}
         </Text>
         <View style={styles.priceRow}>
-          <Text style={styles.price}>{formatPhp(product.priceCents)}</Text>
-          {hasSalePrice && product.originalPriceCents ? (
-            <Text style={styles.originalPrice}>{formatPhp(product.originalPriceCents)}</Text>
+          <Text style={styles.price}>{display.price}</Text>
+          {display.originalPrice ? (
+            <Text style={styles.originalPrice}>{display.originalPrice}</Text>
           ) : null}
         </View>
         <View style={styles.ratingRow}>
           <View style={styles.stars}>
-            {[1, 2, 3, 4, 5].map((star) => (
+            {ratingStars.map((star) => (
               <Star
                 key={star}
                 size={11}
-                color={averageRating >= star - 0.25 ? '#F2B950' : '#DDE0DD'}
-                fill={averageRating >= star - 0.25 ? '#F2B950' : 'transparent'}
+                color={display.averageRating >= star - 0.25 ? '#F2B950' : '#DDE0DD'}
+                fill={display.averageRating >= star - 0.25 ? '#F2B950' : 'transparent'}
                 strokeWidth={2}
               />
             ))}
           </View>
           <Text numberOfLines={1} style={styles.ratingText}>
-            {averageRating.toFixed(1)} ({reviewCount} {reviewCount === 1 ? 'Review' : 'Reviews'})
+            {display.averageRating.toFixed(1)} ({display.reviewCount} {display.reviewCount === 1 ? 'Review' : 'Reviews'})
           </Text>
         </View>
       </View>

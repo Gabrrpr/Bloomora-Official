@@ -1,17 +1,48 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DeliveryCard } from '@/components/rider/delivery-card';
-import { deliveryTasks, getStatusLabel } from '@/constants/mock-deliveries';
 import { Fonts, theme } from '@/constants/theme';
+import { getMyDeliveries, type RiderDelivery } from '@/services/deliveries-api';
+import { getDeliveryCardStatus, getDeliveryEta } from '@/utils/delivery-format';
 
 const banner = require('@/assets/images/rider/home-banner.png');
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const currentDelivery = deliveryTasks[0];
+  const [deliveries, setDeliveries] = useState<RiderDelivery[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const currentDelivery = deliveries[0];
+
+  useEffect(() => {
+    let isMounted = true;
+
+    getMyDeliveries()
+      .then((nextDeliveries) => {
+        if (isMounted) {
+          setDeliveries(nextDeliveries);
+          setError(null);
+        }
+      })
+      .catch((nextError) => {
+        if (isMounted) {
+          setError(nextError instanceof Error ? nextError.message : 'Unable to load deliveries.');
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <ScrollView
@@ -34,7 +65,7 @@ export default function HomeScreen() {
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-        {['All', 'Ongoing', 'Assigned(3)', 'Completed'].map((filter, index) => (
+        {['All', 'Active', `Assigned(${deliveries.length})`, 'Completed'].map((filter, index) => (
           <View key={filter} style={[styles.filterPill, index === 0 && styles.filterPillActive]}>
             <Text style={[styles.filterText, index === 0 && styles.filterTextActive]}>{filter}</Text>
           </View>
@@ -45,15 +76,23 @@ export default function HomeScreen() {
         <View style={styles.currentPill}>
           <Text style={styles.currentPillText}>CURRENT DELIVERY</Text>
         </View>
-        <DeliveryCard
-          address={currentDelivery.address}
-          customer={currentDelivery.recipientName}
-          eta={`Deliver before ${currentDelivery.deliverBefore}`}
-          id={`ORD-${currentDelivery.orderNumber}`}
-          items={currentDelivery.item.name}
-          status={getStatusLabel(currentDelivery.status) === 'Ready for Pickup' ? 'Assigned' : 'In Transit'}
-          onOpen={() => router.push({ pathname: '/delivery/[id]/index', params: { id: currentDelivery.id } })}
-        />
+        {isLoading ? (
+          <Text style={styles.stateText}>Loading your assigned deliveries...</Text>
+        ) : error ? (
+          <Text selectable style={styles.stateText}>{error}</Text>
+        ) : currentDelivery ? (
+          <DeliveryCard
+            address={currentDelivery.address}
+            customer={currentDelivery.recipientName}
+            eta={getDeliveryEta(currentDelivery)}
+            id={currentDelivery.orderNumber}
+            items={currentDelivery.itemSummary}
+            status={getDeliveryCardStatus(currentDelivery.status)}
+            onOpen={() => router.push({ pathname: '/delivery/[id]/index', params: { id: currentDelivery.id } })}
+          />
+        ) : (
+          <Text style={styles.stateText}>No assigned deliveries right now.</Text>
+        )}
       </View>
     </ScrollView>
   );
@@ -139,5 +178,11 @@ const styles = StyleSheet.create({
   screen: {
     backgroundColor: theme.colors.surfaceAlt,
     flex: 1,
+  },
+  stateText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 14,
+    lineHeight: 20,
   },
 });

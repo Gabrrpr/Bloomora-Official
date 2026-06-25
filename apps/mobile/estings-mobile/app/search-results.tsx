@@ -1,7 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import {
-  Animated,
-  Easing,
   FlatList,
   Platform,
   Pressable,
@@ -11,7 +9,7 @@ import {
   View,
 } from 'react-native';
 import { ArrowLeft, ChevronDown, Search, X } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppBrandHeader } from '@/components/app-brand-header';
@@ -333,32 +331,7 @@ function SearchHeaderSkeleton() {
 }
 
 function SkeletonBlock({ style }: { style: object }) {
-  const opacity = useRef(new Animated.Value(0.42)).current;
-
-  useEffect(() => {
-    const animation = Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, {
-          duration: 760,
-          easing: Easing.inOut(Easing.quad),
-          toValue: 0.78,
-          useNativeDriver: false,
-        }),
-        Animated.timing(opacity, {
-          duration: 760,
-          easing: Easing.inOut(Easing.quad),
-          toValue: 0.42,
-          useNativeDriver: false,
-        }),
-      ]),
-    );
-
-    animation.start();
-
-    return () => animation.stop();
-  }, [opacity]);
-
-  return <Animated.View style={[styles.skeletonBase, style, { opacity }]} />;
+  return <View style={[styles.skeletonBase, style]} />;
 }
 
 const styles = StyleSheet.create({

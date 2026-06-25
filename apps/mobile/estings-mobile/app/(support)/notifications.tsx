@@ -1,5 +1,5 @@
 import { router, useFocusEffect } from 'expo-router';
-import { Bell, CheckCheck, ChevronLeft, PackageCheck, Tag } from 'lucide-react-native';
+import { Bell, CheckCheck, ChevronLeft, LogIn, PackageCheck, Tag } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -35,8 +35,11 @@ export default function NotificationsScreen() {
 
     try {
       const nextSession = await getAuthSession();
+      setSession(nextSession);
       if (!nextSession) {
-        router.replace('/(auth)/login');
+        setNotifications([]);
+        setUnreadCount(0);
+        setErrorMessage(null);
         return;
       }
 
@@ -44,7 +47,6 @@ export default function NotificationsScreen() {
         getNotifications({ session: nextSession }),
         getUnreadNotificationCount({ session: nextSession }),
       ]);
-      setSession(nextSession);
       setNotifications(nextNotifications);
       setUnreadCount(nextUnreadCount);
       setErrorMessage(null);
@@ -145,6 +147,8 @@ export default function NotificationsScreen() {
         <View style={styles.loadingState}>
           <ActivityIndicator color={theme.colors.primary} />
         </View>
+      ) : !session ? (
+        <SignedOutState />
       ) : notifications.length ? (
         <View style={styles.list}>
           {notifications.map((notification) => (
@@ -158,6 +162,25 @@ export default function NotificationsScreen() {
         />
       )}
     </ScrollView>
+  );
+}
+
+function SignedOutState() {
+  return (
+    <View style={styles.signedOutState}>
+      <View style={styles.signedOutIcon}>
+        <LogIn size={28} color={theme.colors.primary} />
+      </View>
+      <Text style={styles.signedOutTitle}>Please log in</Text>
+      <Text style={styles.signedOutText}>Sign in to view your order updates, promos, and account activity.</Text>
+      <Pressable
+        accessibilityLabel="Log in to view notifications"
+        accessibilityRole="button"
+        onPress={() => router.push('/(auth)/login')}
+        style={({ pressed }) => [styles.signInButton, pressed && styles.pressed]}>
+        <Text style={styles.signInButtonText}>Log in</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -305,6 +328,51 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.78,
+  },
+  signInButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    marginTop: theme.spacing.sm,
+    minHeight: 46,
+    paddingHorizontal: theme.spacing.xl,
+  },
+  signInButtonText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 14,
+  },
+  signedOutIcon: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.greenSoft,
+    borderRadius: theme.radius.pill,
+    height: 64,
+    justifyContent: 'center',
+    width: 64,
+  },
+  signedOutState: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    padding: theme.spacing.xl,
+  },
+  signedOutText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 14,
+    lineHeight: 20,
+    textAlign: 'center',
+  },
+  signedOutTitle: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 18,
+    lineHeight: 24,
+    textAlign: 'center',
   },
   screen: {
     backgroundColor: theme.colors.background,

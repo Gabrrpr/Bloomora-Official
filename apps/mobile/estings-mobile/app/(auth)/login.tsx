@@ -18,12 +18,14 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { EstingsLogo } from '@/components/estings-logo';
 import { Fonts, theme } from '@/constants/theme';
+import { ApiError } from '@/services/api-client';
 import { loginWithOAuthProvider, loginWithPassword } from '@/services/auth-api';
 import { type FormErrors, isValidEmail, required } from '@/utils/auth-validation';
 
 type LoginField = 'identifier' | 'password';
 const cooldownDurationSeconds = 30;
 const maxFailedSignInAttempts = 3;
+const serviceUnavailableStatuses = new Set([502, 503, 504]);
 
 export default function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -67,6 +69,20 @@ export default function LoginScreen() {
     return Object.keys(nextErrors).length === 0;
   }
 
+  function getNonCredentialSignInMessage(error: unknown) {
+    if (error instanceof ApiError) {
+      if (error.status === 0) {
+        return error.message;
+      }
+
+      if (serviceUnavailableStatuses.has(error.status)) {
+        return 'Unable to reach service, please try again.';
+      }
+    }
+
+    return 'Unable to sign in, please try again.';
+  }
+
   async function handleSignIn() {
     if (cooldownSeconds > 0) {
       setSubmitError(`Please wait ${cooldownSeconds} seconds before trying again.`);
@@ -85,9 +101,12 @@ export default function LoginScreen() {
       setFailedSignInAttempts(0);
       router.replace('/(tabs)');
     } catch (error) {
-      const message = error instanceof Error ? error.message : '';
-      const nextFailedSignInAttempts = failedSignInAttempts + 1;
+      if (!(error instanceof ApiError) || error.status !== 401) {
+        setSubmitError(getNonCredentialSignInMessage(error));
+        return;
+      }
 
+      const nextFailedSignInAttempts = failedSignInAttempts + 1;
       setFailedSignInAttempts(nextFailedSignInAttempts);
 
       if (nextFailedSignInAttempts >= maxFailedSignInAttempts) {
@@ -95,11 +114,7 @@ export default function LoginScreen() {
         setCooldownSeconds(cooldownDurationSeconds);
         setSubmitError(`Please wait ${cooldownDurationSeconds} seconds before trying again.`);
       } else {
-        setSubmitError(
-          message.toLowerCase().includes('invalid credentials')
-            ? 'Incorrect email or password, please try again.'
-            : 'Unable to sign in, please try again.',
-        );
+        setSubmitError('Incorrect email or password, please try again.');
       }
     } finally {
       setIsSubmitting(false);

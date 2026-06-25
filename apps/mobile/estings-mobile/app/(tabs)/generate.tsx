@@ -2,7 +2,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ArrowRight, Send, Shuffle, Sparkles } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { NativeScrollEvent, NativeSyntheticEvent, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import { Alert, NativeScrollEvent, NativeSyntheticEvent, Platform, Pressable, StyleSheet, Text, ToastAndroid, View, useWindowDimensions } from 'react-native';
 import Animated, {
   Extrapolation,
   SharedValue,
@@ -22,6 +22,7 @@ import Svg, { Circle, Defs, LinearGradient, Path, Stop } from 'react-native-svg'
 import { AppBrandHeader } from '@/components/app-brand-header';
 import { FloatingProductSearch } from '@/components/floating-product-search';
 import { Fonts, theme } from '@/constants/theme';
+import { getAuthSession } from '@/services/auth-session';
 
 const SCENES = [
   {
@@ -144,6 +145,17 @@ export default function GenerateScreen() {
     [scheduleSwipeGuide],
   );
 
+  const handleOpenCreationMethod = useCallback(async (route: '/create/describe' | '/create/mix-and-match') => {
+    const session = await getAuthSession();
+
+    if (!session) {
+      showSignInToast();
+      return;
+    }
+
+    router.push(route);
+  }, []);
+
   const sceneFadeStyle = useAnimatedStyle(() => ({
     opacity: interpolate(scrollY.value, [sceneHeight * 2.35, sceneHeight * 2.9], [1, 0.18], Extrapolation.CLAMP),
     transform: [
@@ -203,7 +215,7 @@ export default function GenerateScreen() {
                 icon={method.icon}
                 iconBackground={method.iconBackground}
                 onPress={() => {
-                  router.push(method.title === 'Describe Your Arrangement' ? '/create/describe' : '/create/mix-and-match');
+                  void handleOpenCreationMethod(method.title === 'Describe Your Arrangement' ? '/create/describe' : '/create/mix-and-match');
                 }}
                 title={method.title}
               />
@@ -223,6 +235,17 @@ export default function GenerateScreen() {
       ) : null}
     </View>
   );
+}
+
+function showSignInToast() {
+  const message = 'Please log in to create your custom arrangement.';
+
+  if (Platform.OS === 'android') {
+    ToastAndroid.show(message, ToastAndroid.SHORT);
+    return;
+  }
+
+  Alert.alert('Log in to create', message);
 }
 
 function FinalHeader({

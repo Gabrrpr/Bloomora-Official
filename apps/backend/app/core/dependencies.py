@@ -49,3 +49,10 @@ def require_staff(current_user: User = Depends(get_current_user)) -> User:
     if role_val not in ["admin", "staff"]:
         raise HTTPException(status_code=403, detail="Staff or Admin privileges required")
     return current_user
+
+
+def require_delivery(current_user: User = Depends(get_current_user)) -> User:
+    role_val = current_user.role.value if hasattr(current_user.role, 'value') else str(current_user.role)
+    if role_val != "delivery":
+        raise HTTPException(status_code=403, detail="Delivery rider access required")
+    return current_user
