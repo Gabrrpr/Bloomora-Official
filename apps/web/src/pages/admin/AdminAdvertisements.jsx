@@ -96,6 +96,12 @@ function LazyImage({ src, alt, style, eager = false, onClick, fit = "cover" }) {
   const ref = useRef(null)
   const [inView, setInView] = useState(eager)
   const [loaded, setLoaded] = useState(false)
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    setLoaded(false)
+    setFailed(false)
+  }, [src])
 
   useEffect(() => {
     if (eager) return
@@ -111,14 +117,24 @@ function LazyImage({ src, alt, style, eager = false, onClick, fit = "cover" }) {
 
   return (
     <div ref={ref} style={{ position: "relative", overflow: "hidden", ...style }}>
-      {!loaded && (
+      {!loaded && !failed && (
         <div className="absolute inset-0 animate-pulse"
           style={{ background: "linear-gradient(90deg,#e2e8f0 25%,#f1f5f9 50%,#e2e8f0 75%)", backgroundSize: "200% 100%", animation: "shimmer 1.5s infinite" }} />
       )}
-      {inView && (
+      {failed && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-3 text-center"
+          style={{ backgroundColor: "#f8fafc", color: "#64748b" }}>
+          <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909M3.75 19.5h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Z" />
+          </svg>
+          <span className="text-[11px] font-semibold">Image unavailable</span>
+        </div>
+      )}
+      {inView && !failed && (
         <img
           src={src} alt={alt} decoding="async"
           onLoad={() => setLoaded(true)}
+          onError={() => { setFailed(true); setLoaded(true) }}
           onClick={onClick}
           style={{
             width: "100%", height: "100%",
@@ -143,6 +159,7 @@ export default function AdminAdvertisements() {
   const [saved,     setSaved]     = useState(false)
   const [gridReady, setGridReady] = useState(false)
   const [uploadError, setUploadError] = useState("")
+  const [uploading, setUploading] = useState(false)
   const [renaming, setRenaming] = useState(null)   // ad being renamed, or null
   const [renameValue, setRenameValue] = useState("")
   // Drives the one-time entrance animation; removed after it plays so it never replays.
@@ -160,6 +177,7 @@ export default function AdminAdvertisements() {
             id: ad.id,
             title: ad.title,
             src: ad.image_url,
+            storagePath: ad.storage_path || null,
             builtin: false,
             isActive: ad.is_active,
             sortOrder: ad.sort_order || 0,
@@ -209,7 +227,7 @@ export default function AdminAdvertisements() {
       if (activeAd.builtin) {
         const created = await api.createAdvertisement({
           title: activeAd.title,
-          image_url: activeAd.src,
+          image_url: activeAd.storagePath || activeAd.src,
           is_active: true,
           sort_order: activeIndex,
         })
@@ -217,7 +235,7 @@ export default function AdminAdvertisements() {
       } else {
         await api.updateAdvertisement(activeAd.id, {
           title: activeAd.title,
-          image_url: activeAd.src,
+          image_url: activeAd.storagePath || activeAd.src,
           is_active: true,
           sort_order: activeAd.sortOrder || activeIndex,
         })
@@ -249,16 +267,31 @@ export default function AdminAdvertisements() {
     if (!file.type.startsWith("image/")) { setUploadError("Please choose an image file (PNG or JPG)."); return }
 
     let dataUrl
-    try { dataUrl = (await api.uploadImage("advertisements", file)).url }
-    catch { setUploadError("Sorry, that image couldn't be processed."); return }
+    let storagePath
+    setUploading(true)
+    try {
+      const upload = await api.uploadImage("advertisements", file)
+      dataUrl = upload?.url
+      storagePath = upload?.storage_path || upload?.storagePath || null
+      if (!dataUrl) throw new Error("Upload finished without an image URL.")
+    }
+    catch (err) {
+      setUploadError(err?.message || "Sorry, that image couldn't be processed.")
+      setUploading(false)
+      return
+    }
 
     const targetId = uploadTargetRef.current
 
     if (targetId == null) {
       // Add a brand-new advertisement
       const title = (file.name || "Advertisement").replace(/\.[^/.]+$/, "").slice(0, 40) || "Advertisement"
-      const created = await api.createAdvertisement({ title, image_url: dataUrl, is_active: false, sort_order: ads.length })
-      const next = [...ads, { id: created.id, title: created.title, src: created.image_url, builtin: false, sortOrder: created.sort_order }]
+      const created = await api.createAdvertisement({ title, image_url: storagePath || dataUrl, is_active: false, sort_order: ads.length })
+        .catch(err => {
+          setUploading(false)
+          throw err
+        })
+      const next = [...ads, { id: created.id, title: created.title, src: created.image_url, storagePath: created.storage_path || storagePath || null, builtin: false, sortOrder: created.sort_order }]
       setAds(next)
       const ok = persistCustomAds(next)
       setUploadError(ok ? "" : "Added for this session, but local storage is full — it won't persist after reload.")
@@ -266,7 +299,7 @@ export default function AdminAdvertisements() {
       setSaved(false)
     } else {
       // Replace an existing ad's image
-      const next = ads.map(a => a.id === targetId ? { ...a, src: dataUrl } : a)
+      const next = ads.map(a => a.id === targetId ? { ...a, src: dataUrl, storagePath: storagePath || null } : a)
       setAds(next)
       const target = next.find(a => a.id === targetId)
       const ok = target?.builtin ? persistOverrides(next) : persistCustomAds(next)
@@ -274,13 +307,17 @@ export default function AdminAdvertisements() {
       if (target && !target.builtin) {
         await api.updateAdvertisement(target.id, {
           title: target.title,
-          image_url: target.src,
+          image_url: target.storagePath || target.src,
           is_active: target.id === active,
           sort_order: target.sortOrder || 0,
+        }).catch(err => {
+          setUploading(false)
+          throw err
         })
       }
       setSaved(false)
     }
+    setUploading(false)
   }
 
   const handleDelete = async (id) => {
@@ -334,13 +371,13 @@ export default function AdminAdvertisements() {
           </p>
         </div>
         <div className="flex items-center gap-2.5">
-          <button onClick={() => triggerUpload(null)}
+          <button onClick={() => triggerUpload(null)} disabled={uploading}
             className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold rounded-lg transition-all hover:opacity-90 active:scale-95"
-            style={{ border: `1.5px solid ${btnBdr}`, color: btnTxt, background: btnBg }}>
+            style={{ border: `1.5px solid ${btnBdr}`, color: btnTxt, background: btnBg, opacity: uploading ? 0.65 : 1, cursor: uploading ? "wait" : "pointer" }}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 7.5L12 3m0 0L7.5 7.5M12 3v13.5"/>
             </svg>
-            Upload New Ad
+            {uploading ? "Uploading..." : "Upload New Ad"}
           </button>
           <button onClick={handleSave}
             className="flex items-center gap-2 px-5 py-2.5 text-sm font-bold text-white rounded-lg transition-all hover:opacity-90 active:scale-95"
@@ -354,11 +391,15 @@ export default function AdminAdvertisements() {
       </div>
 
       {/* ── Upload notice ── */}
-      {uploadError && (
+      {(uploadError || uploading) && (
         <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-xs font-medium"
-          style={{ background: isDark ? "rgba(245,158,11,0.12)" : "#fffbeb", border: `1px solid ${isDark ? "rgba(245,158,11,0.3)" : "#fde68a"}`, color: isDark ? "#fde68a" : "#92400e" }}>
-          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          {uploadError}
+          style={{ background: uploadError ? (isDark ? "rgba(245,158,11,0.12)" : "#fffbeb") : (isDark ? "rgba(34,197,94,0.12)" : "#f0fdf4"), border: `1px solid ${uploadError ? (isDark ? "rgba(245,158,11,0.3)" : "#fde68a") : (isDark ? "rgba(34,197,94,0.3)" : "#bbf7d0")}`, color: uploadError ? (isDark ? "#fde68a" : "#92400e") : (isDark ? "#86efac" : G) }}>
+          {uploading ? (
+            <span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin flex-shrink-0" />
+          ) : (
+            <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          )}
+          {uploading ? "Uploading and preparing the advertisement image..." : uploadError}
         </div>
       )}
 
@@ -385,6 +426,11 @@ export default function AdminAdvertisements() {
               src={activeAd.src}
               alt={activeAd.title}
               decoding="async"
+              onError={e => {
+                e.currentTarget.style.opacity = "0.35"
+                setUploadError("The selected advertisement image URL could not be loaded. Try replacing the image.")
+              }}
+              onLoad={e => { e.currentTarget.style.opacity = "1" }}
               onClick={() => setPreview(activeAd)}
               className="w-full rounded-xl cursor-pointer hover:scale-[1.01] transition-transform duration-200"
               style={{ display: "block", height: "auto", maxHeight: "480px", objectFit: "contain", boxShadow: "0 8px 32px rgba(0,0,0,0.15)" }}

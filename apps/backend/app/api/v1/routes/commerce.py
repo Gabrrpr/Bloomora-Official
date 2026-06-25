@@ -7,7 +7,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
+from supabase import create_client
 
+from app.core.config import settings
 from app.core.dependencies import get_db, get_current_user, require_staff
 from app.models import Advertisement, Campaign, CommerceSetting, PromoCode, User
 
@@ -75,11 +77,24 @@ def serialize_promo(promo: PromoCode) -> dict:
     }
 
 
+def advertisement_display_url(path_or_url: str) -> str:
+    if path_or_url.startswith(("http://", "https://", "data:")):
+        return path_or_url
+    try:
+        storage = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY).storage.from_("advertisements")
+        signed = storage.create_signed_url(path_or_url, 60 * 60 * 24 * 7)
+        return signed.get("signedURL") or signed.get("signedUrl") or path_or_url
+    except Exception:
+        return path_or_url
+
+
 def serialize_ad(ad: Advertisement) -> dict:
+    storage_path = None if ad.image_url.startswith(("http://", "https://", "data:")) else ad.image_url
     return {
         "id": str(ad.id),
         "title": ad.title,
-        "image_url": ad.image_url,
+        "image_url": advertisement_display_url(ad.image_url),
+        "storage_path": storage_path,
         "is_active": ad.is_active,
         "sort_order": ad.sort_order,
     }

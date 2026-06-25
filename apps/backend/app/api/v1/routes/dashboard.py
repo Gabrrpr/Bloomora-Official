@@ -17,6 +17,16 @@ PH_TZ = timezone(timedelta(hours=8))
 
 # 🚀 THE FIX: The VIP List of statuses that actually count as "Revenue"
 REVENUE_STATUSES = ["delivered", "confirmed", "preparing", "out_for_delivery", "completed", "paid"]
+DEMAND_STATUSES = [
+    "paid",
+    "confirmed",
+    "preparing",
+    "processing",
+    "ready_for_pickup",
+    "out_for_delivery",
+    "delivered",
+    "completed",
+]
 
 @router.get("/revenue")
 def get_revenue(
@@ -170,20 +180,28 @@ def get_recent_orders(
 @router.get("/trending")
 def get_trending_products(
     branch: str = "all",
+    days: int = 30,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # REMOVE THE TRANSACTION JOIN TEMPORARILY TO TEST
+    window_days = max(1, min(days, 365))
+    since = datetime.now(timezone.utc) - timedelta(days=window_days)
+
     q = db.query(
         Product.id,
         Product.name,
-        func.sum(OrderItem.quantity).label("sold")
+        func.sum(OrderItem.quantity).label("sold"),
+        (func.sum(OrderItem.quantity) / window_days).label("avg_daily_demand"),
     ).join(
         OrderItem, OrderItem.product_id == Product.id
     ).join(
         Order, Order.id == OrderItem.order_id
+    ).join(
+        Transaction, Transaction.order_id == Order.id
     ).filter(
-        Order.status.in_(["delivered", "completed", "paid"])
+        Order.created_at >= since,
+        Order.status.in_(DEMAND_STATUSES),
+        Transaction.status == PaymentStatusEnum.paid,
     )
 
     clean_branch = branch.strip().lower()
@@ -192,13 +210,14 @@ def get_trending_products(
 
     results = q.group_by(Product.id, Product.name).order_by(desc("sold")).limit(5).all()
     
-    print(f"DEBUG: Found {len(results)} trending products") # Check your server terminal!
-    
     return [
         {
             "id": str(r.id),
             "name": r.name,
-            "sold": int(r.sold or 0)
+            "sold": int(r.sold or 0),
+            "period_days": window_days,
+            "avg_daily_demand": round(float(r.avg_daily_demand or 0), 2),
+            "forecast_next_7_days": int(round(float(r.avg_daily_demand or 0) * 7)),
         }
         for r in results
     ]

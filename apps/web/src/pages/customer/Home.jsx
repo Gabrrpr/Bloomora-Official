@@ -16,7 +16,6 @@ import FallingRoses from "../../components/FallingRoses.jsx"
 import FeaturesBar from "../../components/FeaturesBar.jsx"
 import BackToTop from "../../components/BackToTop.jsx"
 import ProductPreviewModal from "../../components/ProductPreviewModal.jsx" 
-import AdPopup from "../../components/AdPopup.jsx" 
 import GridCard from "../../components/GridCard.jsx"
 
 // ── Live countdown for the flash sale (only renders when there's a real end time) ──
@@ -73,7 +72,6 @@ export default function Home({ onNavigate, isCustomizationEnabled }) {
   console.log("📍 Home.jsx detected branch change:", branch);
   
   const [previewProduct, setPreviewProduct] = useState(null)
-  const [showAd, setShowAd] = useState(true)
   const [flashSales, setFlashSales] = useState([])
 
   // Fetch all flash sales
@@ -102,8 +100,6 @@ export default function Home({ onNavigate, isCustomizationEnabled }) {
 
   return (
     <div style={{ backgroundColor: isDark ? "#0f172a" : "#ffffff" }}>
-      {showAd && <AdPopup onClose={() => setShowAd(false)} />}
-
       <div className="relative overflow-hidden">
         <FallingRoses />
         <HeroCarousel onNavigate={onNavigate} />

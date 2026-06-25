@@ -40,7 +40,14 @@ async def upload_file(
         
         # Get public URL
         public_url = supabase.storage.from_(bucket_name).get_public_url(filename)
-        return {"url": public_url}
+        display_url = public_url
+        if bucket_name == "advertisements":
+            try:
+                signed = supabase.storage.from_(bucket_name).create_signed_url(filename, 60 * 60 * 24 * 7)
+                display_url = signed.get("signedURL") or signed.get("signedUrl") or public_url
+            except Exception:
+                display_url = public_url
+        return {"url": display_url, "storage_path": filename}
         
     except HTTPException:
         raise

@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, useCallback } from "react"
+import React, { useState, useRef, useEffect, useCallback } from "react"
+import { useNavigate } from "react-router-dom"
 import { useAuth } from "../../context/AuthContext"
-import { useNavigate } from "react-router-dom";
 import { useTheme } from "../../context/ThemeContext"
 import estingsLogo from "../../assets/EstingsLogo.svg"
 import estingsText from "../../assets/Estings.svg"
@@ -78,46 +78,40 @@ const REVENUE_PERIODS = [
 // ─────────────────────────────────────────────────────────────────────────────
 function useTokens(isDark) {
   if (isDark) return {
-    // Page & surfaces — each level clearly distinct
-    pageBg:      "#0f172a",         // darkest — page background
-    surfaceBg:   "#1e293b",         // cards, panels — clearly lighter than page
-    surfaceAlt:  "#162032",         // alt rows, disabled inputs
+    // Page & surfaces
+    pageBg:      "#0f172a",
+    surfaceBg:   "#1e293b",
+    surfaceAlt:  "#162032",
     cardBg:      "#1e293b",
-    cardBorder:  "#334155",         // clearly visible border
+    cardBorder:  "#334155",
     cardShadow:  "0 2px 8px rgba(0,0,0,0.4)",
     inputBg:     "#0f172a",
-    inputBorder: "#475569",         // clearly visible input border
+    inputBorder: "#475569",
     divider:     "#334155",
-    hoverBg:     "#2d3f55",         // noticeably lighter on hover
-    // Text — high contrast, all readable
-    textPrimary:   "#f1f5f9",       // almost white — headings, values
-    textSecondary: "#cbd5e1",       // light gray — body text, labels
-    textMuted:     "#94a3b8",       // medium gray — captions, metadata
-    // Sidebar
-    sidebarBg:     "#111827",       // slightly different from page
+    hoverBg:     "#2d3f55",
+    textPrimary:   "#f1f5f9",
+    textSecondary: "#cbd5e1",
+    textMuted:     "#94a3b8",
+    sidebarBg:     "#111827",
     sidebarBorder: "#1e293b",
     navActive:     "rgba(74,222,128,0.12)",
     navHover:      "#1e2d3d",
-    navTextActive: "#4ade80",       // bright green — clearly active
-    navTextNormal: "#94a3b8",       // readable gray
-    navTextHover:  "#e2e8f0",       // near-white on hover
-    // Accent
+    navTextActive: "#4ade80",
+    navTextNormal: "#94a3b8",
+    navTextHover:  "#e2e8f0",
     accentG:  "#4ade80",
     accentDG: "#22c55e",
-    // Table
-    tableHead:   "#162032",         // subtly different from card
+    tableHead:   "#162032",
     tableBorder: "#2d3f55",
-    // Misc
     overlayBg: "rgba(0,0,0,0.75)",
     badgeBg:   "#1a2d42",
     chartGrid: "#2d3f55",
     chartDash: "#2d3f55",
-    // Topbar icon button
     iconBtnHover: "#1e293b",
     iconBtnBorder: "#334155",
   }
 
-  // Light mode — unchanged
+  // Light mode
   return {
     pageBg:      "#f3f5f8",
     surfaceBg:   "#ffffff",
@@ -175,7 +169,6 @@ function DarkModeToggle() {
       onMouseEnter={e => e.currentTarget.style.transform = "scale(1.08)"}
       onMouseLeave={e => e.currentTarget.style.transform = "scale(1)"}
     >
-      {/* Sun */}
       <span style={{
         position: "absolute", inset: 0,
         display: "flex", alignItems: "center", justifyContent: "center",
@@ -188,7 +181,6 @@ function DarkModeToggle() {
           <path d="M12 2v2M12 20v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M2 12h2M20 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
         </svg>
       </span>
-      {/* Moon */}
       <span style={{
         position: "absolute", inset: 0,
         display: "flex", alignItems: "center", justifyContent: "center",
@@ -503,10 +495,8 @@ function RevenueChart({ branch }) {
 }
 
 // ─── Recent Orders Card ───────────────────────────────────────────────────────
-function RecentOrdersCard({ branch, t, orders, loading }) {
-  // 🚀 NEW: Initialize the navigate function
-  const navigate = useNavigate();
-
+function RecentOrdersCard({ branch, t, orders, loading, onViewAll }) {
+  const navigate = useNavigate(); // Ensuring the hook is ready here or passed via onViewAll. We'll use the passed prop onViewAll to be safe.
   return (
     <div className="rounded-xl overflow-hidden h-full flex flex-col"
       style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
@@ -517,9 +507,8 @@ function RecentOrdersCard({ branch, t, orders, loading }) {
           <BranchBadge branch={branch} />
         </div>
         
-        {/* 🚀 NEW: Added onClick to trigger navigation to the orders page */}
         <button 
-          onClick={() => navigate("/admin/orders")} 
+          onClick={onViewAll} 
           className="text-xs font-semibold px-2.5 py-1 rounded-md border transition-all hover:opacity-80 active:scale-95"
           style={{ borderColor: t.cardBorder, color: t.textSecondary }}>
           View All
@@ -624,7 +613,6 @@ function LowStockCard({ branch, lowStock, t, isDark, onManage }) {
             onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
             <div className="flex items-center gap-2 min-w-0">
               
-              {/* 🚀 NEW: Product Image Container replacing the danger icon */}
               <div className="w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center overflow-hidden"
                 style={{ backgroundColor: isDark ? "#1e293b" : "#f1f5f9", border: `1px solid ${isDark ? "#334155" : "#e2e8f0"}` }}>
                 {item.image_url || item.image ? (
@@ -660,8 +648,8 @@ function LowStockCard({ branch, lowStock, t, isDark, onManage }) {
 }
 
 function TrendingProductsCard({ branch, trending, t, isDark }) {
-  // Find the highest sold count to calculate progress bar widths
-  const maxSold = trending.length > 0 ? Math.max(...trending.map(i => i.sold)) : 1;
+  const demandValue = item => Number(item.forecast_next_7_days ?? item.sold ?? 0)
+  const maxDemand = trending.length > 0 ? Math.max(...trending.map(demandValue), 1) : 1;
 
   return (
     <div className="rounded-xl overflow-hidden h-full flex flex-col"
@@ -674,7 +662,7 @@ function TrendingProductsCard({ branch, trending, t, isDark }) {
         </div>
         <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md" 
           style={{ backgroundColor: isDark ? "rgba(59,130,246,0.15)" : "#eff6ff", color: isDark ? "#60a5fa" : "#2563eb" }}>
-          Trending
+          30-day rate
         </span>
       </div>
       
@@ -682,23 +670,28 @@ function TrendingProductsCard({ branch, trending, t, isDark }) {
         {trending.length === 0 ? (
            <div className="flex flex-col items-center justify-center py-6 text-center">
              <p className="text-sm font-medium" style={{ color: t.textSecondary }}>No data yet</p>
-             <p className="text-xs mt-0.5" style={{ color: t.textMuted }}>Waiting for more sales to calculate demand.</p>
+             <p className="text-xs mt-0.5" style={{ color: t.textMuted }}>Waiting for paid sales to calculate demand.</p>
            </div>
         ) : (
           trending.slice(0, 5).map((item, idx) => {
-            const pct = Math.max(5, (item.sold / maxSold) * 100);
+            const pct = Math.max(5, (demandValue(item) / maxDemand) * 100);
             return (
               <div key={item.id || idx} className="flex flex-col gap-1.5">
                 <div className="flex justify-between items-end">
                   <p className="text-sm font-medium truncate" style={{ color: t.textPrimary }}>{item.name}</p>
-                  <p className="text-xs font-bold whitespace-nowrap" style={{ color: t.textSecondary }}>{item.sold} sold</p>
+                  <p className="text-xs font-bold whitespace-nowrap" style={{ color: t.textSecondary }}>
+                    {item.forecast_next_7_days ?? 0} next 7d
+                  </p>
                 </div>
+                <p className="text-[11px]" style={{ color: t.textMuted }}>
+                  {item.sold} sold in {item.period_days || 30}d · avg {Number(item.avg_daily_demand || 0).toFixed(2)}/day
+                </p>
                 <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: isDark ? "#334155" : "#f1f5f9" }}>
                   <div className="h-full rounded-full transition-all duration-700" 
                     style={{ 
                       width: `${pct}%`, 
                       background: idx === 0 
-                        ? "linear-gradient(90deg, #3b82f6, #60a5fa)" // #1 Top seller gets blue gradient
+                        ? "linear-gradient(90deg, #3b82f6, #60a5fa)"
                         : (isDark ? "#475569" : "#cbd5e1") 
                     }} 
                   />
@@ -713,7 +706,7 @@ function TrendingProductsCard({ branch, trending, t, isDark }) {
 }
 
 // ─── Draggable Panel Row ──────────────────────────────────────────────────────
-function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading, trending, onManageInventory }) {
+function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading, trending, onManageInventory, onViewOrders }) {
   const { isDark } = useTheme()
   const t = useTokens(isDark)
   const containerRef = useRef(null)
@@ -743,7 +736,7 @@ function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading, tren
   return (
     <>
       <div className="flex flex-col gap-4 xl:hidden">
-        <RecentOrdersCard branch={branch} t={t} orders={recentOrders} loading={recentLoading} />
+        <RecentOrdersCard branch={branch} t={t} orders={recentOrders} loading={recentLoading} onViewAll={onViewOrders} />
         <TrendingProductsCard branch={branch} trending={trending} t={t} isDark={isDark} />
         <LowStockCard branch={branch} lowStock={lowStock} t={t} isDark={isDark} onManage={onManageInventory} />
       </div>
@@ -754,6 +747,7 @@ function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading, tren
             t={t} 
             orders={recentOrders} 
             loading={recentLoading} 
+            onViewAll={onViewOrders}
           />
         </div>
         <div
@@ -763,7 +757,6 @@ function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading, tren
           style={{ width: "12px", flexShrink: 0, cursor: "col-resize", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 5 }}>
           <div style={{ width: "1px", height: "100%", background: hovHandle ? "#2E8B34" : t.divider, opacity: hovHandle ? 0.8 : 0.5, transition: "background 0.2s" }} />
         </div>
-        {/* 🚀 Stacked right column */}
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "16px" }}>
           <div style={{ flex: 1 }}>
              <TrendingProductsCard branch={branch} trending={trending} t={t} isDark={isDark} />
@@ -778,7 +771,6 @@ function DraggablePanelRow({ branch, lowStock, recentOrders, recentLoading, tren
 }
 
 // ─── Flower Loader ────────────────────────────────────────────────────────────
-// Animated flower shown while the dashboard data is still loading.
 function FlowerLoader({ message = "Loading...", isDark = false }) {
   const petals = [
     { angle: 0,   color: "#f48fb1" },
@@ -821,10 +813,7 @@ function DashboardPanel({ user, onNavigate }) {
   const t = useTokens(isDark);
   
   const [branch, setBranch] = useState("all");
-
-  // Full-screen flower loader on first load only; later branch switches refresh in place.
   const [initialLoading, setInitialLoading] = useState(true);
-  // One-time entrance animation; dropped after it plays so it never replays.
   const [entered, setEntered] = useState(false);
 
   const [lowStock, setLowStock] = useState([]);
@@ -834,14 +823,11 @@ function DashboardPanel({ user, onNavigate }) {
   const [revenueToday, setRevenueToday] = useState(0);
   const [recentOrders, setRecentOrders] = useState([]);
   const [recentLoading, setRecentLoading] = useState(true);
-  
-  // 🚀 NEW: Trending State
   const [trending, setTrending] = useState([]);
 
   useEffect(() => {
     const branchParam = branch === "all" ? "All Branches" : branch;
 
-    // Fetch Summary
     const pSummary = api.get(`/dashboard/summary?branch=${branch}`)
       .then(d => {
         setRevenueToday(d?.revenue_today || 0);
@@ -850,7 +836,6 @@ function DashboardPanel({ user, onNavigate }) {
       })
       .catch(err => console.error("Summary Fetch Error:", err));
 
-    // Fetch Recent Orders
     setRecentLoading(true);
     const pRecent = api.getAdminOrders({ branch: branchParam, limit: 5 })
       .then(data => {
@@ -859,7 +844,6 @@ function DashboardPanel({ user, onNavigate }) {
       .catch(err => console.error("Recent Orders Fetch Error:", err))
       .finally(() => setRecentLoading(false));
 
-    // Fetch Low Stock (Add branch filter here if your backend supports it)
     const pLow = api.get(`/products/low-stock?branch=${branchParam}`)
       .then(d => {
         setLowStock(d || []);
@@ -867,28 +851,18 @@ function DashboardPanel({ user, onNavigate }) {
       })
       .catch(() => {});
 
-    // 🚀 NEW: Fetch Trending Products
-    const pTrending = api.get(`/dashboard/trending?branch=${branchParam}`)
+    const pTrending = api.get(`/dashboard/trending?branch=${branchParam}&days=30`)
       .then(data => setTrending(Array.isArray(data) ? data : []))
-      .catch(() => {
-        // Fallback mock data in case your backend endpoint isn't built yet!
-        setTrending([
-          { id: 1, name: "Premium Red Roses", sold: 124 },
-          { id: 2, name: "Sunflower Bouquet", sold: 89 },
-          { id: 3, name: "White Lilies Bundle", sold: 67 },
-          { id: 4, name: "Custom Arrangement", sold: 42 },
-          { id: 5, name: "Spring Mixed Box", sold: 28 },
-        ]);
+      .catch(err => {
+        console.error("Demand Forecast Fetch Error:", err)
+        setTrending([])
       });
 
-    // Clear the first-load flower only after every section has settled.
     Promise.allSettled([pSummary, pRecent, pLow, pTrending])
       .finally(() => setInitialLoading(false));
 
   }, [branch]);
 
-  // Play the entrance animation once the first load finishes, then turn it off
-  // so it never replays on later re-renders.
   useEffect(() => {
     if (initialLoading) return;
     const t = setTimeout(() => setEntered(true), 1300);
@@ -897,8 +871,6 @@ function DashboardPanel({ user, onNavigate }) {
 
   const branchLabel = branch === "all" ? "All Branches" : branch.charAt(0).toUpperCase() + branch.slice(1);
 
-  // ── Print: derived metrics for the printed Dashboard Report ──
-  // The screen UI stays untouched; everything below feeds the print only.
   const handlePrint = () => window.print()
   const printDate   = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
   const printTime   = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })
@@ -907,20 +879,16 @@ function DashboardPanel({ user, onNavigate }) {
   const lowOnlyCount = Math.max(0, lowStock.length - outCount)
   const pct = n => (lowStock.length ? (n / lowStock.length) * 100 : 0)
 
-  // Full low-stock list, most depleted first (screen card shows only 8)
   const printLowStock = [...lowStock].sort(
     (a, b) => (parseInt(a.stock ?? 0) || 0) - (parseInt(b.stock ?? 0) || 0)
   )
 
-  // Report scope line shown under the printed title.
-  // Note: /products/low-stock is not branch-filtered, so that section is company-wide.
   const printScope = [
     `Branch: ${branchLabel}`,
     "Daily operations snapshot",
     `${lowStock.length} low-stock item${lowStock.length === 1 ? "" : "s"}`,
   ].join("   ·   ")
 
-  // First load: show the flower loader instead of an empty dashboard.
   if (initialLoading) {
     return (
       <div className="space-y-6">
@@ -937,20 +905,10 @@ function DashboardPanel({ user, onNavigate }) {
 
   return (
     <div>
-
-      {/* ── Print styles ──
-          The printed report is fully separate from the screen UI:
-          everything in .print-only renders ONLY on paper, and the
-          screen dashboard is no-print. Print sections in order:
-          1 letterhead band  2 title + scope  3 summary cards
-          4 restock urgency bar  5 low-stock detail table  6 footer/signatures */}
       <style>{`
         .print-only { display: none; }
-
-        /* Gentle fade + rise so content eases in once loaded instead of flashing. */
         @keyframes dashRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
         .dash-rise { animation: dashRise 0.85s ease-out both; }
-
         @media print {
           @page { margin: 12mm 10mm; }
           body * { visibility: hidden !important; }
@@ -962,8 +920,6 @@ function DashboardPanel({ user, onNavigate }) {
           .no-print { display: none !important; }
           .print-only { display: block !important; }
           .print-letterhead, .print-doc-title, .print-summary, .print-health { break-inside: avoid; page-break-inside: avoid; }
-
-          /* ── 1. Letterhead: brand band ── */
           .print-letterhead {
             display: flex !important; align-items: center; justify-content: space-between; gap: 16px;
             padding: 13px 18px; border-radius: 12px;
@@ -988,8 +944,6 @@ function DashboardPanel({ user, onNavigate }) {
           }
           .print-meta .gen { margin: 6px 0 0; font-size: 9px; color: rgba(255,255,255,0.85) !important; }
           .print-meta .gen strong { color: #ffffff !important; font-weight: 700; }
-
-          /* ── 2. Document title + report scope ── */
           .print-doc-title { display: flex !important; flex-direction: column; align-items: center; margin: 16px 0 2px; }
           .print-doc-title .t {
             margin: 0; font-size: 15px; font-weight: 800;
@@ -1001,8 +955,6 @@ function DashboardPanel({ user, onNavigate }) {
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
           }
           .print-doc-title .scope { margin: 0; font-size: 9px; color: #6b7280 !important; letter-spacing: 0.02em; text-align: center; }
-
-          /* ── 3. Summary cards ── */
           .print-summary { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 0; }
           .print-summary-card {
             border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px;
@@ -1018,8 +970,6 @@ function DashboardPanel({ user, onNavigate }) {
           .print-summary-card .value.amber { color: #d97706 !important; }
           .print-summary-card .value.red   { color: #dc2626 !important; }
           .print-summary-card .cap { margin: 3px 0 0; font-size: 8px; color: #9ca3af !important; }
-
-          /* ── 4. Restock urgency ── */
           .print-health {
             margin: 10px 0 0; border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 12px 11px;
             background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
@@ -1037,8 +987,6 @@ function DashboardPanel({ user, onNavigate }) {
           .print-health .legend { display: flex; flex-wrap: wrap; gap: 16px; margin: 7px 0 0; }
           .print-health .li { display: flex; align-items: center; gap: 5px; font-size: 8.5px; color: #374151 !important; }
           .print-health .dot { width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; }
-
-          /* ── 5. Low-stock detail table ── */
           .print-detail { display: block !important; margin-top: 14px; }
           .print-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; padding: 0 2px; }
           .print-section-title { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #0C573E !important; }
@@ -1059,13 +1007,11 @@ function DashboardPanel({ user, onNavigate }) {
           .print-detail th.col-reo    { width: 12%; }
           .print-detail th.col-stock  { width: 12%; }
           .print-detail th.col-status { width: 12%; }
-          /* recent orders columns */
           .print-detail th.ro-id     { width: 16%; }
           .print-detail th.ro-cust   { width: 30%; }
           .print-detail th.ro-branch { width: 13%; }
           .print-detail th.ro-status { width: 19%; }
           .print-detail th.ro-total  { width: 17%; }
-          /* demand forecast columns */
           .print-detail th.tr-rank { width: 12%; }
           .print-detail th.tr-name { width: 68%; }
           .print-detail th.tr-sold { width: 20%; }
@@ -1083,13 +1029,9 @@ function DashboardPanel({ user, onNavigate }) {
           .print-detail .item-name { font-weight: 600; color: #0f172a !important; line-height: 1.3; }
           .print-detail tr.alt td { background: #f7faf8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .print-detail tbody tr:last-child td { border-bottom: none; }
-
-          /* stock numbers tinted by urgency */
           .print-detail .stk { font-weight: 700; }
           .print-detail .stk.low { color: #b45309 !important; }
           .print-detail .stk.out { color: #b91c1c !important; }
-
-          /* status pill on paper */
           .print-pill {
             display: inline-block !important; padding: 2px 8px; border-radius: 9999px;
             font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
@@ -1097,8 +1039,6 @@ function DashboardPanel({ user, onNavigate }) {
           }
           .print-pill.low { background: #fef3c7 !important; color: #b45309 !important; }
           .print-pill.out { background: #fee2e2 !important; color: #b91c1c !important; }
-
-          /* ── 6. Footer + signatures ── */
           .print-footer {
             display: flex !important; align-items: flex-end; justify-content: space-between; gap: 24px;
             margin-top: 20px; padding-top: 11px; border-top: 2px solid #e5e7eb;
@@ -1112,9 +1052,7 @@ function DashboardPanel({ user, onNavigate }) {
         }
       `}</style>
 
-      {/* ── Screen dashboard (never printed) ── */}
       <div className="no-print space-y-6">
-        {/* Header */}
         <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 ${entered ? "" : "dash-rise"}`}>
           <div>
             <h1 className="text-2xl font-bold" style={{ color: t.textPrimary }}>Dashboard Overview</h1>
@@ -1144,7 +1082,6 @@ function DashboardPanel({ user, onNavigate }) {
           </div>
         </div>
 
-        {/* Top Cards */}
         <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 ${entered ? "" : "dash-rise"}`} style={{ animationDelay: "0.18s" }}>
           <GreenCard 
             label="Total Revenue Today" 
@@ -1172,27 +1109,22 @@ function DashboardPanel({ user, onNavigate }) {
           />
         </div>
 
-        {/* Main Content Area */}
         <div className={`space-y-6 ${entered ? "" : "dash-rise"}`} style={{ animationDelay: "0.36s" }}>
-          {/* Revenue Chart takes full width or adjusts to your layout */}
           <RevenueChart branch={branch} />
           
-          {/* Here are your missing Recent Orders and Low Stock cards! */}
           <DraggablePanelRow 
             branch={branch} 
             lowStock={lowStock} 
-            recentOrders={recentOrders}    
+            recentOrders={recentOrders}   
             recentLoading={recentLoading}  
             trending={trending}
             onManageInventory={() => onNavigate("Inventory")}
+            onViewOrders={() => onNavigate("Orders")}
           />
         </div>
       </div>
 
-      {/* ── Printable area (print-only Dashboard Report) ── */}
       <div id="dashboard-print-area">
-
-        {/* ── Print 1: letterhead brand band ── */}
         <div className="print-only print-letterhead">
           <div>
             <img className="print-logo-word" src={estingsText} alt="Esting's Flower International Inc." />
@@ -1204,14 +1136,12 @@ function DashboardPanel({ user, onNavigate }) {
           </div>
         </div>
 
-        {/* ── Print 2: document title + report scope ── */}
         <div className="print-only print-doc-title">
           <p className="t">Dashboard Report</p>
           <span className="rule" />
           <p className="scope">{printScope}</p>
         </div>
 
-        {/* ── Print 3: summary cards (today's snapshot) ── */}
         <div className="print-only print-summary">
           <div className="print-summary-card c-value">
             <p className="label">Total Revenue Today</p>
@@ -1235,7 +1165,6 @@ function DashboardPanel({ user, onNavigate }) {
           </div>
         </div>
 
-        {/* ── Print 4: restock urgency ── */}
         {lowStock.length > 0 && (
           <div className="print-only print-health">
             <div className="head">
@@ -1253,9 +1182,6 @@ function DashboardPanel({ user, onNavigate }) {
           </div>
         )}
 
-        {/* ── Print 5: low-stock detail table ──
-            Prints the FULL low-stock list (the screen card shows only 8),
-            sorted most depleted first. */}
         <div className="print-only print-detail">
           <div className="print-section-head">
             <p className="print-section-title">Low Stock Detail</p>
@@ -1294,7 +1220,6 @@ function DashboardPanel({ user, onNavigate }) {
           </div>
         </div>
 
-        {/* ── Print 5b: recent orders ── */}
         {recentOrders.length > 0 && (
           <div className="print-only print-detail" style={{ marginTop: "14px" }}>
             <div className="print-section-head">
@@ -1330,7 +1255,6 @@ function DashboardPanel({ user, onNavigate }) {
           </div>
         )}
 
-        {/* ── Print 5c: demand forecast (top sellers) ── */}
         {trending.length > 0 && (
           <div className="print-only print-detail" style={{ marginTop: "14px" }}>
             <div className="print-section-head">
@@ -1343,7 +1267,8 @@ function DashboardPanel({ user, onNavigate }) {
                   <tr>
                     <th className="tr-rank num">Rank</th>
                     <th className="tr-name">Product</th>
-                    <th className="tr-sold num">Units Sold</th>
+                    <th className="tr-sold num">30d Sold</th>
+                    <th className="tr-sold num">Next 7d</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1352,6 +1277,7 @@ function DashboardPanel({ user, onNavigate }) {
                       <td className="num nowrap muted">{i + 1}</td>
                       <td><span className="item-name">{item.name}</span></td>
                       <td className="num nowrap">{item.sold ?? 0}</td>
+                      <td className="num nowrap">{item.forecast_next_7_days ?? 0}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1360,7 +1286,6 @@ function DashboardPanel({ user, onNavigate }) {
           </div>
         )}
 
-        {/* ── Print 6: footer + signature lines ── */}
         <div className="print-only print-footer">
           <p className="note">
             <strong>Esting's Flower International Inc.</strong> Confidential. This report is generated for internal use only and reflects live dashboard figures as of the date and time indicated above. The low-stock section is company-wide and is not affected by the branch selector.
@@ -1379,6 +1304,21 @@ function DashboardPanel({ user, onNavigate }) {
       </div>
     </div>
   );
+}
+
+// ─── Reusable Form Row (Moved outside to fix the typing focus bug!) ────
+function FRow({ label, value, onChange, type = "text", editable, readOnlyNote, t }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold mb-1" style={{ color: t.textMuted }}>{label}</label>
+      <input type={type} value={value} onChange={e => onChange && onChange(e.target.value)} disabled={!editable}
+        className="w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all"
+        style={{ borderColor: editable ? t.inputBorder : t.divider, backgroundColor: editable ? t.inputBg : t.surfaceAlt, color: t.textPrimary }}
+        onFocus={e => { if (editable) { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.15)` } }}
+        onBlur={e => { e.target.style.borderColor = editable ? t.inputBorder : t.divider; e.target.style.boxShadow = "none" }} />
+      {readOnlyNote && <p className="mt-1 text-[11px]" style={{ color: t.textMuted }}>{readOnlyNote}</p>}
+    </div>
+  )
 }
 
 // ─── My Profile Panel ─────────────────────────────────────────────────────────
@@ -1469,20 +1409,6 @@ function MyProfilePanel({ user, onBack }) {
     }
   }
 
-  function FRow({ label, value, onChange, type = "text", editable, readOnlyNote }) {
-    return (
-      <div>
-        <label className="block text-xs font-semibold mb-1" style={{ color: t.textMuted }}>{label}</label>
-        <input type={type} value={value} onChange={e => onChange && onChange(e.target.value)} disabled={!editable}
-          className="w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all"
-          style={{ borderColor: editable ? t.inputBorder : t.divider, backgroundColor: editable ? t.inputBg : t.surfaceAlt, color: t.textPrimary }}
-          onFocus={e => { if (editable) { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.15)` } }}
-          onBlur={e => { e.target.style.borderColor = editable ? t.inputBorder : t.divider; e.target.style.boxShadow = "none" }} />
-        {readOnlyNote && <p className="mt-1 text-[11px]" style={{ color: t.textMuted }}>{readOnlyNote}</p>}
-      </div>
-    )
-  }
-
   const initials = `${form.firstName?.[0] || ""}${form.lastName?.[0] || ""}`.trim().toUpperCase() || "A"
 
   return (
@@ -1548,12 +1474,12 @@ function MyProfilePanel({ user, onBack }) {
       <div className="rounded-xl p-5" style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
         <p className="text-sm font-semibold mb-4" style={{ color: t.textPrimary }}>Personal Information</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FRow label="First Name" value={form.firstName} onChange={s("firstName")} editable={editMode} />
-          <FRow label="Last Name"  value={form.lastName}  onChange={s("lastName")}  editable={editMode} />
-          <FRow label="Email Address" value={form.email} type="email" editable={false} readOnlyNote={editMode ? "Email changes are managed through account security." : ""} />
-          <FRow label="Phone Number" value={form.phone} onChange={s("phone")} editable={editMode} />
-          <FRow label="Role"   value={user?.role || "Administrator"} editable={false} />
-          <FRow label="Branch" value={user?.branch || "—"}            editable={false} />
+          <FRow label="First Name" value={form.firstName} onChange={s("firstName")} editable={editMode} t={t} />
+          <FRow label="Last Name"  value={form.lastName}  onChange={s("lastName")}  editable={editMode} t={t} />
+          <FRow label="Email Address" value={form.email} type="email" editable={false} readOnlyNote={editMode ? "Email changes are managed through account security." : ""} t={t} />
+          <FRow label="Phone Number" value={form.phone} onChange={s("phone")} editable={editMode} t={t} />
+          <FRow label="Role"   value={user?.role || "Administrator"} editable={false} t={t} />
+          <FRow label="Branch" value={user?.branch || "—"}            editable={false} t={t} />
         </div>
         {editMode && (
           <div className="flex justify-end mt-5">
@@ -1799,10 +1725,6 @@ function NavBtn({ item, active, setActive, collapsed, user }) {
 }
 
 // ─── Appearance Flyout ────────────────────────────────────────────────────────
-// "Appearance" collapses the CMS pages into one trigger. On hover (or click to
-// pin) the sub-items fan out in a floating panel to the right of the sidebar,
-// each sliding in along a gentle outward arc with a staggered delay. A hover
-// bridge spans the gap so the panel doesn't snap shut while the mouse travels.
 const APPEARANCE_FLYOUT_CSS = `
   @keyframes apNodeIn {
     from { opacity: 0; transform: translateX(-8px) scale(0.85); }
@@ -1823,7 +1745,6 @@ function AppearanceFlyout({ items, active, setActive, collapsed, user, t, isDark
   const wrapRef = useRef(null)
   const triggerRef = useRef(null)
 
-  // track viewport: on small screens we expand inline instead of floating
   useEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 768)
     check()
@@ -1831,7 +1752,6 @@ function AppearanceFlyout({ items, active, setActive, collapsed, user, t, isDark
     return () => window.removeEventListener("resize", check)
   }, [])
 
-  // measure the trigger's on-screen CENTER — the origin the fan radiates from
   const measure = () => {
     const el = triggerRef.current
     if (!el) return
@@ -1843,7 +1763,6 @@ function AppearanceFlyout({ items, active, setActive, collapsed, user, t, isDark
 
   const show = () => {
     clearTimeout(closeTimer.current)
-    // measure after paint so the trigger ref is guaranteed populated
     requestAnimationFrame(measure)
     setOpen(true)
   }
@@ -1852,7 +1771,6 @@ function AppearanceFlyout({ items, active, setActive, collapsed, user, t, isDark
     closeTimer.current = setTimeout(() => { if (!pinned) setOpen(false) }, 180)
   }
 
-  // click the trigger to pin/unpin the panel open
   const togglePin = () => {
     measure()
     setPinned(p => {
@@ -1862,7 +1780,6 @@ function AppearanceFlyout({ items, active, setActive, collapsed, user, t, isDark
     })
   }
 
-  // close the pinned panel when clicking elsewhere
   useEffect(() => {
     if (!pinned) return
     const onDocClick = e => {
@@ -1877,7 +1794,6 @@ function AppearanceFlyout({ items, active, setActive, collapsed, user, t, isDark
     return () => document.removeEventListener("mousedown", onDocClick)
   }, [pinned])
 
-  // keep the panel glued to the trigger if the window resizes/scrolls while open
   useEffect(() => {
     if (!(open || pinned)) return
     const reposition = () => measure()
@@ -1893,16 +1809,14 @@ function AppearanceFlyout({ items, active, setActive, collapsed, user, t, isDark
 
   const isOpen = open || pinned
 
-  // ── shared pink palette — solid surfaces in both themes (no transparency) ──
   const pillBg      = isDark ? "#3b1f30" : "#fdf2f8"
   const pillBgHover = isDark ? "#4d2840" : "#fce7f3"
   const pillBorder  = isDark ? "#6d3a55" : "#f9cee4"
   const pillBorderH = isDark ? "#9d4f78" : "#f4a9cf"
   const pillText    = isDark ? "#fbcfe8" : "#9d2463"
   const chipBg      = isDark ? "#522c43" : "#ffffff"
-  const pinkAccent  = isDark ? "#f472b6" : "#db2777"   // active fill / icon / hover text
+  const pinkAccent  = isDark ? "#f472b6" : "#db2777"
 
-  // one pill button, shared by the floating fan (desktop) and inline list (mobile)
   const renderItem = (item, i, { floating }) => {
     const allowed = !user?.role || user.role !== "staff" || item.staff
     const on = active === item.label
@@ -1961,7 +1875,6 @@ function AppearanceFlyout({ items, active, setActive, collapsed, user, t, isDark
     >
       <style>{APPEARANCE_FLYOUT_CSS}</style>
 
-      {/* Trigger — a solid brand-green button */}
       <button
         ref={triggerRef}
         onClick={togglePin}
@@ -1991,7 +1904,6 @@ function AppearanceFlyout({ items, active, setActive, collapsed, user, t, isDark
         )}
       </button>
 
-      {/* MOBILE: inline accordion — items expand within the sidebar list */}
       {isMobile && isOpen && (
         <div
           className="mt-2 pl-3 flex flex-col gap-1.5"
@@ -2001,7 +1913,6 @@ function AppearanceFlyout({ items, active, setActive, collapsed, user, t, isDark
         </div>
       )}
 
-      {/* DESKTOP: floating pink fan to the right (position:fixed, escapes clip) */}
       {!isMobile && isOpen && (
         <>
           <div
@@ -2055,14 +1966,12 @@ function SidebarContent({ active, setActive, collapsed, onLogout, user }) {
 
       <nav className="flex-1 py-2 px-2 overflow-y-auto">
         <div className="space-y-0.5">
-          {/* 🚀 ADDED FILTER: Only show items the user is allowed to see */}
           {NAV_MAIN
             .filter(item => !user?.role || user.role !== "staff" || item.staff)
             .map(item => (
               <NavBtn key={item.label} item={item} active={active} setActive={setActive} collapsed={collapsed} user={user} />
           ))}
         </div>
-        {/* Appearance pages collapse into one fan-out trigger */}
         <div className="space-y-0.5 mt-3">
           <AppearanceFlyout
             items={NAV_APPEARANCE.filter(item => !user?.role || user.role !== "staff" || item.staff !== false)}
@@ -2179,12 +2088,12 @@ export default function AdminDashboard({ onNavigate }) {
   const { isDark } = useTheme()
   const t = useTokens(isDark)
 
-  const [active,       setActive]       = useState("Dashboard")
-  const [overlay,      setOverlay]      = useState(null)
+  const [active,        setActive]        = useState("Dashboard")
+  const [overlay,       setOverlay]       = useState(null)
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_MAX)
-  const [mobileOpen,   setMobileOpen]   = useState(false)
-  const [notifOpen,    setNotifOpen]    = useState(false)
-  const [userOpen,     setUserOpen]     = useState(false)
+  const [mobileOpen,    setMobileOpen]   = useState(false)
+  const [notifOpen,     setNotifOpen]    = useState(false)
+  const [userOpen,      setUserOpen]     = useState(false)
   const [notifications, setNotifications] = useState([])
   const [unreadCount, setUnreadCount] = useState(0)
   const [loadingNotifs, setLoadingNotifs] = useState(false)
@@ -2389,10 +2298,16 @@ export default function AdminDashboard({ onNavigate }) {
                 onMouseEnter={e => { e.currentTarget.style.borderColor = t.cardBorder; e.currentTarget.style.backgroundColor = t.hoverBg }}
                 onMouseLeave={e => { if (!userOpen) { e.currentTarget.style.borderColor = "transparent"; e.currentTarget.style.backgroundColor = "transparent" } }}
               >
-                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0"
+                {/* Profile Image / Initials */}
+                <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold text-white flex-shrink-0 overflow-hidden"
                   style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
-                  {user?.firstName?.[0] || "A"}
+                  {user?.profilePictureUrl ? (
+                    <img src={user.profilePictureUrl} alt="User" className="w-full h-full object-cover" />
+                  ) : (
+                    user?.firstName?.[0] || "A"
+                  )}
                 </div>
+                
                 <div className="hidden sm:block text-left">
                   <p className="text-[10px] leading-none" style={{ color: t.textMuted }}>Logged in as</p>
                   <p className="text-xs font-semibold leading-tight mt-0.5" style={{ color: t.textPrimary }}>

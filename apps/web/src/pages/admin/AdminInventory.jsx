@@ -469,6 +469,8 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
     inputTxt: isDark ? "#e2e8f0" : "#0f172a",
     rowBg: isDark ? "#111827" : "#ffffff",
     hdrBg: isDark ? "#162032" : "#f8fafc",
+    panel: isDark ? "#101827" : "#f8fafc",
+    panelAlt: isDark ? "#0f172a" : "#ffffff",
   };
 
   const selectedIds = Object.keys(lines);
@@ -567,7 +569,7 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
       style={{ backgroundColor: c.overlay, backdropFilter: "blur(4px)", WebkitBackdropFilter: "blur(4px)", zIndex: 9999, position: "fixed", top: 0, left: 0, width: "100vw", height: "100vh" }}
       onClick={e => { if (e.target === e.currentTarget && !saving) onClose() }}>
       <div className="rounded-xl w-full overflow-hidden flex flex-col relative"
-        style={{ maxWidth: "860px", height: "min(88vh, 720px)", maxHeight: "88vh", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${c.bdr}`, backgroundColor: c.bg }}>
+        style={{ maxWidth: "1040px", height: "min(90vh, 760px)", maxHeight: "90vh", boxShadow: "0 24px 64px rgba(0,0,0,0.5)", border: `1px solid ${c.bdr}`, backgroundColor: c.bg }}>
 
         {saving && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-3"
@@ -584,20 +586,22 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
         )}
 
         {/* Modal Header */}
-        <div className="px-6 py-4 flex items-center justify-between" style={{ borderBottom: `1px solid ${c.bdr}` }}>
+        <div className="px-6 py-5 flex items-center justify-between"
+          style={{ background: `linear-gradient(135deg, ${DG}, #15724B 58%, ${G})`, borderBottom: `1px solid ${isDark ? "#153f30" : "#dbe7df"}` }}>
           <div className="flex items-center gap-3">
-            <span className="w-10 h-10 rounded-lg flex items-center justify-center text-white flex-shrink-0"
-              style={{ background: `linear-gradient(135deg,${DG},${G})`, boxShadow: "0 2px 8px rgba(46,139,52,0.3)" }}>
+            <span className="w-11 h-11 rounded-lg flex items-center justify-center text-white flex-shrink-0"
+              style={{ background: "rgba(255,255,255,0.14)", border: "1px solid rgba(255,255,255,0.22)" }}>
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </span>
             <div>
-              <h3 className="text-lg font-bold" style={{ color: c.head }}>Stock Delivery Invoice</h3>
-              <p className="text-xs" style={{ color: c.sub }}>Record inbound inventory and supplier costs.</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-white/70">Inventory Receiving</p>
+              <h3 className="text-xl font-bold text-white">Stock Delivery Invoice</h3>
+              <p className="text-xs text-white/75">Record inbound stock, branch destination, and supplier costs.</p>
             </div>
           </div>
-          <button onClick={onClose} disabled={saving} className="p-2 rounded-md transition-colors hover:bg-gray-100 dark:hover:bg-slate-800" style={{ color: c.sub }}>
+          <button onClick={onClose} disabled={saving} className="p-2 rounded-md transition-colors hover:bg-white/10" style={{ color: "white" }}>
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
           </button>
         </div>
@@ -610,22 +614,22 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
           </div>
         )}
 
-        <div className="px-6 py-5 overflow-y-auto" style={{ flex: 1 }}>
+        <div className="px-6 py-5 overflow-y-auto" style={{ flex: 1, backgroundColor: c.panel }}>
           
           {/* Controls: Branch Toggle & Search */}
-          <div className="flex flex-col sm:flex-row gap-5 mb-6">
+          <div className="grid grid-cols-1 lg:grid-cols-[310px_1fr] gap-4 mb-5">
             
             {/* Branch Selector Pill */}
-            <div className="flex-shrink-0">
+            <div className="rounded-xl p-4" style={{ backgroundColor: c.panelAlt, border: `1px solid ${c.bdr}` }}>
               <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: c.sub }}>
                 Receiving Branch <span className="text-red-500">*</span>
               </label>
-              <div className="flex items-center p-1 rounded-lg" style={{ backgroundColor: isDark ? "#0f172a" : "#f1f5f9", border: `1px solid ${c.inputBdr}` }}>
+              <div className="grid grid-cols-2 gap-1 p-1 rounded-lg" style={{ backgroundColor: isDark ? "#0f172a" : "#eef4ef", border: `1px solid ${c.inputBdr}` }}>
                 {["Manila", "Pampanga"].map(b => {
                   const isActive = branch === b;
                   return (
                     <button key={b} onClick={() => setBranch(b)}
-                      className="px-6 py-2 text-sm font-bold rounded-md transition-all"
+                      className="px-4 py-2.5 text-sm font-bold rounded-md transition-all"
                       style={{
                         backgroundColor: isActive ? (isDark ? "#1e293b" : "white") : "transparent",
                         color: isActive ? (isDark ? "#4ade80" : DG) : c.sub,
@@ -636,10 +640,20 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                   )
                 })}
               </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                <div className="rounded-lg px-3 py-2" style={{ backgroundColor: isDark ? "#0f172a" : "#f8fafc", border: `1px solid ${c.bdr}` }}>
+                  <p className="font-bold" style={{ color: c.cell }}>{selectedIds.length}</p>
+                  <p style={{ color: c.sub }}>Line items</p>
+                </div>
+                <div className="rounded-lg px-3 py-2" style={{ backgroundColor: isDark ? "#0f172a" : "#f8fafc", border: `1px solid ${c.bdr}` }}>
+                  <p className="font-bold" style={{ color: c.cell }}>{totalUnits}</p>
+                  <p style={{ color: c.sub }}>Units</p>
+                </div>
+              </div>
             </div>
 
             {/* Search Input */}
-            <div className="flex-1 relative">
+            <div className="relative rounded-xl p-4" style={{ backgroundColor: c.panelAlt, border: `1px solid ${c.bdr}` }}>
               <label className="block text-xs font-bold uppercase tracking-wider mb-2" style={{ color: c.sub }}>
                 Search Item to Add
               </label>
@@ -648,8 +662,8 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z" />
                 </svg>
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Type product name or SKU..."
-                  className="w-full pl-9 pr-4 py-2.5 text-sm border rounded-lg outline-none transition-all"
-                  style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }}
+                  className="w-full pl-9 pr-4 py-3 text-sm border rounded-lg outline-none transition-all"
+                  style={{ borderColor: c.inputBdr, backgroundColor: c.bg, color: c.inputTxt }}
                   onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(74,222,128,0.18)` }}
                   onBlur={e => { e.target.style.borderColor = c.inputBdr; e.target.style.boxShadow = "none" }} />
               </div>
@@ -677,16 +691,16 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
 
           {/* Invoice Lines Table */}
           {selectedIds.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center rounded-xl border-2 border-dashed" style={{ borderColor: c.bdr, backgroundColor: isDark ? "rgba(0,0,0,0.2)" : "#f8fafc" }}>
+            <div className="flex flex-col items-center justify-center py-16 text-center rounded-xl border-2 border-dashed" style={{ borderColor: c.bdr, backgroundColor: c.panelAlt }}>
               <svg className="w-12 h-12 mb-3" style={{ color: isDark ? "#334155" : "#cbd5e1" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
               <p className="text-sm font-semibold" style={{ color: c.sub }}>Invoice is empty.</p>
               <p className="text-xs mt-1" style={{ color: c.sub }}>Search and select products above to add them to this delivery receipt.</p>
             </div>
           ) : (
-            <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${c.bdr}` }}>
+            <div className="rounded-xl overflow-hidden" style={{ border: `1px solid ${c.bdr}`, backgroundColor: c.panelAlt, boxShadow: isDark ? "none" : "0 1px 3px rgba(15,23,42,0.05)" }}>
               
               {/* Table Header (Hidden on small mobile) */}
-              <div className="hidden sm:flex items-center gap-3 px-4 py-3 text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: c.hdrBg, color: c.sub, borderBottom: `1px solid ${c.bdr}` }}>
+              <div className="hidden sm:grid grid-cols-[minmax(220px,1fr)_96px_118px_140px_92px_34px] items-center gap-3 px-4 py-3 text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: isDark ? "#0f172a" : "#eef4ef", color: c.sub, borderBottom: `1px solid ${c.bdr}` }}>
                 <div className="flex-1 min-w-0">Product Details</div>
                 <div className="w-24 text-center">Qty Received</div>
                 <div className="w-28 text-center">Total Paid (₱)</div>
@@ -696,7 +710,7 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
               </div>
 
               {/* Table Body */}
-              <div className="divide-y" style={{ borderColor: c.bdr, backgroundColor: c.rowBg }}>
+              <div className="divide-y" style={{ borderColor: c.bdr, backgroundColor: c.panelAlt }}>
                 {selectedIds.map(id => {
                   const item = itemById(id)
                   if (!item) return null
@@ -705,13 +719,13 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                   const newTotal = currentBranchStock + received;
 
                   return (
-                    <div key={id} className="flex flex-col sm:flex-row sm:items-center gap-4 sm:gap-3 p-4 sm:py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                    <div key={id} className="grid grid-cols-1 sm:grid-cols-[minmax(220px,1fr)_96px_118px_140px_92px_34px] sm:items-center gap-4 sm:gap-3 p-4 transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       
                       {/* Product Info */}
-                      <div className="flex-1 min-w-0 flex items-start sm:items-center justify-between sm:justify-start">
+                      <div className="min-w-0 flex items-start sm:items-center justify-between sm:justify-start">
                         <div className="min-w-0">
                           <p className="text-sm font-bold truncate" style={{ color: c.cell }}>{item.name}</p>
-                          <p className="text-[11px] font-medium mt-0.5" style={{ color: c.sub }}>Current {branch}: {currentBranchStock} {item.unit_type || "pc"}</p>
+                          <p className="text-[11px] font-medium mt-0.5" style={{ color: c.sub }}>Current {branch}: <span className="font-bold">{currentBranchStock}</span> {item.unit_type || "pc"}</p>
                         </div>
                         {/* Mobile Delete Button */}
                         <button onClick={() => removeLine(id)} className="sm:hidden p-1.5 rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30">
@@ -720,40 +734,43 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                       </div>
 
                       {/* Inputs Grid */}
-                      <div className="flex gap-3 sm:contents">
-                        <div className="flex-1 sm:w-24 sm:flex-none">
+                      <div className="grid grid-cols-1 min-[520px]:grid-cols-3 gap-3 sm:contents">
+                        <div>
                           <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1 text-slate-500">Qty</label>
                           <input type="number" min="0" value={lines[id].qty} onChange={e => setQty(id, e.target.value)} placeholder="0"
-                            className="w-full px-2.5 py-2 text-sm border rounded-md text-center outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500" 
+                            className="w-full px-2.5 py-2.5 text-sm border rounded-md text-center outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500" 
                             style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }} />
                         </div>
 
-                        <div className="flex-1 sm:w-28 sm:flex-none">
+                        <div>
                           <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1 text-slate-500">Total Paid</label>
                           <input type="number" min="0" step="0.01" value={lines[id].cost} onChange={e => setCost(id, e.target.value)} placeholder="0.00"
-                            className="w-full px-2.5 py-2 text-sm border rounded-md text-center outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500" 
+                            className="w-full px-2.5 py-2.5 text-sm border rounded-md text-center outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500" 
                             style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }} />
                         </div>
 
-                        <div className="flex-1 sm:w-32 sm:flex-none">
+                        <div>
                           <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1 text-slate-500">Date</label>
                           <input type="date" value={lines[id].date} onChange={e => setDate(id, e.target.value)}
-                            className="w-full px-2.5 py-2 text-sm border rounded-md outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
+                            className="w-full px-2.5 py-2.5 text-sm border rounded-md outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
                             style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }} />
                         </div>
                       </div>
 
                       {/* Resulting Stock & Desktop Delete */}
-                      <div className="flex items-center justify-between sm:w-24 sm:justify-end flex-shrink-0 pt-2 border-t sm:pt-0 sm:border-0" style={{ borderColor: c.bdr }}>
+                      <div className="flex items-center justify-between sm:justify-end flex-shrink-0 pt-2 border-t sm:pt-0 sm:border-0" style={{ borderColor: c.bdr }}>
                         <span className="sm:hidden text-[10px] font-bold uppercase tracking-wider text-slate-500">New Total</span>
                         <div className="text-right">
-                          <span className="text-sm font-bold" style={{ color: received > 0 ? (isDark ? "#4ade80" : "#16a34a") : c.sub }}>
+                          <span className="inline-flex min-w-10 justify-center rounded-md px-2 py-1 text-sm font-bold" style={{
+                            color: received > 0 ? (isDark ? "#4ade80" : "#16a34a") : c.sub,
+                            backgroundColor: received > 0 ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : "transparent",
+                          }}>
                             {received > 0 ? `${newTotal}` : "—"}
                           </span>
                         </div>
                       </div>
 
-                      <div className="hidden sm:flex w-8 justify-end flex-shrink-0">
+                      <div className="hidden sm:flex justify-end flex-shrink-0">
                         <button onClick={() => removeLine(id)} className="p-1.5 rounded-md text-slate-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                         </button>
