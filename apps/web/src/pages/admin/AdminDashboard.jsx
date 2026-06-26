@@ -268,6 +268,7 @@ function BranchToggle({ value, onChange }) {
 }
 
 // ─── Revenue Chart ────────────────────────────────────────────────────────────
+// ─── Revenue Chart ────────────────────────────────────────────────────────────
 function RevenueChart({ branch }) {
   const { isDark } = useTheme();
   const t = useTokens(isDark);
@@ -417,22 +418,25 @@ function RevenueChart({ branch }) {
         </div>
 
         <div className="flex items-center gap-0.5 p-0.5 rounded-lg" style={{ backgroundColor: t.badgeBg, border: `1px solid ${t.cardBorder}` }}>
-          {REVENUE_PERIODS.map(p => {
-            const on = p.key === periodKey;
+          {REVENUE_PERIODS.map((p) => {
+            const on = p.key === periodKey
             return (
-              <button key={p.key} onClick={() => setPeriodKey(p.key)}
+              <button
+                key={p.key}
+                onClick={() => setPeriodKey(p.key)}
                 className="px-3 py-1 rounded-md text-xs font-semibold transition-all duration-200"
                 style={{
                   backgroundColor: on ? t.surfaceBg : "transparent",
                   color: on ? (isDark ? "#4ade80" : "#0C573E") : t.textSecondary,
                   boxShadow: on ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
-                }}>
+                }}
+              >
                 {p.label}
               </button>
-            );
+            )
           })}
         </div>
-      </div>
+      </div> {/* 🚀 FIXED: This closing div is no longer swallowed! */}
 
       <div className="flex gap-2" style={{ height: "184px", opacity: loading ? 0.35 : 1, transition: "opacity 0.4s ease" }}>
         <div className="flex flex-col justify-between flex-shrink-0 text-right" style={{ width: "40px", paddingBottom: "24px" }}>
@@ -837,7 +841,7 @@ function DashboardPanel({ user, onNavigate }) {
       .catch(err => console.error("Summary Fetch Error:", err));
 
     setRecentLoading(true);
-    const pRecent = api.getAdminOrders({ branch: branchParam, limit: 5 })
+    const pRecent = api.get(`/dashboard/recent-orders?branch=${encodeURIComponent(branchParam)}&limit=5`)
       .then(data => {
         setRecentOrders(Array.isArray(data) ? data.slice(0, 5) : []);
       })

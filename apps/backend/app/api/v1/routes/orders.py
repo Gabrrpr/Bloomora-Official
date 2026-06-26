@@ -48,6 +48,150 @@ def _parse_datetime(value):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid delivery date.")
 
+def _safe_iso(value):
+    try:
+        return value.isoformat() if value else None
+    except Exception:
+        return None
+
+def _safe_float(value, default=0.0):
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except Exception:
+        return default
+
+def _minimal_order_payload(row) -> dict:
+    data = dict(row._mapping) if hasattr(row, "_mapping") else dict(row)
+    order_id = data.get("id")
+    order_id_text = str(order_id) if order_id is not None else ""
+    return {
+        "id": order_id_text,
+        "order_number": f"ORD-{order_id_text.replace('-', '')[:8].upper()}" if order_id_text else None,
+        "user_id": str(data.get("user_id")) if data.get("user_id") is not None else None,
+        "customer_name": data.get("customer_name") or data.get("customer_email") or "Unknown",
+        "customer_email": data.get("customer_email"),
+        "customer_phone": data.get("customer_phone"),
+        "branch": data.get("branch_name") or "—",
+        "special_note": data.get("special_note"),
+        "product_name": data.get("product_name") or "Unknown Item",
+        "image_url": data.get("image_url") or "",
+        "is_custom": False,
+        "quantity": int(data.get("quantity") or 1),
+        "total_amount": _safe_float(data.get("total_amount"), 0.0),
+        "status": data.get("status") or "pending",
+        "delivery_address": data.get("delivery_address"),
+        "delivery_lat": None,
+        "delivery_lng": None,
+        "delivery_geocode_precision": None,
+        "delivery_notes": data.get("delivery_notes"),
+        "recipient_first_name": data.get("recipient_first_name"),
+        "recipient_last_name": data.get("recipient_last_name"),
+        "recipient_phone": data.get("recipient_phone"),
+        "recipient_type": data.get("recipient_type"),
+        "fulfillment_method": data.get("fulfillment_method") or "delivery",
+        "delivery_provider": None,
+        "time_slot": data.get("time_slot"),
+        "subtotal_amount": _safe_float(data.get("subtotal_amount") or data.get("total_amount"), 0.0),
+        "delivery_fee": _safe_float(data.get("delivery_fee"), 0.0),
+        "voucher_code": data.get("voucher_code"),
+        "discount_amount": _safe_float(data.get("discount_amount"), 0.0),
+        "scheduled_at": _safe_iso(data.get("scheduled_at")),
+        "payment_status": data.get("payment_status") or "pending",
+        "payment_provider": data.get("payment_provider"),
+        "checkout_url": data.get("checkout_url"),
+        "paid_at": _safe_iso(data.get("paid_at")),
+        "transaction_id": str(data.get("transaction_id")) if data.get("transaction_id") is not None else None,
+        "expires_at": _safe_iso(data.get("expires_at")),
+        "payment_reference": data.get("payment_reference"),
+        "can_review": bool(data.get("can_review") or False),
+        "has_reviewed": bool(data.get("has_reviewed") or False),
+        "created_at": _safe_iso(data.get("created_at")),
+        "updated_at": _safe_iso(data.get("updated_at")),
+        "items": [],
+        "delivery_tracking": None,
+    }
+
+def _raw_list_orders(
+    db: Session,
+    *,
+    status: Optional[str],
+    search: Optional[str],
+    branch: Optional[str],
+    limit: int,
+    offset: int,
+) -> list[dict]:
+    clauses = []
+    params = {"limit": limit, "offset": offset}
+    if status:
+        clauses.append("LOWER(CAST(o.status AS TEXT)) = :status")
+        params["status"] = status.lower()
+    if branch:
+        clauses.append("LOWER(COALESCE(o.branch_name, '')) = :branch")
+        params["branch"] = branch.lower()
+    if search:
+        clauses.append(
+            "("
+            "LOWER(CAST(o.id AS TEXT)) LIKE :search OR "
+            "LOWER(COALESCE(u.first_name, '')) LIKE :search OR "
+            "LOWER(COALESCE(u.last_name, '')) LIKE :search OR "
+            "LOWER(COALESCE(u.email, '')) LIKE :search"
+            ")"
+        )
+        params["search"] = f"%{search.lower()}%"
+
+    where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    rows = db.execute(
+        text(f"""
+            SELECT
+                o.id,
+                o.user_id,
+                o.quantity,
+                o.total_amount,
+                CAST(o.status AS TEXT) AS status,
+                o.delivery_address,
+                o.delivery_notes,
+                o.special_note,
+                o.scheduled_at,
+                o.created_at,
+                o.updated_at,
+                o.branch_name,
+                o.recipient_first_name,
+                o.recipient_last_name,
+                o.recipient_phone,
+                o.recipient_type,
+                o.fulfillment_method,
+                o.time_slot,
+                o.subtotal_amount,
+                o.delivery_fee,
+                o.voucher_code,
+                o.discount_amount,
+                u.email AS customer_email,
+                u.phone_number AS customer_phone,
+                NULLIF(TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))), '') AS customer_name,
+                COALESCE(p.name, a.name, 'Unknown Item') AS product_name,
+                COALESCE(p.image_url, a.generated_image_url, '') AS image_url,
+                t.id AS transaction_id,
+                CAST(t.status AS TEXT) AS payment_status,
+                t.provider AS payment_provider,
+                t.checkout_url,
+                t.paid_at,
+                t.expires_at,
+                COALESCE(t.provider_checkout_session_id, t.reference_number) AS payment_reference
+            FROM orders o
+            LEFT JOIN users u ON u.id = o.user_id
+            LEFT JOIN products p ON p.id = o.product_id
+            LEFT JOIN arrangements a ON a.id = o.arrangement_id
+            LEFT JOIN transactions t ON t.order_id = o.id
+            {where_sql}
+            ORDER BY o.created_at DESC
+            LIMIT :limit OFFSET :offset
+        """),
+        params,
+    ).all()
+    return [_minimal_order_payload(row) for row in rows]
+
 def _material_row(product: Optional[Product], quantity, material_type: str = "Recipe item") -> dict:
     qty = float(quantity or 0)
     return {
@@ -108,8 +252,12 @@ def _product_materials(db: Optional[Session], product: Optional[Product]) -> lis
     if rows:
         return [_material_row(row.component_product, row.quantity_required) for row in rows]
 
+    composition = getattr(product, "composition", None) or []
+    if not isinstance(composition, list):
+        return []
+
     materials = []
-    for item in getattr(product, "composition", None) or []:
+    for item in composition:
         component_id = item.get("product_id") or item.get("id")
         if not component_id:
             continue
@@ -151,122 +299,229 @@ def _custom_arrangement_materials(arrangement: Optional[Arrangement]) -> list[di
     return materials
 
 def serialize_order(o) -> dict:
-    _expire_pending_transaction(object_session(o), o)
-    db = object_session(o)
-    img_url = ""
-    is_custom = False
-    display_name = "Unknown Item"
-    total_qty = getattr(o, 'quantity', 1)
+    # Never let serialization crash the /orders list endpoint.
+    try:
+        try:
+            _expire_pending_transaction(object_session(o), o)
+        except Exception:
+            session = object_session(o)
+            if session:
+                try:
+                    session.rollback()
+                except Exception:
+                    pass
 
-    serialized_items = []
-    if getattr(o, "items", None):
-        for item in o.items:
-            product = item.product
-            arrangement = item.arrangement
-            unit_price = Decimal(str(item.price_at_purchase or 0))
-            serialized_items.append({
-                "id": str(item.id),
-                "product_id": str(item.product_id) if item.product_id else None,
-                "arrangement_id": str(item.arrangement_id) if item.arrangement_id else None,
-                "product_name": product.name if product else (arrangement.name or "Custom Arrangement"),
-                "image_url": product.image_url if product else arrangement.generated_image_url,
-                "is_custom": arrangement is not None,
-                "quantity": item.quantity,
-                "unit_price": float(unit_price),
-                "line_total": float(unit_price * item.quantity),
-                "materials": _custom_arrangement_materials(arrangement) if arrangement else _product_materials(db, product),
-                "arrangement_prompt": getattr(arrangement, "prompt_text", None) if arrangement else None,
-                "arrangement_description": getattr(arrangement, "description", None) if arrangement else None,
-                "card_message": getattr(item, "card_message", None),
-                "card_enabled": bool(getattr(item, "card_enabled", False)),
-            })
+        db = object_session(o)
+        user = getattr(o, "user", None)
 
-    if serialized_items:
-        first_item = serialized_items[0]
-        display_name = first_item["product_name"]
-        img_url = first_item["image_url"] or ""
-        is_custom = first_item["is_custom"]
-        total_qty = sum(item["quantity"] for item in serialized_items)
-        if len(serialized_items) > 1:
-            display_name = f"{display_name} + {len(serialized_items) - 1} more"
-    elif db and getattr(o, 'product_id', None):
-        product = db.query(Product).filter(Product.id == o.product_id).first()
-        if product:
-            display_name = product.name
-            img_url = getattr(product, 'image_url', "") or getattr(product, 'image', "")
-            is_custom = False
+        def safe_float(v, default=0.0):
+            try:
+                if v is None:
+                    return default
+                return float(v)
+            except Exception:
+                return default
 
-    elif db and getattr(o, 'arrangement_id', None):
-        arrangement = db.query(Arrangement).filter(Arrangement.id == o.arrangement_id).first()
-        if arrangement:
-            display_name = getattr(arrangement, 'name', 'Custom Arrangement')
-            img_url = getattr(arrangement, 'generated_image_url', "") or getattr(arrangement, 'image_url', "") or getattr(arrangement, 'image', "")
-            is_custom = True
-            
-    # 🚀 SMART REFERENCE EXTRACTION
-    payment_ref = None
-    payment_provider = None
-    checkout_url = None
-    paid_at = None
-    if hasattr(o, 'transaction') and o.transaction:
-        payment_ref = getattr(o.transaction, 'provider_checkout_session_id', None) or getattr(o.transaction, 'reference_number', None)
-        payment_provider = getattr(o.transaction, 'provider', None)
-        checkout_url = getattr(o.transaction, 'checkout_url', None)
-        paid_at = getattr(o.transaction, 'paid_at', None)
+        def safe_iso(v):
+            try:
+                return v.isoformat() if v else None
+            except Exception:
+                return None
 
-    return {
-        "id": str(o.id),
-        "order_number": f"ORD-{o.id.hex[:8].upper()}",
-        "user_id": str(o.user_id),
-        "customer_name": f"{getattr(o.user, 'first_name', '') or ''} {getattr(o.user, 'last_name', '') or ''}".strip() or getattr(o.user, 'email', 'Unknown'),
-        "customer_email": o.user.email,
-        "customer_phone": o.user.phone_number,
-        "branch": o.branch_name or (o.user.branch.value if o.user.branch and hasattr(o.user.branch, "value") else (o.user.branch or "—")),
-        "special_note": getattr(o,'special_note', None),
-        "product_name": display_name,
-        "image_url": img_url,
-        "is_custom": is_custom,
-        "quantity": total_qty,
-        "total_amount": float(o.total_amount),
-        "status": o.status.value if hasattr(o.status, "value") else o.status,
-        "delivery_address": o.delivery_address,
-        "delivery_lat": float(o.delivery_lat) if getattr(o, "delivery_lat", None) is not None else None,
-        "delivery_lng": float(o.delivery_lng) if getattr(o, "delivery_lng", None) is not None else None,
-        "delivery_geocode_precision": getattr(o, "delivery_geocode_precision", None),
-        "delivery_notes": o.delivery_notes,
-        "recipient_first_name": o.recipient_first_name,
-        "recipient_last_name": o.recipient_last_name,
-        "recipient_phone": o.recipient_phone,
-        "recipient_type": o.recipient_type,
-        "fulfillment_method": o.fulfillment_method or "delivery",
-        "delivery_provider": o.delivery_provider,
-        "time_slot": o.time_slot,
-        "subtotal_amount": float(o.subtotal_amount or o.total_amount),
-        "delivery_fee": float(o.delivery_fee or 0),
-        "voucher_code": getattr(o, "voucher_code", None),
-        "discount_amount": float(getattr(o, "discount_amount", 0) or 0),
-        "scheduled_at": o.scheduled_at.isoformat() if getattr(o, 'scheduled_at', None) else None,
-        "payment_status": (
-            o.transaction.status.value
-            if o.transaction and hasattr(o.transaction.status, "value")
-            else (str(o.transaction.status) if o.transaction else "pending")
-        ),
-        "payment_provider": payment_provider,
-        "checkout_url": checkout_url,
-        "paid_at": paid_at.isoformat() if paid_at else None,
-        "transaction_id": str(o.transaction.id) if o.transaction else None,
-        "expires_at": o.transaction.expires_at.isoformat() if o.transaction and o.transaction.expires_at else None,
-        
-        # 🚀 UPDATED: Now it grabs PayMongo IDs too!
-        "payment_reference": payment_ref,
-        
-        "can_review": getattr(o, 'can_review', False),
-        "has_reviewed": getattr(o, 'has_reviewed', False),
-        "created_at": o.created_at.isoformat() if getattr(o, 'created_at', None) else None,
-        "updated_at": o.updated_at.isoformat() if getattr(o, 'updated_at', None) else None,
-        "items": serialized_items,
-        "delivery_tracking": _delivery_tracking(o),
-    }
+        img_url = ""
+        is_custom = False
+        display_name = "Unknown Item"
+        total_qty = getattr(o, 'quantity', 1) or 1
+
+        serialized_items = []
+        if getattr(o, "items", None):
+            for item in o.items:
+                product = getattr(item, "product", None)
+                arrangement = getattr(item, "arrangement", None)
+                unit_price = Decimal(str(getattr(item, "price_at_purchase", None) or 0))
+                qty = getattr(item, "quantity", 0) or 0
+
+                serialized_items.append({
+                    "id": str(getattr(item, "id", None)),
+                    "product_id": str(getattr(item, "product_id", None)) if getattr(item, "product_id", None) else None,
+                    "arrangement_id": str(getattr(item, "arrangement_id", None)) if getattr(item, "arrangement_id", None) else None,
+                    "product_name": getattr(product, "name", None)
+                        if product
+                        else (getattr(arrangement, "name", None) if arrangement else "Custom Arrangement"),
+                    "image_url": (getattr(product, "image_url", None) if product else None)
+                        or (getattr(arrangement, "generated_image_url", None) if arrangement else None)
+                        or "",
+                    "is_custom": arrangement is not None,
+                    "quantity": qty,
+                    "unit_price": safe_float(unit_price),
+                    "line_total": safe_float(unit_price * qty),
+                    "materials": _custom_arrangement_materials(arrangement) if arrangement else _product_materials(db, product),
+                    "arrangement_prompt": getattr(arrangement, "prompt_text", None) if arrangement else None,
+                    "arrangement_description": getattr(arrangement, "description", None) if arrangement else None,
+                    "card_message": getattr(item, "card_message", None),
+                    "card_enabled": bool(getattr(item, "card_enabled", False)),
+                })
+
+        if serialized_items:
+            first_item = serialized_items[0]
+            display_name = first_item.get("product_name") or display_name
+            img_url = first_item.get("image_url") or ""
+            is_custom = bool(first_item.get("is_custom"))
+            try:
+                total_qty = sum(i.get("quantity", 0) or 0 for i in serialized_items) or total_qty
+            except Exception:
+                pass
+            if len(serialized_items) > 1:
+                display_name = f"{display_name} + {len(serialized_items) - 1} more"
+        elif db and getattr(o, 'product_id', None):
+            product = db.query(Product).filter(Product.id == o.product_id).first()
+            if product:
+                display_name = getattr(product, 'name', display_name)
+                img_url = getattr(product, 'image_url', "") or getattr(product, 'image', "")
+                is_custom = False
+        elif db and getattr(o, 'arrangement_id', None):
+            arrangement = db.query(Arrangement).filter(Arrangement.id == o.arrangement_id).first()
+            if arrangement:
+                display_name = getattr(arrangement, 'name', 'Custom Arrangement')
+                img_url = (
+                    getattr(arrangement, 'generated_image_url', "")
+                    or getattr(arrangement, 'image_url', "")
+                    or getattr(arrangement, 'image', "")
+                )
+                is_custom = True
+
+        # 🚀 SMART REFERENCE EXTRACTION
+        transaction = getattr(o, 'transaction', None)
+        payment_ref = getattr(transaction, 'provider_checkout_session_id', None) or getattr(transaction, 'reference_number', None) if transaction else None
+        payment_provider = getattr(transaction, 'provider', None) if transaction else None
+        checkout_url = getattr(transaction, 'checkout_url', None) if transaction else None
+        paid_at = getattr(transaction, 'paid_at', None) if transaction else None
+
+        try:
+            delivery_tracking = _delivery_tracking(o)
+        except Exception:
+            delivery_tracking = None
+
+        status_val = getattr(getattr(o, 'status', None), 'value', None) or getattr(o, 'status', None)
+
+        branch_val = "—"
+        try:
+            if user and getattr(user, 'branch', None):
+                branch_val = getattr(getattr(user, 'branch', None), 'value', None) or str(user.branch)
+            else:
+                branch_val = getattr(o, 'branch_name', None) or "—"
+        except Exception:
+            branch_val = getattr(o, 'branch_name', None) or "—"
+
+        customer_name = 'Unknown'
+        try:
+            if user:
+                fn = getattr(user, 'first_name', '') or ''
+                ln = getattr(user, 'last_name', '') or ''
+                customer_name = f"{fn} {ln}".strip() or getattr(user, 'email', 'Unknown')
+        except Exception:
+            customer_name = 'Unknown'
+
+        return {
+            "id": str(o.id),
+            "order_number": f"ORD-{o.id.hex[:8].upper()}",
+            "user_id": str(o.user_id),
+            "customer_name": customer_name,
+            "customer_email": getattr(user, 'email', None) if user else None,
+            "customer_phone": getattr(user, 'phone_number', None) if user else None,
+            "branch": branch_val,
+            "special_note": getattr(o, 'special_note', None),
+            "product_name": display_name,
+            "image_url": img_url,
+            "is_custom": is_custom,
+            "quantity": total_qty,
+            "total_amount": safe_float(getattr(o, 'total_amount', None), 0.0),
+            "status": status_val,
+            "delivery_address": getattr(o, 'delivery_address', None),
+            "delivery_lat": float(o.delivery_lat) if getattr(o, 'delivery_lat', None) is not None else None,
+            "delivery_lng": float(o.delivery_lng) if getattr(o, 'delivery_lng', None) is not None else None,
+            "delivery_geocode_precision": getattr(o, 'delivery_geocode_precision', None),
+            "delivery_notes": getattr(o, 'delivery_notes', None),
+            "recipient_first_name": getattr(o, 'recipient_first_name', None),
+            "recipient_last_name": getattr(o, 'recipient_last_name', None),
+            "recipient_phone": getattr(o, 'recipient_phone', None),
+            "recipient_type": getattr(o, 'recipient_type', None),
+            "fulfillment_method": getattr(o, 'fulfillment_method', None) or "delivery",
+            "delivery_provider": getattr(o, 'delivery_provider', None),
+            "time_slot": getattr(o, 'time_slot', None),
+            "subtotal_amount": safe_float(getattr(o, 'subtotal_amount', None) or getattr(o, 'total_amount', None), 0.0),
+            "delivery_fee": safe_float(getattr(o, 'delivery_fee', None) or 0, 0.0),
+            "voucher_code": getattr(o, 'voucher_code', None),
+            "discount_amount": safe_float(getattr(o, 'discount_amount', None) or 0, 0.0),
+            "scheduled_at": safe_iso(getattr(o, 'scheduled_at', None)),
+            "payment_status": (
+                getattr(getattr(transaction, 'status', None), 'value', None)
+                if transaction and getattr(transaction, 'status', None) is not None
+                else (str(getattr(transaction, 'status', None)) if transaction else "pending")
+            ),
+            "payment_provider": payment_provider,
+            "checkout_url": checkout_url,
+            "paid_at": safe_iso(paid_at),
+            "transaction_id": str(transaction.id) if transaction else None,
+            "expires_at": safe_iso(getattr(transaction, 'expires_at', None)) if transaction else None,
+            "payment_reference": payment_ref,
+            "can_review": getattr(o, 'can_review', False),
+            "has_reviewed": getattr(o, 'has_reviewed', False),
+            "created_at": safe_iso(getattr(o, 'created_at', None)),
+            "updated_at": safe_iso(getattr(o, 'updated_at', None)),
+            "items": serialized_items,
+            "delivery_tracking": delivery_tracking,
+        }
+
+    except Exception:
+        # Last resort: minimal payload.
+        return {
+            "id": str(getattr(o, 'id', None)),
+            "order_number": None,
+            "user_id": str(getattr(o, 'user_id', None)),
+            "customer_name": "Unknown",
+            "customer_email": None,
+            "customer_phone": None,
+            "branch": getattr(o, 'branch_name', '—') if hasattr(o, 'branch_name') else '—',
+            "special_note": None,
+            "product_name": "Unknown Item",
+            "image_url": "",
+            "is_custom": False,
+            "quantity": getattr(o, 'quantity', 1) or 1,
+            "total_amount": 0.0,
+            "status": getattr(getattr(o, 'status', None), 'value', None) or getattr(o, 'status', None),
+            "delivery_address": getattr(o, 'delivery_address', None),
+            "delivery_lat": None,
+            "delivery_lng": None,
+            "delivery_geocode_precision": None,
+            "delivery_notes": getattr(o, 'delivery_notes', None),
+            "recipient_first_name": getattr(o, 'recipient_first_name', None),
+            "recipient_last_name": getattr(o, 'recipient_last_name', None),
+            "recipient_phone": getattr(o, 'recipient_phone', None),
+            "recipient_type": getattr(o, 'recipient_type', None),
+            "fulfillment_method": getattr(o, 'fulfillment_method', None) or 'delivery',
+            "delivery_provider": getattr(o, 'delivery_provider', None),
+            "time_slot": getattr(o, 'time_slot', None),
+            "subtotal_amount": 0.0,
+            "delivery_fee": 0.0,
+            "voucher_code": getattr(o, 'voucher_code', None),
+            "discount_amount": 0.0,
+            "scheduled_at": None,
+            "payment_status": "pending",
+            "payment_provider": None,
+            "checkout_url": None,
+            "paid_at": None,
+            "transaction_id": None,
+            "expires_at": None,
+            "payment_reference": None,
+            "can_review": getattr(o, 'can_review', False),
+            "has_reviewed": getattr(o, 'has_reviewed', False),
+            "created_at": None,
+            "updated_at": None,
+            "items": [],
+            "delivery_tracking": None,
+        }
+
 
 
 def _derive_delivery_branch(address: str) -> str:
@@ -346,7 +601,10 @@ def list_orders(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    query = db.query(Order).options(joinedload(Order.transaction))
+    # Do not eager-load transactions here. Legacy rows can contain old payment
+    # enum strings; lazy access lets serialize_order isolate a bad row instead
+    # of letting one transaction crash the whole dashboard list.
+    query = db.query(Order)
     
     if status:
         try: query = query.filter(Order.status == OrderStatusEnum(status.lower()))
@@ -368,8 +626,30 @@ def list_orders(
             )
         )
 
-    orders = query.order_by(Order.created_at.desc()).offset(offset).limit(limit).all()
-    return [serialize_order(o) for o in orders]
+    try:
+        orders = query.order_by(Order.created_at.desc()).offset(offset).limit(limit).all()
+        return [serialize_order(o) for o in orders]
+    except Exception as exc:
+        # If DB schema is out of sync (e.g., missing delivery_lat/lng columns),
+        # we still want the endpoint to work for the admin dashboard.
+        db.rollback()
+        try:
+            import logging
+            logging.getLogger(__name__).exception(
+                "Falling back to raw order list after ORM load failed: %s",
+                exc,
+            )
+        except Exception:
+            pass
+        return _raw_list_orders(
+            db,
+            status=status,
+            search=search,
+            branch=branch,
+            limit=limit,
+            offset=offset,
+        )
+
 
 @router.get("/{order_id}", response_model=dict)
 def get_order(

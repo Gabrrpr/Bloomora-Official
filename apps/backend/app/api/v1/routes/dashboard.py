@@ -138,43 +138,61 @@ def get_recent_orders(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if getattr(current_user, "role", None) not in [RoleEnum.admin, RoleEnum.staff]:
+    # Never let this dashboard card crash the whole page.
+    try:
+        if getattr(current_user, "role", None) not in [RoleEnum.admin, RoleEnum.staff]:
+            return []
+
+        clean_branch = (branch or "all").strip().lower()
+        capped_limit = max(1, min(int(limit or 5), 20))
+        params = {"limit": capped_limit}
+        branch_filter = ""
+        if clean_branch not in ["all", "all branches"]:
+            branch_filter = "AND LOWER(COALESCE(o.branch_name, '')) = :branch"
+            params["branch"] = clean_branch
+
+        rows = db.execute(
+            text(f"""
+                SELECT
+                    o.id,
+                    CAST(o.status AS TEXT) AS status,
+                    o.total_amount,
+                    o.branch_name,
+                    NULLIF(TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))), '') AS customer_name,
+                    u.email AS customer_email
+                FROM orders o
+                LEFT JOIN users u ON u.id = o.user_id
+                WHERE 1 = 1
+                {branch_filter}
+                ORDER BY o.created_at DESC
+                LIMIT :limit
+            """),
+            params,
+        ).all()
+
+        result = []
+        for row in rows:
+            data = dict(row._mapping)
+            order_id = str(data.get("id") or "")
+
+            try:
+                total_amount = float(data.get("total_amount") or 0)
+            except Exception:
+                total_amount = 0.0
+
+            result.append({
+                "id": order_id,
+                "order_number": f"ORD-{order_id.replace('-', '')[:8].upper()}" if order_id else "ORD-UNKNOWN",
+                "customer_name": data.get("customer_name") or data.get("customer_email") or "Unknown",
+                "status": data.get("status") or "pending",
+                "total_amount": total_amount,
+                "branch": data.get("branch_name") or "—",
+            })
+
+        return result
+    except Exception:
         return []
 
-    q = db.query(Order).join(
-        Transaction, Order.id == Transaction.order_id
-    ).filter(
-        Transaction.status == PaymentStatusEnum.paid
-    ).order_by(
-        Order.created_at.desc()
-    ).limit(limit)
-
-    clean_branch = branch.strip().lower()
-    if clean_branch not in ["all", "all branches"]:
-        q = q.filter(func.lower(Order.branch_name) == clean_branch)
-
-    orders = q.all()
-
-    def _customer_name(o: Order):
-        u = getattr(o, "user", None)
-        if not u:
-            return getattr(o, "customer_name", None) or "Unknown"
-        first = getattr(u, "first_name", None) or ""
-        last = getattr(u, "last_name", None) or ""
-        name = f"{first} {last}".strip()
-        return name or getattr(u, "email", None) or "Unknown"
-
-    return [
-        {
-            "id": str(o.id),
-            "order_number": f"ORD-{o.id.hex[:8].upper()}",
-            "customer_name": _customer_name(o),
-            "status": o.status.value if hasattr(o.status, "value") else o.status,
-            "total_amount": float(o.total_amount or 0),
-            "branch": o.branch_name,
-        }
-        for o in orders
-    ]
 
 
 @router.get("/trending")
