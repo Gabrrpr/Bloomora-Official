@@ -1,5 +1,5 @@
 import { useState } from "react"
-import cookieImg from "../assets/homepage/Cookie.png"
+import cookieImg from "../assets/homepage/Cookie.webp"
 
 const DG = "#0C573E"
 const G  = "#2E8B34"

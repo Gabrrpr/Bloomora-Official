@@ -5,7 +5,7 @@ import { regions, getProvinces } from "../utils/philippines"
 import FlowerPanel from "../components/FlowerPanel"
 import TermsModal from "../components/TermsModal"
 import estingsLogo from "../assets/Estings.svg"
-import bgImg from "../assets/BG_LoginRegister.png"
+import bgImg from "../assets/BG_LoginRegister.webp"
 
 // ── Supported Currencies ────────────────────────────────────────────────────
 const SUPPORTED_REGIONS = [

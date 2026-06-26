@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import FlowerPanel from "../components/FlowerPanel"
 import { sendForgotPasswordOtp, resetPassword } from "../services/auth"
 import estingsLogo from "../assets/Estings.svg"
-import bgImg from "../assets/BG_LoginRegister.png"
+import bgImg from "../assets/BG_LoginRegister.webp"
 
 function TypewriterText({ text, typingSpeed = 100, deletingSpeed = 65, pauseAfterTyping = 2500, pauseAfterDeleting = 600 }) {
   const [state, setState] = useState({ displayed: "", phase: "typing" })

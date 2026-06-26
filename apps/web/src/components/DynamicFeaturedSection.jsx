@@ -353,11 +353,70 @@ export default function DynamicFeaturedSections({ branch, onNavigate, onPreview 
           />
         ))
       ) : (
-        // What to show if Pampanga genuinely has no layout sections built yet
-        <div className="py-24 text-center">
-            <p style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>
-                We're currently curating our featured collections for the {branch} branch. Check back soon!
+        // What to show if a branch genuinely has no layout sections built yet
+        <div className="py-14 sm:py-20 lg:py-28 px-4 sm:px-6 flex justify-center">
+          <style>{`
+            @keyframes dfsBob { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+            @keyframes dfsPetal { 0%,100% { opacity: 0.85; } 50% { opacity: 1; } }
+            @media (prefers-reduced-motion: reduce) {
+              .dfs-bob, .dfs-petal { animation: none !important; }
+            }
+          `}</style>
+          <div
+            className="relative w-full max-w-[20rem] sm:max-w-md text-center rounded-2xl sm:rounded-3xl px-5 py-9 sm:px-8 sm:py-12 overflow-hidden"
+            style={{
+              backgroundColor: isDark ? "rgba(255,255,255,0.03)" : "rgba(46,139,52,0.045)",
+              border: `1px dashed ${isDark ? "rgba(134,239,172,0.18)" : "rgba(46,139,52,0.28)"}`,
+              boxShadow: isDark ? "0 20px 50px -30px rgba(0,0,0,0.6)" : "0 20px 50px -30px rgba(46,139,52,0.35)",
+            }}
+          >
+            {/* soft glow behind the icon */}
+            <div aria-hidden className="pointer-events-none absolute -top-16 sm:-top-20 left-1/2 -translate-x-1/2 w-44 h-44 sm:w-56 sm:h-56 rounded-full"
+              style={{ background: "radial-gradient(circle, rgba(46,139,52,0.20), transparent 70%)" }} />
+
+            {/* branded flower icon */}
+            <div className="dfs-bob relative mx-auto mb-6 sm:mb-7 flex items-center justify-center w-24 h-24 sm:w-28 sm:h-28 rounded-full"
+              style={{ backgroundColor: isDark ? "rgba(46,139,52,0.16)" : "rgba(46,139,52,0.10)", animation: "dfsBob 3.2s ease-in-out infinite" }}>
+              <svg className="w-16 h-16 sm:w-20 sm:h-20" viewBox="0 0 100 100" aria-hidden>
+                <defs>
+                  <linearGradient id="dfsPetalGrad" x1="0" y1="0" x2="0.4" y2="1">
+                    <stop offset="0%"   stopColor={isDark ? "#fbcfe8" : "#fbcfe8"} />
+                    <stop offset="55%"  stopColor={isDark ? "#f0abcd" : "#f472b6"} />
+                    <stop offset="100%" stopColor={isDark ? "#db7bb0" : "#db2777"} />
+                  </linearGradient>
+                  <radialGradient id="dfsCenterGrad" cx="0.5" cy="0.4" r="0.6">
+                    <stop offset="0%"   stopColor="#fde68a" />
+                    <stop offset="60%"  stopColor="#34d399" />
+                    <stop offset="100%" stopColor="#2E8B34" />
+                  </radialGradient>
+                </defs>
+                {[0, 72, 144, 216, 288].map((a, i) => (
+                  <path key={a} className="dfs-petal" transform={`rotate(${a} 50 50)`}
+                    d="M50 52 C38 44 38 24 47 16 L50 20 L53 16 C62 24 62 44 50 52 Z"
+                    fill="url(#dfsPetalGrad)"
+                    style={{ animation: `dfsPetal 1.8s ease-in-out ${(i * 0.15).toFixed(2)}s infinite` }} />
+                ))}
+                <circle cx="50" cy="50" r="10" fill="url(#dfsCenterGrad)" />
+              </svg>
+            </div>
+
+            <h3 className="text-base sm:text-xl font-bold mb-2 tracking-tight inline-block"
+              style={{
+                backgroundImage: isDark
+                  ? "linear-gradient(90deg, #86efac, #34d399, #f0abcd)"
+                  : "linear-gradient(90deg, #0C573E, #2E8B34, #e0529c)",
+                WebkitBackgroundClip: "text",
+                backgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                color: "transparent",
+              }}>
+              Featured collections coming soon
+            </h3>
+            <p className="text-[13px] sm:text-sm leading-relaxed mx-auto max-w-[16rem] sm:max-w-xs" style={{ color: isDark ? "#9ca3af" : "#6b7280" }}>
+              We're currently curating our featured collections for the{" "}
+              <span style={{ fontWeight: 600, color: isDark ? "#86efac" : "#2E8B34" }}>{branch}</span> branch. Check back soon!
             </p>
+          </div>
         </div>
       )}
     </>

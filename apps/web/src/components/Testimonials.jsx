@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react"
 import { useTheme } from "../context/ThemeContext"
-import testimonialsBG from "../assets/homepage/testimonialsBG.png"
+import testimonialsBG from "../assets/homepage/testimonialsBG.webp"
 
 const G   = "#2E8B34"
 const DG  = "#0C573E"

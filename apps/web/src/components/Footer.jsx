@@ -1,13 +1,13 @@
 import { useEffect } from "react"
 import estingsLogo     from "../assets/EstingsLogo.svg"
 import estingsText     from "../assets/Estings.svg"
-import paypalImg       from "../assets/footer/PayPal.png"
-import westernUnionImg from "../assets/footer/WesternUnion.png"
-import gcashImg        from "../assets/footer/GCash.png"
-import bdoImg          from "../assets/footer/BDO.png"
-import bpiImg          from "../assets/footer/BPI.png"
-import metrobankImg    from "../assets/footer/Metrobank.png"
-import lalamoveImg     from "../assets/footer/Lalamove.png"
+import paypalImg       from "../assets/footer/PayPal.webp"
+import westernUnionImg from "../assets/footer/WesternUnion.webp"
+import gcashImg        from "../assets/footer/GCash.webp"
+import bdoImg          from "../assets/footer/BDO.webp"
+import bpiImg          from "../assets/footer/BPI.webp"
+import metrobankImg    from "../assets/footer/Metrobank.webp"
+import lalamoveImg     from "../assets/footer/Lalamove.webp"
 
 const QUICK_LINKS = [
   { label: "Home",       page: "home" },

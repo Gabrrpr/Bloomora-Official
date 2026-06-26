@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef } from "react"
 import { useTheme } from "../context/ThemeContext"
 
-import MixAndMatchImg    from "../assets/MixAndMatchImg.png"
-import DescribeImg       from "../assets/DescribeImg.png"
-import CustomizeSectionBG from "../assets/homepage/CustomizeSectionBG.png"
+import MixAndMatchImg    from "../assets/MixAndMatchImg.webp"
+import DescribeImg       from "../assets/DescribeImg.webp"
+import CustomizeSectionBG from "../assets/homepage/CustomizeSectionBG.webp"
 
 import customized1 from "../assets/customized/customized1.webp"
 import customized2 from "../assets/customized/customized2.webp"

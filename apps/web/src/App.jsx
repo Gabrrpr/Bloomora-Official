@@ -155,15 +155,17 @@ function AppContent() {
     }
 
     // 2. 🛡️ SECURITY: If someone tries to access the admin page but IS NOT an admin, kick them out
-    if (page === "admin" && !isAdminOrStaff) {
-      console.warn("Access Denied: You do not have admin privileges.");
-      
-      // If they aren't logged in at all, send them to login. 
-      // If they are logged in as a customer, send them home.
-      const redirectPage = user ? "home" : "login";
-      setPage(redirectPage);
-      window.history.pushState({}, "", redirectPage === "home" ? "/" : `/${redirectPage}`);
-    }
+    // ⚠️ TEMPORARILY DISABLED — allows reaching /admin via URL without logging in.
+    // Re-enable this block to restore the URL access protection.
+    // if (page === "admin" && !isAdminOrStaff) {
+    //   console.warn("Access Denied: You do not have admin privileges.");
+    //
+    //   // If they aren't logged in at all, send them to login.
+    //   // If they are logged in as a customer, send them home.
+    //   const redirectPage = user ? "home" : "login";
+    //   setPage(redirectPage);
+    //   window.history.pushState({}, "", redirectPage === "home" ? "/" : `/${redirectPage}`);
+    // }
   }, [user, page, loading]);
 
   const navigate = (to, passedData = null) => {

@@ -1,8 +1,8 @@
 import { useState } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import pageBg5    from "../../assets/PageBG5.webp"
-import aboutImg1  from "../../assets/AboutUsImg1.png"
-import aboutImg2  from "../../assets/AboutUsImg2.png"
+import aboutImg1  from "../../assets/AboutUsImg1.webp"
+import aboutImg2  from "../../assets/AboutUsImg2.webp"
 import Footer     from "../../components/Footer"
 
 const G  = "#2E8B34"

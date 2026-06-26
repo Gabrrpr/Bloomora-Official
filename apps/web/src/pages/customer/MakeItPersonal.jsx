@@ -1,5 +1,5 @@
-import mixAndMatchImg from "../../assets/MixAndMatchImg.png"
-import describeImg from "../../assets/DescribeImg.png"
+import mixAndMatchImg from "../../assets/MixAndMatchImg.webp"
+import describeImg from "../../assets/DescribeImg.webp"
 
 const G = "#2E8B34"
 

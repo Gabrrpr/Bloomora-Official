@@ -2,10 +2,10 @@ import { useState, useEffect } from "react"
 import { useTheme } from "../context/ThemeContext"
 import { api } from "../services/api.js"
 
-import heroBg1 from "../assets/hero/HeroBG1.png"
-import heroBg2 from "../assets/hero/HeroBG2.png"
-import heroBg3 from "../assets/hero/HeroBG3.png"
-import heroBg4 from "../assets/hero/HeroBG4.png"
+import heroBg1 from "../assets/hero/HeroBG1.webp"
+import heroBg2 from "../assets/hero/HeroBG2.webp"
+import heroBg3 from "../assets/hero/HeroBG3.webp"
+import heroBg4 from "../assets/hero/HeroBG4.webp"
 
 const IMAGE_MAP = {
   "HeroBG1.png": heroBg1,

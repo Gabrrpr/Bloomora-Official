@@ -8,8 +8,8 @@ import { generateCardMessage, RELATIONSHIP_OPTIONS, OCCASION_OPTIONS, TONE_OPTIO
 
 import withCardImg from "../assets/productpreview/withCard.webp"
 import noCardImg   from "../assets/productpreview/noCard.webp"
-import letterImg   from "../assets/productpreview/Letter.png"
-import writingImg  from "../assets/productpreview/WritingLetter.png"
+import letterImg   from "../assets/productpreview/Letter.webp"
+import writingImg  from "../assets/productpreview/WritingLetter.webp"
 
 const G   = "#2E8B34"
 const DG  = "#0C573E"

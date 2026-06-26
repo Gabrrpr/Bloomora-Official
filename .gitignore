@@ -63,3 +63,4 @@ htmlcov/
 **/.codex-remote-attachments/
 /dist-check/
 /app.json
+apps/backend/.env.backup

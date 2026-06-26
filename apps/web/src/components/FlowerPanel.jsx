@@ -1,5 +1,5 @@
 import estingsLogo from "../assets/Estings.svg"
-import bgImg from "../assets/BG_LoginRegister.png"
+import bgImg from "../assets/BG_LoginRegister.webp"
 
 /**
  * Full-height decorative left panel used on auth pages (desktop only).

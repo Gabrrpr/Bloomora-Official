@@ -8,8 +8,8 @@ import estingsLogo from "../assets/EstingsLogo.svg";
 import estingsText from "../assets/Estings.svg";
 
 // Branch photos
-import manilaBranchImg   from "../assets/homepage/ManilaBranch.png";
-import pampangaBranchImg from "../assets/homepage/PampangaBranch.png";
+import manilaBranchImg   from "../assets/homepage/ManilaBranch.webp";
+import pampangaBranchImg from "../assets/homepage/PampangaBranch.webp";
 
 const SITE_GREEN = "#2E8B34";
 const NAVY_GREEN = "#35530A";
