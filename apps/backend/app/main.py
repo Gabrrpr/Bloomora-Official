@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import JSONResponse
+from contextlib import asynccontextmanager
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -59,6 +60,8 @@ LOCAL_ORIGINS = {
 
 DEPLOYED_ORIGINS = {
     "https://estings.shop",
+    "https://api.estings.shop",
+    "https://www.estings.shop"
 }
 
 CONFIGURED_ORIGINS = {
@@ -69,11 +72,18 @@ CONFIGURED_ORIGINS = {
 
 ALLOWED_ORIGINS = LOCAL_ORIGINS | DEPLOYED_ORIGINS | CONFIGURED_ORIGINS
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: Run your scheduler
+    start_scheduler()
+    yield
+
 app = FastAPI(
     title="Bloomora API",
     description="Backend API for Bloomora - Floral E-Commerce Platform for Esting's Flowers International Inc.",
     version="1.0.0",
     redirect_slashes=False,
+    lifespan=lifespan,
 )
 
 # 🚀 2. NEW: Add the startup event to boot up the scheduler

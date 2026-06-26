@@ -28,8 +28,12 @@ from app.core.limiter import limiter
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 # 🚀 DYNAMIC URL CONFIGURATION
-FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
-BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+FRONTEND_URL = os.getenv("FRONTEND_URL", "https://estings.shop")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://api.estings.shop")
+
+# Strip trailing slashes just in case they accidentally get added in Coolify
+FRONTEND_URL = FRONTEND_URL.rstrip("/")
+BACKEND_URL = BACKEND_URL.rstrip("/")
 
 GOOGLE_REDIRECT_URI  = f"{BACKEND_URL}/api/v1/auth/google/callback"
 FACEBOOK_REDIRECT_URI = f"{BACKEND_URL}/api/v1/auth/facebook/callback"
