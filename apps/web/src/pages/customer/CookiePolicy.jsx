@@ -1,39 +1,13 @@
 import { useState, useEffect } from "react"
-import { useTheme } from "../context/ThemeContext"
-import { api } from "../services/api"
-import estingsLogo from "../assets/Estings.svg"
+import { useTheme } from "../../context/ThemeContext"
+import { api } from "../../services/api"
+import estingsLogo from "../../assets/Estings.svg"
+import { SETTINGS_PATH, COOKIE_KEY as KEY, DEFAULT_COOKIE as FALLBACK } from "../../config/legalContent"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
 
-// Privacy content is stored in the shared settings blob under this key. If nothing
-// is published yet (or the fetch fails), the FALLBACK below is shown — a Data
-// Privacy Act (RA 10173) oriented default, so the page is never blank.
-const SETTINGS_PATH = "/products/admin/settings/homepage"
-const PRIVACY_KEY = "__privacy__"
-
-const FALLBACK = {
-  docTitle: "Privacy Policy",
-  docSubtitle: "Bloomora Floral Management System",
-  effectiveDate: "January 1, 2025",
-  lastUpdated: "April 2025",
-  notice: "This Privacy Policy explains how Bloomora collects, uses, and protects your personal information in accordance with the Data Privacy Act of 2012 (Republic Act No. 10173).",
-  sections: [
-    { title: "1. Introduction", content: "Bloomora, operating under Esting's Flower International Inc., respects your right to privacy and is committed to protecting the personal information you share with us. This Privacy Policy describes how we collect, use, store, and disclose your personal data when you use our platform, in compliance with Republic Act No. 10173 (the Data Privacy Act of 2012) and its implementing rules and regulations." },
-    { title: "2. Information We Collect", content: "We collect information you provide directly, such as your name, email address, phone number, delivery address, and payment details when you register an account or place an order. We also automatically collect technical information such as your device type, browser, and usage data to improve our services." },
-    { title: "3. How We Use Your Information", content: "We use your personal information to process and fulfill your orders, coordinate delivery, communicate with you about your account and purchases, provide customer support, improve our platform, and comply with legal obligations. We process your data only for purposes that are legitimate and clearly stated." },
-    { title: "4. Legal Basis for Processing", content: "We process your personal information based on your consent, the necessity of fulfilling our contract with you, compliance with legal obligations, and our legitimate interests as a business, consistent with the Data Privacy Act of 2012." },
-    { title: "5. Disclosure of Information", content: "We do not sell your personal information. We may share your data with trusted service providers who assist us in operating our platform and delivering orders, such as payment processors and delivery partners. These parties are bound to protect your information and use it only for the purposes we specify." },
-    { title: "6. Data Storage and Security", content: "We implement appropriate organizational, physical, and technical security measures to protect your personal information against unauthorized access, alteration, disclosure, or destruction. We retain your data only for as long as necessary to fulfill the purposes outlined in this policy or as required by law." },
-    { title: "7. Your Rights as a Data Subject", content: "Under the Data Privacy Act of 2012, you have the right to be informed, to access your personal data, to object to processing, to request correction of inaccurate data, to request erasure or blocking, to data portability, and to file a complaint with the National Privacy Commission. You may exercise these rights by contacting us." },
-    { title: "8. Cookies and Tracking", content: "Our platform uses cookies and similar technologies to enhance your experience, remember your preferences, and analyze usage. You may control cookies through your browser settings, though disabling them may affect certain features of the platform." },
-    { title: "9. Children's Privacy", content: "Our platform is intended for users who are at least 18 years of age. We do not knowingly collect personal information from minors. If we become aware that we have collected data from a minor without proper consent, we will take steps to delete it." },
-    { title: "10. Changes to This Policy", content: "We may update this Privacy Policy from time to time to reflect changes in our practices or legal requirements. We will notify you of significant changes through the platform or by email. Continued use of our services after changes take effect constitutes acceptance of the updated policy." },
-    { title: "11. Contact Us", content: "If you have questions about this Privacy Policy or wish to exercise your data privacy rights, please contact our Data Protection Officer at privacy@bloomora.com or through our customer support portal." },
-  ],
-}
-
-export default function PrivacyPolicy({ onNavigate, onBack }) {
+export default function CookiePolicy({ onNavigate, onBack }) {
   const { isDark } = useTheme()
 
   // CMS content — starts as fallback, replaced if a saved version exists
@@ -44,7 +18,7 @@ export default function PrivacyPolicy({ onNavigate, onBack }) {
     api.get(SETTINGS_PATH)
       .then(parsed => {
         if (cancelled) return
-        const saved = parsed?.[PRIVACY_KEY]
+        const saved = parsed?.[KEY]
         if (saved && typeof saved === "object" && Array.isArray(saved.sections) && saved.sections.length > 0) {
           setDoc({
             docTitle:      saved.docTitle      || FALLBACK.docTitle,

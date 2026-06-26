@@ -11,6 +11,9 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import ForgotPassword from "./pages/ForgotPassword";
 import TermsAndConditions from "./pages/customer/TermsAndConditions";
+import DataPrivacyPolicy from "./pages/customer/DataPrivacyPolicy";
+import OrderingAndFulfillment from "./pages/customer/OrderingAndFulfillment";
+import CookiePolicy from "./pages/customer/CookiePolicy";
 import AdminDashboard from "./pages/admin/AdminDashboard";
 import ActivateStaff from "./pages/admin/ActivateStaff";
 import Cart from "./pages/customer/Cart";
@@ -28,7 +31,6 @@ import MakeItPersonal from "./pages/customer/MakeItPersonal";
 import MixAndMatch from "./pages/customer/MixAndMatch";
 import DescribeArrangement from "./pages/customer/DescribeArrangement";
 import FAQ from "./pages/customer/FAQ";
-import ReturnPolicy from "./pages/customer/ReturnPolicy";
 import AIGalleryPage from "./pages/customer/AIGalleryPage";
 import ChatWidget from "./components/ChatWidget";
 import CookieConsent from "./components/CookieConsent";
@@ -155,23 +157,26 @@ function AppContent() {
     }
 
     // 2. 🛡️ SECURITY: If someone tries to access the admin page but IS NOT an admin, kick them out
-    // ⚠️ TEMPORARILY DISABLED — allows reaching /admin via URL without logging in.
-    // Re-enable this block to restore the URL access protection.
-    // if (page === "admin" && !isAdminOrStaff) {
-    //   console.warn("Access Denied: You do not have admin privileges.");
-    //
-    //   // If they aren't logged in at all, send them to login.
-    //   // If they are logged in as a customer, send them home.
-    //   const redirectPage = user ? "home" : "login";
-    //   setPage(redirectPage);
-    //   window.history.pushState({}, "", redirectPage === "home" ? "/" : `/${redirectPage}`);
-    // }
+    if (page === "admin" && !isAdminOrStaff) {
+      console.warn("Access Denied: You do not have admin privileges.");
+
+      // If they aren't logged in at all, send them to login.
+      // If they are logged in as a customer, send them home.
+      const redirectPage = user ? "home" : "login";
+      setPage(redirectPage);
+      window.history.pushState({}, "", redirectPage === "home" ? "/" : `/${redirectPage}`);
+    }
   }, [user, page, loading]);
 
   const navigate = (to, passedData = null) => {
     if (to === "shop") setActiveShopCategory(passedData || "All");
     if ((to === "orders" || to === "write-review") && passedData) setSelectedOrderId(passedData);
-    
+
+    // Smooth flower-loader transition when entering the auth pages from elsewhere.
+    if ((to === "login" || to === "register") && page !== to) {
+      window.dispatchEvent(new CustomEvent("bloomora:auth-transition", { detail: { type: "auth" } }));
+    }
+
     setPrevPage(page);
     setPage(to);
 
@@ -220,6 +225,11 @@ function AppContent() {
       if (page === "activate-staff") return <ActivateStaff onNavigate={navigate} />;
     }
 
+    // Standalone legal pages (their own back bar, no customer navbar) — like Terms.
+    if (page === "privacy") return <DataPrivacyPolicy onNavigate={navigate} />;
+    if (page === "ordering-fulfillment") return <OrderingAndFulfillment onNavigate={navigate} />;
+    if (page === "cookie-policy") return <CookiePolicy onNavigate={navigate} />;
+
     return (
       <>
         {/* Customer UI gets the Navbar */}
@@ -233,7 +243,6 @@ function AppContent() {
             case "about": return <AboutUs onNavigate={navigate} />;
             case "contact": return <ContactUs onNavigate={navigate} />;
             case "faq": return <FAQ onNavigate={navigate} />;
-            case "return-policy": return <ReturnPolicy onNavigate={navigate} />;
             case "world-clock": return <WorldClock onNavigate={navigate} />;
 
             case "make-it-personal": return <MakeItPersonal onNavigate={navigate} />;
@@ -285,7 +294,7 @@ function AppContent() {
               <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
             </svg>
             <p className="text-sm font-semibold" style={{ color: "#0C573E" }}>
-              Signing you out...
+              {authTransition === "logout" ? "Signing you out..." : "Just a moment..."}
             </p>
           </div>
         </div>

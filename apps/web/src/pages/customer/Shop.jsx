@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
+import { useTheme } from "../../context/ThemeContext"
 import ProductPreviewModal from "../../components/ProductPreviewModal.jsx"
 import Footer from "../../components/Footer.jsx"
 import FallbackImage from "../../components/FallbackImage.jsx"
@@ -84,14 +85,21 @@ function WishlistBtn({ id, wishlist, toggleWishlist, small }) {
 }
 
 function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
+  const { isDark } = useTheme();
   const currentPrice = Number(product.price) || 0;
   const oldPrice = Number(product.original) || 0;
   const hasDiscount = oldPrice > currentPrice;
   const isOutOfStock = product.stock <= 0 || !product.is_available || product.status === "inactive";
+  const lc = {
+    bdr: isDark ? "#2d3748" : "#e8edf0", imgBg: isDark ? "#0f172a" : "#f8fafb",
+    name: isDark ? "#f1f5f9" : "#111827", sub: isDark ? "#cbd5e1" : "#374151",
+    muted: isDark ? "#94a3b8" : "#9ca3af", stock: isDark ? "#94a3b8" : "#6b7280",
+    chipBg: isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4", chipC: isDark ? "#4ade80" : G,
+  };
 
   return (
     <div className={`bg-white flex group transition-all duration-200 relative ${isOutOfStock ? "grayscale opacity-75 cursor-not-allowed" : "hover:shadow-md cursor-pointer"}`}
-      style={{ border:"1px solid #e8edf0", borderRadius:"12px", overflow:"hidden", height:"210px" }}
+      style={{ border:`1px solid ${lc.bdr}`, borderRadius:"12px", overflow:"hidden", height:"210px" }}
       onClick={() => !isOutOfStock && onPreview(product)}>
       
       {isOutOfStock && (
@@ -102,7 +110,7 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
         </div>
       )}
 
-      <div className="relative flex-shrink-0" style={{ width:"210px", height:"100%", backgroundColor:"#f8fafb" }}>
+      <div className="relative flex-shrink-0" style={{ width:"210px", height:"100%", backgroundColor:lc.imgBg }}>
         <FallbackImage
           src={product.image}
           alt={product.name}
@@ -126,17 +134,17 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
       </div>
       <div className="flex-1 flex flex-col justify-center relative z-10" style={{ padding:"20px 28px", minWidth:0 }}>
         <span className="inline-block text-[10px] font-bold uppercase tracking-widest mb-2 px-2.5 py-0.5 rounded-full"
-          style={{ backgroundColor:"#f0fdf4", color:G, width:"fit-content" }}>{product.category}</span>
-        <h3 style={{ fontSize:"16px", fontWeight:700, color:"#111827", margin:"0 0 8px", lineHeight:1.25 }}>{product.name}</h3>
+          style={{ backgroundColor:lc.chipBg, color:lc.chipC, width:"fit-content" }}>{product.category}</span>
+        <h3 style={{ fontSize:"16px", fontWeight:700, color:lc.name, margin:"0 0 8px", lineHeight:1.25 }}>{product.name}</h3>
         <div className="flex items-center gap-2 mb-2">
           <Stars rating={product.rating} size="md"/>
-          <span style={{ fontSize:"13px", fontWeight:600, color:"#374151" }}>{product.rating}</span>
-          <span style={{ fontSize:"13px", color:"#9ca3af" }}>({product.reviews.toLocaleString()})</span>
+          <span style={{ fontSize:"13px", fontWeight:600, color:lc.sub }}>{product.rating}</span>
+          <span style={{ fontSize:"13px", color:lc.muted }}>({product.reviews.toLocaleString()})</span>
         </div>
         {!isOutOfStock && (
           <div className="flex items-center gap-1.5">
             <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor:G }}/>
-            <span style={{ fontSize:"12px", color:"#6b7280" }}>In Stock · Ready to deliver</span>
+            <span style={{ fontSize:"12px", color:lc.stock }}>In Stock · Ready to deliver</span>
           </div>
         )}
       </div>
@@ -149,7 +157,7 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
             ₱{currentPrice.toLocaleString()}
           </div>
           {hasDiscount && (
-            <div style={{ fontSize:"13px", color:"#9ca3af", textDecoration:"line-through" }}>
+            <div style={{ fontSize:"13px", color:lc.muted, textDecoration:"line-through" }}>
               ₱{oldPrice.toLocaleString()}
             </div>
           )}
@@ -167,16 +175,22 @@ function ListCardDesktop({ product, wishlist, toggleWishlist, onPreview }) {
 }
 
 function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
+  const { isDark } = useTheme();
   const wishlisted = wishlist.includes(product.id)
   const currentPrice = Number(product.price) || 0;
   const oldPrice = Number(product.original) || 0;
   const hasDiscount = oldPrice > currentPrice;
   const isOutOfStock = product.stock <= 0 || !product.is_available || product.status === "inactive";
+  const lc = {
+    bdr: isDark ? "#2d3748" : "#e8edf0", imgBg: isDark ? "#0f172a" : "#f8fafb",
+    name: isDark ? "#f1f5f9" : "#111827", muted: isDark ? "#94a3b8" : "#9ca3af",
+    wishBg: isDark ? "#0f172a" : "#f3f4f6", wishBdr: isDark ? "#2d3748" : "#e5e7eb",
+  };
 
   return (
     <div
       className={`bg-white flex group transition-all duration-200 relative ${isOutOfStock ? "grayscale opacity-75 cursor-not-allowed" : "hover:shadow-sm cursor-pointer"}`}
-      style={{ border:"1px solid #e8edf0", borderRadius:"12px", overflow:"hidden", alignItems:"stretch" }}
+      style={{ border:`1px solid ${lc.bdr}`, borderRadius:"12px", overflow:"hidden", alignItems:"stretch" }}
       onClick={() => !isOutOfStock && onPreview(product)}
     >
       {isOutOfStock && (
@@ -187,7 +201,7 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
         </div>
       )}
 
-      <div className="relative flex-shrink-0" style={{ width:"108px", minHeight:"108px", backgroundColor:"#f8fafb", position:"relative" }}>
+      <div className="relative flex-shrink-0" style={{ width:"108px", minHeight:"108px", backgroundColor:lc.imgBg, position:"relative" }}>
         <FallbackImage
           src={product.image}
           alt={product.name}
@@ -213,19 +227,19 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
           <p style={{ fontSize:"9px", fontWeight:800, letterSpacing:"0.16em", textTransform:"uppercase", color:G, margin:"0 0 3px" }}>
             {product.category}
           </p>
-          <p style={{ fontSize:"13px", fontWeight:600, color:"#111827", lineHeight:1.3, margin:"0 0 5px", overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
+          <p style={{ fontSize:"13px", fontWeight:600, color:lc.name, lineHeight:1.3, margin:"0 0 5px", overflow:"hidden", display:"-webkit-box", WebkitLineClamp:2, WebkitBoxOrient:"vertical" }}>
             {product.name}
           </p>
           <div style={{ display:"flex", alignItems:"center", gap:"4px" }}>
             <Stars rating={product.rating}/>
-            <span style={{ fontSize:"11px", color:"#9ca3af" }}>({product.reviews})</span>
+            <span style={{ fontSize:"11px", color:lc.muted }}>({product.reviews})</span>
           </div>
         </div>
         <div style={{ display:"flex", alignItems:"center", justifycontent:"space-between", gap:"6px", marginTop:"8px" }}>
           <div style={{ display:"flex", alignItems:"baseline", gap:"4px" }}>
             <span style={{ fontSize:"15px", fontWeight:800, color:G, lineHeight:1 }}>₱{currentPrice.toLocaleString()}</span>
             {hasDiscount && (
-              <span style={{ fontSize:"11px", color:"#9ca3af", textDecoration:"line-through" }}>₱{oldPrice.toLocaleString()}</span>
+              <span style={{ fontSize:"11px", color:lc.muted, textDecoration:"line-through" }}>₱{oldPrice.toLocaleString()}</span>
             )}
           </div>
           <div style={{ display:"flex", alignItems:"center", gap:"6px", flexShrink:0 }}>
@@ -236,8 +250,8 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
               View
             </button>
             <button onClick={e => { e.stopPropagation(); toggleWishlist(product.id) }}
-              style={{ width:"30px", height:"30px", borderRadius:"8px", flexShrink:0, display:"flex", alignItems:"center", justifycontent:"center", backgroundColor:wishlisted?"#fef2f2":"#f3f4f6", border:wishlisted?"1px solid #fecaca":"1px solid #e5e7eb", cursor:"pointer" }}>
-              <svg width="13" height="13" fill={wishlisted?"#e11d48":"none"} stroke={wishlisted?"#e11d48":"#9ca3af"} strokeWidth="2" viewBox="0 0 24 24">
+              style={{ width:"30px", height:"30px", borderRadius:"8px", flexShrink:0, display:"flex", alignItems:"center", justifycontent:"center", backgroundColor:wishlisted?(isDark?"rgba(225,29,72,0.15)":"#fef2f2"):lc.wishBg, border:wishlisted?(isDark?"1px solid rgba(225,29,72,0.4)":"1px solid #fecaca"):`1px solid ${lc.wishBdr}`, cursor:"pointer" }}>
+              <svg width="13" height="13" fill={wishlisted?"#e11d48":"none"} stroke={wishlisted?"#e11d48":lc.muted} strokeWidth="2" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
               </svg>
             </button>
@@ -259,7 +273,8 @@ function SidebarContent({
   selectedLocations,
   setSelectedLocations,
   selectedOccasions,
-  setSelectedOccasions
+  setSelectedOccasions,
+  onClose
 }) {
   const [minInput, setMinInput] = useState("");
   const [maxInput, setMaxInput] = useState("");
@@ -284,8 +299,9 @@ function SidebarContent({
 
   const applyPrice = () => {
     const min = minInput ? Number(minInput) : 0;
-    const max = maxInput ? Number(maxInput) : 99999;
+    const max = maxInput ? Number(maxInput) : 999999;
     setPriceRange([min, max]);
+    onClose?.(); // on mobile, close the drawer so the filtered results are visible
   };
 
   const clearAll = () => {
@@ -526,6 +542,12 @@ function MobileFilterDrawer({ open, onClose, products, activeCategory, setActive
               setSelectedOccasions={setSelectedOccasions}
               onClose={onClose}
             />
+            <button
+              onClick={onClose}
+              className="w-full mt-4 py-3 text-white font-bold rounded-xl text-sm tracking-wide active:scale-95 transition-transform"
+              style={{ backgroundColor: G }}>
+              Show Results
+            </button>
           </div>
         </div>
       </div>
@@ -570,8 +592,9 @@ function ShopLoader() {
 }
 
 export default function Shop({ onNavigate, initialCategory }) {
+  const { isDark } = useTheme()
   const width    = useWidth()
-  const isMobile = width < 768  
+  const isMobile = width < 768
 
   const [products, setProducts]               = useState([])
   const [productsLoading, setProductsLoading] = useState(true)
@@ -596,6 +619,33 @@ export default function Shop({ onNavigate, initialCategory }) {
   const [previewProduct, setPreviewProduct]   = useState(null)
   const sortRef = useRef(null)
   const sortMenuRef = useRef(null)
+  const searchInputRef = useRef(null)
+
+  // Typewriter placeholder for the search bar — types a phrase, pauses, deletes,
+  // then moves to the next. Driven straight to the DOM (no state) so the whole
+  // Shop list doesn't re-render on every keystroke.
+  useEffect(() => {
+    const PHRASES = [
+      "Search for bouquets…",
+      "Search for red roses…",
+      "Search for birthday flowers…",
+      "Search for sunflowers…",
+      "Search for anniversary gifts…",
+      "Search for get well soon…",
+    ]
+    let phrase = 0, char = 0, deleting = false, timer
+    const tick = () => {
+      const el = searchInputRef.current
+      const full = PHRASES[phrase % PHRASES.length]
+      char += deleting ? -1 : 1
+      if (el && !el.value) el.setAttribute("placeholder", full.slice(0, char) || "Search…")
+      if (!deleting && char === full.length) { deleting = true; timer = setTimeout(tick, 1500); return }
+      if (deleting && char === 0) { deleting = false; phrase++; timer = setTimeout(tick, 350); return }
+      timer = setTimeout(tick, deleting ? 38 : 70)
+    }
+    timer = setTimeout(tick, 500)
+    return () => clearTimeout(timer)
+  }, [])
 
   useEffect(() => {
     const handleBranchUpdate = () => {
@@ -914,8 +964,31 @@ export default function Shop({ onNavigate, initialCategory }) {
   const visibleViews        = VIEW_ALL.filter(v => !isMobile || v.mobileVisible)
 
   return (
-    <div className="min-h-screen bg-white">
-      <style>{`@keyframes shopRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes shopPetalBloom{0%,100%{opacity:0.2}50%{opacity:1}}@keyframes shopToast{from{opacity:0;transform:translate(-50%,14px)}to{opacity:1;transform:translate(-50%,0)}}`}</style>
+    <div className="min-h-screen bg-white shop-root">
+      <style>{`@keyframes shopRise{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}@keyframes shopPetalBloom{0%,100%{opacity:0.2}50%{opacity:1}}@keyframes shopToast{from{opacity:0;transform:translate(-50%,14px)}to{opacity:1;transform:translate(-50%,0)}}
+        /* Dark-mode overrides scoped to the Shop page */
+        [data-theme="dark"] .shop-root{background-color:#0f172a;color:#e5e7eb}
+        [data-theme="dark"] .shop-root .bg-white{background-color:#1a2332 !important}
+        [data-theme="dark"] .shop-root .bg-white\\/30{background-color:rgba(15,23,42,0.5) !important}
+        [data-theme="dark"] .shop-root .bg-gray-50{background-color:#162032 !important}
+        [data-theme="dark"] .shop-root .bg-gray-100{background-color:#1e293b !important}
+        [data-theme="dark"] .shop-root .bg-gray-200{background-color:#334155 !important}
+        [data-theme="dark"] .shop-root .bg-gray-300{background-color:#374151 !important}
+        [data-theme="dark"] .shop-root .hover\\:bg-gray-200:hover{background-color:#334155 !important}
+        [data-theme="dark"] .shop-root .text-gray-900{color:#f1f5f9 !important}
+        [data-theme="dark"] .shop-root .text-gray-800{color:#e5e7eb !important}
+        [data-theme="dark"] .shop-root .text-gray-700{color:#cbd5e1 !important}
+        [data-theme="dark"] .shop-root .text-gray-600{color:#94a3b8 !important}
+        [data-theme="dark"] .shop-root .text-gray-500,[data-theme="dark"] .shop-root .text-gray-400{color:#94a3b8 !important}
+        [data-theme="dark"] .shop-root .hover\\:text-gray-900:hover{color:#f1f5f9 !important}
+        [data-theme="dark"] .shop-root .group:hover .group-hover\\:text-gray-900{color:#f1f5f9 !important}
+        [data-theme="dark"] .shop-root .border-gray-200{border-color:#2d3748 !important}
+        [data-theme="dark"] .shop-root .border-gray-300{border-color:#374151 !important}
+        [data-theme="dark"] .shop-root .border-gray-100{border-color:#1f2937 !important}
+        [data-theme="dark"] .shop-root hr{border-color:#2d3748 !important}
+        [data-theme="dark"] .shop-root input[type="number"],[data-theme="dark"] .shop-root input[type="text"],[data-theme="dark"] .shop-root input[type="search"]{background-color:#0f172a !important;color:#e5e7eb !important}
+        [data-theme="dark"] .shop-root input::placeholder{color:#64748b !important}
+      `}</style>
       <MobileFilterDrawer
         open={filterOpen}
         onClose={() => setFilterOpen(false)}
@@ -954,10 +1027,10 @@ export default function Shop({ onNavigate, initialCategory }) {
           <div className="flex-1 min-w-0">
             {activeCampaignKey && (
               <div className="mb-4 rounded-xl px-4 py-3 flex items-center justify-between gap-3 flex-wrap"
-                style={{ backgroundColor:"#f0fdf4", border:`1px solid ${G}33`, animation:"shopRise 0.5s ease 0.08s both" }}>
+                style={{ backgroundColor: isDark?"rgba(74,222,128,0.1)":"#f0fdf4", border:`1px solid ${isDark?"rgba(74,222,128,0.3)":`${G}33`}`, animation:"shopRise 0.5s ease 0.08s both" }}>
                 <div>
-                  <p className="text-sm font-bold" style={{ color:DG }}>{activeCampaign?.name || "Campaign Products"}</p>
-                  <p className="text-xs mt-0.5" style={{ color:"#4b5563" }}>
+                  <p className="text-sm font-bold" style={{ color: isDark?"#4ade80":DG }}>{activeCampaign?.name || "Campaign Products"}</p>
+                  <p className="text-xs mt-0.5" style={{ color: isDark?"#94a3b8":"#4b5563" }}>
                     Showing products assigned to this campaign{activeCampaign?.discount_value ? ` with ${activeCampaign.discount_type === "percent" ? `${Number(activeCampaign.discount_value)}%` : `PHP ${Number(activeCampaign.discount_value).toLocaleString()}`} off` : ""}.
                   </p>
                 </div>
@@ -968,29 +1041,33 @@ export default function Shop({ onNavigate, initialCategory }) {
                     setActiveCampaign(null)
                   }}
                   className="px-3 py-1.5 text-xs font-bold rounded-md border transition-all"
-                  style={{ color:DG, borderColor:`${G}55`, backgroundColor:"white" }}>
+                  style={{ color: isDark?"#4ade80":DG, borderColor:`${G}55`, backgroundColor: isDark?"#1a2332":"white" }}>
                   View All Products
                 </button>
               </div>
             )}
             <div className="relative mb-4" style={{ animation:"shopRise 0.5s ease 0.1s both" }}>
-              <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2" style={{ color:"#9ca3af" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/></svg>
+              <span className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center justify-center w-6 h-6 rounded-full"
+                style={{ backgroundColor: isDark?"rgba(74,222,128,0.14)":"rgba(46,139,52,0.1)", color: isDark?"#4ade80":G }}>
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/></svg>
+              </span>
               <input
+                ref={searchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search for bouquets, flowers, occasions..."
-                className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border outline-none transition-all"
-                style={{ borderColor:"#e5e7eb", backgroundColor:"white" }}
-                onFocus={e => { e.target.style.borderColor=G; e.target.style.boxShadow="0 0 0 3px rgba(74,222,128,0.15)" }}
-                onBlur={e => { e.target.style.borderColor="#e5e7eb"; e.target.style.boxShadow="none" }}
+                placeholder="Search…"
+                className="w-full pl-12 pr-11 py-3 text-sm rounded-full border-2 outline-none transition-all"
+                style={{ borderColor: isDark?"#2d3748":"#e5e7eb", backgroundColor: isDark?"#0f172a":"white", color: isDark?"#e5e7eb":"#111827", boxShadow: isDark?"0 4px 16px rgba(0,0,0,0.3)":"0 4px 16px rgba(12,87,62,0.06)" }}
+                onFocus={e => { e.target.style.borderColor=G; e.target.style.boxShadow="0 0 0 4px rgba(74,222,128,0.18)" }}
+                onBlur={e => { e.target.style.borderColor=isDark?"#2d3748":"#e5e7eb"; e.target.style.boxShadow=isDark?"0 4px 16px rgba(0,0,0,0.3)":"0 4px 16px rgba(12,87,62,0.06)" }}
               />
               {searchQuery && (
                 <button
                   onClick={() => { setSearchQuery(""); window.history.pushState({}, '', window.location.pathname); }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2"
-                  style={{ color:"#9ca3af", background:"none", border:"none", cursor:"pointer" }}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/></svg>
+                  className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center justify-center w-7 h-7 rounded-full transition-colors"
+                  style={{ color: isDark?"#94a3b8":"#9ca3af", background: isDark?"#1a2332":"#f3f4f6", border:"none", cursor:"pointer" }}>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M6 18L18 6M6 6l12 12"/></svg>
                 </button>
               )}
             </div>
@@ -999,7 +1076,7 @@ export default function Shop({ onNavigate, initialCategory }) {
               <div className="flex items-center gap-2">
                 <button onClick={() => setFilterOpen(true)}
                   className="lg:hidden flex items-center gap-1.5 border rounded-lg text-sm text-gray-700 transition-all hover:border-green-400 relative"
-                  style={{ borderColor:"#e5e7eb", padding:"6px 10px", height:"32px" }}>
+                  style={{ borderColor: isDark?"#2d3748":"#e5e7eb", padding:"6px 10px", height:"32px" }}>
                   <svg className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"/>
                   </svg>
@@ -1011,19 +1088,19 @@ export default function Shop({ onNavigate, initialCategory }) {
                   )}
                 </button>
 
-                <div className="flex items-center gap-0.5 rounded-xl" style={{ backgroundColor:"#f3f4f6", border:"1px solid #e5e7eb", padding:"3px" }}>
+                <div className="flex items-center gap-0.5 rounded-xl" style={{ backgroundColor: isDark ? "#0f172a" : "#f3f4f6", border: `1px solid ${isDark ? "#2d3748" : "#e5e7eb"}`, padding:"3px" }}>
                   {visibleViews.map(({ key, label, icon }) => {
                     const active = viewAs === key
                     return (
                       <button key={key} onClick={() => setViewAs(key)}
                         title={label} aria-label={label} aria-pressed={active}
-                        onMouseEnter={e => { if (!active) e.currentTarget.style.backgroundColor = "#e5e7eb" }}
+                        onMouseEnter={e => { if (!active) e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "#e5e7eb" }}
                         onMouseLeave={e => { if (!active) e.currentTarget.style.backgroundColor = "transparent" }}
                         style={{
                           width:"30px", height:"28px", display:"flex", alignItems:"center", justifyContent:"center",
                           flexShrink:0, borderRadius:"8px", cursor:"pointer", outline:"none", border:"none",
                           backgroundColor: active ? G : "transparent",
-                          color: active ? "white" : "#6b7280",
+                          color: active ? "white" : (isDark ? "#94a3b8" : "#6b7280"),
                           boxShadow: active ? "0 1px 3px rgba(12,87,62,0.35)" : "none",
                           transform: active ? "scale(1)" : "scale(0.96)",
                           transition:"background 0.18s ease, color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease",
@@ -1039,7 +1116,7 @@ export default function Shop({ onNavigate, initialCategory }) {
               <div className="relative z-50" ref={sortRef}>
                 <button onClick={() => setSortOpen(p => !p)}
                   className="flex items-center gap-2 border rounded-lg text-sm text-gray-700 transition-all hover:border-green-400"
-                  style={{ borderColor:sortOpen?G:"#e5e7eb", padding:"6px 10px", height:"32px", minWidth:isMobile?"120px":"140px", justifyContent:"space-between" }}>
+                  style={{ borderColor:sortOpen?G:(isDark?"#2d3748":"#e5e7eb"), padding:"6px 10px", height:"32px", minWidth:isMobile?"120px":"140px", justifyContent:"space-between" }}>
                   <span className="text-xs sm:text-sm truncate">{currentSortLabel}</span>
                   <svg className="w-3 h-3 text-gray-400 flex-shrink-0 transition-transform" style={{ transform:sortOpen?"rotate(180deg)":"rotate(0)" }}
                     fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1050,19 +1127,21 @@ export default function Shop({ onNavigate, initialCategory }) {
                 {sortOpen && createPortal(
                   <div
                     ref={sortMenuRef}
-                    className="fixed bg-white z-[9999] shadow-2xl overflow-hidden"
+                    className="fixed z-[9999] shadow-2xl overflow-hidden"
                     style={(() => {
                       const rect = sortRef.current?.getBoundingClientRect()
                       const top = rect ? rect.bottom + 4 : 80
+                      const bg = isDark ? "#1a2332" : "white"
+                      const bdr = `1px solid ${isDark ? "#2d3748" : "#e5e7eb"}`
                       return isMobile
-                        ? { top, right: 16, width: 200, border: "1px solid #e5e7eb", borderRadius: 12 }
-                        : { top, left: rect ? rect.left : undefined, width: rect ? Math.max(rect.width, 160) : 180, border: "1px solid #e5e7eb", borderRadius: 10 }
+                        ? { top, right: 16, width: 200, border: bdr, borderRadius: 12, backgroundColor: bg }
+                        : { top, left: rect ? rect.left : undefined, width: rect ? Math.max(rect.width, 160) : 180, border: bdr, borderRadius: 10, backgroundColor: bg }
                     })()}
                   >
                     {SORT_OPTIONS.map(opt => (
                       <button key={opt.value} onClick={() => { setSortBy(opt.value); setSortOpen(false) }}
                         className="w-full text-left px-4 py-2.5 text-sm transition-all"
-                        style={{ color:sortBy===opt.value?G:"#4b5563", fontWeight:sortBy===opt.value?600:400, backgroundColor:sortBy===opt.value?"#f0fdf4":"white" }}>
+                        style={{ color:sortBy===opt.value?(isDark?"#4ade80":G):(isDark?"#cbd5e1":"#4b5563"), fontWeight:sortBy===opt.value?600:400, backgroundColor:sortBy===opt.value?(isDark?"rgba(74,222,128,0.12)":"#f0fdf4"):(isDark?"#1a2332":"white") }}>
                         {opt.label}
                       </button>
                     ))}
@@ -1076,13 +1155,13 @@ export default function Shop({ onNavigate, initialCategory }) {
             {activeFiltersCount > 0 && (
               <div className="flex flex-wrap gap-2 mb-4">
                 {activeCategory !== "All" && (
-                  <span className="flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full capitalize" style={{ backgroundColor:"#f0fdf4", color:G, border:`1px solid ${G}33` }}>
+                  <span className="flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full capitalize" style={{ backgroundColor: isDark?"rgba(74,222,128,0.12)":"#f0fdf4", color: isDark?"#4ade80":G, border:`1px solid ${isDark?"rgba(74,222,128,0.3)":`${G}33`}` }}>
                     Category: {activeCategory}
                     <button onClick={() => setActiveCategory("All")} className="ml-0.5 text-green-600 font-bold">×</button>
                   </span>
                 )}
                 {selectedOccasions.map(occ => (
-                  <span key={occ} className="flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full capitalize" style={{ backgroundColor:"#f0fdf4", color:G, border:`1px solid ${G}33` }}>
+                  <span key={occ} className="flex items-center gap-1 text-xs font-medium px-3 py-1 rounded-full capitalize" style={{ backgroundColor: isDark?"rgba(74,222,128,0.12)":"#f0fdf4", color: isDark?"#4ade80":G, border:`1px solid ${isDark?"rgba(74,222,128,0.3)":`${G}33`}` }}>
                     Occasion: {occ}
                     <button onClick={() => setSelectedOccasions(prev => prev.filter(o => o !== occ))} className="ml-0.5 text-green-600 font-bold">×</button>
                   </span>

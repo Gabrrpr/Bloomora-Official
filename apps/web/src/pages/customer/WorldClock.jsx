@@ -29,15 +29,20 @@ const REGIONS = ["All", "Middle East", "Asia-Pacific", "North America", "Europe"
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function getStatus(tz) {
   const h = parseInt(new Date().toLocaleString("en-US", { timeZone:tz, hour:"numeric", hour12:false }))
-  if (h >= 8 && h < 18)  return "working"
-  if (h >= 18 && h < 23) return "evening"
-  return "sleep"
+  if (h >= 6 && h < 17)  return "day"
+  if (h >= 17 && h < 21) return "evening"
+  return "night"
 }
 
+// Soft, brand-neutral day/night descriptors — no dashboard dots.
+const SunIcon = (p) => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></svg>
+const SunsetIcon = (p) => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M12 10V3M5.6 6.6l1.4 1.4M2 14h2M20 14h2M17 8l1.4-1.4M22 20H2M16 14a4 4 0 0 0-8 0"/></svg>
+const MoonIcon = (p) => <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" {...p}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+
 const STATUS = {
-  working: { label:"Working hours",         color:"#16a34a", darkColor:"#4ade80",  dot:"#22c55e" },
-  evening: { label:"Evening hours",         color:"#b45309", darkColor:"#fbbf24",  dot:"#f59e0b" },
-  sleep:   { label:"Late night / Sleeping", color:"#4f46e5", darkColor:"#a5b4fc",  dot:"#818cf8" },
+  day:     { label:"Daytime", Icon:SunIcon },
+  evening: { label:"Evening", Icon:SunsetIcon },
+  night:   { label:"Night",   Icon:MoonIcon },
 }
 
 function getOffset(tz) {
@@ -59,50 +64,9 @@ function Flag({ code, size = 20 }) {
     <img
       src={`https://flagcdn.com/w40/${lower}.png`}
       alt={code}
-      style={{ width:size*1.4, height:size, objectFit:"cover", borderRadius:"3px", flexShrink:0, border:"1px solid rgba(0,0,0,0.1)" }}
+      style={{ width:size*1.4, height:size, objectFit:"cover", borderRadius:"3px", flexShrink:0, border:"1px solid rgba(0,0,0,0.08)" }}
       onError={e => { e.target.style.display="none" }}
     />
-  )
-}
-
-// ── Analog clock ──────────────────────────────────────────────────────────────
-function AnalogClock({ tz, size = 80, isPH, isDark }) {
-  const getAngles = () => {
-    const now   = new Date()
-    const local = new Date(now.toLocaleString("en-US", { timeZone:tz }))
-    const h = local.getHours() % 12, m = local.getMinutes(), s = local.getSeconds()
-    return { h:(h*30)+(m*0.5), m:(m*6)+(s*0.1), s:s*6 }
-  }
-  const [a, setA] = useState(getAngles)
-  useEffect(() => { const id=setInterval(()=>setA(getAngles()),1000); return ()=>clearInterval(id) }, [tz])
-
-  const cx = size/2, r = size/2 - 2.5
-  const pt = (angle, len) => ({ x:cx+Math.sin((angle*Math.PI)/180)*len, y:cx-Math.cos((angle*Math.PI)/180)*len })
-
-  const faceFill   = isDark ? "#1e293b" : "white"
-  const faceStroke = isPH ? (isDark?"#4ade80":DG) : (isDark?"#334155":"#e2e8f0")
-  const handC      = isDark ? (isPH?"#4ade80":"#94a3b8") : (isPH?DG:"#475569")
-  const markerC    = isDark ? (isPH?"rgba(74,222,128,0.5)":"#334155") : (isPH?"#a8c5b2":"#cbd5e1")
-  const secC       = isDark ? "#f87171" : "#ef4444"
-  const centerC    = isDark ? (isPH?"#4ade80":"#64748b") : (isPH?DG:"#475569")
-
-  const h = pt(a.h, r*0.50), m = pt(a.m, r*0.68), s = pt(a.s, r*0.76)
-
-  return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-      <circle cx={cx} cy={cx} r={r} fill={faceFill} stroke={faceStroke} strokeWidth={isPH?2:1.5}/>
-      {Array.from({length:12}).map((_,i) => {
-        const ang=i*30, i1=r*0.80, o1=r*0.92
-        const s1={x:cx+Math.sin((ang*Math.PI)/180)*i1, y:cx-Math.cos((ang*Math.PI)/180)*i1}
-        const e1={x:cx+Math.sin((ang*Math.PI)/180)*o1, y:cx-Math.cos((ang*Math.PI)/180)*o1}
-        return <line key={i} x1={s1.x} y1={s1.y} x2={e1.x} y2={e1.y} stroke={markerC} strokeWidth={i%3===0?1.8:0.8} strokeLinecap="round"/>
-      })}
-      <line x1={cx} y1={cx} x2={h.x} y2={h.y} stroke={handC} strokeWidth={size>70?2.5:2} strokeLinecap="round"/>
-      <line x1={cx} y1={cx} x2={m.x} y2={m.y} stroke={handC} strokeWidth={size>70?1.8:1.5} strokeLinecap="round"/>
-      <line x1={cx} y1={cx} x2={s.x} y2={s.y} stroke={secC}  strokeWidth={1} strokeLinecap="round"/>
-      <circle cx={cx} cy={cx} r={2.5} fill={centerC}/>
-      <circle cx={cx} cy={cx} r={1}   fill={faceFill}/>
-    </svg>
   )
 }
 
@@ -113,14 +77,16 @@ function DigitalTime({ tz, large, isDark }) {
   useEffect(() => { const id=setInterval(()=>setT(get()),1000); return ()=>clearInterval(id) }, [tz])
   const [hm, ap] = t.split(" ")
   return (
-    <div className="flex items-baseline gap-1">
+    <div className="flex items-baseline gap-1.5">
       <span style={{
-        fontSize: large ? "clamp(26px,4vw,38px)" : "16px",
+        fontSize: large ? "clamp(30px,5vw,44px)" : "26px",
         fontWeight: 700,
-        color: large ? (isDark?"#4ade80":DG) : (isDark?"#e2e8f0":"#1e293b"),
+        color: large ? (isDark?"#4ade80":DG) : (isDark?"#f1f5f9":"#111827"),
         letterSpacing: "-0.02em",
+        lineHeight: 1,
+        fontVariantNumeric: "tabular-nums",
       }}>{hm}</span>
-      <span style={{ fontSize: large?"14px":"11px", fontWeight:600, color:isDark?"#64748b":"#94a3b8" }}>{ap}</span>
+      <span style={{ fontSize: large?"15px":"13px", fontWeight:600, color:isDark?"#64748b":"#94a3b8" }}>{ap}</span>
     </div>
   )
 }
@@ -129,49 +95,33 @@ function DateStr({ tz, isDark }) {
   const get = () => new Date().toLocaleDateString("en-PH", { timeZone:tz, weekday:"short", month:"short", day:"numeric" })
   const [d, setD] = useState(get)
   useEffect(() => { const id=setInterval(()=>setD(get()),10000); return ()=>clearInterval(id) }, [tz])
-  return <span style={{ fontSize:"12px", color:isDark?"#64748b":"#94a3b8", fontWeight:500 }}>{d}</span>
+  return <span style={{ fontSize:"12.5px", color:isDark?"#94a3b8":"#6b7280" }}>{d}</span>
 }
 
-// ── PH Banner — matches Bloomora card style ───────────────────────────────────
+// ── PH featured card ──────────────────────────────────────────────────────────
 function PHBanner({ isDark }) {
-  const bg  = isDark ? "#1a2332" : "white"
-  const bdr = isDark ? "rgba(74,222,128,0.35)" : DG
-  const nameC = isDark ? "#f1f5f9" : "#0f172a"
-  const subC  = isDark ? "#94a3b8" : "#64748b"
+  const bg    = isDark ? "#1a2332" : "white"
+  const bdr   = isDark ? "rgba(74,222,128,0.3)" : "rgba(46,139,52,0.3)"
+  const nameC = isDark ? "#f1f5f9" : "#1f2937"
+  const subC  = isDark ? "#94a3b8" : "#6b7280"
   const tagBg = isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4"
   const tagC  = isDark ? "#4ade80" : G
 
   return (
-    <div className="rounded-2xl overflow-hidden mb-6"
-      style={{ backgroundColor:bg, border:`2px solid ${bdr}`, boxShadow: isDark?"0 0 0 1px rgba(74,222,128,0.1), 0 4px 24px rgba(0,0,0,0.3)":"0 4px 24px rgba(12,87,62,0.12)" }}>
-      {/* Top accent bar */}
-      <div style={{ height:"3px", background: isDark?"linear-gradient(90deg,rgba(74,222,128,0.2),#4ade80 30%,#86efac 50%,#4ade80 70%,rgba(74,222,128,0.2))":`linear-gradient(90deg,rgba(12,87,62,0.2),${DG} 30%,${G} 50%,${DG} 70%,rgba(12,87,62,0.2))` }}/>
-
-      <div className="flex flex-col sm:flex-row items-center gap-6 p-6 sm:p-8">
-        {/* Clock */}
-        <div className="flex-shrink-0">
-          <AnalogClock tz={PH_TZ} size={100} isPH isDark={isDark}/>
-        </div>
-
-        {/* Info */}
+    <div className="rounded-2xl mb-8 p-5 sm:p-8"
+      style={{ backgroundColor:bg, border:`1px solid ${bdr}`, boxShadow: isDark?"0 8px 32px rgba(0,0,0,0.3)":"0 8px 32px rgba(12,87,62,0.08)" }}>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-5 sm:gap-8">
         <div className="flex-1 text-center sm:text-left">
-          <div className="flex items-center justify-center sm:justify-start gap-2 mb-2">
+          <div className="flex items-center justify-center sm:justify-start gap-2 mb-3">
             <Flag code="PH" size={18}/>
             <span className="text-xs font-bold uppercase tracking-widest" style={{ color:tagC }}>Your Local Time</span>
-            {/* Live dot */}
-            <span className="flex items-center gap-1 ml-1">
-              <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor:"#22c55e" }}/>
-              <span style={{ fontSize:"10px", color:isDark?"#64748b":"#94a3b8" }}>Live</span>
-            </span>
           </div>
-          <p style={{ fontSize:"20px", fontWeight:700, color:nameC, marginBottom:"4px" }}>Philippines — Manila</p>
+          <p style={{ fontSize:"15px", fontWeight:600, color:nameC, marginBottom:"10px" }}>Philippines — Manila</p>
           <DigitalTime tz={PH_TZ} large isDark={isDark}/>
-          <p style={{ fontSize:"12px", color:subC, marginTop:"4px" }}>UTC +08:00 · Philippine Standard Time</p>
+          <p style={{ fontSize:"12.5px", color:subC, marginTop:"8px" }}>UTC +08:00 · Philippine Standard Time</p>
         </div>
-
-        {/* Tag */}
-        <div className="hidden sm:flex flex-shrink-0">
-          <span className="px-4 py-2 rounded-xl text-sm font-bold" style={{ backgroundColor:tagBg, color:tagC }}>
+        <div className="flex sm:flex-shrink-0 justify-center">
+          <span className="px-4 py-2 rounded-full text-sm font-semibold" style={{ backgroundColor:tagBg, color:tagC }}>
             Home Base
           </span>
         </div>
@@ -187,78 +137,49 @@ function ClockCard({ country, isDark }) {
 
   const diff = getOffset(country.tz)
   const st   = STATUS[status]
-  const stC  = isDark ? st.darkColor : st.color
+  const Icon = st.Icon
 
-  const cardBg   = isDark ? "#1a2332" : "white"
-  const cardBdr  = isDark ? "#2d3748" : "#e5e7eb"
-  const nameC    = isDark ? "#e2e8f0" : "#1e293b"
-  const cityC    = isDark ? "#94a3b8" : "#64748b"
-  const headerBg = isDark ? "#111827" : "#f8fafc"
-  const footerBg = isDark ? "rgba(255,255,255,0.03)" : "#f8fafc"
+  const cardBg  = isDark ? "#1a2332" : "white"
+  const cardBdr = isDark ? "#2d3748" : "#e5e7eb"
+  const accent  = isDark ? "#4ade80" : G
+  const nameC   = isDark ? "#e5e7eb" : "#1f2937"
+  const cityC   = isDark ? "#94a3b8" : "#6b7280"
+  const mutedC  = isDark ? "#94a3b8" : "#6b7280"
+  const chipBg  = isDark ? "rgba(255,255,255,0.05)" : "#f3f4f6"
+  const chipC   = isDark ? "#cbd5e1" : "#4b5563"
 
   return (
-    <div className="rounded-2xl overflow-hidden transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5"
-      style={{ backgroundColor:cardBg, border:`1px solid ${cardBdr}` }}>
+    <div className="rounded-2xl p-4 sm:p-5"
+      style={{ backgroundColor:cardBg, border:`1px solid ${cardBdr}`, transition:"transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease" }}
+      onMouseEnter={e => { e.currentTarget.style.transform="translateY(-4px)"; e.currentTarget.style.boxShadow = isDark ? "0 14px 30px rgba(0,0,0,0.45)" : "0 14px 30px rgba(46,139,52,0.12)"; e.currentTarget.style.borderColor = accent }}
+      onMouseLeave={e => { e.currentTarget.style.transform="none"; e.currentTarget.style.boxShadow="none"; e.currentTarget.style.borderColor = cardBdr }}>
 
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3"
-        style={{ backgroundColor:headerBg, borderBottom:`1px solid ${cardBdr}` }}>
-        <div className="flex items-center gap-2.5">
-          <Flag code={country.code} size={16}/>
-          <div>
-            <p className="text-xs font-bold leading-tight" style={{ color:nameC }}>{country.name}</p>
-            <p style={{ fontSize:"11px", color:cityC }}>{country.city}</p>
+      {/* Header: flag + place, offset chip */}
+      <div className="flex items-start justify-between gap-2 mb-4">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <Flag code={country.code} size={18}/>
+          <div className="min-w-0">
+            <p className="text-[13px] font-semibold leading-tight truncate" style={{ color:nameC }}>{country.name}</p>
+            <p style={{ fontSize:"11.5px", color:cityC }}>{country.city}</p>
           </div>
         </div>
-        {diff ? (
-          <span className="text-xs font-bold px-2 py-0.5 rounded-lg"
-            style={{
-              backgroundColor: diff.ahead ? (isDark?"rgba(74,222,128,0.12)":"#f0fdf4") : (isDark?"rgba(251,191,36,0.12)":"#fffbeb"),
-              color: diff.ahead ? (isDark?"#4ade80":"#15803d") : (isDark?"#fbbf24":"#92400e"),
-            }}>
-            {diff.ahead ? "+" : ""}{diff.label}
-          </span>
-        ) : (
-          <span className="text-xs font-bold px-2 py-0.5 rounded-lg"
-            style={{ backgroundColor:isDark?"rgba(74,222,128,0.12)":"#f0fdf4", color:isDark?"#4ade80":G }}>
-            Home
-          </span>
-        )}
+        <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap"
+          style={{ backgroundColor:chipBg, color:chipC }}>
+          {diff ? `${diff.ahead ? "+" : "−"}${diff.label}` : "Same"}
+        </span>
       </div>
 
-      {/* Clock body */}
-      <div className="flex flex-col items-center py-5 gap-2.5">
-        <AnalogClock tz={country.tz} size={76} isDark={isDark}/>
-        <DigitalTime tz={country.tz} isDark={isDark}/>
+      {/* Time */}
+      <DigitalTime tz={country.tz} isDark={isDark}/>
+      <div className="mt-1.5">
         <DateStr tz={country.tz} isDark={isDark}/>
       </div>
 
-      {/* Status footer */}
-      <div className="flex items-center gap-2 px-4 py-2.5"
-        style={{ borderTop:`1px solid ${cardBdr}`, backgroundColor:footerBg }}>
-        <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor:st.dot }}/>
-        <span style={{ fontSize:"11px", fontWeight:600, color:stC }}>{st.label}</span>
+      {/* Day/night descriptor — subtle, no dashboard dot */}
+      <div className="flex items-center gap-1.5 mt-3 pt-3" style={{ borderTop:`1px solid ${cardBdr}`, color:mutedC }}>
+        <Icon />
+        <span style={{ fontSize:"11.5px", fontWeight:500 }}>{st.label}</span>
       </div>
-    </div>
-  )
-}
-
-// ── Legend ────────────────────────────────────────────────────────────────────
-function Legend({ isDark }) {
-  const bg  = isDark ? "#1a2332" : "#f8fafc"
-  const bdr = isDark ? "#2d3748" : "#e5e7eb"
-  return (
-    <div className="flex flex-wrap items-center gap-3 p-4 rounded-xl mb-6"
-      style={{ backgroundColor:bg, border:`1px solid ${bdr}` }}>
-      <span style={{ fontSize:"11px", fontWeight:700, color:isDark?"#64748b":"#94a3b8", textTransform:"uppercase", letterSpacing:"0.08em" }}>
-        Status key
-      </span>
-      {Object.entries(STATUS).map(([key, s]) => (
-        <div key={key} className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full" style={{ backgroundColor:s.dot }}/>
-          <span style={{ fontSize:"12px", fontWeight:500, color:isDark?s.darkColor:s.color }}>{s.label}</span>
-        </div>
-      ))}
     </div>
   )
 }
@@ -268,14 +189,16 @@ export default function WorldClock({ onNavigate }) {
   const { isDark } = useTheme()
   const [region, setRegion] = useState("All")
 
-  const pageBg   = isDark ? "#111827" : "white"
-  const sectionBg = isDark ? "#111827" : "#f8fafc"
-  const labelC   = isDark ? "#64748b" : "#94a3b8"
-  const btnAct   = { backgroundColor:DG, color:"white", border:`1.5px solid ${DG}` }
-  const btnInact = {
+  const pageBg    = isDark ? "#0f172a" : "white"
+  const sectionBg = isDark ? "#0f172a" : "#F7F8FA"
+  const headingC  = isDark ? "#f3f4f6" : "#1f2937"
+  const labelC    = isDark ? "#94a3b8" : "#9ca3af"
+  const accent    = isDark ? "#4ade80" : G
+  const btnAct    = { backgroundColor: accent, color: isDark ? "#0f172a" : "white", border:`1px solid ${accent}` }
+  const btnInact  = {
     backgroundColor: "transparent",
-    color: isDark ? "#94a3b8" : "#64748b",
-    border: isDark ? "1.5px solid #2d3748" : "1.5px solid #e2e8f0",
+    color: isDark ? "#94a3b8" : "#6b7280",
+    border: isDark ? "1px solid #2d3748" : "1px solid #e5e7eb",
   }
 
   const others = COUNTRIES.filter(c => !c.isPH && (region === "All" || c.region === region))
@@ -284,54 +207,55 @@ export default function WorldClock({ onNavigate }) {
     <div className="min-h-screen" style={{ backgroundColor: pageBg }}>
       <style>{`@keyframes pageRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}`}</style>
 
-      {/* Hero */}
-      <div className="relative overflow-hidden" style={{ minHeight:"280px", animation:"pageRise 0.6s ease 0.05s both" }}>
+      {/* Hero — matches About Us */}
+      <div className="relative overflow-hidden max-w-[1600px] mx-auto" style={{ minHeight:"280px", animation:"pageRise 0.6s ease 0.05s both" }}>
         <img src={pageBg5} alt="" className="absolute inset-0 w-full h-full object-cover"/>
         <div className="absolute inset-0"
           style={{ background:"linear-gradient(to right,rgba(12,87,62,0.92) 0%,rgba(12,87,62,0.72) 55%,rgba(12,87,62,0.38) 100%)" }}/>
-        <div className="relative z-10 max-w-6xl mx-auto px-6 sm:px-10 py-16">
-          <p className="text-xs font-bold tracking-widest uppercase mb-4" style={{ color:"#86efac" }}>Help Center</p>
-          <h1 className="text-4xl sm:text-5xl font-bold text-white mb-3 leading-tight">World Clock</h1>
-          <p className="text-base max-w-xl" style={{ color:"rgba(255,255,255,0.78)" }}>
-            Sending flowers to a loved one abroad? Check the local time at their destination so your arrangement arrives at just the right moment.
-          </p>
+        <div className="relative z-10 max-w-5xl mx-auto px-5 sm:px-10 py-14 sm:py-20">
+          <div className="max-w-2xl">
+            <p className="text-xs font-bold tracking-widest uppercase mb-3 sm:mb-4" style={{ color:"#86efac" }}>Help Center</p>
+            <h1 className="text-3xl sm:text-5xl font-bold text-white leading-tight mb-4 sm:mb-5">World Clock</h1>
+            <p className="text-sm sm:text-lg leading-relaxed" style={{ color:"rgba(255,255,255,0.8)" }}>
+              Sending flowers to a loved one abroad? Check the local time at their destination so your arrangement arrives at just the right moment.
+            </p>
+          </div>
         </div>
       </div>
 
       {/* Clock section */}
       <div style={{ backgroundColor: sectionBg }}>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-10 py-10 sm:py-14" style={{ animation:"pageRise 0.6s ease 0.16s both" }}>
+        <div className="max-w-5xl mx-auto px-4 sm:px-10 py-10 sm:py-16" style={{ animation:"pageRise 0.6s ease 0.16s both" }}>
 
-          {/* PH banner */}
+          {/* PH featured card */}
           <PHBanner isDark={isDark}/>
 
-          {/* Legend */}
-          <Legend isDark={isDark}/>
-
-          {/* Region filter */}
-          <div className="flex items-center gap-2 flex-wrap mb-6">
-            <span style={{ fontSize:"11px", fontWeight:700, color:labelC, textTransform:"uppercase", letterSpacing:"0.08em", marginRight:"4px" }}>
-              Filter by region
-            </span>
-            {REGIONS.map(r => (
-              <button key={r} onClick={() => setRegion(r)}
-                className="text-xs font-semibold px-3.5 py-1.5 rounded-lg transition-all"
-                style={region === r ? btnAct : btnInact}>
-                {r}
-              </button>
-            ))}
+          {/* Section heading + region filter */}
+          <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 mb-6">
+            <div>
+              <p className="text-xs font-bold tracking-widest uppercase mb-2" style={{ color:accent }}>Around the World</p>
+              <h2 className="text-2xl font-bold" style={{ color:headingC }}>Local times abroad</h2>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              {REGIONS.map(r => (
+                <button key={r} onClick={() => setRegion(r)}
+                  className="text-xs font-semibold px-3.5 py-1.5 rounded-full transition-all"
+                  style={region === r ? btnAct : btnInact}>
+                  {r}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Clock grid — 2 cols mobile, 3 tablet, 4 desktop */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+          {/* Clock grid */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
             {others.map(c => (
               <ClockCard key={c.tz + c.city} country={c} isDark={isDark}/>
             ))}
           </div>
 
-          <p className="text-xs text-center mt-8"
-            style={{ color:isDark?"#475569":"#94a3b8" }}>
-            Working hours estimated as 8:00 AM to 6:00 PM local time. Daylight saving is applied automatically.
+          <p className="text-xs mt-8" style={{ color:labelC }}>
+            Times update live and follow each location's daylight saving automatically. Offsets shown are relative to Manila.
           </p>
         </div>
       </div>

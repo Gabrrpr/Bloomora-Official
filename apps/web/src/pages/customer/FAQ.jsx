@@ -127,7 +127,7 @@ export default function FAQ({ onNavigate }) {
       <style>{`@keyframes pageRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}`}</style>
 
       {/* Hero */}
-      <div className="relative overflow-hidden" style={{ minHeight:"280px", animation:"pageRise 0.6s ease 0.05s both" }}>
+      <div className="relative overflow-hidden max-w-[1600px] mx-auto" style={{ minHeight:"280px", animation:"pageRise 0.6s ease 0.05s both" }}>
         <img src={pageBg5} alt="" className="absolute inset-0 w-full h-full object-cover"/>
         <div className="absolute inset-0"
           style={{ background:"linear-gradient(to right,rgba(12,87,62,0.92) 0%,rgba(12,87,62,0.72) 55%,rgba(12,87,62,0.38) 100%)" }}/>
@@ -184,13 +184,13 @@ export default function FAQ({ onNavigate }) {
           <p className="text-sm mb-6" style={{ color:"rgba(255,255,255,0.72)" }}>
             Our team is happy to help. Reach out to us anytime.
           </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+          <div className="flex flex-row flex-nowrap gap-2.5 sm:gap-3 justify-center">
             <button onClick={() => onNavigate?.("contact")}
-              className="px-6 py-2.5 rounded-xl text-sm font-bold text-white border-2 border-white/40 hover:bg-white/10 transition">
+              className="px-4 sm:px-6 py-2.5 rounded-xl text-[13px] sm:text-sm font-bold text-white border-2 border-white/40 hover:bg-white/10 transition whitespace-nowrap">
               Contact Us
             </button>
             <button onClick={() => window.dispatchEvent(new CustomEvent("bloomora:open-chat"))}
-              className="px-6 py-2.5 rounded-xl text-sm font-bold transition-all hover:shadow-lg"
+              className="px-4 sm:px-6 py-2.5 rounded-xl text-[13px] sm:text-sm font-bold transition-all hover:shadow-lg whitespace-nowrap"
               style={{ backgroundColor:"white", color:DG }}>
               Open Live Chat
             </button>

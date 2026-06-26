@@ -4,6 +4,9 @@ import { api } from "../../services/api.js"
 import { addToCart } from "../../utils/cart.js"
 import { useTheme } from "../../context/ThemeContext"
 import FallbackImage from "../../components/FallbackImage.jsx" // 🚀 ADDED THIS IMPORT
+import arrangementBouquet from "../../assets/MakeItPersonal/arrangement_bouquet.webp"
+import arrangementBox from "../../assets/MakeItPersonal/arrangement_box.webp"
+import arrangementVase from "../../assets/MakeItPersonal/arrangement_vase.webp"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -36,7 +39,7 @@ const ARRANGEMENTS = [
     label: "Bouquet",
     desc: "Hand-tied & wrapped",
     promptText: "arranged as a beautiful hand-tied bouquet, photographed from a direct side profile view at eye level, clearly showing the full length of the wrapping from the side",
-    image: null,
+    image: arrangementBouquet,
     maxStems: 24,
     path: "M12 3c2.5 2 2.5 5 0 7-2.5-2-2.5-5 0-7Zm6 3c.8 2.8-.8 5.3-3.6 6.1.8-2.8 2.4-5.3 3.6-6.1ZM6 6c1.2.8 2.8 3.3 3.6 6.1C6.8 11.3 5.2 8.8 6 6Zm6 7 4 8H8l4-8Z",
   },
@@ -45,8 +48,8 @@ const ARRANGEMENTS = [
     label: "Box",
     desc: "Arranged in a gift box",
     promptText: "arranged neatly inside a premium floral gift box, photographed from a direct side profile view at eye level, ensuring the entire side of the box is clearly visible with the flowers resting inside",
-    image: null,
-    maxStems: 18,
+    image: arrangementBox,
+    maxStems: 9,
     path: "M3 8h18v3H3V8Zm1 3h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9Zm8-7 3 4H9l3-4Z",
   },
   {
@@ -54,8 +57,8 @@ const ARRANGEMENTS = [
     label: "Vase",
     desc: "Arranged in a vase",
     promptText: "arranged in an elegant vase, photographed from a direct side profile view at eye level, ensuring the full height and side of the vase is completely visible",
-    image: null,
-    maxStems: 15,
+    image: arrangementVase,
+    maxStems: 12,
     path: "M8 3h8l-1 4c2 1.5 3 4 3 7 0 4-3 7-6 7s-6-3-6-7c0-3 1-5.5 3-7L8 3Z",
   },
 ]
@@ -775,7 +778,7 @@ export default function MixAndMatch({ onNavigate }) {
             <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#fbbf24" }} />
           </p>
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold leading-tight mb-2" style={{ color: accentDG }}>
-            Mix &amp; <span style={{ color: accentPink }}>Match</span>
+            <span className="shine-text" style={{ "--shine-base": accentDG }}>Mix &amp;</span> <span className="shine-text" style={{ "--shine-base": accentPink }}>Match</span>
           </h1>
           <p className="text-sm sm:text-base max-w-xl mx-auto" style={{ color: bodyC }}>
             Build your own bouquet step by step, exactly the way you want it.
@@ -895,7 +898,7 @@ export default function MixAndMatch({ onNavigate }) {
                         style={{ borderColor: sel ? accentG : tileBdr, backgroundColor: sel ? tileSelBg : tileBg }}
                       >
                         {/* Image placeholder — swap in a.image when artwork is ready */}
-                        <div className="w-full aspect-[4/3] rounded-xl overflow-hidden flex items-center justify-center relative" style={{ backgroundColor: tilePlaceBg }}>
+                        <div className="w-full aspect-square rounded-xl overflow-hidden flex items-center justify-center relative" style={{ backgroundColor: tilePlaceBg }}>
                           {a.image ? (
                             <img src={a.image} alt={a.label} className="w-full h-full object-cover" />
                           ) : (
@@ -1169,6 +1172,9 @@ export default function MixAndMatch({ onNavigate }) {
       @keyframes mmFade { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
       @keyframes mmSpin { to { transform:rotate(360deg); } }
       @keyframes mmBob  { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-3px); } }
+      @keyframes titleShine { to { background-position: -200% 0; } }
+      .shine-text { background-image: linear-gradient(110deg, var(--shine-base) 0%, var(--shine-base) 42%, #ffffff 50%, var(--shine-base) 58%, var(--shine-base) 100%); background-size: 200% 100%; background-position: 0% 0; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; will-change: background-position; animation: titleShine 3.5s linear infinite; }
+      @media (prefers-reduced-motion: reduce) { .shine-text { animation: none; } }
     `}</style>
     </>
   )

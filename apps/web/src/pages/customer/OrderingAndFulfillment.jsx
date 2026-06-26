@@ -2,12 +2,12 @@ import { useState, useEffect } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api"
 import estingsLogo from "../../assets/Estings.svg"
-import { SETTINGS_PATH, TERMS_KEY as KEY, DEFAULT_TERMS as FALLBACK } from "../../config/legalContent"
+import { SETTINGS_PATH, ORDERING_KEY as KEY, DEFAULT_ORDERING as FALLBACK } from "../../config/legalContent"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
 
-export default function TermsAndConditions({ onNavigate, onBack }) {
+export default function OrderingAndFulfillment({ onNavigate, onBack }) {
   const { isDark } = useTheme()
 
   // CMS content — starts as fallback, replaced if a saved version exists

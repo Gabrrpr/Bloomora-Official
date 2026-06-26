@@ -10,7 +10,7 @@ const DG = "#0C573E"
 import estingsLogo from '../assets/EstingsLogo.svg'
 
 const QUICK_REPLIES = ["What flowers do you offer?", "How does delivery work?", "Can I customize a bouquet?", "What are your store hours?", "Do you deliver same day?"]
-const WELCOME_MESSAGE = { id: 'welcome', from: "bot", text: "Hi there! 👋 Welcome to Esting's Flowers. How can we help you today? Our team is here to assist you." }
+const WELCOME_MESSAGE = { id: 'welcome', from: "bot", text: "Hi there! 👋 Welcome to Esting's Flowers. How can we help you today? Please send us your message and a member of our team will personally get back to you within a few minutes. Thank you kindly for your patience." }
 const SIZES = { small: { w: 300, h: 400 }, medium: { w: 360, h: 500 }, large: { w: 440, h: 620 } }
 const CHAT_SESSION_KEY = 'bloomora_chat_session'
 
@@ -89,6 +89,17 @@ export default function ChatWidget() {
   const [sending, setSending] = useState(false)
   const [allProducts, setAllProducts] = useState([])
 
+  // Rotating "nudge" bubble shown next to the launcher to invite a chat.
+  const NUDGES = [
+    "Have a question? Chat with us!",
+    "Need help? We're here!",
+    "Want a custom bouquet? Ask us!",
+    "Questions? Let's chat!",
+    "Need gift ideas? Chat now!",
+  ]
+  const [nudgeIdx, setNudgeIdx] = useState(0)
+  const [nudgeOn, setNudgeOn] = useState(false)
+
   const bottomRef = useRef(null)
   const fileInputRef = useRef(null)
   const sentMessagesRef = useRef(new Set())
@@ -148,6 +159,25 @@ export default function ChatWidget() {
       window.removeEventListener("bloomora:modal-close", onClose)
     }
   }, [])
+
+  // Cycle the invitation bubble: appear, hold, disappear, wait, repeat — only
+  // while the floating launcher is visible (chat closed, no modal, not dismissed).
+  useEffect(() => {
+    if (open || modalOpen) { setNudgeOn(false); return }
+    let idx = 0
+    let tShow, tHide
+    const run = () => {
+      setNudgeIdx(idx % NUDGES.length)
+      setNudgeOn(true)
+      tHide = setTimeout(() => {
+        setNudgeOn(false)
+        idx += 1
+        tShow = setTimeout(run, 2800)   // hidden gap before next message
+      }, 3800)                          // visible duration
+    }
+    tShow = setTimeout(run, 2000)       // initial delay after load
+    return () => { clearTimeout(tShow); clearTimeout(tHide) }
+  }, [open, modalOpen])
 
   const createSession = useCallback(async () => {
     if (!user) return
@@ -411,30 +441,69 @@ export default function ChatWidget() {
               </div>
             )}
 
-            {/* Input row */}
+            {/* Input row — logged in: show composer. Logged out: show a clear login notice. */}
+            {!user ? (
+              <div className="flex items-center gap-3 px-3.5 py-3.5 border-t" style={{ backgroundColor: isDark ? "rgba(74,222,128,0.10)" : "rgba(46,139,52,0.08)", borderColor: inputBdr }}>
+                <div className="flex items-center justify-center w-9 h-9 rounded-full flex-shrink-0" style={{ backgroundColor: isDark ? "rgba(74,222,128,0.18)" : "rgba(46,139,52,0.14)", color: isDark ? "#4ade80" : G }}>
+                  <svg className="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 0h10.5a2.25 2.25 0 0 1 2.25 2.25v6a2.25 2.25 0 0 1-2.25 2.25H6.75a2.25 2.25 0 0 1-2.25-2.25v-6a2.25 2.25 0 0 1 2.25-2.25Z" /></svg>
+                </div>
+                <p className="text-sm font-semibold m-0 flex-1 leading-snug" style={{ color: isDark ? "#e5e7eb" : "#111827" }}>
+                  Please{" "}
+                  <button onClick={() => { window.location.href = "/login" }} className="font-bold underline cursor-pointer bg-transparent border-none p-0" style={{ color: isDark ? "#4ade80" : G }}>log in</button>
+                  {" "}to start chatting with our team.
+                </p>
+              </div>
+            ) : (
             <div className="flex items-center gap-2 px-3 py-3 border-t" style={{ backgroundColor: inputAreaBg, borderColor: inputBdr }}>
               <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleFileChange} />
               <button onClick={() => fileInputRef.current?.click()} disabled={!user} className="w-9 h-9 flex items-center justify-center rounded-xl flex-shrink-0 transition-all disabled:opacity-40 cursor-pointer" style={{ border: `1px solid ${inputFieldBdr}`, color: isDark ? "#4ade80" : G, backgroundColor: "transparent" }} title="Attach a photo">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" /></svg>
               </button>
 
-              <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder={user ? (attachedProduct ? `Ask about ${attachedProduct.name}...` : "Type your message...") : "Please log in to chat"} disabled={!user} className="flex-1 px-3.5 py-2.5 text-sm rounded-xl border outline-none transition-all" style={{ borderColor: inputFieldBdr, backgroundColor: inputFieldBg, color: isDark ? "#e5e7eb" : "#111827" }} onFocus={e => e.target.style.borderColor = isDark ? "#4ade80" : G} onBlur={e => e.target.style.borderColor = inputFieldBdr} />
+              <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder={attachedProduct ? `Ask about ${attachedProduct.name}...` : "Type your message..."} className="flex-1 px-3.5 py-2.5 text-sm rounded-xl border outline-none transition-all" style={{ borderColor: inputFieldBdr, backgroundColor: inputFieldBg, color: isDark ? "#e5e7eb" : "#111827" }} onFocus={e => e.target.style.borderColor = isDark ? "#4ade80" : G} onBlur={e => e.target.style.borderColor = inputFieldBdr} />
 
               <button onClick={handleSend} disabled={!canSend} className="w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 cursor-pointer border-none" style={{ background: canSend ? `linear-gradient(135deg,${DG},${G})` : (isDark ? "#1e293b" : "#e5e7eb") }}>
                 <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
               </button>
             </div>
+            )}
           </div>
         ) : modalOpen ? null : (
-          <button onClick={() => setOpen(true)} className="group flex items-center justify-center sm:justify-start gap-0 sm:gap-3 p-0 sm:px-4 sm:py-3.5 w-14 h-14 sm:w-auto sm:h-auto text-white rounded-full sm:rounded-2xl transition-all duration-300 hover:scale-105 hover:shadow-2xl cursor-pointer border-none" style={{ background: `linear-gradient(135deg,${DG} 0%,${G} 100%)`, boxShadow: "0 8px 32px rgba(12,87,62,0.35)", border: "1px solid rgba(255,255,255,0.15)" }}>
-            <div className="w-11 h-11 rounded-full sm:rounded-xl flex items-center justify-center flex-shrink-0 transition-all group-hover:scale-110 overflow-hidden bg-white">
-              <img src={estingsLogo} alt="Esting's" style={{ width: "28px", height: "28px", objectFit: "contain" }} />
-            </div>
-            <div className="hidden sm:block text-left">
-              <p className="font-bold text-sm leading-tight m-0">Live Support</p>
-              <p className="text-xs leading-tight m-0" style={{ color: "rgba(255,255,255,0.8)" }}>Chat with our team</p>
-            </div>
-          </button>
+          <div className="relative">
+            {/* Rotating invitation bubble — sits above the launcher, doesn't shift it */}
+            {(
+              <div
+                className="absolute right-0 bottom-full mb-3 w-max"
+                style={{
+                  opacity: nudgeOn ? 1 : 0,
+                  transform: nudgeOn ? "translateY(0)" : "translateY(8px)",
+                  transition: "opacity 0.4s ease, transform 0.4s ease",
+                  pointerEvents: nudgeOn ? "auto" : "none",
+                }}
+              >
+                <div className="relative rounded-2xl rounded-br-md px-4 py-2.5 text-sm font-semibold leading-none whitespace-nowrap text-white"
+                  style={{
+                    backgroundColor: G,
+                    boxShadow: "0 10px 28px rgba(12,87,62,0.45)",
+                  }}>
+                  {NUDGES[nudgeIdx]}
+                  {/* tail pointing toward the launcher */}
+                  <span className="absolute -bottom-1.5 right-6 w-3 h-3 rotate-45"
+                    style={{ backgroundColor: G }} />
+                </div>
+              </div>
+            )}
+
+            <button onClick={() => setOpen(true)} className="group flex items-center justify-center sm:justify-start gap-0 sm:gap-3 p-0 sm:px-4 sm:py-3.5 w-14 h-14 sm:w-auto sm:h-auto text-white rounded-full sm:rounded-2xl transition-all duration-300 hover:scale-105 hover:shadow-2xl cursor-pointer border-none" style={{ background: `linear-gradient(135deg,${DG} 0%,${G} 100%)`, boxShadow: "0 8px 32px rgba(12,87,62,0.35)", border: "1px solid rgba(255,255,255,0.15)" }}>
+              <div className="w-11 h-11 rounded-full sm:rounded-xl flex items-center justify-center flex-shrink-0 overflow-hidden bg-white">
+                <img src={estingsLogo} alt="Esting's" style={{ width: "28px", height: "28px", objectFit: "contain" }} />
+              </div>
+              <div className="hidden sm:block text-left">
+                <p className="font-bold text-sm leading-tight m-0">Live Support</p>
+                <p className="text-xs leading-tight m-0" style={{ color: "rgba(255,255,255,0.8)" }}>Chat with our team</p>
+              </div>
+            </button>
+          </div>
         )}
 
         <UnsendModal isOpen={unsendModal.isOpen} onClose={() => setUnsendModal({ isOpen: false, msgId: null })} onUnsendEveryone={handleUnsendEveryone} onUnsendForYou={handleUnsendForYou} isDark={isDark} />

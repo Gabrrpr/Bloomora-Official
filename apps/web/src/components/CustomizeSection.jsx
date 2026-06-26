@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react"
 import { useTheme } from "../context/ThemeContext"
 
-import MixAndMatchImg    from "../assets/MixAndMatchImg.webp"
-import DescribeImg       from "../assets/DescribeImg.webp"
+import MixAndMatchImg    from "../assets/MakeItPersonal/MixAndMatchImg.webp"
+import DescribeImg       from "../assets/MakeItPersonal/DescribeImg.webp"
 import CustomizeSectionBG from "../assets/homepage/CustomizeSectionBG.webp"
 
 import customized1 from "../assets/customized/customized1.webp"
@@ -34,12 +34,12 @@ const DESCRIBE_STEPS = [
 ]
 
 const AI_IMAGES = [
-  { src:customized1, tag:"Mix and Match"        },
-  { src:customized2, tag:"Describe Arrangement" },
-  { src:customized3, tag:"Mix and Match"        },
-  { src:customized4, tag:"Describe Arrangement" },
-  { src:customized5, tag:"Mix and Match"        },
-  { src:customized6, tag:"Describe Arrangement" },
+  { src:customized1, prompt:"I'd love a bouquet of white tulips." },
+  { src:customized2, prompt:"Can you make a bouquet of red roses?" },
+  { src:customized3, prompt:"I'd like a bouquet of blush pink roses." },
+  { src:customized4, prompt:"How about a bouquet of sunflowers?" },
+  { src:customized5, prompt:"Could you make a bouquet of pink and ivory roses?" },
+  { src:customized6, prompt:"I'm looking for a bouquet of white roses." },
 ]
 
 function useWidth() {
@@ -118,7 +118,12 @@ export default function CustomizeSection({ onNavigate }) {
       {/* ═══════════════════════════════════════════════════════════
           SECTION 1 — Two Ways to Build (BG image)
       ══════════════════════════════════════════════════════════════ */}
-      <section className="relative overflow-hidden">
+      <section className="relative overflow-hidden max-w-[1600px] mx-auto">
+        <style>{`
+          @keyframes csArrowNudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(5px); } }
+          .cs-arrow { animation: csArrowNudge 1.1s ease-in-out infinite; }
+          @media (prefers-reduced-motion: reduce) { .cs-arrow { animation: none; } }
+        `}</style>
         {/* BG image */}
         <div className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage:`url(${CustomizeSectionBG})` }}/>
@@ -204,7 +209,7 @@ export default function CustomizeSection({ onNavigate }) {
                 onMouseEnter={e => { e.currentTarget.style.backgroundColor=G; e.currentTarget.style.boxShadow="0 5px 16px rgba(46,139,52,0.3)" }}
                 onMouseLeave={e => { e.currentTarget.style.backgroundColor=DG; e.currentTarget.style.boxShadow=btnGlow }}>
                 Start Building
-                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="cs-arrow" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 8l4 4m0 0l-4 4m4-4H3"/>
                 </svg>
               </button>
@@ -247,7 +252,7 @@ export default function CustomizeSection({ onNavigate }) {
                 onMouseEnter={e => { e.currentTarget.style.backgroundColor=G; e.currentTarget.style.boxShadow="0 5px 16px rgba(46,139,52,0.3)" }}
                 onMouseLeave={e => { e.currentTarget.style.backgroundColor=DG; e.currentTarget.style.boxShadow=btnGlow }}>
                 Start Building
-                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="cs-arrow" width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17 8l4 4m0 0l-4 4m4-4H3"/>
                 </svg>
               </button>
@@ -313,11 +318,12 @@ export default function CustomizeSection({ onNavigate }) {
                 style={{ aspectRatio:"1/1", boxShadow:imgShadow, opacity:galleryVisible?1:0, transform:galleryVisible?"none":"translateY(14px)", transition:`opacity 0.5s ease ${i*55}ms, transform 0.5s ease ${i*55}ms, box-shadow 0.22s` }}
                 onMouseEnter={e => { e.currentTarget.style.boxShadow=imgHovShdw; e.currentTarget.querySelector("img").style.transform="scale(1.08)"; e.currentTarget.querySelector(".tag-overlay").style.opacity="1" }}
                 onMouseLeave={e => { e.currentTarget.style.boxShadow=imgShadow; e.currentTarget.querySelector("img").style.transform="scale(1)"; e.currentTarget.querySelector(".tag-overlay").style.opacity="0" }}>
-                <img src={img.src} alt={`AI arrangement ${i+1}`} className="w-full h-full object-cover block" style={{ transition:"transform 0.55s ease" }}/>
-                <div className="tag-overlay absolute inset-0 flex items-end p-[9px]"
-                  style={{ backgroundColor:"rgba(10,31,13,0.52)", opacity:0, transition:"opacity 0.22s" }}>
-                  <span className="text-[10px] font-bold text-white rounded-[5px] px-[7px] py-[2px]"
-                    style={{ backgroundColor:"rgba(46,139,52,0.88)" }}>{img.tag}</span>
+                <img src={img.src} alt={img.prompt} className="w-full h-full object-cover block" style={{ transition:"transform 0.55s ease" }}/>
+                <div className="tag-overlay absolute inset-0 flex items-end p-3"
+                  style={{ background:"linear-gradient(to top, rgba(0,0,0,0.80) 0%, rgba(0,0,0,0.18) 55%, transparent 100%)", opacity:0, transition:"opacity 0.22s" }}>
+                  <span className="text-[11px] sm:text-xs italic font-medium text-white leading-snug">
+                    &ldquo;{img.prompt}&rdquo;
+                  </span>
                 </div>
               </div>
             ))}

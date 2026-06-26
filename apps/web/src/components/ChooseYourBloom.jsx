@@ -9,16 +9,15 @@ const DG = "#0C573E"
 const CAROUSEL_ID = "__carousel__"
 
 const FALLBACK_BLOOMS = [
-  { file: "1_GreenCarnations.png",        name: "Green Carnations",        tag: "Fresh Cut",   price: "₱2,400" },
-  { file: "2_PinkWrapperRoses.png",       name: "Pink Wrapper Roses",      tag: "Best Seller", price: "₱3,100" },
-  { file: "3_BlueRoses.png",              name: "Blue Roses",              tag: "Limited",     price: "₱3,500" },
-  { file: "4_RedRosesWhiteWrappers.png",  name: "Red Roses",               tag: "Classic",     price: "₱2,900" },
-  { file: "5_PinkWrapperCarnations.png",  name: "Pink Carnations",         tag: "In Season",   price: "₱2,250" },
-  { file: "6_RosesStargazer.png",         name: "Roses & Stargazer",       tag: "Signature",   price: "₱3,700" },
-  { file: "7_YellowRoses.png",            name: "Yellow Roses",            tag: "Cheerful",    price: "₱2,700" },
-  { file: "8_CarnationsStargazer.png",    name: "Carnations & Stargazer",  tag: "New",         price: "₱2,800" },
-  { file: "9_CarnationsRoses.png",        name: "Carnations & Roses",      tag: "Romantic",    price: "₱3,000" },
-  { file: "10_CarnationsBrownWrapper.png",name: "Rustic Carnations",       tag: "Earthy",      price: "₱2,500" },
+  { file: "1_GreenCarnations.png",        name: "BQT 1002 – Sunset Melody",     tag: "Best Seller", price: "₱4,334.00" },
+  { file: "2_PinkWrapperRoses.png",       name: "BQT 1013 – Harmony Bloom",     tag: "Best Seller", price: "₱5,291.00" },
+  { file: "3_BlueRoses.png",              name: "BQT 1009 – Azure Enigma",      tag: "Best Seller", price: "₱1,815.00" },
+  { file: "4_RedRosesWhiteWrappers.png",  name: "BQT 1000 – Scarlet Promise",   tag: "Best Seller", price: "₱6,765.00" },
+  { file: "5_PinkWrapperCarnations.png",  name: "BQT 1017 – Sunlit Harmony",    tag: "Best Seller", price: "₱2,541.00" },
+  { file: "6_RosesStargazer.png",         name: "BQT 1001 – Rosy Glow",         tag: "Best Seller", price: "₱7,491.00" },
+  { file: "7_YellowRoses.png",            name: "BQT 1010 – Amber Flame",       tag: "Best Seller", price: "₱2,211.00" },
+  { file: "9_CarnationsRoses.png",        name: "BQT 1020 – Scarlet Bloom",     tag: "Best Seller", price: "₱2,871.00" },
+  { file: "10_CarnationsBrownWrapper.png",name: "BQT 1023 – Radiant Symphony",  tag: "Best Seller", price: "₱3,531.00" },
 ]
 
 const FALLBACK_HEADER = {

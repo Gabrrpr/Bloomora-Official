@@ -76,19 +76,19 @@ function markAnnouncementsRead(notifs) {
   } catch { /* ignore */ }
 }
 
-// ── Shortened promo text for mobile responsiveness ──
+// ── Promo text: `short` shows on mobile (avoids truncation), `text` is the
+//    longer, more persuasive copy shown from the `sm` breakpoint up. ──
 const PROMOTIONS = [
-  { text: "Flowers for Every", highlight: "Occasion", cta: "EXPLORE", page: "occasions" },
-  { text: "Build Your Own", highlight: "Bouquet", cta: "CREATE NOW", page: "make-it-personal" },
-  { text: "Fresh Flowers", highlight: "Daily", cta: "SHOP NOW", page: "shop" },
-  { text: "Manila & Pampanga", highlight: "Stores", cta: "VISIT US", page: "contact" },
+  { short: "Flowers for Every",  text: "Handcrafted Flowers for Every",      highlight: "Occasion", cta: "EXPLORE",        page: "occasions" },
+  { short: "Build Your Own",     text: "Design Your Dream",                   highlight: "Bouquet",  cta: "CREATE NOW",     page: "make-it-personal" },
+  { short: "Fresh Flowers",      text: "Farm-Fresh Blooms, Arranged",         highlight: "Daily",    cta: "SHOP NOW",       page: "shop" },
+  { short: "Manila & Pampanga",  text: "Now Open in Manila & Pampanga",       highlight: "Stores",   cta: "VISIT US",       page: "contact" },
 ];
 
 const SOCIAL_LINKS = [
   { name: "Facebook",  href: "https://www.facebook.com/profile.php?id=100063877087893", icon: <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 00-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 011-1h3z"/></svg> },
   { name: "Instagram", href: "https://www.instagram.com/estingsflowershop/", icon: <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="1.8" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="currentColor" stroke="none"/></svg> },
-  { name: "WhatsApp",  href: "#", icon: <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 448 512"><path d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-25.2-115-67.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/></svg> },
-  { name: "Gmail",     href: "#", icon: <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 512 512"><path d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"/></svg> },
+  { name: "Gmail",     href: "mailto:estingsflowerintl@gmail.com", icon: <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 512 512"><path d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"/></svg> },
 ];
 
 const BRANCHES = {
@@ -105,6 +105,23 @@ const HEART_CSS = `
   @keyframes hRise5 { 0%{opacity:0;transform:translateY(4px) translateX(0) scale(0.35) rotate(25deg)} 20%{opacity:1} 100%{opacity:0;transform:translateY(-42px) translateX(8px) scale(0.9) rotate(25deg)} }
   @keyframes hPulse  { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
 `;
+
+// ── Floating Sparkles (continuous, for the Make it Personal button) ───────────
+const SPARKLE_CSS = `
+  @keyframes spRise1 { 0%{opacity:0;transform:translateY(4px) translateX(0) scale(0.4) rotate(0deg)} 25%{opacity:1} 100%{opacity:0;transform:translateY(-34px) translateX(-9px) scale(1) rotate(120deg)} }
+  @keyframes spRise2 { 0%{opacity:0;transform:translateY(4px) translateX(0) scale(0.3) rotate(0deg)} 30%{opacity:1} 100%{opacity:0;transform:translateY(-42px) translateX(6px) scale(0.85) rotate(-110deg)} }
+  @keyframes spRise3 { 0%{opacity:0;transform:translateY(4px) translateX(0) scale(0.5) rotate(0deg)} 20%{opacity:1} 100%{opacity:0;transform:translateY(-37px) translateX(11px) scale(1.15) rotate(140deg)} }
+  @keyframes spRise4 { 0%{opacity:0;transform:translateY(4px) translateX(0) scale(0.35) rotate(0deg)} 25%{opacity:0.95} 100%{opacity:0;transform:translateY(-32px) translateX(-6px) scale(0.85) rotate(-70deg)} }
+  @keyframes spRise5 { 0%{opacity:0;transform:translateY(4px) translateX(0) scale(0.3) rotate(0deg)} 20%{opacity:1} 100%{opacity:0;transform:translateY(-40px) translateX(8px) scale(0.95) rotate(90deg)} }
+`;
+
+const SPARKLES_CONFIG = [
+  { anim:"spRise1 2.4s ease-out infinite", delay:"0s",    left:"-12px",  size:17, color:"#fde047" },
+  { anim:"spRise2 2.9s ease-out infinite", delay:"0.5s",  left:"12%",    size:13, color:"#facc15" },
+  { anim:"spRise3 2.2s ease-out infinite", delay:"1.0s",  left:"34%",    size:19, color:"#fde047" },
+  { anim:"spRise4 2.7s ease-out infinite", delay:"0.3s",  right:"14%",   size:14, color:"#fbbf24" },
+  { anim:"spRise5 2.5s ease-out infinite", delay:"0.85s", right:"-12px", size:13, color:"#facc15" },
+];
 
 const HEARTS_CONFIG = [
   { anim:"hRise1 2.4s ease-out infinite", delay:"0s",    left:"-14px", size:10, color:"#f43f5e" },
@@ -127,6 +144,26 @@ function FloatingHearts() {
         }}>
           <svg width={h.size} height={h.size} viewBox="0 0 24 24" fill={h.color}>
             <path d="M12 21.593c-5.63-5.539-11-10.297-11-14.402 0-3.791 3.068-5.191 5.281-5.191 1.312 0 4.151.501 5.719 4.457 1.59-3.968 4.464-4.447 5.726-4.447 2.54 0 5.274 1.621 5.274 5.181 0 4.069-5.136 8.625-11 14.402z"/>
+          </svg>
+        </span>
+      ))}
+    </>
+  );
+}
+
+function FloatingSparkles() {
+  return (
+    <>
+      {SPARKLES_CONFIG.map((s, i) => (
+        <span key={i} style={{
+          position:"absolute", bottom:"calc(100% - 2px)",
+          left:s.left, right:s.right,
+          animation:s.anim, animationDelay:s.delay,
+          pointerEvents:"none", zIndex:10, lineHeight:1,
+          display:"inline-block",
+        }}>
+          <svg width={s.size} height={s.size} viewBox="0 0 24 24" fill={s.color}>
+            <path d="M12 2c.8 6.2 3.8 9.2 10 10-6.2.8-9.2 3.8-10 10-.8-6.2-3.8-9.2-10-10 6.2-.8 9.2-3.8 10-10z"/>
           </svg>
         </span>
       ))}
@@ -162,7 +199,7 @@ function BranchModal({ branch, onClose }) {
             backgroundColor: isDark ? "#0f1f17" : "#ffffff",
             animation: "bmIn 0.3s cubic-bezier(0.34,1.56,0.64,1) both",
             boxShadow: isDark
-              ? "0 0 0 1px rgba(74,222,128,0.2), 0 32px 80px rgba(0,0,0,0.6)"
+              ? "0 0 0 1px rgba(255,255,255,0.06), 0 32px 80px rgba(0,0,0,0.6)"
               : "0 32px 80px rgba(0,0,0,0.28)",
           }}
           onClick={e => e.stopPropagation()}
@@ -209,11 +246,11 @@ function BranchModal({ branch, onClose }) {
                   You&apos;ve selected
                 </p>
                 <h2 className="text-xl sm:text-2xl font-extrabold leading-tight"
-                  style={{ color: neonG, textShadow: isDark ? "0 0 18px rgba(74,222,128,0.45)" : "none" }}>
+                  style={{ color: neonG }}>
                   {branch} Branch
                 </h2>
                 <div className="w-10 h-[3px] rounded-sm mt-2"
-                  style={{ backgroundColor: neonG, boxShadow: isDark ? "0 0 10px rgba(74,222,128,0.6)" : "none" }} />
+                  style={{ backgroundColor: neonG }} />
               </div>
               <div className="space-y-3 sm:space-y-4 flex-1">
                 {[
@@ -250,7 +287,6 @@ function BranchModal({ branch, onClose }) {
                 className="w-full mt-5 sm:mt-6 py-3 font-semibold text-white text-sm rounded-xl transition-all"
                 style={{
                   background: `linear-gradient(135deg, ${SITE_GREEN}, ${DARK_GREEN})`,
-                  boxShadow: isDark ? "0 0 16px rgba(74,222,128,0.25)" : "none",
                 }}
                 onMouseEnter={e => e.currentTarget.style.opacity = "0.92"}
                 onMouseLeave={e => e.currentTarget.style.opacity = "1"}
@@ -369,7 +405,9 @@ function PromoCarousel({ onNavigate, leftSlot }) {
             textOverflow:"ellipsis",
             fontSize:"clamp(10px, 3vw, 14px)",
           }}>
-            {promo.text}&nbsp;<strong>{promo.highlight}</strong>{" — "}
+            <span className="sm:hidden">{promo.short}</span>
+            <span className="hidden sm:inline">{promo.text}</span>
+            &nbsp;<strong>{promo.highlight}</strong>{" — "}
             <button onClick={(e) => { e.stopPropagation(); onNavigate?.(promo.page); }} style={{ fontWeight:700, textDecoration:"underline", textUnderlineOffset:"2px", background:"none", border:"none", color:"white", cursor:"pointer", letterSpacing:"0.05em", padding:0, display:"inline", whiteSpace:"nowrap" }}
               onMouseEnter={e => e.currentTarget.style.opacity="0.75"} onMouseLeave={e => e.currentTarget.style.opacity="1"}>{promo.cta}</button>
           </span>
@@ -394,174 +432,6 @@ function PromoCarousel({ onNavigate, leftSlot }) {
   );
 }
 
-// ── Search suggestions ────────────────────────────────────────────────────────
-const SEARCH_SUGGESTIONS = [
-  "Red Roses", "Birthday Flowers", "Anniversary Bouquet",
-  "Sunflowers", "Mixed Tulips", "Same-day Delivery",
-];
-
-const SEARCH_TYPING = ["Red Roses", "Sunflowers", "Birthday Flowers", "Mixed Tulips", "Anniversary Bouquet"];
-
-// ── Search Overlay ────────────────────────────────────────────────────────────
-function SearchOverlay({ onClose, onNavigate }) {
-  const { isDark } = useTheme();
-  const [query, setQuery] = useState("");
-  const [typed, setTyped] = useState("");
-  const inputRef = useRef(null);
-
-  useEffect(() => {
-    setTimeout(() => inputRef.current?.focus(), 50);
-    const h = (e) => { if (e.key === "Escape") onClose(); };
-    document.addEventListener("keydown", h);
-    return () => document.removeEventListener("keydown", h);
-  }, []);
-
-  useEffect(() => {
-    let w = 0, c = 0, deleting = false, t;
-    const tick = () => {
-      const word = SEARCH_TYPING[w];
-      if (!deleting) {
-        c++;
-        setTyped(word.slice(0, c));
-        if (c === word.length) { deleting = true; t = setTimeout(tick, 1500); return; }
-        t = setTimeout(tick, 85);
-      } else {
-        c--;
-        setTyped(word.slice(0, c));
-        if (c === 0) { deleting = false; w = (w + 1) % SEARCH_TYPING.length; t = setTimeout(tick, 350); return; }
-        t = setTimeout(tick, 40);
-      }
-    };
-    t = setTimeout(tick, 500);
-    return () => clearTimeout(t);
-  }, []);
-
-  const doSearch = (term) => {
-  if (term && term.trim()) {
-    window.history.pushState({}, '', `/shop?search=${encodeURIComponent(term)}`);
-    onNavigate("shop");                          // 1. switch to shop page
-    window.dispatchEvent(new Event('popstate')); // 2. trigger URL read
-    onClose();                                   // 3. close overlay
-  }
-};
-
-  const fillSearch = (term) => {
-    setQuery(term);
-    inputRef.current?.focus();
-  };
-
-  const surfaceBg = isDark ? "#1a2332" : "white";
-  const textC     = isDark ? "#e5e7eb" : "#111827";
-  const iconC     = isDark ? "#9ca3af" : "#9ca3af";
-  const suggBdr   = isDark ? "#2d3748" : "#e5e7eb";
-  const suggText  = isDark ? "#d1d5db" : "#374151";
-
-  return (
-    <div className="fixed inset-0 z-[100000] flex items-start justify-center px-3 sm:px-4"
-      style={{ backgroundColor:"rgba(0,0,0,0.72)", backdropFilter:"blur(6px)", paddingTop:"clamp(52px,10vh,110px)" }}
-      onClick={onClose}>
-      <style>{`
-        @keyframes ssDown { from{opacity:0;transform:translateY(-16px) scale(0.97)} to{opacity:1;transform:translateY(0) scale(1)} }
-        .search-input {
-          min-width: 0; flex: 1; outline: none;
-          background: transparent !important; background-color: transparent !important;
-          border: none !important; box-shadow: none !important;
-          -webkit-appearance: none !important; appearance: none !important;
-        }
-        [data-theme="dark"] .search-input,
-        [data-theme="light"] .search-input,
-        [data-theme] .search-input {
-          background: transparent !important; background-color: transparent !important;
-          border: none !important; box-shadow: none !important;
-        }
-        .search-input::placeholder { color: ${isDark ? "#6b7280" : "#9ca3af"}; }
-        @media (max-height: 500px) and (orientation: landscape) {
-          .search-dialog { padding-top: 6px !important; }
-        }
-      `}</style>
-      <div className="search-dialog w-full max-w-2xl" onClick={e => e.stopPropagation()}
-        style={{ animation:"ssDown 0.22s cubic-bezier(0.34,1.56,0.64,1) both" }}>
-
-        <div className="text-center mb-4 px-2">
-          <h2 className="text-white font-bold tracking-tight leading-tight" style={{ fontSize:"clamp(20px,5vw,26px)" }}>
-            What are you looking for?
-          </h2>
-          <p className="text-white/55 text-xs sm:text-sm mt-1">
-            Search our flowers, bouquets, and gifts
-          </p>
-        </div>
-
-        <form onSubmit={e => { e.preventDefault(); doSearch(query); }}>
-          <div className="flex items-center rounded-2xl overflow-hidden shadow-2xl"
-            style={{ backgroundColor: surfaceBg, border:`2px solid ${SITE_GREEN}`, height:"52px" }}>
-            <div className="flex items-center pl-3 pr-2 flex-shrink-0" style={{ backgroundColor:"transparent" }}>
-              <svg className="w-5 h-5" style={{ color:iconC }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
-              </svg>
-            </div>
-            <input
-              ref={inputRef} type="text" value={query} onChange={e => setQuery(e.target.value)}
-              placeholder={`Search ${typed}`} className="search-input py-3 text-sm sm:text-base"
-              style={{ color: textC, caretColor: SITE_GREEN, WebkitAppearance:"none" }}
-            />
-            {query && (
-              <button type="button" onClick={(e) => { e.stopPropagation(); setQuery(""); }}
-                className="px-2 flex-shrink-0 transition-opacity hover:opacity-70"
-                style={{ color: iconC, backgroundColor:"transparent", border:"none" }}>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12"/>
-                </svg>
-              </button>
-            )}
-            <button type="submit" onClick={(e) => e.stopPropagation()}
-              className="flex items-center justify-center gap-1.5 text-white font-bold self-stretch transition-all hover:opacity-90 flex-shrink-0"
-              style={{ backgroundColor: SITE_GREEN, borderRadius:"0 16px 16px 0", padding:"0 12px", minWidth:"44px" }}>
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
-              </svg>
-              <span className="hidden sm:inline text-sm">Search</span>
-            </button>
-          </div>
-        </form>
-
-        <div className="mt-4">
-          <p className="text-white/50 text-[11px] font-semibold uppercase tracking-widest mb-2 px-1">Popular searches</p>
-          <div className="rounded-2xl overflow-hidden" style={{ backgroundColor: surfaceBg, border:`1px solid ${suggBdr}` }}>
-            {SEARCH_SUGGESTIONS.map((s, i) => (
-              <div key={s} className="flex items-stretch"
-                style={{ borderBottom: i < SEARCH_SUGGESTIONS.length - 1 ? `1px solid ${suggBdr}` : "none" }}>
-                <button type="button" onClick={(e) => { e.stopPropagation(); doSearch(s); }}
-                  className="flex-1 flex items-center gap-3 px-4 py-3 text-left transition-colors min-w-0"
-                  style={{ color: suggText, backgroundColor:"transparent" }}
-                  onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "rgba(255,255,255,0.04)" : "#f9fafb"}
-                  onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
-                  <svg className="w-4 h-4 flex-shrink-0" style={{ color:iconC }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
-                  </svg>
-                  <span className="text-sm font-medium truncate">{s}</span>
-                </button>
-                <button type="button" aria-label={`Use "${s}" in search box`}
-                  onClick={(e) => { e.stopPropagation(); fillSearch(s); }}
-                  className="flex items-center justify-center px-3.5 flex-shrink-0 transition-colors"
-                  style={{ color:iconC, borderLeft:`1px solid ${suggBdr}`, backgroundColor:"transparent" }}
-                  onMouseEnter={e => { e.currentTarget.style.color = isDark ? "#4ade80" : SITE_GREEN; e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4"; }}
-                  onMouseLeave={e => { e.currentTarget.style.color = iconC; e.currentTarget.style.backgroundColor = "transparent"; }}>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 18 6 6m0 0h7m-7 0v7"/>
-                  </svg>
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <p className="text-center text-white/50 text-xs mt-3">
-          Press <kbd className="px-1.5 py-0.5 rounded text-xs" style={{ backgroundColor:"rgba(255,255,255,0.15)", color:"rgba(255,255,255,0.8)" }}>Esc</kbd> to close
-        </p>
-      </div>
-    </div>
-  );
-}
 
 function DropdownMenu({ items, categories, onNavigate, onClose }) {
   const { isDark } = useTheme();
@@ -926,7 +796,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
   const [mobileOpen, setMobileOpen]             = useState(false);
   const [cartOpen, setCartOpen]                 = useState(false);
   const [userOpen, setUserOpen]                 = useState(false);
-  const [searchOpen, setSearchOpen]             = useState(false);
   const [mipOpen, setMipOpen]                   = useState(false);
 
   const [notifOpen, setNotifOpen]               = useState(false);
@@ -1035,7 +904,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
     },
     { label: "About Us", page: "about" },
     { label: "Contact Us", page: "contact" },
-    { label: "Help Center", page: null, dropdown: [{ label: "FAQs", page: "faq" }, { label: "Track My Order", page: "orders" }, { label: "Return Policy", page: "return-policy" }, { label: "World Clock", page: "world-clock" }] },
+    { label: "Help Center", page: null, dropdown: [{ label: "FAQs", page: "faq" }, { label: "Track My Order", page: "orders" }, { label: "Ordering & Fulfillment", page: "ordering-fulfillment" }, { label: "World Clock", page: "world-clock" }] },
   ];
 
   useEffect(() => {
@@ -1213,9 +1082,9 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
       <style>{`
         @keyframes dropIn { from { opacity:0; transform:translateY(-8px) scale(0.97); } to { opacity:1; transform:translateY(0) scale(1); } }
         ${HEART_CSS}
+        ${SPARKLE_CSS}
       `}</style>
       {branchModal && <BranchModal branch={branchModal} onClose={() => setBranchModal(null)} />}
-      {searchOpen && <SearchOverlay onClose={() => setSearchOpen(false)} onNavigate={onNavigate} />}
 
       <div
         className="w-full sticky top-0"
@@ -1276,10 +1145,15 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
             {/* Desktop nav links */}
             <div className="hidden lg:flex items-center gap-5 xl:gap-8 flex-1 justify-center">
 
-              {FINAL_NAV_LINKS.map(link => (
+              {FINAL_NAV_LINKS.map(link => {
+                // Only treat a link as having a menu when it actually has items.
+                // (An empty `categories` array is still truthy and would otherwise
+                // open an empty bordered box — the stray grey line under the button.)
+                const hasMenu = !!(link.dropdown?.length || link.categories?.length)
+                return (
                 <div key={link.label} className="relative"
-                  onMouseEnter={() => (link.dropdown||link.categories) && openMenuD(link.label)}
-                  onMouseLeave={() => (link.dropdown||link.categories) && closeMenuD()}>
+                  onMouseEnter={() => hasMenu && openMenuD(link.label)}
+                  onMouseLeave={() => hasMenu && closeMenuD()}>
                   <button onClick={(e) => { e.stopPropagation(); handleNavClick(link); }}
                     className="flex items-center gap-0.5 text-sm font-medium pb-1 whitespace-nowrap transition-colors relative"
                     style={{
@@ -1290,15 +1164,16 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                     onMouseLeave={e => { if (active!==link.label) e.currentTarget.style.color = link.highlight ? (isDark?"#ff6b81":"#f43f5e") : (isDark ? "#d1d5db" : "#4b5563"); }}>
                     {link.highlight && <FloatingHearts />}
                     {link.label}
-                    {(link.dropdown||link.categories) && <svg className="w-3 h-3 text-gray-400 ml-0.5 transition-transform" style={{ transform:openMenu===link.label?"rotate(180deg)":"rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>}
+                    {hasMenu && <svg className="w-3 h-3 text-gray-400 ml-0.5 transition-transform" style={{ transform:openMenu===link.label?"rotate(180deg)":"rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>}
                   </button>
-                  {(link.dropdown||link.categories) && openMenu===link.label && (
+                  {hasMenu && openMenu===link.label && (
                     <div onMouseEnter={() => openMenuD(link.label)} onMouseLeave={closeMenuD}>
                       <DropdownMenu items={link.dropdown} categories={link.categories} onNavigate={onNavigate} onClose={() => setOpenMenu(null)} />
                     </div>
                   )}
                 </div>
-              ))}
+                )
+              })}
 
               {/* Make it Personal button */}
               <div className="relative" ref={mipRef}
@@ -1307,12 +1182,13 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                 <button
                   disabled={!isCustomizationEnabled}
                   onClick={(e) => { e.stopPropagation(); if (isCustomizationEnabled) onNavigate?.("make-it-personal"); }}
-                  className={`whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full text-white flex items-center gap-1 transition-all select-none ${
+                  className={`relative whitespace-nowrap text-xs font-semibold px-3 py-1.5 rounded-full text-white flex items-center gap-1 transition-all select-none ${
                     isCustomizationEnabled
                       ? "hover:shadow-md hover:scale-105 cursor-pointer active:scale-95"
                       : "opacity-40 cursor-not-allowed"
                   }`}
                   style={{ background: isCustomizationEnabled ? "linear-gradient(135deg,#2E8B34,#0C573E)" : "#6b7280" }}>
+                  {isCustomizationEnabled && <FloatingSparkles />}
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
                   Make it Personal
                   <svg className="w-2.5 h-2.5 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 5l7 7-7 7"/></svg>
@@ -1336,14 +1212,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
 
             {/* Right side icons */}
             <div className="flex items-center gap-1 sm:gap-2">
-              <button onClick={(e) => { e.stopPropagation(); setSearchOpen(true); }}
-                className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors"
-                style={{ color: isDark ? "#e5e7eb" : "#4b5563" }}
-                onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#1a2332" : "#f9fafb"}
-                onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
-                <svg className="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5"><path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/></svg>
-              </button>
-
               <div className="relative" ref={cartRef}>
                 <button onClick={(e) => { e.stopPropagation(); setCartOpen(false); onNavigate?.("cart"); }}
                   className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative"

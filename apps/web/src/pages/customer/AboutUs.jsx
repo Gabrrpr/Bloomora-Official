@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import pageBg5    from "../../assets/PageBG5.webp"
 import aboutImg1  from "../../assets/AboutUsImg1.webp"
@@ -9,10 +9,14 @@ const G  = "#2E8B34"
 const DG = "#0C573E"
 
 const STATS = [
-  { num:"67",     label:"Years in Business" },
-  { num:"50K+",   label:"Happy Customers" },
-  { num:"2",      label:"Branch Locations" },
-  { num:"1,000+", label:"Arrangements / Month" },
+  { num:"67",     label:"Years in Business",
+    icon:<svg className="w-full h-full" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5"/></svg> },
+  { num:"50K+",   label:"Customers Served",
+    icon:<svg className="w-full h-full" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z"/></svg> },
+  { num:"2",      label:"Branch Locations",
+    icon:<svg className="w-full h-full" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}><path strokeLinecap="round" strokeLinejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z"/></svg> },
+  { num:"1,000+", label:"Arrangements / Month",
+    icon:<svg className="w-full h-full" fill="currentColor" viewBox="0 0 24 24"><path d="M18.7 12.4c-.28-.16-.57-.29-.86-.4.29-.11.58-.24.86-.4 1.92-1.11 2.99-3.12 3-5.19-1.79-1.03-4.07-1.11-5.99 0-.28.16-.54.35-.78.54.05-.31.08-.63.08-.95 0-2.22-1.21-4.15-3-5.19C10.21 1.85 9 3.78 9 6c0 .32.03.64.08.95-.24-.2-.49-.39-.78-.55-1.92-1.11-4.2-1.03-5.99 0 0 2.07 1.07 4.08 2.99 5.19.28.16.57.29.86.4-.29.11-.58.24-.86.4C3.39 13.9 2.32 15.91 2.31 17.98c1.79 1.03 4.07 1.11 5.99 0 .28-.16.54-.35.78-.54-.05.31-.08.63-.08.95 0 2.22 1.21 4.15 3 5.19 1.79-1.04 3-2.97 3-5.19 0-.32-.03-.64-.08-.95.24.2.49.39.78.55 1.92 1.11 4.2 1.03 5.99 0-.01-2.07-1.08-4.08-3-5.19zM12 16c-2.21 0-4-1.79-4-4s1.79-4 4-4 4 1.79 4 4-1.79 4-4 4z"/></svg> },
 ]
 
 const VALUES = [
@@ -46,9 +50,18 @@ const STORY_SLIDES = [
 export default function AboutUs({ onNavigate }) {
   const { isDark } = useTheme()
   const [slideIdx, setSlideIdx] = useState(0)
+  const [lightboxOpen, setLightboxOpen] = useState(false)
 
   const prevSlide = () => setSlideIdx(i => (i-1+STORY_SLIDES.length)%STORY_SLIDES.length)
   const nextSlide = () => setSlideIdx(i => (i+1)%STORY_SLIDES.length)
+
+  // Close the enlarged image with the Escape key.
+  useEffect(() => {
+    if (!lightboxOpen) return
+    const onKey = e => { if (e.key === "Escape") setLightboxOpen(false) }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [lightboxOpen])
 
   // ── color tokens ──────────────────────────────────────────────────────────
   const pageBg       = isDark ? "#111827" : "white"
@@ -71,10 +84,14 @@ export default function AboutUs({ onNavigate }) {
 
   return (
     <div className="min-h-screen" style={{ backgroundColor: pageBg }}>
-      <style>{`@keyframes pageRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}`}</style>
+      <style>{`
+        @keyframes pageRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}
+        @keyframes lbFade{from{opacity:0}to{opacity:1}}
+        @keyframes lbZoom{from{opacity:0;transform:scale(0.88)}to{opacity:1;transform:scale(1)}}
+      `}</style>
 
       {/* Hero - image-based, always looks good */}
-      <div className="relative overflow-hidden" style={{ minHeight:"280px", animation:"pageRise 0.6s ease 0.05s both" }}>
+      <div className="relative overflow-hidden max-w-[1600px] mx-auto" style={{ minHeight:"280px", animation:"pageRise 0.6s ease 0.05s both" }}>
         <img src={pageBg5} alt="" className="absolute inset-0 w-full h-full object-cover"/>
         <div className="absolute inset-0" style={{ background:"linear-gradient(to right,rgba(12,87,62,0.88) 0%,rgba(12,87,62,0.65) 60%,rgba(12,87,62,0.3) 100%)" }}/>
         <div className="relative z-10 max-w-5xl mx-auto px-6 sm:px-10 py-20">
@@ -92,13 +109,20 @@ export default function AboutUs({ onNavigate }) {
 
       {/* Stats bar */}
       <div style={{ borderBottom:`1px solid ${statsBdr}`, animation:"pageRise 0.6s ease 0.16s both" }}>
-        <div className="max-w-5xl mx-auto px-6 sm:px-10">
-          <div className="grid grid-cols-2 sm:grid-cols-4" style={{ borderBottom:"none" }}>
-            {STATS.map(({ num, label }, i) => (
-              <div key={label} className="py-8 px-6 text-center"
-                style={{ borderRight: i<STATS.length-1 ? `1px solid ${statsDivide}` : "none" }}>
-                <p className="text-3xl font-bold mb-1" style={{ color: numColor }}>{num}</p>
-                <p className="text-sm" style={{ color: labelColor }}>{label}</p>
+        <div className="max-w-5xl mx-auto px-4 sm:px-10 py-8 sm:py-12">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {STATS.map(({ num, label, icon }) => (
+              <div key={label}
+                className="rounded-2xl p-4 sm:p-6 flex flex-col items-center text-center transition-all duration-200"
+                style={{ backgroundColor: cardBg, border:`1px solid ${cardBdr}` }}
+                onMouseEnter={e => { e.currentTarget.style.transform="translateY(-4px)"; e.currentTarget.style.boxShadow = isDark ? "0 14px 30px rgba(0,0,0,0.45)" : "0 14px 30px rgba(46,139,52,0.12)"; e.currentTarget.style.borderColor = accentG }}
+                onMouseLeave={e => { e.currentTarget.style.transform="none"; e.currentTarget.style.boxShadow="none"; e.currentTarget.style.borderColor = cardBdr }}>
+                <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl flex items-center justify-center mb-3 p-2.5"
+                  style={{ backgroundColor: iconBg, color: iconColor }}>
+                  {icon}
+                </div>
+                <p className="text-2xl sm:text-4xl font-extrabold leading-none mb-1.5" style={{ color: accentG }}>{num}</p>
+                <p className="text-[11px] sm:text-sm font-medium leading-tight" style={{ color: labelColor }}>{label}</p>
               </div>
             ))}
           </div>
@@ -127,7 +151,9 @@ export default function AboutUs({ onNavigate }) {
             <div className="relative w-full aspect-square rounded-xl overflow-hidden shadow-sm"
               style={{ border:`1px solid ${imgBdr}` }}>
               <img src={STORY_SLIDES[slideIdx].img} alt={STORY_SLIDES[slideIdx].label}
-                className="w-full h-full object-cover transition-opacity duration-500"/>
+                onClick={() => setLightboxOpen(true)}
+                title="Click to enlarge"
+                className="w-full h-full object-cover transition-opacity duration-500 cursor-zoom-in"/>
               <button onClick={prevSlide}
                 className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full flex items-center justify-center text-white bg-black/30 hover:bg-black/50 backdrop-blur-sm transition-all">
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -163,7 +189,9 @@ export default function AboutUs({ onNavigate }) {
           <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {VALUES.map(({ title, desc, icon }) => (
               <div key={title} className="rounded-xl p-5"
-                style={{ backgroundColor: cardBg, border:`1px solid ${cardBdr}` }}>
+                style={{ backgroundColor: cardBg, border:`1px solid ${cardBdr}`, transition:"transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease" }}
+                onMouseEnter={e => { e.currentTarget.style.transform="translateY(-6px)"; e.currentTarget.style.boxShadow = isDark ? "0 16px 34px rgba(0,0,0,0.5)" : "0 16px 34px rgba(46,139,52,0.16)"; e.currentTarget.style.borderColor = accentG }}
+                onMouseLeave={e => { e.currentTarget.style.transform="none"; e.currentTarget.style.boxShadow="none"; e.currentTarget.style.borderColor = cardBdr }}>
                 <div className="w-9 h-9 rounded-lg mb-4 flex items-center justify-center"
                   style={{ backgroundColor: iconBg, color: iconColor }}>
                   {icon}
@@ -175,6 +203,27 @@ export default function AboutUs({ onNavigate }) {
           </div>
         </div>
       </div>
+
+      {/* Enlarged image lightbox */}
+      {lightboxOpen && (
+        <div onClick={() => setLightboxOpen(false)}
+          style={{ position:"fixed", inset:0, zIndex:99999, background:"rgba(0,0,0,0.85)", backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)", display:"flex", alignItems:"center", justifyContent:"center", padding:"clamp(16px,5vw,48px)", animation:"lbFade 0.25s ease" }}>
+          <button onClick={(e) => { e.stopPropagation(); setLightboxOpen(false) }} aria-label="Close"
+            style={{ position:"absolute", top:"clamp(12px,3vw,24px)", right:"clamp(12px,3vw,24px)", width:"44px", height:"44px", borderRadius:"9999px", background:"rgba(255,255,255,0.15)", border:"1px solid rgba(255,255,255,0.3)", color:"white", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", backdropFilter:"blur(4px)" }}
+            onMouseEnter={e => e.currentTarget.style.background="rgba(255,255,255,0.3)"}
+            onMouseLeave={e => e.currentTarget.style.background="rgba(255,255,255,0.15)"}>
+            <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+          <figure onClick={e => e.stopPropagation()}
+            style={{ margin:0, maxWidth:"min(900px,100%)", maxHeight:"100%", display:"flex", flexDirection:"column", alignItems:"center", animation:"lbZoom 0.3s cubic-bezier(0.22,1,0.36,1)" }}>
+            <img src={STORY_SLIDES[slideIdx].img} alt={STORY_SLIDES[slideIdx].label}
+              style={{ maxWidth:"100%", maxHeight:"80vh", objectFit:"contain", borderRadius:"12px", boxShadow:"0 20px 60px rgba(0,0,0,0.5)" }}/>
+            <figcaption style={{ marginTop:"14px", color:"rgba(255,255,255,0.85)", fontSize:"13px", fontStyle:"italic", textAlign:"center", maxWidth:"600px", lineHeight:1.5 }}>
+              {STORY_SLIDES[slideIdx].label}
+            </figcaption>
+          </figure>
+        </div>
+      )}
 
       <Footer onNavigate={onNavigate}/>
     </div>

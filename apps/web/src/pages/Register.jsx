@@ -45,6 +45,16 @@ function isValidCity(v) {
   return /^[a-zA-ZÀ-ÖØ-öø-ÿ\s'.\-]+$/.test(v.trim()) && v.trim().length >= 2
 }
 
+/** Display a raw +63 number as "+63 9XX XXX XXXX" (3-3-4 grouping). Storage stays raw. */
+function formatPHPhone(raw) {
+  if (!raw) return ""
+  let digits = raw.replace(/\D/g, "")           // e.g. "639171234567"
+  if (digits.startsWith("63")) digits = digits.slice(2)  // drop country code → 10 national digits
+  digits = digits.slice(0, 10)
+  const groups = [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6, 10)].filter(Boolean)
+  return groups.length ? `+63 ${groups.join(" ")}` : "+63"
+}
+
 /** Street address: at least 10 chars and contains at least one digit (house/unit number) */
 function isValidStreet(v) {
   return v.trim().length >= 10 && /\d/.test(v)
@@ -472,7 +482,7 @@ export default function Register({ onNavigate }) {
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h.93a2 2 0 01.948.684l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 01.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /></svg>
                       </span>
-                      <input type="tel" value={form.phone}
+                      <input type="tel" value={formatPHPhone(form.phone)}
                         onChange={handlePhoneChange}
                         onBlur={() => { touch("phone"); validateField("phone", form.phone, null) }}
                         placeholder="+63 917 123 4567"
@@ -650,7 +660,7 @@ export default function Register({ onNavigate }) {
               <form onSubmit={handleVerifyAndRegister} className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-3 text-center">OTP Code</label>
-                  <div className="flex justify-center gap-3">
+                  <div className="flex justify-center gap-1.5 sm:gap-3">
                     {[0,1,2,3,4,5].map(i => (
                       <input key={i} id={`otp-${i}`} type="text" inputMode="numeric" maxLength={1} value={otp[i] || ""}
                         onChange={e => {
@@ -670,7 +680,7 @@ export default function Register({ onNavigate }) {
                           setOtp(paste)
                           setTimeout(() => document.getElementById(`otp-${Math.min(paste.length - 1, 5)}`)?.focus(), 0)
                         }}
-                        className="w-14 h-14 text-center text-2xl font-bold border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition bg-white" />
+                        className="w-10 h-12 sm:w-14 sm:h-14 text-center text-xl sm:text-2xl font-bold border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition bg-white" />
                     ))}
                   </div>
                   <p className="text-xs text-gray-400 mt-3 text-center">Check your email inbox for the verification code.</p>

@@ -64,7 +64,7 @@ export default function AllOccasions({ onNavigate }) {
     <div className={`min-h-screen ${isDark ? "bg-gray-900" : "bg-white"}`}>
       <style>{`@keyframes pageRise{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:none}}`}</style>
       {/* Hero */}
-      <div className="relative overflow-hidden" style={{ minHeight: "280px", animation:"pageRise 0.6s ease 0.05s both" }}>
+      <div className="relative overflow-hidden max-w-[1600px] mx-auto" style={{ minHeight: "280px", animation:"pageRise 0.6s ease 0.05s both" }}>
         <img src={pageBg5} alt="" className="absolute inset-0 w-full h-full object-cover" />
         <div
           className="absolute inset-0"

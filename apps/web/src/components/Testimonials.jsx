@@ -285,12 +285,14 @@ export default function Testimonials() {
     : "none"
 
   return (
-    <section className="relative overflow-hidden py-[clamp(56px,7vw,100px)]">
+    <section className="relative overflow-hidden max-w-[1600px] mx-auto py-[clamp(56px,7vw,100px)]">
       <style>{carouselCss}</style>
 
-      {/* Background image */}
-      <div className="absolute inset-0 z-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage:`url(${testimonialsBG})` }}/>
+      {/* Background image — a single, non-repeating image. On wide screens it
+          stretches to fill; on mobile we switch to `cover` so the image isn't
+          squeezed/distorted in the tall, narrow viewport. */}
+      <div className="absolute inset-0 z-0 bg-center"
+        style={{ backgroundImage:`url(${testimonialsBG})`, backgroundSize: w < 640 ? "cover" : "100% 100%", backgroundRepeat:"no-repeat" }}/>
       {/* Overlay */}
       <div className="absolute inset-0 z-[1]"
         style={{ backgroundColor: isDark ? "rgba(8,15,10,0.7)" : "rgba(255,255,255,0.45)" }}/>
@@ -324,9 +326,10 @@ export default function Testimonials() {
 
           <div className="flex items-center gap-3.5">
             <ArrowBtn dir="left" onClick={prev} isDark={isDark}/>
-            {/* overflow-hidden clips the sliding cards so they animate in/out
-                cleanly without spilling past the arrows */}
-            <div className="flex-1 overflow-hidden">
+            {/* Clip only horizontally so the sliding cards don't spill past the
+                arrows, while letting the top "Verified Customer" badge and the
+                hover lift breathe vertically (overflow-hidden would crop them). */}
+            <div className="flex-1" style={{ overflowX:"clip", overflowY:"visible" }}>
               <div
                 key={current}
                 className="rev-deck grid gap-4 items-stretch"

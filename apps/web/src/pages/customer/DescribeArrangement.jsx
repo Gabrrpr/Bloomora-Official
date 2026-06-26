@@ -457,7 +457,7 @@ export default function DescribeArrangement({ onNavigate }) {
             <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#fbbf24" }} />
           </p>
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold leading-tight mb-2" style={{ color: accentDG }}>
-            Describe Your <span style={{ color: accentPink }}>Dream Bouquet</span>
+            <span className="shine-text" style={{ "--shine-base": accentDG }}>Describe Your</span> <span className="shine-text" style={{ "--shine-base": accentPink }}>Dream Bouquet</span>
           </h1>
           <p className="text-sm sm:text-base max-w-xl mx-auto" style={{ color: bodyC }}>
             Tell us what you imagine, and our AI will bring it to life in seconds.
@@ -515,17 +515,17 @@ export default function DescribeArrangement({ onNavigate }) {
               <div className="mt-5 border-t pt-4" style={{ borderColor: dividerC }}>
                 <button
                   onClick={() => setShowMaterials(p => !p)}
-                  className="flex items-center gap-2 text-sm font-semibold transition"
+                  className="flex items-center justify-start gap-2 text-sm font-semibold transition text-left w-full"
                   style={{ color: subHeadC }}
                 >
                   <svg
-                    className="w-4 h-4 transition-transform"
+                    className="w-4 h-4 flex-shrink-0 transition-transform"
                     style={{ transform: showMaterials ? "rotate(180deg)" : "rotate(0)" }}
                     fill="none" viewBox="0 0 24 24" stroke="currentColor"
                   >
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
                   </svg>
-                  {showMaterials ? "Hide" : "Add"} optional materials (flowers, vase, wrapping, accessories)
+                  <span className="text-left">{showMaterials ? "Hide" : "Add"} optional materials (flowers, vase, wrapping, accessories)</span>
                 </button>
 
                 {showMaterials && (
@@ -621,7 +621,7 @@ export default function DescribeArrangement({ onNavigate }) {
                 <button
                   onClick={handleGenerate}
                   disabled={!customizationEnabled || !prompt.trim() || loading || (aiUsage?.remaining === 0)}
-                  className="flex items-center gap-2 px-7 py-3.5 text-base font-bold text-white rounded-2xl transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-50"
+                  className="flex items-center justify-center gap-2 px-7 py-3.5 text-base font-bold text-white rounded-2xl transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-50 whitespace-nowrap"
                   style={{ background: customizationEnabled && prompt.trim() && aiUsage?.remaining !== 0 ? "linear-gradient(135deg, #e879a0, #f43f5e)" : (isDark ? "#475569" : "#d1d5db") }}
                 >
                   {loading ? (
@@ -1181,6 +1181,9 @@ export default function DescribeArrangement({ onNavigate }) {
       @keyframes daFade { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
       @keyframes daSpin { to { transform:rotate(360deg); } }
       @keyframes daBob  { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-3px); } }
+      @keyframes titleShine { to { background-position: -200% 0; } }
+      .shine-text { background-image: linear-gradient(110deg, var(--shine-base) 0%, var(--shine-base) 42%, #ffffff 50%, var(--shine-base) 58%, var(--shine-base) 100%); background-size: 200% 100%; background-position: 0% 0; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; will-change: background-position; animation: titleShine 3.5s linear infinite; }
+      @media (prefers-reduced-motion: reduce) { .shine-text { animation: none; } }
     `}</style>
     </>
   )

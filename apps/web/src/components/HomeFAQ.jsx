@@ -167,19 +167,22 @@ export default function HomeFAQ({ onNavigate }) {
   // ── Support CTA — redesigned to remove green-on-green ──
   // Light: clean neutral card (cream/white) so the green button reads as a sharp accent.
   // Dark:  green-tinted dark panel (matches the review cards / trust bar) with a neon button.
-  const ctaBg        = isDark ? "#0f1f17" : "#F2F7F3"
-  const ctaBdr       = isDark ? "rgba(74,222,128,0.22)" : "#dceadd"
+  // Filled green panel so the CTA stands apart from the light question cards.
+  const ctaBg        = isDark
+    ? "linear-gradient(135deg, #0c573e 0%, #0a3d2b 100%)"
+    : "linear-gradient(135deg, #2E8B34 0%, #0C573E 100%)"
+  const ctaBdr       = isDark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.16)"
   const ctaShdw      = isDark
-    ? "0 0 0 1px rgba(74,222,128,0.12), 0 12px 40px rgba(0,0,0,0.4)"
-    : "0 8px 28px rgba(12,87,62,0.08)"
-  const ctaTitleC    = isDark ? "#f0fdf4" : "#132015"
-  const ctaSubC      = isDark ? "#9ca3af" : "#4A7C59"
-  const ctaIconWrapBg= isDark ? "rgba(74,222,128,0.12)" : "rgba(46,139,52,0.1)"
-  const ctaIconColor = isDark ? "#4ade80" : DG
-  const ctaBtnBg     = isDark ? "#4ade80" : DG
-  const ctaBtnColor  = isDark ? "#0a1f0d" : "#ffffff"
-  const ctaBtnGlow   = isDark ? "0 0 18px rgba(74,222,128,0.4)" : "0 6px 18px rgba(12,87,62,0.3)"
-  const ctaBtnIconBg = isDark ? "rgba(10,31,13,0.22)" : "rgba(255,255,255,0.22)"
+    ? "0 16px 44px rgba(0,0,0,0.45)"
+    : "0 16px 40px rgba(12,87,62,0.28)"
+  const ctaTitleC    = "#ffffff"
+  const ctaSubC      = "rgba(255,255,255,0.82)"
+  const ctaIconWrapBg= "rgba(255,255,255,0.18)"
+  const ctaIconColor = "#ffffff"
+  const ctaBtnBg     = "#ffffff"
+  const ctaBtnColor  = DG
+  const ctaBtnGlow   = "0 6px 18px rgba(0,0,0,0.18)"
+  const ctaBtnIconBg = "rgba(46,139,52,0.14)"
 
   const active = FAQS[activeTab]
 
@@ -240,7 +243,7 @@ export default function HomeFAQ({ onNavigate }) {
         {/* Support CTA — neutral surface so the button is a clean accent (no green-on-green) */}
         <div className="mt-[clamp(32px,4vw,48px)] flex flex-col sm:flex-row items-center justify-between gap-5 rounded-[24px] p-6 sm:p-8 transition-all duration-500"
           style={{
-            backgroundColor: ctaBg,
+            background: ctaBg,
             border: `1px solid ${ctaBdr}`,
             boxShadow: ctaShdw,
             opacity: visible?1:0,
