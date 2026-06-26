@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Text, Boolean, ForeignKey, DateTime
+from sqlalchemy import Column, String, Text, Boolean, ForeignKey, DateTime, Numeric
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from .base import Base, now_utc
@@ -18,6 +18,9 @@ class Address(Base):
     city = Column(String(100), nullable=False)
     province = Column(String(100), nullable=False)
     zip_code = Column(String(20), nullable=True)
+    latitude = Column(Numeric(10, 7), nullable=True)
+    longitude = Column(Numeric(10, 7), nullable=True)
+    geocode_precision = Column(String(50), nullable=True)
     is_default = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=now_utc)
 

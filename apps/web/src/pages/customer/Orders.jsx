@@ -29,6 +29,9 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
   const isPending = ["pending", "preparing"].includes(statusKey)
   const isDelivered = ["delivered", "completed"].includes(statusKey)
   const isOutForDelivery = statusKey === "out_for_delivery"
+  const tracking = order.delivery_tracking || {}
+  const rider = tracking.rider
+  const vehicle = tracking.vehicle
 
   const { isDark } = useTheme()
   const lineBdr  = isDark ? "#2d3748" : "#E8EDE3"
@@ -140,10 +143,15 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
 
             {isOutForDelivery && (
               <button
+                onClick={() => {
+                  if (tracking.lalamove_share_link) {
+                    window.open(tracking.lalamove_share_link, "_blank", "noopener,noreferrer")
+                  }
+                }}
                 className="px-3.5 py-1.5 text-[12px] font-semibold rounded-lg transition text-white"
-                style={{ background: "#4A6741" }}
+                style={{ background: tracking.lalamove_share_link ? "#4A6741" : "#9CA3AF" }}
                 onMouseEnter={e => e.currentTarget.style.background = "#3A5332"}
-                onMouseLeave={e => e.currentTarget.style.background = "#4A6741"}
+                onMouseLeave={e => e.currentTarget.style.background = tracking.lalamove_share_link ? "#4A6741" : "#9CA3AF"}
               >
                 Track order
               </button>
@@ -186,6 +194,43 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
             )}
           </div>
         </div>
+        {(tracking.lalamove_share_link || rider || vehicle || tracking.lalamove_status || tracking.status) && (
+          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+            {(tracking.lalamove_status || tracking.status) && (
+              <div className="rounded-lg border border-gray-100 bg-white px-3 py-2">
+                <span className="text-gray-400">Delivery status</span>
+                <p className="font-semibold text-gray-700">{formatStatus(tracking.lalamove_status || tracking.status)}</p>
+              </div>
+            )}
+            {rider && (
+              <div className="rounded-lg border border-gray-100 bg-white px-3 py-2">
+                <span className="text-gray-400">Rider</span>
+                <p className="font-semibold text-gray-700">{rider.name}</p>
+                {rider.phone && <p className="text-gray-500">{rider.phone}</p>}
+              </div>
+            )}
+            {vehicle && (
+              <div className="rounded-lg border border-gray-100 bg-white px-3 py-2">
+                <span className="text-gray-400">Vehicle</span>
+                <p className="font-semibold text-gray-700">
+                  {[vehicle.color, vehicle.brand, vehicle.model].filter(Boolean).join(" ") || vehicle.vehicle_type}
+                </p>
+                {vehicle.plate_number && <p className="text-gray-500">{vehicle.plate_number}</p>}
+              </div>
+            )}
+            {tracking.lalamove_share_link && (
+              <a
+                href={tracking.lalamove_share_link}
+                target="_blank"
+                rel="noreferrer"
+                className="rounded-lg border border-[#D6E4CC] bg-white px-3 py-2 font-semibold"
+                style={{ color: "#2D5016" }}
+              >
+                Open Lalamove live tracking
+              </a>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

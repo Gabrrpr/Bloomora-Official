@@ -25,7 +25,17 @@ class Settings(BaseSettings):
     # Lalamove
     LALAMOVE_API_KEY: str = ""
     LALAMOVE_SECRET: str = ""
-    LALAMOVE_BASE_URL: str = "https://rest.lalamove.com"
+    LALAMOVE_BASE_URL: str = "https://rest.sandbox.lalamove.com"
+    LALAMOVE_SENDER_NAME: str = "Esting's Flowers"
+    LALAMOVE_SENDER_PHONE: str = "+639123456789"
+    LALAMOVE_PICKUP_ADDRESS: str = "Esting's Flowers, Laon-Laan Cor. Dos Castillas St., Sampaloc, Manila"
+    LALAMOVE_PICKUP_LAT: str = "14.6126"
+    LALAMOVE_PICKUP_LNG: str = "120.9920"
+    LALAMOVE_SERVICE_TYPE: str = "MOTORCYCLE"
+
+    # Geocoding
+    GEOCODING_BASE_URL: str = "https://nominatim.openstreetmap.org"
+    GEOCODING_USER_AGENT: str = "Bloomora/1.0 (delivery geocoding)"
 
     # PayMongo
     PAYMONGO_SECRET_KEY: str = ""

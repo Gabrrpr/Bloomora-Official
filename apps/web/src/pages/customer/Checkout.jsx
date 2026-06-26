@@ -60,7 +60,13 @@ export default function Checkout({ onNavigate }) {
     city: "",
     province: "",
     zip: "",
+    latitude: null,
+    longitude: null,
+    geocode_precision: null,
   })
+  const [deliveryPin, setDeliveryPin] = useState(null)
+  const [geocoding, setGeocoding] = useState(false)
+  const [geocodeError, setGeocodeError] = useState("")
 
   useEffect(() => {
     api.getCheckoutSettings()
@@ -206,6 +212,18 @@ export default function Checkout({ onNavigate }) {
 
   const selectedAddress = addresses.find(a => a.id === selectedAddressId)
 
+  const formatAddress = (addr) => addr
+    ? [addr.street, addr.barangay, addr.city, addr.province, addr.zip_code].filter(Boolean).join(", ")
+    : ""
+
+  const makeMapUrl = (pin) => {
+    if (!pin?.lat || !pin?.lng) return ""
+    const lat = Number(pin.lat)
+    const lng = Number(pin.lng)
+    const delta = 0.006
+    return `https://www.openstreetmap.org/export/embed.html?bbox=${lng - delta}%2C${lat - delta}%2C${lng + delta}%2C${lat + delta}&layer=mapnik&marker=${lat}%2C${lng}`
+  }
+
   const provinceToBranch = (provinceOrAddress) => {
     const p = (provinceOrAddress || "").toLowerCase()
     if (!p) return null
@@ -215,12 +233,12 @@ export default function Checkout({ onNavigate }) {
   }
 
   const pickupAddressSource = selectedAddress
-    ? [selectedAddress.street, selectedAddress.barangay, selectedAddress.city, selectedAddress.province, selectedAddress.zip_code].filter(Boolean).join(", ")
+    ? formatAddress(selectedAddress)
     : (customer?.address || user?.address || "")
   const pickupBranchName = provinceToBranch(selectedAddress?.province || pickupAddressSource) || selectedStoreBranch
   const pickupBranch = PICKUP_BRANCHES[pickupBranchName] || PICKUP_BRANCHES.Manila;
   const selectedAddressText = selectedAddress
-    ? [selectedAddress.street, selectedAddress.barangay, selectedAddress.city, selectedAddress.province, selectedAddress.zip_code].filter(Boolean).join(", ")
+    ? formatAddress(selectedAddress)
     : (customer?.address || user?.address || "")
   const manualAddressText = [manualForm.street, manualForm.barangay, manualForm.city, manualForm.province, manualForm.zip].filter(Boolean).join(", ")
   const deliveryAddressText = recipientType === "myself" ? selectedAddressText : manualAddressText
@@ -231,15 +249,17 @@ export default function Checkout({ onNavigate }) {
   )
   const isManilaAddress = deliveryAddressBranch === "Manila"
   const isLalamoveAvailable = lalamoveEnabled && isManilaAddress
-  const showStandardDelivery = !isLalamoveAvailable
+  const showStandardDelivery = deliveryAddressBranch === "Pampanga"
 
   useEffect(() => {
     if (fulfillmentMethod === "lalamove" && !isLalamoveAvailable) {
-      setFulfillmentMethod("pickup")
+      setFulfillmentMethod(showStandardDelivery ? "delivery" : "pickup")
     } else if (fulfillmentMethod === "delivery" && isLalamoveAvailable) {
       setFulfillmentMethod("lalamove")
+    } else if (fulfillmentMethod === "delivery" && !showStandardDelivery) {
+      setFulfillmentMethod(isLalamoveAvailable ? "lalamove" : "pickup")
     }
-  }, [fulfillmentMethod, isLalamoveAvailable])
+  }, [fulfillmentMethod, isLalamoveAvailable, showStandardDelivery])
 
   const getDeliveryDetails = () => {
     if (fulfillmentMethod === "pickup") {
@@ -261,7 +281,7 @@ export default function Checkout({ onNavigate }) {
         return {
           name: selectedAddress.recipient_name,
           phone: selectedAddress.phone,
-          address: [selectedAddress.street, selectedAddress.barangay, selectedAddress.city, selectedAddress.province, selectedAddress.zip_code].filter(Boolean).join(", "),
+          address: formatAddress(selectedAddress),
         }
       }
       return {
@@ -279,6 +299,15 @@ export default function Checkout({ onNavigate }) {
   }
 
   const deliveryDetails = getDeliveryDetails()
+  const savedAddressPin = selectedAddress?.latitude && selectedAddress?.longitude
+    ? {
+        lat: Number(selectedAddress.latitude),
+        lng: Number(selectedAddress.longitude),
+        label: formatAddress(selectedAddress),
+        precision: selectedAddress.geocode_precision || "saved_address",
+      }
+    : null
+  const activeDeliveryPin = deliveryPin || savedAddressPin
 
   const addressBranch = (fulfillmentMethod === "pickup")
     ? pickupBranchName
@@ -292,6 +321,92 @@ export default function Checkout({ onNavigate }) {
   
   const needsBranchConfirm = fulfillmentMethod === "delivery" && selectedStoreBranch && addressBranch && (selectedStoreBranch.toLowerCase() !== addressBranch.toLowerCase())
   const [branchConfirmOpen, setBranchConfirmOpen] = useState(false)
+
+  useEffect(() => {
+    setGeocodeError("")
+    if (recipientType === "myself") {
+      setDeliveryPin(null)
+    } else if (manualForm.latitude && manualForm.longitude) {
+      setDeliveryPin({
+        lat: Number(manualForm.latitude),
+        lng: Number(manualForm.longitude),
+        label: manualAddressText,
+        precision: manualForm.geocode_precision || "manual",
+      })
+    } else {
+      setDeliveryPin(null)
+    }
+  }, [recipientType, selectedAddressId, manualAddressText, manualForm.latitude, manualForm.longitude, manualForm.geocode_precision])
+
+  const geocodeDeliveryAddress = async () => {
+    if (!deliveryAddressText) {
+      setGeocodeError("Enter a complete delivery address first.")
+      return
+    }
+    setGeocoding(true)
+    setGeocodeError("")
+    try {
+      const res = await api.geocodeAddress(deliveryAddressText)
+      const match = (res.results || [])[0]
+      if (!match?.lat || !match?.lng) {
+        setGeocodeError("We could not find a map pin for this address. Try adding the barangay, city, and province.")
+        return
+      }
+      const nextPin = {
+        lat: Number(match.lat),
+        lng: Number(match.lng),
+        label: match.label || deliveryAddressText,
+        precision: match.type || "geocoded",
+      }
+      setDeliveryPin(nextPin)
+      if (recipientType === "someone_else") {
+        setManualForm(current => ({
+          ...current,
+          latitude: nextPin.lat,
+          longitude: nextPin.lng,
+          geocode_precision: nextPin.precision,
+        }))
+      }
+    } catch (e) {
+      setGeocodeError(e.message || "Unable to check this address on the map.")
+    } finally {
+      setGeocoding(false)
+    }
+  }
+
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) {
+      setGeocodeError("Your browser does not support location sharing.")
+      return
+    }
+    setGeocoding(true)
+    setGeocodeError("")
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        const nextPin = {
+          lat: Number(position.coords.latitude),
+          lng: Number(position.coords.longitude),
+          label: "Current location",
+          precision: `gps_${Math.round(position.coords.accuracy || 0)}m`,
+        }
+        setDeliveryPin(nextPin)
+        if (recipientType === "someone_else") {
+          setManualForm(current => ({
+            ...current,
+            latitude: nextPin.lat,
+            longitude: nextPin.lng,
+            geocode_precision: nextPin.precision,
+          }))
+        }
+        setGeocoding(false)
+      },
+      () => {
+        setGeocodeError("Location permission was denied. You can still use the address lookup.")
+        setGeocoding(false)
+      },
+      { enableHighAccuracy: true, timeout: 12000, maximumAge: 60000 },
+    )
+  }
 
   const buildDeliveryNotes = () =>
     `[BRANCH:${addressBranch || "Manila"}] ${fulfillmentMethod === "pickup" ? `Pickup at ${pickupBranch.label}` : `Delivery time: ${deliveryTime}`} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone || "No phone provided"})${appliedVoucher ? ` | Voucher: ${appliedVoucher.code}` : ""}`
@@ -329,6 +444,9 @@ export default function Checkout({ onNavigate }) {
             city: manualForm.city,
             province: manualForm.province,
             zip_code: manualForm.zip || "",
+            latitude: activeDeliveryPin?.lat ?? null,
+            longitude: activeDeliveryPin?.lng ?? null,
+            geocode_precision: activeDeliveryPin?.precision || null,
             is_default: false,
           });
           const res = await api.getAddresses();
@@ -359,6 +477,9 @@ export default function Checkout({ onNavigate }) {
         payment_reference: referenceNumber.trim(),
         fulfillment_method: fulfillmentMethod,
         special_note: orderNote.trim() || null,
+        delivery_lat: activeDeliveryPin?.lat ?? null,
+        delivery_lng: activeDeliveryPin?.lng ?? null,
+        delivery_geocode_precision: activeDeliveryPin?.precision || null,
         
         // 🚀 THE FIX: Force these to strictly lowercase so the Database Enum accepts them!
         branch_name: addressBranch.toLowerCase(),
@@ -429,7 +550,11 @@ export default function Checkout({ onNavigate }) {
         return;
       }
       if (!addressBranch) {
-        setError("Sorry, we currently only deliver to Metro Manila and Pampanga areas. Please provide a valid address within our coverage.");
+        setError("Standard delivery is only available for Pampanga. Manila delivery uses Lalamove.");
+        return;
+      }
+      if (addressBranch === "Manila") {
+        setError("Standard delivery is not available for Manila. Please select Lalamove or Pickup.");
         return;
       }
     } else if (fulfillmentMethod === "lalamove") {
@@ -439,6 +564,10 @@ export default function Checkout({ onNavigate }) {
       }
       if (!isLalamoveAvailable) {
         setError("Lalamove is only available within Metro Manila. Please provide a valid Manila address.");
+        return;
+      }
+      if (!activeDeliveryPin?.lat || !activeDeliveryPin?.lng) {
+        setError("Please confirm the delivery pin before using Lalamove.");
         return;
       }
     } else {
@@ -472,7 +601,11 @@ export default function Checkout({ onNavigate }) {
         return;
       }
       if (!addressBranch) {
-        setError("Sorry, we only deliver to Metro Manila and Pampanga. Please provide a valid address within our coverage.");
+        setError("Standard delivery is only available for Pampanga. Manila delivery uses Lalamove.");
+        return;
+      }
+      if (addressBranch === "Manila") {
+        setError("Standard delivery is not available for Manila. Please select Lalamove or Pickup.");
         return;
       }
     } else if (fulfillmentMethod === "lalamove") {
@@ -482,6 +615,10 @@ export default function Checkout({ onNavigate }) {
       }
       if (!isLalamoveAvailable) {
         setError("Lalamove is only available within Metro Manila. Please provide a valid Manila address.");
+        return;
+      }
+      if (!activeDeliveryPin?.lat || !activeDeliveryPin?.lng) {
+        setError("Please confirm the delivery pin before using Lalamove.");
         return;
       }
     } else if (!deliveryDetails.phone) {
@@ -687,6 +824,64 @@ export default function Checkout({ onNavigate }) {
               )}
             </div>
 
+            {fulfillmentMethod !== "pickup" && deliveryAddressText && (
+              <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-5 shadow-sm">
+                <div className="flex items-center justify-between gap-3 mb-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span className="w-7 h-7 rounded-lg bg-[#F0F7F1] flex items-center justify-center flex-shrink-0">
+                      <svg className="w-4 h-4 text-[#2E8B34]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" /></svg>
+                    </span>
+                    <div className="min-w-0">
+                      <h2 className="text-sm font-bold text-gray-800">Delivery pin</h2>
+                      <p className="text-xs text-gray-500 truncate">{activeDeliveryPin ? activeDeliveryPin.label : deliveryAddressText}</p>
+                    </div>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-1 rounded-full flex-shrink-0 ${activeDeliveryPin ? "bg-[#F0F7F1] text-[#2E8B34]" : "bg-amber-50 text-amber-700"}`}>
+                    {activeDeliveryPin ? "PIN SET" : "NEEDED"}
+                  </span>
+                </div>
+
+                {activeDeliveryPin && (
+                  <div className="rounded-xl overflow-hidden border border-gray-100 bg-gray-50 mb-3 h-48">
+                    <iframe
+                      title="Delivery pin map"
+                      src={makeMapUrl(activeDeliveryPin)}
+                      className="w-full h-full border-0"
+                      loading="lazy"
+                    />
+                  </div>
+                )}
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    onClick={geocodeDeliveryAddress}
+                    disabled={geocoding}
+                    className="flex-1 py-2.5 text-xs font-semibold rounded-lg border border-[#2E8B34] text-[#2E8B34] hover:bg-[#F0F7F1] disabled:opacity-60"
+                  >
+                    {geocoding ? "Checking..." : activeDeliveryPin ? "Refresh pin" : "Check address"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={useCurrentLocation}
+                    disabled={geocoding}
+                    className="flex-1 py-2.5 text-xs font-semibold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+                  >
+                    Use current location
+                  </button>
+                </div>
+
+                {activeDeliveryPin && (
+                  <p className="text-[11px] text-gray-500 mt-2">
+                    Coordinates: {Number(activeDeliveryPin.lat).toFixed(6)}, {Number(activeDeliveryPin.lng).toFixed(6)}
+                  </p>
+                )}
+                {geocodeError && (
+                  <p className="text-[11px] text-red-500 mt-2">{geocodeError}</p>
+                )}
+              </div>
+            )}
+
             {/* Package */}
             <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-5 shadow-sm">
               <p className="text-xs text-gray-400 font-medium mb-4">Package 1 of 1</p>
@@ -705,11 +900,11 @@ export default function Checkout({ onNavigate }) {
                       </div>
                       <span className={`text-sm font-semibold ${fulfillmentMethod === "delivery" ? "text-[#2E8B34]" : "text-gray-700"}`}>Standard</span>
                     </div>
-                    <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">Metro Manila or Pampanga coverage<br />Scheduled by branch team</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">Pampanga branch delivery only<br />Scheduled by branch team</p>
                   </div>
                 )}
 
-                {lalamoveEnabled && (
+                {lalamoveEnabled && isManilaAddress && (
                   <div
                     onClick={() => { if (isLalamoveAvailable) setFulfillmentMethod("lalamove") }}
                     className={`border-2 rounded-lg p-3.5 transition ${isLalamoveAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-60"} ${fulfillmentMethod === "lalamove" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200 hover:border-gray-300"}`}
@@ -1049,7 +1244,7 @@ export default function Checkout({ onNavigate }) {
                 <input
                   type="text"
                   value={manualForm.street}
-                  onChange={e => setManualForm({ ...manualForm, street: e.target.value })}
+                  onChange={e => setManualForm({ ...manualForm, street: e.target.value, latitude: null, longitude: null, geocode_precision: null })}
                   placeholder="123 Main St, Building Name"
                   required
                   className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2E8B34] focus:border-[#2E8B34]"
@@ -1061,7 +1256,7 @@ export default function Checkout({ onNavigate }) {
                   <input
                     type="text"
                     value={manualForm.barangay}
-                    onChange={e => setManualForm({ ...manualForm, barangay: e.target.value })}
+                    onChange={e => setManualForm({ ...manualForm, barangay: e.target.value, latitude: null, longitude: null, geocode_precision: null })}
                     placeholder="Barangay Malabanias"
                     className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2E8B34] focus:border-[#2E8B34]"
                   />
@@ -1071,7 +1266,7 @@ export default function Checkout({ onNavigate }) {
                   <input
                     type="text"
                     value={manualForm.city}
-                    onChange={e => setManualForm({ ...manualForm, city: e.target.value })}
+                    onChange={e => setManualForm({ ...manualForm, city: e.target.value, latitude: null, longitude: null, geocode_precision: null })}
                     placeholder="Angeles"
                     required
                     className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2E8B34] focus:border-[#2E8B34]"
@@ -1083,8 +1278,8 @@ export default function Checkout({ onNavigate }) {
                   <label className="block text-xs font-medium text-gray-500 mb-1.5">Province *</label>
                   <input
                     type="text"
-                    value={manualForm.province}
-                    onChange={e => setManualForm({ ...manualForm, province: e.target.value })}
+                  value={manualForm.province}
+                  onChange={e => setManualForm({ ...manualForm, province: e.target.value, latitude: null, longitude: null, geocode_precision: null })}
                     placeholder="Pampanga"
                     required
                     className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2E8B34] focus:border-[#2E8B34]"
@@ -1094,8 +1289,8 @@ export default function Checkout({ onNavigate }) {
                   <label className="block text-xs font-medium text-gray-500 mb-1.5">ZIP Code</label>
                   <input
                     type="text"
-                    value={manualForm.zip}
-                    onChange={e => setManualForm({ ...manualForm, zip: e.target.value })}
+                  value={manualForm.zip}
+                  onChange={e => setManualForm({ ...manualForm, zip: e.target.value, latitude: null, longitude: null, geocode_precision: null })}
                     placeholder="2009"
                     className="w-full px-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2E8B34] focus:border-[#2E8B34]"
                   />

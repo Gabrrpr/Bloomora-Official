@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Request, Depends
 from sqlalchemy.orm import Session
 from app.core.dependencies import get_db
-from app.models import Order
+from app.models import Delivery, DeliveryStatusEnum, Order, OrderStatusEnum
 
 router = APIRouter(prefix="/webhooks", tags=["Webhooks"])
 
@@ -23,7 +23,20 @@ async def lalamove_webhook(request: Request, db: Session = Depends(get_db)):
             if order:
                 # Update the delivery status with Lalamove's new status
                 # (e.g., ASSIGNING_DRIVER, ON_GOING, PICKED_UP, COMPLETED)
-                order.delivery_status = event_type
+                order.lalamove_status = event_type
+                delivery = db.query(Delivery).filter(Delivery.order_id == order.id).first()
+                if event_type in {"ASSIGNING_DRIVER", "DRIVER_ASSIGNED"}:
+                    order.status = OrderStatusEnum.preparing
+                    if delivery:
+                        delivery.status = DeliveryStatusEnum.assigned
+                elif event_type in {"ON_GOING", "PICKED_UP"}:
+                    order.status = OrderStatusEnum.out_for_delivery
+                    if delivery:
+                        delivery.status = DeliveryStatusEnum.out_for_delivery
+                elif event_type in {"COMPLETED", "DELIVERED"}:
+                    order.status = OrderStatusEnum.delivered
+                    if delivery:
+                        delivery.status = DeliveryStatusEnum.delivered
                 db.commit()
                 print(f"Lalamove Webhook: Order {order.id} updated to {event_type}")
             else:

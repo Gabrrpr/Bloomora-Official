@@ -713,3 +713,46 @@ def list_assignable_orders(
 
     orders = query.order_by(Order.scheduled_at.asc(), Order.created_at.asc()).limit(limit).all()
     return [_serialize_assignable_order(order) for order in orders]
+
+@router.post("/{delivery_id}/assign-lalamove")
+def assign_lalamove_rider(delivery_id: uuid.UUID, db: Session = Depends(get_db)):
+    # 1. Find the delivery record in the database
+    delivery = db.query(Deliveries).filter(Deliveries.id == delivery_id).first()
+    if not delivery:
+        raise HTTPException(status_code=404, detail="Delivery not found")
+
+    # 2. Get the related order details for customer info
+    order = db.query(Order).filter(Order.id == delivery.order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order details not found")
+    if not order.delivery_lat or not order.delivery_lng:
+        raise HTTPException(status_code=400, detail="This order does not have a confirmed delivery pin.")
+
+    try:
+        # 3. Trigger the Lalamove booking
+        lalamove_data = book_lalamove_delivery(
+            customer_name=f"{order.user.first_name} {order.user.last_name}",
+            customer_phone=order.recipient_phone or order.user.phone_number or "09000000000",
+            dropoff_address=order.delivery_address,
+            dropoff_lat=str(order.delivery_lat),
+            dropoff_lng=str(order.delivery_lng),
+        )
+        
+        # 4. Save the Lalamove tracking ID to your deliveries table
+        delivery.lalamove_order_id = lalamove_data["lalamove_order_id"]
+        order.delivery_provider = "lalamove"
+        order.lalamove_order_id = lalamove_data["lalamove_order_id"]
+        order.lalamove_share_link = lalamove_data["share_link"]
+        order.lalamove_status = lalamove_data["status"]
+        delivery.status = "assigned" 
+        db.commit()
+        
+        return {
+            "status": "success", 
+            "message": "Lalamove rider assigned!",
+            "tracking_link": lalamove_data["share_link"]
+        }
+        
+    except Exception as e:
+        print(f"Lalamove Booking Error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to book rider with Lalamove")

@@ -360,6 +360,10 @@ export const api = {
     return api.patch(`/addresses/${addressId}/set-default`, {});
   },
 
+  async geocodeAddress(query) {
+    return api.get(`/addresses/geocode?q=${encodeURIComponent(query)}`);
+  },
+
   // ── Storage / Uploads ───────────────────────────────────────────────────
   async uploadImage(bucket, file) {
     const formData = new FormData();

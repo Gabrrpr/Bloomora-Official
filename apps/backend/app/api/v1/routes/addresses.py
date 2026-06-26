@@ -6,6 +6,7 @@ import uuid
 from app.core.dependencies import get_db, get_current_user
 from app.models import User, Address
 from pydantic import BaseModel
+from app.services.geocoding_service import geocode_address
 
 router = APIRouter(prefix="/addresses", tags=["Addresses"])
 
@@ -19,6 +20,9 @@ class AddressPayload(BaseModel):
     city: str
     province: str
     zip_code: Optional[str] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    geocode_precision: Optional[str] = None
     is_default: bool = False
 
 
@@ -33,6 +37,9 @@ def serialize_address(a: Address) -> dict:
         "city": a.city,
         "province": a.province,
         "zip_code": a.zip_code,
+        "latitude": float(a.latitude) if a.latitude is not None else None,
+        "longitude": float(a.longitude) if a.longitude is not None else None,
+        "geocode_precision": a.geocode_precision,
         "is_default": a.is_default,
         "created_at": a.created_at.isoformat() if a.created_at else None,
     }
@@ -69,6 +76,9 @@ def create_address(
         city=payload.city,
         province=payload.province,
         zip_code=payload.zip_code,
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        geocode_precision=payload.geocode_precision,
         is_default=payload.is_default,
     )
     db.add(new_address)
@@ -108,11 +118,25 @@ def update_address(
     address.city = payload.city
     address.province = payload.province
     address.zip_code = payload.zip_code
+    address.latitude = payload.latitude
+    address.longitude = payload.longitude
+    address.geocode_precision = payload.geocode_precision
     address.is_default = payload.is_default
 
     db.commit()
     db.refresh(address)
     return {"status": "success", "address": serialize_address(address)}
+
+
+@router.get("/geocode", response_model=dict)
+def geocode(
+    q: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    del db, current_user
+    results = geocode_address(q)
+    return {"results": results}
 
 
 @router.delete("/{address_id}", response_model=dict)

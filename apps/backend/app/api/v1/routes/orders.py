@@ -59,6 +59,47 @@ def _material_row(product: Optional[Product], quantity, material_type: str = "Re
         "material_type": material_type,
     }
 
+
+def _coordinate(value):
+    if value is None or value == "":
+        return None
+    try:
+        return Decimal(str(value))
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid delivery coordinates.")
+
+
+def _delivery_tracking(order: Order) -> dict:
+    delivery = getattr(order, "delivery", None)
+    rider = delivery.rider if delivery else None
+    vehicle = delivery.vehicle if delivery else None
+    return {
+        "provider": order.delivery_provider,
+        "lalamove_order_id": order.lalamove_order_id,
+        "lalamove_share_link": order.lalamove_share_link,
+        "lalamove_status": order.lalamove_status,
+        "status": (
+            delivery.status.value
+            if delivery and hasattr(delivery.status, "value")
+            else (str(delivery.status) if delivery else None)
+        ),
+        "estimated_arrival": delivery.estimated_arrival.isoformat() if delivery and delivery.estimated_arrival else None,
+        "rider": {
+            "id": str(rider.id),
+            "name": f"{rider.first_name} {rider.last_name}".strip() or rider.username,
+            "phone": rider.phone_number,
+        } if rider else None,
+        "vehicle": {
+            "id": str(vehicle.id),
+            "plate_number": vehicle.plate_number,
+            "vehicle_type": vehicle.vehicle_type.value if hasattr(vehicle.vehicle_type, "value") else str(vehicle.vehicle_type),
+            "brand": vehicle.brand,
+            "model": vehicle.model,
+            "color": vehicle.color,
+        } if vehicle else None,
+    }
+
+
 def _product_materials(db: Optional[Session], product: Optional[Product]) -> list[dict]:
     if not db or not product:
         return []
@@ -189,6 +230,9 @@ def serialize_order(o) -> dict:
         "total_amount": float(o.total_amount),
         "status": o.status.value if hasattr(o.status, "value") else o.status,
         "delivery_address": o.delivery_address,
+        "delivery_lat": float(o.delivery_lat) if getattr(o, "delivery_lat", None) is not None else None,
+        "delivery_lng": float(o.delivery_lng) if getattr(o, "delivery_lng", None) is not None else None,
+        "delivery_geocode_precision": getattr(o, "delivery_geocode_precision", None),
         "delivery_notes": o.delivery_notes,
         "recipient_first_name": o.recipient_first_name,
         "recipient_last_name": o.recipient_last_name,
@@ -221,6 +265,7 @@ def serialize_order(o) -> dict:
         "created_at": o.created_at.isoformat() if getattr(o, 'created_at', None) else None,
         "updated_at": o.updated_at.isoformat() if getattr(o, 'updated_at', None) else None,
         "items": serialized_items,
+        "delivery_tracking": _delivery_tracking(o),
     }
 
 
@@ -228,7 +273,23 @@ def _derive_delivery_branch(address: str) -> str:
     normalized = (address or "").lower()
     if any(value in normalized for value in ("pampanga", "angeles", "mabalacat", "san fernando")):
         return "Pampanga"
-    if any(value in normalized for value in ("metro manila", "national capital region", " ncr", "manila")):
+    if any(value in normalized for value in (
+        "metro manila",
+        "national capital region",
+        " ncr",
+        "manila",
+        "quezon",
+        "makati",
+        "pasig",
+        "taguig",
+        "caloocan",
+        "paranaque",
+        "valenzuela",
+        "muntinlupa",
+        "mandaluyong",
+        "marikina",
+        "pasay",
+    )):
         return "Manila"
     raise HTTPException(
         status_code=400,
@@ -248,7 +309,7 @@ def _validate_delivery_date(value, fulfillment_method: str, cutoff: str = "14:00
     if local_date < today or local_date > today + timedelta(days=30):
         raise HTTPException(status_code=400, detail="Delivery date must be within the next 30 days.")
     cutoff_hour, cutoff_minute = (int(part) for part in cutoff.split(":", 1))
-    if fulfillment_method == "delivery" and local_date == today and (now.hour, now.minute) >= (cutoff_hour, cutoff_minute):
+    if fulfillment_method in {"delivery", "lalamove"} and local_date == today and (now.hour, now.minute) >= (cutoff_hour, cutoff_minute):
         display_hour = cutoff_hour % 12 or 12
         suffix = "AM" if cutoff_hour < 12 else "PM"
         raise HTTPException(status_code=400, detail=f"Same-day delivery is unavailable after {display_hour}:{cutoff_minute:02d} {suffix}.")
@@ -361,11 +422,20 @@ async def create_order(
     delivery_address = payload.get("delivery_address", "")
     raw_branch = (
         _derive_delivery_branch(delivery_address)
-        if fulfillment_method == "delivery"
+        if fulfillment_method in {"delivery", "lalamove"}
         else str(payload.get("branch_name") or payload.get("branch") or "Manila").strip().title()
     )
     if raw_branch not in {"Manila", "Pampanga"}:
         raise HTTPException(status_code=400, detail="Select either the Manila or Pampanga branch.")
+    if fulfillment_method == "delivery" and raw_branch == "Manila":
+        raise HTTPException(status_code=400, detail="Standard delivery is not available for Manila. Please select Lalamove or Pickup.")
+    if fulfillment_method == "lalamove" and raw_branch != "Manila":
+        raise HTTPException(status_code=400, detail="Lalamove delivery is available only for Manila addresses.")
+    delivery_lat = _coordinate(payload.get("delivery_lat"))
+    delivery_lng = _coordinate(payload.get("delivery_lng"))
+    delivery_geocode_precision = str(payload.get("delivery_geocode_precision") or "").strip() or None
+    if fulfillment_method == "lalamove" and (delivery_lat is None or delivery_lng is None):
+        raise HTTPException(status_code=400, detail="Please confirm the exact delivery pin before selecting Lalamove.")
     delivery_settings = get_delivery_settings(db)
     scheduled_at = _validate_delivery_date(
         payload.get("scheduled_at") or payload.get("delivery_date"),
@@ -432,7 +502,7 @@ async def create_order(
 
         delivery_fee = (
             Decimal(str(delivery_settings["delivery_fee"]))
-            if fulfillment_method == "delivery"
+            if fulfillment_method in {"delivery", "lalamove"}
             else Decimal("0.00")
         )
         minimum_order = Decimal(str(delivery_settings["minimum_order"]))
@@ -457,6 +527,9 @@ async def create_order(
             total_amount=total_amount,
             status=OrderStatusEnum.pending_payment,
             delivery_address=delivery_address,
+            delivery_lat=delivery_lat,
+            delivery_lng=delivery_lng,
+            delivery_geocode_precision=delivery_geocode_precision,
             delivery_notes=delivery_notes,
             special_note=payload.get("special_note"),
             scheduled_at=scheduled_at,
@@ -525,7 +598,7 @@ async def create_order(
 
         db.commit()
 
-        if payload.get("delivery_method") == "lalamove":
+        if fulfillment_method == "lalamove" or payload.get("delivery_method") == "lalamove":
             try:
                 print("Dispatching Lalamove rider...")
                 lalamove_res = book_lalamove_delivery(
@@ -533,20 +606,24 @@ async def create_order(
 
                     customer_phone=current_user.phone_number or "09000000000",
                     dropoff_address=payload.get("delivery_address", ""),
-                    dropoff_lat=str(payload.get("delivery_lat", "14.5995")),
-                    dropoff_lng=str(payload.get("delivery_lng", "120.9842")),
+                    dropoff_lat=str(delivery_lat),
+                    dropoff_lng=str(delivery_lng),
                 )
 
                 # Save the Lalamove IDs back to the order
                 order.delivery_provider = "lalamove"
                 order.lalamove_order_id = lalamove_res["lalamove_order_id"]
                 order.lalamove_share_link = lalamove_res["share_link"]
+                order.lalamove_status = lalamove_res["status"]
                 order.status = OrderStatusEnum.preparing
                 db.commit()
                 print(f"Lalamove Order Created: {order.lalamove_order_id}")
 
             except Exception as e:
                 print(f"❌ Lalamove Booking Failed: {str(e)}")
+                order.delivery_provider = "lalamove"
+                order.lalamove_status = "booking_failed"
+                db.commit()
                 # Even if Lalamove fails, the order is already placed.
                 # You might want to email the staff to book manually.
 
