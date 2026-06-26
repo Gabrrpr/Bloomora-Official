@@ -401,7 +401,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         role = user.role.value if hasattr(user.role, 'value') else user.role
 
         exchange_code = store_oauth_tokens(jwt_access, jwt_refresh, role)
-        return RedirectResponse(url=f"{FRONTEND_URL}/oauth/callback?code={exchange_code}")
+        return RedirectResponse(url=f"{FRONTEND_URL}/?token={jwt_access}")
 
     except Exception as e:
         print("Google OAuth error:", e)
@@ -442,7 +442,7 @@ async def facebook_callback(request: Request, db: Session = Depends(get_db)):
         role = user.role.value if hasattr(user.role, 'value') else user.role
 
         exchange_code = store_oauth_tokens(jwt_access, jwt_refresh, role)
-        return RedirectResponse(url=f"{FRONTEND_URL}/oauth/callback?code={exchange_code}")
+        return RedirectResponse(url=f"{FRONTEND_URL}/?token={jwt_access}")
 
     except HTTPException:
         raise
