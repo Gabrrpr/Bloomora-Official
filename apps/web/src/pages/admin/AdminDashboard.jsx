@@ -1973,7 +1973,7 @@ function SidebarContent({ active, setActive, collapsed, onLogout, user }) {
         )}
       </div>
 
-      <nav className="flex-1 py-2 px-2 overflow-y-auto">
+      <nav className="flex-1 py-2 px-2 overflow-hidden">
         <div className="space-y-0.5">
           {NAV_MAIN
             .filter(item => !user?.role || user.role !== "staff" || item.staff)
@@ -2081,7 +2081,7 @@ function ResizableSidebar({ active, setActive, onLogout, user, sidebarWidth, set
 
   return (
     <aside className="hidden lg:flex flex-col flex-shrink-0 min-h-screen relative"
-      style={{ width: `${sidebarWidth}px`, backgroundColor: t.sidebarBg, borderRight: `1px solid ${t.sidebarBorder}`, boxShadow: "1px 0 6px rgba(0,0,0,0.05)", transition: isDragging.current ? "none" : "width 0.25s cubic-bezier(0.4,0,0.2,1)", overflow: "hidden" }}>
+      style={{ width: `${sidebarWidth}px`, height: "100vh", position: "sticky", top: 0, backgroundColor: t.sidebarBg, borderRight: `1px solid ${t.sidebarBorder}`, boxShadow: "1px 0 6px rgba(0,0,0,0.05)", transition: isDragging.current ? "none" : "width 0.25s cubic-bezier(0.4,0,0.2,1)", overflow: "hidden" }}>
       <SidebarContent active={active} setActive={setActive} collapsed={collapsed} onLogout={onLogout} user={user} />
       <div onMouseDown={onMouseDown} onMouseEnter={() => setHovering(true)} onMouseLeave={() => setHovering(false)}
         style={{ position: "absolute", top: 0, right: 0, width: "6px", height: "100%", cursor: "col-resize", zIndex: 10 }}>
@@ -2190,7 +2190,7 @@ export default function AdminDashboard({ onNavigate }) {
 
 
   return (
-    <div className="min-h-screen flex" style={{ backgroundColor: t.pageBg }}>
+    <div className="h-screen flex overflow-hidden" style={{ backgroundColor: t.pageBg }}>
 
       {mobileOpen && (
         <div className="fixed inset-0 z-40 lg:hidden" style={{ backgroundColor: t.overlayBg, backdropFilter: "blur(2px)" }}
@@ -2205,7 +2205,7 @@ export default function AdminDashboard({ onNavigate }) {
 
       <ResizableSidebar active={active} setActive={goTo} onLogout={handleLogout} user={user} sidebarWidth={sidebarWidth} setSidebarWidth={setSidebarWidth} />
 
-      <div className="flex-1 flex flex-col min-h-screen min-w-0">
+      <div className="flex-1 flex flex-col min-h-0 min-w-0">
 
         {/* ─── Topbar ─── */}
         <header className="flex-shrink-0 flex items-center px-4 lg:px-6"
@@ -2336,7 +2336,7 @@ export default function AdminDashboard({ onNavigate }) {
           </div>
         </header>
 
-        <main className="flex-1 p-4 lg:p-6 overflow-y-auto">
+        <main className="flex-1 min-h-0 p-4 lg:p-6 overflow-y-auto">
           {renderMain()}
         </main>
       </div>

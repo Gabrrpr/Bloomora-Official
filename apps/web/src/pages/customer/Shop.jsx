@@ -43,6 +43,9 @@ const toFilterList = value => {
   return trimmed.split(",")
 }
 
+const ratingFromProduct = product => Number(product?.average_rating ?? product?.rating ?? 0)
+const reviewCountFromProduct = product => Number(product?.review_count ?? product?.reviews ?? 0)
+
 function useWidth() {
   const [w, setW] = useState(typeof window !== "undefined" ? window.innerWidth : 1024)
   useEffect(() => {
@@ -681,8 +684,8 @@ export default function Shop({ onNavigate, initialCategory }) {
             ...p,
             image: p.image_url || new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href,
             original: p.original_price || null, 
-            rating: 5.0,
-            reviews: 0,
+            rating: ratingFromProduct(p),
+            reviews: reviewCountFromProduct(p),
             ribbon: p.ribbon || null,
             search_tags: p.search_tags || p.tags || [],
           }));
@@ -802,8 +805,8 @@ export default function Shop({ onNavigate, initialCategory }) {
           ? res.map(p => ({
               ...p,
               image: p.image_url || p.image || new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href,
-              rating: typeof p.rating === "number" ? p.rating : 5.0,
-              reviews: typeof p.reviews === "number" ? p.reviews : 0,
+              rating: ratingFromProduct(p),
+              reviews: reviewCountFromProduct(p),
               ribbon: p.ribbon || null,
               original: p.original_price || null,
             }))
@@ -892,7 +895,7 @@ export default function Shop({ onNavigate, initialCategory }) {
     .sort((a, b) => {
       if (sortBy === "price-asc")  return a.price - b.price;
       if (sortBy === "price-desc") return b.price - a.price;
-      if (sortBy === "rating")     return (b.rating || 0) - (a.rating || 0);
+      if (sortBy === "rating")     return (b.rating || 0) - (a.rating || 0) || (b.reviews || 0) - (a.reviews || 0);
       if (sortBy === "newest") return new Date(b.created_at || 0) - new Date(a.created_at || 0);
       return (b.reviews || 0) - (a.reviews || 0);
     });

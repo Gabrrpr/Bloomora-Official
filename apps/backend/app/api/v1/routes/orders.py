@@ -13,7 +13,7 @@ import secrets
 
 # 🚀 INJECTED SECURE DEPENDENCIES
 from app.core.dependencies import get_db, get_current_user, require_staff
-from app.models import User, RoleEnum, Order, OrderItem, StockReservation, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory
+from app.models import User, RoleEnum, Order, OrderItem, StockReservation, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory, ProductRecipe
 from app.utils.lalamove import book_lalamove_delivery
 
 # We use your dedicated PayMongo service instead of raw requests!
@@ -48,6 +48,67 @@ def _parse_datetime(value):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid delivery date.")
 
+def _material_row(product: Optional[Product], quantity, material_type: str = "Recipe item") -> dict:
+    qty = float(quantity or 0)
+    return {
+        "product_id": str(product.id) if product else None,
+        "name": product.name if product else "Unknown material",
+        "quantity": qty,
+        "unit": product.inventory.unit_type if product and product.inventory and product.inventory.unit_type else "piece",
+        "stock": int(product.inventory.current_stock or 0) if product and product.inventory else 0,
+        "material_type": material_type,
+    }
+
+def _product_materials(db: Optional[Session], product: Optional[Product]) -> list[dict]:
+    if not db or not product:
+        return []
+
+    rows = db.query(ProductRecipe).filter(ProductRecipe.parent_product_id == product.id).all()
+    if rows:
+        return [_material_row(row.component_product, row.quantity_required) for row in rows]
+
+    materials = []
+    for item in getattr(product, "composition", None) or []:
+        component_id = item.get("product_id") or item.get("id")
+        if not component_id:
+            continue
+        try:
+            component_uuid = uuid.UUID(str(component_id))
+        except ValueError:
+            continue
+        component = db.query(Product).filter(Product.id == component_uuid).first()
+        materials.append(_material_row(component, item.get("quantity") or item.get("qty") or 1))
+    return materials
+
+def _custom_arrangement_materials(arrangement: Optional[Arrangement]) -> list[dict]:
+    if not arrangement:
+        return []
+
+    materials = []
+    linked_parts = [
+        ("Flower", getattr(arrangement, "flower", None)),
+        ("Vase", getattr(arrangement, "vase", None)),
+        ("Wrapping", getattr(arrangement, "wrapping", None)),
+        ("Accessory", getattr(arrangement, "accessory", None)),
+    ]
+    for material_type, part in linked_parts:
+        if not part:
+            continue
+        product = getattr(part, "product", None)
+        quantity = getattr(part, "quantity", 1) or 1
+        if product:
+            materials.append(_material_row(product, quantity, material_type))
+        else:
+            materials.append({
+                "product_id": None,
+                "name": getattr(part, "name", None) or material_type,
+                "quantity": float(quantity),
+                "unit": "piece",
+                "stock": int(getattr(part, "quantity", 0) or 0),
+                "material_type": material_type,
+            })
+    return materials
+
 def serialize_order(o) -> dict:
     _expire_pending_transaction(object_session(o), o)
     db = object_session(o)
@@ -72,6 +133,9 @@ def serialize_order(o) -> dict:
                 "quantity": item.quantity,
                 "unit_price": float(unit_price),
                 "line_total": float(unit_price * item.quantity),
+                "materials": _custom_arrangement_materials(arrangement) if arrangement else _product_materials(db, product),
+                "arrangement_prompt": getattr(arrangement, "prompt_text", None) if arrangement else None,
+                "arrangement_description": getattr(arrangement, "description", None) if arrangement else None,
                 "card_message": getattr(item, "card_message", None),
                 "card_enabled": bool(getattr(item, "card_enabled", False)),
             })

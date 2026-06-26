@@ -37,6 +37,8 @@ BACKEND_URL = BACKEND_URL.rstrip("/")
 
 GOOGLE_REDIRECT_URI  = f"{BACKEND_URL}/api/v1/auth/google/callback"
 FACEBOOK_REDIRECT_URI = f"{BACKEND_URL}/api/v1/auth/facebook/callback"
+OAUTH_CALLBACK_URL = f"{FRONTEND_URL}/oauth/callback"
+LOGIN_URL = f"{FRONTEND_URL}/login"
 
 # ── OAuth Setup ───────────────────────────────────────────────────────────────
 oauth = OAuth()
@@ -377,7 +379,7 @@ async def google_login(request: Request):
 async def google_callback(request: Request, db: Session = Depends(get_db)):
     error = request.query_params.get("error")
     if error:
-        return RedirectResponse(url=f"{FRONTEND_URL}/?error=google_auth_failed")
+        return RedirectResponse(url=f"{LOGIN_URL}?error=google_auth_failed")
 
     try:
         # 🚀 SECURITY FIX: Use Authlib wrapper to securely enforce and check state CSRF parameter
@@ -401,11 +403,11 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         role = user.role.value if hasattr(user.role, 'value') else user.role
 
         exchange_code = store_oauth_tokens(jwt_access, jwt_refresh, role)
-        return RedirectResponse(url=f"{FRONTEND_URL}/?token={jwt_access}")
+        return RedirectResponse(url=f"{OAUTH_CALLBACK_URL}?code={exchange_code}")
 
     except Exception as e:
         print("Google OAuth error:", e)
-        return RedirectResponse(url=f"{FRONTEND_URL}/?error=google_auth_failed")
+        return RedirectResponse(url=f"{LOGIN_URL}?error=google_auth_failed")
 
 
 # ── Facebook OAuth ────────────────────────────────────────────────────────────
@@ -418,7 +420,7 @@ async def facebook_login(request: Request):
 async def facebook_callback(request: Request, db: Session = Depends(get_db)):
     error = request.query_params.get("error")
     if error:
-        return RedirectResponse(url=f"{FRONTEND_URL}/?error=facebook_auth_failed")
+        return RedirectResponse(url=f"{LOGIN_URL}?error=facebook_auth_failed")
 
     try:
         token = await oauth.facebook.authorize_access_token(request)
@@ -442,13 +444,14 @@ async def facebook_callback(request: Request, db: Session = Depends(get_db)):
         role = user.role.value if hasattr(user.role, 'value') else user.role
 
         exchange_code = store_oauth_tokens(jwt_access, jwt_refresh, role)
-        return RedirectResponse(url=f"{FRONTEND_URL}/?token={jwt_access}")
+        return RedirectResponse(url=f"{OAUTH_CALLBACK_URL}?code={exchange_code}")
 
-    except HTTPException:
-        raise
+    except HTTPException as e:
+        print("Facebook OAuth error:", e.detail)
+        return RedirectResponse(url=f"{LOGIN_URL}?error=facebook_email_required")
     except Exception as e:
         print("Facebook OAuth error:", e)
-        return RedirectResponse(url=f"{FRONTEND_URL}/?error=facebook_auth_failed")
+        return RedirectResponse(url=f"{LOGIN_URL}?error=facebook_auth_failed")
 
 
 # ── Me ────────────────────────────────────────────────────────────────────────

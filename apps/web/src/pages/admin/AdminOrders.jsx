@@ -128,6 +128,7 @@ export default function AdminOrders() {
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState(null)
   const [viewingOrder, setViewingOrder] = useState(null)
+  const [imagePreview, setImagePreview] = useState(null)
   const [page, setPage] = useState(1);
   const [entered, setEntered] = useState(false)
   const [phText, setPhText] = useState("")
@@ -157,6 +158,10 @@ export default function AdminOrders() {
   const [recipientName, setRecipientName] = useState("");
   const [pickupMode, setPickupMode] = useState("walkin");
   const [pickupDate, setPickupDate] = useState("");
+
+  const openImagePreview = (src, title) => {
+    setImagePreview({ src: src || ImageNotFound, title: title || "Order image" })
+  }
 
   const fetchOrders = useCallback(async () => {
     setLoading(true); setError(null)
@@ -543,6 +548,39 @@ export default function AdminOrders() {
       `}</style>
 
       {/* ── Order Detail Modal ── */}
+      {imagePreview && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center p-4 no-print"
+          style={{ backgroundColor: "rgba(2,6,23,0.86)", backdropFilter: "blur(6px)" }}
+          onClick={e => { if (e.target === e.currentTarget) setImagePreview(null) }}>
+          <div className="w-full flex flex-col gap-3" style={{ maxWidth: "min(920px, 96vw)" }}>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm font-semibold truncate" style={{ color: "#e5e7eb" }}>{imagePreview.title}</p>
+              <button
+                type="button"
+                onClick={() => setImagePreview(null)}
+                className="w-9 h-9 rounded-full flex items-center justify-center transition-all hover:scale-105"
+                style={{ backgroundColor: "rgba(255,255,255,0.12)", color: "white", border: "1px solid rgba(255,255,255,0.18)" }}
+                aria-label="Close image preview">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="rounded-xl overflow-hidden flex items-center justify-center"
+              style={{ backgroundColor: "#020617", border: "1px solid rgba(255,255,255,0.16)", maxHeight: "82vh" }}>
+              <img
+                src={imagePreview.src || ImageNotFound}
+                alt={imagePreview.title || "Order image preview"}
+                className="w-full h-full object-contain"
+                style={{ maxHeight: "82vh" }}
+                onError={e => { e.currentTarget.src = ImageNotFound }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {viewingOrder && (
         <div className="fixed inset-0 z-50 flex items-center justify-center px-4 no-print"
           style={{ backgroundColor: modalD.overlayBg, backdropFilter: "blur(4px)" }}
@@ -564,6 +602,34 @@ export default function AdminOrders() {
             
             {/* Body */}
             <div className="p-6 space-y-6 overflow-y-auto">
+              <div className="rounded-xl overflow-hidden border" style={{ borderColor: isDark ? "#334155" : "#e2e8f0", backgroundColor: isDark ? "#0f172a" : "#f8fafc" }}>
+                <button
+                  type="button"
+                  onClick={() => openImagePreview(viewingOrder.image_url || ImageNotFound, viewingOrder.product_name)}
+                  className="relative block w-full group cursor-zoom-in"
+                  title="View larger image"
+                  aria-label="View order image larger">
+                <img
+                  src={viewingOrder.image_url || ImageNotFound}
+                  alt={viewingOrder.product_name || "Order image"}
+                  className="w-full object-cover"
+                  style={{ height: "220px" }}
+                  onError={e => { e.currentTarget.src = ImageNotFound }}
+                />
+                  <span className="absolute right-3 bottom-3 px-2.5 py-1 rounded-md text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity"
+                    style={{ backgroundColor: "rgba(15,23,42,0.82)", color: "white" }}>
+                    Click to zoom
+                  </span>
+                </button>
+                <div className="px-4 py-3 flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold truncate" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>
+                    {viewingOrder.product_name}
+                  </p>
+                  <p className="text-sm font-bold whitespace-nowrap" style={{ color: isDark ? "#4ade80" : DG }}>
+                    ₱{Number(viewingOrder.total_amount || 0).toLocaleString()}
+                  </p>
+                </div>
+              </div>
               <div className="p-4 rounded-xl" style={{ backgroundColor: isDark ? "#1e293b" : "#f1f5f9" }}>
                 <p className="text-[10px] font-bold uppercase tracking-widest mb-3" style={{ color: subTxt }}>Customer Profile</p>
                 <div className="space-y-1">
@@ -588,10 +654,55 @@ export default function AdminOrders() {
                       {viewingOrder.items.map(item => (
                         <div key={item.id} className="p-3 rounded-lg border"
                           style={{ borderColor: isDark ? "#334155" : "#e2e8f0", background: isDark ? "#0f172a" : "#f8fafc" }}>
-                          <div className="flex justify-between gap-3">
-                            <p className="text-sm font-semibold" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{item.product_name}</p>
-                            <p className="text-xs font-semibold" style={{ color: subTxt }}>x{item.quantity}</p>
+                          <div className="flex items-center justify-between gap-3">
+                            <button
+                              type="button"
+                              onClick={() => openImagePreview(item.image_url || viewingOrder.image_url || ImageNotFound, item.product_name)}
+                              className="w-14 h-14 rounded-lg overflow-hidden flex-shrink-0 cursor-zoom-in transition-transform hover:scale-[1.03]"
+                              title="View larger image"
+                              aria-label={`View ${item.product_name || "order item"} image larger`}
+                              style={{ border: `1px solid ${isDark ? "#334155" : "#e2e8f0"}`, backgroundColor: isDark ? "#111827" : "white" }}>
+                              <img
+                                src={item.image_url || viewingOrder.image_url || ImageNotFound}
+                                alt={item.product_name || "Order item"}
+                                className="w-full h-full object-cover"
+                                onError={e => { e.currentTarget.src = ImageNotFound }}
+                              />
+                            </button>
+                            <p className="text-sm font-semibold flex-1 min-w-0 truncate" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{item.product_name}</p>
+                            <p className="text-xs font-semibold flex-shrink-0" style={{ color: subTxt }}>x{item.quantity}</p>
                           </div>
+                          <div className="mt-1 flex items-center justify-between gap-3 text-xs" style={{ color: subTxt }}>
+                            <span>Unit: ₱{Number(item.unit_price || 0).toLocaleString()}</span>
+                            <span className="font-semibold">Line: ₱{Number(item.line_total || 0).toLocaleString()}</span>
+                          </div>
+                          {(item.arrangement_prompt || item.arrangement_description) && (
+                            <div className="mt-2 p-2 rounded-md" style={{ background: isDark ? "#111827" : "white", border: `1px solid ${isDark ? "#334155" : "#e2e8f0"}` }}>
+                              <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: subTxt }}>Custom Arrangement Brief</p>
+                              <p className="text-xs whitespace-pre-wrap leading-relaxed" style={{ color: isDark ? "#cbd5e1" : "#334155" }}>
+                                {item.arrangement_description || item.arrangement_prompt}
+                              </p>
+                            </div>
+                          )}
+                          {Array.isArray(item.materials) && item.materials.length > 0 && (
+                            <div className="mt-3">
+                              <p className="text-[10px] font-bold uppercase tracking-widest mb-2" style={{ color: subTxt }}>Recipe / Materials Needed</p>
+                              <div className="space-y-1.5">
+                                {item.materials.map((material, materialIdx) => (
+                                  <div key={`${item.id}-material-${materialIdx}`} className="flex items-center justify-between gap-3 px-2.5 py-2 rounded-md"
+                                    style={{ background: isDark ? "#111827" : "white", border: `1px solid ${isDark ? "#334155" : "#e2e8f0"}` }}>
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-semibold truncate" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{material.name}</p>
+                                      <p className="text-[11px]" style={{ color: subTxt }}>{material.material_type || "Material"} · stock {material.stock ?? 0}</p>
+                                    </div>
+                                    <span className="text-xs font-bold whitespace-nowrap" style={{ color: isDark ? "#4ade80" : DG }}>
+                                      {Number(material.quantity || 0).toLocaleString()} {material.unit || "piece"}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                           {item.card_message && (
                             <div className="mt-2 p-2.5 rounded-md"
                               style={{ background: isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4", border: `1px solid ${isDark ? "rgba(74,222,128,0.25)" : "#bbf7d0"}` }}>

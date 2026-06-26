@@ -146,6 +146,21 @@ export default function Login({ onNavigate }) {
   const [splitting, setSplitting]         = useState(false)
   const [pendingRoute, setPendingRoute]   = useState(null)
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const oauthError = params.get("error")
+    if (!oauthError) return
+
+    const messages = {
+      google_auth_failed: "Google login could not be completed. Please try again.",
+      facebook_auth_failed: "Facebook login could not be completed. Please try again.",
+      facebook_email_required: "Facebook did not share an email address. Please allow email access or use email login.",
+      no_email: "The social account did not provide an email address.",
+    }
+    setError(messages[oauthError] || "Social login could not be completed. Please try again.")
+    window.history.replaceState({}, "", "/login")
+  }, [])
+
   // ── Rate-limit state ──────────────────────────────────────────────────────
   const [lockoutSecs, setLockoutSecs]     = useState(0)   // 0 = not locked
   const [attempts, setAttempts]           = useState(0)

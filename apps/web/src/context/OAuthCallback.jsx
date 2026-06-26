@@ -1,45 +1,51 @@
-import { useEffect, useState, useRef } from "react";
-import { useAuth } from "./AuthContext";
-import { API_BASE } from "../config/api";
+import { useEffect, useRef, useState } from "react"
+import { useAuth } from "./AuthContext"
+import { API_BASE } from "../config/api"
 
 export default function OAuthCallback({ onNavigate }) {
-  const { setUserFromToken } = useAuth();
-  const [status, setStatus] = useState("Authenticating...");
-  const exchangeAttempted = useRef(false);
+  const { setUserFromToken } = useAuth()
+  const [status, setStatus] = useState("Authenticating...")
+  const exchangeAttempted = useRef(false)
 
   useEffect(() => {
-    if (exchangeAttempted.current) return;
-    exchangeAttempted.current = true;
+    if (exchangeAttempted.current) return
+    exchangeAttempted.current = true
 
     const handleExchange = async () => {
-  const params = new URLSearchParams(window.location.search);
-  const code = params.get("code");
+      const params = new URLSearchParams(window.location.search)
+      const code = params.get("code")
 
-  if (!code) {
-    onNavigate("home"); // Don't redirect to login
-    return;
-  }
+      if (!code) {
+        setStatus("Missing authentication code.")
+        onNavigate("login")
+        return
+      }
 
-  try {
-    const response = await fetch(`${API_BASE}/auth/oauth/exchange?code=${code}`);
-    const data = await response.json();
+      try {
+        const response = await fetch(`${API_BASE}/auth/oauth/exchange?code=${encodeURIComponent(code)}`)
+        const data = await response.json()
 
-    if (response.ok && data.access_token) {
-      await setUserFromToken(data.access_token);
-      onNavigate("home");
-    } else {
-      // 🚀 CRITICAL: If server rejects code, do NOT redirect to login.
-      // Just clear the status and stay on home.
-      console.error("Auth rejected:", data.detail);
-      onNavigate("home"); 
+        if (response.ok && data.access_token) {
+          localStorage.setItem("access_token", data.access_token)
+          if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token)
+          await setUserFromToken(data.access_token)
+          window.history.replaceState({}, "", "/")
+          onNavigate("home")
+          return
+        }
+
+        console.error("OAuth rejected:", data.detail)
+        setStatus("Social login could not be completed.")
+        onNavigate("login")
+      } catch (err) {
+        console.error("OAuth exchange failed:", err)
+        setStatus("Social login could not be completed.")
+        onNavigate("login")
+      }
     }
-  } catch (err) {
-    onNavigate("home"); // Stay on home if network fails
-  }
-};
 
-    handleExchange();
-  }, [onNavigate, setUserFromToken]);
+    handleExchange()
+  }, [onNavigate, setUserFromToken])
 
-  return <div className="p-10 text-center">{status}</div>;
+  return <div className="p-10 text-center">{status}</div>
 }
