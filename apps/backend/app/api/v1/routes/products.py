@@ -1020,7 +1020,7 @@ def get_similar_products(product_id: str, limit: int = 5, db: Session = Depends(
 
     return similar_products
 @router.get("/admin/settings/lalamove", tags=["Admin"])
-def get_lalamove_status(db: Session = Depends(get_db), current_user: User = Depends(require_staff)):
+def get_lalamove_status(db: Session = Depends(get_db)):
     # Query your database for the setting
     query = text("SELECT setting_value FROM store_settings WHERE setting_key = 'lalamove_enabled'")
     result = db.execute(query).fetchone()

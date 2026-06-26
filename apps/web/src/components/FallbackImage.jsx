@@ -1,10 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 
-/**
- * Generic image component that guarantees a fallback image.
- * - If src is empty/null -> fallback shows immediately
- * - If src 404s/throws -> fallback swaps in via onError
- */
+
 export default function FallbackImage({
   src,
   alt = "",
@@ -20,9 +16,6 @@ export default function FallbackImage({
   }, [src, fallbackSrc]);
 
   const safeFallback = useMemo(() => fallbackSrc || "../assets/default-img/ImageNotFound.webp", [fallbackSrc]);
-
-  // If callers explicitly want the logo fallback, don't override it.
-  // (We keep a global default that points to ImageNotFound.webp, but the callers can still pass /EstingsLogo.svg.)
 
   return (
     <img

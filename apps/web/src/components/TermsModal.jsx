@@ -1,18 +1,10 @@
 import { useEffect, useRef } from "react"
 
-/**
- * TermsModal — popup version of the Terms & Conditions page.
- * Used in Register.jsx so the user can review T&C without losing their form progress.
- *
- * Props:
- *   open        - boolean: controls visibility
- *   onClose     - () => void
- *   onAgree     - () => void  (called when user clicks "I Agree" inside the modal; optional)
- */
+
 export default function TermsModal({ open, onClose, onAgree }) {
   const dialogRef = useRef(null)
 
-  // Lock body scroll while open + handle ESC
+
   useEffect(() => {
     if (!open) return
     const prev = document.body.style.overflow

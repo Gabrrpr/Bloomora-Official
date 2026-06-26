@@ -7,7 +7,7 @@ import { api } from "../services/api.js";
 import estingsLogo from "../assets/EstingsLogo.svg";
 import estingsText from "../assets/Estings.svg";
 
-// Branch photos
+
 import manilaBranchImg   from "../assets/homepage/ManilaBranch.webp";
 import pampangaBranchImg from "../assets/homepage/PampangaBranch.webp";
 

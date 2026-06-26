@@ -20,8 +20,7 @@ const ALL_OCCASIONS = [
   { label: "Just Because",img: justBecauseImg,  hidden: true },
 ]
 
-// 6 cards total for mobile (3 cols x 2 rows). The 6th card (Wedding) is hidden
-// at the sm breakpoint and up via `mobileOnly`, so desktop still shows exactly 5.
+
 const VISIBLE = ALL_OCCASIONS
   .filter(o => !o.hidden)
   .map((o, i) => ({ ...o, mobileOnly: i === 5 }))
@@ -58,23 +57,17 @@ function OccasionCard({ label, img, onNavigate, delay, labelColor, accentG, mobi
         onClick={() => onNavigate?.("occasions")}
         className="group flex flex-col items-center gap-5 w-full focus:outline-none"
       >
-        {/* Ring wrapper: the colored ring fades via opacity instead of swapping
-            border color, so there's no hard pop. The image scales on the same
-            easing curve as the ring + shadow for one unified motion.
-            `active` drives the same look as hover for the auto-cycling zoom. */}
         <div className="relative w-full aspect-square">
-          {/* Soft glow / shadow layer */}
           <div
             className={`absolute inset-0 rounded-full transition-opacity duration-300 ease-out group-hover:opacity-100 ${active ? "opacity-100" : "opacity-0"}`}
             style={{ boxShadow: `0 12px 28px -6px ${accentG}55` }}
           />
-          {/* Colored ring — sits OUTSIDE the image via negative inset, so the
-              full stroke is beyond the image edge (not overlapping it). */}
+
           <div
             className={`absolute -inset-[7px] rounded-full border-[3px] transition-opacity duration-300 ease-out group-hover:opacity-100 z-10 pointer-events-none ${active ? "opacity-100" : "opacity-0"}`}
             style={{ borderColor: accentG }}
           />
-          {/* Image */}
+
           <div className={`absolute inset-0 rounded-full overflow-hidden transition-transform duration-[650ms] ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:scale-[1.04] ${active ? "scale-[1.04]" : ""}`}>
             <img
               src={img}
@@ -101,8 +94,7 @@ export default function OccasionsStrip({ onNavigate }) {
   const headingRef = useRef(null)
   useReveal(headingRef, 0)
 
-  // Auto-cycling zoom: one occasion is "active" at a time, advancing every
-  // second and looping back to the first — a continuous spotlight across cards.
+
   const [activeIdx, setActiveIdx] = useState(0)
   useEffect(() => {
     const id = setInterval(() => {
@@ -125,7 +117,7 @@ export default function OccasionsStrip({ onNavigate }) {
     >
       <div className="max-w-6xl mx-auto">
 
-        {/* Heading */}
+
         <div
           ref={headingRef}
           className="text-center mb-10"
@@ -140,7 +132,7 @@ export default function OccasionsStrip({ onNavigate }) {
           <p className="text-sm mb-4" style={{ color: bodyC }}>
             Whatever it is, we've got flowers for it.
           </p>
-          {/* Green bar — glows in dark mode, same as HomeFAQ and Testimonials */}
+
           <div
             className="mx-auto rounded-full"
             style={{
@@ -152,7 +144,6 @@ export default function OccasionsStrip({ onNavigate }) {
           />
         </div>
 
-        {/* Cards */}
         <div className="grid grid-cols-3 sm:grid-cols-5 gap-6 sm:gap-10 mb-8">
           {VISIBLE.map(({ label, img, mobileOnly }, i) => (
             <OccasionCard
@@ -169,7 +160,7 @@ export default function OccasionsStrip({ onNavigate }) {
           ))}
         </div>
 
-        {/* See all */}
+
         <div className="text-center">
           <button
             onClick={() => onNavigate?.("occasions")}

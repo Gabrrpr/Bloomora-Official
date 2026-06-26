@@ -236,8 +236,7 @@ def _web_item_key(item: dict[str, Any]) -> str:
 def _optional_product(db: Session, item: dict[str, Any]) -> tuple[Optional[uuid.UUID], Optional[Product]]:
     item_id = str(item.get("id") or "")
     
-    # 🚀 THE FIX: If the ID looks like a custom AI arrangement (doesn't look like a standard UUID), 
-    # skip the database lookup entirely.
+   
     if item_id.startswith("arr-") or len(item_id) < 30: 
         return None, None
         

@@ -229,7 +229,6 @@ export default function ProductPreviewModalSimple({product,onClose,onNavigate}){
       if (!Array.isArray(p.branches) || !p.branches.includes(branch)) return false;
       return true;
     })
-    .slice(0, 4)
 
   useEffect(()=>{
     requestAnimationFrame(()=>requestAnimationFrame(()=>setVisible(true)))

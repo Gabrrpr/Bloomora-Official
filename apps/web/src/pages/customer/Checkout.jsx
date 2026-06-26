@@ -252,7 +252,9 @@ export default function Checkout({ onNavigate }) {
   const showStandardDelivery = true
 
   useEffect(() => {
-
+    if (fulfillmentMethod === "lalamove" && !isLalamoveAvailable) {
+      setFulfillmentMethod(showStandardDelivery ? "delivery" : "pickup")
+    }
   }, [fulfillmentMethod, isLalamoveAvailable, showStandardDelivery])
 
   const getDeliveryDetails = () => {
@@ -882,7 +884,7 @@ export default function Checkout({ onNavigate }) {
                   </div>
                 )}
 
-                {lalamoveEnabled && isManilaAddress && (
+                {lalamoveEnabled && (
                   <div
                     onClick={() => { if (isLalamoveAvailable) setFulfillmentMethod("lalamove") }}
                     className={`border-2 rounded-lg p-3.5 transition ${isLalamoveAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-60"} ${fulfillmentMethod === "lalamove" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200 hover:border-gray-300"}`}
@@ -894,7 +896,11 @@ export default function Checkout({ onNavigate }) {
                       <span className={`text-sm font-semibold ${fulfillmentMethod === "lalamove" ? "text-[#2E8B34]" : "text-gray-700"}`}>Lalamove</span>
                     </div>
                     <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">
-                      {isLalamoveAvailable ? "Manila eligible address" : "Available only for Manila addresses"}<br />Fast same-day delivery
+                      {isLalamoveAvailable
+                        ? "Manila eligible address"
+                        : deliveryAddressText
+                          ? "Available only for Manila addresses"
+                          : "Add a Manila delivery address to use this"}<br />Fast same-day delivery
                     </p>
                   </div>
                 )}

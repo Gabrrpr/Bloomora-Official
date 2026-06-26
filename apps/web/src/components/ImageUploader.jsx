@@ -9,7 +9,7 @@ export default function ImageUploader({ bucketName = "hero-images", onUploadComp
     const file = e.target.files[0];
     if (!file) return;
 
-    // Optional: Check file size (e.g., limit to 5MB)
+
     if (file.size > 5 * 1024 * 1024) {
       alert("File is too large. Please select an image under 5MB.");
       return;
@@ -17,14 +17,14 @@ export default function ImageUploader({ bucketName = "hero-images", onUploadComp
 
     setUploading(true);
     try {
-      // 1. Send the file to your FastAPI backend
+  
       const response = await api.uploadImage(bucketName, file);
       
-      // 2. The backend returns the new Supabase URL!
+
       const newImageUrl = response.url;
       setPreviewUrl(newImageUrl);
       
-      // 3. Pass the URL back to your main component to save to the database
+
       onUploadComplete(newImageUrl);
       
     } catch (error) {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-/* ── Flower A: 8-petal bright pink (reference match) ── */
+
 const FLOWER_A = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
   <ellipse cx='50' cy='30' rx='11' ry='17' fill='#f472b6' transform='rotate(0   50 50)'/>
   <ellipse cx='50' cy='30' rx='11' ry='17' fill='#ec4899' transform='rotate(45  50 50)'/>
@@ -15,7 +15,7 @@ const FLOWER_A = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
   <circle cx='46' cy='46' r='3'  fill='#fef9c3' opacity='0.7'/>
 </svg>`;
 
-/* ── Flower B: 6-petal deep pink, large ── */
+
 const FLOWER_B = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
   <ellipse cx='50' cy='29' rx='12' ry='18' fill='#db2777' transform='rotate(0   50 50)'/>
   <ellipse cx='50' cy='29' rx='12' ry='18' fill='#be185d' transform='rotate(60  50 50)'/>
@@ -28,7 +28,7 @@ const FLOWER_B = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
   <circle cx='46' cy='46' r='3'  fill='white' opacity='0.5'/>
 </svg>`;
 
-/* ── Flower C: 5-petal blush, small accent ── */
+
 const FLOWER_C = `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>
   <ellipse cx='50' cy='30' rx='10' ry='16' fill='#fbcfe8' transform='rotate(0   50 50)'/>
   <ellipse cx='50' cy='30' rx='10' ry='16' fill='#f9a8d4' transform='rotate(72  50 50)'/>

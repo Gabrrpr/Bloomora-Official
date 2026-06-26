@@ -15,16 +15,30 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column("addresses", sa.Column("latitude", sa.Numeric(10, 7), nullable=True))
-    op.add_column("addresses", sa.Column("longitude", sa.Numeric(10, 7), nullable=True))
-    op.add_column("addresses", sa.Column("geocode_precision", sa.String(50), nullable=True))
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
 
-    op.add_column("orders", sa.Column("delivery_lat", sa.Numeric(10, 7), nullable=True))
-    op.add_column("orders", sa.Column("delivery_lng", sa.Numeric(10, 7), nullable=True))
-    op.add_column("orders", sa.Column("delivery_geocode_precision", sa.String(50), nullable=True))
-    op.add_column("orders", sa.Column("lalamove_order_id", sa.String(255), nullable=True))
-    op.add_column("orders", sa.Column("lalamove_share_link", sa.Text(), nullable=True))
-    op.add_column("orders", sa.Column("lalamove_status", sa.String(80), nullable=True))
+    address_columns = {column["name"] for column in inspector.get_columns("addresses")}
+    if "latitude" not in address_columns:
+        op.add_column("addresses", sa.Column("latitude", sa.Numeric(10, 7), nullable=True))
+    if "longitude" not in address_columns:
+        op.add_column("addresses", sa.Column("longitude", sa.Numeric(10, 7), nullable=True))
+    if "geocode_precision" not in address_columns:
+        op.add_column("addresses", sa.Column("geocode_precision", sa.String(50), nullable=True))
+
+    order_columns = {column["name"] for column in inspector.get_columns("orders")}
+    if "delivery_lat" not in order_columns:
+        op.add_column("orders", sa.Column("delivery_lat", sa.Numeric(10, 7), nullable=True))
+    if "delivery_lng" not in order_columns:
+        op.add_column("orders", sa.Column("delivery_lng", sa.Numeric(10, 7), nullable=True))
+    if "delivery_geocode_precision" not in order_columns:
+        op.add_column("orders", sa.Column("delivery_geocode_precision", sa.String(50), nullable=True))
+    if "lalamove_order_id" not in order_columns:
+        op.add_column("orders", sa.Column("lalamove_order_id", sa.String(255), nullable=True))
+    if "lalamove_share_link" not in order_columns:
+        op.add_column("orders", sa.Column("lalamove_share_link", sa.Text(), nullable=True))
+    if "lalamove_status" not in order_columns:
+        op.add_column("orders", sa.Column("lalamove_status", sa.String(80), nullable=True))
 
 
 def downgrade():

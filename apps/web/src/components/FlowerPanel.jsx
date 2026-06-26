@@ -1,10 +1,6 @@
 import estingsLogo from "../assets/Estings.svg"
 import bgImg from "../assets/BG_LoginRegister.webp"
 
-/**
- * Full-height decorative left panel used on auth pages (desktop only).
- * Does NOT control its own width or visibility — the parent wrapper in each page does that.
- */
 export default function FlowerPanel() {
   return (
     <div

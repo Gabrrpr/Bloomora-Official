@@ -1,9 +1,8 @@
 import { useTheme } from "../context/ThemeContext"
 
-const G = "#2E8B34" // site green
+const G = "#2E8B34"
 
-// Floating left-side stack: dark-mode toggle on top, scroll-to-top below.
-// Mirrors the ChatWidget on the opposite (left) side. Both always visible.
+
 export default function BackToTop() {
   const { isDark, toggleDark } = useTheme()
 

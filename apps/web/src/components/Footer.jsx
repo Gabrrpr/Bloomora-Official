@@ -20,10 +20,7 @@ const CUSTOMER_CARE = [
   { label: "FAQs",           page: "faq" },
   { label: "Track My Order", page: "orders" },
 ]
-// Legal links live in the copyright bar. All are routed, CMS-managed pages
-// (edited in Admin → Legal): Data Privacy Policy -> "privacy",
-// Terms & Conditions -> "terms", Ordering & Fulfillment -> "ordering-fulfillment",
-// Cookie Policy -> "cookie-policy".
+
 const LEGAL_LINKS = [
   { label: "Data Privacy Policy",     page: "privacy" },
   { label: "Terms & Conditions",      page: "terms" },

@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from app.models import ActivityLog  # Adjust import based on where your models live
+from app.models import ActivityLog
 
 def log_activity(db: Session, action: str, user=None, details: str = None, user_id=None, **kwargs):
     """
@@ -8,7 +8,7 @@ def log_activity(db: Session, action: str, user=None, details: str = None, user_
     """
     try:
         role = None
-        branch = "Manila" # Fallback default
+        branch = "Manila" 
 
         if user:
             user_id = str(user.id)
@@ -31,5 +31,5 @@ def log_activity(db: Session, action: str, user=None, details: str = None, user_
         db.commit()
 
     except Exception as e:
-        print(f"⚠️ Failed to save activity log: {e}")
+        print(f"Failed to save activity log: {e}")
         db.rollback()

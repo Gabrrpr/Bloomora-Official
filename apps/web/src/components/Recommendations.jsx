@@ -3,7 +3,7 @@ import { api } from "../services/api";
 import GridCard from "./GridCard";
 import { useTheme } from "../context/ThemeContext.jsx";
 
-// NOTE: This file is used by the UI; keep imports stable for Vite.
+
 
 function titleCase(value) {
   return String(value || "Recommended")

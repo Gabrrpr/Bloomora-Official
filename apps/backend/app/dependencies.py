@@ -2,7 +2,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from app.core.security import decode_token
 from app.db.session import get_db
-from app.models.user import User, RoleEnum  # 🚀 IMPORT YOUR ENUMS
+from app.models.user import User, RoleEnum
 from sqlalchemy.orm import Session
 
 bearer = HTTPBearer()

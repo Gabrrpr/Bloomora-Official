@@ -22,8 +22,7 @@ export default function AdPopup({ advertisement, onClose }) {
     }
   }, [advertisement])
 
-  // Trigger the entrance transition on the next frame so it eases in from hidden
-  // (a value set on first mount won't animate).
+  
   useEffect(() => {
     if (!imageSrc) return
     const id = requestAnimationFrame(() => requestAnimationFrame(() => setVisible(true)))
@@ -37,7 +36,7 @@ export default function AdPopup({ advertisement, onClose }) {
     }, 500)
   }
 
-  if (!imageSrc) return null // Don't render until we know what image to show
+  if (!imageSrc) return null
 
   return (
     <div

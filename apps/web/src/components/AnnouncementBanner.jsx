@@ -3,11 +3,11 @@ import { useState, useEffect, useRef } from "react"
 const DG = "#0C573E"
 const G  = "#2E8B34"
 
-const ANNOUNCE_KEY        = "bloomora_announcements"        // current: array
-const ANNOUNCE_KEY_LEGACY = "bloomora_announcement"          // old: single object
+const ANNOUNCE_KEY        = "bloomora_announcements"        
+const ANNOUNCE_KEY_LEGACY = "bloomora_announcement"          
 const ROTATE_MS = 5000
 
-// Returns an array of active { emoji, text } messages.
+
 function readAnnouncements() {
   try {
     const raw = localStorage.getItem(ANNOUNCE_KEY)

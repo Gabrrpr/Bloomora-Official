@@ -437,7 +437,7 @@ async def facebook_callback(request: Request, db: Session = Depends(get_db)):
 
         user = find_or_create_oauth_user(email, first_name, last_name, db)
         
-        # 🚀 FIX: Generate token pairs using unified security module
+
         jwt_access = create_access_token(data={"sub": str(user.id)})
         jwt_refresh = create_refresh_token(data={"sub": str(user.id)})
         

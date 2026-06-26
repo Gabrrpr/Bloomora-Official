@@ -9,14 +9,14 @@ export default function ActivateStaff({ onNavigate }) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   
-  // 🚀 ADDED: State to toggle password visibility
+
   const [showPassword, setShowPassword] = useState(false);
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
 
-  // 1. Grab the token from the URL (e.g., ?token=xyz123)
+
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const urlToken = urlParams.get("token");
@@ -47,7 +47,7 @@ export default function ActivateStaff({ onNavigate }) {
 
     setLoading(true);
     try {
-      // 2. Send the token and new password to your FastAPI backend
+
       await api.activateStaff(token, password);
       setSuccess(true);
     } catch (err) {

@@ -48,7 +48,7 @@ def validate_and_optimize_prompt(user_prompt: str, inventory_list: list[str]) ->
 
     try:
         response = client.models.generate_content(
-            model='gemini-3.1-flash-lite', # 🚀 UPDATED TO 3.5-FLASH
+            model='gemini-3.1-flash-lite',
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
