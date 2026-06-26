@@ -141,17 +141,15 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
               Contact shop
             </button>
 
-            {isOutForDelivery && (
+            {tracking.lalamove_share_link && (
               <button
                 onClick={() => {
-                  if (tracking.lalamove_share_link) {
-                    window.open(tracking.lalamove_share_link, "_blank", "noopener,noreferrer")
-                  }
+                  window.open(tracking.lalamove_share_link, "_blank", "noopener,noreferrer")
                 }}
                 className="px-3.5 py-1.5 text-[12px] font-semibold rounded-lg transition text-white"
-                style={{ background: tracking.lalamove_share_link ? "#4A6741" : "#9CA3AF" }}
+                style={{ background: "#4A6741" }}
                 onMouseEnter={e => e.currentTarget.style.background = "#3A5332"}
-                onMouseLeave={e => e.currentTarget.style.background = tracking.lalamove_share_link ? "#4A6741" : "#9CA3AF"}
+                onMouseLeave={e => e.currentTarget.style.background = "#4A6741"}
               >
                 Track order
               </button>

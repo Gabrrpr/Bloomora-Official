@@ -249,16 +249,10 @@ export default function Checkout({ onNavigate }) {
   )
   const isManilaAddress = deliveryAddressBranch === "Manila"
   const isLalamoveAvailable = lalamoveEnabled && isManilaAddress
-  const showStandardDelivery = deliveryAddressBranch === "Pampanga"
+  const showStandardDelivery = true
 
   useEffect(() => {
-    if (fulfillmentMethod === "lalamove" && !isLalamoveAvailable) {
-      setFulfillmentMethod(showStandardDelivery ? "delivery" : "pickup")
-    } else if (fulfillmentMethod === "delivery" && isLalamoveAvailable) {
-      setFulfillmentMethod("lalamove")
-    } else if (fulfillmentMethod === "delivery" && !showStandardDelivery) {
-      setFulfillmentMethod(isLalamoveAvailable ? "lalamove" : "pickup")
-    }
+
   }, [fulfillmentMethod, isLalamoveAvailable, showStandardDelivery])
 
   const getDeliveryDetails = () => {
@@ -546,15 +540,7 @@ export default function Checkout({ onNavigate }) {
     // Pickup doesn't require an address
     if (fulfillmentMethod === "delivery") {
       if (!deliveryDetails.address || !deliveryDetails.phone) {
-        setError("Please provide a complete delivery address and phone number before placing an order.");
-        return;
-      }
-      if (!addressBranch) {
-        setError("Standard delivery is only available for Pampanga. Manila delivery uses Lalamove.");
-        return;
-      }
-      if (addressBranch === "Manila") {
-        setError("Standard delivery is not available for Manila. Please select Lalamove or Pickup.");
+        setError("Please select or add a complete delivery address and phone number before placing an order.");
         return;
       }
     } else if (fulfillmentMethod === "lalamove") {
@@ -598,14 +584,6 @@ export default function Checkout({ onNavigate }) {
     if (fulfillmentMethod === "delivery") {
       if (!deliveryDetails.address || !deliveryDetails.phone) {
         setError("Please select or add a complete delivery address and phone number.");
-        return;
-      }
-      if (!addressBranch) {
-        setError("Standard delivery is only available for Pampanga. Manila delivery uses Lalamove.");
-        return;
-      }
-      if (addressBranch === "Manila") {
-        setError("Standard delivery is not available for Manila. Please select Lalamove or Pickup.");
         return;
       }
     } else if (fulfillmentMethod === "lalamove") {
@@ -900,7 +878,7 @@ export default function Checkout({ onNavigate }) {
                       </div>
                       <span className={`text-sm font-semibold ${fulfillmentMethod === "delivery" ? "text-[#2E8B34]" : "text-gray-700"}`}>Standard</span>
                     </div>
-                    <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">Pampanga branch delivery only<br />Scheduled by branch team</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">Manila and Pampanga<br />Scheduled by branch team</p>
                   </div>
                 )}
 

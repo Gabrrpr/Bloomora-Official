@@ -121,6 +121,7 @@ function OverviewPanel({ user, setPanel, isDark, showToast }) {
       await api.deleteAccount(deletePassword, deleteConfirmName.trim())
       showToast("Account deleted successfully.")
       logout()
+      onNavigate?.("home")
     } catch (err) {
       setDeleteError(err.message || "Failed to delete account.")
     } finally {

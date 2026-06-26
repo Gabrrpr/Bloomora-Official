@@ -1,6 +1,22 @@
 export const regions = [
   { id: '00', name: 'NATIONAL CAPITAL REGION (NCR)', regionCode: 'NCR', provinces: [
-    { id: '137501000', name: 'Metro Manila' }
+    { id: '137502000', name: 'Caloocan City' },
+    { id: '137501000', name: 'City of Manila' },
+    { id: '137514000', name: 'Quezon City' },
+    { id: '137503000', name: 'City of Makati' },
+    { id: '137510000', name: 'City of Pasig' },
+    { id: '137516000', name: 'City of Taguig' },
+    { id: '137508000', name: 'Parañaque City' },
+    { id: '137517000', name: 'City of Valenzuela' },
+    { id: '137504000', name: 'Muntinlupa City' },
+    { id: '137506000', name: 'Mandaluyong City' },
+    { id: '137507000', name: 'Marikina City' },
+    { id: '137509000', name: 'Pasay City' },
+    { id: '137512000', name: 'San Juan City' },
+    { id: '137505000', name: 'Las Piñas City' },
+    { id: '137511000', name: 'Malabon City' },
+    { id: '137515000', name: 'Navotas City' },
+    { id: '137513000', name: 'Pateros Municipality' }
   ] },
   { id: '01', name: 'ILOCOS REGION (REGION I)', regionCode: '01', provinces: [
     { id: '010000000', name: 'Ilocos Norte' },

@@ -81,6 +81,7 @@ def serialize_product(p: Product) -> dict:
         "product_type": p.product_type,
         "category": p.category,
         "image_url": p.image_url,
+        "image": p.image_url,
         "is_available": effective_is_available(p, inv),
         "status": product_status_value(p),
         
@@ -466,7 +467,8 @@ def get_admin_products(
                 "care_guide": getattr(p, "care_guide", None),
                 "price": current_price,
                 "category": p.category.value if hasattr(p.category, "value") else p.category,
-                "image_url": p.image_url,
+        "image_url": p.image_url,
+        "image": p.image_url,
                 "is_available": effective_is_available(p, inv),
                 "status": product_status_value(p),
                 "created_at": p.created_at.isoformat() if p.created_at else None,

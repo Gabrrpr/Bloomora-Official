@@ -681,7 +681,7 @@ function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark
       {!isMobile && (
         <div className="pm-quote-img flex-shrink-0 overflow-hidden flex items-center justify-center p-6"
           style={{ width: "50%", background: isDark ? "#0f172a" : "#f3f4f6" }}>
-          <img src={product.image} alt={product.name} className="max-w-full max-h-full object-contain"
+          <img src={productImage} alt={product.name} className="max-w-full max-h-full object-contain"
             onError={e => { e.target.style.display="none" }}/>
         </div>
       )}
@@ -714,7 +714,7 @@ function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark
               <div className="flex items-center gap-3 p-3 rounded-xl mb-5"
                 style={{ background: subBg, border: `1px solid ${bdr}` }}>
                 <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0" style={{ border: `1px solid ${bdr}` }}>
-                  <img src={product.image} alt={product.name} className="w-full h-full object-cover"
+                  <img src={productImage} alt={product.name} className="w-full h-full object-cover"
                     onError={e => { e.target.style.display="none" }}/>
                 </div>
                 <div className="flex-1 min-w-0">
@@ -914,7 +914,7 @@ function ImgZoom({ product, isDark }) {
       onMouseEnter={() => setActive(true)}
       onMouseLeave={() => { setActive(false); setPos(null) }}>
 
-      <img src={product.image} alt={product.name} className="pm-img-photo w-full h-full object-cover block"
+      <img src={product.image || product.image_url || ""} alt={product.name} className="pm-img-photo w-full h-full object-cover block"
         style={{
           transition: active ? "transform 0.25s ease-out" : "transform 0.4s ease",
           transform: active && pos ? "scale(1.7)" : "scale(1)",
@@ -1528,6 +1528,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   const cardBdr = isDark ? "rgba(0,255,136,0.08)" : "rgba(0,0,0,0.08)"
   const colors  = CATEGORY_COLORS[product.category] || CATEGORY_COLORS.Roses
   const { formatPrice } = useCurrency();
+  const productImage = product.image || product.image_url || "";
 
   // 🚀 THE FIX: No more parallel API call. This is fast and synchronous!
   const suggestedProducts = products
@@ -2037,7 +2038,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
 
             <div className="pm-scroll flex-1 min-h-0 overflow-y-auto" style={{ background: pageBg }}>
               <div className="relative w-full overflow-hidden" style={{ aspectRatio: "1/1", background: isDark ? "#0f172a" : "#f8fafc" }}>
-                <img src={product.image} alt={product.name} className="w-full h-full object-contain"
+                <img src={productImage} alt={product.name} className="w-full h-full object-contain"
                   onError={e => { e.target.style.display="none" }}/>
                 {hasDisc && (
                   <div className="absolute top-3 left-3 text-white text-xs font-bold px-3 py-1 rounded-md z-10"

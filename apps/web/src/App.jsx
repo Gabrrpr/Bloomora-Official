@@ -117,13 +117,16 @@ function AppContent() {
     const fetchGlobalSettings = async () => {
       try {
         const data = await api.isCustomizationEnabled();
-        // Update the state with the real database value
         setIsCustomizationEnabled(data.enabled);
       } catch (err) {
         console.error("Failed to fetch AI Customization setting:", err);
       }
     };
     fetchGlobalSettings();
+
+    const handleToggled = () => fetchGlobalSettings();
+    window.addEventListener("customization-toggled", handleToggled);
+    return () => window.removeEventListener("customization-toggled", handleToggled);
   }, []);
 
   useEffect(() => {
@@ -276,10 +279,17 @@ function AppContent() {
           0%, 100% { opacity: 0.2; }
           50% { opacity: 1; }
         }
+        @keyframes authOverlayFadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        .auth-overlay-enter {
+          animation: authOverlayFadeIn 0.35s ease-out both;
+        }
       `}</style>
       {authTransition && (
         <div
-          className="fixed inset-0 z-[99999] flex items-center justify-center pointer-events-none bg-white/95"
+          className={`fixed inset-0 z-[99999] flex items-center justify-center bg-white/95 auth-overlay-enter`}
         >
           <div className="flex flex-col items-center gap-3">
             <svg width="96" height="96" viewBox="0 0 100 100">

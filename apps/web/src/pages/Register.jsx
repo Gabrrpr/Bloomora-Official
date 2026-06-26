@@ -227,7 +227,7 @@ export default function Register({ onNavigate }) {
 
       case "phone":
         if (!value) return setErr("phone", "Phone number is required.")
-        if (!isValidPHPhone(value)) return setErr("phone", "Enter a valid PH mobile number (+639XXXXXXXXX).")
+        if (!isValidPHPhone(value)) return setErr("phone", "Enter a valid PH mobile number (+63 9XX XXX XXXX).")
         return clearErr("phone")
 
       case "username":
@@ -334,7 +334,7 @@ export default function Register({ onNavigate }) {
 
     if (!isValidName(form.firstName) || !isValidName(form.lastName)) { setError("Please enter a valid first and last name."); return false }
     if (!isValidEmail(form.email)) { setError("Please enter a valid email address (e.g. juan@gmail.com)."); return false }
-    if (!isValidPHPhone(form.phone)) { setError("Please enter a valid PH mobile number (+639XXXXXXXXX)."); return false }
+    if (!isValidPHPhone(form.phone)) { setError("Please enter a valid PH mobile number (+63 9XX XXX XXXX)."); return false }
     if (form.username && !isValidUsername(form.username)) { setError("Username must be 3–30 characters (letters, numbers, _ or .)."); return false }
     if (passwordStrength !== "strong") { setError("Password must be strong (8+ chars, uppercase, number, special)."); return false }
     if (form.password !== form.confirmPassword) { setError("Passwords do not match."); return false }

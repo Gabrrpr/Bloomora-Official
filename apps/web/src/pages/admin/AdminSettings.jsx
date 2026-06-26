@@ -266,6 +266,7 @@ export default function AdminSettings() {
     try {
       await api.setCustomizationEnabled(!customizationEnabled)
       setCustomizationEnabled(!customizationEnabled)
+      window.dispatchEvent(new CustomEvent("customization-toggled"))
       setToggleSaved(true)
       setTimeout(() => setToggleSaved(false), 2000)
     } catch (e) {
