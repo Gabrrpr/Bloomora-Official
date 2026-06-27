@@ -879,6 +879,7 @@ export default function Shop({ onNavigate, initialCategory }) {
   const baseList = (searchResults !== null ? searchResults : products)
 
   const filtered = baseList
+  .filter(p => p.is_visible !== false) 
     .map(p => {
       let branchStock = p.stock;
       const locs = selectedLocations.map(l => (l || "").toLowerCase().trim());
@@ -891,6 +892,7 @@ export default function Shop({ onNavigate, initialCategory }) {
       
       return { ...p, stock: branchStock };
     })
+    .filter(p => p.is_available === true && p.status !== "inactive")
     .filter(p => normalizeCat(p.category) !== 'add-on' && normalizeCat(p.category) !== 'addon')
     .filter(p => {
       const activeNorm = normalizeCat(activeCategory);
@@ -916,18 +918,15 @@ export default function Shop({ onNavigate, initialCategory }) {
       if (!selectedLocations || selectedLocations.length === 0) return true;
       const selectedLocsNorm = selectedLocations.map(normalizeCat);
       
-      const branches = Array.isArray(p.branches) ? p.branches.map(normalizeCat) : [];
-      
-      if (branches.length === 0) {
-         branches.push("manila");
-      }
+      const rawBranches = Array.isArray(p.branches) ? p.branches.map(normalizeCat) : [];
+      const branches = rawBranches.length === 0 ? ["manila"] : rawBranches;
       return selectedLocsNorm.some(loc => branches.includes(loc));
       })
     .filter(p => p.price >= priceRange[0] && p.price <= priceRange[1])
     .filter(p => {
       if (!searchQuery) return true;
       const q = searchQuery.toLowerCase().trim();
-
+      
       const matchName = (p.name || "").toLowerCase().includes(q);
       const matchCat = (p.category || "").toLowerCase().includes(q);
       const matchDesc = (p.description || "").toLowerCase().includes(q);

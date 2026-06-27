@@ -406,6 +406,17 @@ export default function MixAndMatch({ onNavigate }) {
     setError("")
   }
 
+  const decFlower = (p) => {
+  setFlowerQty(prev => {
+    const cur = prev[p.id] || 0
+    if (cur <= 0) return prev
+    const next = { ...prev, [p.id]: cur - 1 }
+    if (next[p.id] === 0) delete next[p.id]
+    return next
+  })
+  setError("")
+}
+
   const toggleFiller = (id) => {
     setFillerIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
     setError("")

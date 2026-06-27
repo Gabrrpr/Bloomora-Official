@@ -171,8 +171,11 @@ def get_flash_sales(db: Session = Depends(get_db)):
             db.query(Product)
             .options(joinedload(Product.inventory))
             .filter(Product.original_price.isnot(None))
-            .all()
-        )
+        .filter(Product.is_visible == True)
+        .filter(Product.status == ProductStatusEnum.active)
+        .all()
+    )
+
         review_summaries = get_review_summaries(db, [p.id for p in products])
         return [with_review_summary(serialize_product(p), review_summaries.get(p.id)) for p in products]
     except Exception as e:
@@ -183,6 +186,10 @@ def get_flash_sales(db: Session = Depends(get_db)):
 def search_products(q: str = "", db: Session = Depends(get_db)):
     if not q or not q.strip():
         return []
+
+    # Only return products that are meant to be shown on the customer storefront.
+    # This prevents hidden inventory (is_visible=false) from appearing when searching.
+
 
     search_term = f"%{q.lower().strip()}%"
 
@@ -201,8 +208,11 @@ def search_products(q: str = "", db: Session = Depends(get_db)):
                 Product.composition.cast(String).ilike(search_term),
             )
         )
+        .filter(Product.is_visible == True)
+        .filter(Product.status == ProductStatusEnum.active)
         .all()
     )
+
 
     review_summaries = get_review_summaries(db, [p.id for p in results])
     return [with_review_summary(serialize_product(p), review_summaries.get(p.id)) for p in results]
