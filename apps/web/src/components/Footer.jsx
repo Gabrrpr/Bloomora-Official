@@ -12,7 +12,6 @@ import lalamoveImg     from "../assets/footer/Lalamove.webp"
 const QUICK_LINKS = [
   { label: "Home",       page: "home" },
   { label: "Shop",       page: "shop" },
-  { label: "Occasions",  page: "occasions" },
   { label: "About Us",   page: "about" },
   { label: "Contact Us", page: "contact" },
 ]

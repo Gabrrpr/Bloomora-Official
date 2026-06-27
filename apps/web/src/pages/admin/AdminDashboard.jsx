@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react"
+import { createPortal } from "react-dom"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../../context/AuthContext"
 import { useTheme } from "../../context/ThemeContext"
@@ -1926,12 +1927,12 @@ function AppearanceFlyout({ items, active, setActive, collapsed, user, t, isDark
         </div>
       )}
 
-      {!isMobile && isOpen && (
+      {!isMobile && isOpen && createPortal(
         <>
           <div
             onMouseEnter={show}
             onMouseLeave={scheduleHide}
-            style={{ position: "fixed", top: coords.top - 30, left: coords.left, width: 160, height: 60, zIndex: 1090 }}
+            style={{ position: "fixed", top: coords.top - 30, left: coords.left, width: 160, height: 60, zIndex: 2147483646 }}
           />
           <div
             data-ap-panel
@@ -1942,7 +1943,7 @@ function AppearanceFlyout({ items, active, setActive, collapsed, user, t, isDark
               top: coords.top,
               left: coords.left + 150,
               transform: "translateY(-50%)",
-              zIndex: 1100,
+              zIndex: 2147483647,
               display: "flex",
               flexDirection: "column",
               gap: 8,
@@ -1950,7 +1951,8 @@ function AppearanceFlyout({ items, active, setActive, collapsed, user, t, isDark
           >
             {items.map((item, i) => renderItem(item, i, { floating: true }))}
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   )
@@ -2093,6 +2095,113 @@ function ResizableSidebar({ active, setActive, onLogout, user, sidebarWidth, set
       </div>
     </aside>
   )
+}
+
+// Extra keywords so the admin search detects sections by what they contain.
+const ADMIN_SEARCH_KEYWORDS = {
+  "Dashboard": "home overview stats summary",
+  "Orders": "orders purchases walk-in pos sales checkout",
+  "Products": "products catalog items flowers bouquet add product",
+  "Inventory": "inventory stock materials supplies",
+  "Staffs": "staff employees accounts team members",
+  "Customers": "customers clients buyers users",
+  "Messages": "messages chat support inbox conversations",
+  "Activity Logs": "activity logs history audit trail",
+  "Transactions": "transactions payments sales revenue receipts",
+  "Delivery": "delivery riders vehicles dispatch shipping",
+  "Hero Section": "hero banner homepage landing",
+  "Advertisements": "ads advertisements promo banners",
+  "Promotions": "promotions discounts vouchers deals",
+  "Featured Products": "featured products highlights",
+  "FAQ": "faq questions help answers",
+  "Legal": "legal terms privacy policy",
+  "Preview Site": "preview site view storefront",
+  "Campaigns": "campaigns marketing seasonal",
+  "Mobile Feed": "mobile feed app posts banners",
+};
+
+// Functional admin top-nav search: suggests sections and jumps to them.
+function AdminSearch({ user, onGo, t }) {
+  const [q, setQ] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const onDoc = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  const role = user?.role;
+  const candidates = [
+    ...NAV_MAIN.filter(i => !role || role !== "staff" || i.staff),
+    ...NAV_APPEARANCE.filter(i => !role || role !== "staff" || i.staff !== false),
+  ].map(i => ({ label: i.label, keywords: ADMIN_SEARCH_KEYWORDS[i.label] || "" }));
+
+  const query = q.trim().toLowerCase();
+  const tokens = query.split(/\s+/).filter(Boolean);
+  const results = query
+    ? candidates
+        .map(c => {
+          const hay = `${c.label} ${c.keywords}`.toLowerCase();
+          const matches = tokens.every(tk => hay.includes(tk));
+          const label = c.label.toLowerCase();
+          let score = 0;
+          if (label === query) score = 4;
+          else if (label.startsWith(query)) score = 3;
+          else if (label.includes(query)) score = 2;
+          else if (matches) score = 1;
+          return { c, matches, score };
+        })
+        .filter(r => r.matches)
+        .sort((a, b) => b.score - a.score)
+        .map(r => r.c)
+    : [];
+
+  const go = (label) => { onGo(label); setOpen(false); setQ(""); };
+
+  return (
+    <div className="relative hidden sm:block" ref={ref}>
+      <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: t.textMuted }}
+        fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
+      </svg>
+      <input
+        value={q}
+        onChange={e => { setQ(e.target.value); setOpen(true); }}
+        onFocus={e => { setOpen(true); e.target.style.width = "220px"; e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.15)`; e.target.style.backgroundColor = t.surfaceBg }}
+        onBlur={e => { e.target.style.width = "180px"; e.target.style.borderColor = t.inputBorder; e.target.style.boxShadow = "none"; e.target.style.backgroundColor = t.inputBg }}
+        onKeyDown={e => { if (e.key === "Enter" && results[0]) go(results[0].label); if (e.key === "Escape") setOpen(false); }}
+        placeholder="Search pages..."
+        className="pl-9 pr-4 py-1.5 text-sm rounded-lg outline-none transition-all"
+        style={{ width: "180px", border: `1px solid ${t.inputBorder}`, backgroundColor: t.inputBg, color: t.textPrimary }}
+      />
+      {open && query && (
+        <div className="absolute right-0 mt-2 w-64 rounded-xl shadow-xl overflow-hidden" style={{ zIndex: 200, backgroundColor: t.surfaceBg, border: `1px solid ${t.cardBorder}` }}>
+          {results.length ? (
+            <div className="max-h-72 overflow-y-auto py-1">
+              {results.map(c => (
+                <button key={c.label} onMouseDown={() => go(c.label)}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors"
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = t.hoverBg || (t.inputBg)}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}>
+                  <span className="flex items-center justify-center w-7 h-7 rounded-lg flex-shrink-0" style={{ backgroundColor: "rgba(46,139,52,0.12)", color: G }}>
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7"/></svg>
+                  </span>
+                  <span className="text-sm font-medium" style={{ color: t.textPrimary }}>{c.label}</span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="px-4 py-5 text-center">
+              <p className="text-sm font-semibold" style={{ color: t.textPrimary }}>No results found</p>
+              <p className="text-xs mt-0.5" style={{ color: t.textMuted }}>We couldn't find a page matching “{q}”.</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Main Shell ───────────────────────────────────────────────────────────────
@@ -2239,19 +2348,7 @@ export default function AdminDashboard({ onNavigate }) {
           <div className="flex items-center" style={{ gap: "10px" }}>
 
             {/* Search */}
-            <div className="relative hidden sm:block">
-              <svg className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" style={{ color: t.textMuted }}
-                fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607Z"/>
-              </svg>
-              <input
-                placeholder="Search..."
-                className="pl-9 pr-4 py-1.5 text-sm rounded-lg outline-none transition-all"
-                style={{ width: "160px", border: `1px solid ${t.inputBorder}`, backgroundColor: t.inputBg, color: t.textPrimary }}
-                onFocus={e => { e.target.style.width = "200px"; e.target.style.borderColor = G; e.target.style.boxShadow = `0 0 0 2px rgba(46,139,52,0.15)`; e.target.style.backgroundColor = t.surfaceBg }}
-                onBlur={e => { e.target.style.width = "160px"; e.target.style.borderColor = t.inputBorder; e.target.style.boxShadow = "none"; e.target.style.backgroundColor = t.inputBg }}
-              />
-            </div>
+            <AdminSearch user={user} onGo={goTo} t={t} />
 
             {/* Divider */}
             <div className="hidden sm:block w-px h-5" style={{ backgroundColor: t.divider }} />

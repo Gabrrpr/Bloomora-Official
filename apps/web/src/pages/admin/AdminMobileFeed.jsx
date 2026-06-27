@@ -357,8 +357,12 @@ export default function AdminMobileFeed() {
         @font-face { font-family: "Mobile Inter"; src: url("${mobileInterBold}") format("truetype"); font-weight: 700; }
         @font-face { font-family: "Mobile Inter"; src: url("${mobileInterExtraBold}") format("truetype"); font-weight: 800; }
         @font-face { font-family: "Mobile Inter Tight"; src: url("${mobileInterTightMedium}") format("truetype"); font-weight: 500; }
+        @keyframes mfRise {
+          from { opacity: 0; transform: translateY(12px); }
+          to   { opacity: 1; transform: none; }
+        }
       `}</style>
-      <header className="flex flex-wrap items-start justify-between gap-4">
+      <header className="flex flex-wrap items-start justify-between gap-4" style={{ animation: "mfRise 0.4s ease both" }}>
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-xl font-bold">Mobile Content</h1>
@@ -382,7 +386,7 @@ export default function AdminMobileFeed() {
         </div>
       </header>
 
-      <div className="inline-flex rounded-xl p-1" style={{ backgroundColor: colors.cardAlt, border: `1px solid ${colors.border}` }}>
+      <div className="inline-flex rounded-xl p-1" style={{ backgroundColor: colors.cardAlt, border: `1px solid ${colors.border}`, animation: "mfRise 0.4s ease 0.06s both" }}>
         {[["feed", "Feed Posts"], ["banner", "Category Banners"]].map(([value, label]) => (
           <button
             key={value}
@@ -405,7 +409,7 @@ export default function AdminMobileFeed() {
         </div>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_350px]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_350px]" style={{ animation: "mfRise 0.45s ease 0.12s both" }}>
         <div className="space-y-5">
           <ContentList
             colors={colors}
@@ -606,7 +610,7 @@ function ContentList({ colors, records, selectedId, onSelect, onMove, onDelete }
         <span className="text-xs" style={{ color: colors.muted }}>{records.length} item{records.length === 1 ? "" : "s"}</span>
       </div>
       {records.length ? records.map((record, index) => (
-        <div key={record.id} className="flex items-center gap-3 border-b px-4 py-3 last:border-0" style={{ borderColor: colors.border, backgroundColor: selectedId === record.id ? colors.greenSoft : "transparent" }}>
+        <div key={record.id} className="flex items-center gap-3 border-b px-4 py-3 last:border-0" style={{ borderColor: colors.border, backgroundColor: selectedId === record.id ? colors.greenSoft : "transparent", animation: `mfRise 0.4s ease ${0.1 + index * 0.05}s both` }}>
           <button type="button" onClick={() => onSelect(record)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
             <div className="h-16 w-12 flex-shrink-0 overflow-hidden rounded-lg bg-slate-200">
               {record.media?.kind === "video"

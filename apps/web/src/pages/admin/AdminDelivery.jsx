@@ -61,12 +61,14 @@ function FlowerLoader({ message = "Loading...", isDark = false }) {
   );
 }
 
-function PrintBtn({ onClick }) {
+function PrintBtn({ onClick, isDark }) {
   return (
     <button
       onClick={onClick}
-      className="no-print flex items-center gap-1.5 px-4 py-2 text-sm font-semibold border rounded-lg transition-all hover:shadow-sm hover:bg-gray-50 active:scale-95"
-      style={{ borderColor: "#dde3ec", color: "#374151", backgroundColor: "white" }}
+      className="no-print flex items-center gap-1.5 px-4 py-2 text-sm font-semibold border rounded-lg transition-all hover:shadow-sm active:scale-95"
+      style={{ borderColor: isDark ? "#334155" : "#dde3ec", color: isDark ? "#e2e8f0" : "#374151", backgroundColor: isDark ? "#1e293b" : "white" }}
+      onMouseEnter={e => { e.currentTarget.style.backgroundColor = isDark ? "#22324a" : "#f9fafb" }}
+      onMouseLeave={e => { e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "white" }}
     >
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path
@@ -249,7 +251,6 @@ export default function AdminDeliveryFixed() {
   const [ordersSort, setOrdersSort] = useState("");
 
   const [loading, setLoading] = useState(true);
-  const [entered, setEntered] = useState(false);
   const [phText, setPhText] = useState("");
 
   const [riders, setRiders] = useState([]);
@@ -334,15 +335,6 @@ export default function AdminDeliveryFixed() {
     loadDeliveryData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchFilter]);
-
-  useEffect(() => {
-    if (loading) {
-      setEntered(false);
-      return;
-    }
-    const t = setTimeout(() => setEntered(true), 120);
-    return () => clearTimeout(t);
-  }, [loading]);
 
   useEffect(() => {
     if (search) {
@@ -667,8 +659,8 @@ export default function AdminDeliveryFixed() {
     <div className="space-y-6">
       <style>{`
         .print-only { display: none; }
-        @keyframes delivRise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
-        .deliv-rise { animation: delivRise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+        @keyframes delivRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+        .deliv-rise { animation: delivRise 0.85s ease-out both; }
         .hover-row { transition: background-color 0.15s ease-in-out; }
         .hover-row:hover { background-color: ${hoverRowBg} !important; }
         
@@ -698,11 +690,11 @@ export default function AdminDeliveryFixed() {
         }
       `}</style>
 
-      <div className={`no-print flex items-center justify-between flex-wrap gap-4 ${entered ? "deliv-rise" : ""}`}>
+      <div className={`no-print flex items-center justify-between flex-wrap gap-4 deliv-rise`}>
         <h1 className="text-2xl font-bold tracking-tight" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>Delivery Operations</h1>
         <div className="flex items-center gap-3">
           <ExportDeliveryBtn riders={filteredRiders} orders={filteredOrders} isDark={isDark} />
-          <PrintBtn onClick={() => window.print()} />
+          <PrintBtn onClick={() => window.print()} isDark={isDark} />
         </div>
       </div>
 
@@ -719,14 +711,14 @@ export default function AdminDeliveryFixed() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 no-print">
+      <div className={`grid grid-cols-2 lg:grid-cols-4 gap-4 no-print deliv-rise`} style={{ animationDelay: "0.18s" }}>
         <GreenCard label="Pending orders" sublabel="Needs rider" value={pendingOrders.length} sub="Ready to assign" />
         <WhiteCard label="Assigned deliveries" sublabel="Active rider load" value={assignedDeliveries} sub="Currently assigned" accentColor="#3b82f6" />
         <WhiteCard label="Available riders" sublabel="Verified and idle" value={availableRiders.length} sub={`${inactiveRiders} unavailable`} accentColor="#22c55e" />
         <WhiteCard label="Total riders" sublabel="Delivery accounts" value={riders.length} sub={branchFilter || "All branches"} accentColor="#f59e0b" />
       </div>
 
-      <div className="no-print rounded-2xl overflow-hidden shadow-sm" style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}` }}>
+      <div className={`no-print rounded-2xl overflow-hidden shadow-sm deliv-rise`} style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, animationDelay: "0.36s" }}>
         <div className="flex items-center justify-between px-6 py-5 gap-4 flex-wrap" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
           <div>
             <p className="text-base font-bold" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>Delivery Configuration</p>
@@ -1033,7 +1025,7 @@ export default function AdminDeliveryFixed() {
           </div>
         </div>
 
-        <div className="no-print rounded-2xl overflow-hidden shadow-sm" style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}` }}>
+        <div className={`no-print rounded-2xl overflow-hidden shadow-sm deliv-rise`} style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, animationDelay: "0.54s" }}>
           <div className="px-6 py-5 flex items-center justify-between gap-4 flex-wrap" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
             <div className="flex items-center gap-3 flex-wrap w-full lg:w-auto">
               <FDrop value={branchFilter} onChange={setBranchFilter} isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt}>

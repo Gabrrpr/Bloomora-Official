@@ -23,7 +23,7 @@ const DEFAULT_HEROES = [
     cta: "Shop Flowers",
     ctaNav: "shop",
     ctaSecondary: "View Occasions",
-    ctaSecondaryNav: "occasions",
+    ctaSecondaryNav: "shop",
     accent: "#2E8B34",
     image: heroBg1,
   },
@@ -35,7 +35,7 @@ const DEFAULT_HEROES = [
     cta: "Shop Flowers",
     ctaNav: "shop",
     ctaSecondary: "Explore Collection",
-    ctaSecondaryNav: "occasions",
+    ctaSecondaryNav: "shop",
     accent: "#e11d48",
     image: heroBg2,
   },
@@ -59,7 +59,7 @@ const DEFAULT_HEROES = [
     cta: "Shop Flowers",
     ctaNav: "shop",
     ctaSecondary: "View Occasions",
-    ctaSecondaryNav: "occasions",
+    ctaSecondaryNav: "shop",
     accent: "#d97706",
     image: heroBg4,
   },
@@ -126,7 +126,7 @@ export default function HeroCarousel({ onNavigate }) {
   // Resolve a slide's nav target with sensible fallbacks so older CMS payloads
   // (which may only carry ctaSecondaryNav) still route correctly.
   const primaryNav   = (h) => h.ctaNav || "shop"
-  const secondaryNav = (h) => h.ctaSecondaryNav || "occasions"
+  const secondaryNav = (h) => h.ctaSecondaryNav || "shop"
 
   const hero     = heroes[current]
   const prevHero = prev !== null ? heroes[prev] : null
@@ -207,12 +207,14 @@ export default function HeroCarousel({ onNavigate }) {
                   style={{ backgroundColor: hero.accent, "--hero-accent": hero.accent }}>
                   {hero.cta}
                 </button>
-                <button
-                  onClick={() => onNavigate && onNavigate(secondaryNav(hero))}
-                  className="hero-glow-border w-full sm:w-auto px-6 sm:px-7 py-3 sm:py-3.5 text-sm font-semibold text-white rounded-full border border-white/40 backdrop-blur-sm hover:bg-white/10 transition-all duration-200 text-center whitespace-nowrap"
-                  style={{ backgroundColor: "transparent", "--hero-accent": hero.accent }}>
-                  {hero.ctaSecondary}
-                </button>
+                {hero.showSecondary !== false && hero.ctaSecondary && (
+                  <button
+                    onClick={() => onNavigate && onNavigate(secondaryNav(hero))}
+                    className="hero-glow-border w-full sm:w-auto px-6 sm:px-7 py-3 sm:py-3.5 text-sm font-semibold text-white rounded-full border border-white/40 backdrop-blur-sm hover:bg-white/10 transition-all duration-200 text-center whitespace-nowrap"
+                    style={{ backgroundColor: "transparent", "--hero-accent": hero.accent }}>
+                    {hero.ctaSecondary}
+                  </button>
+                )}
               </div>
             </div>
           </div>

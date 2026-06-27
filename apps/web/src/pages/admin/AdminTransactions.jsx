@@ -61,13 +61,13 @@ function ExportCSVBtn({ onClick, isDark }) {
   )
 }
 
-function PrintBtn({ onClick }) {
+function PrintBtn({ onClick, isDark }) {
   return (
     <button onClick={onClick}
       className="no-print flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all active:scale-95"
-      style={{ borderColor: "#dde3ec", color: "#374151", backgroundColor: "white" }}
-      onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f9fafb"}
-      onMouseLeave={e => e.currentTarget.style.backgroundColor = "white"}>
+      style={{ borderColor: isDark ? "#374151" : "#dde3ec", color: isDark ? "#94a3b8" : "#374151", backgroundColor: isDark ? "#1e293b" : "white" }}
+      onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#2d3f55" : "#f9fafb"}
+      onMouseLeave={e => e.currentTarget.style.backgroundColor = isDark ? "#1e293b" : "white"}>
       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
           d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
@@ -547,7 +547,7 @@ export default function AdminTransactions() {
         </div>
         <div className="flex items-center gap-2">
           <ExportCSVBtn onClick={handleCSV} isDark={isDark} />
-          <PrintBtn onClick={handlePrint} />
+          <PrintBtn onClick={handlePrint} isDark={isDark} />
         </div>
       </div>
 

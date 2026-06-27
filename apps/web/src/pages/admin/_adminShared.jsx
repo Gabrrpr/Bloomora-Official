@@ -44,11 +44,24 @@ const BADGE = {
   "Refund":           { bg: "#fef3c7", color: "#92400e", dot: null },
 }
 
+// Dark-mode variants keyed by the light text color, so badges fit the dark scheme
+// (translucent tint background + a light, legible text color).
+const BADGE_DARK = {
+  "#15803d": { bg: "rgba(34,197,94,0.15)",  color: "#4ade80" },
+  "#166534": { bg: "rgba(34,197,94,0.15)",  color: "#4ade80" },
+  "#dc2626": { bg: "rgba(248,113,113,0.15)", color: "#f87171" },
+  "#92400e": { bg: "rgba(234,179,8,0.15)",   color: "#fbbf24" },
+  "#1e40af": { bg: "rgba(59,130,246,0.15)",  color: "#93c5fd" },
+  "#475569": { bg: "rgba(148,163,184,0.15)", color: "#cbd5e1" },
+}
+
 export function StatusBadge({ status }) {
+  const { isDark } = useTheme() || {}
   const s = BADGE[status] || { bg: "#f1f5f9", color: "#475569", dot: "#94a3b8" }
+  const d = BADGE_DARK[s.color] || { bg: "rgba(148,163,184,0.15)", color: "#cbd5e1" }
   return (
     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-semibold"
-      style={{ backgroundColor: s.bg, color: s.color }}>
+      style={{ backgroundColor: isDark ? d.bg : s.bg, color: isDark ? d.color : s.color }}>
       {s.dot && <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: s.dot }} />}
       {status}
     </span>

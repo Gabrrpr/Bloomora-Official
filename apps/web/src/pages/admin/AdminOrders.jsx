@@ -135,7 +135,9 @@ export default function AdminOrders() {
 
   // 🚀 WALK-IN POS STATE
   const [posOpen, setPosOpen] = useState(false)
+  const [posClosing, setPosClosing] = useState(false)
   const [posProducts, setPosProducts] = useState([])
+  const [posCatalogLoading, setPosCatalogLoading] = useState(false)
   const [posCart, setPosCart] = useState([])
   const [posBranch, setPosBranch] = useState("Manila")
   const [posPayMethod, setPosPayMethod] = useState("cash")
@@ -177,6 +179,7 @@ export default function AdminOrders() {
   useEffect(() => {
     if (posOpen && posProducts.length === 0) {
       const loadCatalog = async () => {
+        setPosCatalogLoading(true);
         try {
           const [adminRes, customizationRes] = await Promise.all([
             api.getAdminProducts ? api.getAdminProducts() : api.get("/products/admin/all"),
@@ -193,11 +196,19 @@ export default function AdminOrders() {
           setPosProducts([...byId.values()]);
         } catch (e) {
           console.warn("Failed to load POS catalog:", e);
+        } finally {
+          setPosCatalogLoading(false);
         }
       }
       loadCatalog();
     }
   }, [posOpen])
+
+  // Animate the drawer out before unmounting (smooth slide back to the right).
+  const closePos = () => {
+    setPosClosing(true)
+    setTimeout(() => { setPosOpen(false); setPosClosing(false) }, 280)
+  }
 
   useEffect(() => {
     if (loading) { setEntered(false); return }
@@ -281,9 +292,26 @@ export default function AdminOrders() {
   const posItemKind = (p) => ["Flowers", "Vases", "Wrapping", "Add-ons"].includes(posItemCategory(p)) ? "Material" : "Product";
 
   // 🚀 NEW: Get Strictly Branch-based Stock from adminInventory/inventory Array
+  // Format a Philippine mobile number as the user types: "+63 917 123 4567".
+  const formatPhPhone = (raw) => {
+    let d = (raw || "").replace(/\D/g, "");
+    if (d.startsWith("63")) d = d.slice(2);
+    if (d.startsWith("0")) d = d.slice(1);
+    d = d.slice(0, 10); // PH mobile is 10 digits after the +63 country code
+    if (!d) return "";
+    let out = "+63 " + d.slice(0, 3);
+    if (d.length > 3) out += " " + d.slice(3, 6);
+    if (d.length > 6) out += " " + d.slice(6, 10);
+    return out;
+  };
+
   const getBranchStock = (p) => {
     const checkBranch = posBranch.toLowerCase();
-    
+
+    // Flat per-branch stock fields (e.g. stock_manila / stock_pampanga) — primary source.
+    const flat = p[`stock_${checkBranch}`] ?? p[`stock${checkBranch.charAt(0).toUpperCase()}${checkBranch.slice(1)}`];
+    if (flat != null) return flat;
+
     // Check if there is an adminInventory or inventory array
     const invArray = p.adminInventory || p.inventory;
     if (invArray && Array.isArray(invArray)) {
@@ -384,7 +412,7 @@ export default function AdminOrders() {
       const payload = {
         items: posCart.map(i => ({ id: i.id, qty: i.qty })),
         customer_name: customerName,
-        customer_phone: customerPhone,
+        customer_phone: customerPhone.replace(/\s/g, ""),
         fulfillment_method: fulfillmentMethod,
         delivery_address: fulfillmentMethod === "delivery" ? deliveryAddress : "PICKUP",
         delivery_notes: `[BRANCH:${posBranch}] POS Transaction | ${pickupLabel}`,
@@ -522,6 +550,55 @@ export default function AdminOrders() {
     <div className="space-y-5">
       <style>{`
         .print-only { display: none; }
+        @media print {
+          @page { size: A4 portrait; margin: 12mm 10mm; }
+          html, body { background: #ffffff !important; }
+          body * { visibility: hidden !important; }
+          #orders-print-area, #orders-print-area * { visibility: visible !important; }
+          #orders-print-area { position: absolute; top: 0; left: 0; width: 100%; font-family: "Helvetica Neue", Arial, sans-serif; color: #1f2937; box-sizing: border-box; }
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+          .op-letterhead, .op-doc-title, .op-summary { break-inside: avoid; page-break-inside: avoid; }
+          .op-letterhead { display: flex !important; align-items: center; justify-content: space-between; gap: 18px; min-height: 62px; padding: 12px 18px; border-radius: 12px; background: linear-gradient(135deg,#0C573E 0%,#15724B 55%,#2E8B34 100%) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .op-logo-word { height: 32px; width: auto; max-width: 260px; display: block; object-fit: contain; filter: brightness(0) invert(1); }
+          .op-tagline { margin: 5px 0 0; font-size: 8px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: rgba(255,255,255,0.82) !important; }
+          .op-meta { text-align: right; flex-shrink: 0; }
+          .op-meta .ref { display: inline-block; margin: 0; padding: 3px 10px; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.12) !important; color: #fff !important; font-size: 8.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .op-meta .gen { margin: 6px 0 0; font-size: 9px; color: rgba(255,255,255,0.85) !important; }
+          .op-meta .gen strong { color: #fff !important; font-weight: 700; }
+          .op-doc-title { display: flex !important; flex-direction: column; align-items: center; margin: 16px 0 2px; }
+          .op-doc-title .t { margin: 0; font-size: 15px; font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: #0C573E !important; }
+          .op-doc-title .rule { width: 54px; height: 3px; border-radius: 9999px; margin: 7px 0 6px; background: linear-gradient(90deg,#0C573E,#2E8B34) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .op-doc-title .scope { margin: 0; font-size: 9px; color: #6b7280 !important; text-align: center; }
+          .op-summary { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 0; }
+          .op-card { min-width: 0; border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px; background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .op-card.c-total { border-top-color: #0C573E !important; }
+          .op-card.c-sales { border-top-color: #2E8B34 !important; }
+          .op-card.c-open  { border-top-color: #d97706 !important; }
+          .op-card.c-cancel{ border-top-color: #dc2626 !important; }
+          .op-card .label { margin: 0; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9ca3af !important; }
+          .op-card .value { margin: 3px 0 0; font-size: 19px; font-weight: 800; color: #111827 !important; }
+          .op-card .value.green { color: #16a34a !important; }
+          .op-card .value.amber { color: #d97706 !important; }
+          .op-card .value.red { color: #dc2626 !important; }
+          .op-card .cap { margin: 3px 0 0; font-size: 8px; color: #9ca3af !important; }
+          .op-detail { display: block !important; margin-top: 6px; }
+          .op-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 14px 0 7px; padding: 0 2px; }
+          .op-section-title { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #0C573E !important; }
+          .op-section-sub { margin: 0; font-size: 8.5px; color: #9ca3af !important; }
+          .op-detail .twrap { border: 1px solid #dbe3df; border-radius: 10px; overflow: hidden; }
+          .op-detail table { width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; }
+          .op-detail thead { display: table-header-group; }
+          .op-detail tr { page-break-inside: avoid; }
+          .op-detail th { background: #0C573E !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border: none; padding: 7px 6px; text-align: left; font-size: 8.3px; font-weight: 700; text-transform: uppercase; line-height: 1.25; }
+          .op-detail th.c-idx { width: 6%; } .op-detail th.c-id { width: 18%; } .op-detail th.c-cust { width: 30%; } .op-detail th.c-pay { width: 13%; } .op-detail th.c-date { width: 16%; } .op-detail th.c-total { width: 17%; }
+          .op-detail td { border-bottom: 1px solid #eef1f4; padding: 6px; font-size: 9px; color: #1f2937 !important; vertical-align: top; overflow-wrap: anywhere; }
+          .op-detail .num { text-align: right; }
+          .op-detail .muted { color: #6b7280 !important; }
+          .op-detail .strong { font-weight: 700; color: #0f172a !important; }
+          .op-detail tr.alt td { background: #f7faf8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .op-detail tbody tr:last-child td { border-bottom: none; }
+        }
         @keyframes ordersRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
         .orders-rise { animation: ordersRise 0.85s ease-out both; }
 
@@ -529,7 +606,17 @@ export default function AdminOrders() {
           from { transform: translateX(100%); }
           to { transform: translateX(0); }
         }
-        .pos-drawer { animation: posSlideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        .pos-drawer { animation: posSlideIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes posSlideOut {
+          from { transform: translateX(0); }
+          to { transform: translateX(100%); }
+        }
+        .pos-drawer-out { animation: posSlideOut 0.28s cubic-bezier(0.4, 0, 1, 1) forwards; }
+        @keyframes posBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes posBackdropOut { from { opacity: 1; } to { opacity: 0; } }
+        .pos-backdrop-in { animation: posBackdropIn 0.28s ease both; }
+        .pos-backdrop-out { animation: posBackdropOut 0.28s ease both; }
+        @keyframes posSpin { to { transform: rotate(360deg); } }
 
         @keyframes posItemIn { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
         .pos-item-in { animation: posItemIn 0.25s ease-out both; }
@@ -752,10 +839,10 @@ export default function AdminOrders() {
 
       {/* 🚀 WALK-IN POS DRAWER */}
       {posOpen && (
-        <div className="fixed inset-0 z-[60] flex justify-end no-print" style={{ backgroundColor: "rgba(15,23,42,0.6)", backdropFilter: "blur(2px)" }}>
-          <div className="absolute inset-0" onClick={() => setPosOpen(false)} />
-          
-          <div className="relative pos-drawer flex flex-col h-full shadow-2xl ml-auto"
+        <div className={`fixed inset-0 z-[60] flex justify-end no-print ${posClosing ? "pos-backdrop-out" : "pos-backdrop-in"}`} style={{ backgroundColor: "rgba(15,23,42,0.6)", backdropFilter: "blur(2px)" }}>
+          <div className="absolute inset-0" onClick={closePos} />
+
+          <div className={`relative flex flex-col h-full shadow-2xl ml-auto ${posClosing ? "pos-drawer-out" : "pos-drawer"}`}
             style={{ width: `${posWidth}px`, maxWidth: '100%', backgroundColor: isDark ? "#0f172a" : "#f8fafc", borderLeft: `1px solid ${isDark ? "#334155" : "#e2e8f0"}` }}>
             
             {/* 🚀 NEW: Resizer Handle */}
@@ -786,7 +873,7 @@ export default function AdminOrders() {
                     ₱{posCart.reduce((sum, i) => sum + (i.price * i.qty), 0).toLocaleString()}
                   </div>
                 )}
-                <button onClick={() => setPosOpen(false)} className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors">
+                <button onClick={closePos} className="p-2 rounded-md hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors">
                   <svg className="w-5 h-5" style={{ color: isDark ? "#94a3b8" : "#64748b" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
                 </button>
               </div>
@@ -797,21 +884,21 @@ export default function AdminOrders() {
               <div className="flex-1 flex flex-col border-r min-w-0" style={{ borderColor: isDark ? "#334155" : "#e2e8f0", backgroundColor: isDark ? "#0f172a" : "#f1f5f9" }}>
                 
                 {/* Search & Branch Bar */}
-                <div className="p-4 flex gap-3 flex-shrink-0 bg-white dark:bg-slate-800 border-b dark:border-slate-700">
+                <div className="p-4 flex gap-3 flex-shrink-0 bg-white dark:bg-slate-800" style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#eef1f4"}` }}>
                   <div className="relative flex-1">
                     <svg className="w-4 h-4 absolute left-3 top-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
                     <input type="text" placeholder="Search products..." value={posSearch} onChange={e => setPosSearch(e.target.value)}
-                      className="w-full pl-9 pr-4 py-2 text-sm border rounded-lg outline-none focus:border-green-500 bg-gray-50 dark:bg-slate-900 dark:border-slate-600 dark:text-white" />
+                      className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-green-500 bg-gray-50 dark:bg-slate-900 dark:border-slate-600 dark:text-white" />
                   </div>
                   <select value={posBranch} onChange={e => setPosBranch(e.target.value)}
-                    className="px-3 py-2 text-sm font-semibold border rounded-lg bg-gray-50 dark:bg-slate-900 dark:border-slate-600 dark:text-white outline-none">
+                    className="px-3 py-2 text-sm font-semibold border border-slate-200 rounded-lg bg-gray-50 dark:bg-slate-900 dark:border-slate-600 dark:text-white outline-none">
                     <option value="Manila">Manila Branch</option>
                     <option value="Pampanga">Pampanga Branch</option>
                   </select>
                 </div>
 
                 {/* Categories Scroll Bar */}
-                <div className="px-4 py-3 bg-white dark:bg-slate-800 border-b dark:border-slate-700 overflow-x-auto whitespace-nowrap flex gap-2 no-scrollbar flex-shrink-0">
+                <div className="px-4 py-3 bg-white dark:bg-slate-800 overflow-x-auto whitespace-nowrap flex gap-2 no-scrollbar flex-shrink-0" style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#eef1f4"}` }}>
                   {posCategories.map(c => (
                     <button key={c} onClick={() => setPosCategory(c)}
                       className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-all border ${
@@ -826,6 +913,12 @@ export default function AdminOrders() {
 
                 {/* Grid */}
                 <div className="flex-1 overflow-y-auto p-4">
+                  {posCatalogLoading && posProducts.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center gap-3 py-20">
+                      <span style={{ width: 34, height: 34, borderRadius: "9999px", border: `3px solid ${isDark ? "#22324a" : "#e2e8f0"}`, borderTopColor: G, display: "inline-block", animation: "posSpin 0.7s linear infinite" }} />
+                      <p className="text-sm font-medium" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>Loading products…</p>
+                    </div>
+                  ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                     {filteredPosProducts.map(p => {
                       const inCartQty = posCart.find(i => i.id === p.id)?.qty || 0
@@ -872,11 +965,12 @@ export default function AdminOrders() {
                     })}
                     {filteredPosProducts.length === 0 && <p className="col-span-3 text-center text-sm mt-10 text-gray-500">No items found in this category.</p>}
                   </div>
+                  )}
                 </div>
               </div>
 
               {/* Right Column: Cart, Details & Checkout */}
-              <div className="w-[380px] flex flex-col flex-shrink-0 relative overflow-y-auto" style={{ backgroundColor: isDark ? "#111827" : "white" }}>
+              <div className="w-[380px] flex flex-col flex-shrink-0 relative overflow-hidden" style={{ backgroundColor: isDark ? "#111827" : "white" }}>
                 
                 {/* Toast and Success layers */}
                 {posToast && (
@@ -913,12 +1007,14 @@ export default function AdminOrders() {
                 )}
 
                 {/* Header */}
-                <div className="px-5 py-4 border-b flex items-center justify-between" style={{ borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
+                <div className="px-5 py-4 border-b flex items-center justify-between flex-shrink-0" style={{ borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
                   <h3 className="font-bold text-base" style={{ color: isDark ? "#f8fafc" : "#0f172a" }}>Order Checkout</h3>
                   {posCart.length > 0 && <button onClick={() => setPosCart([])} className="text-xs text-red-400 font-semibold">Clear Cart</button>}
                 </div>
 
-                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+                {/* Scroll area: cart items + fulfillment details scroll together */}
+                <div className="flex-1 overflow-y-auto">
+                <div className="px-4 py-3 space-y-2">
                   {/* Cart items */}
                   {posCart.length === 0 ? (
                      <p className="text-center text-gray-400 text-xs mt-10">Cart is empty</p>
@@ -961,7 +1057,12 @@ export default function AdminOrders() {
                     <div className="grid grid-cols-2 gap-2">
                       {["delivery", "pickup"].map((m) => (
                         <button key={m} onClick={() => setFulfillmentMethod(m)}
-                          className={`py-2 text-xs font-bold rounded-lg border transition-all ${fulfillmentMethod === m ? "bg-green-600 text-white border-green-600" : "bg-transparent border-gray-300 text-gray-500"}`}>
+                          className="py-2 text-xs font-bold rounded-lg border transition-all"
+                          style={{
+                            backgroundColor: fulfillmentMethod === m ? G : "transparent",
+                            borderColor: fulfillmentMethod === m ? G : (isDark ? "#334155" : "#e2e8f0"),
+                            color: fulfillmentMethod === m ? "#ffffff" : (isDark ? "#94a3b8" : "#64748b"),
+                          }}>
                           {m.toUpperCase()}
                         </button>
                       ))}
@@ -972,7 +1073,7 @@ export default function AdminOrders() {
                     <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: subTxt }}>Customer Info</p>
                     <input placeholder="Customer Name" value={customerName} onChange={e => setCustomerName(e.target.value)}
                       className="w-full px-3 py-2 text-sm border rounded-lg outline-none" style={{ borderColor: isDark ? "#334155" : "#e2e8f0", backgroundColor: isDark ? "#1e293b" : "white", color: isDark ? "#e2e8f0" : "#1e293b" }} />
-                    <input placeholder="Phone Number" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)}
+                    <input placeholder="+63 917 123 4567" inputMode="numeric" value={customerPhone} onChange={e => setCustomerPhone(formatPhPhone(e.target.value))}
                       className="w-full px-3 py-2 text-sm border rounded-lg outline-none" style={{ borderColor: isDark ? "#334155" : "#e2e8f0", backgroundColor: isDark ? "#1e293b" : "white", color: isDark ? "#e2e8f0" : "#1e293b" }} />
                   </div>
 
@@ -1027,15 +1128,16 @@ export default function AdminOrders() {
                         />
                       ) : (
                         <p className="text-[11px] leading-relaxed" style={{ color: subTxt }}>
-                          Use this for customers taking the bouquet immediately from the store.
+                          Use this for customers taking their order immediately from the store.
                         </p>
                       )}
                     </div>
                   )}
                 </div>
+                </div>
 
-                {/* Footer (Payment & Submit) */}
-                <div className="p-5 border-t bg-gray-50 dark:bg-slate-900" style={{ borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
+                {/* Footer (Payment & Submit) — pinned at the bottom */}
+                <div className="p-5 border-t bg-gray-50 dark:bg-slate-900 flex-shrink-0" style={{ borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
                   <div className="flex justify-between items-center mb-4">
                      <span className="text-sm font-semibold text-gray-500">Total Due</span>
                      <span className="text-2xl font-bold text-green-600">₱{posCart.reduce((sum, i) => sum + (i.price * i.qty), 0).toLocaleString()}</span>
@@ -1138,7 +1240,11 @@ export default function AdminOrders() {
                 onBlur={e => { e.target.style.borderColor = inputBdr; e.target.style.boxShadow = "none" }} />
             </div>
             
-            <button onClick={fetchOrders} className="px-4 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200 bg-white dark:bg-slate-800 border dark:border-slate-600 rounded-md transition-all hover:bg-gray-50 active:scale-95">
+            <button onClick={fetchOrders}
+              className="px-4 py-2 text-sm font-semibold rounded-md transition-all active:scale-95"
+              style={{ border: `1px solid ${inputBdr}`, backgroundColor: inputBg, color: inputTxt }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#2d3f55" : "#f9fafb"}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = inputBg}>
               Refresh
             </button>
             <button onClick={() => setPosOpen(true)} className="px-4 py-2 text-sm font-semibold text-white rounded-md transition-all hover:opacity-90 active:scale-95 flex items-center gap-1.5"
@@ -1222,6 +1328,86 @@ export default function AdminOrders() {
             <button disabled={page >= totalPages} onClick={() => setPage(p => p + 1)} className="px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all disabled:opacity-50"
               style={{ background: isDark ? "#1e293b" : "white", color: isDark ? "#94a3b8" : "#6b7280", border: `1px solid ${isDark ? "#374151" : "#e2e8f0"}` }}>→</button>
           </div>
+        </div>
+      </div>
+
+      {/* ── Printable report (matches the Inventory print format) ── */}
+      <div id="orders-print-area">
+        <div className="print-only op-letterhead">
+          <div>
+            <img className="op-logo-word" src={estingsWordmark} alt="Esting's Flower International Inc." />
+            <p className="op-tagline">Flower International Inc.</p>
+          </div>
+          <div className="op-meta">
+            <p className="ref">Ref: ORD-{new Date().toISOString().slice(0, 10).replace(/-/g, "")}</p>
+            <p className="gen">Generated <strong>{printDate}</strong> at <strong>{printTime}</strong></p>
+          </div>
+        </div>
+
+        <div className="print-only op-doc-title">
+          <p className="t">Orders Report</p>
+          <span className="rule" />
+          <p className="scope">{printScope}</p>
+        </div>
+
+        <div className="print-only op-summary">
+          <div className="op-card c-total">
+            <p className="label">Total Orders</p>
+            <p className="value">{filtered.length}</p>
+            <p className="cap">{printGroups.length} status group{printGroups.length === 1 ? "" : "s"}</p>
+          </div>
+          <div className="op-card c-sales">
+            <p className="label">Sales Value</p>
+            <p className="value green">₱{salesValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+            <p className="cap">Excludes cancelled</p>
+          </div>
+          <div className="op-card c-open">
+            <p className="label">Open Orders</p>
+            <p className="value amber">{openOrders}</p>
+            <p className="cap">Pending → out for delivery</p>
+          </div>
+          <div className="op-card c-cancel">
+            <p className="label">Cancelled</p>
+            <p className="value red">{cancelledCount}</p>
+            <p className="cap">{deliveredCount} delivered</p>
+          </div>
+        </div>
+
+        <div className="print-only op-detail">
+          {printGroups.map(group => (
+            <div key={group.label}>
+              <div className="op-section-head">
+                <p className="op-section-title">{group.label}</p>
+                <p className="op-section-sub">{group.items.length} order{group.items.length === 1 ? "" : "s"} · ₱{group.value.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+              </div>
+              <div className="twrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th className="c-idx">#</th>
+                      <th className="c-id">Order ID</th>
+                      <th className="c-cust">Customer</th>
+                      <th className="c-pay">Payment</th>
+                      <th className="c-date">Order Date</th>
+                      <th className="c-total num">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {group.items.map((o, i) => (
+                      <tr key={o.id} className={i % 2 ? "alt" : ""}>
+                        <td className="muted">{i + 1}</td>
+                        <td className="strong">{o.order_number}</td>
+                        <td>{o.customer_name || "—"}{o.customer_email ? <><br /><span className="muted">{o.customer_email}</span></> : null}</td>
+                        <td>{o.payment_status || "pending"}</td>
+                        <td className="muted">{o.created_at ? new Date(o.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}</td>
+                        <td className="num strong">₱{(o.total_amount || 0).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>

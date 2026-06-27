@@ -3,6 +3,7 @@ import { useTheme } from "../../context/ThemeContext"
 import { useBranch } from "../../context/BranchContext";
 import { loadVouchers, saveVouchers } from "../../utils/vouchers.js"
 import { api } from "../../services/api.js"
+import SaveToast from "../../components/SaveToast"
 
 const DG = "#0C573E"  
 const G  = "#2E8B34"
@@ -379,6 +380,7 @@ export default function AdminPromotions() {
 
   return (
     <div className="space-y-5">
+      <SaveToast show={savedFlash || annSaved} isDark={isDark} message="Saved!" sub="Your promotion changes are now live." />
       {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
       <style>{`
         @keyframes promoRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }

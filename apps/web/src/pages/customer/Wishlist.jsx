@@ -109,11 +109,11 @@ export default function Wishlist({ onNavigate }) {
                 <div key={item.id} style={{ animation:`pageRise 0.5s ease ${0.22 + i * 0.07}s both` }} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow group flex flex-col">
                   
                   {/* Image Section */}
-                  <div className="relative h-44 bg-gray-50 flex items-center justify-center overflow-hidden flex-shrink-0 cursor-pointer" onClick={() => onNavigate("shop")}>
-                    <img 
-                      src={item.image_url || PLACEHOLDER_IMAGE} 
-                      alt={item.name} 
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                  <div className="relative aspect-square bg-gray-50 flex items-center justify-center overflow-hidden flex-shrink-0 cursor-pointer" onClick={() => onNavigate("shop")}>
+                    <img
+                      src={item.image_url || PLACEHOLDER_IMAGE}
+                      alt={item.name}
+                      className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500"
                       onError={(e) => { e.target.src = PLACEHOLDER_IMAGE; }}
                     />
                     

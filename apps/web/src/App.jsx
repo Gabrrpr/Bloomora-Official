@@ -25,7 +25,6 @@ import Wishlist from "./pages/customer/Wishlist";
 import Settings from "./pages/customer/Settings";
 import AboutUs from "./pages/customer/AboutUs";
 import ContactUs from "./pages/customer/ContactUs";
-import AllOccasions from "./pages/customer/AllOccasions";
 import Shop from "./pages/customer/Shop";
 import MakeItPersonal from "./pages/customer/MakeItPersonal";
 import MixAndMatch from "./pages/customer/MixAndMatch";
@@ -242,7 +241,6 @@ function AppContent() {
             case "oauth-callback": return <OAuthCallback onNavigate={navigate} />;
             case "home": return <Home onNavigate={navigate} />;
             case "shop": return <Shop onNavigate={navigate} initialCategory={activeShopCategory} />;
-            case "occasions": return <AllOccasions onNavigate={navigate} />;
             case "about": return <AboutUs onNavigate={navigate} />;
             case "contact": return <ContactUs onNavigate={navigate} />;
             case "faq": return <FAQ onNavigate={navigate} />;

@@ -6,7 +6,7 @@ import weddingImg     from "../assets/occasions/Wedding.webp"
 import graduationImg  from "../assets/occasions/Graduation.webp"
 import sympathyImg    from "../assets/occasions/Sympathy.webp"
 import justBecauseImg from "../assets/occasions/JustBecause.webp"
-import openingsImg    from "../assets/occasions/Openings.webp"
+import getWellSoonImg from "../assets/occasions/GetWellSoon.webp"
 
 const G = "#2E8B34"
 
@@ -15,7 +15,7 @@ const ALL_OCCASIONS = [
   { label: "Anniversary", img: anniversaryImg },
   { label: "Graduation",  img: graduationImg },
   { label: "Sympathy",    img: sympathyImg },
-  { label: "Openings",    img: openingsImg },
+  { label: "Get Well Soon", img: getWellSoonImg, value: "Get Well" },
   { label: "Wedding",     img: weddingImg },
   { label: "Just Because",img: justBecauseImg,  hidden: true },
 ]
@@ -23,7 +23,7 @@ const ALL_OCCASIONS = [
 
 const VISIBLE = ALL_OCCASIONS
   .filter(o => !o.hidden)
-  .map((o, i) => ({ ...o, mobileOnly: i === 5 }))
+  .map(o => ({ ...o, mobileOnly: false }))
 
 function useReveal(ref, delay = 0) {
   useEffect(() => {
@@ -43,7 +43,7 @@ function useReveal(ref, delay = 0) {
   }, [])
 }
 
-function OccasionCard({ label, img, onNavigate, delay, labelColor, accentG, mobileOnly, active }) {
+function OccasionCard({ label, value, img, onNavigate, delay, labelColor, accentG, mobileOnly, active }) {
   const ref = useRef(null)
   useReveal(ref, delay)
 
@@ -54,7 +54,7 @@ function OccasionCard({ label, img, onNavigate, delay, labelColor, accentG, mobi
       style={{ opacity:0, transform:"translateY(28px)", transition:"opacity 0.55s ease, transform 0.55s ease" }}
     >
       <button
-        onClick={() => onNavigate?.("occasions")}
+        onClick={() => { localStorage.setItem("bloomora_active_occasion", value || label); onNavigate?.("shop") }}
         className="group flex flex-col items-center gap-5 w-full focus:outline-none"
       >
         <div className="relative w-full aspect-square">
@@ -144,11 +144,12 @@ export default function OccasionsStrip({ onNavigate }) {
           />
         </div>
 
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-6 sm:gap-10 mb-8">
-          {VISIBLE.map(({ label, img, mobileOnly }, i) => (
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-6 sm:gap-8 mb-8">
+          {VISIBLE.map(({ label, img, mobileOnly, value }, i) => (
             <OccasionCard
               key={label}
               label={label}
+              value={value}
               img={img}
               onNavigate={onNavigate}
               delay={i * 80}
@@ -160,21 +161,6 @@ export default function OccasionsStrip({ onNavigate }) {
           ))}
         </div>
 
-
-        <div className="text-center">
-          <button
-            onClick={() => onNavigate?.("occasions")}
-            className="inline-flex items-center gap-1.5 text-sm font-semibold transition-colors"
-            style={{ color: accentG }}
-            onMouseEnter={e => e.currentTarget.style.color = isDark ? "#86efac" : "#15803d"}
-            onMouseLeave={e => e.currentTarget.style.color = accentG}
-          >
-            See all occasions
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-        </div>
 
       </div>
     </section>

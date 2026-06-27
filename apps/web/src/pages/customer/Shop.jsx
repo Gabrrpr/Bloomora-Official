@@ -27,6 +27,10 @@ const discount = (orig, price) => Math.round((1 - price / orig) * 100)
 
 const normalizeFilterValue = value => (value || "").toString().trim().toLowerCase()
 
+// Friendlier display names for certain occasion tags (matching still uses the raw tag).
+const OCCASION_DISPLAY = { "get well": "Get Well Soon" }
+const occasionDisplay = occ => OCCASION_DISPLAY[normalizeFilterValue(occ)] || occ
+
 const toFilterList = value => {
   if (Array.isArray(value)) return value
   if (typeof value !== "string") return []
@@ -436,7 +440,7 @@ function SidebarContent({
                     style={{ accentColor: G }}
                   />
                   <label htmlFor={`sidebar-occ-${occ}`} className="cursor-pointer hover:text-gray-900 text-xs capitalize">
-                    {occ}
+                    {occasionDisplay(occ)}
                   </label>
                 </li>
               ))}

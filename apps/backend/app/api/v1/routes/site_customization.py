@@ -9,6 +9,8 @@ from app.schemas.site_customization import (
     HeroCustomizationResponse,
     HeroCustomizationUpdate,
     HeroSlide,
+    NavPromosResponse,
+    NavPromosUpdate,
 )
 from app.schemas.customization_toggle import (
     CustomizationToggleResponse,
@@ -75,6 +77,24 @@ def _get_or_seed_hero(db: Session):
     return row
 
 
+DEFAULT_NAV_PROMOS = [
+    {"short": "Flowers for Every", "text": "Handcrafted Flowers for Every", "highlight": "Occasion", "cta": "EXPLORE", "page": "shop"},
+    {"short": "Build Your Own", "text": "Design Your Dream", "highlight": "Bouquet", "cta": "CREATE NOW", "page": "make-it-personal"},
+    {"short": "Fresh Flowers", "text": "Farm-Fresh Blooms, Arranged", "highlight": "Daily", "cta": "SHOP NOW", "page": "shop"},
+    {"short": "Manila & Pampanga", "text": "Now Open in Manila & Pampanga", "highlight": "Stores", "cta": "VISIT US", "page": "contact"},
+]
+
+
+def _get_or_seed_promos(db: Session):
+    row = db.query(SiteCustomization).filter(SiteCustomization.key == "nav_promos").first()
+    if not row:
+        row = SiteCustomization(key="nav_promos", value=json.dumps(DEFAULT_NAV_PROMOS))
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+    return row
+
+
 def _get_or_seed_toggle(db: Session):
     row = db.query(SiteCustomization).filter(SiteCustomization.key == "customization_enabled").first()
     if not row:
@@ -119,6 +139,34 @@ def update_hero_slides(
     db.commit()
     db.refresh(row)
     return {"slides": json.loads(row.value)}
+
+
+# ── Navbar Promo Strip ────────────────────────────────────────────────────────
+
+@router.get("/promos", response_model=NavPromosResponse)
+def get_nav_promos(db: Session = Depends(get_db)):
+    """Public endpoint to retrieve the rotating navbar promo messages."""
+    row = _get_or_seed_promos(db)
+    try:
+        promos = json.loads(row.value)
+    except json.JSONDecodeError:
+        promos = DEFAULT_NAV_PROMOS
+    return {"promos": promos}
+
+
+@router.put("/promos", response_model=NavPromosResponse)
+def update_nav_promos(
+    payload: NavPromosUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update the navbar promo messages. Admin/Staff only."""
+    require_admin_or_staff(current_user)
+    row = _get_or_seed_promos(db)
+    row.value = json.dumps([p.model_dump() for p in payload.promos])
+    db.commit()
+    db.refresh(row)
+    return {"promos": json.loads(row.value)}
 
 
 # ── Customization Toggle ──────────────────────────────────────────────────────

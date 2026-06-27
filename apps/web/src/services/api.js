@@ -383,6 +383,17 @@ export const api = {
     });
   },
 
+  async getNavPromos() {
+    return api.get('/site-customization/promos');
+  },
+
+  async updateNavPromos(data) {
+    return api.request('/site-customization/promos', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+
   async isCustomizationEnabled() {
     return api.get('/site-customization/customization/toggle');
   },

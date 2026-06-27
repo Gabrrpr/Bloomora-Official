@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react"
+import { createPortal } from "react-dom"
 import { useTheme } from "../../context/ThemeContext"
 import { useBranch } from "../../context/BranchContext";
 import { api } from "../../services/api.js"
@@ -145,7 +146,7 @@ function Field({ label, value, onChange, placeholder, t, type = "text", maxLengt
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         maxLength={maxLength}
-        className="w-full px-3 py-2 text-sm rounded-md outline-none transition-all"
+        className="w-full max-w-sm px-3 py-2 text-sm rounded-md outline-none transition-all"
         style={{ backgroundColor: t.inputBg, color: t.textPrimary, border: `1px solid ${t.inputBorder}` }}
         onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = "0 0 0 2px rgba(46,139,52,0.15)" }}
         onBlur={e => { e.target.style.borderColor = t.inputBorder; e.target.style.boxShadow = "none" }}
@@ -165,7 +166,7 @@ function TextArea({ label, value, onChange, placeholder, t, rows = 3 }) {
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
         rows={rows}
-        className="w-full px-3 py-2 text-sm rounded-md outline-none transition-all resize-y"
+        className="w-full max-w-md px-3 py-2 text-sm rounded-md outline-none transition-all resize-y"
         style={{ backgroundColor: t.inputBg, color: t.textPrimary, border: `1px solid ${t.inputBorder}` }}
         onFocus={e => { e.target.style.borderColor = G; e.target.style.boxShadow = "0 0 0 2px rgba(46,139,52,0.15)" }}
         onBlur={e => { e.target.style.borderColor = t.inputBorder; e.target.style.boxShadow = "none" }}
@@ -648,9 +649,21 @@ function CarouselEditor({ data, onChange, products, loading, t, isDark }) {
             <Field label="Link Label" value={data.ctaLabel}
               onChange={v => onChange({ ...data, ctaLabel: v })}
               placeholder="e.g. Shop all bouquets" t={t} maxLength={28} />
-            <Field label="Link Target Page" value={data.ctaTarget}
-              onChange={v => onChange({ ...data, ctaTarget: v })}
-              placeholder="e.g. shop, vases, addons" t={t} maxLength={32} />
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: t.textMuted }}>
+                Link To
+              </label>
+              <select
+                value={data.ctaTarget || "shop"}
+                onChange={e => onChange({ ...data, ctaTarget: e.target.value })}
+                className="w-full max-w-sm px-3 py-2 text-sm rounded-md outline-none cursor-pointer transition-all"
+                style={{ backgroundColor: t.inputBg, color: t.textPrimary, border: `1px solid ${t.inputBorder}` }}>
+                <option value="shop">Shop · All Products</option>
+                {[...new Set((products || []).map(p => p.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)).map(c => (
+                  <option key={c} value={`shop:${c}`}>Shop · {c}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -1101,9 +1114,21 @@ function TabEditor({ data, onChange, products, loading, t, isDark }) {
             <Field label="CTA Button Label" value={data.banner.ctaLabel}
               onChange={v => onChange({ ...data, banner: { ...data.banner, ctaLabel: v } })}
               placeholder="e.g. Shop All Flowers" t={t} maxLength={28} />
-            <Field label="CTA Target Page" value={data.banner.ctaTarget}
-              onChange={v => onChange({ ...data, banner: { ...data.banner, ctaTarget: v } })}
-              placeholder="e.g. shop, vases, addons" t={t} maxLength={32} />
+            <div>
+              <label className="block text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: t.textMuted }}>
+                CTA Links To
+              </label>
+              <select
+                value={data.banner.ctaTarget || "shop"}
+                onChange={e => onChange({ ...data, banner: { ...data.banner, ctaTarget: e.target.value } })}
+                className="w-full max-w-sm px-3 py-2 text-sm rounded-md outline-none cursor-pointer transition-all"
+                style={{ backgroundColor: t.inputBg, color: t.textPrimary, border: `1px solid ${t.inputBorder}` }}>
+                <option value="shop">Shop · All Products</option>
+                {[...new Set((products || []).map(p => p.category).filter(Boolean))].sort((a, b) => a.localeCompare(b)).map(c => (
+                  <option key={c} value={`shop:${c}`}>Shop · {c}</option>
+                ))}
+              </select>
+            </div>
           </div>
         </div>
 
@@ -1199,6 +1224,43 @@ function TabEditor({ data, onChange, products, loading, t, isDark }) {
         isDark={isDark}
       />
     </>
+  )
+}
+
+// Centered "saved" confirmation popup, styled like the dark/light mode toast.
+function SaveToast({ show, isDark, message = "Published!", sub = "Your changes are now live." }) {
+  if (!show) return null
+  const cardBg     = isDark ? "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)" : "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)"
+  const cardBorder = isDark ? "rgba(74,222,128,0.35)" : "rgba(46,139,52,0.28)"
+  const cardShadow = isDark ? "0 24px 70px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04)" : "0 24px 70px rgba(15,23,42,0.18), 0 0 0 1px rgba(0,0,0,0.04)"
+  const titleC = isDark ? "#f1f5f9" : "#1f2937"
+  const subC   = isDark ? "#94a3b8" : "#6b7280"
+  const iconBg = isDark ? "rgba(74,222,128,0.16)" : "rgba(46,139,52,0.12)"
+  const iconC  = isDark ? "#4ade80" : G
+  return createPortal(
+    <>
+      <style>{`
+        @keyframes featSaveToastIn { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.92); } 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+        @keyframes featSaveCheckPop { 0% { transform: scale(0.4); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); } }
+      `}</style>
+      <div role="status" aria-live="polite"
+        style={{
+          position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 2147483647,
+          display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: "14px",
+          width: "max-content", maxWidth: "calc(100vw - 48px)", padding: "30px 38px", borderRadius: "22px",
+          background: cardBg, border: `1px solid ${cardBorder}`, boxShadow: cardShadow, color: titleC,
+          animation: "featSaveToastIn 0.28s cubic-bezier(0.22,1,0.36,1)", pointerEvents: "none",
+        }}>
+        <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "62px", height: "62px", borderRadius: "9999px", flexShrink: 0, background: iconBg, color: iconC, animation: "featSaveCheckPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both" }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+        </span>
+        <div>
+          <p style={{ margin: 0, fontSize: "17px", fontWeight: 800 }}>{message}</p>
+          <p style={{ margin: "4px 0 0", fontSize: "13px", color: subC }}>{sub}</p>
+        </div>
+      </div>
+    </>,
+    document.body
   )
 }
 
@@ -1428,6 +1490,7 @@ export default function AdminFeaturedProducts() {
 
   return (
     <div className="space-y-5">
+      <SaveToast show={saved} isDark={isDark} message="Published!" sub="Your featured products are now live on the homepage." />
       {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
       <style>{`
         @keyframes featRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -1442,27 +1505,7 @@ export default function AdminFeaturedProducts() {
             Curate which products appear in the homepage Featured sections for each branch.
           </p>
         </div>
-        <div className="flex flex-col items-stretch sm:items-end gap-3 w-full sm:w-auto">
-
-          {/* Branch selector */}
-          <div className="flex gap-2">
-            {["Manila", "Pampanga"].map(b => (
-              <button
-                key={b}
-                onClick={() => setBranch(b)}
-                className="flex-1 sm:flex-none px-4 sm:px-6 py-2 rounded-md font-bold transition-all text-sm"
-                style={{
-                  backgroundColor: branch === b ? DG : "transparent",
-                  color: branch === b ? "white" : t.textSecondary,
-                  border: `1px solid ${branch === b ? DG : t.inputBorder}`
-                }}
-              >
-                {b}
-              </button>
-            ))}
-          </div>
-
-          <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
             {saved && (
               <span className="text-xs font-semibold px-3 py-1.5 rounded-md flex items-center gap-1.5"
                 style={{ backgroundColor: isDark ? "rgba(74,222,128,0.15)" : "#f0fdf4", color: isDark ? "#4ade80" : "#16a34a" }}>
@@ -1486,6 +1529,17 @@ export default function AdminFeaturedProducts() {
             </button>
           </div>
         </div>
+
+      {/* Branch selector */}
+      <div className={`flex items-center gap-2 ${entered ? "" : "feat-rise"}`} style={{ animationDelay: "0.06s" }}>
+        <span className="text-sm font-semibold mr-1" style={{ color: t.textSecondary }}>Editing branch:</span>
+        {["Manila", "Pampanga"].map(b => (
+          <button key={b} onClick={() => setBranch(b)}
+            className="px-5 py-2 rounded-md font-bold transition-all text-sm"
+            style={{ backgroundColor: branch === b ? DG : "transparent", color: branch === b ? "white" : t.textSecondary, border: `1px solid ${branch === b ? DG : t.inputBorder}` }}>
+            {b}
+          </button>
+        ))}
       </div>
 
       {/* internal tabs and section controls */}
@@ -1550,7 +1604,7 @@ export default function AdminFeaturedProducts() {
       </div>
 
       {/* split layout */}
-      <div className={`grid grid-cols-1 xl:grid-cols-[1.3fr_1fr] gap-5 ${entered ? "" : "feat-rise"}`} style={{ animationDelay: "0.24s" }}>
+      <div className={`grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-5 ${entered ? "" : "feat-rise"}`} style={{ animationDelay: "0.24s" }}>
         {/* editor */}
         <div>
           {activeIsCarousel ? (
@@ -1582,7 +1636,7 @@ export default function AdminFeaturedProducts() {
             </svg>
             <p className="text-xs font-bold uppercase tracking-wider" style={{ color: t.textMuted }}>Live Preview</p>
           </div>
-          <div className="xl:sticky xl:top-4">
+          <div className="lg:sticky lg:top-4">
             {activeIsCarousel ? (
               <CarouselPreview data={currentData} products={branchProducts} isDark={isDark} />
             ) : (

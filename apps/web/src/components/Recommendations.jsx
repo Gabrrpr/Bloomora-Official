@@ -50,39 +50,35 @@ export default function RecommendedProducts({ onPreview, wishlist = [], toggleWi
   return (
     <section className="my-12">
       <div
-        className="relative overflow-hidden rounded-2xl px-4 py-6 sm:px-6 sm:py-7"
+        className="rounded-2xl overflow-hidden"
         style={{
           background: isDark
-            ? "linear-gradient(135deg,#102019 0%,#172a22 52%,#1e293b 100%)"
-            : "linear-gradient(135deg,#f0fdf4 0%,#ffffff 48%,#fff7ed 100%)",
-          border: `1px solid ${isDark ? "rgba(74,222,128,0.18)" : "#d9f99d"}`,
-          boxShadow: isDark ? "0 18px 40px rgba(0,0,0,0.35)" : "0 18px 42px rgba(12,87,62,0.08)",
+            ? "linear-gradient(135deg, #0f1a14 0%, #15241b 100%)"
+            : "linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)",
+          border: `1px solid ${isDark ? "#24372a" : "#cdeccd"}`,
+          boxShadow: isDark ? "0 8px 28px rgba(0,0,0,0.28)" : "0 10px 30px rgba(12,87,62,0.12)",
         }}
       >
-        <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-6">
+        {/* Header */}
+        <div className="flex items-center gap-2.5 px-5 pt-5 pb-4">
+          <span className="flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0 text-white shadow-sm"
+            style={{ background: "linear-gradient(135deg, #0C573E, #2E8B34)" }}>
+            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M11.48 3.5a.56.56 0 011.04 0l2.12 5.11a.56.56 0 00.48.35l5.52.44c.5.04.7.66.32.99l-4.2 3.6a.56.56 0 00-.18.56l1.28 5.38a.56.56 0 01-.84.61l-4.72-2.88a.56.56 0 00-.59 0l-4.72 2.88a.56.56 0 01-.84-.61l1.28-5.38a.56.56 0 00-.18-.56l-4.2-3.6a.56.56 0 01.32-.99l5.52-.44a.56.56 0 00.48-.35L11.48 3.5z" /></svg>
+          </span>
           <div>
-            <div
-              className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider mb-2"
-              style={{
-                backgroundColor: isDark ? "rgba(74,222,128,0.12)" : "#dcfce7",
-                color: isDark ? "#86efac" : "#0C573E",
-              }}
-            >
-              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: isDark ? "#86efac" : "#2E8B34" }} />
-              Based on your taste
-            </div>
-            <h2 className="text-2xl sm:text-3xl font-extrabold leading-tight" style={{ color: isDark ? "#f8fafc" : "#111827" }}>
+            <h2 className="text-xl sm:text-2xl font-bold leading-tight" style={{ color: isDark ? "#f0fdf4" : "#14532d" }}>
               Recommended For You
             </h2>
-            <p className="text-sm mt-1 max-w-xl" style={{ color: isDark ? "#cbd5e1" : "#64748b" }}>
+            <p className="text-xs mt-0.5" style={{ color: isDark ? "#86efac" : "#15803d" }}>
               Fresh picks shaped by your activity and previous orders.
             </p>
           </div>
-          <div className="hidden sm:flex items-center gap-2 text-xs font-semibold" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
-            <span className="w-8 h-px" style={{ backgroundColor: isDark ? "#334155" : "#bbf7d0" }} />
-            Personal picks
-          </div>
         </div>
+        {/* Divider */}
+        <div className="h-px mx-5" style={{ backgroundColor: isDark ? "#24372a" : "#cdeccd" }} />
+
+        {/* Body */}
+        <div className="p-4 sm:p-5">
 
         {loading ? (
           <div className="space-y-8 animate-pulse">
@@ -101,11 +97,10 @@ export default function RecommendedProducts({ onPreview, wishlist = [], toggleWi
           <div className="space-y-8">
             {rows.map((row, rowIndex) => (
               <div key={rowIndex}>
-                <div className="flex items-center gap-3 mb-3">
+                <div className="mb-3">
                   <h3 className="text-sm font-extrabold uppercase tracking-wider" style={{ color: isDark ? "#d9f99d" : "#0C573E" }}>
                     {rowLabel(row, rowIndex)}
                   </h3>
-                  <span className="h-px flex-1" style={{ backgroundColor: isDark ? "rgba(148,163,184,0.18)" : "#dbeafe" }} />
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                   {row.map(product => (
@@ -123,6 +118,7 @@ export default function RecommendedProducts({ onPreview, wishlist = [], toggleWi
             ))}
           </div>
         )}
+        </div>
       </div>
     </section>
   );

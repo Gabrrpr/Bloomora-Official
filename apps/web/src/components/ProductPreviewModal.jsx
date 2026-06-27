@@ -1723,7 +1723,13 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
     .filter(Boolean)
     .map(a => ({ id: a.id, name: a.name, price: a.price }))
 
-  const openChatWithQuote   = (quote)   => window.dispatchEvent(new CustomEvent("bloomora:open-chat", { detail: { quote } }))
+  const openChatWithQuote   = (quote)   => window.dispatchEvent(new CustomEvent("bloomora:open-chat", {
+    detail: {
+      quote,
+      // Attach the product itself alongside the quotation so the chat shows both.
+      product: { id: product.id, name: product.name, price: product.price, image: product.image },
+    }
+  }))
   const openChatWithProduct = () => {
   window.dispatchEvent(new CustomEvent("bloomora:open-chat", { 
     detail: { 

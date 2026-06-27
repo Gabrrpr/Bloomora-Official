@@ -1164,7 +1164,7 @@ export default function AdminInventory() {
         .inv-rise { animation: invRise 0.85s ease-out both; }
 
         @media print {
-          @page { size: A4 landscape; margin: 10mm; }
+          @page { size: A4 portrait; margin: 12mm 10mm; }
           html, body { background: #ffffff !important; }
           body * { visibility: hidden !important; }
           #inventory-print-area, #inventory-print-area * { visibility: visible !important; }

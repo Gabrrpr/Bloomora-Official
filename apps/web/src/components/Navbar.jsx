@@ -79,7 +79,7 @@ function markAnnouncementsRead(notifs) {
 // ── Promo text: `short` shows on mobile (avoids truncation), `text` is the
 //    longer, more persuasive copy shown from the `sm` breakpoint up. ──
 const PROMOTIONS = [
-  { short: "Flowers for Every",  text: "Handcrafted Flowers for Every",      highlight: "Occasion", cta: "EXPLORE",        page: "occasions" },
+  { short: "Flowers for Every",  text: "Handcrafted Flowers for Every",      highlight: "Occasion", cta: "EXPLORE",        page: "shop" },
   { short: "Build Your Own",     text: "Design Your Dream",                   highlight: "Bouquet",  cta: "CREATE NOW",     page: "make-it-personal" },
   { short: "Fresh Flowers",      text: "Farm-Fresh Blooms, Arranged",         highlight: "Daily",    cta: "SHOP NOW",       page: "shop" },
   { short: "Manila & Pampanga",  text: "Now Open in Manila & Pampanga",       highlight: "Stores",   cta: "VISIT US",       page: "contact" },
@@ -366,19 +366,20 @@ function MakeItPersonalPopout({ onNavigate, onClose, isCustomizationEnabled }) {
 }
 
 // ── Promo Carousel ────────────────────────────────────────────────────────────
-function PromoCarousel({ onNavigate, leftSlot }) {
+function PromoCarousel({ onNavigate, leftSlot, promos }) {
+  const list = (Array.isArray(promos) && promos.length) ? promos : PROMOTIONS;
   const [current, setCurrent] = useState(0);
   const [animating, setAnimating] = useState(false);
   const [direction, setDirection] = useState("next");
   const intervalRef = useRef(null);
-  const total = PROMOTIONS.length;
+  const total = list.length;
   const go = (dir) => {
     if (animating) return;
     setDirection(dir); setAnimating(true);
     setTimeout(() => { setCurrent(c => dir==="next"?(c+1)%total:(c-1+total)%total); setAnimating(false); }, 260);
   };
-  useEffect(() => { intervalRef.current = setInterval(() => go("next"), 4000); return () => clearInterval(intervalRef.current); }, [animating]);
-  const promo = PROMOTIONS[current];
+  useEffect(() => { intervalRef.current = setInterval(() => go("next"), 4000); return () => clearInterval(intervalRef.current); }, [animating, total]);
+  const promo = list[current % total] || list[0];
   const arrowBtn = (dir) => (
     <button onClick={(e) => { e.stopPropagation(); clearInterval(intervalRef.current); go(dir); }}
       style={{ width:"26px", height:"26px", display:"flex", alignItems:"center", justifyItems:"center", borderRadius:"50%", border:"none", background:"transparent", color:"rgba(255,255,255,0.85)", cursor:"pointer", flexShrink:0, transition:"background 0.15s" }}
@@ -477,7 +478,7 @@ function DropdownMenu({ items, categories, onNavigate, onClose }) {
   return (
     <div className="absolute top-full left-0 mt-2 z-50 min-w-[190px] overflow-hidden" style={dropStyle}>
       {items.map(item => (
-        <button key={item.label} onClick={(e) => { e.stopPropagation(); if (item.page && onNavigate) onNavigate(item.page, item.param); onClose?.(); }}
+        <button key={item.label} onClick={(e) => { e.stopPropagation(); if (item.occasion) { localStorage.setItem("bloomora_active_occasion", item.occasion); onNavigate?.("shop"); } else if (item.page && onNavigate) onNavigate(item.page, item.param); onClose?.(); }}
           className="w-full text-left px-4 py-2.5 text-sm first:rounded-t-xl last:rounded-b-xl transition-all duration-150 capitalize"
           style={{ color: isDark ? "#d1d5db" : "#4b5563" }}
           onMouseEnter={e => itemHover(e, true)}
@@ -806,6 +807,16 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
   // Track which mobile-drawer accordions are expanded (by link label)
   const [mobileExpanded, setMobileExpanded]     = useState({});
 
+  // Navbar promo strip — managed from the admin Hero page (falls back to defaults).
+  const [navPromos, setNavPromos] = useState(PROMOTIONS);
+  useEffect(() => {
+    let active = true;
+    api.getNavPromos()
+      .then(data => { if (active && Array.isArray(data?.promos) && data.promos.length) setNavPromos(data.promos); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, []);
+
   useEffect(() => {
     const refresh = () => {
       const anns = readAnnouncementNotifs();
@@ -892,15 +903,6 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
         }))
       }))
       .filter(cat => cat.items.length > 0 || cat.heading)
-    },
-    {
-      label: "Occasions", page: "occasions",
-      dropdown: [
-        { label: "Birthdays", page: "occasions" }, { label: "Anniversaries", page: "occasions" },
-        { label: "Weddings", page: "occasions" }, { label: "Graduations", page: "occasions" },
-        { label: "Sympathy", page: "occasions" }, { label: "Just Because", page: "occasions" },
-        { label: "Openings", page: "occasions" }, { label: "Get Well Soon", page: "occasions" },
-      ],
     },
     { label: "About Us", page: "about" },
     { label: "Contact Us", page: "contact" },
@@ -1091,7 +1093,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
         ref={navRef}
         style={{ zIndex: 99999, pointerEvents: "auto", position: "sticky" }}
       >
-        <PromoCarousel onNavigate={onNavigate} leftSlot={
+        <PromoCarousel onNavigate={onNavigate} promos={navPromos} leftSlot={
           <div className="flex items-center gap-2 flex-shrink-0" ref={locationRef}>
             {/* "STORE BRANCH" label — now shown at all sizes (own row on mobile) */}
             <span className="text-[11px] uppercase tracking-wide font-semibold whitespace-nowrap" style={{ color: "rgba(255,255,255,0.65)" }}>Store Branch</span>

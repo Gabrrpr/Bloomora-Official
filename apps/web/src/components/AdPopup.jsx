@@ -10,16 +10,9 @@ export default function AdPopup({ advertisement, onClose }) {
       setImageSrc(advertisement.image_url)
       return
     }
-    // 1. Check if the Admin Panel has saved a custom or overridden ad source
-    const customSrc = localStorage.getItem("bloomora_active_ad_src")
-    
-    if (customSrc) {
-      setImageSrc(customSrc)
-    } else {
-      // 2. Fallback to default if no override exists
-      const defaultSrc = new URL(`../assets/ads/advertisement1.png`, import.meta.url).href
-      setImageSrc(defaultSrc)
-    }
+    // Use the active ad image the admin selected/uploaded (saved by the admin panel).
+    // No hardcoded fallback — if none is set, the popup simply doesn't show.
+    setImageSrc(localStorage.getItem("bloomora_active_ad_src") || null)
   }, [advertisement])
 
   

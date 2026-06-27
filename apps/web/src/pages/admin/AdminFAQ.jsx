@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react"
 import { useTheme } from "../../context/ThemeContext"
+import SaveToast from "../../components/SaveToast"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -394,6 +395,7 @@ export default function AdminFAQ() {
 
   return (
     <div className="space-y-5">
+      <SaveToast show={saved} isDark={isDark} message="FAQ saved!" sub="Your FAQ updates are now live." />
       {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
       <style>{`
         @keyframes faqRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }

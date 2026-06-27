@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react"
+import { createPortal } from "react-dom"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
 import ImageUploader from "../../components/ImageUploader"; // Adjust path as needed
@@ -63,10 +64,24 @@ const IMAGE_MAP = {
 }
 
 const DEFAULT_SLIDES = [
-  { id:1, tag:"Esting's Flower International Inc.", headline:"Fresh Blooms,\nSince 1959", description:"Since 1959, we've been part of countless moments big and small. Every arrangement is made by hand with fresh flowers and genuine care.", cta:"Shop Flowers", ctaSecondary:"View Occasions", accent:"#2E8B34", image:"HeroBG1.png" },
-  { id:2, tag:"Made a mistake?", headline:"Let flowers\ndo the talking", description:'Whether it\'s an apology, a misunderstanding, or just a way to say "I care," sending flowers is sometimes the simplest way to fix things without saying too much.', cta:"Shop Flowers", ctaSecondary:"Explore Collection", accent:"#e11d48", image:"HeroBG2.png" },
-  { id:3, tag:"Make It Personal", headline:"Flowers,\nMade Your Way", description:'Use our "Make it Personal" feature to describe your ideal bouquet, or build your own arrangement through our Mix and Match option. We\'ll turn your idea into something fresh and beautifully made.', cta:"Try It Now", ctaSecondary:"See Examples", accent:"#7c3aed", image:"HeroBG3.png" },
-  { id:4, tag:"Fresh Flowers, For Any Moment", headline:"Simple Ways\nto Show You Care", description:"From everyday surprises to life's biggest moments, we create fresh arrangements that help you express what you feel in a simple and meaningful way.", cta:"Shop Flowers", ctaSecondary:"View Occasions", accent:"#d97706", image:"HeroBG4.png" },
+  { id:1, tag:"Esting's Flower International Inc.", headline:"Fresh Blooms,\nSince 1959", description:"Since 1959, we've been part of countless moments big and small. Every arrangement is made by hand with fresh flowers and genuine care.", cta:"Shop Flowers", ctaSecondary:"View Occasions", ctaNav:"shop", ctaSecondaryNav:"shop", accent:"#2E8B34", image:"HeroBG1.png" },
+  { id:2, tag:"Made a mistake?", headline:"Let flowers\ndo the talking", description:'Whether it\'s an apology, a misunderstanding, or just a way to say "I care," sending flowers is sometimes the simplest way to fix things without saying too much.', cta:"Shop Flowers", ctaSecondary:"Explore Collection", ctaNav:"shop", ctaSecondaryNav:"shop", accent:"#e11d48", image:"HeroBG2.png" },
+  { id:3, tag:"Make It Personal", headline:"Flowers,\nMade Your Way", description:'Use our "Make it Personal" feature to describe your ideal bouquet, or build your own arrangement through our Mix and Match option. We\'ll turn your idea into something fresh and beautifully made.', cta:"Try It Now", ctaSecondary:"See Examples", ctaNav:"make-it-personal", ctaSecondaryNav:"ai-gallery", accent:"#7c3aed", image:"HeroBG3.png" },
+  { id:4, tag:"Fresh Flowers, For Any Moment", headline:"Simple Ways\nto Show You Care", description:"From everyday surprises to life's biggest moments, we create fresh arrangements that help you express what you feel in a simple and meaningful way.", cta:"Shop Flowers", ctaSecondary:"View Occasions", ctaNav:"shop", ctaSecondaryNav:"shop", accent:"#d97706", image:"HeroBG4.png" },
+]
+
+// Where a hero CTA button can take the visitor.
+const HERO_LINKS = [
+  { value: "shop", label: "Shop" },
+  { value: "make-it-personal", label: "Make it Personal" },
+  { value: "mix-and-match", label: "Mix & Match" },
+  { value: "describe-arrangement", label: "Describe Your Arrangement" },
+  { value: "ai-gallery", label: "AI Gallery" },
+  { value: "contact", label: "Contact Us" },
+  { value: "about", label: "About Us" },
+  { value: "faq", label: "FAQ" },
+  { value: "world-clock", label: "World Clock" },
+  { value: "home", label: "Home" },
 ]
 
 // ── Live Hero Preview ─────────────────────────────────────────────────────────
@@ -145,12 +160,14 @@ function HeroPreview({ slide, isDark }) {
             >
               {slide.cta || "Primary CTA"}
             </button>
-            <button
-              className="px-7 py-3 text-base font-semibold text-white rounded-full border transition-all"
-              style={{ borderColor:"rgba(255,255,255,0.4)", backgroundColor:"rgba(255,255,255,0.08)", backdropFilter:"blur(4px)" }}
-            >
-              {slide.ctaSecondary || "Secondary CTA"}
-            </button>
+            {slide.showSecondary !== false && (
+              <button
+                className="px-7 py-3 text-base font-semibold text-white rounded-full border transition-all"
+                style={{ borderColor:"rgba(255,255,255,0.4)", backgroundColor:"rgba(255,255,255,0.08)", backdropFilter:"blur(4px)" }}
+              >
+                {slide.ctaSecondary || "Secondary CTA"}
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -162,17 +179,17 @@ function HeroPreview({ slide, isDark }) {
 function Field({ label, hint, children, isDark }) {
   return (
     <div>
-      <label className="block text-sm font-semibold mb-1.5" style={{ color:isDark?"#94a3b8":"#374151" }}>
+      <label className="block text-xs font-semibold mb-1" style={{ color:isDark?"#94a3b8":"#374151" }}>
         {label}
       </label>
       {children}
-      {hint && <p className="text-xs mt-1" style={{ color:isDark?"#64748b":"#9ca3af" }}>{hint}</p>}
+      {hint && <p className="text-[11px] mt-1 leading-snug" style={{ color:isDark?"#64748b":"#9ca3af" }}>{hint}</p>}
     </div>
   )
 }
 
 function Input({ value, onChange, placeholder, type="text", rows, isDark, inputBg, inputBdr, inputTxt }) {
-  const shared = "w-full px-3 py-2.5 text-sm border rounded-md outline-none transition-all"
+  const shared = "w-full px-3 py-2 text-sm border rounded-md outline-none transition-all"
   if (rows) {
     return (
       <textarea value={value} onChange={e => onChange?.(e.target.value)} placeholder={placeholder} rows={rows}
@@ -193,7 +210,7 @@ function Select({ value, onChange, options, isDark, inputBg, inputBdr, inputTxt 
   return (
     <div className="relative">
       <select value={value} onChange={e => onChange?.(e.target.value)}
-        className="w-full appearance-none px-3 py-2.5 text-sm border rounded-md cursor-pointer outline-none transition-all"
+        className="w-full appearance-none px-3 py-2 text-sm border rounded-md cursor-pointer outline-none transition-all"
         style={{ borderColor:inputBdr, backgroundColor:inputBg, color:inputTxt }}
         onFocus={e => { e.target.style.borderColor=G; e.target.style.boxShadow=`0 0 0 2px rgba(46,139,52,0.12)` }}
         onBlur={e => { e.target.style.borderColor=inputBdr; e.target.style.boxShadow="none" }}>
@@ -204,6 +221,43 @@ function Select({ value, onChange, options, isDark, inputBg, inputBdr, inputTxt 
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="m19.5 8.25-7.5 7.5-7.5-7.5" />
       </svg>
     </div>
+  )
+}
+
+// Centered "saved" confirmation popup, styled like the dark/light mode toast.
+function SaveToast({ show, isDark, message = "Changes saved!", sub = "Your updates are now live." }) {
+  if (!show) return null
+  const cardBg     = isDark ? "linear-gradient(135deg, #0f172a 0%, #1e293b 100%)" : "linear-gradient(135deg, #ffffff 0%, #f8fafc 100%)"
+  const cardBorder = isDark ? "rgba(74,222,128,0.35)" : "rgba(46,139,52,0.28)"
+  const cardShadow = isDark ? "0 24px 70px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04)" : "0 24px 70px rgba(15,23,42,0.18), 0 0 0 1px rgba(0,0,0,0.04)"
+  const titleC = isDark ? "#f1f5f9" : "#1f2937"
+  const subC   = isDark ? "#94a3b8" : "#6b7280"
+  const iconBg = isDark ? "rgba(74,222,128,0.16)" : "rgba(46,139,52,0.12)"
+  const iconC  = isDark ? "#4ade80" : G
+  return createPortal(
+    <>
+      <style>{`
+        @keyframes saveToastIn { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.92); } 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+        @keyframes saveCheckPop { 0% { transform: scale(0.4); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: scale(1); } }
+      `}</style>
+      <div role="status" aria-live="polite"
+        style={{
+          position: "fixed", top: "50%", left: "50%", transform: "translate(-50%, -50%)", zIndex: 2147483647,
+          display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: "14px",
+          width: "max-content", maxWidth: "calc(100vw - 48px)", padding: "30px 38px", borderRadius: "22px",
+          background: cardBg, border: `1px solid ${cardBorder}`, boxShadow: cardShadow, color: titleC,
+          animation: "saveToastIn 0.28s cubic-bezier(0.22,1,0.36,1)", pointerEvents: "none",
+        }}>
+        <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: "62px", height: "62px", borderRadius: "9999px", flexShrink: 0, background: iconBg, color: iconC, animation: "saveCheckPop 0.45s cubic-bezier(0.34,1.56,0.64,1) both" }}>
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5" /></svg>
+        </span>
+        <div>
+          <p style={{ margin: 0, fontSize: "17px", fontWeight: 800 }}>{message}</p>
+          <p style={{ margin: "4px 0 0", fontSize: "13px", color: subC }}>{sub}</p>
+        </div>
+      </div>
+    </>,
+    document.body
   )
 }
 
@@ -245,6 +299,163 @@ function FlowerIcon() {
   )
 }
 
+// ── Top-bar promo strip CMS ───────────────────────────────────────────────────
+const PROMO_PAGES = [
+  { value: "shop", label: "Shop" },
+  { value: "make-it-personal", label: "Make it Personal" },
+  { value: "mix-and-match", label: "Mix & Match" },
+  { value: "contact", label: "Contact Us" },
+  { value: "about", label: "About Us" },
+  { value: "faq", label: "FAQ" },
+  { value: "home", label: "Home" },
+]
+
+function PromoStripEditor({ isDark }) {
+  const [promos, setPromos] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+  const [error, setError] = useState("")
+  const [confirmRemove, setConfirmRemove] = useState(null) // index pending removal
+
+  useEffect(() => {
+    api.getNavPromos()
+      .then(d => setPromos(Array.isArray(d?.promos) ? d.promos : []))
+      .catch(() => setError("Couldn't load promo messages."))
+      .finally(() => setLoading(false))
+  }, [])
+
+  const update = (i, field, val) => setPromos(p => p.map((x, j) => j === i ? { ...x, [field]: val } : x))
+  const add = () => setPromos(p => [...p, { short: "", text: "New promo message", highlight: "", cta: "SHOP NOW", page: "shop" }])
+  const remove = (i) => setPromos(p => p.filter((_, j) => j !== i))
+  const move = (i, dir) => setPromos(p => { const n = [...p]; const j = i + dir; if (j < 0 || j >= n.length) return n; [n[i], n[j]] = [n[j], n[i]]; return n })
+
+  const save = async () => {
+    setSaving(true); setError("")
+    try {
+      const clean = promos.filter(x => (x.text || "").trim())
+      await api.updateNavPromos({ promos: clean })
+      setPromos(clean)
+      setSaved(true); setTimeout(() => setSaved(false), 2000)
+    } catch (e) { setError(e.message || "Failed to save promo messages.") }
+    finally { setSaving(false) }
+  }
+
+  const cardBg = isDark ? "#1e293b" : "white"
+  const cardBdr = isDark ? "#334155" : "#e8edf2"
+  const headerBg = isDark ? "#162032" : "#fafbfc"
+  const headerBdr = isDark ? "#2d3f55" : "#f1f5f9"
+  const bodyTxt = isDark ? "#f1f5f9" : "#111827"
+  const subTxt = isDark ? "#94a3b8" : "#64748b"
+  const inputBg = isDark ? "#0f172a" : "white"
+  const inputBdr = isDark ? "#475569" : "#dde3ec"
+  const inputTxt = isDark ? "#f1f5f9" : "#111827"
+  const inputStyle = { backgroundColor: inputBg, border: `1px solid ${inputBdr}`, color: inputTxt }
+
+  return (
+    <div className="rounded-xl overflow-hidden" style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}` }}>
+      <SaveToast show={saved} isDark={isDark} message="Promos saved!" sub="Your top-bar messages are now live." />
+      <div className="flex items-center justify-between px-5 py-4 flex-wrap gap-3" style={{ borderBottom: `1px solid ${headerBdr}`, backgroundColor: headerBg }}>
+        <div>
+          <h2 className="text-base font-bold" style={{ color: bodyTxt }}>Top Bar Promo Messages</h2>
+          <p className="text-xs mt-0.5" style={{ color: subTxt }}>The rotating announcements in the site's top navigation bar.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={add}
+            className="px-3.5 py-2 text-sm font-semibold border rounded-md transition-all"
+            style={{ borderColor: inputBdr, color: subTxt, backgroundColor: inputBg }}>
+            + Add Message
+          </button>
+          <SaveBtn onClick={save} saved={saved} label={saving ? "Saving..." : "Save Promos"} />
+        </div>
+      </div>
+      <div className="p-5 space-y-3">
+        {error && <p className="text-xs font-medium" style={{ color: "#ef4444" }}>{error}</p>}
+        {loading ? (
+          <p className="text-sm" style={{ color: subTxt }}>Loading promo messages…</p>
+        ) : promos.length === 0 ? (
+          <p className="text-sm" style={{ color: subTxt }}>No promo messages yet. Click “Add Message” to create one.</p>
+        ) : promos.map((promo, i) => (
+          <div key={i} className="rounded-lg p-3.5" style={{ border: `1px solid ${cardBdr}`, backgroundColor: isDark ? "#0f172a" : "#fcfdfe" }}>
+            <div className="flex items-center justify-between mb-2.5">
+              <span className="text-xs font-bold uppercase tracking-wider" style={{ color: subTxt }}>Message {i + 1}</span>
+              <div className="flex items-center gap-1">
+                <button onClick={() => move(i, -1)} disabled={i === 0} title="Move up"
+                  className="w-7 h-7 flex items-center justify-center rounded-md border transition-all disabled:opacity-30" style={{ borderColor: inputBdr, color: subTxt, backgroundColor: inputBg }}>↑</button>
+                <button onClick={() => move(i, 1)} disabled={i === promos.length - 1} title="Move down"
+                  className="w-7 h-7 flex items-center justify-center rounded-md border transition-all disabled:opacity-30" style={{ borderColor: inputBdr, color: subTxt, backgroundColor: inputBg }}>↓</button>
+                <button onClick={() => setConfirmRemove(i)} title="Remove"
+                  className="w-7 h-7 flex items-center justify-center rounded-md text-white transition-all" style={{ backgroundColor: "#dc2626" }}>✕</button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="col-span-2 sm:col-span-4">
+                <label className="block text-xs font-semibold mb-1" style={{ color: subTxt }}>Message (desktop)</label>
+                <input value={promo.text || ""} onChange={e => update(i, "text", e.target.value)} placeholder="e.g. Now Open in Manila & Pampanga"
+                  className="w-full px-3 py-2 text-sm rounded-md outline-none" style={inputStyle} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: subTxt }}>Short text (mobile)</label>
+                <input value={promo.short || ""} onChange={e => update(i, "short", e.target.value)} placeholder="e.g. Manila & Pampanga"
+                  className="w-full px-3 py-2 text-sm rounded-md outline-none" style={inputStyle} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: subTxt }}>Highlighted word</label>
+                <input value={promo.highlight || ""} onChange={e => update(i, "highlight", e.target.value)} placeholder="e.g. Stores"
+                  className="w-full px-3 py-2 text-sm rounded-md outline-none" style={inputStyle} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: subTxt }}>Button label</label>
+                <input value={promo.cta || ""} onChange={e => update(i, "cta", e.target.value)} placeholder="e.g. VISIT US"
+                  className="w-full px-3 py-2 text-sm rounded-md outline-none" style={inputStyle} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold mb-1" style={{ color: subTxt }}>Button links to</label>
+                <select value={promo.page || "shop"} onChange={e => update(i, "page", e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-md outline-none" style={inputStyle}>
+                  {PROMO_PAGES.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+              </div>
+            </div>
+            <p className="text-[11px] mt-2.5" style={{ color: subTxt }}>
+              Preview: <span style={{ color: bodyTxt }}>{promo.text || promo.short} <strong>{promo.highlight}</strong> — {promo.cta}</span>
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {confirmRemove !== null && createPortal(
+        <div onClick={() => setConfirmRemove(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backgroundColor: "rgba(15,23,42,0.55)", backdropFilter: "blur(3px)" }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 380, borderRadius: 18, overflow: "hidden", backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}>
+            <div style={{ padding: "26px 24px 10px", textAlign: "center" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 52, height: 52, borderRadius: "9999px", marginBottom: 12, backgroundColor: isDark ? "rgba(248,113,113,0.16)" : "#fee2e2", color: isDark ? "#f87171" : "#dc2626" }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
+              </span>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: bodyTxt }}>Remove promo message?</h3>
+              <p style={{ margin: "6px 0 0", fontSize: 13, lineHeight: 1.5, color: subTxt }}>This message will no longer appear in the top navigation bar. This can't be undone.</p>
+            </div>
+            <div className="flex gap-2 p-4">
+              <button onClick={() => setConfirmRemove(null)}
+                className="flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all"
+                style={{ border: `1px solid ${inputBdr}`, backgroundColor: inputBg, color: bodyTxt }}>
+                Cancel
+              </button>
+              <button onClick={() => { remove(confirmRemove); setConfirmRemove(null) }}
+                className="flex-1 py-2.5 text-sm font-bold text-white rounded-lg transition-all hover:opacity-90"
+                style={{ backgroundColor: "#dc2626" }}>
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
 // ── Main Component ────────────────────────────────────────────────────────────
 export default function AdminHero() {
   const { isDark } = useTheme()
@@ -279,7 +490,7 @@ export default function AdminHero() {
       .then(data => {
         if (data?.slides && Array.isArray(data.slides) && data.slides.length > 0) {
           // Fill missing properties to ensure smooth editing
-          const defaultTemplate = { tag: "", headline: "", description: "", cta: "", ctaSecondary: "", accent: "#2E8B34", image: "HeroBG1.png" };
+          const defaultTemplate = { tag: "", headline: "", description: "", cta: "", ctaSecondary: "", ctaNav: "shop", ctaSecondaryNav: "shop", showSecondary: true, accent: "#2E8B34", image: "HeroBG1.png" };
           setSlides(data.slides.map((s, idx) => ({ ...defaultTemplate, ...s, id: s.id || Date.now() + idx })));
         } else {
           setSlides(DEFAULT_SLIDES);
@@ -308,6 +519,9 @@ export default function AdminHero() {
       description: "Write an engaging description for your new slide.",
       cta: "Shop Now",
       ctaSecondary: "Learn More",
+      ctaNav: "shop",
+      ctaSecondaryNav: "shop",
+      showSecondary: true,
       accent: "#2E8B34",
       image: "HeroBG1.png" // Defaults to first standard image
     };
@@ -368,6 +582,7 @@ const isCustomImageActive = activeSlide.image === "custom" || activeSlide.image?
 
   return (
     <div className="space-y-5">
+      <SaveToast show={saved} isDark={isDark} message="Hero saved!" sub="Your hero slides are now live." />
       {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
       <style>{`
         @keyframes heroRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -518,31 +733,66 @@ const isCustomImageActive = activeSlide.image === "custom" || activeSlide.image?
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
-          <Field label="Tag / Badge" isDark={isDark}>
-            <Input value={activeSlide.tag} onChange={v => updateSlide("tag", v)} placeholder="e.g. Fresh Flowers"
-              isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
-          </Field>
-
-          <Field label="Headline" hint='Use \n for a line break (e.g. "Fresh Blooms,\nSince 1959")' isDark={isDark}>
-            <Input value={activeSlide.headline} onChange={v => updateSlide("headline", v)} placeholder="e.g. Fresh Blooms"
-              isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
-          </Field>
+        <div className="p-4 space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <Field label="Tag / Badge" isDark={isDark}>
+              <Input value={activeSlide.tag} onChange={v => updateSlide("tag", v)} placeholder="e.g. Fresh Flowers"
+                isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
+            </Field>
+            <Field label="Headline" hint='Use \n for a line break' isDark={isDark}>
+              <Input value={activeSlide.headline} onChange={v => updateSlide("headline", v)} placeholder="e.g. Fresh Blooms"
+                isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
+            </Field>
+          </div>
 
           <Field label="Description" isDark={isDark}>
-            <Input value={activeSlide.description} onChange={v => updateSlide("description", v)} rows={3} placeholder="Short description..."
+            <Input value={activeSlide.description} onChange={v => updateSlide("description", v)} rows={2} placeholder="Short description..."
               isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
           </Field>
 
-          <div className="grid grid-cols-2 gap-3">
+          {/* How many buttons this slide shows */}
+          <Field label="Buttons" isDark={isDark}>
+            <div className="inline-flex rounded-md overflow-hidden" style={{ border: `1px solid ${inputBdr}` }}>
+              {[{ n: "1 button", v: false }, { n: "2 buttons", v: true }].map(opt => {
+                const on = (activeSlide.showSecondary !== false) === opt.v
+                return (
+                  <button key={opt.n} type="button" onClick={() => updateSlide("showSecondary", opt.v)}
+                    className="px-4 py-1.5 text-sm font-semibold transition-colors"
+                    style={{ backgroundColor: on ? G : inputBg, color: on ? "#ffffff" : inputTxt }}>
+                    {opt.n}
+                  </button>
+                )
+              })}
+            </div>
+          </Field>
+
+          <div className={`grid gap-3 ${activeSlide.showSecondary !== false ? "grid-cols-2 lg:grid-cols-4" : "grid-cols-2"}`}>
             <Field label="Primary CTA" isDark={isDark}>
               <Input value={activeSlide.cta} onChange={v => updateSlide("cta", v)} placeholder="e.g. Shop Flowers"
                 isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
             </Field>
-            <Field label="Secondary CTA" isDark={isDark}>
-              <Input value={activeSlide.ctaSecondary} onChange={v => updateSlide("ctaSecondary", v)} placeholder="e.g. View Occasions"
-                isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
+            <Field label="Primary links to" isDark={isDark}>
+              <select value={activeSlide.ctaNav || "shop"} onChange={e => updateSlide("ctaNav", e.target.value)}
+                className="w-full px-3 py-2 text-sm rounded-md outline-none"
+                style={{ backgroundColor: inputBg, border: `1px solid ${inputBdr}`, color: inputTxt }}>
+                {HERO_LINKS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+              </select>
             </Field>
+            {activeSlide.showSecondary !== false && (
+              <Field label="Secondary CTA" isDark={isDark}>
+                <Input value={activeSlide.ctaSecondary} onChange={v => updateSlide("ctaSecondary", v)} placeholder="e.g. View Occasions"
+                  isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt} />
+              </Field>
+            )}
+            {activeSlide.showSecondary !== false && (
+              <Field label="Secondary links to" isDark={isDark}>
+                <select value={activeSlide.ctaSecondaryNav || "shop"} onChange={e => updateSlide("ctaSecondaryNav", e.target.value)}
+                  className="w-full px-3 py-2 text-sm rounded-md outline-none"
+                  style={{ backgroundColor: inputBg, border: `1px solid ${inputBdr}`, color: inputTxt }}>
+                  {HERO_LINKS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
+                </select>
+              </Field>
+            )}
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -613,6 +863,11 @@ const isCustomImageActive = activeSlide.image === "custom" || activeSlide.image?
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Top-bar promo messages CMS */}
+      <div className={entered ? "" : "hero-rise"}>
+        <PromoStripEditor isDark={isDark} />
       </div>
     </div>
   )

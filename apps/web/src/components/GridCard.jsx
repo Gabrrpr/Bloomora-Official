@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import FallbackImage from "./FallbackImage.jsx";
 import { useCurrency } from "../context/CuurencyContext.jsx";
 import { useTheme } from "../context/ThemeContext.jsx";
@@ -22,7 +23,13 @@ function Stars({ rating, size = "sm", isDark }) {
 }
 
 function WishlistBtn({ id, wishlist, toggleWishlist, small, isDark }) {
-  const wishlisted = wishlist?.includes(id);
+  const fromProp = wishlist?.includes(id);
+  // Optimistic local state so the heart fills instantly on click instead of
+  // waiting for the wishlist API round-trip to update the parent.
+  const [on, setOn] = useState(fromProp);
+  const [burst, setBurst] = useState(false);
+  useEffect(() => { setOn(fromProp); }, [fromProp]);
+
   const sz = small ? "w-7 h-7" : "w-8 h-8";
   const idleBg  = isDark ? "#0f172a" : "#f3f4f6";
   const idleBdr = isDark ? "#334155" : "#e5e7eb";
@@ -32,18 +39,22 @@ function WishlistBtn({ id, wishlist, toggleWishlist, small, isDark }) {
   return (
     <button
       type="button"
-      aria-label={wishlisted ? "Remove from wishlist" : "Add to wishlist"}
+      aria-label={on ? "Remove from wishlist" : "Add to wishlist"}
       onClick={(e) => {
         // Prevent the card click (onPreview) from firing.
         e.preventDefault();
         e.stopPropagation();
+        const next = !on;
+        setOn(next);                 // instant visual feedback
+        if (next) { setBurst(true); setTimeout(() => setBurst(false), 460); }
         // Ensure toggleWishlist only receives the product id
         toggleWishlist(String(id));
       }}
-      className={`${sz} flex items-center justify-center rounded-lg transition-all flex-shrink-0 cursor-pointer`}
-      style={{ backgroundColor: wishlisted ? onBg : idleBg, border: wishlisted ? `1px solid ${onBdr}` : `1px solid ${idleBdr}` }}
+      className={`${sz} relative flex items-center justify-center rounded-lg transition-all flex-shrink-0 cursor-pointer active:scale-90`}
+      style={{ backgroundColor: on ? onBg : idleBg, border: on ? `1px solid ${onBdr}` : `1px solid ${idleBdr}` }}
     >
-      <svg className="w-3.5 h-3.5" fill={wishlisted ? "#e11d48" : "none"} stroke={wishlisted ? "#e11d48" : idleStroke} strokeWidth={2} viewBox="0 0 24 24">
+      {burst && <span className="wishlist-ring" style={{ borderColor: "#e11d48" }} />}
+      <svg className={`w-3.5 h-3.5 ${burst ? "wishlist-pop" : ""}`} fill={on ? "#e11d48" : "none"} stroke={on ? "#e11d48" : idleStroke} strokeWidth={2} viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
       </svg>
     </button>

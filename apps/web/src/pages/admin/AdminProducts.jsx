@@ -5,6 +5,7 @@ import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
 import { DG, G, StatusBadge, TH, TD, ActionBtns, EmptyRow, TableWrap, ExportBtn } from "./_adminShared"
 import FallbackImage from "../../components/FallbackImage.jsx"
+import estingsWordmark from "../../assets/Estings.svg"
 
 const PLACEHOLDER_IMAGE = new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href
 const AVAILABILITIES = ["Available", "Limited", "Out of Stock"]
@@ -274,7 +275,23 @@ function ExportProductsBtn({ data=[], d }) {
       className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all active:scale-95"
       style={{ borderColor:d.inputBdr, color:d.subC, backgroundColor:d.inputBg }}>
       <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-      Export Report
+      Export CSV
+    </button>
+  )
+}
+
+function PrintProductsBtn({ d, isDark }) {
+  return (
+    <button onClick={() => window.print()}
+      className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all active:scale-95"
+      style={{ borderColor: d.inputBdr, color: d.subC, backgroundColor: d.inputBg }}
+      onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "#2d3f55" : "#f9fafb"}
+      onMouseLeave={e => e.currentTarget.style.backgroundColor = d.inputBg}>
+      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+      </svg>
+      Print
     </button>
   )
 }
@@ -2282,6 +2299,20 @@ export default function AdminProducts({ onNavigate }) {
 
   const selStyle = { borderColor:d.inputBdr, backgroundColor:d.inputBg, color:d.inputTxt }
 
+  // ── Print report data ──
+  const printDate  = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
+  const printTime  = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })
+  const activeCount   = filtered.filter(p => String(p.status || "").toLowerCase() === "active").length
+  const lowStockCount = filtered.filter(p => productStockInfo(p).level === "low").length
+  const outStockCount = filtered.filter(p => productStockInfo(p).level === "out").length
+  const printScope = [
+    status && status !== "All Status" ? `Status: ${status}` : "All Statuses",
+    branchFilter && branchFilter !== "All Branches" ? `Branch: ${branchFilter}` : "All Branches",
+    category ? `Category: ${category}` : "All Categories",
+    search ? `Search: "${search}"` : null,
+    `${filtered.length} product${filtered.length === 1 ? "" : "s"}`,
+  ].filter(Boolean).join("  ·  ")
+
   if (loading) {
     return (
       <div className="space-y-5">
@@ -2303,9 +2334,63 @@ export default function AdminProducts({ onNavigate }) {
       <style>{`
         @keyframes productsRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
         .products-rise { animation: productsRise 0.85s ease-out both; }
+        .print-only { display: none; }
+        @media print {
+          @page { size: A4 portrait; margin: 12mm 10mm; }
+          html, body { background: #ffffff !important; }
+          body * { visibility: hidden !important; }
+          #products-print-area, #products-print-area * { visibility: visible !important; }
+          #products-print-area { position: absolute; top: 0; left: 0; width: 100%; font-family: "Helvetica Neue", Arial, sans-serif; color: #1f2937; box-sizing: border-box; }
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+          .pp-letterhead, .pp-doc-title, .pp-summary { break-inside: avoid; page-break-inside: avoid; }
+          .pp-letterhead { display: flex !important; align-items: center; justify-content: space-between; gap: 18px; min-height: 62px; padding: 12px 18px; border-radius: 12px; background: linear-gradient(135deg,#0C573E 0%,#15724B 55%,#2E8B34 100%) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .pp-logo-word { height: 32px; width: auto; max-width: 260px; display: block; object-fit: contain; filter: brightness(0) invert(1); }
+          .pp-tagline { margin: 5px 0 0; font-size: 8px; font-weight: 700; letter-spacing: 0.3em; text-transform: uppercase; color: rgba(255,255,255,0.82) !important; }
+          .pp-meta { text-align: right; flex-shrink: 0; }
+          .pp-meta .ref { display: inline-block; margin: 0; padding: 3px 10px; border-radius: 9999px; border: 1px solid rgba(255,255,255,0.35); background: rgba(255,255,255,0.12) !important; color: #fff !important; font-size: 8.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .pp-meta .gen { margin: 6px 0 0; font-size: 9px; color: rgba(255,255,255,0.85) !important; }
+          .pp-meta .gen strong { color: #fff !important; font-weight: 700; }
+          .pp-doc-title { display: flex !important; flex-direction: column; align-items: center; margin: 16px 0 2px; }
+          .pp-doc-title .t { margin: 0; font-size: 15px; font-weight: 800; letter-spacing: 0.3em; text-transform: uppercase; color: #0C573E !important; }
+          .pp-doc-title .rule { width: 54px; height: 3px; border-radius: 9999px; margin: 7px 0 6px; background: linear-gradient(90deg,#0C573E,#2E8B34) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .pp-doc-title .scope { margin: 0; font-size: 9px; color: #6b7280 !important; text-align: center; }
+          .pp-summary { display: grid !important; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 14px 0 0; }
+          .pp-card { min-width: 0; border: 1px solid #e5e7eb; border-top-width: 3px; border-radius: 9px; padding: 9px 12px 10px; background: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .pp-card.c-total { border-top-color: #0C573E !important; }
+          .pp-card.c-active { border-top-color: #2E8B34 !important; }
+          .pp-card.c-low  { border-top-color: #d97706 !important; }
+          .pp-card.c-out  { border-top-color: #dc2626 !important; }
+          .pp-card .label { margin: 0; font-size: 8.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9ca3af !important; }
+          .pp-card .value { margin: 3px 0 0; font-size: 19px; font-weight: 800; color: #111827 !important; }
+          .pp-card .value.green { color: #16a34a !important; }
+          .pp-card .value.amber { color: #d97706 !important; }
+          .pp-card .value.red { color: #dc2626 !important; }
+          .pp-card .cap { margin: 3px 0 0; font-size: 8px; color: #9ca3af !important; }
+          .pp-detail { display: block !important; margin-top: 14px; }
+          .pp-detail .twrap { border: 1px solid #dbe3df; border-radius: 10px; overflow: hidden; }
+          .pp-detail table { width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; }
+          .pp-detail thead { display: table-header-group; }
+          .pp-detail tr { page-break-inside: avoid; }
+          .pp-detail th { background: #0C573E !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border: none; padding: 7px 6px; text-align: left; font-size: 8.3px; font-weight: 700; text-transform: uppercase; line-height: 1.25; }
+          .pp-detail th.c-idx { width: 6%; } .pp-detail th.c-name { width: 30%; } .pp-detail th.c-cat { width: 18%; } .pp-detail th.c-branch { width: 16%; } .pp-detail th.c-price { width: 14%; } .pp-detail th.c-status { width: 16%; }
+          .pp-detail td { border-bottom: 1px solid #eef1f4; padding: 6px; font-size: 9px; color: #1f2937 !important; vertical-align: top; overflow-wrap: anywhere; }
+          .pp-detail .num { text-align: right; }
+          .pp-detail .muted { color: #6b7280 !important; }
+          .pp-detail .strong { font-weight: 700; color: #0f172a !important; }
+          .pp-detail .cap { text-transform: capitalize; }
+          .pp-detail tr.alt td { background: #f7faf8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .pp-detail tbody tr:last-child td { border-bottom: none; }
+        }
       `}</style>
 
-      <h1 className={`text-xl font-bold ${entered ? "" : "products-rise"}`} style={{ color:d.headC }}>Products</h1>
+      <div className={`flex items-center justify-between gap-3 flex-wrap ${entered ? "" : "products-rise"}`}>
+        <h1 className="text-xl font-bold" style={{ color:d.headC }}>Products</h1>
+        <div className="flex items-center gap-2">
+          <ExportProductsBtn data={filtered} d={d}/>
+          <PrintProductsBtn d={d} isDark={isDark} />
+        </div>
+      </div>
 
       {/* Stat cards */}
       <div className={`flex flex-wrap gap-3 items-stretch ${entered ? "" : "products-rise"}`} style={{ animationDelay: "0.18s" }}>
@@ -2388,7 +2473,6 @@ export default function AdminProducts({ onNavigate }) {
                 style={{ backgroundColor: d.inputBg, borderColor: d.inputBdr, color: d.subC }}>
                 Rename Category
               </button>
-            <ExportProductsBtn data={filtered} d={d}/>
           </div>
         </div>
 
@@ -2457,6 +2541,78 @@ export default function AdminProducts({ onNavigate }) {
           showing={`Showing ${paginated.length} of ${filtered.length} entries`}
           page={pageSafe} totalPages={totalPages} onPageChange={setPage} d={d}
         />
+      </div>
+
+      {/* ── Printable report (matches the Inventory / Orders print format) ── */}
+      <div id="products-print-area">
+        <div className="print-only pp-letterhead">
+          <div>
+            <img className="pp-logo-word" src={estingsWordmark} alt="Esting's Flower International Inc." />
+            <p className="pp-tagline">Flower International Inc.</p>
+          </div>
+          <div className="pp-meta">
+            <p className="ref">Ref: PRD-{new Date().toISOString().slice(0, 10).replace(/-/g, "")}</p>
+            <p className="gen">Generated <strong>{printDate}</strong> at <strong>{printTime}</strong></p>
+          </div>
+        </div>
+
+        <div className="print-only pp-doc-title">
+          <p className="t">Products Report</p>
+          <span className="rule" />
+          <p className="scope">{printScope}</p>
+        </div>
+
+        <div className="print-only pp-summary">
+          <div className="pp-card c-total">
+            <p className="label">Total Products</p>
+            <p className="value">{filtered.length}</p>
+            <p className="cap">In this report</p>
+          </div>
+          <div className="pp-card c-active">
+            <p className="label">Active</p>
+            <p className="value green">{activeCount}</p>
+            <p className="cap">Currently active</p>
+          </div>
+          <div className="pp-card c-low">
+            <p className="label">Low Stock</p>
+            <p className="value amber">{lowStockCount}</p>
+            <p className="cap">At or below reorder point</p>
+          </div>
+          <div className="pp-card c-out">
+            <p className="label">Out of Stock</p>
+            <p className="value red">{outStockCount}</p>
+            <p className="cap">Zero units / inactive</p>
+          </div>
+        </div>
+
+        <div className="print-only pp-detail">
+          <div className="twrap">
+            <table>
+              <thead>
+                <tr>
+                  <th className="c-idx">#</th>
+                  <th className="c-name">Product</th>
+                  <th className="c-cat">Category</th>
+                  <th className="c-branch">Branches</th>
+                  <th className="c-price num">Price</th>
+                  <th className="c-status">Availability</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((p, i) => (
+                  <tr key={p.id} className={i % 2 ? "alt" : ""}>
+                    <td className="muted">{i + 1}</td>
+                    <td className="strong">{p.name}</td>
+                    <td className="cap">{p.category || "—"}</td>
+                    <td className="muted">{Array.isArray(p.branches) && p.branches.length ? p.branches.join(", ") : "—"}</td>
+                    <td className="num strong">₱{(+p.price || 0).toLocaleString()}</td>
+                    <td>{productStockInfo(p).label}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   )

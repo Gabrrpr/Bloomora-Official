@@ -215,7 +215,9 @@ export default function Login({ onNavigate }) {
   // ── Inline email validation on blur ──────────────────────────────────────
   const handleEmailBlur = () => {
     if (!form.email) { setEmailError(""); return }
-    if (!isValidEmail(form.email)) {
+    // Login accepts a username OR an email — only validate format when the
+    // value looks like an email attempt (contains "@").
+    if (form.email.includes("@") && !isValidEmail(form.email)) {
       setEmailError("Please enter a valid email address (e.g. juan@gmail.com).")
     } else {
       setEmailError("")

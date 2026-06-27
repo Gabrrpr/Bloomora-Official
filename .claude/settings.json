@@ -3,7 +3,15 @@
     "allow": [
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} in %{time_total}s\\\\n\" --max-time 90 https://bloomora-api.onrender.com/api/v1/config/exchange-rates)",
       "Bash(git check-ignore *)",
-      "Bash(awk 'NR>=365 && NR<=520 && \\(/<\\\\/footer>/ || /<\\\\/>/ || /^}/ \\)' components/Footer.jsx)"
+      "Bash(awk 'NR>=365 && NR<=520 && \\(/<\\\\/footer>/ || /<\\\\/>/ || /^}/ \\)' components/Footer.jsx)",
+      "Bash(curl -s -i -X OPTIONS https://bloomora-api.onrender.com/api/v1/auth/login -H 'Origin: http://localhost:5173' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type')",
+      "Bash(lsof -iTCP:8000 -sTCP:LISTEN)",
+      "Bash(curl -s -i http://localhost:8000/api/v1/products/flash-sales -H 'Origin: http://localhost:5173')",
+      "Bash(curl -s -i -X OPTIONS http://localhost:8000/api/v1/auth/login -H 'Origin: http://localhost:5173' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type')",
+      "Bash(npx esbuild *)",
+      "Bash(awk 'NR>=820 && NR<=1010 && \\(/return \\\\\\(/ || /<nav/ || /<header/ || /logo/i || /Logo/ || /onClick=\\\\{\\\\\\(\\\\\\) => onNavigate\\\\\\(\"home\"\\\\\\)/ || /cartOpen/ || /setCartOpen/ || /h-\\\\[?[0-9]/ \\)' src/components/Navbar.jsx)",
+      "Bash(perl -0pi -e 's/\\\\$\\\\{entered \\\\? \"deliv-rise\" : \"\"\\\\}/deliv-rise/g' src/pages/admin/AdminDelivery.jsx)",
+      "Bash(awk 'NR>=2095 && NR<=2170 && \\(/function /||/const t =/||/const \\\\{ isDark/||/const goTo/||/useTokens/\\)' src/pages/admin/AdminDashboard.jsx)"
     ]
   }
 }

@@ -1,49 +1,26 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react"
+import { createPortal } from "react-dom"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api"
+import SaveToast from "../../components/SaveToast"
 
 const DG = "#0C573E"
 const G  = "#2E8B34"
 
-const ADS = [
-  { id: 1, title: "Happy Mother's Day" },
-  { id: 2, title: "Happy Father's Day" },
-  { id: 3, title: "Happy Valentine's Day" },
-  { id: 4, title: "Birthday" },
-  { id: 5, title: "Happy Valentine's Day" },
-  { id: 6, title: "Happy Chinese New Year" },
-  { id: 7, title: "Happy Teacher's Day" },
-  { id: 8, title: "Ribbon Cutting Ceremony" },
-  { id: 9, title: "Graduation Day" },
-]
-
-const AD_SRCS = Object.fromEntries(
-  ADS.map(ad => [
-    ad.id,
-    new URL(`../../assets/ads/advertisement${ad.id}.png`, import.meta.url).href,
-  ])
-)
-
 // ── Local persistence keys ───────────────────────────────────────────────────
-const ACTIVE_ID_KEY  = "bloomora_active_ad_id"   // existing — which ad is live
-const ACTIVE_SRC_KEY = "bloomora_active_ad_src"   // NEW — resolved image of the live ad (read this on the customer side)
-const CUSTOM_ADS_KEY = "bloomora_custom_ads"      // NEW — admin-uploaded ads
-const OVERRIDES_KEY  = "bloomora_ad_overrides"    // NEW — replacement images for the built-in slots
+const ACTIVE_ID_KEY  = "bloomora_active_ad_id"   // which ad is live
+const ACTIVE_SRC_KEY = "bloomora_active_ad_src"  // resolved image of the live ad (read on the customer side)
+const CUSTOM_ADS_KEY = "bloomora_custom_ads"     // admin-uploaded ads
 
-// Build the starting ad list: hardcoded defaults + any admin uploads / replacements saved locally
+// Build the starting ad list purely from admin uploads saved locally (no hardcoded
+// defaults — the admin uploads advertisements and chooses among them). The backend
+// list, when available, overrides this on load.
 function buildInitialAds() {
-  const builtin = ADS.map(a => ({ id: a.id, title: a.title, src: AD_SRCS[a.id], builtin: true }))
   try {
-    const overrides = JSON.parse(localStorage.getItem(OVERRIDES_KEY) || "{}") || {}
-    builtin.forEach(a => { if (overrides[a.id]) a.src = overrides[a.id] })
-  } catch { /* ignore */ }
-  let custom = []
-  try {
-    custom = (JSON.parse(localStorage.getItem(CUSTOM_ADS_KEY) || "[]") || [])
+    return (JSON.parse(localStorage.getItem(CUSTOM_ADS_KEY) || "[]") || [])
       .filter(a => a && a.id != null && a.src)
       .map(a => ({ id: Number(a.id), title: a.title || "Advertisement", src: a.src, builtin: false }))
-  } catch { /* ignore */ }
-  return [...builtin, ...custom]
+  } catch { return [] }
 }
 
 // Downscale + compress an uploaded image so a few of them fit inside localStorage
@@ -76,17 +53,8 @@ function compressImage(file, maxDim = 1280, quality = 0.82) {
 
 function persistCustomAds(list) {
   try {
-    const custom = list.filter(a => !a.builtin).map(a => ({ id: a.id, title: a.title, src: a.src }))
+    const custom = list.map(a => ({ id: a.id, title: a.title, src: a.src }))
     localStorage.setItem(CUSTOM_ADS_KEY, JSON.stringify(custom))
-    return true
-  } catch { return false }
-}
-
-function persistOverrides(list) {
-  try {
-    const overrides = {}
-    list.filter(a => a.builtin && a.src && a.src !== AD_SRCS[a.id]).forEach(a => { overrides[a.id] = a.src })
-    localStorage.setItem(OVERRIDES_KEY, JSON.stringify(overrides))
     return true
   } catch { return false }
 }
@@ -151,13 +119,46 @@ function LazyImage({ src, alt, style, eager = false, onClick, fit = "cover" }) {
   )
 }
 
+// Animated flower shown while advertisements are still loading.
+function FlowerLoader({ message = "Loading...", isDark = false }) {
+  const petals = [
+    { angle: 0,   color: "#f48fb1" },
+    { angle: 60,  color: "#ec407a" },
+    { angle: 120, color: "#e91e63" },
+    { angle: 180, color: "#f06292" },
+    { angle: 240, color: "#c2185b" },
+    { angle: 300, color: "#f48fb1" },
+  ]
+  return (
+    <>
+      <style>{`@keyframes adPetalBloom { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }`}</style>
+      <div className="flex flex-col items-center justify-center rounded-xl" style={{ minHeight: "60vh" }}>
+        <svg width="120" height="120" viewBox="0 0 100 100">
+          {petals.map(({ angle, color }, i) => (
+            <g key={i} transform={`rotate(${angle} 50 50)`}>
+              <ellipse cx="50" cy="27" rx="9.5" ry="21" fill={color}
+                style={{ animation: `adPetalBloom 1.4s ease-in-out ${(i * 0.2).toFixed(2)}s infinite`, animationFillMode: "both" }} />
+            </g>
+          ))}
+          <circle cx="50" cy="50" r="12" fill="#2E8B34" />
+          <circle cx="50" cy="50" r="7"  fill="#f9c6d0" />
+          <circle cx="50" cy="50" r="3.5" fill="#fff" opacity="0.7" />
+        </svg>
+        <p className="mt-4 text-sm font-medium tracking-wide" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{message}</p>
+      </div>
+    </>
+  )
+}
+
 export default function AdminAdvertisements() {
   const { isDark } = useTheme()
-  const [ads,       setAds]       = useState(buildInitialAds)
+  const [ads,       setAds]       = useState([])
   const [active,    setActive]    = useState(1)
   const [preview,   setPreview]   = useState(null)
   const [saved,     setSaved]     = useState(false)
+  const [loading,   setLoading]   = useState(true)
   const [gridReady, setGridReady] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(null) // ad pending deletion
   const [uploadError, setUploadError] = useState("")
   const [uploading, setUploading] = useState(false)
   const [renaming, setRenaming] = useState(null)   // ad being renamed, or null
@@ -172,8 +173,11 @@ export default function AdminAdvertisements() {
     const t = setTimeout(() => setGridReady(true), 80)
     api.getAdvertisements()
       .then(data => {
-        if (Array.isArray(data) && data.length) {
-          const mapped = data.map(ad => ({
+        if (!Array.isArray(data)) return
+        // Backend is the single source of truth — dedupe by id so nothing doubles.
+        const seen = new Set()
+        const mapped = data
+          .map(ad => ({
             id: ad.id,
             title: ad.title,
             src: ad.image_url,
@@ -182,11 +186,12 @@ export default function AdminAdvertisements() {
             isActive: ad.is_active,
             sortOrder: ad.sort_order || 0,
           }))
-          setAds(mapped)
-          setActive(mapped.find(ad => ad.isActive)?.id || mapped[0].id)
-        }
+          .filter(ad => (seen.has(ad.id) ? false : seen.add(ad.id)))
+        setAds(mapped)
+        if (mapped.length) setActive(mapped.find(ad => ad.isActive)?.id || mapped[0].id)
       })
       .catch(() => {})
+      .finally(() => setLoading(false))
     return () => clearTimeout(t)
   }, [])
 
@@ -302,7 +307,7 @@ export default function AdminAdvertisements() {
       const next = ads.map(a => a.id === targetId ? { ...a, src: dataUrl, storagePath: storagePath || null } : a)
       setAds(next)
       const target = next.find(a => a.id === targetId)
-      const ok = target?.builtin ? persistOverrides(next) : persistCustomAds(next)
+      const ok = persistCustomAds(next)
       setUploadError(ok ? "" : "Updated for this session, but local storage is full — it won't persist after reload.")
       if (target && !target.builtin) {
         await api.updateAdvertisement(target.id, {
@@ -351,8 +356,63 @@ export default function AdminAdvertisements() {
     setRenaming(null)
   }
 
+  if (loading) {
+    return (
+      <div className="space-y-5">
+        <h1 className="text-xl font-bold" style={{ color: bodyTxt }}>Pop-up Advertisements</h1>
+        <FlowerLoader message="Loading advertisements..." isDark={isDark} />
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
+      <SaveToast show={saved} isDark={isDark} message="Advertisement saved!" sub="Your active ad is now live on the customer site." />
+
+      {confirmDelete && createPortal(
+        <div onClick={() => setConfirmDelete(null)}
+          style={{ position: "fixed", inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backgroundColor: "rgba(15,23,42,0.55)", backdropFilter: "blur(3px)" }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ width: "100%", maxWidth: 380, borderRadius: 18, overflow: "hidden", backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}>
+            <div style={{ padding: "26px 24px 10px", textAlign: "center" }}>
+              <span style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 52, height: 52, borderRadius: "9999px", marginBottom: 12, backgroundColor: isDark ? "rgba(248,113,113,0.16)" : "#fee2e2", color: isDark ? "#f87171" : "#dc2626" }}>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><path d="M10 11v6M14 11v6" /><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" /></svg>
+              </span>
+              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 800, color: bodyTxt }}>Delete this advertisement?</h3>
+              <p style={{ margin: "6px 0 0", fontSize: 13, lineHeight: 1.5, color: mutedTxt }}>
+                “{confirmDelete.title || "Advertisement"}” will be permanently removed. This can't be undone.
+              </p>
+            </div>
+            <div className="flex gap-2 p-4">
+              <button onClick={() => setConfirmDelete(null)}
+                className="flex-1 py-2.5 text-sm font-semibold rounded-lg transition-all"
+                style={{ border: `1px solid ${btnBdr}`, backgroundColor: btnBg, color: bodyTxt }}>
+                Cancel
+              </button>
+              <button onClick={() => { handleDelete(confirmDelete.id); setConfirmDelete(null) }}
+                className="flex-1 py-2.5 text-sm font-bold text-white rounded-lg transition-all hover:opacity-90"
+                style={{ backgroundColor: "#dc2626" }}>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {uploading && createPortal(
+        <div style={{ position: "fixed", inset: 0, zIndex: 2147483647, display: "flex", alignItems: "center", justifyContent: "center", padding: 16, backgroundColor: "rgba(15,23,42,0.55)", backdropFilter: "blur(3px)" }}>
+          <style>{`@keyframes adUploadSpin { to { transform: rotate(360deg); } }`}</style>
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center", gap: 14, width: "max-content", maxWidth: "calc(100vw - 48px)", padding: "32px 40px", borderRadius: 22, backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: "0 24px 60px rgba(0,0,0,0.4)" }}>
+            <span style={{ width: 44, height: 44, borderRadius: "9999px", border: `4px solid ${isDark ? "#22324a" : "#e2e8f0"}`, borderTopColor: "#2E8B34", display: "inline-block", animation: "adUploadSpin 0.7s linear infinite" }} />
+            <div>
+              <p style={{ margin: 0, fontSize: 16, fontWeight: 800, color: bodyTxt }}>Uploading advertisement…</p>
+              <p style={{ margin: "4px 0 0", fontSize: 13, color: mutedTxt }}>Please keep this page open for a moment.</p>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
       <style>{`
         @keyframes shimmer { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }
         @keyframes adRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -404,6 +464,7 @@ export default function AdminAdvertisements() {
       )}
 
       {/* ── Active ad panel ── */}
+      {activeAd ? (
       <div className={`rounded-xl overflow-hidden ${entered ? "" : "ad-rise"}`}
         style={{ border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 2px 8px rgba(0,0,0,0.06)", animationDelay: "0.18s" }}>
 
@@ -506,6 +567,21 @@ export default function AdminAdvertisements() {
           </div>
         </div>
       </div>
+      ) : (
+        <div className={`rounded-xl flex flex-col items-center justify-center text-center px-6 py-16 ${entered ? "" : "ad-rise"}`}
+          style={{ border: `2px dashed ${isDark ? "#334155" : "#cbd5e1"}`, backgroundColor: isDark ? "#0f172a" : "#fafbfc", animationDelay: "0.18s" }}>
+          <div className="w-14 h-14 rounded-full flex items-center justify-center mb-4" style={{ backgroundColor: isDark ? "rgba(34,197,94,0.12)" : "#f0fdf4" }}>
+            <svg className="w-7 h-7" fill="none" stroke={isDark ? "#4ade80" : G} strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 7.5L12 3m0 0L7.5 7.5M12 3v13.5"/></svg>
+          </div>
+          <p className="text-base font-bold mb-1" style={{ color: bodyTxt }}>No advertisements yet</p>
+          <p className="text-sm mb-5" style={{ color: mutedTxt }}>Upload your first advertisement to show it on the customer site.</p>
+          <button onClick={() => triggerUpload(null)} disabled={uploading}
+            className="px-5 py-2.5 text-sm font-bold text-white rounded-lg transition-all hover:opacity-90 disabled:opacity-50"
+            style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
+            Upload Advertisement
+          </button>
+        </div>
+      )}
 
       {/* ── All ads grid ── */}
       <div className={`rounded-xl overflow-hidden ${entered ? "" : "ad-rise"}`}
@@ -594,7 +670,7 @@ export default function AdminAdvertisements() {
                             </svg>
                           </button>
                           {!ad.builtin && (
-                            <button onClick={e => { e.stopPropagation(); handleDelete(ad.id) }}
+                            <button onClick={e => { e.stopPropagation(); setConfirmDelete(ad) }}
                               className="w-8 h-8 rounded-md flex items-center justify-center shadow hover:scale-105 transition-transform text-white"
                               style={{ backgroundColor: "#ef4444" }} title="Delete advertisement">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

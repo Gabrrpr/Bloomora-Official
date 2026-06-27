@@ -441,6 +441,24 @@ export default function ChatWidget() {
               </div>
             )}
 
+            {/* Attached quotation (Pre-Send Preview) */}
+            {attachedQuote && (
+              <div className="px-3 pt-2 border-t" style={{ backgroundColor: inputAreaBg, borderColor: inputBdr }}>
+                <div className="flex items-center gap-2.5 p-2 rounded-xl" style={{ border: `1px solid ${isDark ? "#334155" : "#bfdbfe"}`, background: isDark ? "rgba(59,130,246,0.08)" : "#eff6ff" }}>
+                  <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: isDark ? "rgba(59,130,246,0.18)" : "#dbeafe", color: isDark ? "#93c5fd" : "#1d4ed8" }}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+                  </div>
+                  <div className="flex-1 min-w-0 pr-2">
+                    <p className="text-[9px] font-bold uppercase tracking-wider m-0" style={{ color: isDark ? "#93c5fd" : "#1d4ed8" }}>Quotation attached</p>
+                    <p className="text-xs font-bold m-0 truncate" style={{ color: isDark ? "#e5e7eb" : "#111827" }}>{attachedQuote.summary || "Bulk order quotation"}</p>
+                  </div>
+                  <button onClick={removeQuote} className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-white cursor-pointer border-none mr-1" style={{ backgroundColor: "#ef4444" }} title="Remove quotation">
+                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Input row — logged in: show composer. Logged out: show a clear login notice. */}
             {!user ? (
               <div className="flex items-center gap-3 px-3.5 py-3.5 border-t" style={{ backgroundColor: isDark ? "rgba(74,222,128,0.10)" : "rgba(46,139,52,0.08)", borderColor: inputBdr }}>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
+import SaveToast from "../../components/SaveToast"
 import {
   SETTINGS_PATH,
   TERMS_KEY, PRIVACY_KEY, ORDERING_KEY, COOKIE_KEY,
@@ -335,6 +336,7 @@ export default function AdminLegal() {
 
   return (
     <div className="space-y-5">
+      <SaveToast show={saved} isDark={isDark} message="Legal saved!" sub="Your legal documents are now live." />
       {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
       <style>{`
         @keyframes legalRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
