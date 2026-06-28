@@ -60,7 +60,7 @@ function useIsMobile(breakpoint = 900) {
 }
 
 /* ── Mini Calendar ── */
-const MAX_ORDER_DAYS = 30 
+const MAX_ORDER_DAYS = 30
 
 function MiniCalendar({ selected, onSelect }) {
   const now = todayD()
@@ -592,7 +592,7 @@ function QuoteLineRow({ label, unit, qty, txt, subTxt, addon, formatPrice }) {
 }
 
 /* ── Quote Step ── */
-function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark, onBack, onClose, onOpenChat, isMobile, formatPrice, productImage }) {
+function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark, onBack, onClose, onOpenChat, isMobile, formatPrice }) {
   const [phase,  setPhase]  = useState("input")
   const [qtyStr, setQtyStr] = useState("")
   const [err,    setErr]    = useState("")
@@ -1344,16 +1344,8 @@ function SuggestionsSection({ suggestions = [], isDark, onClose, onNavigate, for
 
   return (
     <div className="pt-6" style={{ borderTop: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
-      <div className="flex items-center justify-between gap-3 mb-4">
-        <p className="text-xs font-semibold uppercase tracking-widest m-0"
-          style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>You might also like</p>
-        {suggestions.length > 4 && (
-          <span className="text-[11px] font-semibold"
-            style={{ color: isDark ? "#4ade80" : G }}>
-            {suggestions.length} options
-          </span>
-        )}
-      </div>
+      <p className="text-xs font-semibold uppercase tracking-widest mb-4"
+        style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>You might also like</p>
       
       {/* 🚀 FIXED: Slick, horizontal scroll layout that perfectly fits the modal body */}
       <div className="flex overflow-x-auto gap-4 pb-4 snap-x snap-mandatory hide-scrollbar">
@@ -1557,6 +1549,11 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
       
       return true;
     })
+    .slice(0, 4);
+
+  // 🚀 DEBUG LOGGER: This will tell us exactly what is failing!
+  console.log("Total products passed to modal:", products.length);
+  console.log("Valid suggestions found:", suggestedProducts.length);
 
   const originalPrice = product.original_price || product.original || 0
   const hasDisc = originalPrice > product.price
@@ -1723,13 +1720,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
     .filter(Boolean)
     .map(a => ({ id: a.id, name: a.name, price: a.price }))
 
-  const openChatWithQuote   = (quote)   => window.dispatchEvent(new CustomEvent("bloomora:open-chat", {
-    detail: {
-      quote,
-      // Attach the product itself alongside the quotation so the chat shows both.
-      product: { id: product.id, name: product.name, price: product.price, image: product.image },
-    }
-  }))
+  const openChatWithQuote   = (quote)   => window.dispatchEvent(new CustomEvent("bloomora:open-chat", { detail: { quote } }))
   const openChatWithProduct = () => {
   window.dispatchEvent(new CustomEvent("bloomora:open-chat", { 
     detail: { 
@@ -1816,6 +1807,16 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
       {tab === "details" && (
         <div className="pb-4 space-y-5">
           <DescriptionSection product={product} isDark={isDark}/>
+          
+          {/* 🚀 THE FIX: This is where the Similar Products properly belong! */}
+          <SuggestionsSection 
+             suggestions={suggestedProducts} 
+             isDark={isDark} 
+             onClose={onClose} 
+             onNavigate={onNavigate} 
+             formatPrice={formatPrice}
+          />
+          
           <QtySection {...qtyProps}/>
           <div className="pb-5" style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
             <AddOnsSection {...addOnProps}/>
@@ -1856,13 +1857,6 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
             )}
           </div>
           <DeliverySection {...deliveryProps}/>
-          <SuggestionsSection 
-             suggestions={suggestedProducts} 
-             isDark={isDark} 
-             onClose={onClose} 
-             onNavigate={onNavigate} 
-             formatPrice={formatPrice}
-          />
         </div>
       )}
       {tab === "care"    && <CareSection isDark={isDark} product={product}/>}
@@ -2023,8 +2017,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
               product={product} color={color} sizeLabel={qty}
               addOnObjects={quoteAddOnObjects} addOnTotal={addOnTotal}
               isDark={isDark} onBack={() => setStep("product")} onClose={close}
-              onOpenChat={openChatWithQuote} isMobile formatPrice={formatPrice}
-              productImage={productImage}/>
+              onOpenChat={openChatWithQuote} isMobile formatPrice={formatPrice}/>
           </div>
         ) : (
           <div className="flex-1 min-h-0 flex flex-col">
@@ -2138,8 +2131,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
                 product={product} color={color} sizeLabel={qty}
                 addOnObjects={quoteAddOnObjects} addOnTotal={addOnTotal}
                 isDark={isDark} onBack={() => setStep("product")} onClose={close}
-                onOpenChat={openChatWithQuote} formatPrice={formatPrice}
-                productImage={productImage}/>
+                onOpenChat={openChatWithQuote} formatPrice={formatPrice}/>
             </div>
           )}
 
