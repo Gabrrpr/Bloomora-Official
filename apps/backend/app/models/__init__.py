@@ -6,7 +6,7 @@ from .wishlist import WishlistItem
 WishListItem = WishlistItem
 from .address import Address
 from .product import Product, Inventory, Discount, ProductStatusEnum, ProductRecipe, PromoCode
-from .order import Order, Transaction, Delivery, OrderStatusEnum, PaymentMethodEnum, PaymentStatusEnum, DeliveryStatusEnum
+from .order import Order, Transaction, Delivery, DeliveryOrder, OrderStatusEnum, PaymentMethodEnum, PaymentStatusEnum, DeliveryStatusEnum, DeliveryOrderStatusEnum
 from .vehicle import Vehicle, VehicleTypeEnum
 from .arrangement import Arrangement, Flower, Vase, Wrapping, Accessory
 from .campaigns import Campaign, product_campaigns

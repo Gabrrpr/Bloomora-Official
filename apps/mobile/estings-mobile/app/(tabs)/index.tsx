@@ -60,7 +60,7 @@ export default function HomeScreen() {
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const [viewport, setViewport] = useState({ height, width });
-  const [activeTab, setActiveTab] = useState<FeedTab>('explore');
+  const [activeTab, setActiveTab] = useState<FeedTab>('new');
   const [branch, setBranch] = useState<FeedBranch>('manila');
   const pagerRef = useRef<FlatList<FeedTab>>(null);
   const tabScrollX = useSharedValue(0);
@@ -141,7 +141,7 @@ export default function HomeScreen() {
 
   const handleHorizontalEnd = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const index = Math.round(event.nativeEvent.contentOffset.x / viewport.width);
-    setActiveTab(tabs[index]?.value ?? 'explore');
+    setActiveTab(tabs[index]?.value ?? 'new');
   }, [viewport.width]);
 
   return (
@@ -165,7 +165,7 @@ export default function HomeScreen() {
               offset: index * viewport.width,
             })}
             horizontal
-            initialScrollIndex={0}
+            initialScrollIndex={1}
             key={viewport.width}
             keyExtractor={(item) => item}
             onMomentumScrollEnd={handleHorizontalEnd}

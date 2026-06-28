@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
   },
   openButtonText: {
     color: theme.colors.text,
-    fontFamily: Fonts.sansExtraBold,
+    fontFamily: Fonts.sansBold,
     fontSize: 14,
     lineHeight: 18,
   },
@@ -123,7 +123,7 @@ const styles = StyleSheet.create({
   },
   orderIdText: {
     color: theme.colors.primaryDark,
-    fontFamily: Fonts.sansExtraBold,
+    fontFamily: Fonts.sansBold,
     fontSize: 13,
     lineHeight: 18,
   },

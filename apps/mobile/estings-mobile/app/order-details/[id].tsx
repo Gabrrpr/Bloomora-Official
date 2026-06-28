@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { CheckCircle2, Copy, ImageOff, Package } from 'lucide-react-native';
+import { CheckCircle2, Copy, HelpCircle, ImageOff, MessageCircle, Package } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -16,14 +16,14 @@ import { getPayMongoPaymentStatus } from '@/services/payments-api';
 export function ErrorBoundary({ error, retry }: { error: Error; retry: () => void }) {
   return (
     <View style={styles.screen}>
-      <AppPageHeader onBack={() => router.replace('/(tabs)/orders')} title="Order Details" />
+      <AppPageHeader onBack={goBackFromOrderDetails} title="Order Details" />
       <View style={styles.state}>
         <Text style={styles.title}>Order details unavailable</Text>
         <Text style={styles.muted}>{error.message || 'This order could not be opened.'}</Text>
         <Pressable onPress={retry} style={styles.primaryButton}>
           <Text style={styles.primaryButtonText}>Try again</Text>
         </Pressable>
-        <Pressable onPress={() => router.replace('/(tabs)/orders')} style={styles.outlineButton}>
+        <Pressable onPress={goBackFromOrderDetails} style={styles.outlineButton}>
           <Text style={styles.outlineButtonText}>Back to orders</Text>
         </Pressable>
       </View>
@@ -103,17 +103,14 @@ export default function OrderDetailsScreen() {
   return (
     <View style={styles.screen}>
       <AppPageHeader
-        onBack={() => {
-          if (router.canGoBack()) router.back();
-          else router.replace('/(tabs)/orders');
-        }}
+        onBack={goBackFromOrderDetails}
         title="Order Details"
       />
       <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]} showsVerticalScrollIndicator={false}>
         {isLoading ? (
           <View style={styles.state}><ActivityIndicator color={theme.colors.primary} /><Text style={styles.muted}>Loading order details</Text></View>
         ) : errorMessage || !order ? (
-          <View style={styles.state}><Text style={styles.title}>Order unavailable</Text><Text style={styles.muted}>{errorMessage ?? 'No order data was returned.'}</Text><Pressable onPress={loadOrder} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Try again</Text></Pressable><Pressable onPress={() => router.replace('/(tabs)/orders')} style={styles.outlineButton}><Text style={styles.outlineButtonText}>Back to orders</Text></Pressable></View>
+          <View style={styles.state}><Text style={styles.title}>Order unavailable</Text><Text style={styles.muted}>{errorMessage ?? 'No order data was returned.'}</Text><Pressable onPress={loadOrder} style={styles.primaryButton}><Text style={styles.primaryButtonText}>Try again</Text></Pressable><Pressable onPress={goBackFromOrderDetails} style={styles.outlineButton}><Text style={styles.outlineButtonText}>Back</Text></Pressable></View>
         ) : (
           <>
             <View style={styles.hero}>
@@ -169,10 +166,7 @@ export default function OrderDetailsScreen() {
               </Pressable>
               <View style={styles.divider} />
 
-              <View style={styles.deliveryGrid}>
-                <DetailValue label="Recipient Name" value={order.recipientName || 'Not available'} />
-                <DetailValue label="Recipient Contact" value={order.recipientPhone || 'Not available'} />
-              </View>
+              <Text style={styles.sectionTitle}>Shipping Information</Text>
               <View style={styles.deliveryGrid}>
                 <DetailValue label="Fulfillment Method" value={formatLabel(order.fulfillmentMethod)} />
                 <DetailValue label={order.fulfillmentMethod === 'pickup' ? 'Pickup Time' : 'Delivery Time'} value={formatTimeSlot(order.timeSlot)} />
@@ -181,7 +175,14 @@ export default function OrderDetailsScreen() {
                 <DetailValue label="Delivery Date" value={formatDate(order.scheduledAt)} />
                 <DetailValue label="Delivery Provider" value={order.deliveryProvider ? formatLabel(order.deliveryProvider) : 'Not applicable'} />
               </View>
-              <DetailValue label="Delivery Address" value={order.deliveryAddress || `Pickup at ${order.branch || "Esting's"}`} />
+              <View style={styles.divider} />
+
+              <Text style={styles.sectionTitle}>Delivery Information</Text>
+              <View style={styles.deliveryGrid}>
+                <DetailValue label="Name" value={order.recipientName || 'Not available'} />
+                <DetailValue label="Contact Number" value={order.recipientPhone || 'Not available'} />
+              </View>
+              <DetailValue label="Address" value={order.deliveryAddress || `Pickup at ${order.branch || "Esting's"}`} />
               {order.deliveryNotes ? <DetailValue label="Delivery Notes" value={order.deliveryNotes} /> : null}
               <View style={styles.divider} />
 
@@ -203,11 +204,21 @@ export default function OrderDetailsScreen() {
               <SummaryRow emphasized label="Total" value={formatPhp(Math.round(order.totalAmount * 100))} />
               <View style={styles.divider} />
 
-              <Pressable
-                onPress={() => router.push(`/(support)/live-chat?quote=${encodeURIComponent(`Hi, I need help with Order #${order.orderNumber}.\n\nOrder ID: ${order.orderNumber}\nPayment Status: ${formatLabel(order.paymentStatus)}\nOrder Status: ${formatLabel(order.status)}`)}` as never)}
-                style={styles.supportButton}>
-                <Text style={styles.supportButtonText}>Contact Support</Text>
-              </Pressable>
+              <Text style={styles.sectionTitle}>Support Center</Text>
+              <View style={styles.supportActions}>
+                <Pressable
+                  onPress={() => router.push(`/(support)/live-chat?quote=${encodeURIComponent(`Hi, I need help with Order #${order.orderNumber}.\n\nOrder ID: ${order.orderNumber}\nPayment Status: ${formatLabel(order.paymentStatus)}\nOrder Status: ${formatLabel(order.status)}`)}` as never)}
+                  style={[styles.supportButton, styles.supportButtonDark]}>
+                  <MessageCircle color="#FFFFFF" size={18} />
+                  <Text style={styles.supportButtonText}>Live Chat Support</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => router.push('/help-center' as never)}
+                  style={styles.supportButton}>
+                  <HelpCircle color="#444444" size={18} />
+                  <Text style={styles.supportButtonOutlineText}>Help Center</Text>
+                </Pressable>
+              </View>
 
               {order.paymentStatus === 'pending' ? (
                 <Pressable onPress={() => order.checkoutUrl ? void Linking.openURL(order.checkoutUrl) : Alert.alert('Payment link unavailable', 'Refresh the order or contact support.')} style={styles.primaryButton}>
@@ -220,6 +231,14 @@ export default function OrderDetailsScreen() {
       </ScrollView>
     </View>
   );
+}
+
+function goBackFromOrderDetails() {
+  if (router.canGoBack()) {
+    router.back();
+  } else {
+    router.replace('/(tabs)/orders');
+  }
 }
 
 function DetailValue({ label, value }: { label: string; value: string }) {
@@ -311,7 +330,10 @@ const styles = StyleSheet.create({
   summaryValue: { color: '#444444', flex: 1, fontFamily: Fonts.sans, fontSize: 15, textAlign: 'right' },
   totalText: { color: '#222222', fontFamily: Fonts.sansMedium, fontSize: 17 },
   totalValue: { color: '#444444', fontFamily: Fonts.sansMedium, fontSize: 16 },
-  supportButton: { alignItems: 'center', backgroundColor: '#383838', borderRadius: theme.radius.sm, justifyContent: 'center', minHeight: 54 },
+  supportActions: { gap: 10 },
+  supportButton: { alignItems: 'center', borderColor: '#D7D7D7', borderRadius: theme.radius.sm, borderWidth: 1, flexDirection: 'row', gap: 8, justifyContent: 'center', minHeight: 54 },
+  supportButtonDark: { backgroundColor: '#383838', borderColor: '#383838' },
+  supportButtonOutlineText: { color: '#444444', fontFamily: Fonts.sans, fontSize: 16 },
   supportButtonText: { color: '#FFFFFF', fontFamily: Fonts.sans, fontSize: 16 },
   primaryButton: { alignItems: 'center', backgroundColor: theme.colors.primary, borderRadius: theme.radius.sm, justifyContent: 'center', minHeight: 54 },
   primaryButtonText: { color: '#FFFFFF', fontFamily: Fonts.sansMedium, fontSize: 16 },

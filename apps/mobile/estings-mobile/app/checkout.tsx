@@ -16,6 +16,7 @@ import {
   Alert,
   Animated,
   FlatList,
+  type ImageSourcePropType,
   Modal,
   Pressable,
   ScrollView,
@@ -57,6 +58,7 @@ import {
 } from '@/utils/philippine-locations';
 
 type FulfillmentMethod = 'delivery' | 'pickup';
+type DeliveryProvider = 'lalamove' | 'standard';
 type OrderRecipient = 'myself' | 'someone';
 type TimeSlot = {
   enabled: boolean;
@@ -83,6 +85,9 @@ type AddressFormValue = {
   region: string;
   street: string;
 };
+
+const lalamoveLogo = require('@/assets/images/payment/lalamove.png');
+const estingsDeliveryLogo = require('@/assets/images/payment/estings-delivery.png');
 
 const timeSlots: TimeSlot[] = [
   { enabled: true, id: 'anytime', label: 'Anytime of the day' },
@@ -181,6 +186,27 @@ function getSupportedDeliveryArea(address: string) {
   return null;
 }
 
+function getDeliveryProviderForArea(area: string | null): DeliveryProvider {
+  return area === 'Metro Manila' ? 'lalamove' : 'standard';
+}
+
+function getDeliveryProvinceLabel(address: string) {
+  const normalizedAddress = address.toLowerCase();
+
+  for (const region of getPhilippineRegions()) {
+    const province = getPhilippineProvinces(region.code).find((item) =>
+      normalizedAddress.includes(item.name.toLowerCase())
+    );
+
+    if (province) {
+      return province.code === '-NO PROVINCE-' ? 'Metro Manila' : province.name;
+    }
+  }
+
+  const parts = address.split(',').map((part) => part.trim()).filter(Boolean);
+  return parts.length >= 2 ? parts[parts.length - 2] : 'this province';
+}
+
 function toCanonicalPhone(phone: string, countryCode: string) {
   return `${countryCode}${normalizeLocalPhone(phone, countryCode)}`;
 }
@@ -217,10 +243,22 @@ function startOfDay(date: Date) {
   return next;
 }
 
+function createCheckoutAttemptId() {
+  if (typeof globalThis.crypto?.randomUUID === 'function') {
+    return globalThis.crypto.randomUUID();
+  }
+
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (char) => {
+    const value = Math.floor(Math.random() * 16);
+    const next = char === 'x' ? value : (value & 0x3) | 0x8;
+    return next.toString(16);
+  });
+}
+
 export default function CheckoutScreen() {
   const insets = useSafeAreaInsets();
   const scrollRef = useRef<ScrollView>(null);
-  const checkoutAttemptIdRef = useRef(`${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  const checkoutAttemptIdRef = useRef(createCheckoutAttemptId());
   const params = useLocalSearchParams<{ ids?: string; voucher?: string }>();
   const selectedIds = useMemo(
     () => new Set((params.ids ?? '').split(',').map((id) => id.trim()).filter(Boolean)),
@@ -246,6 +284,7 @@ export default function CheckoutScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPaying, setIsPaying] = useState(false);
   const [fulfillmentMethod, setFulfillmentMethod] = useState<FulfillmentMethod>('delivery');
+  const [deliveryProvider, setDeliveryProvider] = useState<DeliveryProvider>('standard');
   const [recipientType, setRecipientType] = useState<OrderRecipient>('myself');
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [selectedTime, setSelectedTime] = useState<string | null>(null);
@@ -302,6 +341,19 @@ export default function CheckoutScreen() {
       street: parts[0] || 'Street address',
     };
   }, [deliveryAddress, recipientCountry.code, recipientFirstName, recipientLastName, recipientPhone]);
+  const deliveryArea = useMemo(
+    () => getSupportedDeliveryArea(deliveryAddress),
+    [deliveryAddress],
+  );
+  const deliveryProvinceLabel = useMemo(
+    () => getDeliveryProvinceLabel(deliveryAddress),
+    [deliveryAddress],
+  );
+
+  useEffect(() => {
+    if (fulfillmentMethod !== 'delivery') return;
+    setDeliveryProvider(getDeliveryProviderForArea(deliveryArea));
+  }, [deliveryArea, fulfillmentMethod]);
 
   useEffect(() => {
     let active = true;
@@ -515,7 +567,7 @@ export default function CheckoutScreen() {
         deliveryAddress: fulfillmentMethod === 'delivery' ? deliveryAddress.trim() : '',
         deliveryDate: selectedDate.toISOString(),
         deliveryNotes: specialInstructions.trim(),
-        deliveryProvider: fulfillmentMethod === 'delivery' ? 'standard' : undefined,
+        deliveryProvider: fulfillmentMethod === 'delivery' ? deliveryProvider : undefined,
         fulfillmentMethod,
         isAnonymous: sendAnonymously,
         items,
@@ -627,6 +679,36 @@ export default function CheckoutScreen() {
             }}
           />
         </View>
+
+        {fulfillmentMethod === 'delivery' ? (
+          <>
+            <View style={styles.labelRow}>
+              <Text style={styles.fieldLabel}>Delivery Provider</Text>
+              <CircleHelp color={theme.colors.textMuted} size={11} />
+            </View>
+            {deliveryArea === 'Metro Manila' ? (
+              <DeliveryProviderOption
+                active={deliveryProvider === 'lalamove'}
+                image={lalamoveLogo}
+                label="Lalamove"
+                note="For Metro Manila orders"
+                onPress={() => setDeliveryProvider('lalamove')}
+              />
+            ) : deliveryArea === 'Pampanga' ? (
+              <DeliveryProviderOption
+                active={deliveryProvider === 'standard'}
+                image={estingsDeliveryLogo}
+                label="Esting's Standard Delivery"
+                note="For Pampanga orders"
+                onPress={() => setDeliveryProvider('standard')}
+              />
+            ) : (
+              <View style={styles.providerHintBox}>
+                <Text style={styles.helperText}>There are no currently supported delivery providers in {deliveryProvinceLabel}.</Text>
+              </View>
+            )}
+          </>
+        ) : null}
 
         <Section title={fulfillmentMethod === 'delivery' ? 'Delivery Date' : 'Pickup Date'}>
           <View style={styles.dateCards}>
@@ -866,6 +948,39 @@ function SegmentOption({ active, icon, label, onPress }: { active: boolean; icon
     <Pressable onPress={onPress} style={({ pressed }) => [styles.segmentOption, active && styles.segmentOptionActive, pressed && styles.controlPressed]}>
       {icon}
       <Text style={[styles.segmentLabel, active && styles.segmentLabelActive]}>{label}</Text>
+    </Pressable>
+  );
+}
+
+function DeliveryProviderOption({
+  active,
+  icon,
+  image,
+  label,
+  note,
+  onPress,
+}: {
+  active: boolean;
+  icon?: ReactNode;
+  image?: ImageSourcePropType;
+  label: string;
+  note: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.providerCard, active && styles.providerCardActive, pressed && styles.controlPressed]}>
+      <View style={[styles.providerIconFrame, active && styles.providerIconFrameActive]}>
+        {image ? (
+          <Image contentFit="contain" source={image} style={styles.providerLogo} />
+        ) : icon}
+      </View>
+      <View style={styles.providerCopy}>
+        <Text style={[styles.providerLabel, active && styles.providerLabelActive]}>{label}</Text>
+        <Text style={[styles.providerNote, active && styles.providerNoteActive]}>{note}</Text>
+      </View>
+      {active ? <Check color={theme.colors.white} size={17} strokeWidth={2.7} /> : null}
     </Pressable>
   );
 }
@@ -1418,6 +1533,17 @@ const styles = StyleSheet.create({
   segmentOptionActive: { backgroundColor: '#2E9638', borderColor: '#2E9638' },
   segmentLabel: { color: '#444444', fontFamily: Fonts.sans, fontSize: 14 },
   segmentLabelActive: { color: theme.colors.white },
+  providerCard: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#C5C5C5', borderRadius: theme.radius.sm, borderWidth: 1, flexDirection: 'row', gap: 10, minHeight: 62, paddingHorizontal: 12, paddingVertical: 10 },
+  providerCardActive: { backgroundColor: '#2E9638', borderColor: '#2E9638' },
+  providerIconFrame: { alignItems: 'center', backgroundColor: '#F8F8F8', borderRadius: theme.radius.sm, height: 40, justifyContent: 'center', overflow: 'hidden', width: 86 },
+  providerIconFrameActive: { backgroundColor: '#FFFFFF' },
+  providerLogo: { height: 30, width: 78 },
+  providerCopy: { flex: 1 },
+  providerLabel: { color: '#444444', fontFamily: Fonts.sansMedium, fontSize: 14 },
+  providerLabelActive: { color: theme.colors.white },
+  providerNote: { color: '#777777', fontFamily: Fonts.sans, fontSize: 11, marginTop: 2 },
+  providerNoteActive: { color: 'rgba(255, 255, 255, 0.82)' },
+  providerHintBox: { backgroundColor: '#FFFFFF', borderColor: '#C5C5C5', borderRadius: theme.radius.sm, borderWidth: 1, padding: 12 },
   section: { backgroundColor: 'transparent', gap: 8 },
   separatedSection: { marginTop: 10, paddingBottom: 10 },
   sectionHeading: { alignItems: 'center', flexDirection: 'row', gap: 4 },

@@ -20,7 +20,7 @@ from typing import Optional
 from authlib.integrations.starlette_client import OAuth
 
 # 🚀 IMPORT ALL CORE SECURITY OPERATIONS DIRECLY
-from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token
+from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 
 # Import the limiter from your main app instance
 from app.core.limiter import limiter
@@ -100,6 +100,9 @@ class ResetPasswordRequest(BaseModel):
     email: EmailStr
     otp: str
     new_password: str
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 
 # ── Secure OAuth Token Exchange ───────────────────────────────────────────────
@@ -275,6 +278,9 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     except IntegrityError as e:
         db.rollback() 
         raise HTTPException(status_code=400, detail="Email or Username conflict.")
+    except HTTPException:
+        db.rollback()
+        raise
         
     except Exception as e:
         db.rollback()
@@ -366,6 +372,39 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
             "address": user.address,
             "profile_picture_url": getattr(user, 'profile_picture_url', None)
         }
+    }
+
+
+# ── Refresh Token ─────────────────────────────────────────────────────────────
+@router.post("/refresh")
+def refresh_token(payload: RefreshTokenRequest, db: Session = Depends(get_db)):
+    token_payload = decode_token(payload.refresh_token, expected_type="refresh")
+
+    if not token_payload:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token.")
+
+    user_id = token_payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token.")
+
+    try:
+        user_uuid = uuid.UUID(user_id)
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token.")
+
+    user = db.query(User).filter(User.id == user_uuid).first()
+
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid or expired refresh token.")
+    if not user.is_active:
+        raise HTTPException(status_code=403, detail="Account is disabled.")
+    if not user.is_verified:
+        raise HTTPException(status_code=403, detail="Please verify your email first.")
+
+    return {
+        "access_token": create_access_token(data={"sub": str(user.id)}),
+        "refresh_token": create_refresh_token(data={"sub": str(user.id)}),
+        "token_type": "bearer",
     }
 
 

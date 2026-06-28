@@ -234,13 +234,18 @@ export function BulkQuotationSheet({
                   <ReportRow label="Item" value={product.name} />
                   {colorName ? <ReportRow label="Color" value={colorName} /> : null}
                   <ReportRow label="Quantity" value={String(meta.qty)} />
-                  <ReportRow label="Per unit" value={formatPhp(unitPriceCents)} />
+                  <View style={styles.reportDivider} />
+                  <ReportLineRow label={product.name} quantity={meta.qty} unitPriceCents={product.priceCents} />
+                  {addOns.map((addOn) => (
+                    <ReportLineRow addOn key={addOn.id} label={addOn.name} quantity={meta.qty} unitPriceCents={addOn.priceCents} />
+                  ))}
+                  <ReportRow label="Per-unit total" value={formatPhp(unitPriceCents)} />
                   <View style={styles.reportDivider} />
                   <ReportRow emphasized label="Grand total" value={formatPhp(grandTotalCents)} />
                 </View>
 
                 <Text style={styles.reportNote}>
-                  This is a standard-rate estimate. Ask us if a bulk discount is available for this quantity.
+                  This is a standard-rate estimate. Bulk discounts are not applied automatically. Message us to discuss a better rate for this quantity.
                 </Text>
 
                 <View style={styles.actionRow}>
@@ -288,6 +293,28 @@ function ReportRow({
     <View style={styles.reportRow}>
       <Text style={styles.reportLabel}>{label}</Text>
       <Text style={[styles.reportValue, emphasized && styles.reportValueEmphasized]}>{value}</Text>
+    </View>
+  );
+}
+
+function ReportLineRow({
+  addOn = false,
+  label,
+  quantity,
+  unitPriceCents,
+}: {
+  addOn?: boolean;
+  label: string;
+  quantity: number;
+  unitPriceCents: number;
+}) {
+  return (
+    <View style={styles.reportLineRow}>
+      <View style={styles.reportLineCopy}>
+        <Text numberOfLines={1} style={styles.reportLineLabel}>{addOn ? `Add-on: ${label}` : label}</Text>
+        <Text style={styles.reportLineMath}>{formatPhp(unitPriceCents)} x {quantity.toLocaleString('en-PH')}</Text>
+      </View>
+      <Text style={styles.reportLineTotal}>{formatPhp(unitPriceCents * quantity)}</Text>
     </View>
   );
 }
@@ -523,6 +550,32 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     fontFamily: Fonts.sans,
     fontSize: 13,
+  },
+  reportLineCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  reportLineLabel: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 12,
+  },
+  reportLineMath: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 11,
+  },
+  reportLineRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    justifyContent: 'space-between',
+  },
+  reportLineTotal: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 12,
+    textAlign: 'right',
   },
   reportValue: {
     color: theme.colors.text,

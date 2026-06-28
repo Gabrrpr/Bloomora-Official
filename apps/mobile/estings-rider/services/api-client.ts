@@ -4,6 +4,7 @@ export const DEFAULT_API_BASE_URL =
   process.env.EXPO_PUBLIC_API_URL ?? 'https://api.estings.shop/api/v1';
 
 type ApiRequestOptions = RequestInit & {
+  skipAuthRefresh?: boolean;
   token?: string;
 };
 
@@ -18,7 +19,7 @@ export class ApiError extends Error {
 }
 
 export async function apiFetch<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-  const { headers, token, ...requestOptions } = options;
+  const { headers, skipAuthRefresh = false, token, ...requestOptions } = options;
   const normalizedBaseUrl = DEFAULT_API_BASE_URL.replace(/\/$/, '');
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   const response = await fetch(`${normalizedBaseUrl}${normalizedPath}`, {
@@ -30,6 +31,19 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
       ...headers,
     },
   });
+
+  if (response.status === 401 && token && !skipAuthRefresh) {
+    const { refreshAuthSession } = await import('@/services/auth-api');
+    const nextSession = await refreshAuthSession();
+
+    if (nextSession?.accessToken && nextSession.accessToken !== token) {
+      return apiFetch<T>(path, {
+        ...options,
+        skipAuthRefresh: true,
+        token: nextSession.accessToken,
+      });
+    }
+  }
 
   if (!response.ok) {
     let message = `Request failed with status ${response.status}`;

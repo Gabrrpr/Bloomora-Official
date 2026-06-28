@@ -423,6 +423,8 @@ function CategorySelectorSheet({
   onSelectCategory: (category?: string) => void;
   progress: Animated.Value;
 }) {
+  const insets = useSafeAreaInsets();
+  const bottomClearance = Math.max(insets.bottom + 96, 112);
   const backdropOpacity = progress.interpolate({
     inputRange: [0, 1],
     outputRange: [0, 0.34],
@@ -437,14 +439,16 @@ function CategorySelectorSheet({
       <Animated.View style={[styles.categorySheetBackdrop, { opacity: backdropOpacity }]}>
         <Pressable accessibilityLabel="Close categories" onPress={onClose} style={StyleSheet.absoluteFill} />
       </Animated.View>
-      <Animated.View style={[styles.categorySheet, { transform: [{ translateX }] }]}>
+      <Animated.View style={[styles.categorySheet, { bottom: bottomClearance, transform: [{ translateX }] }]}>
         <View style={styles.categorySheetHeader}>
           <Text style={styles.categorySheetTitle}>All Categories</Text>
           <Pressable accessibilityLabel="Close categories" accessibilityRole="button" hitSlop={8} onPress={onClose}>
             <X size={theme.icon.sm} color={theme.colors.textMuted} />
           </Pressable>
         </View>
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.categorySheetContent}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={[styles.categorySheetContent, { paddingBottom: theme.spacing.xl }]}>
           <Pressable
             accessibilityRole="button"
             onPress={() => onSelectCategory()}

@@ -40,6 +40,7 @@ import {
   getBiometricsAvailability,
   type BiometricsAvailability,
 } from '@/services/biometrics';
+import { registerWithPassword, sendSignUpOtp, verifySignUpOtp } from '@/services/auth-api';
 import {
   type FormErrors,
   isSixDigitOtp,
@@ -112,6 +113,9 @@ export default function SignUpScreen() {
   const [resendSeconds, setResendSeconds] = useState(30);
   const [biometricsAvailability, setBiometricsAvailability] = useState<BiometricsAvailability | null>(null);
   const [biometricsMessage, setBiometricsMessage] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
 
   const hasEnteredSignUpData = [
     firstName,
@@ -284,14 +288,30 @@ export default function SignUpScreen() {
     router.replace('/login');
   }
 
-  function handlePersonalInfoContinue() {
-    if (validatePersonalInfo()) {
+  async function handlePersonalInfoContinue() {
+    if (isSendingOtp || !validatePersonalInfo()) {
+      return;
+    }
+
+    setIsSendingOtp(true);
+    setSubmitError(null);
+
+    try {
+      await sendSignUpOtp(email);
       setSecurityStep('otp');
       setPhase(2);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Unable to send the verification code.');
+    } finally {
+      setIsSendingOtp(false);
     }
   }
 
-  function handleVerifyOtp() {
+  async function handleVerifyOtp() {
+    if (isVerifyingOtp) {
+      return;
+    }
+
     if (!required(otp)) {
       setErrors({ otp: 'Enter the 6-digit code sent to your email.' });
       return;
@@ -303,16 +323,40 @@ export default function SignUpScreen() {
     }
 
     setErrors({});
-    setSecurityStep('privacy');
-    setIsProtectionVisible(true);
+    setIsVerifyingOtp(true);
+    setSubmitError(null);
+
+    try {
+      await verifySignUpOtp(email, otp);
+      await registerWithPassword({
+        address,
+        email,
+        firstName,
+        lastName,
+        password,
+        phoneNumber: `+63${phone}`,
+      });
+      setSecurityStep('privacy');
+      setIsProtectionVisible(true);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Unable to verify and create your account.');
+    } finally {
+      setIsVerifyingOtp(false);
+    }
   }
 
-  function handleResendCode() {
+  async function handleResendCode() {
     if (resendSeconds > 0) {
       return;
     }
 
-    setResendSeconds(30);
+    setSubmitError(null);
+    try {
+      await sendSignUpOtp(email);
+      setResendSeconds(30);
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Unable to resend the verification code.');
+    }
   }
 
   function handleAgreeAndContinue() {
@@ -321,23 +365,27 @@ export default function SignUpScreen() {
   }
 
   async function handleEnableBiometrics() {
-    const availability = await getBiometricsAvailability();
-    setBiometricsAvailability(availability);
+    try {
+      const availability = await getBiometricsAvailability();
+      setBiometricsAvailability(availability);
 
-    if (!availability.isAvailable) {
-      setBiometricsMessage(availability.unavailableReason ?? 'Biometrics are unavailable on this device.');
-      return;
+      if (!availability.isAvailable) {
+        setBiometricsMessage(availability.unavailableReason ?? 'Biometrics are unavailable on this device.');
+        return;
+      }
+
+      const result = await authenticateWithBiometrics(`Enable ${availability.label} for Esting's.`);
+
+      if (result.success) {
+        setBiometricsMessage(`${availability.label} is enabled for your Esting's account.`);
+        setPhase(3);
+        return;
+      }
+
+      setBiometricsMessage(result.error ?? 'Biometric setup was not completed.');
+    } catch (error) {
+      setBiometricsMessage(error instanceof Error ? error.message : 'Biometric setup is unavailable right now.');
     }
-
-    const result = await authenticateWithBiometrics(`Enable ${availability.label} for Esting's.`);
-
-    if (result.success) {
-      setBiometricsMessage(`${availability.label} is enabled for your Esting's account.`);
-      setPhase(3);
-      return;
-    }
-
-    setBiometricsMessage(result.error ?? 'Biometric setup was not completed.');
   }
 
   function handleFinish() {
@@ -537,7 +585,12 @@ export default function SignUpScreen() {
               />
             </View>
 
-            <PrimaryButton disabled={!canContinuePersonalInfo} label="Continue" onPress={handlePersonalInfoContinue} />
+            {submitError ? <Text style={styles.submitErrorText}>{submitError}</Text> : null}
+            <PrimaryButton
+              disabled={!canContinuePersonalInfo || isSendingOtp}
+              label={isSendingOtp ? 'Sending code...' : 'Continue'}
+              onPress={handlePersonalInfoContinue}
+            />
           </View>
         ) : null}
 
@@ -556,6 +609,7 @@ export default function SignUpScreen() {
                 </View>
 
                 <View style={styles.otpFooterContent}>
+                  {submitError ? <Text style={styles.submitErrorText}>{submitError}</Text> : null}
                   <Pressable
                     accessibilityRole="button"
                     disabled={resendSeconds > 0}
@@ -582,7 +636,11 @@ export default function SignUpScreen() {
                 </View>
 
                 <View style={styles.stickyActions}>
-                  <PrimaryButton label="Verify Code" onPress={handleVerifyOtp} />
+                  <PrimaryButton
+                    disabled={isVerifyingOtp}
+                    label={isVerifyingOtp ? 'Creating account...' : 'Verify Code'}
+                    onPress={handleVerifyOtp}
+                  />
                   <SecondaryButton label="Edit email" onPress={() => setPhase(1)} />
                 </View>
               </>
@@ -1873,6 +1931,13 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sansMedium,
     fontSize: 12,
     lineHeight: 17,
+  },
+  submitErrorText: {
+    color: theme.colors.danger,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   inputError: {
     borderColor: theme.colors.danger,

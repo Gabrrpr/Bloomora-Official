@@ -61,7 +61,7 @@ const styles = StyleSheet.create({
   },
   value: {
     color: theme.colors.text,
-    fontFamily: Fonts.sansExtraBold,
+    fontFamily: Fonts.sansBold,
     fontSize: 22,
     lineHeight: 27,
   },

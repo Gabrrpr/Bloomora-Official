@@ -4,7 +4,6 @@ import {
   Poppins_500Medium,
   Poppins_600SemiBold,
   Poppins_700Bold,
-  Poppins_800ExtraBold,
 } from '@expo-google-fonts/poppins';
 import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
@@ -29,7 +28,6 @@ export default function RootLayout() {
     Poppins_500Medium,
     Poppins_600SemiBold,
     Poppins_700Bold,
-    Poppins_800ExtraBold,
   });
 
   if (!fontsLoaded) {
@@ -51,7 +49,9 @@ export default function RootLayout() {
           <Stack.Screen name="(auth)" options={{ headerShown: false }} />
           <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
           <Stack.Screen name="(settings)" options={{ headerShown: false }} />
+          <Stack.Screen name="notifications" options={{ headerShown: false }} />
           <Stack.Screen name="delivery/[id]/index" options={{ headerShown: false }} />
+          <Stack.Screen name="dispatch/[id]/index" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
         <StatusBar backgroundColor="#FFFFFF" style="dark" translucent={false} />

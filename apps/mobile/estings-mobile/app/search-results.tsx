@@ -18,6 +18,7 @@ import { ProductCard } from '@/components/product-card';
 import { type Product } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { shopApi } from '@/services/shop-api';
+import { getStoreBranch, setStoreBranch, type StoreBranch } from '@/services/branch-preference';
 
 const outlineColor = 'rgba(31, 42, 36, 0.11)';
 type SortOption = 'all' | 'latest' | 'price-asc' | 'price-desc';
@@ -41,9 +42,12 @@ const budgetOptions: { label: string; value: BudgetOption }[] = [
 
 export default function SearchResultsScreen() {
   const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams<{ branch?: 'manila' | 'pampanga'; q?: string }>();
+  const params = useLocalSearchParams<{ branch?: StoreBranch; q?: string }>();
   const initialQuery = typeof params.q === 'string' ? params.q : '';
+  const initialBranch = params.branch === 'pampanga' ? 'pampanga' : 'manila';
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [branch, setBranch] = useState<StoreBranch>(initialBranch);
+  const [isBranchPickerOpen, setIsBranchPickerOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [openFilter, setOpenFilter] = useState<'sort' | 'budget' | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -58,18 +62,27 @@ export default function SearchResultsScreen() {
     setSubmittedQuery(nextQuery);
   }, [params.q]);
 
+  useEffect(() => {
+    if (params.branch === 'manila' || params.branch === 'pampanga') {
+      setBranch(params.branch);
+      return;
+    }
+
+    void getStoreBranch().then(setBranch);
+  }, [params.branch]);
+
   const loadProducts = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage(null);
 
     try {
-      setProducts(await shopApi.getProducts({ branch: params.branch }));
+      setProducts(await shopApi.getProducts({ branch }));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Search is unavailable.');
     } finally {
       setIsLoading(false);
     }
-  }, [params.branch]);
+  }, [branch]);
 
   useEffect(() => {
     void loadProducts();
@@ -105,6 +118,13 @@ export default function SearchResultsScreen() {
     setOpenFilter(null);
   }, [query]);
 
+  const handleSelectBranch = useCallback((nextBranch: StoreBranch) => {
+    setBranch(nextBranch);
+    setIsBranchPickerOpen(false);
+    void setStoreBranch(nextBranch);
+    router.setParams({ branch: nextBranch });
+  }, []);
+
   const renderProduct = useCallback(
     ({ item }: { item: Product }) => (
       <View style={styles.productCell}>
@@ -136,7 +156,17 @@ export default function SearchResultsScreen() {
   return (
     <View style={styles.screen}>
       <View style={styles.stickyHeader}>
-        <AppBrandHeader showSearchAction={false} />
+        <AppBrandHeader
+          onMenuPress={() => router.push('/categories')}
+          onStorePress={() => setIsBranchPickerOpen((current) => !current)}
+          showMenuAction
+          showSearchAction={false}
+          showStoreAction
+        />
+
+        {isBranchPickerOpen ? (
+          <BranchPopover branch={branch} onClose={() => setIsBranchPickerOpen(false)} onSelect={handleSelectBranch} topInset={insets.top} />
+        ) : null}
 
         <View style={styles.searchRow}>
           <Pressable
@@ -212,6 +242,45 @@ export default function SearchResultsScreen() {
         updateCellsBatchingPeriod={50}
         windowSize={Platform.OS === 'android' ? 7 : 9}
       />
+    </View>
+  );
+}
+
+function BranchPopover({
+  branch,
+  onClose,
+  onSelect,
+  topInset,
+}: {
+  branch: StoreBranch;
+  onClose: () => void;
+  onSelect: (branch: StoreBranch) => void;
+  topInset: number;
+}) {
+  return (
+    <View pointerEvents="box-none" style={styles.branchOverlay}>
+      <Pressable accessibilityLabel="Close branch selector" onPress={onClose} style={StyleSheet.absoluteFill} />
+      <View style={[styles.branchPicker, { top: topInset + 66 }]}>
+        {(['manila', 'pampanga'] as StoreBranch[]).map((option) => {
+          const isSelected = branch === option;
+          const label = option === 'manila' ? 'Manila' : 'Pampanga';
+
+          return (
+            <Pressable
+              key={option}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
+              onPress={() => onSelect(option)}
+              style={({ pressed }) => [
+                styles.branchOption,
+                isSelected && styles.branchOptionActive,
+                pressed && styles.pressed,
+              ]}>
+              <Text style={[styles.branchOptionText, isSelected && styles.branchOptionTextActive]}>{label}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
@@ -362,6 +431,45 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 10,
     zIndex: 20,
+  },
+  branchOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 70,
+  },
+  branchPicker: {
+    backgroundColor: theme.colors.white,
+    borderColor: outlineColor,
+    borderRadius: 16,
+    borderWidth: 1,
+    boxShadow: '0 18px 36px rgba(31, 42, 36, 0.16)',
+    elevation: 8,
+    gap: 8,
+    padding: 10,
+    position: 'absolute',
+    right: theme.spacing.md,
+    width: 176,
+    zIndex: 71,
+  },
+  branchOption: {
+    alignItems: 'center',
+    borderColor: outlineColor,
+    borderRadius: 12,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 40,
+    paddingHorizontal: theme.spacing.md,
+  },
+  branchOptionActive: {
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
+  },
+  branchOptionText: {
+    color: softText,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 13,
+  },
+  branchOptionTextActive: {
+    color: theme.colors.white,
   },
   backButton: {
     alignItems: 'center',

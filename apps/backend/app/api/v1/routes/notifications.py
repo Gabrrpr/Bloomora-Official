@@ -5,7 +5,7 @@ from typing import List
 import uuid
 
 from app.core.dependencies import get_db, get_current_user
-from app.models.user import User
+from app.models.user import RoleEnum, User
 from app.models import Order, Product, Inventory, Chat
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
@@ -16,12 +16,16 @@ def get_unread_count(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    is_customer = current_user.role == RoleEnum.customer
     result = db.execute(
         text("""
             SELECT COUNT(*) FROM notifications
-            WHERE (user_id = :uid OR is_global = true) AND is_read = FALSE
+            WHERE (user_id = :uid OR is_global = true)
+              AND is_read = FALSE
+              AND NOT (:is_customer AND type = 'message' AND is_global = true)
+              AND NOT (:is_customer AND target_role IS NOT NULL AND target_role != 'customer')
         """),
-        {"uid": str(current_user.id)}
+        {"uid": str(current_user.id), "is_customer": is_customer}
     ).scalar()
     return {"unread_count": result or 0}
 
@@ -31,15 +35,18 @@ def get_notifications(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    is_customer = current_user.role == RoleEnum.customer
     rows = db.execute(
         text("""
             SELECT id, type, title, message, order_id, is_read, created_at
             FROM notifications
-            WHERE user_id = :uid OR is_global = true
+            WHERE (user_id = :uid OR is_global = true)
+              AND NOT (:is_customer AND type = 'message' AND is_global = true)
+              AND NOT (:is_customer AND target_role IS NOT NULL AND target_role != 'customer')
             ORDER BY created_at DESC
             LIMIT 30
         """),
-        {"uid": str(current_user.id)}
+        {"uid": str(current_user.id), "is_customer": is_customer}
     ).fetchall()
 
     return [

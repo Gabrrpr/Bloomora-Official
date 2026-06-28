@@ -1,12 +1,12 @@
 import Feather from '@expo/vector-icons/Feather';
-import { Image } from 'expo-image';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, View, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { RiderAppLogo } from '@/components/rider/rider-app-logo';
 import { theme } from '@/constants/theme';
-
-const defaultProfile = require('@/assets/images/rider/default-profile.png');
+import { getRiderNotifications } from '@/services/rider-notifications';
 
 type RiderAppHeaderProps = {
   style?: StyleProp<ViewStyle>;
@@ -16,6 +16,23 @@ export function RiderAppHeader({ style }: RiderAppHeaderProps) {
   const { height, width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const layout = getRiderAppHeaderLayout(width, height, insets.top);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      void getRiderNotifications().then((notifications) => {
+        if (isActive) {
+          setUnreadCount(notifications.filter((notification) => !notification.isRead).length);
+        }
+      });
+
+      return () => {
+        isActive = false;
+      };
+    }, []),
+  );
 
   return (
     <View
@@ -32,10 +49,13 @@ export function RiderAppHeader({ style }: RiderAppHeaderProps) {
         <RiderAppLogo style={styles.logoImage} />
       </View>
       <View style={styles.headerActions}>
-        <Image contentFit="cover" source={defaultProfile} style={styles.avatar} />
-        <Pressable accessibilityLabel="Open notifications" accessibilityRole="button" style={({ pressed }) => [styles.notificationButton, pressed && styles.pressed]}>
+        <Pressable
+          accessibilityLabel="Open notifications"
+          accessibilityRole="button"
+          style={({ pressed }) => [styles.notificationButton, pressed && styles.pressed]}
+          onPress={() => router.push('/notifications')}>
           <Feather color={theme.colors.primary} name="bell" size={24} />
-          <View style={styles.notificationDot} />
+          {unreadCount > 0 ? <View style={styles.notificationDot} /> : null}
         </Pressable>
       </View>
     </View>
@@ -60,11 +80,6 @@ function clamp(value: number, min: number, max: number) {
 }
 
 const styles = StyleSheet.create({
-  avatar: {
-    borderRadius: theme.radius.pill,
-    height: 52,
-    width: 52,
-  },
   header: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -88,7 +103,6 @@ const styles = StyleSheet.create({
   },
   notificationButton: {
     alignItems: 'center',
-    backgroundColor: theme.colors.surface,
     borderRadius: theme.radius.pill,
     height: 52,
     justifyContent: 'center',
@@ -98,11 +112,11 @@ const styles = StyleSheet.create({
   notificationDot: {
     backgroundColor: '#FF5151',
     borderRadius: theme.radius.pill,
-    height: 16,
+    height: 8,
     position: 'absolute',
-    right: -1,
-    top: -1,
-    width: 16,
+    right: 8,
+    top: 9,
+    width: 8,
   },
   pressed: {
     opacity: 0.76,

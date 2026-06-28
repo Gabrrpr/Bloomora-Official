@@ -258,6 +258,9 @@ def get_customization_products(db: Session = Depends(get_db)):
             "category": clean_category,
             "image_url": p.image_url,
             "is_available": effective_is_available(p, inv),
+            "is_visible": p.is_visible,
+            "product_group": p.product_group.lower().strip() if p.product_group else "",
+            "product_type": p.product_type.lower().strip() if p.product_type else "",
             "stock": stock,
             "stock_status": stock_status,
         }

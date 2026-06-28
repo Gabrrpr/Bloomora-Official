@@ -35,12 +35,10 @@ export function FloatingTabBar({ descriptors, navigation, state }: BottomTabBarP
   const visibleRoutes = state.routes.filter(
     (route): route is typeof route & { name: FloatingTabRoute } => isFloatingTabRoute(route.name),
   );
-  const visibleActiveIndex = Math.max(
-    0,
-    visibleRoutes.findIndex((route) => route.key === state.routes[state.index]?.key),
-  );
+  const visibleActiveIndex = visibleRoutes.findIndex((route) => route.key === state.routes[state.index]?.key);
+  const hasVisibleActiveRoute = visibleActiveIndex >= 0;
   const layout = getFloatingTabLayout(width, height, insets.bottom, visibleRoutes.length);
-  const activeIndex = useSharedValue(visibleActiveIndex);
+  const activeIndex = useSharedValue(hasVisibleActiveRoute ? visibleActiveIndex : -1);
   const isHomeTab = state.routes[state.index]?.name === 'index';
   const [cartCount, setCartCount] = useState(0);
 
@@ -55,12 +53,12 @@ export function FloatingTabBar({ descriptors, navigation, state }: BottomTabBarP
   }, []);
 
   useEffect(() => {
-    activeIndex.value = withSpring(visibleActiveIndex, {
+    activeIndex.value = withSpring(hasVisibleActiveRoute ? visibleActiveIndex : -1, {
       damping: 22,
       mass: 0.82,
       stiffness: 260,
     });
-  }, [activeIndex, visibleActiveIndex]);
+  }, [activeIndex, hasVisibleActiveRoute, visibleActiveIndex]);
 
   useEffect(() => {
     refreshCartCount();
@@ -85,7 +83,7 @@ export function FloatingTabBar({ descriptors, navigation, state }: BottomTabBarP
           },
         ]}>
         {isHomeTab ? <View pointerEvents="none" style={styles.glassHighlight} /> : null}
-        <Reanimated.View
+        {hasVisibleActiveRoute ? <Reanimated.View
           pointerEvents="none"
           style={[
             styles.activePlate,
@@ -97,7 +95,7 @@ export function FloatingTabBar({ descriptors, navigation, state }: BottomTabBarP
             },
             activePlateStyle,
           ]}
-        />
+        /> : null}
         {visibleRoutes.map((route, index) => {
           const routeName = route.name;
           const item = tabConfig[routeName];

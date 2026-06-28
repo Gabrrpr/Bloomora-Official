@@ -1,11 +1,26 @@
 import { useState, useEffect, useRef, useMemo } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import SaveToast from "../../components/SaveToast"
+import { api } from "../../services/api"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
 
 const STORAGE_KEY = "bloomora:admin:faq"
+const SETTINGS_PATH = "/products/admin/settings/homepage"
+const FAQ_KEY = "__faq__"
+
+function normalizeSettingsBlob(settings) {
+  if (typeof settings === "string") {
+    try {
+      const parsed = JSON.parse(settings)
+      return parsed && typeof parsed === "object" ? parsed : {}
+    } catch {
+      return {}
+    }
+  }
+  return settings && typeof settings === "object" ? settings : {}
+}
 
 // ─── Default seed (matches HomeFAQ.jsx exactly) ──────────────────────────────
 const DEFAULT_FAQS = [
@@ -275,18 +290,41 @@ export default function AdminFAQ() {
   const [dirty, setDirty]             = useState(false)
   const [saved, setSaved]             = useState(false)
   const [editingCatName, setEditingCatName] = useState(false)
+  const [settingsBlob, setSettingsBlob] = useState({})
   // Drives the one-time entrance animation; removed after it plays so it never replays.
   const [entered, setEntered] = useState(false)
 
-  // Load saved FAQs from local storage on first render.
+  // Load saved FAQs from the shared settings blob, falling back to legacy local storage.
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        if (Array.isArray(parsed) && parsed.length > 0) setFaqs(parsed)
-      }
-    } catch { /* ignore bad saved data */ }
+    let cancelled = false
+    api.get(SETTINGS_PATH)
+      .then((settings) => {
+        if (cancelled) return
+        const nextSettings = normalizeSettingsBlob(settings)
+        setSettingsBlob(nextSettings)
+        const savedFaqs = nextSettings[FAQ_KEY]
+        if (Array.isArray(savedFaqs) && savedFaqs.length > 0) {
+          setFaqs(savedFaqs)
+          return
+        }
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY)
+          if (raw) {
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed) && parsed.length > 0) setFaqs(parsed)
+          }
+        } catch { /* ignore bad saved data */ }
+      })
+      .catch(() => {
+        try {
+          const raw = localStorage.getItem(STORAGE_KEY)
+          if (raw) {
+            const parsed = JSON.parse(raw)
+            if (Array.isArray(parsed) && parsed.length > 0) setFaqs(parsed)
+          }
+        } catch { /* ignore bad saved data */ }
+      })
+    return () => { cancelled = true }
   }, [])
 
   // Play the entrance animation once on mount, then turn it off.
@@ -375,8 +413,11 @@ export default function AdminFAQ() {
     markDirty()
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     try {
+      const nextSettings = { ...settingsBlob, [FAQ_KEY]: faqs }
+      await api.post(SETTINGS_PATH, nextSettings)
+      setSettingsBlob(nextSettings)
       localStorage.setItem(STORAGE_KEY, JSON.stringify(faqs))
       setDirty(false)
       setSaved(true)

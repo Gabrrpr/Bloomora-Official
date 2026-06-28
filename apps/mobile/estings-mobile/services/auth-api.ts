@@ -30,6 +30,15 @@ type AuthMessageResponse = {
   status?: string;
 };
 
+type RegisterResponse = AuthMessageResponse & {
+  user_id?: string;
+};
+
+type ProfilePictureResponse = {
+  success?: boolean;
+  url?: string | null;
+};
+
 const productionWebBaseUrl = 'https://blueviolet-otter-621683.hostingersite.com';
 const defaultWebBaseUrl = process.env.EXPO_PUBLIC_WEB_URL ?? (__DEV__ ? 'http://localhost:5173' : productionWebBaseUrl);
 
@@ -96,6 +105,56 @@ export async function loginWithOAuthProvider(provider: OAuthProvider) {
   return session;
 }
 
+export async function sendSignUpOtp(email: string) {
+  return apiFetch<AuthMessageResponse>('/auth/send-otp', {
+    body: JSON.stringify({
+      email: email.trim(),
+    }),
+    method: 'POST',
+    skipAuthRefresh: true,
+  });
+}
+
+export async function verifySignUpOtp(email: string, otp: string) {
+  return apiFetch<AuthMessageResponse>('/auth/verify-otp', {
+    body: JSON.stringify({
+      email: email.trim(),
+      otp: otp.trim(),
+    }),
+    method: 'POST',
+    skipAuthRefresh: true,
+  });
+}
+
+export async function registerWithPassword({
+  address,
+  email,
+  firstName,
+  lastName,
+  password,
+  phoneNumber,
+}: {
+  address?: string;
+  email: string;
+  firstName: string;
+  lastName: string;
+  password: string;
+  phoneNumber?: string;
+}) {
+  return apiFetch<RegisterResponse>('/auth/register', {
+    body: JSON.stringify({
+      address: address?.trim() || undefined,
+      email: email.trim(),
+      first_name: firstName.trim(),
+      last_name: lastName.trim(),
+      password,
+      phone_number: phoneNumber?.trim() || undefined,
+    }),
+    method: 'POST',
+    skipAuthRefresh: true,
+  });
+}
+
 export async function refreshAuthSession() {
   const currentSession = await getAuthSession();
 
@@ -158,6 +217,34 @@ export async function resetForgotPassword({
   });
 }
 
+export async function uploadProfilePicture(imageUri: string, session: AuthSession) {
+  const extension = getImageExtension(imageUri);
+  const form = new FormData();
+  form.append('file', {
+    name: `profile-${Date.now()}.${extension}`,
+    type: `image/${extension === 'jpg' ? 'jpeg' : extension}`,
+    uri: imageUri,
+  } as never);
+
+  const response = await apiFetch<ProfilePictureResponse>('/users/profile/upload-picture', {
+    body: form,
+    method: 'POST',
+    token: session.accessToken,
+  });
+
+  const nextSession: AuthSession = {
+    ...session,
+    user: {
+      ...session.user,
+      profile_picture_url: response.url ?? session.user.profile_picture_url ?? null,
+    },
+  };
+
+  await saveAuthSession(nextSession);
+
+  return nextSession;
+}
+
 function getOAuthCodeFromUrl(url: string) {
   try {
     return new URL(url).searchParams.get('code');
@@ -166,4 +253,15 @@ function getOAuthCodeFromUrl(url: string) {
 
     return match ? decodeURIComponent(match[1]) : null;
   }
+}
+
+function getImageExtension(uri: string) {
+  const cleanUri = uri.split('?')[0] ?? uri;
+  const match = /\.(jpe?g|png|webp)$/i.exec(cleanUri);
+
+  if (!match) {
+    return 'jpg';
+  }
+
+  return match[1].toLowerCase() === 'jpeg' ? 'jpg' : match[1].toLowerCase();
 }

@@ -5,23 +5,18 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  CircleHelp,
-  Code2,
   ContactRound,
   EyeOff,
   Fingerprint,
   Globe2,
-  Headset,
   KeyRound,
   Languages,
   LocateFixed,
   LogOut,
   Mail,
   MapPin,
-  MessageCircle,
   Pencil,
   Phone,
-  RotateCcw,
   Search,
   ShieldCheck,
   SlidersHorizontal,
@@ -63,10 +58,9 @@ type ActiveView =
   | 'contact'
   | 'username'
   | 'displayName'
-  | 'email'
   | 'phone'
   | 'password';
-type EditableAccountField = 'displayName' | 'email' | 'phone' | 'username';
+type EditableAccountField = 'displayName' | 'phone' | 'username';
 type PasswordStrength = 'Weak' | 'Fair' | 'Good' | 'Strong';
 type PasswordResetStep = 'email' | 'otp' | 'reset';
 
@@ -111,7 +105,6 @@ export default function SettingsScreen() {
   const [draftFirstName, setDraftFirstName] = useState(firstName);
   const [draftMiddleName, setDraftMiddleName] = useState(middleName);
   const [draftLastName, setDraftLastName] = useState(lastName);
-  const [draftEmail, setDraftEmail] = useState(email);
   const [draftPhone, setDraftPhone] = useState(phone);
   const [draftUsername, setDraftUsername] = useState(username);
   const [passwordStep, setPasswordStep] = useState<PasswordResetStep>('email');
@@ -155,7 +148,6 @@ export default function SettingsScreen() {
             setDraftFirstName(nextFirstName || nextUsername || 'Estings');
             setDraftMiddleName('');
             setDraftLastName(nextLastName);
-            setDraftEmail(nextEmail);
             setDraftPhone(nextPhone);
             setDraftUsername(nextUsername);
             setPasswordEmail(nextEmail);
@@ -251,10 +243,6 @@ export default function SettingsScreen() {
       setDraftLastName(lastName);
     }
 
-    if (field === 'email') {
-      setDraftEmail(email);
-    }
-
     if (field === 'phone') {
       setDraftPhone(phone);
     }
@@ -278,10 +266,6 @@ export default function SettingsScreen() {
       setFirstName(draftFirstName.trim());
       setMiddleName(draftMiddleName.trim());
       setLastName(draftLastName.trim());
-    }
-
-    if (field === 'email' && isValidEmail(draftEmail)) {
-      setEmail(draftEmail.trim());
     }
 
     if (field === 'phone' && isValidPhilippinePhone(draftPhone)) {
@@ -432,7 +416,7 @@ export default function SettingsScreen() {
         ] : [],
       },
       {
-        title: 'App Settings',
+        title: 'App Permissions',
         items: [
           {
             detail: pushNotificationsEnabled ? 'On' : 'Off',
@@ -452,20 +436,6 @@ export default function SettingsScreen() {
             title: 'Contact',
             onPress: isSignedIn ? () => setActiveView('contact') : undefined,
           },
-          {
-            icon: Code2,
-            title: 'Developer Tools',
-            onPress: () => router.push('/developer'),
-          },
-        ],
-      },
-      {
-        title: 'Help Center',
-        items: [
-          { icon: CircleHelp, title: 'FAQs', onPress: () => router.push('/faq') },
-          { icon: RotateCcw, title: 'Return Policy', onPress: () => router.push('/return-policy') },
-          { icon: Headset, title: 'Live Chat', onPress: () => router.push('/live-chat') },
-          { icon: MessageCircle, title: 'Support Contact', onPress: () => router.push('/contact') },
         ],
       },
     ],
@@ -536,7 +506,6 @@ export default function SettingsScreen() {
             phone={phone}
             username={username}
             onOpenDisplayName={() => openAccountEdit('displayName')}
-            onOpenEmail={() => openAccountEdit('email')}
             onOpenPassword={handleOpenPassword}
             onOpenPhone={() => openAccountEdit('phone')}
             onOpenUsername={handleOpenUsername}
@@ -596,19 +565,6 @@ export default function SettingsScreen() {
             onChangeLastName={setDraftLastName}
             onChangeMiddleName={setDraftMiddleName}
             onSave={() => handleSaveAccountField('displayName')}
-          />
-        ) : null}
-
-        {activeView === 'email' ? (
-          <AccountFieldEditView
-            autoCapitalize="none"
-            errorText={draftEmail && !isValidEmail(draftEmail) ? 'Enter a valid email address.' : undefined}
-            helperText="Use an email address you can access for order updates."
-            keyboardType="email-address"
-            label="Email"
-            value={draftEmail}
-            onChangeText={setDraftEmail}
-            onSave={() => handleSaveAccountField('email')}
           />
         ) : null}
 
@@ -718,7 +674,6 @@ function AccountView({
   displayName,
   email,
   onOpenDisplayName,
-  onOpenEmail,
   onOpenPassword,
   onOpenPhone,
   onOpenUsername,
@@ -728,7 +683,6 @@ function AccountView({
   displayName: string;
   email: string;
   onOpenDisplayName: () => void;
-  onOpenEmail: () => void;
   onOpenPassword: () => void;
   onOpenPhone: () => void;
   onOpenUsername: () => void;
@@ -743,7 +697,7 @@ function AccountView({
           <Divider />
           <SettingsRow detail={username} icon={Pencil} title="Username" onPress={onOpenUsername} />
           <Divider />
-          <SettingsRow detail={email} icon={Mail} title="Email" onPress={onOpenEmail} />
+          <SettingsRow detail={email} icon={Mail} title="Email" />
           <Divider />
           <SettingsRow detail={phone} icon={Phone} title="Phone" onPress={onOpenPhone} />
         </View>
@@ -1342,8 +1296,6 @@ function getHeaderTitle(activeView: ActiveView) {
       return 'Username';
     case 'displayName':
       return 'Name';
-    case 'email':
-      return 'Email';
     case 'phone':
       return 'Phone';
     case 'password':
@@ -1354,7 +1306,7 @@ function getHeaderTitle(activeView: ActiveView) {
 }
 
 function isAccountEditView(activeView: ActiveView): activeView is EditableAccountField | 'password' {
-  return ['displayName', 'email', 'phone', 'username', 'password'].includes(activeView);
+  return ['displayName', 'phone', 'username', 'password'].includes(activeView);
 }
 
 function formatDisplayName(firstName: string, middleName: string, lastName: string) {
@@ -1509,8 +1461,8 @@ const styles = StyleSheet.create({
   },
   lightToggleTrack: {
     alignItems: 'center',
-    backgroundColor: '#EEF1F0',
-    borderColor: '#DDE4E0',
+    backgroundColor: '#E5E7EB',
+    borderColor: '#D1D5DB',
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
@@ -1519,23 +1471,23 @@ const styles = StyleSheet.create({
     width: 52,
   },
   lightToggleTrackOn: {
-    backgroundColor: '#E8F4ED',
-    borderColor: '#C9E1D0',
+    backgroundColor: theme.colors.primary,
+    borderColor: theme.colors.primary,
   },
   lightToggleDisabled: {
     opacity: 0.48,
   },
   lightToggleThumb: {
     backgroundColor: theme.colors.white,
-    borderColor: '#D2DAD6',
+    borderColor: '#C7CED0',
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     height: 24,
     width: 24,
   },
   lightToggleThumbOn: {
-    backgroundColor: '#8CC89A',
-    borderColor: '#7DBB8B',
+    backgroundColor: theme.colors.white,
+    borderColor: theme.colors.white,
     transform: [{ translateX: 20 }],
   },
   rowIcon: {

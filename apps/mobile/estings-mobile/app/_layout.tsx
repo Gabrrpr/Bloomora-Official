@@ -85,6 +85,7 @@ export default function RootLayout() {
           <Stack.Screen name="(settings)" options={{ headerShown: false }} />
           <Stack.Screen name="checkout" options={{ headerShown: false }} />
           <Stack.Screen name="addresses" options={{ headerShown: false }} />
+          <Stack.Screen name="my-rating" options={{ headerShown: false }} />
           <Stack.Screen name="create" options={{ headerShown: false }} />
           <Stack.Screen name="payment" options={{ headerShown: false }} />
           <Stack.Screen name="product-list" options={{ headerShown: false }} />

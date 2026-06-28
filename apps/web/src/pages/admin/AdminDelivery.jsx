@@ -173,7 +173,7 @@ function FDrop({ value, onChange, children, isDark, inputBg, inputBdr, inputTxt 
 
 function EmptyState({ title, subtitle, isDark }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
+    <div className="flex flex-col items-center justify-center py-10 text-center">
       <div
         className="w-14 h-14 rounded-2xl flex items-center justify-center mb-4 shadow-sm"
         style={{
@@ -255,6 +255,7 @@ export default function AdminDeliveryFixed() {
 
   const [riders, setRiders] = useState([]);
   const [pendingOrders, setPendingOrders] = useState([]);
+  const [deliveryOrders, setDeliveryOrders] = useState([]);
 
   const [assignments, setAssignments] = useState({});
   const [vehicleAssignments, setVehicleAssignments] = useState({});
@@ -270,6 +271,15 @@ export default function AdminDeliveryFixed() {
   const [bulkRiderId, setBulkRiderId] = useState("");
   const [bulkVehicleId, setBulkVehicleId] = useState("");
   const [loadError, setLoadError] = useState("");
+  const [showDispatchModal, setShowDispatchModal] = useState(false);
+  const [creatingDispatch, setCreatingDispatch] = useState(false);
+  const [dispatchSearch, setDispatchSearch] = useState("");
+  const [dispatchForm, setDispatchForm] = useState({
+    branch: "Pampanga",
+    rider_id: "",
+    vehicle_id: "",
+    notes: "",
+  });
 
   const [vehicles, setVehicles] = useState([]);
 
@@ -288,6 +298,7 @@ export default function AdminDeliveryFixed() {
   });
   const [savingVehicle, setSavingVehicle] = useState(false);
   const [deletingVehicleId, setDeletingVehicleId] = useState(null);
+  const [detailModal, setDetailModal] = useState({ type: "", item: null });
 
   const [deliveryFee, setDeliveryFee] = useState("150");
   const [minOrder, setMinOrder] = useState("500");
@@ -310,12 +321,19 @@ export default function AdminDeliveryFixed() {
       const riderQuery = branchFilter ? `?branch=${encodeURIComponent(branchFilter)}` : "";
       const orderQuery = `?branch=${encodeURIComponent(branchFilter)}&limit=100`;
 
-      const [settingsData, ridersData, ordersData, vehiclesData] = await Promise.all([
-        api.getCheckoutSettings().catch(() => ({})),
+      const [settingsResult, ridersResult, ordersResult, deliveryOrdersResult, vehiclesResult] = await Promise.allSettled([
+        api.getCheckoutSettings(),
         api.get(`/deliveries/admin/riders${riderQuery}`),
         api.get(`/deliveries/admin/assignable-orders${orderQuery}`),
-        api.getVehicles(branchFilter || null).catch(() => []),
+        api.get(`/deliveries/admin/delivery-orders${orderQuery}`),
+        api.getVehicles(branchFilter || null),
       ]);
+
+      const settingsData = settingsResult.status === "fulfilled" ? settingsResult.value : {};
+      const ridersData = ridersResult.status === "fulfilled" ? ridersResult.value : [];
+      const ordersData = ordersResult.status === "fulfilled" ? ordersResult.value : [];
+      const deliveryOrdersData = deliveryOrdersResult.status === "fulfilled" ? deliveryOrdersResult.value : [];
+      const vehiclesData = vehiclesResult.status === "fulfilled" ? vehiclesResult.value : [];
 
       const settings = settingsData.delivery || {};
       setDeliveryFee(String(settings.delivery_fee ?? 100));
@@ -323,7 +341,18 @@ export default function AdminDeliveryFixed() {
       setSameDayCutoff(settings.same_day_cutoff || "14:00");
       setRiders(Array.isArray(ridersData) ? ridersData : []);
       setPendingOrders(Array.isArray(ordersData) ? ordersData : []);
+      setDeliveryOrders(Array.isArray(deliveryOrdersData) ? deliveryOrdersData : []);
       setVehicles(Array.isArray(vehiclesData) ? vehiclesData : []);
+
+      const failedSections = [
+        ridersResult.status === "rejected" ? "riders" : null,
+        ordersResult.status === "rejected" ? "ready orders" : null,
+        deliveryOrdersResult.status === "rejected" ? "active dispatches" : null,
+        vehiclesResult.status === "rejected" ? "vehicles" : null,
+      ].filter(Boolean);
+      if (failedSections.length > 0) {
+        setLoadError(`Some delivery data could not load: ${failedSections.join(", ")}. Check the backend logs or database migration status.`);
+      }
     } catch (err) {
       setLoadError(err?.message || "Unable to load delivery operations.");
     } finally {
@@ -411,6 +440,18 @@ export default function AdminDeliveryFixed() {
     });
   }, [pendingOrders, search]);
 
+  const dispatchModalOrders = useMemo(() => {
+    const q = dispatchSearch.trim().toLowerCase();
+    return pendingOrders.filter((order) => {
+      const oNum = order.orderNumber || order.order_number;
+      const rName = order.recipientName || order.recipient_name;
+      const rPhone = order.recipientPhone || order.recipient_phone;
+      const summary = order.itemSummary || order.item_summary;
+      const haystack = [oNum, rName, rPhone, order.branch, summary].filter(Boolean).join(" ").toLowerCase();
+      return !q || haystack.includes(q);
+    });
+  }, [pendingOrders, dispatchSearch]);
+
   const assignedDeliveries = riders.reduce((sum, rider) => sum + (Number(rider.activeDeliveries ?? rider.active_deliveries) || 0), 0);
   const inactiveRiders = riders.filter((r) => !(r.isActive ?? r.is_active) || !(r.isVerified ?? r.is_verified)).length;
 
@@ -424,6 +465,49 @@ export default function AdminDeliveryFixed() {
 
     setDelivSaved(true);
     setTimeout(() => setDelivSaved(false), 2000);
+  };
+
+  const openDispatchModal = () => {
+    setDispatchForm({
+      branch: branchFilter || "Pampanga",
+      rider_id: "",
+      vehicle_id: "",
+      notes: "",
+    });
+    setDispatchSearch("");
+    setShowDispatchModal(true);
+  };
+
+  const createDispatch = async () => {
+    if (!dispatchForm.rider_id) {
+      setLoadError("Select a rider before creating a dispatch.");
+      return;
+    }
+    if (selectedOrders.size === 0) {
+      setLoadError("Select at least one order to dispatch.");
+      return;
+    }
+
+    setCreatingDispatch(true);
+    setLoadError("");
+    try {
+      await api.post("/deliveries/admin/delivery-orders", {
+        branch: dispatchForm.branch || branchFilter || "Pampanga",
+        rider_id: dispatchForm.rider_id,
+        vehicle_id: dispatchForm.vehicle_id || null,
+        notes: dispatchForm.notes,
+        order_ids: Array.from(selectedOrders),
+      });
+      setSelectedOrders(new Set());
+      setDispatchForm({ branch: branchFilter || "Pampanga", rider_id: "", vehicle_id: "", notes: "" });
+      setDispatchSearch("");
+      setShowDispatchModal(false);
+      await loadDeliveryData();
+    } catch (err) {
+      setLoadError(err?.message || "Unable to create dispatch.");
+    } finally {
+      setCreatingDispatch(false);
+    }
   };
 
   const assignOrder = async (order) => {
@@ -638,6 +722,119 @@ export default function AdminDeliveryFixed() {
     }
   };
 
+  const detailRow = (label, value) => (
+    <div className="rounded-lg border px-4 py-3" style={{ borderColor: toolbarBdr, backgroundColor: isDark ? "#111827" : "#f8fafc" }}>
+      <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>{label}</p>
+      <p className="text-sm font-semibold mt-1 break-words" style={{ color: isDark ? "#f8fafc" : "#111827" }}>{value || "-"}</p>
+    </div>
+  );
+
+  const renderDetailContent = () => {
+    const item = detailModal.item;
+    if (!item) return null;
+
+    if (detailModal.type === "rider") {
+      const vehicle = getVehicleForRider(vehicles, item);
+      const active = item.activeDeliveryDetails || item.active_delivery_details || item.orders || item.activeOrders || item.active_orders || item.deliveries || [];
+      return (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {detailRow("Name", item.name || "Unnamed Rider")}
+            {detailRow("Email", item.email)}
+            {detailRow("Phone", item.phoneNumber || item.phone_number)}
+            {detailRow("Branch", item.branch)}
+            {detailRow("Availability", statusLabel(item.availability))}
+            {detailRow("Active Deliveries", item.activeDeliveries ?? item.active_deliveries ?? 0)}
+            {detailRow("Assigned Vehicle", vehicle ? `${vehicle.plateNumber || vehicle.plate_number || "-"} (${statusLabel(vehicle.vehicleType || vehicle.vehicle_type)})` : "-")}
+            {detailRow("Verification", (item.isVerified ?? item.is_verified) ? "Verified" : "Unverified")}
+          </div>
+          <div>
+            <h4 className="text-sm font-bold mb-3" style={{ color: isDark ? "#f8fafc" : "#111827" }}>Current Assignments</h4>
+            {active.length === 0 ? (
+              <p className="text-sm" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>No current assignments.</p>
+            ) : (
+              <div className="space-y-2">
+                {active.map((delivery) => (
+                  <div key={delivery.id} className="rounded-lg border p-3 flex items-start justify-between gap-3" style={{ borderColor: toolbarBdr }}>
+                    <div>
+                      <p className="text-sm font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>{delivery.orderNumber || delivery.order_number}</p>
+                      <p className="text-xs mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{delivery.itemSummary || delivery.item_summary || "-"}</p>
+                    </div>
+                    <button type="button" onClick={() => openReassignModal(delivery, item.id)} className="px-3 py-2 text-xs font-bold text-white rounded-lg" style={{ backgroundColor: "#2563eb" }}>
+                      Reassign
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      );
+    }
+
+    if (detailModal.type === "vehicle") {
+      const assignedRider = riders.find((r) => String(r.id) === String(item.assignedRiderId) || String(r.id) === String(item.assigned_rider_id));
+      return (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {detailRow("Plate Number", item.plateNumber || item.plate_number)}
+          {detailRow("Type", statusLabel(item.vehicleType || item.vehicle_type))}
+          {detailRow("Brand", item.brand)}
+          {detailRow("Model", item.model)}
+          {detailRow("Color", item.color)}
+          {detailRow("Capacity", item.capacity)}
+          {detailRow("Branch", item.branch)}
+          {detailRow("Assigned Rider", assignedRider?.name)}
+          {detailRow("Status", (item.isActive ?? item.is_active) ? "Active" : "Inactive")}
+          {detailRow("Document URL", item.documentUrl || item.document_url)}
+        </div>
+      );
+    }
+
+    if (detailModal.type === "dispatch") {
+      return (
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {detailRow("Dispatch Number", item.deliveryOrderNumber || item.delivery_order_number)}
+            {detailRow("Status", statusLabel(item.status))}
+            {detailRow("Rider", item.riderName || item.rider_name)}
+            {detailRow("Vehicle", `${item.vehiclePlateNumber || item.vehicle_plate_number || "-"}${item.vehicleType || item.vehicle_type ? ` (${statusLabel(item.vehicleType || item.vehicle_type)})` : ""}`)}
+            {detailRow("Branch", item.branch)}
+            {detailRow("Stop Count", item.stopCount ?? item.stop_count ?? item.deliveries?.length ?? 0)}
+            {detailRow("Created", formatDate(item.createdAt || item.created_at))}
+            {detailRow("Notes", item.notes)}
+          </div>
+          <div>
+            <h4 className="text-sm font-bold mb-3" style={{ color: isDark ? "#f8fafc" : "#111827" }}>Included Orders</h4>
+            <div className="space-y-2">
+              {(item.deliveries || []).map((delivery) => (
+                <div key={delivery.id} className="rounded-lg border p-3" style={{ borderColor: toolbarBdr }}>
+                  <p className="text-sm font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>{delivery.orderNumber || delivery.order_number}</p>
+                  <p className="text-xs mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{delivery.itemSummary || delivery.item_summary || "-"}</p>
+                  <span className="text-[11px] font-bold px-2 py-1 rounded inline-block mt-2" style={{ color: isDark ? "#86efac" : "#15803d", backgroundColor: isDark ? "rgba(34,197,94,0.12)" : "#f0fdf4" }}>
+                    {statusLabel(delivery.status)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {detailRow("Order Number", item.orderNumber || item.order_number)}
+        {detailRow("Status", statusLabel(item.status))}
+        {detailRow("Recipient", item.recipientName || item.recipient_name)}
+        {detailRow("Phone", item.recipientPhone || item.recipient_phone)}
+        {detailRow("Branch", item.branch)}
+        {detailRow("Schedule", formatDate(item.scheduledAt || item.scheduled_at))}
+        {detailRow("Items", item.itemSummary || item.item_summary)}
+        {detailRow("Address", item.address || item.deliveryAddress || item.delivery_address)}
+      </div>
+    );
+  };
+
   const printDate = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" });
   const printTime = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
   const printScope = [
@@ -656,7 +853,7 @@ export default function AdminDeliveryFixed() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <style>{`
         .print-only { display: none; }
         @keyframes delivRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -712,10 +909,10 @@ export default function AdminDeliveryFixed() {
       )}
 
       <div className={`grid grid-cols-2 lg:grid-cols-4 gap-4 no-print deliv-rise`} style={{ animationDelay: "0.18s" }}>
-        <GreenCard label="Pending orders" sublabel="Needs rider" value={pendingOrders.length} sub="Ready to assign" />
-        <WhiteCard label="Assigned deliveries" sublabel="Active rider load" value={assignedDeliveries} sub="Currently assigned" accentColor="#3b82f6" />
+        <GreenCard label="Ready for dispatch" sublabel="Ready pickup orders" value={pendingOrders.length} sub="Needs dispatch" />
+        <WhiteCard label="Active dispatches" sublabel="In-house routes" value={deliveryOrders.length} sub="Currently assigned" accentColor="#3b82f6" />
         <WhiteCard label="Available riders" sublabel="Verified and idle" value={availableRiders.length} sub={`${inactiveRiders} unavailable`} accentColor="#22c55e" />
-        <WhiteCard label="Total riders" sublabel="Delivery accounts" value={riders.length} sub={branchFilter || "All branches"} accentColor="#f59e0b" />
+        <WhiteCard label="Assigned stops" sublabel="Active rider load" value={assignedDeliveries} sub={branchFilter || "All branches"} accentColor="#f59e0b" />
       </div>
 
       <div className={`no-print rounded-2xl overflow-hidden shadow-sm deliv-rise`} style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, animationDelay: "0.36s" }}>
@@ -914,6 +1111,130 @@ export default function AdminDeliveryFixed() {
         </div>
       )}
 
+      {showDispatchModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm" style={{ backgroundColor: "rgba(0,0,0,0.62)" }}>
+          <div className="w-full max-w-6xl max-h-[92vh] rounded-2xl overflow-hidden shadow-2xl flex flex-col" style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}` }}>
+            <div className="px-6 py-5 flex items-center justify-between gap-4" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
+              <div>
+                <h3 className="text-base font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>Dispatch Orders</h3>
+                <p className="text-sm mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Create one in-house dispatch route for selected ready orders.</p>
+              </div>
+              <button type="button" onClick={() => setShowDispatchModal(false)} className="p-2 rounded-lg transition-all hover:bg-gray-100 dark:hover:bg-slate-700" style={{ color: inputTxt }}>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold mb-2" style={{ color: isDark ? "#e2e8f0" : "#374151" }}>Branch</label>
+                  <FDrop value={dispatchForm.branch} onChange={(value) => setDispatchForm((current) => ({ ...current, branch: value }))} isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt}>
+                    {BRANCHES.map((branch) => <option key={branch} value={branch}>{branch}</option>)}
+                  </FDrop>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-2" style={{ color: isDark ? "#e2e8f0" : "#374151" }}>Rider *</label>
+                  <FDrop
+                    value={dispatchForm.rider_id}
+                    onChange={(value) => {
+                      const rider = riders.find((r) => String(r.id) === String(value));
+                      const riderVehicle = getVehicleForRider(vehicles, rider);
+                      setDispatchForm((current) => ({ ...current, rider_id: value, vehicle_id: riderVehicle?.id || current.vehicle_id }));
+                    }}
+                    isDark={isDark}
+                    inputBg={inputBg}
+                    inputBdr={inputBdr}
+                    inputTxt={inputTxt}
+                  >
+                    <option value="">Select rider</option>
+                    {assignableRiders.map((rider) => (
+                      <option key={rider.id} value={rider.id}>{rider.name} ({rider.activeDeliveries ?? rider.active_deliveries ?? 0} active)</option>
+                    ))}
+                  </FDrop>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold mb-2" style={{ color: isDark ? "#e2e8f0" : "#374151" }}>In-house Vehicle</label>
+                  <FDrop value={dispatchForm.vehicle_id} onChange={(value) => setDispatchForm((current) => ({ ...current, vehicle_id: value }))} isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt}>
+                    <option value="">No vehicle</option>
+                    {vehicles.filter((vehicle) => vehicle.isActive ?? vehicle.is_active).map((vehicle) => (
+                      <option key={vehicle.id} value={vehicle.id}>{vehicle.plateNumber || vehicle.plate_number} ({statusLabel(vehicle.vehicleType || vehicle.vehicle_type)})</option>
+                    ))}
+                  </FDrop>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold mb-2" style={{ color: isDark ? "#e2e8f0" : "#374151" }}>Notes</label>
+                <textarea
+                  value={dispatchForm.notes}
+                  onChange={(e) => setDispatchForm((current) => ({ ...current, notes: e.target.value }))}
+                  rows={3}
+                  className="w-full px-4 py-3 text-sm border rounded-lg focus:ring-2 focus:border-green-500 focus:outline-none transition-all shadow-sm resize-none"
+                  style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt, outlineColor: "rgba(34,197,94,0.3)" }}
+                  placeholder="Optional route notes, packing instructions, or driver reminders"
+                />
+              </div>
+
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <p className="text-sm font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>{selectedOrders.size} selected</p>
+                  <p className="text-xs mt-0.5" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Only paid orders marked ready for pickup are listed.</p>
+                </div>
+                <input
+                  value={dispatchSearch}
+                  onChange={(e) => setDispatchSearch(e.target.value)}
+                  placeholder="Search ready orders"
+                  className="px-4 py-2.5 text-sm border rounded-lg focus:ring-2 focus:border-green-500 focus:outline-none transition-all shadow-sm"
+                  style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt, minWidth: 260, outlineColor: "rgba(34,197,94,0.3)" }}
+                />
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border" style={{ borderColor: toolbarBdr }}>
+                <table className="w-full" style={{ minWidth: "820px" }}>
+                  <thead style={{ backgroundColor: toolbarBg, borderBottom: `1px solid ${toolbarBdr}` }}>
+                    <tr>
+                      {["", "Order", "Recipient", "Branch", "Schedule", "Items"].map((h) => (
+                        <th key={h || "select"} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#6b7280" }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dispatchModalOrders.length === 0 ? (
+                      <tr><td colSpan={6}><EmptyState title="No ready orders" subtitle="Mark paid delivery orders as ready for pickup before dispatching." isDark={isDark} /></td></tr>
+                    ) : dispatchModalOrders.map((order) => {
+                      const checked = selectedOrders.has(order.id);
+                      return (
+                        <tr key={order.id} className="hover-row" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: checked ? (isDark ? "rgba(34,197,94,0.08)" : "#f0fdf4") : "transparent" }}>
+                          <td className="px-4 py-3"><input type="checkbox" checked={checked} onChange={() => toggleOrderSelection(order.id)} className="w-4 h-4 rounded text-green-600 focus:ring-green-500 border-gray-300 cursor-pointer" /></td>
+                          <td className="px-4 py-3 text-sm font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>{order.orderNumber || order.order_number}</td>
+                          <td className="px-4 py-3">
+                            <p className="text-sm font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>{order.recipientName || order.recipient_name || "Recipient"}</p>
+                            <p className="text-xs" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{order.recipientPhone || order.recipient_phone || "-"}</p>
+                          </td>
+                          <td className="px-4 py-3 text-sm" style={{ color: isDark ? "#cbd5e1" : "#4b5563" }}>{order.branch || "-"}</td>
+                          <td className="px-4 py-3 text-sm" style={{ color: isDark ? "#cbd5e1" : "#4b5563" }}>{formatDate(order.scheduledAt || order.scheduled_at)}</td>
+                          <td className="px-4 py-3 text-sm" style={{ color: isDark ? "#cbd5e1" : "#4b5563", maxWidth: 340 }}>{order.itemSummary || order.item_summary || "-"}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="px-6 py-5 flex items-center justify-between gap-3 flex-wrap" style={{ borderTop: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
+              <button type="button" onClick={() => setSelectedOrders(new Set())} className="px-5 py-2.5 text-sm font-semibold border rounded-lg transition-all" style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}>Clear Selection</button>
+              <div className="flex items-center gap-3">
+                <button type="button" onClick={() => setShowDispatchModal(false)} className="px-5 py-2.5 text-sm font-semibold border rounded-lg transition-all" style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}>Cancel</button>
+                <button type="button" onClick={createDispatch} disabled={creatingDispatch || !dispatchForm.rider_id || selectedOrders.size === 0} className="px-6 py-2.5 text-sm font-bold text-white rounded-lg transition-all hover:shadow-md active:scale-95 disabled:opacity-50 disabled:transform-none" style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
+                  {creatingDispatch ? "Creating..." : "Create Dispatch"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* REASSIGN MODAL */}
       {reassignData.show && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm" style={{ backgroundColor: "rgba(0,0,0,0.6)" }}>
@@ -990,6 +1311,51 @@ export default function AdminDeliveryFixed() {
                 style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}
               >
                 {reassigning ? "Reassigning..." : "Confirm Reassign"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detailModal.item && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm" style={{ backgroundColor: "rgba(0,0,0,0.62)" }}>
+          <div className="w-full max-w-3xl max-h-[90vh] rounded-2xl overflow-hidden shadow-2xl flex flex-col" style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}` }}>
+            <div className="px-6 py-5 flex items-center justify-between gap-4" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
+              <div>
+                <h3 className="text-base font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>
+                  {detailModal.type === "rider" ? "Rider Details" : detailModal.type === "vehicle" ? "Vehicle Details" : detailModal.type === "dispatch" ? "Dispatch Details" : "Order Details"}
+                </h3>
+                <p className="text-sm mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Full delivery operation attributes.</p>
+              </div>
+              <button type="button" onClick={() => setDetailModal({ type: "", item: null })} className="p-2 rounded-lg transition-all hover:bg-gray-100 dark:hover:bg-slate-700" style={{ color: inputTxt }}>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto space-y-6">
+              {renderDetailContent()}
+            </div>
+            <div className="px-6 py-5 flex items-center justify-end gap-3" style={{ borderTop: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
+              {detailModal.type === "vehicle" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const vehicle = detailModal.item;
+                    setDetailModal({ type: "", item: null });
+                    openEditVehicle(vehicle);
+                  }}
+                  className="px-5 py-2.5 text-sm font-semibold border rounded-lg transition-all hover:bg-gray-50 dark:hover:bg-slate-800"
+                  style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}
+                >
+                  Edit Vehicle
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setDetailModal({ type: "", item: null })}
+                className="px-6 py-2.5 text-sm font-bold text-white rounded-lg transition-all"
+                style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}
+              >
+                Close
               </button>
             </div>
           </div>
@@ -1075,6 +1441,141 @@ export default function AdminDeliveryFixed() {
             </div>
           </div>
 
+          <div className="p-4">
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+              <section className="rounded-xl border overflow-hidden" style={{ borderColor: cardBdr, backgroundColor: cardBg }}>
+                <div className="px-5 py-4 flex items-center justify-between gap-3" style={{ borderBottom: `1px solid ${isDark ? "#243142" : "#eef2f6"}`, backgroundColor: toolbarBg }}>
+                  <div>
+                    <h2 className="text-base font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>Available Delivery Riders</h2>
+                    <p className="text-sm mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Verified riders ready for delivery work.</p>
+                  </div>
+                  <span className="text-xs font-bold px-3 py-1.5 rounded-full" style={{ color: isDark ? "#cbd5e1" : "#475569", backgroundColor: isDark ? "#1f2937" : "#f3f6f8" }}>{availableRiders.length} available</span>
+                </div>
+                <div>
+                  {filteredRiders.length === 0 ? (
+                    <EmptyState title="No riders found" subtitle="Try another branch, status, or search term." isDark={isDark} />
+                  ) : filteredRiders.map((rider, index) => {
+                    const vehicle = getVehicleForRider(vehicles, rider);
+                    const unavailable = !(rider.isActive ?? rider.is_active) || !(rider.isVerified ?? rider.is_verified);
+                    return (
+                      <div key={rider.id} className="px-5 py-4 flex items-center justify-between gap-4 transition-colors hover:bg-gray-50 dark:hover:bg-slate-800/40" style={{ borderTop: index === 0 ? "none" : `1px solid ${isDark ? "#243142" : "#eef2f6"}` }}>
+                        <div className="min-w-0 flex items-center gap-3">
+                          <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white overflow-hidden shrink-0" style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
+                            {rider.profilePictureUrl || rider.profile_picture_url ? <img src={rider.profilePictureUrl || rider.profile_picture_url} alt={rider.name} className="w-full h-full object-cover" /> : riderInitials(rider.name)}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-sm font-bold truncate" style={{ color: isDark ? "#f8fafc" : "#111827" }}>{rider.name || "Unnamed Rider"}</p>
+                            <p className="text-xs mt-1 truncate" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{rider.branch || "No branch"} - {vehicle ? vehicle.plateNumber || vehicle.plate_number : "No vehicle"}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="hidden sm:inline text-xs font-semibold" style={{ color: unavailable ? (isDark ? "#fca5a5" : "#b91c1c") : (isDark ? "#94a3b8" : "#64748b") }}>
+                            {unavailable ? "Unavailable" : statusLabel(rider.availability)}
+                          </span>
+                          <button type="button" onClick={() => setDetailModal({ type: "rider", item: rider })} className="px-3 py-2 text-xs font-bold border rounded-lg transition-all hover:bg-gray-50 dark:hover:bg-slate-800" style={{ borderColor: inputBdr, color: inputTxt, backgroundColor: inputBg }}>View</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="rounded-xl border overflow-hidden" style={{ borderColor: cardBdr, backgroundColor: cardBg }}>
+                <div className="px-5 py-4 flex items-center justify-between gap-3" style={{ borderBottom: `1px solid ${isDark ? "#243142" : "#eef2f6"}`, backgroundColor: toolbarBg }}>
+                  <div>
+                    <h2 className="text-base font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>Vehicle Management</h2>
+                    <p className="text-sm mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>In-house fleet and rider assignment.</p>
+                  </div>
+                  <button type="button" onClick={openAddVehicle} className="ml-auto px-4 py-2 text-sm font-bold text-white rounded-lg transition-all active:scale-95" style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>Add Vehicle</button>
+                </div>
+                <div>
+                  {vehicles.length === 0 ? (
+                    <EmptyState title="No vehicles found" subtitle="Add your first vehicle to start assigning it to riders." isDark={isDark} />
+                  ) : vehicles.map((vehicle, index) => {
+                    const assignedRider = riders.find((r) => String(r.id) === String(vehicle.assignedRiderId) || String(r.id) === String(vehicle.assigned_rider_id));
+                    return (
+                      <div key={vehicle.id} className="px-5 py-4 flex items-center justify-between gap-4 transition-colors hover:bg-gray-50 dark:hover:bg-slate-800/40" style={{ borderTop: index === 0 ? "none" : `1px solid ${isDark ? "#243142" : "#eef2f6"}` }}>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold truncate" style={{ color: isDark ? "#f8fafc" : "#111827" }}>{vehicle.plateNumber || vehicle.plate_number || "No plate"}</p>
+                          <p className="text-xs mt-1 truncate" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{statusLabel(vehicle.vehicleType || vehicle.vehicle_type)} - {[vehicle.brand, vehicle.model].filter(Boolean).join(" ") || "No model"} - {assignedRider?.name || "Unassigned"}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button type="button" onClick={() => setDetailModal({ type: "vehicle", item: vehicle })} className="px-3 py-2 text-xs font-bold border rounded-lg transition-all hover:bg-gray-50 dark:hover:bg-slate-800" style={{ borderColor: inputBdr, color: inputTxt, backgroundColor: inputBg }}>View</button>
+                          <button type="button" onClick={() => openEditVehicle(vehicle)} className="px-3 py-2 text-xs font-bold border rounded-lg transition-all hover:bg-gray-50 dark:hover:bg-slate-800" style={{ borderColor: inputBdr, color: inputTxt, backgroundColor: inputBg }}>Edit</button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <section className="rounded-xl border overflow-hidden" style={{ borderColor: cardBdr, backgroundColor: cardBg }}>
+                <div className="px-5 py-4 flex items-center justify-between gap-3" style={{ borderBottom: `1px solid ${isDark ? "#243142" : "#eef2f6"}`, backgroundColor: toolbarBg }}>
+                  <div>
+                    <h2 className="text-base font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>Active Dispatches</h2>
+                    <p className="text-sm mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Routes already assigned to riders.</p>
+                  </div>
+                  <span className="text-xs font-bold px-3 py-1.5 rounded-full" style={{ color: isDark ? "#cbd5e1" : "#475569", backgroundColor: isDark ? "#1f2937" : "#f3f6f8" }}>{deliveryOrders.length} active</span>
+                </div>
+                <div>
+                  {deliveryOrders.length === 0 ? (
+                    <EmptyState title="No active dispatches" subtitle="Create a dispatch after orders are paid and ready for pickup." isDark={isDark} />
+                  ) : deliveryOrders.map((dispatch, index) => (
+                    <div key={dispatch.id} className="px-5 py-4 flex items-center justify-between gap-4 transition-colors hover:bg-gray-50 dark:hover:bg-slate-800/40" style={{ borderTop: index === 0 ? "none" : `1px solid ${isDark ? "#243142" : "#eef2f6"}` }}>
+                      <div className="min-w-0">
+                        <p className="text-sm font-bold truncate" style={{ color: isDark ? "#f8fafc" : "#111827" }}>{dispatch.deliveryOrderNumber || dispatch.delivery_order_number}</p>
+                        <p className="text-xs mt-1 truncate" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{dispatch.riderName || dispatch.rider_name || "No rider"} - {dispatch.vehiclePlateNumber || dispatch.vehicle_plate_number || "No vehicle"} - {dispatch.stopCount ?? dispatch.stop_count ?? dispatch.deliveries?.length ?? 0} stops</p>
+                      </div>
+                      <button type="button" onClick={() => setDetailModal({ type: "dispatch", item: dispatch })} className="px-3 py-2 text-xs font-bold border rounded-lg transition-all hover:bg-gray-50 dark:hover:bg-slate-800 shrink-0" style={{ borderColor: inputBdr, color: inputTxt, backgroundColor: inputBg }}>View</button>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-xl border overflow-hidden" style={{ borderColor: cardBdr, backgroundColor: cardBg }}>
+                <div className="px-5 py-4 flex items-center justify-between gap-3 flex-wrap" style={{ borderBottom: `1px solid ${isDark ? "#243142" : "#eef2f6"}`, backgroundColor: toolbarBg }}>
+                  <div>
+                    <h2 className="text-base font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>Ready for Dispatch</h2>
+                    <p className="text-sm mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Paid orders marked ready for pickup.</p>
+                  </div>
+                  <div className="ml-auto flex items-center gap-2">
+                    <span className="text-xs font-bold px-3 py-1.5 rounded-full" style={{ color: isDark ? "#cbd5e1" : "#475569", backgroundColor: isDark ? "#1f2937" : "#f3f6f8" }}>{selectedOrders.size || filteredOrders.length} {selectedOrders.size ? "selected" : "pending"}</span>
+                    {selectedOrders.size > 0 ? <button type="button" onClick={clearSelection} className="px-3 py-2 text-xs font-bold border rounded-lg" style={{ borderColor: inputBdr, color: inputTxt, backgroundColor: inputBg }}>Clear</button> : null}
+                    <button type="button" onClick={openDispatchModal} className="px-4 py-2 text-sm font-bold text-white rounded-lg transition-all active:scale-95" style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>Dispatch Orders</button>
+                  </div>
+                </div>
+                <div>
+                  {filteredOrders.length === 0 ? (
+                    <EmptyState title="No pending delivery orders" subtitle="Paid delivery orders appear here after they are marked ready for pickup." isDark={isDark} />
+                  ) : (
+                    <>
+                      <label className="px-5 py-3 flex items-center gap-3 text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>
+                        <input type="checkbox" checked={selectedOrders.size === filteredOrders.length && filteredOrders.length > 0} onChange={toggleSelectAll} className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300 cursor-pointer" />
+                        Select all ready orders
+                      </label>
+                      {filteredOrders.map((order, index) => {
+                        const selected = selectedOrders.has(order.id);
+                        return (
+                          <div key={order.id} className="px-5 py-4 flex items-center justify-between gap-4 transition-colors hover:bg-gray-50 dark:hover:bg-slate-800/40" style={{ borderTop: index === 0 ? "none" : `1px solid ${isDark ? "#243142" : "#eef2f6"}`, backgroundColor: selected ? (isDark ? "rgba(34,197,94,0.08)" : "#f5fbf7") : "transparent" }}>
+                            <div className="min-w-0 flex items-start gap-3">
+                              <input type="checkbox" checked={selected} onChange={() => toggleOrderSelection(order.id)} className="w-4 h-4 mt-0.5 rounded text-blue-600 focus:ring-blue-500 border-gray-300 cursor-pointer shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold truncate" style={{ color: isDark ? "#f8fafc" : "#111827" }}>{order.orderNumber || order.order_number}</p>
+                                <p className="text-xs mt-1 truncate" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{order.recipientName || order.recipient_name || "Recipient"} - {order.branch || "-"} - {formatDate(order.scheduledAt || order.scheduled_at)}</p>
+                              </div>
+                            </div>
+                            <button type="button" onClick={() => setDetailModal({ type: "order", item: order })} className="px-3 py-2 text-xs font-bold border rounded-lg transition-all hover:bg-gray-50 dark:hover:bg-slate-800 shrink-0" style={{ borderColor: inputBdr, color: inputTxt, backgroundColor: inputBg }}>View</button>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                </div>
+              </section>
+            </div>
+          </div>
+
+          <div className="hidden">
           <div className="px-6 pt-6 pb-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
@@ -1191,7 +1692,7 @@ export default function AdminDeliveryFixed() {
             </table>
           </div>
 
-          <div className="no-print rounded-2xl overflow-hidden mt-6 shadow-sm" style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}` }}>
+          <div className="no-print rounded-2xl overflow-hidden mt-4 shadow-sm" style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}` }}>
             <div className="px-6 py-5 flex items-center justify-between gap-3 flex-wrap" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
               <div>
                 <h2 className="text-lg font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>Vehicle Management</h2>
@@ -1286,6 +1787,57 @@ export default function AdminDeliveryFixed() {
             </div>
           </div>
 
+          <div className="no-print rounded-2xl overflow-hidden mt-4 shadow-sm" style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}` }}>
+            <div className="px-6 py-5 flex items-center justify-between gap-3 flex-wrap" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
+              <div>
+                <h2 className="text-lg font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>Active Dispatches</h2>
+                <p className="text-sm mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>In-house delivery orders already assigned to riders.</p>
+              </div>
+              <span className="text-sm font-bold px-3 py-1.5 rounded-full" style={{ color: isDark ? "#bfdbfe" : "#1d4ed8", backgroundColor: isDark ? "rgba(59,130,246,0.12)" : "#eff6ff" }}>
+                {deliveryOrders.length} active
+              </span>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full" style={{ minWidth: "980px" }}>
+                <thead style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
+                  <tr>
+                    {["Dispatch", "Rider", "Vehicle", "Branch", "Stops", "Status", "Orders"].map((h) => (
+                      <th key={h} className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#6b7280" }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {deliveryOrders.length === 0 ? (
+                    <tr><td colSpan={7}><EmptyState title="No active dispatches" subtitle="Create a dispatch after orders are paid and ready for pickup." isDark={isDark} /></td></tr>
+                  ) : deliveryOrders.map((dispatch) => (
+                    <tr key={dispatch.id} className="hover-row" style={{ borderBottom: `1px solid ${toolbarBdr}` }}>
+                      <td className="px-6 py-4">
+                        <p className="text-sm font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>{dispatch.deliveryOrderNumber || dispatch.delivery_order_number}</p>
+                        {dispatch.notes ? <p className="text-xs mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{dispatch.notes}</p> : null}
+                      </td>
+                      <td className="px-6 py-4 text-sm font-semibold" style={{ color: isDark ? "#cbd5e1" : "#374151" }}>{dispatch.riderName || dispatch.rider_name || "-"}</td>
+                      <td className="px-6 py-4 text-sm" style={{ color: isDark ? "#cbd5e1" : "#4b5563" }}>
+                        {dispatch.vehiclePlateNumber || dispatch.vehicle_plate_number || "-"}
+                        {(dispatch.vehicleType || dispatch.vehicle_type) ? <span className="text-xs ml-1.5" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>({statusLabel(dispatch.vehicleType || dispatch.vehicle_type)})</span> : null}
+                      </td>
+                      <td className="px-6 py-4 text-sm" style={{ color: isDark ? "#cbd5e1" : "#4b5563" }}>{dispatch.branch || "-"}</td>
+                      <td className="px-6 py-4 text-sm font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>{dispatch.stopCount ?? dispatch.stop_count ?? dispatch.deliveries?.length ?? 0}</td>
+                      <td className="px-6 py-4"><span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ color: isDark ? "#86efac" : "#15803d", backgroundColor: isDark ? "rgba(34,197,94,0.12)" : "#f0fdf4" }}>{statusLabel(dispatch.status)}</span></td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-1.5">
+                          {(dispatch.deliveries || []).slice(0, 6).map((delivery) => (
+                            <span key={delivery.id} className="text-[11px] font-bold px-2 py-1 rounded" style={{ color: isDark ? "#cbd5e1" : "#374151", backgroundColor: isDark ? "#334155" : "#f3f4f6" }}>{delivery.orderNumber || delivery.order_number}</span>
+                          ))}
+                          {(dispatch.deliveries || []).length > 6 ? <span className="text-[11px] font-bold px-2 py-1 rounded" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>+{(dispatch.deliveries || []).length - 6}</span> : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
           {showBulkAssignModal && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm" style={{ backgroundColor: "rgba(0,0,0,0.6)" }}>
               <div className="w-full max-w-md rounded-2xl overflow-hidden shadow-2xl transform transition-all" style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}` }}>
@@ -1375,26 +1927,26 @@ export default function AdminDeliveryFixed() {
             </div>
           )}
 
-          <div className="no-print rounded-2xl overflow-hidden mt-6 shadow-sm" style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}` }}>
+          <div className="no-print rounded-2xl overflow-hidden mt-4 shadow-sm" style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}` }}>
             <div className="px-6 py-5 flex items-center justify-between gap-4 flex-wrap" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
               <div>
-                <h2 className="text-lg font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>Pending Delivery Orders</h2>
-                <p className="text-sm mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Paid delivery orders that do not have a rider yet.</p>
+                <h2 className="text-lg font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>Ready for Dispatch</h2>
+                <p className="text-sm mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Paid orders marked ready for pickup, waiting for dispatch.</p>
               </div>
               <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={openDispatchModal}
+                  className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white rounded-lg transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-95"
+                  style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}
+                >
+                  Dispatch Orders
+                </button>
                 {selectedOrders.size > 0 && (
                   <>
                     <span className="text-sm font-bold px-3 py-1.5 rounded-full" style={{ color: isDark ? "#bfdbfe" : "#1d4ed8", backgroundColor: isDark ? "rgba(59,130,246,0.12)" : "#eff6ff" }}>
                       {selectedOrders.size} selected
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setShowBulkAssignModal(true)}
-                      className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white rounded-lg transition-all hover:shadow-md hover:-translate-y-0.5 active:scale-95"
-                      style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}
-                    >
-                      Bulk Assign
-                    </button>
                     <button
                       type="button"
                       onClick={clearSelection}
@@ -1423,7 +1975,7 @@ export default function AdminDeliveryFixed() {
                         className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300 cursor-pointer"
                       />
                     </th>
-                    {["Order", "Recipient", "Branch", "Schedule", "Items", "Assign Rider", "Vehicle"].map((h) => (
+                    {["Order", "Recipient", "Branch", "Schedule", "Items"].map((h) => (
                       <th key={h} className="px-6 py-4 text-left text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#6b7280" }}>{h}</th>
                     ))}
                   </tr>
@@ -1431,10 +1983,10 @@ export default function AdminDeliveryFixed() {
                 <tbody>
                   {filteredOrders.length === 0 ? (
                     <tr>
-                      <td colSpan={8}>
+                      <td colSpan={6}>
                         <EmptyState
                           title="No pending delivery orders"
-                          subtitle="New paid delivery orders will appear here when they are ready for rider assignment."
+                          subtitle="Paid delivery orders appear here after they are marked ready for pickup."
                           isDark={isDark}
                         />
                       </td>
@@ -1470,65 +2022,7 @@ export default function AdminDeliveryFixed() {
                           </td>
                           <td className="px-6 py-4 text-sm font-medium" style={{ color: isDark ? "#cbd5e1" : "#4b5563" }}>{order.branch || "-"}</td>
                           <td className="px-6 py-4 text-sm font-medium" style={{ color: isDark ? "#cbd5e1" : "#4b5563" }}>{formatDate(order.scheduledAt || order.scheduled_at)}</td>
-                          <td className="px-6 py-4 text-sm font-medium" style={{ color: isDark ? "#cbd5e1" : "#4b5563", maxWidth: "320px" }}>{order.itemSummary || order.item_summary || "-"}</td>
-                          <td className="px-6 py-4">
-                            <div className="flex flex-col gap-2">
-                              <select
-                                value={assignments[order.id] || ""}
-                                onChange={(e) => {
-                                  const rId = e.target.value;
-                                  setAssignments((current) => ({ ...current, [order.id]: rId }));
-                                  
-                                  const riderObj = riders.find(r => String(r.id) === String(rId));
-                                  const riderVehicle = getVehicleForRider(vehicles, riderObj);
-                                  if (riderVehicle) {
-                                    setVehicleAssignments((current) => ({ ...current, [order.id]: riderVehicle.id }));
-                                  } else {
-                                     setVehicleAssignments((current) => {
-                                       const next = {...current};
-                                       delete next[order.id];
-                                       return next;
-                                     });
-                                  }
-                                }}
-                                className="px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:border-green-500 focus:outline-none shadow-sm transition-all min-w-[180px]"
-                                style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt, outlineColor: "rgba(34,197,94,0.3)" }}
-                              >
-                                <option value="">Select rider</option>
-                                {assignableRiders.map((r) => (
-                                  <option key={r.id} value={r.id}>
-                                    {r.name} ({r.activeDeliveries ?? r.active_deliveries ?? 0} active)
-                                  </option>
-                                ))}
-                              </select>
-
-                              <select
-                                value={vehicleAssignments[order.id] || ""}
-                                onChange={(e) => setVehicleAssignments((current) => ({ ...current, [order.id]: e.target.value }))}
-                                className="px-3 py-2 text-sm border rounded-lg focus:ring-2 focus:border-green-500 focus:outline-none shadow-sm transition-all min-w-[180px]"
-                                style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt, outlineColor: "rgba(34,197,94,0.3)" }}
-                              >
-                                <option value="">Select vehicle</option>
-                                {vehicles
-                                  .filter((v) => v.isActive ?? v.is_active)
-                                  .map((v) => (
-                                    <option key={v.id} value={v.id}>
-                                      {v.plateNumber || v.plate_number} ({v.vehicleType || v.vehicle_type})
-                                    </option>
-                                  ))}
-                              </select>
-
-                              <button
-                                type="button"
-                                onClick={() => assignOrder(order)}
-                                disabled={!assignments[order.id] || assigningOrder === order.id}
-                                className="px-4 py-2 text-sm font-bold text-white rounded-lg transition-all hover:shadow-md active:scale-95 disabled:opacity-50 disabled:transform-none"
-                                style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}
-                              >
-                                {assigningOrder === order.id ? "Assigning..." : "Assign Order"}
-                              </button>
-                            </div>
-                          </td>
+                          <td className="px-6 py-4 text-sm font-medium" style={{ color: isDark ? "#cbd5e1" : "#4b5563", maxWidth: "420px" }}>{order.itemSummary || order.item_summary || "-"}</td>
                         </tr>
                       );
                     })
@@ -1536,6 +2030,8 @@ export default function AdminDeliveryFixed() {
                 </tbody>
               </table>
             </div>
+          </div>
+
           </div>
 
           <div className="print-only print-table">
@@ -1569,7 +2065,7 @@ export default function AdminDeliveryFixed() {
           </div>
 
           <div className="print-only print-table">
-            <h3>Pending Delivery Orders</h3>
+            <h3>Ready for Dispatch</h3>
             <table>
               <thead>
                 <tr>
@@ -1583,7 +2079,7 @@ export default function AdminDeliveryFixed() {
                 {filteredOrders.length === 0 ? (
                   <tr>
                     <td colSpan={4}>
-                      <EmptyState title="No pending delivery orders" subtitle="New paid delivery orders will appear here when they are ready for rider assignment." isDark={isDark} />
+                      <EmptyState title="No pending delivery orders" subtitle="Paid delivery orders appear here after they are marked ready for pickup." isDark={isDark} />
                     </td>
                   </tr>
                 ) : (
@@ -1604,3 +2100,4 @@ export default function AdminDeliveryFixed() {
     </div>
   );
 }
+

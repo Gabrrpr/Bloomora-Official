@@ -26,6 +26,13 @@ class AddressPayload(BaseModel):
     is_default: bool = False
 
 
+def parse_address_id(address_id: str) -> uuid.UUID:
+    try:
+        return uuid.UUID(address_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid address ID.")
+
+
 def serialize_address(a: Address) -> dict:
     return {
         "id": str(a.id),
@@ -103,12 +110,13 @@ def update_address(
     current_user: User = Depends(get_current_user),
 ):
     """Update an existing address."""
-    address = db.query(Address).filter(Address.id == address_id, Address.user_id == current_user.id).first()
+    parsed_address_id = parse_address_id(address_id)
+    address = db.query(Address).filter(Address.id == parsed_address_id, Address.user_id == current_user.id).first()
     if not address:
         raise HTTPException(status_code=404, detail="Address not found.")
 
     if payload.is_default:
-        db.query(Address).filter(Address.user_id == current_user.id, Address.id != address_id).update({"is_default": False})
+        db.query(Address).filter(Address.user_id == current_user.id, Address.id != parsed_address_id).update({"is_default": False})
 
     address.label = payload.label
     address.recipient_name = payload.recipient_name
@@ -146,15 +154,17 @@ def delete_address(
     current_user: User = Depends(get_current_user),
 ):
     """Delete an address."""
-    address = db.query(Address).filter(Address.id == address_id, Address.user_id == current_user.id).first()
+    parsed_address_id = parse_address_id(address_id)
+    address = db.query(Address).filter(Address.id == parsed_address_id, Address.user_id == current_user.id).first()
     if not address:
         raise HTTPException(status_code=404, detail="Address not found.")
 
+    was_default = bool(address.is_default)
     db.delete(address)
     db.commit()
 
     # If the deleted address was the default, set another address as default
-    if address.is_default:
+    if was_default:
         remaining = db.query(Address).filter(Address.user_id == current_user.id).order_by(Address.created_at.desc()).first()
         if remaining:
             remaining.is_default = True
@@ -170,11 +180,12 @@ def set_default_address(
     current_user: User = Depends(get_current_user),
 ):
     """Set an address as the default."""
-    address = db.query(Address).filter(Address.id == address_id, Address.user_id == current_user.id).first()
+    parsed_address_id = parse_address_id(address_id)
+    address = db.query(Address).filter(Address.id == parsed_address_id, Address.user_id == current_user.id).first()
     if not address:
         raise HTTPException(status_code=404, detail="Address not found.")
 
-    db.query(Address).filter(Address.user_id == current_user.id, Address.id != address_id).update({"is_default": False})
+    db.query(Address).filter(Address.user_id == current_user.id, Address.id != parsed_address_id).update({"is_default": False})
     address.is_default = True
     db.commit()
     db.refresh(address)

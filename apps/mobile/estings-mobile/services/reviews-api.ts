@@ -8,6 +8,18 @@ export type ReviewableProduct = {
   reviewed: boolean;
 };
 
+export type MyReview = {
+  comment?: string | null;
+  created_at?: string | null;
+  id: string;
+  image_url?: string | null;
+  order_id: string;
+  product_id: string;
+  product_image_url?: string | null;
+  product_name?: string | null;
+  star_rating: number;
+};
+
 export async function getReviewEligibility(orderId: string, session: AuthSession) {
   return apiFetch<{ order_id: string; products: ReviewableProduct[] }>(
     `/reviews/order/${encodeURIComponent(orderId)}/eligibility`,
@@ -45,6 +57,13 @@ export async function submitProductReview({
   return apiFetch<{ status: string }>('/reviews/submit', {
     body: form,
     method: 'POST',
+    token: session.accessToken,
+  });
+}
+
+export async function getMyReviews(session: AuthSession) {
+  return apiFetch<MyReview[]>('/reviews/my-reviews', {
+    method: 'GET',
     token: session.accessToken,
   });
 }

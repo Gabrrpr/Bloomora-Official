@@ -717,6 +717,10 @@ async def create_order(
 
     attempt_id = str(payload.get("attemptId") or payload.get("checkout_attempt_id") or "").strip() or None
     if attempt_id:
+        try:
+            attempt_id = str(uuid.UUID(attempt_id))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid checkout attempt ID. Please restart checkout and try again.")
         existing_order = db.query(Order).filter(
             Order.user_id == current_user.id,
             Order.checkout_attempt_id == attempt_id,
@@ -860,7 +864,10 @@ async def create_order(
         db.flush()
 
         reserved_until = datetime.now(timezone.utc) + timedelta(hours=1)
-        incoming_by_id = {str(item.get("id")): item for item in cart_items}
+        incoming_by_id = {
+            str(item.get("id")).replace("arr-", ""): item
+            for item in cart_items
+        }
         for item_type, entity, quantity, unit_price in prepared_items:
             incoming = incoming_by_id.get(str(entity.id), {})
             card_message = str(incoming.get("card_message") or incoming.get("cardMessage") or "").strip() or None
@@ -874,7 +881,6 @@ async def create_order(
                 card_enabled=bool(card_message),
             )
             db.add(order_item)
-            db.commit()
             db.flush()
             if item_type == "product":
                 db.add(StockReservation(
@@ -1318,14 +1324,30 @@ def force_order_status(
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
 
+    allowed_manual_statuses = {
+        "confirmed": OrderStatusEnum.confirmed,
+        "preparing": OrderStatusEnum.preparing,
+        "ready_for_pickup": OrderStatusEnum.ready_for_pickup,
+        "cancelled": OrderStatusEnum.cancelled,
+    }
+
     if status == "paid":
         order.status = OrderStatusEnum.paid
         if order.transaction:
             order.transaction.status = PaymentStatusEnum.paid.value
         _convert_reservations(db, order) 
         _increment_sold_count(db, order)
-    elif status == "delivered":
-        order.status = OrderStatusEnum.delivered
+    elif status in allowed_manual_statuses:
+        if status == "ready_for_pickup":
+            payment_status = order.transaction.status if order.transaction else None
+            if payment_status != PaymentStatusEnum.paid:
+                raise HTTPException(status_code=400, detail="Only paid orders can be marked ready for pickup.")
+        order.status = allowed_manual_statuses[status]
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Select confirmed, preparing, ready_for_pickup, or cancelled from Orders. Delivery statuses are managed in the delivery module.",
+        )
         
     db.commit()
     return {"status": "success", "new_status": order.status}

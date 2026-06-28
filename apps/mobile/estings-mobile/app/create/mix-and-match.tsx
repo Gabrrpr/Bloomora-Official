@@ -1,10 +1,12 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { ArrowLeft, ArrowRight, Check, LoaderCircle, RotateCcw, ShoppingCart, Shuffle, Sparkles } from 'lucide-react-native';
+import { ArrowLeft, ArrowRight, Check, LoaderCircle, Minus, PackageOpen, Plus, RotateCcw, Search, ShoppingCart, Shuffle, Sparkles, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  type ImageSourcePropType,
+  Modal,
   NativeScrollEvent,
   NativeSyntheticEvent,
   Pressable,
@@ -30,7 +32,8 @@ import { GreetingCardComposer } from '@/components/greeting-card-composer';
 import { ProductAddOnSelector } from '@/components/product-add-on-selector';
 import { formatPhp, type Product } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
-import { addAiArrangementToCart } from '@/services/guest-cart';
+import { requireSignedIn } from '@/services/auth-guard';
+import { getAuthSession } from '@/services/auth-session';
 import {
   checkAndGenerate,
   getAiUsage,
@@ -40,79 +43,82 @@ import {
   type CustomizationProduct,
   type GenerationResult,
 } from '@/services/customization-api';
-import { getAuthSession } from '@/services/auth-session';
-import { requireSignedIn } from '@/services/auth-guard';
+import { addAiArrangementToCart } from '@/services/guest-cart';
 import { shopApi } from '@/services/shop-api';
 
 const imageNotFound = require('@/assets/images/default-img/ImageNotFound.webp');
+const arrangementBouquet = require('@/assets/images/make-it-personal/arrangement_bouquet.webp');
+const arrangementBox = require('@/assets/images/make-it-personal/arrangement_box.webp');
+const arrangementVase = require('@/assets/images/make-it-personal/arrangement_vase.webp');
+const pollinationsCredit = require('@/assets/images/make-it-personal/pollinations-ai.png');
 
-type StepKey = 'arrangement' | 'flowers' | 'container' | 'accessories';
-type ContainerMode = 'vase' | 'wrapping';
+type ArrangementType = 'bouquet' | 'box' | 'vase';
+type StepKey = 'arrangement' | 'flowers' | 'container' | 'accessories' | 'review';
 
-const STEPS: { description: string; key: StepKey; label: string; title: string }[] = [
-  {
-    description: 'Choose the base look and presentation for your custom arrangement.',
-    key: 'arrangement',
-    label: 'Arrangement',
-    title: 'Choose your arrangement',
-  },
-  {
-    description: 'Select one flower or filler from the available customization stock.',
-    key: 'flowers',
-    label: 'Flowers',
-    title: 'Choose flowers and fillers',
-  },
-  {
-    description: 'Pick a vase or wrapping style to hold the arrangement together.',
-    key: 'container',
-    label: 'Container',
-    title: 'Choose your container',
-  },
-  {
-    description: 'Add a finishing detail, then generate your personalized preview.',
-    key: 'accessories',
-    label: 'Accessories',
-    title: 'Choose accessories',
-  },
-];
+type ArrangementOption = {
+  description: string;
+  helper: string;
+  id: ArrangementType;
+  image: number;
+  label: string;
+  maxStems: number;
+};
 
-const ARRANGEMENT_OPTIONS = [
+type SelectedPreviewItem = {
+  id: string;
+  image: ImageSourcePropType;
+  label: string;
+};
+
+const ARRANGEMENT_OPTIONS: ArrangementOption[] = [
   {
+    description: 'Hand-tied & wrapped',
+    helper: 'Up to 24 stems',
     id: 'bouquet',
-    label: 'Hand bouquet',
-    description: 'Classic hand-tied bouquet with a polished gift-ready finish.',
+    image: arrangementBouquet,
+    label: 'Bouquet',
+    maxStems: 24,
   },
   {
-    id: 'vase-arrangement',
-    label: 'Vase arrangement',
-    description: 'Structured display designed for tables, offices, and home spaces.',
+    description: 'Arranged in a gift box',
+    helper: 'Up to 9 stems',
+    id: 'box',
+    image: arrangementBox,
+    label: 'Flower Box',
+    maxStems: 9,
   },
   {
-    id: 'flower-box',
-    label: 'Flower box',
-    description: 'Compact premium arrangement with a clean boxed presentation.',
-  },
-  {
-    id: 'wrapped-bundle',
-    label: 'Wrapped bundle',
-    description: 'Soft floral bundle with a casual, romantic wrapped style.',
+    description: 'Arranged in a vase',
+    helper: 'Up to 12 stems',
+    id: 'vase',
+    image: arrangementVase,
+    label: 'Vase',
+    maxStems: 12,
   },
 ];
 
 const FLOWER_FACTS = [
-  'Roses can live for over a week with fresh water and a clean stem cut.',
-  'Carnations are among the longest-lasting cut flowers.',
-  "Baby's breath adds airy texture and symbolizes everlasting love.",
-  'A balanced bouquet usually combines focal blooms, fillers, and greenery.',
+  'A balanced arrangement combines focal blooms, texture, and a clear container style.',
+  'Fresh water and clean stem cuts help flowers last longer.',
+  'Fillers add movement and texture without needing strict stem counts.',
+  'Florists use containers to control the final shape and presentation.',
 ];
+
+const SEARCH_THRESHOLDS: Record<'container' | 'filler' | 'standard', number> = {
+  container: 7,
+  filler: 9,
+  standard: 7,
+};
 
 export default function MixAndMatchScreen() {
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
+  const headerLayout = getAppBrandHeaderLayout(width, height, insets.top);
+  const side = Math.min(Math.max(width * 0.062, 20), 30);
+
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [step, setStep] = useState(0);
-  const [containerMode, setContainerMode] = useState<ContainerMode>('vase');
   const [products, setProducts] = useState<CustomizationProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -129,26 +135,99 @@ export default function MixAndMatchScreen() {
   const [isLoadingAddOns, setIsLoadingAddOns] = useState(false);
   const [selectedAddOnIds, setSelectedAddOnIds] = useState<ReadonlySet<string>>(() => new Set());
   const [isHeaderSolid, setIsHeaderSolid] = useState(false);
-  const [selectedArrangement, setSelectedArrangement] = useState(ARRANGEMENT_OPTIONS[0].id);
-  const [selectedFlowerId, setSelectedFlowerId] = useState<string | null>(null);
-  const [selectedVaseId, setSelectedVaseId] = useState<string | null>(null);
-  const [selectedWrappingId, setSelectedWrappingId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedArrangement, setSelectedArrangement] = useState<ArrangementType>('bouquet');
+  const [flowerQuantities, setFlowerQuantities] = useState<Record<string, number>>({});
+  const [selectedFillerIds, setSelectedFillerIds] = useState<ReadonlySet<string>>(() => new Set());
+  const [selectedContainerId, setSelectedContainerId] = useState<string | null>(null);
   const [selectedAccessoryId, setSelectedAccessoryId] = useState<string | null>(null);
-  const headerLayout = getAppBrandHeaderLayout(width, height, insets.top);
-  const side = Math.min(Math.max(width * 0.062, 20), 30);
-  const activeStep = STEPS[step];
-  const flowerProducts = useMemo(() => products.filter(isFlowerLikeProduct), [products]);
-  const vaseProducts = useMemo(() => products.filter((product) => normalizeCategory(product.category) === 'vase'), [products]);
-  const wrappingProducts = useMemo(() => products.filter((product) => normalizeCategory(product.category) === 'wrapping'), [products]);
-  const accessoryProducts = useMemo(() => products.filter((product) => normalizeCategory(product.category) === 'accessory'), [products]);
-  const selectedArrangementOption = ARRANGEMENT_OPTIONS.find((option) => option.id === selectedArrangement) ?? ARRANGEMENT_OPTIONS[0];
-  const selectedFlower = products.find((product) => product.id === selectedFlowerId);
-  const selectedVase = products.find((product) => product.id === selectedVaseId);
-  const selectedWrapping = products.find((product) => product.id === selectedWrappingId);
-  const selectedAccessory = products.find((product) => product.id === selectedAccessoryId);
-  const selectedContainer = selectedVase ?? selectedWrapping;
-  const canGenerate = Boolean(selectedFlowerId && (selectedVaseId || selectedWrappingId) && selectedAccessoryId);
+  const [flowerSheetProduct, setFlowerSheetProduct] = useState<CustomizationProduct | null>(null);
+  const [flowerSheetQty, setFlowerSheetQty] = useState(0);
+
+  const selectedArrangementOption = useMemo(
+    () => ARRANGEMENT_OPTIONS.find((option) => option.id === selectedArrangement) ?? ARRANGEMENT_OPTIONS[0],
+    [selectedArrangement],
+  );
+  const steps = useMemo(
+    () => getSteps(selectedArrangementOption),
+    [selectedArrangementOption],
+  );
+  const isReviewStep = step >= steps.length;
+  const activeStep = isReviewStep ? getReviewStep() : steps[step];
+  const availableProducts = useMemo(() => products.filter(isMixAndMatchProduct), [products]);
+  const flowerProducts = useMemo(() => availableProducts.filter(isFlowerProduct), [availableProducts]);
+  const fillerProducts = useMemo(() => availableProducts.filter(isFillerProduct), [availableProducts]);
+  const wrapperProducts = useMemo(() => availableProducts.filter(isWrapperProduct), [availableProducts]);
+  const vaseProducts = useMemo(() => availableProducts.filter(isVaseProduct), [availableProducts]);
+  const boxProducts = useMemo(() => availableProducts.filter(isBoxProduct), [availableProducts]);
+  const accessoryProducts = useMemo(() => availableProducts.filter(isAccessoryProduct), [availableProducts]);
+  const selectedFlowers = useMemo(
+    () =>
+      Object.entries(flowerQuantities)
+        .map(([id, quantity]) => ({ product: products.find((item) => item.id === id), quantity }))
+        .filter((item): item is { product: CustomizationProduct; quantity: number } => Boolean(item.product) && item.quantity > 0),
+    [flowerQuantities, products],
+  );
+  const selectedFillers = useMemo(
+    () => products.filter((item) => selectedFillerIds.has(item.id)),
+    [products, selectedFillerIds],
+  );
+  const containerProducts = useMemo(() => {
+    if (selectedArrangement === 'bouquet') return wrapperProducts;
+    if (selectedArrangement === 'vase') return vaseProducts;
+    return boxProducts;
+  }, [boxProducts, selectedArrangement, vaseProducts, wrapperProducts]);
+  const selectedContainer = products.find((item) => item.id === selectedContainerId);
+  const selectedAccessory = products.find((item) => item.id === selectedAccessoryId);
+  const selectedStemCount = selectedFlowers.reduce((total, item) => total + item.quantity, 0);
+  const selectedPreviewItems = useMemo<SelectedPreviewItem[]>(
+    () => [
+      { id: selectedArrangementOption.id, image: selectedArrangementOption.image, label: selectedArrangementOption.label },
+      ...selectedFlowers.map(({ product, quantity }) => ({
+        id: product.id,
+        image: product.image_url ? { uri: product.image_url } : imageNotFound,
+        label: `${quantity}x ${product.name}`,
+      })),
+      ...selectedFillers.map((product) => ({
+        id: product.id,
+        image: product.image_url ? { uri: product.image_url } : imageNotFound,
+        label: product.name,
+      })),
+      ...(selectedContainer ? [{
+        id: selectedContainer.id,
+        image: selectedContainer.image_url ? { uri: selectedContainer.image_url } : imageNotFound,
+        label: selectedContainer.name,
+      }] : []),
+      ...(selectedAccessory ? [{
+        id: selectedAccessory.id,
+        image: selectedAccessory.image_url ? { uri: selectedAccessory.image_url } : imageNotFound,
+        label: selectedAccessory.name,
+      }] : []),
+    ],
+    [selectedAccessory, selectedArrangementOption, selectedContainer, selectedFillers, selectedFlowers],
+  );
+  const estimatedTotalCents = useMemo(() => {
+    const flowers = selectedFlowers.reduce((total, item) => total + Math.round((item.product.price || 0) * 100) * item.quantity, 0);
+    const fillers = selectedFillers.reduce((total, item) => total + Math.round((item.price || 0) * 100), 0);
+    const container = selectedContainer ? Math.round((selectedContainer.price || 0) * 100) : 0;
+    const accessory = selectedAccessory ? Math.round((selectedAccessory.price || 0) * 100) : 0;
+    return flowers + fillers + container + accessory;
+  }, [selectedAccessory, selectedContainer, selectedFillers, selectedFlowers]);
   const showResult = Boolean(result?.success);
+
+  const stepProducts = useMemo(() => {
+    if (activeStep.key === 'flowers') return flowerProducts;
+    if (activeStep.key === 'container') return containerProducts;
+    if (activeStep.key === 'accessories') return accessoryProducts;
+    return [];
+  }, [accessoryProducts, activeStep.key, containerProducts, flowerProducts]);
+  const flowerStepProducts = useMemo(() => [...flowerProducts, ...fillerProducts], [fillerProducts, flowerProducts]);
+  const searchThreshold = activeStep.key === 'container' ? SEARCH_THRESHOLDS.container : SEARCH_THRESHOLDS.standard;
+  const searchableProducts = activeStep.key === 'flowers' ? flowerStepProducts : stepProducts;
+  const shouldShowSearch = searchableProducts.length >= searchThreshold;
+  const visibleFlowerProducts = useMemo(() => filterProductsForSearch(flowerProducts, searchQuery), [flowerProducts, searchQuery]);
+  const visibleFillerProducts = useMemo(() => filterProductsForSearch(fillerProducts, searchQuery), [fillerProducts, searchQuery]);
+  const visibleStepProducts = useMemo(() => filterProductsForSearch(stepProducts, searchQuery), [searchQuery, stepProducts]);
 
   const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     const shouldShowSolidHeader = event.nativeEvent.contentOffset.y > 12;
@@ -170,9 +249,7 @@ export default function MixAndMatchScreen() {
           getAiUsage().catch(() => ({ remaining: 5, limit: 5 })),
         ]);
 
-        if (!isActive) {
-          return;
-        }
+        if (!isActive) return;
 
         if (!session) {
           setError('Please sign in before using Mix & Match.');
@@ -205,25 +282,27 @@ export default function MixAndMatchScreen() {
     setIsLoadingAddOns(true);
     void shopApi.getAddOns()
       .then((items) => {
-        if (isActive) {
-          setAddOns(items);
-        }
+        if (isActive) setAddOns(items);
       })
       .catch(() => {
-        if (isActive) {
-          setAddOns([]);
-        }
+        if (isActive) setAddOns([]);
       })
       .finally(() => {
-        if (isActive) {
-          setIsLoadingAddOns(false);
-        }
+        if (isActive) setIsLoadingAddOns(false);
       });
 
     return () => {
       isActive = false;
     };
   }, []);
+
+  useEffect(() => {
+    setSearchQuery('');
+  }, [step, selectedArrangement]);
+
+  useEffect(() => {
+    setSelectedContainerId(null);
+  }, [selectedArrangement]);
 
   useEffect(() => {
     if (!isGenerating) {
@@ -247,36 +326,85 @@ export default function MixAndMatchScreen() {
     };
   }, [isGenerating]);
 
-  function handleSelectContainerMode(nextMode: ContainerMode) {
-    setContainerMode(nextMode);
-    setSelectedVaseId(null);
-    setSelectedWrappingId(null);
-  }
-
   function handleNext() {
-    if (step === 0) {
-      setStep(1);
+    if (!canContinue(activeStep.key)) {
       return;
     }
 
-    if (step === 1 && !selectedFlowerId) {
-      setError('Choose a flower or filler to continue.');
+    if (activeStep.key === 'review') {
+      void handleGenerate();
       return;
     }
 
-    if (step === 2 && !selectedContainer) {
-      setError('Choose a vase or wrapping to continue.');
-      return;
-    }
-
-    if (step < STEPS.length - 1) {
+    if (step < steps.length - 1) {
       setError(null);
       setStep((current) => current + 1);
       scrollRef.current?.scrollTo({ animated: true, y: 0 });
       return;
     }
 
-    void handleGenerate();
+    setError(null);
+    setStep(steps.length);
+    scrollRef.current?.scrollTo({ animated: true, y: 0 });
+  }
+
+  function canContinue(key: StepKey) {
+    if (key === 'flowers' && selectedStemCount <= 0) {
+      setError('Choose at least one flower to continue.');
+      return false;
+    }
+
+    if (key === 'container' && !selectedContainerId) {
+      if (containerProducts.length === 0) {
+        setError('There is no stock in this container type. Please try another arrangement type. We will add more soon!');
+        return false;
+      }
+
+      setError(`Choose a ${getContainerLabel(selectedArrangement).toLowerCase()} to continue.`);
+      return false;
+    }
+
+    if (key === 'review' && (!selectedContainerId || selectedStemCount <= 0)) {
+      setError('Complete your flowers and container before generating.');
+      return false;
+    }
+
+    return true;
+  }
+
+  function openFlowerSheet(product: CustomizationProduct) {
+    setFlowerSheetProduct(product);
+    setFlowerSheetQty(flowerQuantities[product.id] ?? 1);
+    setError(null);
+  }
+
+  function updateFlowerQuantity(productId: string, nextQuantity: number) {
+    const product = products.find((item) => item.id === productId);
+    const currentQuantity = flowerQuantities[productId] ?? 0;
+    const remainingLimit = selectedArrangementOption.maxStems - (selectedStemCount - currentQuantity);
+    const stockLimit = Math.max(0, product?.stock ?? selectedArrangementOption.maxStems);
+    const clamped = Math.min(Math.max(nextQuantity, 0), remainingLimit, stockLimit);
+
+    if (nextQuantity > clamped) {
+      setError(`You can select up to ${selectedArrangementOption.maxStems} stems for ${selectedArrangementOption.label}.`);
+    } else {
+      setError(null);
+    }
+
+    setFlowerQuantities((current) => {
+      const next = { ...current };
+      if (clamped <= 0) {
+        delete next[productId];
+      } else {
+        next[productId] = clamped;
+      }
+      return next;
+    });
+  }
+
+  function closeFlowerSheet() {
+    setFlowerSheetProduct(null);
+    setFlowerSheetQty(0);
   }
 
   async function handleGenerate() {
@@ -290,8 +418,13 @@ export default function MixAndMatchScreen() {
       return;
     }
 
-    if (!canGenerate || isGenerating) {
+    if (!selectedContainer || selectedFlowers.length === 0 || isGenerating) {
       setError('Complete all selections before generating your preview.');
+      return;
+    }
+
+    const session = await requireSignedIn('generate your arrangement');
+    if (!session) {
       return;
     }
 
@@ -300,19 +433,20 @@ export default function MixAndMatchScreen() {
     setResult(null);
 
     try {
+      const primaryFlower = [...selectedFlowers].sort((first, second) => second.quantity - first.quantity)[0]?.product;
       const promptText = buildPrompt({
         accessory: selectedAccessory,
         arrangement: selectedArrangementOption,
-        flower: selectedFlower,
-        vase: selectedVase,
-        wrapping: selectedWrapping,
+        container: selectedContainer,
+        fillers: selectedFillers,
+        flowers: selectedFlowers,
       });
       const data = await checkAndGenerate({
-        accessory_id: selectedAccessoryId ?? undefined,
-        flower_id: selectedFlowerId ?? undefined,
+        flower_id: primaryFlower?.id,
         prompt_text: promptText,
-        vase_id: selectedVaseId ?? undefined,
-        wrapping_id: selectedWrappingId ?? undefined,
+        accessory_id: selectedAccessory?.id,
+        vase_id: selectedArrangement === 'vase' ? selectedContainer.id : undefined,
+        wrapping_id: selectedArrangement === 'bouquet' ? selectedContainer.id : undefined,
       });
 
       if (data.success) {
@@ -363,8 +497,8 @@ export default function MixAndMatchScreen() {
       });
 
       router.push('/(tabs)/cart');
-    } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to add this arrangement to your cart.');
+    } catch (addError) {
+      Alert.alert('Error', addError instanceof Error ? addError.message : 'Failed to add this arrangement to your cart.');
     } finally {
       setAddingToCart(false);
     }
@@ -374,9 +508,10 @@ export default function MixAndMatchScreen() {
     setResult(null);
     setError(null);
     setStep(0);
-    setSelectedFlowerId(null);
-    setSelectedVaseId(null);
-    setSelectedWrappingId(null);
+    setSelectedArrangement('bouquet');
+    setFlowerQuantities({});
+    setSelectedFillerIds(new Set());
+    setSelectedContainerId(null);
     setSelectedAccessoryId(null);
     setProgress(0);
     setArrangementName('AI Arrangement');
@@ -384,16 +519,43 @@ export default function MixAndMatchScreen() {
     setSelectedAddOnIds(new Set());
   }
 
-  const stepProducts =
-    step === 1
-      ? flowerProducts
-      : step === 2
-        ? containerMode === 'vase'
-          ? vaseProducts
-          : wrappingProducts
-        : step === 3
-          ? accessoryProducts
-          : [];
+  const stepFooter = (
+    <View style={styles.cardFooter}>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => {
+          if (step === 0) {
+            router.back();
+            return;
+          }
+          if (isReviewStep) {
+            setStep(steps.length - 1);
+            return;
+          }
+          setStep((current) => Math.max(current - 1, 0));
+        }}
+        style={({ pressed }) => [styles.returnButton, pressed && styles.pressed]}>
+        <Text style={styles.returnButtonText}>{step === 0 ? 'Return' : 'Back'}</Text>
+      </Pressable>
+
+      <Pressable
+        accessibilityRole="button"
+        disabled={isGenerating || isLoading}
+        onPress={handleNext}
+        style={({ pressed }) => [styles.continueButton, (isGenerating || isLoading) && styles.continueButtonDisabled, pressed && !isGenerating && !isLoading && styles.pressed]}>
+        <Text style={[styles.continueButtonText, (isGenerating || isLoading) && styles.continueButtonTextDisabled]}>
+          {activeStep.key === 'review' ? (isGenerating ? 'Generating...' : 'Generate') : 'Continue'}
+        </Text>
+        {isGenerating ? (
+          <SpinningLoader />
+        ) : activeStep.key === 'review' ? (
+          <Sparkles color="#FFFFFF" size={19} strokeWidth={2.5} />
+        ) : (
+          <ArrowRight color="#FFFFFF" size={19} strokeWidth={2.5} />
+        )}
+      </Pressable>
+    </View>
+  );
 
   return (
     <View style={styles.screen}>
@@ -410,7 +572,7 @@ export default function MixAndMatchScreen() {
         contentContainerStyle={[
           styles.content,
           {
-            paddingBottom: insets.bottom + 108,
+            paddingBottom: insets.bottom + (showResult ? 108 : 156),
             paddingHorizontal: side,
             paddingTop: headerLayout.top + headerLayout.height + 24,
           },
@@ -433,6 +595,7 @@ export default function MixAndMatchScreen() {
             cardMessage={cardMessage}
             isLoadingAddOns={isLoadingAddOns}
             selectedAddOnIds={selectedAddOnIds}
+            selectedItems={selectedPreviewItems}
             onAddToCart={handleAddToCart}
             onChangeArrangementName={setArrangementName}
             onChangeCardMessage={setCardMessage}
@@ -440,11 +603,8 @@ export default function MixAndMatchScreen() {
             onToggleAddOn={(id) => {
               setSelectedAddOnIds((current) => {
                 const next = new Set(current);
-                if (next.has(id)) {
-                  next.delete(id);
-                } else {
-                  next.add(id);
-                }
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
                 return next;
               });
             }}
@@ -455,7 +615,7 @@ export default function MixAndMatchScreen() {
             <View style={styles.heroBlock}>
               <Text style={styles.heroEyebrow}>MAKE IT PERSONAL</Text>
               <Text style={styles.heroTitle}>Mix & <Text style={styles.heroTitleAccent}>Match</Text></Text>
-              <Text style={styles.heroSubtitle}>Build your own bouquet step by step, exactly the way you want it.</Text>
+              <Text style={styles.heroSubtitle}>Build your own custom arrangement from available florist materials.</Text>
             </View>
 
             <View style={styles.progressCard}>
@@ -466,16 +626,16 @@ export default function MixAndMatchScreen() {
                   </View>
                   <View style={styles.progressCopy}>
                     <Text style={styles.progressTitle}>Mix and Match</Text>
-                    <Text style={styles.progressSubtitle}>Build your bouquet step by step</Text>
+                    <Text style={styles.progressSubtitle}>Phone-friendly AI arrangement builder</Text>
                   </View>
                 </View>
                 <View style={styles.progressMeta}>
                   <Text style={styles.aiUsage}>{aiUsage ? `${aiUsage.remaining} / ${aiUsage.limit} AI left` : 'AI preview'}</Text>
-                  <Text style={styles.stepCount}>Step {step + 1} of {STEPS.length}</Text>
+                  <Text style={styles.stepCount}>{isReviewStep ? 'Review' : `Step ${step + 1} of ${steps.length}`}</Text>
                 </View>
               </View>
               <View style={styles.stepTrack}>
-                {STEPS.map((item, index) => (
+                {steps.map((item, index) => (
                   <StepNode key={item.key} index={index} label={item.label} status={index < step ? 'done' : index === step ? 'active' : 'idle'} />
                 ))}
               </View>
@@ -490,7 +650,7 @@ export default function MixAndMatchScreen() {
             <View style={styles.selectionCard}>
               <View style={styles.selectionHeader}>
                 <View style={styles.stepBadge}>
-                  <Text style={styles.stepBadgeText}>{step + 1}</Text>
+                  <Text style={styles.stepBadgeText}>{isReviewStep ? '✓' : step + 1}</Text>
                 </View>
                 <View style={styles.selectionCopy}>
                   <Text style={styles.selectionTitle}>{activeStep.title}</Text>
@@ -503,13 +663,12 @@ export default function MixAndMatchScreen() {
                   <ActivityIndicator color={theme.colors.primary} />
                   <Text style={styles.loadingText}>Loading customization stock...</Text>
                 </View>
-              ) : step === 0 ? (
+              ) : activeStep.key === 'arrangement' ? (
                 <View style={styles.arrangementGrid}>
                   {ARRANGEMENT_OPTIONS.map((option) => (
-                    <ChoiceCard
-                      description={option.description}
+                    <ArrangementChoiceCard
                       key={option.id}
-                      label={option.label}
+                      option={option}
                       onPress={() => {
                         setSelectedArrangement(option.id);
                         setError(null);
@@ -517,87 +676,203 @@ export default function MixAndMatchScreen() {
                       selected={selectedArrangement === option.id}
                     />
                   ))}
+                  <SelectionSummary label="Arrangement" value={selectedArrangementOption.label} />
                 </View>
+              ) : activeStep.key === 'review' ? (
+                <ReviewPanel
+                  accessory={selectedAccessory}
+                  arrangement={selectedArrangementOption}
+                  container={selectedContainer}
+                  estimatedTotalCents={estimatedTotalCents}
+                  fillers={selectedFillers}
+                  flowers={selectedFlowers}
+                  selectedItems={selectedPreviewItems}
+                />
               ) : (
                 <>
-                  {step === 2 ? (
-                    <View style={styles.segmentedControl}>
-                      <SegmentButton active={containerMode === 'vase'} label="Vase" onPress={() => handleSelectContainerMode('vase')} />
-                      <SegmentButton active={containerMode === 'wrapping'} label="Wrapping" onPress={() => handleSelectContainerMode('wrapping')} />
+                  {activeStep.key === 'flowers' ? (
+                    <SelectedFlowersSummary
+                      maxStems={selectedArrangementOption.maxStems}
+                      onChangeQuantity={updateFlowerQuantity}
+                      selectedFlowers={selectedFlowers}
+                      stemCount={selectedStemCount}
+                    />
+                  ) : null}
+
+                  {shouldShowSearch ? (
+                    <View style={styles.inlineSearch}>
+                      <Search color="#6B7280" size={17} strokeWidth={2.2} />
+                      <TextInput
+                        autoCapitalize="none"
+                        onChangeText={setSearchQuery}
+                        placeholder={`Search ${activeStep.label.toLowerCase()}`}
+                        placeholderTextColor="#9CA3AF"
+                        style={styles.inlineSearchInput}
+                        value={searchQuery}
+                      />
+                      {searchQuery ? (
+                        <Pressable accessibilityLabel="Clear search" onPress={() => setSearchQuery('')} style={styles.clearSearchButton}>
+                          <X color="#6B7280" size={16} strokeWidth={2.4} />
+                        </Pressable>
+                      ) : null}
                     </View>
                   ) : null}
-                  <View style={styles.productGrid}>
-                    {stepProducts.map((product) => (
-                      <InventoryCard
-                        key={product.id}
-                        onPress={() => {
-                          setError(null);
-                          if (step === 1) {
-                            setSelectedFlowerId((current) => (current === product.id ? null : product.id));
-                          } else if (step === 2 && containerMode === 'vase') {
-                            setSelectedVaseId((current) => (current === product.id ? null : product.id));
-                          } else if (step === 2) {
-                            setSelectedWrappingId((current) => (current === product.id ? null : product.id));
-                          } else {
-                            setSelectedAccessoryId((current) => (current === product.id ? null : product.id));
-                          }
-                        }}
-                        product={product}
-                        selected={
-                          selectedFlowerId === product.id ||
-                          selectedVaseId === product.id ||
-                          selectedWrappingId === product.id ||
-                          selectedAccessoryId === product.id
-                        }
-                      />
-                    ))}
-                  </View>
-                  {stepProducts.length === 0 ? (
-                    <Text style={styles.emptyText}>No available items for this step yet.</Text>
-                  ) : null}
+
+                  {activeStep.key === 'flowers' ? (
+                    <>
+                      <ProductSectionHeader title="Main Flower" subtitle={`Select up to ${selectedArrangementOption.maxStems} stems for this arrangement.`} />
+                      <View style={styles.productGrid}>
+                        {visibleFlowerProducts.map((product) => {
+                          const quantity = flowerQuantities[product.id] ?? 0;
+
+                          return (
+                            <InventoryCard
+                              key={product.id}
+                              onPress={() => {
+                                setError(null);
+                                openFlowerSheet(product);
+                              }}
+                              product={product}
+                              quantity={quantity}
+                              selected={quantity > 0}
+                            />
+                          );
+                        })}
+                      </View>
+                      {flowerProducts.length === 0 ? (
+                        <Text style={styles.emptyText}>No main flowers are available for Mix and Match yet.</Text>
+                      ) : visibleFlowerProducts.length === 0 ? (
+                        <Text style={styles.emptyText}>No main flowers match your search.</Text>
+                      ) : null}
+
+                      <ProductSectionHeader title="Filler" subtitle="Optional greenery and texture for the arrangement." />
+                      <View style={styles.productGrid}>
+                        {visibleFillerProducts.map((product) => (
+                          <InventoryCard
+                            key={product.id}
+                            onPress={() => {
+                              setError(null);
+                              setSelectedFillerIds((current) => {
+                                const next = new Set(current);
+                                if (next.has(product.id)) next.delete(product.id);
+                                else next.add(product.id);
+                                return next;
+                              });
+                            }}
+                            product={product}
+                            selected={selectedFillerIds.has(product.id)}
+                          />
+                        ))}
+                      </View>
+                      {fillerProducts.length === 0 ? (
+                        <Text style={styles.emptyText}>No fillers are available for Mix and Match yet.</Text>
+                      ) : visibleFillerProducts.length === 0 ? (
+                        <Text style={styles.emptyText}>No fillers match your search.</Text>
+                      ) : null}
+                    </>
+                  ) : (
+                    <>
+                      <View style={styles.productGrid}>
+                        {visibleStepProducts.map((product) => {
+                          const selected = activeStep.key === 'container' ? selectedContainerId === product.id : selectedAccessoryId === product.id;
+
+                          return (
+                            <InventoryCard
+                              key={product.id}
+                              onPress={() => {
+                                setError(null);
+                                if (activeStep.key === 'accessories') {
+                                  setSelectedAccessoryId((current) => (current === product.id ? null : product.id));
+                                  return;
+                                }
+                                setSelectedContainerId((current) => (current === product.id ? null : product.id));
+                              }}
+                              product={product}
+                              selected={selected}
+                            />
+                          );
+                        })}
+                      </View>
+                      {stepProducts.length === 0 ? (
+                        activeStep.key === 'container' ? <EmptyContainerState /> : <Text style={styles.emptyText}>No accessories are available yet. You can continue without one.</Text>
+                      ) : visibleStepProducts.length === 0 ? (
+                        <Text style={styles.emptyText}>No items match your search.</Text>
+                      ) : null}
+                    </>
+                  )}
                 </>
               )}
-
-              <View style={styles.cardFooter}>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {
-                    if (step === 0) {
-                      router.back();
-                      return;
-                    }
-                    setStep((current) => Math.max(current - 1, 0));
-                  }}
-                  style={({ pressed }) => [styles.returnButton, pressed && styles.pressed]}>
-                  <Text style={styles.returnButtonText}>{step === 0 ? 'Return' : 'Back'}</Text>
-                </Pressable>
-
-                <Pressable
-                  accessibilityRole="button"
-                  disabled={isGenerating || isLoading}
-                  onPress={handleNext}
-                  style={({ pressed }) => [styles.continueButton, (isGenerating || isLoading) && styles.continueButtonDisabled, pressed && !isGenerating && !isLoading && styles.pressed]}>
-                  <Text style={[styles.continueButtonText, (isGenerating || isLoading) && styles.continueButtonTextDisabled]}>
-                    {step === STEPS.length - 1 ? (isGenerating ? 'Generating...' : 'Generate') : 'Continue'}
-                  </Text>
-                  {isGenerating ? (
-                    <SpinningLoader />
-                  ) : step === STEPS.length - 1 ? (
-                    <Sparkles color="#FFFFFF" size={19} strokeWidth={2.5} />
-                  ) : (
-                    <ArrowRight color="#FFFFFF" size={19} strokeWidth={2.5} />
-                  )}
-                </Pressable>
-              </View>
             </View>
           </>
         )}
       </ScrollView>
 
+      {!showResult ? (
+        <View style={[styles.floatingStepFooter, { paddingBottom: insets.bottom + 12, paddingHorizontal: side }]}>
+          {stepFooter}
+        </View>
+      ) : null}
+
+      <FlowerQuantitySheet
+        maxStems={selectedArrangementOption.maxStems}
+        onClose={closeFlowerSheet}
+        onSave={(product, quantity) => {
+          updateFlowerQuantity(product.id, quantity);
+          closeFlowerSheet();
+        }}
+        onSetQuantity={setFlowerSheetQty}
+        product={flowerSheetProduct}
+        quantity={flowerSheetQty}
+        remainingStems={selectedArrangementOption.maxStems - (selectedStemCount - (flowerSheetProduct ? flowerQuantities[flowerSheetProduct.id] ?? 0 : 0))}
+      />
       {isGenerating ? <GenerationOverlay fact={FLOWER_FACTS[factIdx]} progress={progress} /> : null}
       <FloatingProductSearch onClose={() => setIsSearchOpen(false)} visible={isSearchOpen} />
     </View>
   );
+}
+
+function getSteps(arrangement: ArrangementOption): { description: string; key: StepKey; label: string; title: string }[] {
+  return [
+    {
+      description: "Pick how you'd like your flowers presented.",
+      key: 'arrangement',
+      label: 'Arrangement',
+      title: 'Choose your arrangement',
+    },
+    {
+      description: `Choose the main flower, then add optional fillers. ${arrangement.label} supports ${arrangement.maxStems} stems.`,
+      key: 'flowers',
+      label: 'Flowers',
+      title: 'Select flowers',
+    },
+    {
+      description: `Only matching container options are shown for this arrangement.`,
+      key: 'container',
+      label: 'Container',
+      title: 'Choose container',
+    },
+    {
+      description: 'Choose an optional ribbon or accessory.',
+      key: 'accessories',
+      label: 'Accessories',
+      title: 'Choose accessories',
+    },
+  ];
+}
+
+function getReviewStep(): { description: string; key: StepKey; label: string; title: string } {
+  return {
+    description: 'Review your selected items and price breakdown, then generate the AI concept.',
+    key: 'review',
+    label: 'Review',
+    title: 'Review and generate',
+  };
+}
+
+function getContainerLabel(type: ArrangementType) {
+  if (type === 'bouquet') return 'wrapper';
+  if (type === 'vase') return 'vase';
+  return 'clear box';
 }
 
 function StepNode({ index, label, status }: { index: number; label: string; status: 'active' | 'done' | 'idle' }) {
@@ -615,28 +890,102 @@ function StepNode({ index, label, status }: { index: number; label: string; stat
   );
 }
 
-function ChoiceCard({ description, label, onPress, selected }: { description: string; label: string; onPress: () => void; selected: boolean }) {
+function ArrangementChoiceCard({ onPress, option, selected }: { onPress: () => void; option: ArrangementOption; selected: boolean }) {
   return (
-    <Pressable onPress={onPress} style={({ pressed }) => [styles.choiceCard, selected && styles.choiceCardSelected, pressed && styles.pressed]}>
-      <View style={[styles.choiceIcon, selected && styles.choiceIconSelected]}>
-        {selected ? <Check color="#FFFFFF" size={16} strokeWidth={2.8} /> : <Sparkles color="#6B7280" size={16} strokeWidth={2.2} />}
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.arrangementCard, selected && styles.arrangementCardSelected, pressed && styles.pressed]}>
+      <View style={styles.arrangementImageWrap}>
+        <Image contentFit="contain" source={option.image} style={styles.arrangementImage} />
+        {selected ? (
+          <View style={styles.arrangementCheck}>
+            <Check color="#FFFFFF" size={13} strokeWidth={3} />
+          </View>
+        ) : null}
       </View>
-      <Text style={styles.choiceTitle}>{label}</Text>
-      <Text style={styles.choiceText}>{description}</Text>
+      <Text style={[styles.arrangementTitle, selected && styles.arrangementTitleSelected]}>{option.label}</Text>
+      <Text style={styles.arrangementDescription}>{option.description}</Text>
+      <Text style={styles.arrangementHelper}>{option.helper}</Text>
     </Pressable>
   );
 }
 
-function SegmentButton({ active, label, onPress }: { active: boolean; label: string; onPress: () => void }) {
+function SelectionSummary({ label, value }: { label: string; value: string }) {
   return (
-    <Pressable onPress={onPress} style={[styles.segmentButton, active && styles.segmentButtonActive]}>
-      <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{label}</Text>
-    </Pressable>
+    <View style={styles.selectionSummary}>
+      <Text style={styles.selectionSummaryText}>{label}: {value}</Text>
+    </View>
   );
 }
 
-function InventoryCard({ onPress, product, selected }: { onPress: () => void; product: CustomizationProduct; selected: boolean }) {
-  const isOut = (product.stock ?? 0) <= 0 || product.stock_status === 'out_of_stock';
+function ProductSectionHeader({ subtitle, title }: { subtitle: string; title: string }) {
+  return (
+    <View style={styles.productSectionHeader}>
+      <Text style={styles.productSectionTitle}>{title}</Text>
+      <Text style={styles.productSectionSubtitle}>{subtitle}</Text>
+    </View>
+  );
+}
+
+function EmptyContainerState() {
+  return (
+    <View style={styles.emptyContainerState}>
+      <PackageOpen color="#9CA3AF" size={28} strokeWidth={2.1} />
+      <Text style={styles.emptyContainerText}>There is no stock in this container type. Please try another arrangement type. We will add more soon!</Text>
+    </View>
+  );
+}
+
+function SelectedFlowersSummary({
+  maxStems,
+  onChangeQuantity,
+  selectedFlowers,
+  stemCount,
+}: {
+  maxStems: number;
+  onChangeQuantity: (productId: string, quantity: number) => void;
+  selectedFlowers: { product: CustomizationProduct; quantity: number }[];
+  stemCount: number;
+}) {
+  if (!selectedFlowers.length) {
+    return (
+      <View style={styles.flowerSummaryEmpty}>
+        <Text style={styles.flowerSummaryText}>Selected stems: {stemCount} / {maxStems}</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.flowerSummary}>
+      <Text style={styles.flowerSummaryText}>Selected stems: {stemCount} / {maxStems}</Text>
+      {selectedFlowers.map(({ product, quantity }) => (
+        <View key={product.id} style={styles.flowerSummaryRow}>
+          <Text numberOfLines={1} style={styles.flowerSummaryName}>{product.name}</Text>
+          <View style={styles.quickQuantity}>
+            <Pressable onPress={() => onChangeQuantity(product.id, quantity - 1)} style={styles.quickQuantityButton}>
+              <Minus color="#24482E" size={14} strokeWidth={2.5} />
+            </Pressable>
+            <Text style={styles.quickQuantityText}>{quantity}</Text>
+            <Pressable onPress={() => onChangeQuantity(product.id, quantity + 1)} style={styles.quickQuantityButton}>
+              <Plus color="#24482E" size={14} strokeWidth={2.5} />
+            </Pressable>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function InventoryCard({
+  onPress,
+  product,
+  quantity,
+  selected,
+}: {
+  onPress: () => void;
+  product: CustomizationProduct;
+  quantity?: number;
+  selected: boolean;
+}) {
+  const isOut = !isSelectableProduct(product);
 
   return (
     <Pressable disabled={isOut} onPress={onPress} style={({ pressed }) => [styles.productCard, selected && styles.productCardSelected, isOut && styles.productCardDisabled, pressed && !isOut && styles.pressed]}>
@@ -644,7 +993,7 @@ function InventoryCard({ onPress, product, selected }: { onPress: () => void; pr
         <Image contentFit="cover" source={product.image_url ? { uri: product.image_url } : imageNotFound} style={styles.productImage} />
         {selected ? (
           <View style={styles.productCheck}>
-            <Check color="#FFFFFF" size={13} strokeWidth={3} />
+            {quantity && quantity > 0 ? <Text style={styles.productCheckText}>{quantity}</Text> : <Check color="#FFFFFF" size={13} strokeWidth={3} />}
           </View>
         ) : null}
       </View>
@@ -656,6 +1005,133 @@ function InventoryCard({ onPress, product, selected }: { onPress: () => void; pr
         </Text>
       </View>
     </Pressable>
+  );
+}
+
+function FlowerQuantitySheet({
+  maxStems,
+  onClose,
+  onSave,
+  onSetQuantity,
+  product,
+  quantity,
+  remainingStems,
+}: {
+  maxStems: number;
+  onClose: () => void;
+  onSave: (product: CustomizationProduct, quantity: number) => void;
+  onSetQuantity: (quantity: number) => void;
+  product: CustomizationProduct | null;
+  quantity: number;
+  remainingStems: number;
+}) {
+  if (!product) {
+    return null;
+  }
+
+  const maxQuantity = Math.max(0, Math.min(product.stock ?? maxStems, remainingStems));
+  const nextQuantity = Math.min(Math.max(quantity, 0), maxQuantity);
+
+  return (
+    <Modal animationType="slide" onRequestClose={onClose} transparent visible>
+      <View style={styles.modalBackdrop}>
+        <Pressable accessibilityLabel="Close flower quantity selector" onPress={onClose} style={styles.modalScrim} />
+        <View style={styles.bottomSheet}>
+          <View style={styles.sheetHandle} />
+          <View style={styles.sheetHeader}>
+            <Text style={styles.sheetTitle}>Flower quantity</Text>
+            <Pressable accessibilityLabel="Close" onPress={onClose} style={styles.sheetClose}>
+              <X color="#3A403B" size={19} strokeWidth={2.4} />
+            </Pressable>
+          </View>
+          <View style={styles.sheetProductRow}>
+            <Image contentFit="cover" source={product.image_url ? { uri: product.image_url } : imageNotFound} style={styles.sheetImage} />
+            <View style={styles.sheetProductCopy}>
+              <Text numberOfLines={2} style={styles.sheetProductName}>{product.name}</Text>
+              <Text style={styles.sheetProductMeta}>{formatPhp(Math.round((product.price || 0) * 100))} each</Text>
+              <Text style={styles.sheetProductMeta}>{product.stock} available</Text>
+            </View>
+          </View>
+          <View style={styles.sheetLimitBox}>
+            <Text style={styles.sheetLimitText}>Stem limit for this arrangement: {maxStems}</Text>
+            <Text style={styles.sheetLimitText}>You can add up to {maxQuantity} of this flower now.</Text>
+          </View>
+          <View style={styles.sheetQuantityRow}>
+            <Pressable onPress={() => onSetQuantity(Math.max(0, nextQuantity - 1))} style={styles.sheetQuantityButton}>
+              <Minus color="#24482E" size={18} strokeWidth={2.6} />
+            </Pressable>
+            <Text style={styles.sheetQuantityText}>{nextQuantity}</Text>
+            <Pressable onPress={() => onSetQuantity(Math.min(maxQuantity, nextQuantity + 1))} style={styles.sheetQuantityButton}>
+              <Plus color="#24482E" size={18} strokeWidth={2.6} />
+            </Pressable>
+          </View>
+          <Pressable onPress={() => onSave(product, nextQuantity)} style={({ pressed }) => [styles.sheetSaveButton, pressed && styles.pressed]}>
+            <Text style={styles.sheetSaveText}>{nextQuantity > 0 ? 'Add / Update flower' : 'Remove flower'}</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function ReviewPanel({
+  accessory,
+  arrangement,
+  container,
+  estimatedTotalCents,
+  fillers,
+  flowers,
+  selectedItems,
+}: {
+  accessory?: CustomizationProduct;
+  arrangement: ArrangementOption;
+  container?: CustomizationProduct;
+  estimatedTotalCents: number;
+  fillers: CustomizationProduct[];
+  flowers: { product: CustomizationProduct; quantity: number }[];
+  selectedItems: SelectedPreviewItem[];
+}) {
+  return (
+    <View style={styles.reviewPanel}>
+      <SelectionSummary label="Arrangement" value={arrangement.label} />
+      <View style={styles.reviewImageGrid}>
+        {selectedItems.map((item) => (
+          <View key={item.id} style={styles.reviewImageItem}>
+            <Image contentFit="cover" source={item.image} style={styles.reviewImage} />
+            <Text numberOfLines={2} style={styles.reviewImageLabel}>{item.label}</Text>
+          </View>
+        ))}
+      </View>
+      <View style={styles.reviewSection}>
+        <Text style={styles.reviewSectionTitle}>Price Breakdown</Text>
+        {flowers.map(({ product, quantity }) => (
+          <ReviewRow key={product.id} label={product.name} meta={`x ${quantity}`} value={formatPhp(Math.round((product.price || 0) * 100) * quantity)} />
+        ))}
+        {fillers.map((product) => (
+          <ReviewRow key={product.id} label={product.name} value={formatPhp(Math.round((product.price || 0) * 100))} />
+        ))}
+        {container ? <ReviewRow label={container.name} value={formatPhp(Math.round((container.price || 0) * 100))} /> : null}
+        {accessory ? <ReviewRow label={accessory.name} value={formatPhp(Math.round((accessory.price || 0) * 100))} /> : null}
+        {!fillers.length ? <Text style={styles.reviewMuted}>No fillers selected</Text> : null}
+        {!accessory ? <Text style={styles.reviewMuted}>No accessory selected</Text> : null}
+        <View style={styles.estimatedTotal}>
+          <Text style={styles.estimatedTotalLabel}>Estimated before AI check</Text>
+          <Text style={styles.estimatedTotalValue}>{formatPhp(estimatedTotalCents)}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function ReviewRow({ label, meta, value }: { label: string; meta?: string; value: string }) {
+  return (
+    <View style={styles.reviewRow}>
+      <View style={styles.reviewLabelGroup}>
+        <Text numberOfLines={1} style={styles.reviewLabel}>{label}</Text>
+        {meta ? <Text style={styles.qtyPill}>{meta}</Text> : null}
+      </View>
+      <Text style={styles.reviewValue}>{value}</Text>
+    </View>
   );
 }
 
@@ -673,6 +1149,7 @@ function ResultView({
   onToggleAddOn,
   result,
   selectedAddOnIds,
+  selectedItems,
 }: {
   addOns: Product[];
   addingToCart: boolean;
@@ -687,6 +1164,7 @@ function ResultView({
   onToggleAddOn: (id: string) => void;
   result: GenerationResult;
   selectedAddOnIds: ReadonlySet<string>;
+  selectedItems: SelectedPreviewItem[];
 }) {
   const baseTotalPrice = Math.round((result.price_breakdown?.total_price || 0) * 100);
   const selectedAddOnTotal = addOns
@@ -718,8 +1196,9 @@ function ResultView({
         </View>
         <View style={styles.conceptNote}>
           <Sparkles color="#9D5EDB" size={17} strokeWidth={2.3} />
-          <Text style={styles.conceptNoteText}>This image is an AI-generated concept to show the overall color palette and vibe. Your final handcrafted arrangement will strictly follow the exact stem counts and materials listed below in your Cost Breakdown.</Text>
+          <Text style={styles.conceptNoteText}>AI-generated concept for color palette and vibe. Final handcrafted arrangement follows the exact materials in the cost breakdown.</Text>
         </View>
+        <Image contentFit="contain" source={pollinationsCredit} style={styles.pollinationsCredit} />
 
         <View style={styles.resultDetails}>
           <Text style={styles.inputLabel}>Arrangement name</Text>
@@ -732,22 +1211,36 @@ function ResultView({
           />
           <Text style={styles.resultDescription}>A personalized floral arrangement based on your selected materials.</Text>
 
+          <View style={styles.selectedItemsPanel}>
+            <Text style={styles.breakdownTitle}>Selected Items</Text>
+            <View style={styles.reviewImageGrid}>
+              {selectedItems.map((item) => (
+                <View key={item.id} style={styles.reviewImageItem}>
+                  <Image contentFit="cover" source={item.image} style={styles.reviewImage} />
+                  <Text numberOfLines={2} style={styles.reviewImageLabel}>{item.label}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
           <View style={styles.breakdownCard}>
             <Text style={styles.breakdownTitle}>Cost Breakdown</Text>
             {result.price_breakdown?.items?.map((item) => (
               <View key={`${item.product_id}-${item.product_name}`} style={styles.breakdownRow}>
-                <Text numberOfLines={1} style={styles.breakdownLabel}>{item.product_name} x {item.quantity}</Text>
+                <View style={styles.breakdownLabelGroup}>
+                  <Text numberOfLines={1} style={styles.breakdownLabel}>{item.product_name}</Text>
+                  {item.quantity > 1 ? <Text style={styles.breakdownQty}>x {item.quantity}</Text> : null}
+                </View>
                 <Text style={styles.breakdownValue}>{formatPhp(Math.round(item.subtotal * 100))}</Text>
               </View>
             ))}
-            <View style={styles.breakdownDivider} />
             {selectedAddOnTotal > 0 ? (
               <View style={styles.breakdownRow}>
-                <Text style={styles.breakdownTotalLabel}>Add-ons</Text>
-                <Text style={styles.breakdownTotalValue}>{formatPhp(selectedAddOnTotal)}</Text>
+                <Text style={styles.breakdownLabel}>Add-ons</Text>
+                <Text style={styles.breakdownValue}>{formatPhp(selectedAddOnTotal)}</Text>
               </View>
             ) : null}
-            <View style={styles.breakdownRow}>
+            <View style={styles.breakdownTotalRow}>
               <Text style={styles.breakdownTotalLabel}>Total</Text>
               <Text style={styles.breakdownTotalValue}>{formatPhp(totalPrice)}</Text>
             </View>
@@ -768,7 +1261,7 @@ function ResultView({
           </Pressable>
         </View>
       </View>
-      <Text style={styles.resultFinePrint}>This is an AI generated preview. Your bouquet will be prepared based on the selected size and options.</Text>
+      <Text style={styles.resultFinePrint}>Generated image is stored with the arrangement and used for cart and checkout display.</Text>
     </View>
   );
 }
@@ -806,38 +1299,126 @@ function SpinningLoader({ color = '#FFFFFF' }: { color?: string }) {
   );
 }
 
-function normalizeCategory(category: string) {
-  return category.trim().toLowerCase();
+function normalizeText(value?: string | null) {
+  return (value ?? '').trim().toLowerCase();
 }
 
-function isFlowerLikeProduct(product: CustomizationProduct) {
-  const category = normalizeCategory(product.category);
+function productSearchBlob(product: CustomizationProduct) {
+  const attrs = product.attrs
+    ? Object.values(product.attrs).filter((value) => value !== null && value !== undefined).join(' ')
+    : '';
+  const extended = product as CustomizationProduct & {
+    description?: string | null;
+    product_group?: string | null;
+    product_type?: string | null;
+  };
 
-  return category === 'flower' || category === 'flowers' || category === 'filler' || category === 'fillers';
+  return normalizeText(`${product.name} ${product.category} ${extended.description ?? ''} ${extended.product_type ?? ''} ${extended.product_group ?? ''} ${attrs}`);
+}
+
+function isSelectableProduct(product: CustomizationProduct) {
+  return product.is_available !== false && product.stock_status !== 'out_of_stock' && (product.stock ?? 0) > 0;
+}
+
+function productCategory(product: CustomizationProduct) {
+  return normalizeText(product.category);
+}
+
+function productType(product: CustomizationProduct) {
+  return normalizeText(product.product_type);
+}
+
+function isExactCategory(product: CustomizationProduct, categories: string[]) {
+  const category = productCategory(product);
+  return categories.includes(category);
+}
+
+function isMixAndMatchProduct(product: CustomizationProduct) {
+  if (!isSelectableProduct(product)) return false;
+  const category = productCategory(product);
+  const blob = productSearchBlob(product);
+
+  if (category === 'box') return false;
+  if (['filler', 'wrapping', 'vase', 'accessory', 'accesorry', 'flower', 'flowers'].includes(category)) return true;
+
+  if (product.is_visible === true) return false;
+  return !/\b(bouquet|arrangement|flower box arrangement|vase arrangement|catalog|storefront)\b/.test(blob);
+}
+
+function isFillerProduct(product: CustomizationProduct) {
+  const type = productType(product);
+  const blob = productSearchBlob(product);
+  if (blob.includes('pot filler')) return false;
+  return isExactCategory(product, ['filler']) || type.includes('filler') || blob.includes('greenery') || blob.includes('gypsophila') || blob.includes("baby's breath") || blob.includes('statice');
+}
+
+function isFlowerProduct(product: CustomizationProduct) {
+  const category = productCategory(product);
+  const type = productType(product);
+  const blob = productSearchBlob(product);
+  if (isFillerProduct(product) || /\b(wrapper|wrapping|wrap|vase|box|ribbon|accessory)\b/.test(blob)) return false;
+  return category.includes('flower') || type.includes('flower') || /\b(rose|roses|tulip|tulips|carnation|carnations|lily|lilies|orchid|orchids|sunflower|sunflowers|peony|peonies)\b/.test(blob);
+}
+
+function isWrapperProduct(product: CustomizationProduct) {
+  const category = productCategory(product);
+  const type = productType(product);
+  const blob = productSearchBlob(product);
+  if (blob.includes('ribbon') || category.includes('accessory') || type.includes('accessory') || category.includes('vase') || type.includes('vase') || category.includes('box') || type.includes('box')) return false;
+  return isExactCategory(product, ['wrapping']) || ((category.includes('wrapper') || type.includes('wrapping') || type.includes('wrapper') || blob.includes('wrapper') || blob.includes('wrapping') || blob.includes('wrap')) && !blob.includes('ribbon'));
+}
+
+function isVaseProduct(product: CustomizationProduct) {
+  const type = productType(product);
+  return isExactCategory(product, ['vase']) || type.includes('vase') || productSearchBlob(product).includes('vase');
+}
+
+function isBoxProduct(product: CustomizationProduct) {
+  const category = productCategory(product);
+  const type = productType(product);
+  const blob = productSearchBlob(product);
+  if (blob.includes('ribbon') || blob.includes('wrapper') || blob.includes('wrapping') || blob.includes('wrap') || category.includes('vase') || type.includes('vase')) return false;
+  return blob.includes('clear box') || category.includes('clear box') || type.includes('clear box');
+}
+
+function isAccessoryProduct(product: CustomizationProduct) {
+  const category = productCategory(product);
+  const type = productType(product);
+  const blob = productSearchBlob(product);
+  return isExactCategory(product, ['accessory', 'accesorry']) || type.includes('accessory') || type.includes('accesorry') || category.includes('ribbon') || type.includes('ribbon') || blob.includes('ribbon');
+}
+
+function filterProductsForSearch(products: CustomizationProduct[], query: string) {
+  const normalizedQuery = normalizeText(query);
+  if (!normalizedQuery) return products;
+
+  return products.filter((product) => productSearchBlob(product).includes(normalizedQuery));
 }
 
 function buildPrompt({
   accessory,
   arrangement,
-  flower,
-  vase,
-  wrapping,
+  container,
+  fillers,
+  flowers,
 }: {
   accessory?: CustomizationProduct;
-  arrangement: { label: string };
-  flower?: CustomizationProduct;
-  vase?: CustomizationProduct;
-  wrapping?: CustomizationProduct;
+  arrangement: ArrangementOption;
+  container: CustomizationProduct;
+  fillers: CustomizationProduct[];
+  flowers: { product: CustomizationProduct; quantity: number }[];
 }) {
-  const parts = [
-    `${arrangement.label} floral arrangement`,
-    flower ? `${flower.attrs?.quantity || 1} ${flower.attrs?.color || ''} ${flower.attrs?.style || ''} ${flower.name}` : null,
-    vase ? `presented in ${vase.attrs?.material || ''} ${vase.attrs?.style || ''} ${vase.name}` : null,
-    wrapping ? `wrapped with ${wrapping.attrs?.color || ''} ${wrapping.attrs?.style || ''} ${wrapping.name}` : null,
-    accessory ? `finished with ${accessory.attrs?.name || accessory.name}` : null,
-  ].filter(Boolean);
+  const flowerText = flowers.map(({ product, quantity }) => `${quantity} ${product.attrs?.color || ''} ${product.name}`.trim()).join(', ');
+  const fillerText = fillers.length ? `with optional fillers: ${fillers.map((item) => item.name).join(', ')}` : 'with no filler required';
+  const containerText =
+    arrangement.id === 'bouquet'
+      ? `wrapped with ${container.name}`
+      : arrangement.id === 'vase'
+        ? `arranged in ${container.name} vase`
+        : `arranged in ${container.name} flower box`;
+  const accessoryText = accessory ? `finished with ${accessory.name}` : 'with no ribbon or accessory';
 
-  return `A custom Mix and Match arrangement: ${parts.join(', ')}. Ultra-realistic florist product photo, clean studio lighting, elegant composition, natural textures, front-facing arrangement, no top-down view.`;
+  return `A custom Mix and Match ${arrangement.label}: ${flowerText}, ${fillerText}, ${containerText}, ${accessoryText}. Ultra-realistic florist product photo, clean studio lighting, elegant composition, natural textures, front-facing arrangement, no top-down view.`;
 }
 
 const softOutline = 'rgba(218, 222, 218, 0.72)';
@@ -852,7 +1433,7 @@ const styles = StyleSheet.create({
   },
   floatingHeaderSolid: {
     backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    borderBottomColor: 'rgba(218, 222, 218, 0.72)',
+    borderBottomColor: softOutline,
     borderBottomWidth: 1,
     boxShadow: '0 10px 26px rgba(31, 42, 36, 0.08)',
   },
@@ -898,10 +1479,9 @@ const styles = StyleSheet.create({
   progressCard: {
     backgroundColor: '#FFFFFF',
     borderColor: softOutline,
-    borderRadius: 24,
+    borderRadius: 22,
     borderWidth: 1,
-    boxShadow: '0 18px 42px rgba(31, 42, 36, 0.08)',
-    gap: 22,
+    gap: 20,
     padding: theme.spacing.lg,
   },
   progressHeader: {
@@ -951,7 +1531,7 @@ const styles = StyleSheet.create({
   },
   stepTrack: {
     flexDirection: 'row',
-    minHeight: 72,
+    minHeight: 74,
   },
   stepItem: {
     alignItems: 'center',
@@ -960,35 +1540,35 @@ const styles = StyleSheet.create({
   },
   stepLine: {
     backgroundColor: '#E5E7EB',
-    height: 1.4,
+    height: 2,
     left: '-50%',
     position: 'absolute',
-    right: '50%',
-    top: 18,
+    top: 15,
+    width: '100%',
   },
   stepLineActive: {
     backgroundColor: theme.colors.primary,
   },
   stepCircle: {
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E7EB',
+    backgroundColor: '#F3F4F6',
     borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    height: 36,
+    height: 30,
     justifyContent: 'center',
-    width: 36,
-    zIndex: 2,
+    marginBottom: 8,
+    width: 30,
+    zIndex: 1,
   },
   stepCircleActive: {
+    backgroundColor: '#EAF5EC',
     borderColor: theme.colors.primary,
+    borderWidth: 1,
   },
   stepCircleDone: {
     backgroundColor: theme.colors.primary,
-    borderColor: theme.colors.primary,
   },
   stepCircleText: {
-    color: '#A2AAA4',
+    color: '#6B7280',
     fontFamily: Fonts.sansBold,
     fontSize: 12,
   },
@@ -996,53 +1576,47 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
   },
   stepLabel: {
-    color: '#98A19A',
+    color: '#8B958D',
     fontFamily: Fonts.sansSemiBold,
     fontSize: 10,
     lineHeight: 13,
-    marginTop: 8,
-    maxWidth: 74,
-    minHeight: 28,
     textAlign: 'center',
   },
   stepLabelActive: {
-    color: theme.colors.primaryDark,
+    color: theme.colors.primary,
   },
   errorBox: {
-    backgroundColor: '#FFF1F2',
-    borderColor: '#FECDD3',
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
     borderRadius: 14,
     borderWidth: 1,
     padding: theme.spacing.md,
   },
   errorText: {
-    color: '#DC2626',
+    color: '#B91C1C',
     fontFamily: Fonts.sansSemiBold,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 13,
+    lineHeight: 18,
   },
   selectionCard: {
     backgroundColor: '#FFFFFF',
     borderColor: softOutline,
-    borderRadius: 24,
+    borderRadius: 22,
     borderWidth: 1,
-    boxShadow: '0 18px 42px rgba(31, 42, 36, 0.08)',
     gap: theme.spacing.lg,
     padding: theme.spacing.lg,
   },
   selectionHeader: {
-    alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: theme.spacing.sm,
+    gap: 10,
   },
   stepBadge: {
     alignItems: 'center',
     backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.pill,
-    height: 26,
+    height: 24,
     justifyContent: 'center',
-    marginTop: 1,
-    width: 26,
+    width: 24,
   },
   stepBadgeText: {
     color: '#FFFFFF',
@@ -1051,121 +1625,218 @@ const styles = StyleSheet.create({
   },
   selectionCopy: {
     flex: 1,
-    gap: 3,
   },
   selectionTitle: {
     color: theme.colors.text,
     fontFamily: Fonts.sansExtraBold,
     fontSize: 17,
-    lineHeight: 22,
   },
   selectionSubtitle: {
     color: theme.colors.textMuted,
     fontFamily: Fonts.sans,
-    fontSize: 13,
-    lineHeight: 19,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 3,
   },
   loadingPanel: {
     alignItems: 'center',
-    gap: theme.spacing.sm,
-    minHeight: 160,
-    justifyContent: 'center',
+    gap: 10,
+    paddingVertical: 34,
   },
   loadingText: {
-    color: '#8B958D',
-    fontFamily: Fonts.sans,
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansSemiBold,
     fontSize: 13,
   },
   arrangementGrid: {
-    gap: theme.spacing.sm,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
   },
-  choiceCard: {
+  arrangementCard: {
     backgroundColor: '#FFFFFF',
     borderColor: '#E5E7EB',
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
-    gap: 5,
-    padding: theme.spacing.md,
+    padding: 12,
+    width: '47%',
   },
-  choiceCardSelected: {
-    backgroundColor: '#F0F7F1',
+  arrangementCardSelected: {
+    backgroundColor: '#F4FBF5',
     borderColor: theme.colors.primary,
   },
-  choiceIcon: {
+  arrangementImageWrap: {
     alignItems: 'center',
-    backgroundColor: '#F3F4F6',
-    borderRadius: theme.radius.pill,
-    height: 28,
+    backgroundColor: '#F8FAF8',
+    borderRadius: 12,
+    height: 132,
     justifyContent: 'center',
-    width: 28,
+    marginBottom: 10,
+    overflow: 'hidden',
   },
-  choiceIconSelected: {
+  arrangementImage: {
+    height: '100%',
+    width: '100%',
+  },
+  arrangementCheck: {
+    alignItems: 'center',
     backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
+    height: 24,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 10,
+    top: 10,
+    width: 24,
   },
-  choiceTitle: {
+  arrangementTitle: {
     color: theme.colors.text,
-    fontFamily: Fonts.sansExtraBold,
+    fontFamily: Fonts.sansBold,
     fontSize: 14,
+    textAlign: 'center',
   },
-  choiceText: {
+  arrangementTitleSelected: {
+    color: theme.colors.primary,
+  },
+  arrangementDescription: {
     color: theme.colors.textMuted,
     fontFamily: Fonts.sans,
     fontSize: 12,
-    lineHeight: 17,
+    marginTop: 5,
+    textAlign: 'center',
   },
-  segmentedControl: {
-    backgroundColor: '#F3F4F6',
-    borderRadius: 15,
-    flexDirection: 'row',
-    padding: 4,
+  arrangementHelper: {
+    color: '#9CA3AF',
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 11,
+    marginTop: 3,
+    textAlign: 'center',
   },
-  segmentButton: {
-    alignItems: 'center',
-    borderRadius: 12,
-    flex: 1,
-    minHeight: 38,
-    justifyContent: 'center',
+  selectionSummary: {
+    backgroundColor: '#EEF7EF',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    width: '100%',
   },
-  segmentButtonActive: {
-    backgroundColor: '#FFFFFF',
-    boxShadow: '0 8px 18px rgba(31, 42, 36, 0.08)',
+  selectionSummaryText: {
+    color: theme.colors.primary,
+    fontFamily: Fonts.sansBold,
+    fontSize: 13,
   },
-  segmentText: {
+  productSectionHeader: {
+    gap: 3,
+    marginTop: 2,
+  },
+  productSectionTitle: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 15,
+  },
+  productSectionSubtitle: {
     color: theme.colors.textMuted,
     fontFamily: Fonts.sansSemiBold,
     fontSize: 12,
+    lineHeight: 17,
   },
-  segmentTextActive: {
-    color: theme.colors.primary,
+  flowerSummaryEmpty: {
+    backgroundColor: '#F8FAF8',
+    borderRadius: 12,
+    padding: 12,
+  },
+  flowerSummary: {
+    backgroundColor: '#F8FAF8',
+    borderRadius: 12,
+    gap: 10,
+    padding: 12,
+  },
+  flowerSummaryText: {
+    color: theme.colors.text,
     fontFamily: Fonts.sansBold,
+    fontSize: 13,
+  },
+  flowerSummaryRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  flowerSummaryName: {
+    color: theme.colors.text,
+    flex: 1,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 13,
+  },
+  quickQuantity: {
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
+    borderColor: '#DCE7DE',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+  },
+  quickQuantityButton: {
+    alignItems: 'center',
+    height: 32,
+    justifyContent: 'center',
+    width: 34,
+  },
+  quickQuantityText: {
+    color: '#24482E',
+    fontFamily: Fonts.sansBold,
+    fontSize: 13,
+    minWidth: 18,
+    textAlign: 'center',
+  },
+  inlineSearch: {
+    alignItems: 'center',
+    backgroundColor: '#F9FAFB',
+    borderColor: '#E5E7EB',
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    minHeight: 46,
+    paddingHorizontal: 12,
+  },
+  inlineSearchInput: {
+    color: theme.colors.text,
+    flex: 1,
+    fontFamily: Fonts.sans,
+    fontSize: 14,
+    paddingVertical: 0,
+  },
+  clearSearchButton: {
+    alignItems: 'center',
+    height: 32,
+    justifyContent: 'center',
+    width: 32,
   },
   productGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: theme.spacing.sm,
+    gap: 12,
   },
   productCard: {
     backgroundColor: '#FFFFFF',
     borderColor: '#E5E7EB',
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1,
-    overflow: 'hidden',
-    padding: 9,
-    width: '48.5%',
+    padding: 10,
+    width: '47%',
   },
   productCardSelected: {
+    backgroundColor: '#F4FBF5',
     borderColor: theme.colors.primary,
-    borderWidth: 1.5,
   },
   productCardDisabled: {
-    opacity: 0.52,
+    opacity: 0.45,
   },
   productImageWrap: {
-    aspectRatio: 1,
     backgroundColor: '#F3F4F6',
-    borderRadius: 12,
+    borderRadius: 10,
+    height: 118,
+    marginBottom: 9,
     overflow: 'hidden',
-    position: 'relative',
   },
   productImage: {
     height: '100%',
@@ -1175,121 +1846,358 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.pill,
-    height: 22,
+    height: 24,
     justifyContent: 'center',
     position: 'absolute',
-    right: 7,
-    top: 7,
-    width: 22,
+    right: 8,
+    top: 8,
+    minWidth: 24,
+    paddingHorizontal: 6,
+  },
+  productCheckText: {
+    color: '#FFFFFF',
+    fontFamily: Fonts.sansBold,
+    fontSize: 11,
   },
   productName: {
     color: theme.colors.text,
-    fontFamily: Fonts.sansSemiBold,
-    fontSize: 12,
-    lineHeight: 16,
-    marginTop: 8,
-    minHeight: 32,
+    fontFamily: Fonts.sansBold,
+    fontSize: 13,
+    lineHeight: 17,
+    minHeight: 34,
   },
   productPrice: {
     color: theme.colors.primary,
     fontFamily: Fonts.sansBold,
-    fontSize: 12,
-    marginTop: 3,
+    fontSize: 13,
+    marginTop: 5,
   },
   stockBadge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#F3F4F6',
+    backgroundColor: '#EDF7ED',
     borderRadius: theme.radius.pill,
-    marginTop: 6,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    marginTop: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   stockBadgeLow: {
-    backgroundColor: '#FFF7ED',
+    backgroundColor: '#FEF3C7',
   },
   stockBadgeOut: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: '#F3F4F6',
   },
   stockText: {
-    color: '#6B7280',
+    color: theme.colors.primary,
     fontFamily: Fonts.sansBold,
     fontSize: 10,
   },
   stockTextLow: {
-    color: '#D97706',
+    color: '#B45309',
   },
   stockTextOut: {
-    color: '#DC2626',
+    color: '#6B7280',
   },
   emptyText: {
     color: theme.colors.textMuted,
     fontFamily: Fonts.sansSemiBold,
     fontSize: 13,
+    paddingVertical: 20,
     textAlign: 'center',
   },
-  cardFooter: {
+  emptyContainerState: {
     alignItems: 'center',
-    borderTopColor: '#EEF1EE',
+    backgroundColor: '#F9FAFB',
+    borderColor: '#E5E7EB',
+    borderRadius: 14,
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 26,
+  },
+  emptyContainerText: {
+    color: '#8B95A1',
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  floatingStepFooter: {
+    backgroundColor: 'rgba(255, 255, 255, 0.96)',
+    borderTopColor: '#EEF0EE',
     borderTopWidth: 1,
+    bottom: 0,
+    boxShadow: '0 -12px 28px rgba(31, 42, 36, 0.08)',
+    left: 0,
+    paddingTop: 12,
+    position: 'absolute',
+    right: 0,
+  },
+  cardFooter: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingTop: theme.spacing.lg,
+    gap: 10,
   },
   returnButton: {
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    borderColor: softOutline,
-    borderRadius: 13,
+    borderColor: '#DDE2DD',
+    borderRadius: 12,
     borderWidth: 1,
-    height: 46,
+    minHeight: 48,
     justifyContent: 'center',
     paddingHorizontal: theme.spacing.lg,
+    width: 112,
   },
   returnButtonText: {
-    color: '#3F4741',
+    color: theme.colors.text,
     fontFamily: Fonts.sansSemiBold,
     fontSize: 13,
   },
   continueButton: {
     alignItems: 'center',
     backgroundColor: theme.colors.primary,
-    borderRadius: 16,
+    borderRadius: 12,
+    flex: 1,
     flexDirection: 'row',
-    gap: theme.spacing.sm,
-    height: 52,
+    gap: 8,
+    minHeight: 48,
     justifyContent: 'center',
-    minWidth: 150,
-    paddingHorizontal: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.xl,
   },
   continueButtonDisabled: {
-    backgroundColor: '#E2E5E2',
+    opacity: 0.55,
   },
   continueButtonText: {
     color: '#FFFFFF',
-    fontFamily: Fonts.sansBold,
-    fontSize: 15,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 14,
   },
   continueButtonTextDisabled: {
-    color: '#A5ABA6',
+    color: '#FFFFFF',
+  },
+  modalBackdrop: {
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  modalScrim: {
+    backgroundColor: 'rgba(15, 23, 42, 0.38)',
+    flex: 1,
+  },
+  bottomSheet: {
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    gap: theme.spacing.md,
+    padding: theme.spacing.lg,
+    paddingBottom: theme.spacing.xl,
+  },
+  sheetHandle: {
+    alignSelf: 'center',
+    backgroundColor: '#D1D5DB',
+    borderRadius: theme.radius.pill,
+    height: 4,
+    width: 42,
+  },
+  sheetHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  sheetTitle: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 18,
+  },
+  sheetClose: {
+    alignItems: 'center',
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  sheetProductRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+  },
+  sheetImage: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 14,
+    height: 92,
+    width: 92,
+  },
+  sheetProductCopy: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  sheetProductName: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 16,
+    lineHeight: 21,
+  },
+  sheetProductMeta: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 12,
+    marginTop: 4,
+  },
+  sheetLimitBox: {
+    backgroundColor: '#F8FAF8',
+    borderRadius: 12,
+    gap: 3,
+    padding: 12,
+  },
+  sheetLimitText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 12,
+  },
+  sheetQuantityRow: {
+    alignItems: 'center',
+    alignSelf: 'center',
+    borderColor: '#DCE7DE',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+  },
+  sheetQuantityButton: {
+    alignItems: 'center',
+    height: 48,
+    justifyContent: 'center',
+    width: 56,
+  },
+  sheetQuantityText: {
+    color: '#24482E',
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 20,
+    minWidth: 40,
+    textAlign: 'center',
+  },
+  sheetSaveButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: 14,
+    minHeight: 50,
+    justifyContent: 'center',
+  },
+  sheetSaveText: {
+    color: '#FFFFFF',
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 14,
+  },
+  reviewPanel: {
+    gap: theme.spacing.md,
+  },
+  reviewImageGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  reviewImageItem: {
+    width: '30.5%',
+  },
+  reviewImage: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: 10,
+    height: 78,
+    width: '100%',
+  },
+  reviewImageLabel: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 11,
+    lineHeight: 14,
+    marginTop: 5,
+  },
+  reviewSection: {
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  reviewSectionTitle: {
+    backgroundColor: '#F9FAFB',
+    color: theme.colors.text,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 13,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  reviewRow: {
+    alignItems: 'center',
+    borderTopColor: '#EEF0EE',
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  reviewLabelGroup: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  reviewLabel: {
+    color: '#64748B',
+    flexShrink: 1,
+    fontFamily: Fonts.sans,
+    fontSize: 13,
+  },
+  qtyPill: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: theme.radius.pill,
+    color: '#8B95A1',
+    fontFamily: Fonts.sansBold,
+    fontSize: 11,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  reviewValue: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansBold,
+    fontSize: 13,
+  },
+  reviewMuted: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 13,
+    padding: 12,
+  },
+  estimatedTotal: {
+    alignItems: 'center',
+    backgroundColor: '#F3FAF3',
+    borderRadius: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    padding: 14,
+  },
+  estimatedTotalLabel: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansBold,
+    fontSize: 13,
+  },
+  estimatedTotalValue: {
+    color: '#047857',
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 16,
   },
   resultCard: {
     backgroundColor: '#FFFFFF',
     borderColor: softOutline,
     borderRadius: 22,
     borderWidth: 1,
-    boxShadow: '0 18px 42px rgba(31, 42, 36, 0.12)',
-    overflow: 'hidden',
+    gap: theme.spacing.lg,
+    padding: theme.spacing.lg,
   },
   resultHeader: {
     alignItems: 'center',
-    borderBottomColor: '#EEF1EE',
-    borderBottomWidth: 1,
     flexDirection: 'row',
     gap: theme.spacing.md,
-    padding: theme.spacing.lg,
   },
   resultHeaderIcon: {
     alignItems: 'center',
+    backgroundColor: '#FAF0FF',
+    borderRadius: theme.radius.pill,
     height: 48,
     justifyContent: 'center',
     width: 48,
@@ -1300,66 +2208,71 @@ const styles = StyleSheet.create({
   resultTitle: {
     color: theme.colors.text,
     fontFamily: Fonts.sansExtraBold,
-    fontSize: 22,
+    fontSize: 21,
   },
   resultSubtitle: {
     color: theme.colors.textMuted,
     fontFamily: Fonts.sans,
-    fontSize: 14,
+    fontSize: 13,
   },
   resultIconButton: {
     alignItems: 'center',
-    height: 44,
+    borderColor: '#E5E7EB',
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 42,
     justifyContent: 'center',
-    width: 44,
+    width: 42,
   },
   resultBody: {
     gap: theme.spacing.lg,
-    padding: theme.spacing.lg,
   },
   resultImageFrame: {
-    aspectRatio: 1,
-    borderColor: '#DEE3DE',
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRadius: 18,
+    height: 310,
     overflow: 'hidden',
     position: 'relative',
-  },
-  resultImageBadge: {
-    backgroundColor: 'rgba(255, 255, 255, 0.92)',
-    borderRadius: 999,
-    left: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    position: 'absolute',
-    top: 12,
-    zIndex: 2,
-  },
-  resultImageBadgeText: {
-    color: '#7C3AED',
-    fontFamily: Fonts.sansBold,
-    fontSize: 11,
   },
   resultImage: {
     height: '100%',
     width: '100%',
   },
+  resultImageBadge: {
+    backgroundColor: 'rgba(12, 87, 62, 0.9)',
+    borderRadius: theme.radius.pill,
+    left: 12,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    position: 'absolute',
+    top: 12,
+    zIndex: 1,
+  },
+  resultImageBadgeText: {
+    color: '#FFFFFF',
+    fontFamily: Fonts.sansBold,
+    fontSize: 11,
+  },
   conceptNote: {
     alignItems: 'flex-start',
-    backgroundColor: '#F5F0FF',
-    borderColor: '#DDD0FF',
+    backgroundColor: '#FAF5FF',
+    borderColor: '#E9D5FF',
     borderRadius: 14,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 9,
-    padding: theme.spacing.md,
+    gap: 8,
+    padding: 12,
   },
   conceptNoteText: {
-    color: '#4C3A72',
+    color: '#6D4D7A',
     flex: 1,
-    fontFamily: Fonts.sans,
+    fontFamily: Fonts.sansSemiBold,
     fontSize: 12,
     lineHeight: 17,
+  },
+  pollinationsCredit: {
+    alignSelf: 'flex-start',
+    height: 22,
+    width: 150,
   },
   resultDetails: {
     gap: theme.spacing.md,
@@ -1370,15 +2283,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
   },
   arrangementNameInput: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#DEE3DE',
-    borderRadius: 14,
+    borderColor: '#DDE2DD',
+    borderRadius: 12,
     borderWidth: 1,
     color: theme.colors.text,
     fontFamily: Fonts.sansSemiBold,
-    fontSize: 16,
+    fontSize: 14,
     minHeight: 48,
-    paddingHorizontal: theme.spacing.md,
+    paddingHorizontal: 14,
   },
   resultDescription: {
     color: theme.colors.textMuted,
@@ -1386,92 +2298,118 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
-  breakdownCard: {
-    borderColor: '#DEE3DE',
-    borderRadius: 16,
+  selectedItemsPanel: {
+    borderColor: '#DDE2DD',
+    borderRadius: 12,
     borderWidth: 1,
-    padding: theme.spacing.md,
+    gap: 10,
+    paddingBottom: 12,
+    paddingHorizontal: 12,
+  },
+  breakdownCard: {
+    borderColor: '#DDE2DD',
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
   },
   breakdownTitle: {
     color: theme.colors.text,
-    fontFamily: Fonts.sansBold,
-    fontSize: 15,
-    marginBottom: theme.spacing.sm,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 14,
+    padding: 12,
   },
   breakdownRow: {
     alignItems: 'center',
+    borderTopColor: '#EEF0EE',
+    borderTopWidth: 1,
     flexDirection: 'row',
+    gap: 10,
     justifyContent: 'space-between',
-    gap: theme.spacing.md,
-    paddingVertical: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  breakdownLabelGroup: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
   },
   breakdownLabel: {
-    color: theme.colors.text,
-    flex: 1,
+    color: '#64748B',
+    flexShrink: 1,
     fontFamily: Fonts.sans,
-    fontSize: 12,
+    fontSize: 13,
+  },
+  breakdownQty: {
+    backgroundColor: '#F3F4F6',
+    borderRadius: theme.radius.pill,
+    color: '#8B95A1',
+    fontFamily: Fonts.sansBold,
+    fontSize: 11,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
   breakdownValue: {
     color: theme.colors.text,
-    fontFamily: Fonts.sansSemiBold,
-    fontSize: 12,
+    fontFamily: Fonts.sansBold,
+    fontSize: 13,
   },
-  breakdownDivider: {
-    backgroundColor: '#E5E8E5',
-    height: 1,
-    marginVertical: theme.spacing.sm,
+  breakdownTotalRow: {
+    alignItems: 'center',
+    backgroundColor: '#F3FAF3',
+    borderTopColor: '#DDEBDD',
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 13,
   },
   breakdownTotalLabel: {
     color: theme.colors.text,
-    fontFamily: Fonts.sansBold,
-    fontSize: 14,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 15,
   },
   breakdownTotalValue: {
-    color: theme.colors.text,
+    color: '#047857',
     fontFamily: Fonts.sansExtraBold,
-    fontSize: 20,
+    fontSize: 15,
   },
   addButton: {
     alignItems: 'center',
-    backgroundColor: '#1F8F4D',
+    backgroundColor: theme.colors.primary,
     borderRadius: 14,
     flexDirection: 'row',
-    gap: theme.spacing.sm,
-    minHeight: 52,
+    gap: 8,
     justifyContent: 'center',
+    minHeight: 52,
   },
   addButtonText: {
     color: '#FFFFFF',
-    fontFamily: Fonts.sansBold,
-    fontSize: 15,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 14,
   },
   resultFinePrint: {
-    borderTopColor: '#EEF1EE',
-    borderTopWidth: 1,
     color: theme.colors.textMuted,
     fontFamily: Fonts.sans,
     fontSize: 12,
     lineHeight: 17,
-    padding: theme.spacing.lg,
   },
   overlay: {
     alignItems: 'center',
-    backgroundColor: 'rgba(9, 19, 13, 0.38)',
+    backgroundColor: 'rgba(12, 17, 24, 0.42)',
     bottom: 0,
     justifyContent: 'center',
     left: 0,
-    padding: theme.spacing.lg,
+    padding: 26,
     position: 'absolute',
     right: 0,
     top: 0,
-    zIndex: 40,
   },
   overlayCard: {
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     borderRadius: 22,
     gap: theme.spacing.md,
-    maxWidth: 340,
     padding: theme.spacing.xl,
     width: '100%',
   },
@@ -1482,13 +2420,13 @@ const styles = StyleSheet.create({
   },
   overlayFact: {
     color: theme.colors.textMuted,
-    fontFamily: Fonts.sans,
+    fontFamily: Fonts.sansSemiBold,
     fontSize: 13,
     lineHeight: 19,
     textAlign: 'center',
   },
   progressTrack: {
-    backgroundColor: '#E8ECE9',
+    backgroundColor: '#E5E7EB',
     borderRadius: theme.radius.pill,
     height: 8,
     overflow: 'hidden',
@@ -1496,10 +2434,10 @@ const styles = StyleSheet.create({
   },
   progressFill: {
     backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
     height: '100%',
   },
   pressed: {
-    opacity: 0.78,
-    transform: [{ scale: 0.985 }],
+    opacity: 0.72,
   },
 });

@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { router, useFocusEffect, type Href } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams, type Href } from 'expo-router';
 import { CalendarDays, ChevronRight, Clock3, ImageOff, Search, ShoppingBag } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -25,6 +25,7 @@ const tabs: { id: OrderTab; label: string }[] = [
 
 export default function OrdersScreen() {
   const insets = useSafeAreaInsets();
+  const params = useLocalSearchParams<{ tab?: string }>();
   const [activeTab, setActiveTab] = useState<OrderTab>('all');
   const [query, setQuery] = useState('');
   const [session, setSession] = useState<AuthSession | null>(null);
@@ -76,6 +77,13 @@ export default function OrdersScreen() {
   }, []);
 
   useFocusEffect(useCallback(() => void loadOrders(), [loadOrders]));
+  useFocusEffect(
+    useCallback(() => {
+      if (isOrderTab(params.tab)) {
+        setActiveTab(params.tab);
+      }
+    }, [params.tab]),
+  );
 
   const visibleOrders = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -220,6 +228,9 @@ export function getCustomerStatus(order: CustomerOrder) {
 
 function formatLabel(value: string) {
   return value.split(/[_-]+/).map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(' ');
+}
+function isOrderTab(value?: string): value is OrderTab {
+  return tabs.some((tab) => tab.id === value);
 }
 function validDate(value?: string | null) { const date = value ? new Date(value) : null; return date && !Number.isNaN(date.getTime()) ? date : null; }
 function formatDateTime(value?: string | null) { const date = validDate(value); return date ? new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium', timeStyle: 'short' }).format(date) : 'Recently'; }

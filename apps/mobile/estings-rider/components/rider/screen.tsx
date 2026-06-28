@@ -86,7 +86,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     color: theme.colors.textMuted,
-    fontFamily: Fonts.sansExtraBold,
+    fontFamily: Fonts.sansBold,
     fontSize: 15,
     lineHeight: 20,
   },
@@ -98,7 +98,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: theme.colors.text,
-    fontFamily: Fonts.sansExtraBold,
+    fontFamily: Fonts.sansBold,
     fontSize: 30,
     lineHeight: 36,
   },

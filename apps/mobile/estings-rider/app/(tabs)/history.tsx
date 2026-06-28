@@ -1,15 +1,17 @@
-import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import Feather from '@expo/vector-icons/Feather';
+import { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { DeliveryCard } from '@/components/rider/delivery-card';
-import { MetricCard } from '@/components/rider/metric-card';
-import { RiderScreen, SectionHeader } from '@/components/rider/screen';
+import { DeliveryStopCard, getDestination } from '@/components/rider/delivery-stop-card';
+import { RiderScreen } from '@/components/rider/screen';
 import { Fonts, theme } from '@/constants/theme';
 import { getMyDeliveryHistory, type RiderDelivery } from '@/services/deliveries-api';
-import { getDeliveryEta } from '@/utils/delivery-format';
+
+type HistoryGroup = 'Today' | 'Yesterday' | 'Past';
 
 export default function HistoryScreen() {
   const [completedDeliveries, setCompletedDeliveries] = useState<RiderDelivery[]>([]);
+  const [query, setQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -39,66 +41,128 @@ export default function HistoryScreen() {
     };
   }, []);
 
+  const groups = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const filteredDeliveries = completedDeliveries.filter((delivery) => {
+      if (!normalizedQuery) return true;
+      const haystack = [
+        delivery.orderNumber,
+        delivery.recipientName,
+        delivery.recipientPhone,
+        delivery.address,
+        getDestination(delivery),
+        delivery.itemSummary,
+      ].join(' ').toLowerCase();
+
+      return haystack.includes(normalizedQuery);
+    });
+
+    return groupHistory(filteredDeliveries);
+  }, [completedDeliveries, query]);
+
   return (
-    <RiderScreen subtitle="Completed deliveries and shift totals" title="History">
-      <View style={styles.metricsRow}>
-        <MetricCard icon="checkmark.seal.fill" label="Completed" value={String(completedDeliveries.length)} />
-        <MetricCard icon="clock.fill" label="Avg. handoff" tone="amber" value="6m" />
+    <RiderScreen title="History">
+      <View style={styles.searchBox}>
+        <Feather color="#8F8F8F" name="search" size={22} />
+        <TextInput
+          placeholder="Search deliveries"
+          placeholderTextColor="#8F8F8F"
+          style={styles.searchInput}
+          value={query}
+          onChangeText={setQuery}
+        />
       </View>
 
-      <View style={styles.summaryPanel}>
-        <Text style={styles.summaryTitle}>Today</Text>
-        <Text style={styles.summaryText}>All completed orders were handed to verified recipients. No return-to-shop items logged.</Text>
-      </View>
+      {isLoading ? <Text style={styles.stateText}>Loading completed deliveries...</Text> : null}
+      {error ? <Text selectable style={styles.stateText}>{error}</Text> : null}
+      {!isLoading && !error && completedDeliveries.length === 0 ? <Text style={styles.stateText}>No completed deliveries yet.</Text> : null}
 
-      <SectionHeader title="Recent Deliveries" />
-      <View style={styles.list}>
-        {isLoading ? <Text style={styles.stateText}>Loading completed deliveries...</Text> : null}
-        {error ? <Text selectable style={styles.stateText}>{error}</Text> : null}
-        {!isLoading && !error && completedDeliveries.length === 0 ? <Text style={styles.stateText}>No completed deliveries yet.</Text> : null}
-        {completedDeliveries.map((delivery) => (
-          <DeliveryCard
-            key={delivery.id}
-            address={delivery.address}
-            customer={delivery.recipientName}
-            eta={getDeliveryEta(delivery)}
-            id={delivery.orderNumber}
-            items={delivery.itemSummary}
-            status="Delivered"
-          />
-        ))}
-      </View>
+      {!isLoading && !error ? (
+        <View style={styles.groups}>
+          {(['Today', 'Yesterday', 'Past'] as HistoryGroup[]).map((group) => (
+            <View key={group} style={styles.group}>
+              <Text style={styles.groupTitle}>{group}</Text>
+              {groups[group].length > 0 ? (
+                <View style={styles.list}>
+                  {groups[group].map((delivery) => (
+                    <DeliveryStopCard key={delivery.id} delivery={delivery} variant="completed" />
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
     </RiderScreen>
   );
 }
 
+function groupHistory(deliveries: RiderDelivery[]) {
+  const groups: Record<HistoryGroup, RiderDelivery[]> = {
+    Past: [],
+    Today: [],
+    Yesterday: [],
+  };
+  const now = new Date();
+
+  deliveries.forEach((delivery) => {
+    const deliveredAt = delivery.deliveredAt ? new Date(delivery.deliveredAt) : null;
+    if (!deliveredAt || Number.isNaN(deliveredAt.getTime())) {
+      groups.Past.push(delivery);
+      return;
+    }
+
+    const diffDays = getDayDiff(now, deliveredAt);
+    if (diffDays === 0) {
+      groups.Today.push(delivery);
+    } else if (diffDays === 1) {
+      groups.Yesterday.push(delivery);
+    } else {
+      groups.Past.push(delivery);
+    }
+  });
+
+  return groups;
+}
+
+function getDayDiff(now: Date, then: Date) {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const other = new Date(then.getFullYear(), then.getMonth(), then.getDate()).getTime();
+  return Math.round((today - other) / 86400000);
+}
+
 const styles = StyleSheet.create({
-  list: {
+  group: {
     gap: theme.spacing.md,
   },
-  metricsRow: {
-    flexDirection: 'row',
-    gap: theme.spacing.md,
+  groups: {
+    gap: theme.spacing.lg,
   },
-  summaryPanel: {
-    backgroundColor: theme.colors.surface,
-    borderColor: 'rgba(31, 42, 36, 0.07)',
-    borderRadius: 20,
-    borderWidth: 1,
-    gap: 6,
-    padding: theme.spacing.lg,
-  },
-  summaryText: {
-    color: theme.colors.textMuted,
-    fontFamily: Fonts.sans,
-    fontSize: 13,
-    lineHeight: 19,
-  },
-  summaryTitle: {
+  groupTitle: {
     color: theme.colors.text,
     fontFamily: Fonts.sansBold,
     fontSize: 16,
     lineHeight: 21,
+  },
+  list: {
+    gap: theme.spacing.md,
+  },
+  searchBox: {
+    alignItems: 'center',
+    backgroundColor: '#E7E7E7',
+    borderRadius: 11,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    minHeight: 47,
+    paddingHorizontal: theme.spacing.md,
+  },
+  searchInput: {
+    color: theme.colors.text,
+    flex: 1,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 15,
+    lineHeight: 20,
+    paddingVertical: 0,
   },
   stateText: {
     color: theme.colors.textMuted,

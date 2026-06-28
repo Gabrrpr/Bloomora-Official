@@ -13,6 +13,15 @@ export type RiderDelivery = {
   address: string;
   arrivedAt?: string | null;
   assignedArea?: string | null;
+  assignedVehicle?: {
+    brand?: string | null;
+    capacity?: string | null;
+    color?: string | null;
+    id: string;
+    model?: string | null;
+    plateNumber?: string | null;
+    vehicleType?: string | null;
+  } | null;
   branch?: string | null;
   customerNotes?: string | null;
   deliveredAt?: string | null;
@@ -20,6 +29,7 @@ export type RiderDelivery = {
   estimatedArrival?: string | null;
   handlingNotes: string[];
   id: string;
+  imageUrl?: string | null;
   inTransitAt?: string | null;
   itemSummary: string;
   orderId: string;
@@ -34,8 +44,29 @@ export type RiderDelivery = {
   status: RiderDeliveryStatus;
 };
 
+export type RiderDeliveryOrder = {
+  branch?: string | null;
+  createdAt?: string | null;
+  deliveries: RiderDelivery[];
+  deliveryOrderNumber: string;
+  id: string;
+  notes?: string | null;
+  riderId?: string | null;
+  riderName?: string | null;
+  status: string;
+  stopCount: number;
+  updatedAt?: string | null;
+  vehicleId?: string | null;
+  vehiclePlateNumber?: string | null;
+  vehicleType?: string | null;
+};
+
 export async function getMyDeliveries() {
   return apiFetchWithSession<RiderDelivery[]>('/deliveries/rider/me');
+}
+
+export async function getMyDeliveryOrders() {
+  return apiFetchWithSession<RiderDeliveryOrder[]>('/deliveries/rider/delivery-orders/me');
 }
 
 export async function getMyDeliveryHistory() {

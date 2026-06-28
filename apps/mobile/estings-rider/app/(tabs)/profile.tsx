@@ -1,161 +1,146 @@
 import Feather from '@expo/vector-icons/Feather';
+import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import type { ComponentProps } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
 
-import { RiderScreen, SectionHeader } from '@/components/rider/screen';
-import { IconSymbol } from '@/components/ui/icon-symbol';
+import { RiderScreen } from '@/components/rider/screen';
 import { Fonts, theme } from '@/constants/theme';
-
-type IconName = ComponentProps<typeof IconSymbol>['name'];
-
-const profileStats = [
-  { label: 'Delivered', value: '128' },
-  { label: 'Rating', value: '4.9' },
-  { label: 'Routes', value: '32' },
-];
-
-const accountRows: { detail: string; icon: IconName; title: string }[] = [
-  { detail: 'Assigned vehicle and bag checks', icon: 'truck.box.fill', title: 'Rider equipment' },
-  { detail: 'Shop announcements and route updates', icon: 'bell.fill', title: 'Notifications' },
-  { detail: 'Proof of delivery and recipient notes', icon: 'doc.text.fill', title: 'Delivery records' },
-];
+import { getAuthSession, type AuthUser } from '@/services/auth-session';
+import { getMyDeliveries, getMyDeliveryHistory } from '@/services/deliveries-api';
 
 export default function ProfileScreen() {
+  const [rider, setRider] = useState<AuthUser | null>(null);
+  const [activeCount, setActiveCount] = useState(0);
+  const [completedCount, setCompletedCount] = useState(0);
+  const [isAvailable, setIsAvailable] = useState(true);
+  const riderName = getRiderName(rider);
+  const riderEmail = rider?.email ?? 'rider@estings.shop';
+  const profilePicture = rider?.profile_picture_url?.trim();
+
+  useEffect(() => {
+    let mounted = true;
+
+    void Promise.all([
+      getAuthSession(),
+      getMyDeliveries().catch(() => []),
+      getMyDeliveryHistory().catch(() => []),
+    ]).then(([session, activeDeliveries, completedDeliveries]) => {
+      if (mounted) {
+        setRider(session?.user ?? null);
+        setActiveCount(activeDeliveries.length);
+        setCompletedCount(completedDeliveries.length);
+      }
+    });
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   return (
     <RiderScreen
       headerAction={
-        <HeaderIconButton
-          accessibilityLabel="Open rider settings"
-          icon="settings"
-          onPress={() => router.push('/settings')}
-        />
+        <Pressable accessibilityLabel="Open settings" accessibilityRole="button" style={({ pressed }) => [styles.headerIconButton, pressed && styles.pressed]} onPress={() => router.push('/settings')}>
+          <Feather color={theme.colors.text} name="settings" size={22} />
+        </Pressable>
       }
-      subtitle="Staff account and delivery performance"
       title="Profile">
       <View style={styles.identityPanel}>
         <View style={styles.avatarRing}>
           <View style={styles.avatar}>
-            <IconSymbol color={theme.colors.white} name="person.crop.circle.fill" size={34} />
+            {profilePicture ? (
+              <Image contentFit="cover" source={{ uri: profilePicture }} style={styles.avatarImage} />
+            ) : (
+              <Text style={styles.avatarInitials}>{getRiderInitials(rider)}</Text>
+            )}
           </View>
         </View>
         <View style={styles.identityCopy}>
-          <Text style={styles.profileName}>{"Esting's Rider"}</Text>
-          <Text style={styles.profileEmail}>rider@estings.app</Text>
-          <View style={styles.memberPill}>
-            <IconSymbol color={theme.colors.rider} name="checkmark.seal.fill" size={14} />
-            <Text style={styles.memberPillText}>Staff Delivery</Text>
+          <View style={styles.nameRow}>
+            <Text numberOfLines={1} style={styles.profileName}>{riderName}</Text>
+            <Feather color="#2D9CDB" name="check-circle" size={14} />
           </View>
+          <Text numberOfLines={1} style={styles.profileEmail}>{riderEmail}</Text>
         </View>
       </View>
 
       <View style={styles.statsGrid}>
-        {profileStats.map((stat) => (
-          <View key={stat.label} style={styles.statCell}>
-            <Text style={styles.statValue}>{stat.value}</Text>
-            <Text style={styles.statLabel}>{stat.label}</Text>
-          </View>
-        ))}
+        <StatCell label="Deliveries" value={String(activeCount)} />
+        <StatCell label="Completed" value={String(completedCount)} />
+        <StatCell label="Status" value={isAvailable ? 'Available' : 'Offline'} />
       </View>
 
-      <SectionHeader title="Shift" />
-      <View style={styles.shiftPanel}>
-        <View>
-          <Text style={styles.shiftTitle}>Active shift</Text>
-          <Text style={styles.shiftText}>May 31, 2026 - 9:00 AM to 6:00 PM</Text>
+      <Text style={styles.sectionTitle}>Settings</Text>
+      <View style={styles.statusPanel}>
+        <View style={styles.statusCopy}>
+          <Text style={styles.statusTitle}>Status: {isAvailable ? 'Available' : 'Offline'}</Text>
+          <Text style={styles.statusText}>{isAvailable ? 'You are currently on standby.' : 'You will not appear available for new routes.'}</Text>
         </View>
-        <View style={styles.shiftBadge}>
-          <Text style={styles.shiftBadgeText}>Online</Text>
-        </View>
-      </View>
-
-      <SectionHeader title="Account" />
-      <View style={styles.menuGroup}>
-        {accountRows.map((row, index) => (
-          <View key={row.title}>
-            <AccountRow {...row} />
-            {index < accountRows.length - 1 ? <View style={styles.divider} /> : null}
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.trustPanel}>
-        <IconSymbol color={theme.colors.primary} name="checkmark.seal.fill" size={19} />
-        <Text style={styles.trustText}>{"Verified staff profile for Esting's delivery operations."}</Text>
+        <Switch value={isAvailable} trackColor={{ false: theme.colors.border, true: theme.colors.greenSoft }} thumbColor={theme.colors.primary} onValueChange={setIsAvailable} />
       </View>
     </RiderScreen>
   );
 }
 
-function AccountRow({ detail, icon, title }: { detail: string; icon: IconName; title: string }) {
+function StatCell({ label, value }: { label: string; value: string }) {
   return (
-    <Pressable accessibilityRole="button" style={({ pressed }) => [styles.accountRow, pressed && styles.pressed]}>
-      <View style={styles.rowIcon}>
-        <IconSymbol color={theme.colors.textMuted} name={icon} size={21} />
-      </View>
-      <View style={styles.rowCopy}>
-        <Text style={styles.rowTitle}>{title}</Text>
-        <Text style={styles.rowDetail}>{detail}</Text>
-      </View>
-      <IconSymbol color={theme.colors.textMuted} name="chevron.right" size={18} />
-    </Pressable>
+    <View style={styles.statCell}>
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
   );
 }
 
-function HeaderIconButton({
-  accessibilityLabel,
-  icon,
-  onPress,
-}: {
-  accessibilityLabel: string;
-  icon: ComponentProps<typeof Feather>['name'];
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      accessibilityLabel={accessibilityLabel}
-      accessibilityRole="button"
-      style={({ pressed }) => [styles.headerIconButton, pressed && styles.pressed]}
-      onPress={onPress}>
-      <Feather color={theme.colors.text} name={icon} size={22} />
-    </Pressable>
-  );
+function getRiderName(user: AuthUser | null) {
+  const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim();
+  return name || user?.username || "Esting's Rider";
+}
+
+function getRiderInitials(user: AuthUser | null) {
+  const first = user?.first_name?.trim();
+  const last = user?.last_name?.trim();
+  const initials = `${first?.[0] ?? ''}${last?.[0] ?? ''}`.toUpperCase();
+  if (initials.length > 0) return initials;
+
+  const fallback = user?.username?.trim() || user?.email?.trim() || 'Rider';
+  return fallback
+    .split(/[\s._@-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
 }
 
 const styles = StyleSheet.create({
-  accountRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    minHeight: 66,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
-  },
   avatar: {
     alignItems: 'center',
-    backgroundColor: theme.colors.rider,
+    backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.pill,
-    height: 62,
+    height: 56,
     justifyContent: 'center',
-    width: 62,
+    overflow: 'hidden',
+    width: 56,
+  },
+  avatarImage: {
+    height: '100%',
+    width: '100%',
+  },
+  avatarInitials: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansBold,
+    fontSize: 23,
+    lineHeight: 28,
   },
   avatarRing: {
     alignItems: 'center',
     borderColor: 'rgba(31, 42, 36, 0.1)',
     borderRadius: theme.radius.pill,
     borderWidth: 1,
-    height: 74,
+    height: 68,
     justifyContent: 'center',
-    width: 74,
-  },
-  divider: {
-    backgroundColor: 'rgba(31, 42, 36, 0.09)',
-    height: 1,
-    marginLeft: 72,
-  },
-  identityCopy: {
-    flex: 1,
-    gap: 5,
+    width: 68,
   },
   headerIconButton: {
     alignItems: 'center',
@@ -163,41 +148,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 36,
   },
+  identityCopy: {
+    flex: 1,
+    gap: 4,
+  },
   identityPanel: {
     alignItems: 'center',
     backgroundColor: theme.colors.surface,
-    borderColor: 'rgba(31, 42, 36, 0.07)',
-    borderRadius: 20,
+    borderColor: 'rgba(31, 42, 36, 0.08)',
+    borderRadius: 10,
     borderWidth: 1,
     flexDirection: 'row',
     gap: theme.spacing.md,
-    padding: theme.spacing.lg,
+    padding: theme.spacing.sm,
   },
-  memberPill: {
+  nameRow: {
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    backgroundColor: theme.colors.riderSoft,
-    borderColor: 'rgba(51, 65, 85, 0.1)',
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
     flexDirection: 'row',
     gap: 5,
-    marginTop: 2,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-  },
-  memberPillText: {
-    color: theme.colors.rider,
-    fontFamily: Fonts.sansSemiBold,
-    fontSize: 12,
-    lineHeight: 15,
-  },
-  menuGroup: {
-    backgroundColor: theme.colors.surface,
-    borderColor: 'rgba(31, 42, 36, 0.07)',
-    borderRadius: 20,
-    borderWidth: 1,
-    overflow: 'hidden',
   },
   pressed: {
     opacity: 0.76,
@@ -206,70 +174,21 @@ const styles = StyleSheet.create({
   profileEmail: {
     color: theme.colors.textMuted,
     fontFamily: Fonts.sans,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  profileName: {
-    color: theme.colors.text,
-    fontFamily: Fonts.sansBold,
-    fontSize: 18,
-    lineHeight: 23,
-  },
-  rowCopy: {
-    flex: 1,
-    gap: 2,
-  },
-  rowDetail: {
-    color: theme.colors.textMuted,
-    fontFamily: Fonts.sans,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  rowIcon: {
-    alignItems: 'center',
-    height: 40,
-    justifyContent: 'center',
-    width: 40,
-  },
-  rowTitle: {
-    color: theme.colors.text,
-    fontFamily: Fonts.sansSemiBold,
-    fontSize: 14,
-    lineHeight: 18,
-  },
-  shiftBadge: {
-    backgroundColor: theme.colors.greenSoft,
-    borderRadius: theme.radius.pill,
-    paddingHorizontal: 11,
-    paddingVertical: 7,
-  },
-  shiftBadgeText: {
-    color: theme.colors.primaryDark,
-    fontFamily: Fonts.sansSemiBold,
-    fontSize: 12,
-    lineHeight: 15,
-  },
-  shiftPanel: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surface,
-    borderColor: 'rgba(31, 42, 36, 0.07)',
-    borderRadius: 20,
-    borderWidth: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    padding: theme.spacing.lg,
-  },
-  shiftText: {
-    color: theme.colors.textMuted,
-    fontFamily: Fonts.sans,
     fontSize: 12,
     lineHeight: 17,
   },
-  shiftTitle: {
+  profileName: {
     color: theme.colors.text,
+    flexShrink: 1,
     fontFamily: Fonts.sansBold,
     fontSize: 15,
     lineHeight: 20,
+  },
+  sectionTitle: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansBold,
+    fontSize: 14,
+    lineHeight: 19,
   },
   statCell: {
     alignItems: 'center',
@@ -280,38 +199,48 @@ const styles = StyleSheet.create({
   statLabel: {
     color: theme.colors.textMuted,
     fontFamily: Fonts.sansMedium,
-    fontSize: 12,
-    lineHeight: 15,
+    fontSize: 10,
+    lineHeight: 14,
   },
   statValue: {
     color: theme.colors.text,
     fontFamily: Fonts.sansBold,
-    fontSize: 18,
-    lineHeight: 23,
+    fontSize: 14,
+    lineHeight: 19,
+    textAlign: 'center',
   },
   statsGrid: {
     backgroundColor: theme.colors.surface,
     borderColor: 'rgba(31, 42, 36, 0.07)',
-    borderRadius: 20,
+    borderRadius: 10,
     borderWidth: 1,
     flexDirection: 'row',
-    overflow: 'hidden',
   },
-  trustPanel: {
+  statusCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  statusPanel: {
     alignItems: 'center',
     backgroundColor: theme.colors.surface,
     borderColor: 'rgba(31, 42, 36, 0.07)',
-    borderRadius: 20,
+    borderRadius: 10,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: theme.spacing.sm,
+    gap: theme.spacing.md,
+    minHeight: 58,
     padding: theme.spacing.md,
   },
-  trustText: {
+  statusText: {
     color: theme.colors.textMuted,
-    flex: 1,
     fontFamily: Fonts.sans,
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  statusTitle: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansBold,
+    fontSize: 14,
+    lineHeight: 19,
   },
 });

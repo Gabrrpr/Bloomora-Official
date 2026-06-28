@@ -27,7 +27,7 @@ export async function getNotifications({ session }: { session: AuthSession }) {
     token: session.accessToken,
   });
 
-  return notifications.map(mapBackendNotification);
+  return notifications.map(mapBackendNotification).filter(isCustomerVisibleNotification);
 }
 
 export async function getUnreadNotificationCount({ session }: { session: AuthSession }) {
@@ -69,4 +69,12 @@ function mapBackendNotification(notification: BackendNotification): MobileNotifi
     title: notification.title?.trim() || 'Notification',
     type: notification.type?.trim() || 'general',
   };
+}
+
+function isCustomerVisibleNotification(notification: MobileNotification) {
+  const normalized = `${notification.type} ${notification.title} ${notification.message}`.toLowerCase();
+  if (normalized.includes('new message from customer')) return false;
+  if (normalized.includes('from customer') || normalized.includes('customer said')) return false;
+  if (normalized.includes('customer:') || normalized.includes('customer replied')) return false;
+  return true;
 }

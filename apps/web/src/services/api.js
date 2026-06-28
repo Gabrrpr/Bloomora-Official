@@ -246,7 +246,7 @@ export const api = {
   },
 
   async updateAdminOrderStatus(orderId, status) {
-  return api.patch(`/orders/admin/${orderId}/force-status`, { status });
+    return api.patch(`/orders/${orderId}/force-status`, { status });
   },
 
   async getMyOrders(status) {

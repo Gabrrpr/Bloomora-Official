@@ -7,7 +7,13 @@ import estingsWordmark from "../../assets/Estings.svg"
 // 🚀 NEW: Import Fallback Image
 import ImageNotFound from "../../assets/default-img/ImageNotFound.webp"
 
-const ORDER_STATUSES = ["All", "Pending", "Preparing", "Out for Delivery", "Delivered", "Cancelled"]
+const ORDER_STATUSES = ["All", "Pending", "Confirmed", "Preparing", "Ready for Pickup", "Out for Delivery", "Delivered", "Cancelled"]
+const MANUAL_ORDER_STATUSES = [
+  { label: "Confirmed", value: "confirmed" },
+  { label: "Preparing", value: "preparing" },
+  { label: "Ready for Pickup", value: "ready_for_pickup" },
+  { label: "Cancelled", value: "cancelled" },
+]
 
 const SEARCH_SAMPLES = ["John Dela Cruz", "ORD-5FA237AC", "Maria Santos", "ORD-9C4E1B07"]
 const BRANCHES       = ["All Branches", "Manila", "Pampanga"]
@@ -17,7 +23,7 @@ const PRINT_STATUS_META = [
   { key: "Pending",         label: "Pending",         cls: "s-pending"   },
   { key: "Confirmed",       label: "Confirmed",       cls: "s-confirmed" },
   { key: "Preparing",       label: "Preparing",       cls: "s-preparing" },
-  { key: "Out For Delivery", label: "Out for Delivery", cls: "s-ofd"       },
+  { key: "Out for Delivery", label: "Out for Delivery", cls: "s-ofd"       },
   { key: "Delivered",       label: "Delivered",       cls: "s-delivered" },
   { key: "Cancelled",       label: "Cancelled",       cls: "s-cancelled" },
 ]
@@ -113,7 +119,16 @@ function PrintBtn({ onClick, isDark }) {
 
 function formatStatus(status) {
   if (!status) return "Pending"
-  return status.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
+  const normalized = String(status).toLowerCase()
+  if (normalized === "ready_for_pickup") return "Ready for Pickup"
+  if (normalized === "out_for_delivery") return "Out for Delivery"
+  if (normalized === "pending_payment") return "Pending Payment"
+  if (normalized === "payment_failed") return "Payment Failed"
+  return normalized.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
+}
+
+function statusToApi(status) {
+  return String(status).toLowerCase().replace(/ /g, "_")
 }
 
 export default function AdminOrders() {
@@ -247,7 +262,7 @@ export default function AdminOrders() {
   }, [search])
 
   const counts = {
-    "Out for Delivery": orders.filter(o => formatStatus(o.status) === "Out For Delivery").length,
+    "Out for Delivery": orders.filter(o => formatStatus(o.status) === "Out for Delivery").length,
     Pending:   orders.filter(o => formatStatus(o.status) === "Pending").length,
     Preparing: orders.filter(o => formatStatus(o.status) === "Preparing").length,
     Cancelled: orders.filter(o => formatStatus(o.status) === "Cancelled").length,
@@ -491,7 +506,7 @@ export default function AdminOrders() {
 
   const deliveredCount  = statusCounts["Delivered"] || 0
   const cancelledCount  = statusCounts["Cancelled"] || 0
-  const openOrders      = (statusCounts["Pending"] || 0) + (statusCounts["Confirmed"] || 0) + (statusCounts["Preparing"] || 0) + (statusCounts["Out For Delivery"] || 0)
+  const openOrders      = (statusCounts["Pending"] || 0) + (statusCounts["Confirmed"] || 0) + (statusCounts["Preparing"] || 0) + (statusCounts["Ready for Pickup"] || 0) + (statusCounts["Out for Delivery"] || 0)
   const filteredValue   = filtered.reduce((s, o) => s + (parseFloat(o.total_amount || 0) || 0), 0)
   const salesValue      = filtered.filter(o => formatStatus(o.status) !== "Cancelled")
     .reduce((s, o) => s + (parseFloat(o.total_amount || 0) || 0), 0)
@@ -1381,27 +1396,24 @@ export default function AdminOrders() {
                       <button className="px-3 py-1.5 text-xs font-semibold rounded-md border transition-all hover:shadow-sm active:scale-95"
                         style={{ backgroundColor: isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4", borderColor: isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0", color: isDark ? "#4ade80" : DG }}
                         onClick={() => openOrderDetail(o)}>View</button>
-                      <select value={formatStatus(o.status)}
+                      <select value={statusToApi(o.status)}
                         onChange={async e => {
-                          const nextKey = e.target.value.toLowerCase().replace(/ /g, "_");
+                          const nextKey = e.target.value;
                           try {
-                            const response = await fetch(`http://localhost:8000/api/v1/orders/${o.id}/force-status`, {
-                              method: 'PATCH',
-                              headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('access_token')}` },
-                              body: JSON.stringify({ status: nextKey })
-                            });
-                            if (!response.ok) throw new Error("Failed to update");
+                            await api.updateAdminOrderStatus(o.id, nextKey);
                             await fetchOrders(); 
                           } catch (err) {
                             console.error("Update error:", err);
-                            setError("Failed to update status");
+                            setError(err?.message || "Failed to update status");
                           }
                         }}
                         className="text-xs font-semibold border rounded-md px-2 py-1 outline-none"
                         style={{ borderColor: isDark ? "#374151" : "#e2e8f0", color: isDark ? "#e2e8f0" : "#0f172a", backgroundColor: isDark ? "#1e293b" : "white" }}>
-                        <option value={formatStatus(o.status)}>{formatStatus(o.status)}</option>
-                        {["Pending", "Preparing", "Out For Delivery", "Delivered", "Cancelled", "Confirmed"].map(s => (
-                          <option key={s} value={s}>{s}</option>
+                        {!MANUAL_ORDER_STATUSES.some(status => status.value === statusToApi(o.status)) && (
+                          <option value={statusToApi(o.status)}>{formatStatus(o.status)}</option>
+                        )}
+                        {MANUAL_ORDER_STATUSES.map(status => (
+                          <option key={status.value} value={status.value}>{status.label}</option>
                         ))}
                       </select>
                     </div>

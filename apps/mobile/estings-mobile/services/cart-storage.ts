@@ -9,6 +9,12 @@ import {
 } from '@/services/guest-cart';
 import { userCartApi } from '@/services/user-cart-api';
 
+type CartReadOptions = {
+  forceRefresh?: boolean;
+};
+
+let signedInCartCache: { items: CartItem[]; userId: string } | null = null;
+
 function isLocalOnlyItem(item: CartItem) {
   return (
     item.product.id.startsWith('ai-arr-') ||
@@ -16,10 +22,19 @@ function isLocalOnlyItem(item: CartItem) {
   );
 }
 
-export async function getCartItems() {
+export function clearCartItemsCache() {
+  signedInCartCache = null;
+}
+
+export async function getCartItems(options: CartReadOptions = {}) {
   const session = await getAuthSession();
   if (!session) {
     return getGuestCartItems();
+  }
+
+  const userId = session.user.id;
+  if (!options.forceRefresh && signedInCartCache?.userId === userId) {
+    return signedInCartCache.items;
   }
 
   const guestItems = await getGuestCartItems();
@@ -30,16 +45,22 @@ export async function getCartItems() {
       session,
     );
     await setGuestCartItems(localOnlyItems);
-    return [...syncedItems, ...localOnlyItems];
+    const items = [...syncedItems, ...localOnlyItems];
+    signedInCartCache = { items, userId };
+    return items;
   }
 
-  return userCartApi.get(session);
+  const items = await userCartApi.get(session);
+  signedInCartCache = { items, userId };
+  return items;
 }
 
 export async function addCartItem(product: Product, quantity = 1, cardMessage?: string) {
   const session = await getAuthSession();
   if (session) {
-    return userCartApi.add(product, quantity, session, cardMessage);
+    const items = await userCartApi.add(product, quantity, session, cardMessage);
+    signedInCartCache = { items, userId: session.user.id };
+    return items;
   }
   throw new Error('Please sign in to add items to your cart.');
 }
@@ -49,11 +70,15 @@ export async function updateCartItemQuantity(productId: string, quantity: number
   const guestItems = await getGuestCartItems();
   if (guestItems.some((item) => item.product.id === productId && isLocalOnlyItem(item))) {
     const localItems = await updateGuestCartItemQuantity(productId, quantity);
-    return session ? [...(await userCartApi.get(session)), ...localItems] : localItems;
+    if (!session) return localItems;
+    const items = [...(await userCartApi.get(session)), ...localItems];
+    signedInCartCache = { items, userId: session.user.id };
+    return items;
   }
-  return session
-    ? userCartApi.update(productId, quantity, session)
-    : updateGuestCartItemQuantity(productId, quantity);
+  if (!session) return updateGuestCartItemQuantity(productId, quantity);
+  const items = await userCartApi.update(productId, quantity, session);
+  signedInCartCache = { items, userId: session.user.id };
+  return items;
 }
 
 export async function removeCartItem(productId: string) {
@@ -61,11 +86,15 @@ export async function removeCartItem(productId: string) {
   const guestItems = await getGuestCartItems();
   if (guestItems.some((item) => item.product.id === productId && isLocalOnlyItem(item))) {
     const localItems = await removeGuestCartItem(productId);
-    return session ? [...(await userCartApi.get(session)), ...localItems] : localItems;
+    if (!session) return localItems;
+    const items = [...(await userCartApi.get(session)), ...localItems];
+    signedInCartCache = { items, userId: session.user.id };
+    return items;
   }
-  return session
-    ? userCartApi.remove(productId, session)
-    : removeGuestCartItem(productId);
+  if (!session) return removeGuestCartItem(productId);
+  const items = await userCartApi.remove(productId, session);
+  signedInCartCache = { items, userId: session.user.id };
+  return items;
 }
 
 export async function setCartItems(items: CartItem[]) {
@@ -86,5 +115,7 @@ export async function setCartItems(items: CartItem[]) {
   for (const item of databaseItems) {
     await userCartApi.update(item.product.id, item.quantity, session);
   }
-  return [...(await userCartApi.get(session)), ...localOnlyItems];
+  const nextItems = [...(await userCartApi.get(session)), ...localOnlyItems];
+  signedInCartCache = { items: nextItems, userId: session.user.id };
+  return nextItems;
 }

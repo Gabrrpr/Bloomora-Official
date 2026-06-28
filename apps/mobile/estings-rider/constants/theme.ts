@@ -1,5 +1,5 @@
 const palette = {
-  green: '#2E8B34',
+  green: '#308D36',
   greenDark: '#236B28',
   greenSoft: '#F0F8F1',
   ink: '#1F2A24',
@@ -85,7 +85,6 @@ export const Fonts = {
   sansMedium: 'Poppins_500Medium',
   sansSemiBold: 'Poppins_600SemiBold',
   sansBold: 'Poppins_700Bold',
-  sansExtraBold: 'Poppins_800ExtraBold',
   condensed: 'Poppins_400Regular',
   condensedLight: 'Poppins_400Regular',
   condensedMedium: 'Poppins_500Medium',

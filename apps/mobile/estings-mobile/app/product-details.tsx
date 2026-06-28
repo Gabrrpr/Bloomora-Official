@@ -6,6 +6,7 @@ import {
   Animated,
   FlatList,
   Image as RNImage,
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -16,12 +17,13 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import { ArrowLeft, Check, FileText, Heart, MessageCircle, Minus, Package, Plus, Share2, ShoppingBag, Star, User } from 'lucide-react-native';
+import { ArrowLeft, Check, FileText, Heart, MessageCircle, Minus, Package, Plus, Share2, ShoppingBag, Star, User, WandSparkles, X } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BulkQuotationSheet } from '@/components/bulk-quotation-sheet';
 import { EmptyState } from '@/components/bloom-ui';
+import { GreetingCardComposer } from '@/components/greeting-card-composer';
 import { ProductAddOnSelector } from '@/components/product-add-on-selector';
 import { ProductCareGuideSection } from '@/components/product-care-guide-section';
 import { ProductCard } from '@/components/product-card';
@@ -71,6 +73,7 @@ export default function ProductDetailsScreen() {
   const [showAddedToast, setShowAddedToast] = useState(false);
   const [isLoadingAddOns, setIsLoadingAddOns] = useState(false);
   const [showBulkQuotation, setShowBulkQuotation] = useState(false);
+  const [showCardWriter, setShowCardWriter] = useState(false);
   const [cardMessage, setCardMessage] = useState('');
 
   const loadProducts = useCallback(async () => {
@@ -608,22 +611,7 @@ export default function ProductDetailsScreen() {
                 <BulkOrderHint onGetQuote={handleOpenBulkQuotation} quantity={quantity} />
               ) : null}
 
-              <View style={styles.cardComposer}>
-                <View style={styles.cardComposerTitleRow}>
-                  <FileText color={theme.colors.primary} size={18} />
-                  <Text style={styles.cardComposerTitle}>Add a letter card</Text>
-                </View>
-                <TextInput
-                  maxLength={500}
-                  multiline
-                  onChangeText={setCardMessage}
-                  placeholder="Write a short message for the recipient (optional)"
-                  placeholderTextColor={theme.colors.textMuted}
-                  style={styles.cardComposerInput}
-                  value={cardMessage}
-                />
-                <Text style={styles.cardComposerCount}>{cardMessage.length}/500</Text>
-              </View>
+              <GreetingCardSection message={cardMessage} onChangeMessage={setCardMessage} onOpenAiWriter={() => setShowCardWriter(true)} />
 
               {/* Stock info */}
               {!isSoldOut ? (
@@ -688,6 +676,25 @@ export default function ProductDetailsScreen() {
         />
       ) : null}
 
+      <Modal animationType="slide" onRequestClose={() => setShowCardWriter(false)} transparent visible={showCardWriter}>
+        <Pressable onPress={() => setShowCardWriter(false)} style={styles.cardWriterOverlay}>
+          <Pressable style={[styles.cardWriterSheet, { paddingBottom: insets.bottom + 18 }]}>
+            <View style={styles.cardWriterHeader}>
+              <View style={styles.cardWriterTitleRow}>
+                <WandSparkles color={theme.colors.primary} size={19} />
+                <Text style={styles.cardWriterTitle}>AI Message Writer</Text>
+              </View>
+              <Pressable accessibilityLabel="Close AI Message Writer" onPress={() => setShowCardWriter(false)} style={styles.cardWriterClose}>
+                <X color={theme.colors.text} size={20} />
+              </Pressable>
+            </View>
+            <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              <GreetingCardComposer message={cardMessage} onChangeMessage={setCardMessage} />
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       {product ? (
         <ProductScrollHeader
           animatedStyle={{
@@ -719,6 +726,44 @@ export default function ProductDetailsScreen() {
           <Text style={styles.addedToastText}>Added to cart successfully.</Text>
         </Animated.View>
       ) : null}
+    </View>
+  );
+}
+
+function GreetingCardSection({
+  message,
+  onChangeMessage,
+  onOpenAiWriter,
+}: {
+  message: string;
+  onChangeMessage: (value: string) => void;
+  onOpenAiWriter: () => void;
+}) {
+  return (
+    <View style={styles.cardComposer}>
+      <View style={styles.cardComposerTitleRow}>
+        <FileText color={theme.colors.primary} size={18} />
+        <View style={styles.cardComposerTitleCopy}>
+          <Text style={styles.cardComposerTitle}>Greeting card (optional)</Text>
+          <Text style={styles.cardComposerSubtitle}>Write your own message or generate a thoughtful draft with AI.</Text>
+        </View>
+      </View>
+      <TextInput
+        maxLength={500}
+        multiline
+        onChangeText={onChangeMessage}
+        placeholder="Write a short message for the recipient"
+        placeholderTextColor={theme.colors.textMuted}
+        style={styles.cardComposerInput}
+        value={message}
+      />
+      <View style={styles.cardComposerFooter}>
+        <Text style={styles.cardComposerCount}>{message.length}/500</Text>
+        <Pressable accessibilityRole="button" onPress={onOpenAiWriter} style={({ pressed }) => [styles.aiWriterButton, pressed && styles.pressed]}>
+          <WandSparkles color={theme.colors.white} size={15} />
+          <Text style={styles.aiWriterButtonText}>AI Message Writer</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -1079,14 +1124,25 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   cardComposerTitleRow: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 7,
+  },
+  cardComposerTitleCopy: {
+    flex: 1,
+    gap: 2,
+    minWidth: 0,
   },
   cardComposerTitle: {
     color: theme.colors.text,
     fontFamily: Fonts.sansSemiBold,
     fontSize: 13,
+  },
+  cardComposerSubtitle: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 11,
+    lineHeight: 16,
   },
   cardComposerInput: {
     backgroundColor: theme.colors.white,
@@ -1104,7 +1160,63 @@ const styles = StyleSheet.create({
     color: theme.colors.textMuted,
     fontFamily: Fonts.sans,
     fontSize: 10,
-    textAlign: 'right',
+  },
+  cardComposerFooter: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+  },
+  aiWriterButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
+    flexDirection: 'row',
+    gap: 7,
+    minHeight: 38,
+    paddingHorizontal: 14,
+  },
+  aiWriterButtonText: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansBold,
+    fontSize: 12,
+  },
+  cardWriterOverlay: {
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    flex: 1,
+    justifyContent: 'flex-end',
+  },
+  cardWriterSheet: {
+    backgroundColor: theme.colors.white,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '82%',
+    paddingHorizontal: 16,
+    paddingTop: 14,
+  },
+  cardWriterHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 42,
+  },
+  cardWriterTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  cardWriterTitle: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansBold,
+    fontSize: 16,
+  },
+  cardWriterClose: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: theme.radius.pill,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
   },
   screen: {
     backgroundColor: theme.colors.white,

@@ -49,6 +49,15 @@ class DeliveryStatusEnum(str, enum.Enum):
     failed = "failed"
 
 
+class DeliveryOrderStatusEnum(str, enum.Enum):
+    draft = "draft"
+    assigned = "assigned"
+    picked_up = "picked_up"
+    in_progress = "in_progress"
+    completed = "completed"
+    cancelled = "cancelled"
+
+
 class Order(Base):
     __tablename__ = "orders"
 
@@ -125,6 +134,7 @@ class Delivery(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False, unique=True)
+    delivery_order_id = Column(UUID(as_uuid=True), ForeignKey("delivery_orders.id"), nullable=True)
     rider_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     assigned_area = Column(String(255), nullable=True)
     status = Column(Enum(DeliveryStatusEnum), default=DeliveryStatusEnum.assigned)
@@ -143,5 +153,26 @@ class Delivery(Base):
 
     # Relationships
     order = relationship("Order", back_populates="delivery")
+    delivery_order = relationship("DeliveryOrder", back_populates="deliveries")
     rider = relationship("User", back_populates="deliveries", foreign_keys=[rider_id])
     vehicle = relationship("Vehicle", foreign_keys=[vehicle_id])
+
+
+class DeliveryOrder(Base):
+    __tablename__ = "delivery_orders"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    delivery_order_number = Column(String(40), nullable=False, unique=True, index=True)
+    branch = Column(String(50), nullable=False, default="Pampanga")
+    rider_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    vehicle_id = Column(UUID(as_uuid=True), ForeignKey("vehicles.id"), nullable=True)
+    status = Column(Enum(DeliveryOrderStatusEnum), nullable=False, default=DeliveryOrderStatusEnum.assigned)
+    notes = Column(Text, nullable=True)
+    created_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now_utc)
+    updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+
+    deliveries = relationship("Delivery", back_populates="delivery_order")
+    rider = relationship("User", foreign_keys=[rider_id])
+    vehicle = relationship("Vehicle", foreign_keys=[vehicle_id])
+    created_by = relationship("User", foreign_keys=[created_by_id])

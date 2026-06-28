@@ -1,7 +1,11 @@
 import { useIsFocused } from '@react-navigation/native';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
+import * as WebBrowser from 'expo-web-browser';
 import { router, useFocusEffect } from 'expo-router';
 import {
-  Bell,
+  Camera,
+  CreditCard,
   ChevronRight,
   Heart,
   HelpCircle,
@@ -9,14 +13,15 @@ import {
   MapPin,
   MessageCircle,
   PackageCheck,
+  PackageSearch,
   Settings,
-  ShieldCheck,
   Sparkles,
+  Star,
   Truck,
   UserRound,
 } from 'lucide-react-native';
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   interpolate,
@@ -30,6 +35,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts, theme } from '@/constants/theme';
+import { uploadProfilePicture } from '@/services/auth-api';
 import { getAuthSession, type AuthSession } from '@/services/auth-session';
 
 type RowIcon = typeof UserRound;
@@ -37,18 +43,19 @@ type RowIcon = typeof UserRound;
 const outlineColor = 'rgba(31, 42, 36, 0.11)';
 const hairlineColor = 'rgba(31, 42, 36, 0.09)';
 
-const accountBenefits = [
-  { icon: PackageCheck, label: 'Track orders' },
-  { icon: MapPin, label: 'Save addresses' },
-  { icon: Heart, label: 'Keep favorites' },
-  { icon: Bell, label: 'Get updates' },
-];
+const orderShortcuts = [
+  { color: '#2E8B34', icon: PackageCheck, label: 'My Orders', tab: 'all' },
+  { color: '#EAB308', icon: CreditCard, label: 'To Pay', tab: 'to_pay' },
+  { color: '#0EA5E9', icon: PackageSearch, label: 'Processing', tab: 'processing' },
+  { color: '#F97316', icon: Truck, label: 'Shipped', tab: 'shipped' },
+] as const;
 
 export default function MeScreen() {
   const isFocused = useIsFocused();
   const insets = useSafeAreaInsets();
   const topPadding = insets.top + theme.spacing.lg;
   const [session, setSession] = useState<AuthSession | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const user = session?.user;
   const displayName = getDisplayName(user);
 
@@ -73,6 +80,38 @@ export default function MeScreen() {
       };
     }, []),
   );
+
+  const handleChangeProfilePicture = useCallback(async () => {
+    if (!session || isUploadingAvatar) {
+      return;
+    }
+
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert('Permission needed', 'Allow photo access to update your profile picture.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      allowsEditing: true,
+      aspect: [1, 1],
+      mediaTypes: ['images'],
+      quality: 0.82,
+    });
+
+    if (result.canceled || !result.assets[0]?.uri) {
+      return;
+    }
+
+    setIsUploadingAvatar(true);
+    try {
+      setSession(await uploadProfilePicture(result.assets[0].uri, session));
+    } catch (error) {
+      Alert.alert('Unable to update photo', error instanceof Error ? error.message : 'Please try another image.');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  }, [isUploadingAvatar, session]);
 
   return (
     <ScrollView
@@ -99,9 +138,26 @@ export default function MeScreen() {
 
       {user ? (
         <View style={styles.signInPanel}>
-          <View style={styles.signedInAvatar}>
-            <UserRound size={40} color={theme.colors.white} strokeWidth={2.2} />
-          </View>
+          <Pressable
+            accessibilityLabel="Change profile picture"
+            accessibilityRole="button"
+            onPress={handleChangeProfilePicture}
+            style={({ pressed }) => [styles.signedInAvatarButton, pressed && styles.pressed]}>
+            {user.profile_picture_url ? (
+              <Image contentFit="cover" source={{ uri: user.profile_picture_url }} style={styles.signedInAvatarImage} />
+            ) : (
+              <View style={styles.signedInAvatar}>
+                <UserRound size={40} color={theme.colors.white} strokeWidth={2.2} />
+              </View>
+            )}
+            <View style={styles.avatarEditBadge}>
+              {isUploadingAvatar ? (
+                <ActivityIndicator color={theme.colors.white} size="small" />
+              ) : (
+                <Camera color={theme.colors.white} size={16} strokeWidth={2.4} />
+              )}
+            </View>
+          </Pressable>
           <View style={styles.signInCopy}>
             <Text style={styles.signInTitle}>{displayName}</Text>
             <Text style={styles.signInText}>{user.email}</Text>
@@ -139,20 +195,23 @@ export default function MeScreen() {
         </View>
       )}
 
-      <View style={styles.benefitGrid}>
-        {accountBenefits.map((benefit) => (
-          <View key={benefit.label} style={styles.benefitCell}>
-            <View style={styles.benefitIcon}>
-              <benefit.icon size={20} color={theme.colors.primary} strokeWidth={2.1} />
-            </View>
-            <Text style={styles.benefitText}>{benefit.label}</Text>
-          </View>
+      <SectionHeader title="Orders" />
+      <View style={styles.shortcutGroup}>
+        {orderShortcuts.map((shortcut) => (
+          <Pressable
+            accessibilityRole="button"
+            key={shortcut.label}
+            onPress={() => router.push(`/(tabs)/orders?tab=${shortcut.tab}` as never)}
+            style={({ pressed }) => [styles.orderShortcut, pressed && styles.pressed]}>
+            <shortcut.icon size={34} color={shortcut.color} strokeWidth={1.8} />
+            <Text style={styles.orderShortcutText}>{shortcut.label}</Text>
+          </Pressable>
         ))}
       </View>
-
-      <SectionHeader title="Orders" />
       <View style={styles.menuGroup}>
-        <AccountRow icon={PackageCheck} title="My orders" detail="Payment, preparation, and delivery status" onPress={() => router.push('/(tabs)/orders')} />
+        <AccountRow icon={Star} title="My Rating" detail="To rate and my reviews" onPress={() => router.push('/my-rating' as never)} />
+        <Divider />
+        <AccountRow icon={Heart} title="Wishlist" detail="Saved bouquets and arrangements" onPress={() => router.push('/wishlist' as never)} />
         <Divider />
         <AccountRow icon={MapPin} title="Saved addresses" detail="Create, edit, and choose delivery addresses" onPress={() => router.push('/addresses')} />
       </View>
@@ -161,18 +220,10 @@ export default function MeScreen() {
       <View style={styles.menuGroup}>
         <AccountRow icon={MessageCircle} title="Live chat" detail="Ask about flowers or deliveries" onPress={() => router.push('/live-chat')} />
         <Divider />
-        <AccountRow icon={HelpCircle} title="Contact us" detail="Branches and support" onPress={() => router.push('/contact')} />
+        <AccountRow icon={HelpCircle} title="Help Center" detail="FAQs and policies" onPress={() => router.push('/help-center' as never)} />
         <Divider />
-        <AccountRow icon={Info} title={"About Esting's"} detail="Our story" onPress={() => router.push('/about')} />
+        <AccountRow icon={Info} title={"About Esting's"} detail="Our story" onPress={() => void openAboutWebsite()} />
       </View>
-
-      <SectionHeader title="Information" />
-      <View style={styles.menuGroup}>
-        <AccountRow icon={ShieldCheck} title="Terms and Conditions" onPress={() => router.push('/terms-and-condition')} />
-        <Divider />
-        <AccountRow icon={PackageCheck} title="Return Policy" onPress={() => router.push('/return-policy')} />
-      </View>
-
     </ScrollView>
   );
 }
@@ -283,6 +334,12 @@ function AccountRow({
 
 function Divider() {
   return <View style={styles.divider} />;
+}
+
+async function openAboutWebsite() {
+  await WebBrowser.openBrowserAsync('https://estings.shop/about', {
+    presentationStyle: WebBrowser.WebBrowserPresentationStyle.AUTOMATIC,
+  });
 }
 
 function getDisplayName(user: AuthSession['user'] | undefined) {
@@ -407,6 +464,35 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     width: 94,
   },
+  signedInAvatarButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    height: 104,
+    justifyContent: 'center',
+    position: 'relative',
+    width: 104,
+  },
+  signedInAvatarImage: {
+    backgroundColor: theme.colors.greenSoft,
+    borderColor: 'rgba(255, 255, 255, 0.86)',
+    borderRadius: theme.radius.pill,
+    borderWidth: 3,
+    height: 104,
+    width: 104,
+  },
+  avatarEditBadge: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primaryDark,
+    borderColor: theme.colors.surface,
+    borderRadius: theme.radius.pill,
+    borderWidth: 2,
+    bottom: 3,
+    height: 34,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 3,
+    width: 34,
+  },
   signInCopy: {
     alignItems: 'center',
     gap: theme.spacing.xs,
@@ -515,6 +601,30 @@ const styles = StyleSheet.create({
     borderColor: outlineColor,
     borderRadius: 20,
     borderWidth: 1,
+    overflow: 'hidden',
+  },
+  orderShortcut: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 7,
+    justifyContent: 'center',
+    minHeight: 96,
+    paddingHorizontal: 6,
+    paddingVertical: 12,
+  },
+  orderShortcutText: {
+    color: '#111111',
+    fontFamily: Fonts.sansMedium,
+    fontSize: 14,
+    lineHeight: 18,
+    textAlign: 'center',
+  },
+  shortcutGroup: {
+    backgroundColor: theme.colors.surface,
+    borderColor: outlineColor,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
     overflow: 'hidden',
   },
   accountRow: {

@@ -15,6 +15,7 @@ router = APIRouter(prefix="/reviews", tags=["Reviews"])
 
 def serialize_review(review: Review) -> dict:
     user = getattr(review, "user", None)
+    product = getattr(review, "product", None)
     customer_name = (
         f"{getattr(user, 'first_name', '') or ''} {getattr(user, 'last_name', '') or ''}".strip()
         or "Customer"
@@ -25,6 +26,8 @@ def serialize_review(review: Review) -> dict:
         "customer_name": customer_name,
         "user_name": customer_name,
         "product_id": str(review.product_id),
+        "product_name": getattr(product, "name", None),
+        "product_image_url": getattr(product, "image_url", None),
         "order_id": str(review.order_id),
         "star_rating": review.star_rating,
         "comment": review.comment,
@@ -79,7 +82,7 @@ async def _upload_review_image(image: UploadFile | None) -> str | None:
 def get_product_reviews(product_id: str, db: Session = Depends(get_db)):
     reviews = (
         db.query(Review)
-        .options(joinedload(Review.user))
+        .options(joinedload(Review.user), joinedload(Review.product))
         .filter(Review.product_id == product_id)
         .order_by(Review.created_at.desc())
         .all()
@@ -189,7 +192,7 @@ def get_my_reviews(
 ):
     reviews = (
         db.query(Review)
-        .options(joinedload(Review.user))
+        .options(joinedload(Review.user), joinedload(Review.product))
         .filter(Review.user_id == current_user.id)
         .order_by(Review.created_at.desc())
         .all()
@@ -199,7 +202,7 @@ def get_my_reviews(
 
 @router.get("/admin/all")
 def get_all_reviews(db: Session = Depends(get_db), _: User = Depends(require_staff)):
-    reviews = db.query(Review).options(joinedload(Review.user)).order_by(Review.created_at.desc()).all()
+    reviews = db.query(Review).options(joinedload(Review.user), joinedload(Review.product)).order_by(Review.created_at.desc()).all()
     return [serialize_review(review) for review in reviews]
 
 

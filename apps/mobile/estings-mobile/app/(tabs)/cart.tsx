@@ -105,7 +105,7 @@ export default function CartScreen() {
     setVoucherMessage('Voucher filled in from the feed. Tap Apply when you are ready.');
   }, [params.voucher]);
 
-  const loadCart = useCallback(async (showLoading = true) => {
+  const loadCart = useCallback(async (showLoading = true, forceRefresh = true) => {
     if (showLoading) {
       setIsLoading(true);
     }
@@ -113,7 +113,7 @@ export default function CartScreen() {
     try {
       const selectedBranch = await getStoreBranch();
       setBranch(selectedBranch);
-      const storedItems = await getCartItems();
+      const storedItems = await getCartItems({ forceRefresh });
 
       setCartItems(storedItems);
       setSelectedProductIds(new Set(storedItems.map((item) => item.product.id)));
@@ -132,7 +132,7 @@ export default function CartScreen() {
     } catch (error) {
       console.warn('Failed to load cart items.', error);
       try {
-        const fallbackItems = await getCartItems();
+        const fallbackItems = await getCartItems({ forceRefresh: false });
 
         setCartItems(fallbackItems);
         setSelectedProductIds(new Set(fallbackItems.map((item) => item.product.id)));
@@ -160,7 +160,7 @@ export default function CartScreen() {
 
     setIsRefreshing(true);
     try {
-      await loadCart(false);
+      await loadCart(false, true);
     } finally {
       setIsRefreshing(false);
     }
@@ -169,22 +169,39 @@ export default function CartScreen() {
   useFocusEffect(
     useCallback(() => {
       setHasRequestedRecommendations(true);
-      void loadCart();
+      void loadCart(true, true);
 
       return undefined;
     }, [loadCart]),
   );
 
-  const handleUpdateQuantity = useCallback(async (productId: string, quantity: number) => {
-    try {
-      setCartItems(await updateCartItemQuantity(productId, quantity));
-    } catch (error) {
-      Alert.alert(
-        'Unable to update quantity',
-        error instanceof Error ? error.message : 'Please try again.',
-      );
+  const handleUpdateQuantity = useCallback((productId: string, quantity: number) => {
+    const item = cartItems.find((cartItem) => cartItem.product.id === productId);
+    if (!item || isAiArrangementCartItem(item)) {
+      return;
     }
-  }, []);
+
+    const previousItems = cartItems;
+    const stockLimit = item.product.stock && item.product.stock > 0 ? item.product.stock : 99;
+    const nextQuantity = Math.min(Math.max(quantity, 1), stockLimit);
+    const optimisticItems = cartItems.map((cartItem) =>
+      cartItem.product.id === productId ? { ...cartItem, quantity: nextQuantity } : cartItem,
+    );
+
+    setCartItems(optimisticItems);
+
+    void updateCartItemQuantity(productId, nextQuantity)
+      .then((items) => {
+        setCartItems(items);
+      })
+      .catch((error) => {
+        setCartItems(previousItems);
+        Alert.alert(
+          'Unable to update quantity',
+          error instanceof Error ? error.message : 'Please try again.',
+        );
+      });
+  }, [cartItems]);
 
   const handleRemoveItem = useCallback(async (productId: string) => {
     setCartItems(await removeCartItem(productId));
@@ -666,7 +683,7 @@ const CartLineItem = memo(function CartLineItem({
   const lineTotal = item.product.priceCents * item.quantity;
   const removeProgress = useRef(new Animated.Value(0)).current;
   const [isRemoving, setIsRemoving] = useState(false);
-  const isAiArrangement = item.product.productType === 'Ai Arrangement';
+  const isAiArrangement = isAiArrangementCartItem(item);
   const addOnSummary = item.addOns?.map((addOn) => addOn.name).join(', ');
 
   const handleRemove = useCallback(() => {
@@ -687,8 +704,12 @@ const CartLineItem = memo(function CartLineItem({
     router.push(`/create/arrangement-details?cartItemId=${encodeURIComponent(item.id)}`);
   }, [item.id]);
   const handleNavigateToProduct = useCallback(() => {
+    if (isAiArrangement) {
+      router.push(`/create/arrangement-details?cartItemId=${encodeURIComponent(item.id)}`);
+      return;
+    }
     router.push(`/product-details?id=${encodeURIComponent(item.product.id)}`);
-  }, [item.product.id]);
+  }, [isAiArrangement, item.id, item.product.id]);
   const handleToggle = useCallback(() => {
     onToggleSelected(item.product.id);
   }, [item.product.id, onToggleSelected]);
@@ -767,23 +788,30 @@ const CartLineItem = memo(function CartLineItem({
             <Text numberOfLines={2} style={styles.cartItemMeta}>Greeting card: {item.cardMessage}</Text>
           ) : null}
           <View style={styles.cartItemActions}>
-            <View style={styles.quantityControl}>
-              <Pressable
-                accessibilityLabel={`Decrease ${item.product.name} quantity`}
-                disabled={isRemoving}
-                onPress={() => onUpdateQuantity(item.product.id, item.quantity - 1)}
-                style={styles.quantityButton}>
-                <Minus size={15} color={theme.colors.text} />
-              </Pressable>
-              <Text style={styles.quantityText}>{item.quantity}</Text>
-              <Pressable
-                accessibilityLabel={`Increase ${item.product.name} quantity`}
-                disabled={isRemoving}
-                onPress={() => onUpdateQuantity(item.product.id, item.quantity + 1)}
-                style={styles.quantityButton}>
-                <Plus size={15} color={theme.colors.text} />
-              </Pressable>
-            </View>
+            {isAiArrangement ? (
+              <View style={styles.aiQuantityPill}>
+                <Sparkles size={12} color={theme.colors.primary} strokeWidth={2.4} />
+                <Text style={styles.aiQuantityText}>Qty 1</Text>
+              </View>
+            ) : (
+              <View style={styles.quantityControl}>
+                <Pressable
+                  accessibilityLabel={`Decrease ${item.product.name} quantity`}
+                  disabled={isRemoving}
+                  onPress={() => onUpdateQuantity(item.product.id, item.quantity - 1)}
+                  style={styles.quantityButton}>
+                  <Minus size={15} color={theme.colors.text} />
+                </Pressable>
+                <Text style={styles.quantityText}>{item.quantity}</Text>
+                <Pressable
+                  accessibilityLabel={`Increase ${item.product.name} quantity`}
+                  disabled={isRemoving}
+                  onPress={() => onUpdateQuantity(item.product.id, item.quantity + 1)}
+                  style={styles.quantityButton}>
+                  <Plus size={15} color={theme.colors.text} />
+                </Pressable>
+              </View>
+            )}
             <Pressable
               accessibilityLabel={`Remove ${item.product.name}`}
               disabled={isRemoving}
@@ -1055,6 +1083,21 @@ function SummaryRow({ isTotal = false, label, value }: { isTotal?: boolean; labe
   );
 }
 
+function isAiArrangementCartItem(item: CartItem) {
+  const productType = item.product.productType?.toLowerCase();
+  const categoryName = item.product.categoryName?.toLowerCase();
+  const productGroup = item.product.productGroup?.toLowerCase();
+  return (
+    item.product.id.startsWith('ai-arr-') ||
+    productType === 'ai arrangement' ||
+    productType === 'custom arrangement' ||
+    categoryName === 'custom ai arrangement' ||
+    productGroup === 'custom ai arrangement' ||
+    item.product.categoryId === 'cat-ai-arrangement' ||
+    item.product.categoryId === 'cat-custom-ai-arrangement'
+  );
+}
+
 function hydrateCartItemsFromInventory(
   items: CartItem[],
   products: Product[],
@@ -1063,6 +1106,10 @@ function hydrateCartItemsFromInventory(
   const liveProductsById = new Map(products.map((product) => [product.id, product]));
 
   return items.flatMap((item) => {
+    if (isAiArrangementCartItem(item)) {
+      return [{ ...item, quantity: 1 }];
+    }
+
     const liveProduct = liveProductsById.get(item.product.id);
 
     if (!liveProduct || liveProduct.isActive === false) {
@@ -1456,6 +1503,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     minWidth: 18,
     textAlign: 'center',
+  },
+  aiQuantityPill: {
+    alignItems: 'center',
+    backgroundColor: '#EEF7EF',
+    borderRadius: theme.radius.pill,
+    flexDirection: 'row',
+    gap: 6,
+    minHeight: 34,
+    paddingHorizontal: 12,
+  },
+  aiQuantityText: {
+    color: theme.colors.primary,
+    fontFamily: Fonts.sansBold,
+    fontSize: 12,
   },
   removeButton: {
     alignItems: 'center',

@@ -62,11 +62,15 @@ export type CustomizationProduct = {
     style?: string | null;
   };
   category: string;
+  description?: string | null;
   id: string;
   image_url?: string | null;
   is_available?: boolean;
+  is_visible?: boolean | null;
   name: string;
   price: number;
+  product_group?: string | null;
+  product_type?: string | null;
   stock: number;
   stock_status?: 'in_stock' | 'low_stock' | 'out_of_stock' | string;
 };
