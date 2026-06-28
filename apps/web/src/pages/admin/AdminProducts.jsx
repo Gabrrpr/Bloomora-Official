@@ -525,6 +525,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
       fd.append("group", form.group.toLowerCase().trim());
       fd.append("category", form.category.toLowerCase().trim());
       fd.append("product_type", form.productType.toLowerCase().trim());
+      fd.append("is_visible", form.is_visible.toString());
       
       fd.append("price", String(form.price));
       fd.append("base_price", String(form.basePrice || 0));
@@ -1132,7 +1133,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     season_key: product.season_key || "",
     limited_start_at: product.limited_start_at || "", 
     limited_end_at: product.limited_end_at || "",
-    is_visible: [false, "false", 0, "0"].includes(product.is_visible) ? false : true,
+    is_visible: product.is_visible === false ? false : true,
     composition: product.composition || [],
     occasions: product.occasions || [],
     branches: product.branches || [],
@@ -1388,7 +1389,10 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
     return g === 'floral' || c.includes('flower') || c.includes('rose') || c.includes('bouquet');
   };
 
-  const availableMaterials = products.filter(p => isMaterialAvailableInSelectedBranches(p));
+  const availableMaterials = products.filter(p =>
+    isMaterialAvailableInSelectedBranches(p) && p.is_visible !== false
+  );
+
   const materialCategories = ["All", ...Array.from(new Set(availableMaterials.map(p => 
     p.category ? p.category.charAt(0).toUpperCase() + p.category.slice(1) : ""
   ).filter(Boolean)))];

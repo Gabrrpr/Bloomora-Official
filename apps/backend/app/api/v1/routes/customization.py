@@ -305,6 +305,20 @@ async def check_and_generate(
     # Update arrangement with final estimated price
     arrangement.estimated_price = price_breakdown.total_price
     arrangement.generated_image_url = generated_url
+    arrangement.price_breakdown = {
+        "items": [
+            {
+                "material_type": item.material_type,
+                "product_id": item.product_id,
+                "product_name": item.product_name,
+                "unit_price": item.unit_price,
+                "quantity": item.quantity,
+                "subtotal": item.subtotal,
+            }
+            for item in price_breakdown.items
+        ],
+        "total_price": price_breakdown.total_price,
+    }
     db.commit()
 
     # ── Step 9: Log the AI usage ──────────────────────────────────────────

@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Text, Numeric, Integer, Boolean, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, Numeric, Integer, Boolean, DateTime, ForeignKey, JSON
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.models.base import Base, now_utc
@@ -23,6 +23,7 @@ class Arrangement(Base):
     last_restock_date   = Column(DateTime(timezone=True), nullable=True)  # ← add (from ERD)
     created_at          = Column(DateTime(timezone=True), default=now_utc)
     updated_at          = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
+    price_breakdown = Column(JSON, nullable=True)
 
     # Relationships
     user        = relationship("User", back_populates="arrangements")  # ← add

@@ -319,9 +319,10 @@ function SidebarContent({
 
   const groupedHierarchy = { floral: {}, 'non-floral': {} };
   
+  const HIDDEN_CATS = ["add-on", "addon", "wrapping", "ribbon", "filler"];
   (products || []).forEach(p => {
     const catNorm = (p.category || "").toLowerCase().trim();
-    if (catNorm === 'add-on' || catNorm === 'addon') return;
+    if (HIDDEN_CATS.includes(catNorm)) return;
 
     const group = (p.product_group || 'floral').toLowerCase().trim();
     const cat = p.category || "Uncategorized";
@@ -897,7 +898,7 @@ export default function Shop({ onNavigate, initialCategory }) {
       return { ...p, stock: branchStock };
     })
     .filter(p => p.is_available === true && p.status !== "inactive")
-    .filter(p => normalizeCat(p.category) !== 'add-on' && normalizeCat(p.category) !== 'addon')
+    .filter(p => !["add-on", "addon", "wrapping", "ribbon", "filler"].includes(normalizeCat(p.category)))
     .filter(p => {
       const activeNorm = normalizeCat(activeCategory);
       const pcNorm = normalizeCat(p.category);

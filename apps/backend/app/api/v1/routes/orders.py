@@ -273,11 +273,37 @@ def _custom_arrangement_materials(arrangement: Optional[Arrangement]) -> list[di
     if not arrangement:
         return []
 
+    # ── Try price_breakdown first (AI-generated arrangements store materials here) ──
+    pb = getattr(arrangement, "price_breakdown", None)
+    if pb:
+        try:
+            import json
+            if isinstance(pb, str):
+                pb = json.loads(pb)
+            items = pb.get("items", []) if isinstance(pb, dict) else []
+            if items:
+                return [
+                    {
+                        "product_id": item.get("product_id"),
+                        "name": item.get("product_name") or item.get("name") or "Unknown",
+                        "quantity": float(item.get("quantity") or 1),
+                        "unit": "piece",
+                        "stock": 0,
+                        "material_type": item.get("material_type") or "Material",
+                        "unit_price": float(item.get("unit_price") or 0),
+                        "subtotal": float(item.get("subtotal") or 0),
+                    }
+                    for item in items
+                ]
+        except Exception:
+            pass
+
+    # ── Fallback: try linked relationship objects ──
     materials = []
     linked_parts = [
-        ("Flower", getattr(arrangement, "flower", None)),
-        ("Vase", getattr(arrangement, "vase", None)),
-        ("Wrapping", getattr(arrangement, "wrapping", None)),
+        ("Flower",    getattr(arrangement, "flower",    None)),
+        ("Vase",      getattr(arrangement, "vase",      None)),
+        ("Wrapping",  getattr(arrangement, "wrapping",  None)),
         ("Accessory", getattr(arrangement, "accessory", None)),
     ]
     for material_type, part in linked_parts:
@@ -356,6 +382,7 @@ def serialize_order(o) -> dict:
                     "unit_price": safe_float(unit_price),
                     "line_total": safe_float(unit_price * qty),
                     "materials": _custom_arrangement_materials(arrangement) if arrangement else _product_materials(db, product),
+                    "price_breakdown": getattr(arrangement, "price_breakdown", None) if arrangement else None,  # ← ADD
                     "arrangement_prompt": getattr(arrangement, "prompt_text", None) if arrangement else None,
                     "arrangement_description": getattr(arrangement, "description", None) if arrangement else None,
                     "card_message": getattr(item, "card_message", None),

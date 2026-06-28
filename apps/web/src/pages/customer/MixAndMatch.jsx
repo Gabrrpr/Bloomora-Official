@@ -314,7 +314,7 @@ export default function MixAndMatch({ onNavigate }) {
         
         // 🚀 FIX: Safely extract products so we don't accidentally wipe the array
         const allProds = Array.isArray(prodRes) ? prodRes : (prodRes.products || prodRes.data || []);
-        setProducts(allProds)
+        setProducts(allProds.filter(p => p.is_visible !== false))
         setAiUsage(usageRes)
       } catch (e) {
         console.error("Failed to load products", e)

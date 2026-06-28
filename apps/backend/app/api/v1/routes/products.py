@@ -197,19 +197,20 @@ def search_products(q: str = "", db: Session = Depends(get_db)):
         db.query(Product)
         .options(joinedload(Product.inventory))
         .filter(
-            or_(
-                func.lower(Product.name).ilike(search_term),
-                func.lower(Product.category).ilike(search_term),
-                and_(
-                    Product.description.isnot(None),
-                    func.lower(Product.description).ilike(search_term),
-                ),
-                Product.tags.cast(String).ilike(search_term),
-                Product.composition.cast(String).ilike(search_term),
+            and_(
+                Product.is_visible == True,
+                Product.status == ProductStatusEnum.active,
+                or_(
+                    func.lower(Product.name).ilike(search_term),
+                    func.lower(Product.category).ilike(search_term),
+                    and_(
+                        Product.description.isnot(None),
+                        func.lower(Product.description).ilike(search_term),
+                    ),
+                    Product.tags.cast(String).ilike(search_term),
+                )
             )
         )
-        .filter(Product.is_visible == True)
-        .filter(Product.status == ProductStatusEnum.active)
         .all()
     )
 
@@ -291,13 +292,13 @@ def get_customization_products(db: Session = Depends(get_db)):
 
 @router.get("/categories/hierarchy", response_model=List[dict])
 def get_category_hierarchy(db: Session = Depends(get_db)):
-    products = db.query(Product).filter(Product.status != ProductStatusEnum.inactive).all()
+    products = db.query(Product).filter(Product.status != ProductStatusEnum.inactive, Product.is_visible == True).all()
     hierarchy_dict = {}
     NON_FLORAL_CATS = ["wrapping", "accessory", "vase", "tools", "pot", "pot fillers", "candles"]
 
     for p in products:
         cat = (p.category or "").lower().strip()
-        if cat in ["add-on", "addon"]:
+        if cat in ["add-on", "addon", "wrapping", "ribbon", "filler"]:
             continue
 
         group = (p.product_group or "").lower().strip()
@@ -973,7 +974,8 @@ def get_product(product_id: str, db: Session = Depends(get_db)):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid product ID format")
 
-    product = db.query(Product).filter(Product.id == prod_uuid).first()
+    product = db.query(Product).filter(Product.id == prod_uuid, Product.is_visible == True).first()
+
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 

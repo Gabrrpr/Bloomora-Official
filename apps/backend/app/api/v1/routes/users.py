@@ -1,7 +1,7 @@
 import os
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import or_, func, text
+from sqlalchemy import or_, func
 from typing import List, Optional
 from datetime import datetime, timezone, timedelta
 import uuid, secrets, io, time
@@ -9,9 +9,8 @@ from PIL import Image
 
 from app.api.v1.routes.auth import hash_password, generate_username 
 from app.core.dependencies import get_db, get_current_user, require_staff
-from app.core.security import verify_password
 from app.core.supabase import supabase
-from app.models import User, RoleEnum, BranchEnum, ActivityLog, WishListItem, Product, CartItem, Order, OrderItem, Review, Chat, AIUsageLog, Arrangement, Notification
+from app.models import User, RoleEnum, BranchEnum, ActivityLog, WishlistItem
 from pydantic import BaseModel, EmailStr
 from app.services.email_service import send_otp_email, send_staff_confirm_email
 from app.utils.logger import log_activity
@@ -55,7 +54,6 @@ def serialize_user(u: User) -> dict:
         "must_change_password": getattr(u, 'must_change_password', False),
         
         "profile_picture_url": getattr(u, 'profile_picture_url', None),
-        "preferred_currency": getattr(u, 'preferred_currency', "PHP"),
         
         "created_at": u.created_at.isoformat() if getattr(u, 'created_at', None) else None,
         "updated_at": u.updated_at.isoformat() if getattr(u, 'updated_at', None) else None,
@@ -84,16 +82,13 @@ class UserUpdateRequest(BaseModel):
     first_name: Optional[str] = None
     middle_name: Optional[str] = None
     last_name: Optional[str] = None
-    email: Optional[str] = None
+    role: Optional[str] = None
+    branch: Optional[str] = None
     phone_number: Optional[str] = None
-    username: Optional[str] = None
     address: Optional[str] = None
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None
-    role: Optional[str] = None
-    branch: Optional[str] = None
     must_change_password: Optional[bool] = None
-    preferred_currency: Optional[str] = None
     
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -282,45 +277,24 @@ def activate_staff_account(payload: StaffActivateRequest, db: Session = Depends(
 
 @router.get("/activity-logs")
 def get_activity_logs(db: Session = Depends(get_db)):
-    try:
-        rows = db.execute(
-            text("""
-                SELECT
-                    al.id,
-                    al.user_id,
-                    COALESCE((
-                        SELECT TRIM(
-                            COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')
-                        )
-                        FROM users u
-                        WHERE u.id = al.user_id
-                    ), al.role) AS staff_name,
-                    al.role,
-                    al.action,
-                    (SELECT u.branch FROM users u WHERE u.id = al.user_id) AS branch,
-                    al.action AS details,
-                    al.created_at
-                FROM activity_logs al
-                ORDER BY al.created_at DESC
-                LIMIT 200
-            """)
-        ).fetchall()
-
-        return [
-            {
-                "id": str(r.id),
-                "user_id": str(r.user_id) if r.user_id else None,
-                "staff_name": r.staff_name or "System",
-                "role": r.role,
-                "action": r.action,
-                "branch": r.branch,
-                "details": r.details or r.action,
-                "created_at": r.created_at.isoformat() if r.created_at else None,
-            }
-            for r in rows
-        ]
-    except Exception:
-        raise
+    logs = (
+        db.query(ActivityLog)
+        .options(joinedload(ActivityLog.user))
+        .order_by(ActivityLog.created_at.desc())
+        .all()
+    )
+    
+    return [
+        {
+            "id": str(log.id),
+            "user_id": str(log.user_id) if log.user_id else None,
+            "role": log.role,
+            "action": log.action,
+            "branch": getattr(log.user.branch, "value", log.user.branch) if log.user and log.user.branch else None,
+            "created_at": log.created_at.isoformat() if log.created_at else None
+        }
+        for log in logs
+    ]
 
 @router.get("/{user_id}", response_model=dict)
 def get_user(
@@ -459,7 +433,6 @@ def update_user(
     if payload.is_active is not None: user.is_active = payload.is_active
     if payload.is_verified is not None: user.is_verified = payload.is_verified
     if payload.must_change_password is not None: user.must_change_password = payload.must_change_password
-    if payload.preferred_currency is not None: user.preferred_currency = payload.preferred_currency
     if payload.role is not None:
         try: user.role = RoleEnum(payload.role.lower())
         except ValueError: raise HTTPException(status_code=400, detail=f"Invalid role: {payload.role}")
@@ -475,24 +448,13 @@ def update_user(
 
     return {"status": "success", "message": "User updated successfully.", "user": serialize_user(user)}
 
-class DeleteAccountRequest(BaseModel):
-    password: str = ""
-    confirm_name: str = ""
-
 @router.delete("/me", response_model=dict)
 def delete_my_account(
-    payload: DeleteAccountRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    full_name = f"{current_user.first_name} {current_user.last_name}".strip()
-    if not payload.password or not verify_password(payload.password, current_user.password_hash):
-        raise HTTPException(status_code=403, detail="Incorrect password.")
-    if payload.confirm_name and payload.confirm_name.strip() != full_name:
-        raise HTTPException(status_code=400, detail="Full name confirmation does not match your account name.")
-
     try:
-        # 1. Attempt to delete avatar from Supabase to free up space
+        # 1. Delete avatar from Supabase storage
         if current_user.profile_picture_url:
             try:
                 files = supabase.storage.from_("avatars").list(str(current_user.id))
@@ -502,20 +464,21 @@ def delete_my_account(
             except Exception:
                 pass
 
-        # 2. Delete all user-related data before removing the account
-        db.query(Chat).filter(Chat.user_id == current_user.id).delete(synchronize_session=False)
-        db.query(Review).filter(Review.user_id == current_user.id).delete(synchronize_session=False)
-        db.query(AIUsageLog).filter(AIUsageLog.user_id == current_user.id).delete(synchronize_session=False)
-        db.query(ActivityLog).filter(ActivityLog.user_id == current_user.id).delete(synchronize_session=False)
+        # 2. Anonymize personal data instead of hard deleting
+        current_user.email = f"deleted_{current_user.id}@deleted.local"
+        current_user.first_name = "Deleted"
+        current_user.last_name = "User"
+        current_user.middle_name = None
+        current_user.phone_number = None
+        current_user.address = None
+        current_user.profile_picture_url = None
+        current_user.username = f"deleted_{current_user.id}"
+        current_user.password_hash = ""
+        current_user.is_active = False
+        current_user.is_deleted = True
+        current_user.deleted_at = datetime.now(timezone.utc)
+        current_user.wishlist = []
 
-        # 3. Delete user's arrangements (they may have related order_items, but orders will be deleted next)
-        db.query(Arrangement).filter(Arrangement.user_id == current_user.id).delete(synchronize_session=False)
-
-        # 4. Delete all user orders — this cascades to OrderItems and StockReservations
-        db.query(Order).filter(Order.user_id == current_user.id).delete(synchronize_session=False)
-
-        # 5. Finally delete the user — Address, WishlistItem, Notification, CartItem cascade automatically
-        db.delete(current_user)
         db.commit()
         return {"status": "success", "message": "Account deleted permanently."}
     except Exception as e:
@@ -525,13 +488,35 @@ def delete_my_account(
 
 @router.get("/me/wishlist", response_model=List[dict])
 def get_wishlist(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    products = (
-        db.query(Product)
-        .join(WishListItem, WishListItem.product_id == Product.id)
-        .filter(WishListItem.user_id == current_user.id)
-        .all()
-    )
+    wishlist_data = getattr(current_user, "wishlist", [])
+    
+    # Safety check: if the database returned it as a string, parse it into a list
+    if isinstance(wishlist_data, str):
+        try:
+            import json
+            wishlist_data = json.loads(wishlist_data)
+        except:
+            wishlist_data = []
 
+    if not wishlist_data or not isinstance(wishlist_data, list):
+        return []
+    
+    # 🚀 THE FIX: Convert the text strings back into proper UUID objects
+    import uuid
+    valid_uuids = []
+    for w_id in wishlist_data:
+        try:
+            valid_uuids.append(uuid.UUID(w_id))
+        except:
+            pass
+
+    if not valid_uuids:
+        return []
+
+    # Fetch the actual product data using the properly formatted UUIDs
+    products = db.query(Product).filter(Product.id.in_(valid_uuids), Product.is_visible == True).all()
+
+    
     result = []
     for p in products:
         result.append({
@@ -543,44 +528,37 @@ def get_wishlist(db: Session = Depends(get_db), current_user: User = Depends(get
         })
     return result
 
+
 @router.post("/me/wishlist/{product_id}", response_model=dict)
 def toggle_wishlist(
-    product_id: str,
-    db: Session = Depends(get_db),
+    product_id: str, 
+    db: Session = Depends(get_db), 
     current_user: User = Depends(get_current_user)
 ):
+    print(f"DEBUG: Current User ID: {current_user.id}")
+    print(f"DEBUG: Current Wishlist: {getattr(current_user, 'wishlist', 'Not Found')}")
+
     try:
-        prod_uuid = uuid.UUID(product_id)
+        # Normalize product_id
+        prod_uuid = str(uuid.UUID(product_id))
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid product ID")
 
-    product_exists = db.query(Product.id).filter(Product.id == prod_uuid).first()
-    if not product_exists:
-        raise HTTPException(status_code=404, detail="Product not found")
-
-    existing = (
-        db.query(WishListItem)
-        .filter(
-            WishListItem.user_id == current_user.id,
-            WishListItem.product_id == prod_uuid,
-        )
-        .first()
-    )
-
-    if existing:
-        db.delete(existing)
+    current_wishlist = list(getattr(current_user, "wishlist", []) or [])
+    
+    if prod_uuid in current_wishlist:
+        current_wishlist.remove(prod_uuid)
         action = "removed"
     else:
-        db.add(WishListItem(user_id=current_user.id, product_id=prod_uuid))
+        current_wishlist.append(prod_uuid)
         action = "added"
-
+        
+    current_user.wishlist = current_wishlist
+    
+    from sqlalchemy.orm.attributes import flag_modified
+    flag_modified(current_user, "wishlist")
+    
     db.commit()
-
-    current_wishlist = [
-        str(row.product_id)
-        for row in db.query(WishListItem.product_id)
-        .filter(WishListItem.user_id == current_user.id)
-        .all()
-    ]
-
+    print(f"DEBUG: Successfully {action} product {prod_uuid}")
+    
     return {"status": "success", "action": action, "wishlist": current_wishlist}
