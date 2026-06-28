@@ -102,6 +102,7 @@ def serialize_product(p: Product) -> dict:
         "labor_cost": getattr(p, "labor_cost", 0), 
         "markup_percentage": markup_percentage,
         "season_key": getattr(p, "season_key", None),
+        "is_customization_material": getattr(p, "is_customization_material", False),
         "limited_start_at": getattr(p, "limited_start_at", None),
         "limited_end_at": getattr(p, "limited_end_at", None),
     }
@@ -223,7 +224,8 @@ def get_customization_products(db: Session = Depends(get_db)):
         db.query(Product)
         # 🚀 THE FIX: We removed `Product.is_available == True` and `Product.is_visible == True`.
         # Now we only check if the product hasn't been completely deleted/archived.
-        .filter(Product.status == ProductStatusEnum.active)
+        .filter(Product.status == ProductStatusEnum.active,
+                Product.is_visible == True,)
         .options(
             joinedload(Product.inventory),
             joinedload(Product.flower),
@@ -259,6 +261,7 @@ def get_customization_products(db: Session = Depends(get_db)):
             "is_available": effective_is_available(p, inv),
             "stock": stock,
             "stock_status": stock_status,
+            "is_customization_material": getattr(p, "is_customization_material", False),
         }
 
         if p.flower:

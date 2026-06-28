@@ -51,6 +51,7 @@ class Product(Base):
     discounts = relationship("Discount", back_populates="product")
     campaigns = relationship("Campaign", secondary="product_campaigns", back_populates="products")
     order_items = relationship("OrderItem", back_populates="product")
+    is_customization_material = Column(Boolean, default=False, nullable=False)
     
     # 🚀 FIX APPLIED HERE: Added overlaps
     components = relationship("ProductRecipe", foreign_keys="[ProductRecipe.parent_product_id]", cascade="all, delete-orphan", overlaps="recipe_items,parent_product")
