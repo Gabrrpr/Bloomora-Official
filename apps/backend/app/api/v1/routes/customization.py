@@ -35,9 +35,12 @@ def calculate_price_breakdown(
     vase: Optional[Vase],
     wrapping: Optional[Wrapping],
     accessory: Optional[Accessory],
+    wrapping_product: Optional[Product] = None,
+    accessory_product: Optional[Product] = None,
 ) -> PriceBreakdown:
     """
     Builds an itemized price breakdown from the explicitly selected materials.
+    Falls back to Product records when Wrapping/Accessory sub-table rows are missing.
     """
     items: List[PriceBreakdownItem] = []
 
@@ -73,6 +76,16 @@ def calculate_price_breakdown(
             quantity=wrapping.quantity,
             subtotal=subtotal,
         ))
+    elif wrapping_product:
+        subtotal = float(wrapping_product.price)
+        items.append(PriceBreakdownItem(
+            material_type="Wrapping",
+            product_id=str(wrapping_product.id),
+            product_name=wrapping_product.name,
+            unit_price=float(wrapping_product.price),
+            quantity=1,
+            subtotal=subtotal,
+        ))
 
     if accessory:
         subtotal = float(accessory.unit_price) * accessory.quantity
@@ -82,6 +95,16 @@ def calculate_price_breakdown(
             product_name=accessory.name if accessory.name else "Accessory",
             unit_price=float(accessory.unit_price),
             quantity=accessory.quantity,
+            subtotal=subtotal,
+        ))
+    elif accessory_product:
+        subtotal = float(accessory_product.price)
+        items.append(PriceBreakdownItem(
+            material_type="Accessory",
+            product_id=str(accessory_product.id),
+            product_name=accessory_product.name,
+            unit_price=float(accessory_product.price),
+            quantity=1,
             subtotal=subtotal,
         ))
 
@@ -176,10 +199,23 @@ async def check_and_generate(
         )
 
     # ── Step 5: Look up material records using product IDs ────────────────
+    wrapping_product = None
+    accessory_product = None
+    wrapping = None
+    accessory = None
+
+    if payload.wrapping_id:
+        wrapping = db.query(Wrapping).filter(Wrapping.product_id == payload.wrapping_id).first()
+        if not wrapping:
+            wrapping_product = db.query(Product).filter(Product.id == payload.wrapping_id).first()
+
+    if payload.accessory_id:
+        accessory = db.query(Accessory).filter(Accessory.product_id == payload.accessory_id).first()
+        if not accessory:
+            accessory_product = db.query(Product).filter(Product.id == payload.accessory_id).first()
+
     flower    = db.query(Flower).filter(Flower.product_id == payload.flower_id).first() if payload.flower_id else None
     vase      = db.query(Vase).filter(Vase.product_id == payload.vase_id).first() if payload.vase_id else None
-    wrapping  = db.query(Wrapping).filter(Wrapping.product_id == payload.wrapping_id).first() if payload.wrapping_id else None
-    accessory = db.query(Accessory).filter(Accessory.product_id == payload.accessory_id).first() if payload.accessory_id else None
 
     # ── Step 6: Save arrangement ──────────────────────────────────────────
     arrangement = Arrangement(
@@ -218,7 +254,11 @@ async def check_and_generate(
 
     # ── Step 8: Calculate price breakdown (Merged!) ───────────────────────
     # 8a. Calculate the base items the user selected via dropdowns
-    price_breakdown = calculate_price_breakdown(flower, vase, wrapping, accessory)
+    price_breakdown = calculate_price_breakdown(
+        flower, vase, wrapping, accessory,
+        wrapping_product=wrapping_product,
+        accessory_product=accessory_product,
+    )
     
     # 8b. Add items that Gemini intelligently extracted from their text prompt
     used_item_objects = ai_verdict.get("used_items", []) # Now a list of dicts: [{'name': '...', 'quantity': int}]

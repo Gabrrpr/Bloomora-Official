@@ -271,6 +271,7 @@ export const api = {
   },
 
   async getCustomizationProducts() {
+    // api.get automatically adds API_BASE and the correct /api/v1 prefix
     return api.get('/products/customization/all');
   },
 

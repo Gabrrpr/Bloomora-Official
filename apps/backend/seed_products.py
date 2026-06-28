@@ -13,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from sqlalchemy.orm import Session
 from app.core.database import engine, SessionLocal
 from app.models.product import Product, Inventory, ProductStatusEnum
-from app.models.arrangement import Vase
+from app.models.arrangement import Vase, Wrapping, Accessory, Flower
 
 
 # ── VASES DATA (from VasesPage.jsx) ───────────────────────────────────────────────
@@ -56,9 +56,43 @@ ADDONS = [
     {"name": "Twix", "price": 149, "original": 195, "rating": 4.7, "reviews": 48, "ribbon": None, "brand": "Mars", "weight": "50g", "image": "twix.webp"},
 ]
 
+# ── WRAPPING DATA ──────────────────────────────────────────────────────────────
+WRAPPINGS = [
+    {"name": "Classic White Wrapping Paper", "price": 80, "style": "Classic", "color": "White", "image": "wrapping_white.webp"},
+    {"name": "Kraft Brown Wrapping Paper", "price": 70, "style": "Rustic", "color": "Brown", "image": "wrapping_brown.webp"},
+    {"name": "Pink Matte Wrapping Paper", "price": 90, "style": "Matte", "color": "Pink", "image": "wrapping_pink.webp"},
+    {"name": "Black Elegant Wrapping Paper", "price": 100, "style": "Elegant", "color": "Black", "image": "wrapping_black.webp"},
+    {"name": "Gold Foil Wrapping Paper", "price": 120, "style": "Foil", "color": "Gold", "image": "wrapping_gold.webp"},
+]
+
+FLOWERS = [
+    {"name": "Red Roses", "price": 120, "color": "Red", "style": "Premium", "image": "RedRoses.webp"},
+    {"name": "White Roses", "price": 130, "color": "White", "style": "Premium", "image": "WhiteRoses.webp"},
+    {"name": "Pink Roses", "price": 120, "color": "Pink", "style": "Premium", "image": "PinkRoses.webp"},
+    {"name": "Yellow Roses", "price": 110, "color": "Yellow", "style": "Premium", "image": "YellowRoses.webp"},
+    {"name": "Red Tulips", "price": 100, "color": "Red", "style": "Deluxe", "image": "RedTulips.webp"},
+    {"name": "Pink Tulips", "price": 100, "color": "Pink", "style": "Deluxe", "image": "PinkTulips.webp"},
+    {"name": "Yellow Tulips", "price": 95, "color": "Yellow", "style": "Deluxe", "image": "YellowTulips.webp"},
+    {"name": "Sunflowers", "price": 90, "color": "Yellow", "style": "Classic", "image": "Sunflowers.webp"},
+    {"name": "Pink Carnations", "price": 80, "color": "Pink", "style": "Classic", "image": "PinkCarnations.webp"},
+    {"name": "White Carnations", "price": 75, "color": "White", "style": "Classic", "image": "WhiteCarnations.webp"},
+    {"name": "White Lilies", "price": 150, "color": "White", "style": "Premium", "image": "WhiteLilies.webp"},
+    {"name": "Pink Peonies", "price": 180, "color": "Pink", "style": "Luxury", "image": "PinkPeonies.webp"},
+    {"name": "White Orchids", "price": 200, "color": "White", "style": "Luxury", "image": "WhiteOrchids.webp"},
+    {"name": "Baby's Breath", "price": 60, "color": "White", "style": "Filler", "image": "BabysBreath.webp"},
+    {"name": "Green Leaves", "price": 40, "color": "Green", "style": "Foliage", "image": "GreenLeaves.webp"},
+]
+
+FILLERS = [
+    {"name": "Baby's Breath", "price": 60, "color": "White", "style": "Filler", "image": "BabysBreath.webp"},
+    {"name": "Green Leaves", "price": 40, "color": "Green", "style": "Foliage", "image": "GreenLeaves.webp"},
+    {"name": "Eucalyptus", "price": 70, "color": "Green", "style": "Filler", "image": "Eucalyptus.webp"},
+    {"name": "Dried Grass", "price": 50, "color": "Tan", "style": "Filler", "image": "DriedGrass.webp"},
+]
+
 
 def seed_products():
-    """Seed vases and add-ons to the database."""
+    """Seed vases, add-ons, wrapping materials, and their sub-table records."""
     db = SessionLocal()
 
     try:
@@ -179,9 +213,153 @@ def seed_products():
         else:
             print("All add-ons already exist in database")
 
+        # Ensure Accessory records exist for all accessory products
+        existing_accessory_product_ids = {a.product_id for a in db.query(Accessory).all()}
+        accessories_needing_records = db.query(Product).filter(
+            Product.category == "accessory",
+            Product.id.notin_(existing_accessory_product_ids)
+        ).all()
+
+        if accessories_needing_records:
+            print(f"Creating Accessory records for {len(accessories_needing_records)} accessory products...")
+            for product in accessories_needing_records:
+                accessory = Accessory(
+                    product_id=product.id,
+                    name=product.name,
+                    style=None,
+                    color=None,
+                    size=None,
+                    quantity=1,
+                    unit_price=product.price,
+                )
+                db.add(accessory)
+            db.commit()
+            print(f"Created Accessory records for {len(accessories_needing_records)} products")
+
+        # Seed wrapping products
+        existing_wrapping_names = {p.name for p in db.query(Product).filter(Product.category == "wrapping").all()}
+        wrappings_to_add = [w for w in WRAPPINGS if w["name"] not in existing_wrapping_names]
+        if wrappings_to_add:
+            print(f"Seeding {len(wrappings_to_add)} new wrapping products...")
+            for wrap_data in wrappings_to_add:
+                product = Product(
+                    id=uuid.uuid4(),
+                    name=wrap_data["name"],
+                    description=f"{wrap_data['style']} {wrap_data['color']} wrapping paper - {wrap_data['name']}",
+                    price=Decimal(str(wrap_data["price"])),
+                    category="wrapping",
+                    image_url=f"/assets/products/wrapping/{wrap_data['image']}",
+                    is_available=True,
+                    status=ProductStatusEnum.active,
+                )
+                db.add(product)
+                db.flush()
+
+                inventory = Inventory(
+                    product_id=product.id,
+                    current_stock=100,
+                    reorder_point=20,
+                    unit_type="pieces",
+                )
+                db.add(inventory)
+
+                wrapping = Wrapping(
+                    product_id=product.id,
+                    style=wrap_data["style"],
+                    color=wrap_data["color"],
+                    material="Paper",
+                    size="Standard",
+                    quantity=1,
+                    unit_price=Decimal(str(wrap_data["price"])),
+                )
+                db.add(wrapping)
+
+            db.commit()
+            print(f"Added {len(wrappings_to_add)} wrapping products to database")
+        else:
+            print("All wrapping products already exist in database")
+
         # Summary
         total = db.query(Product).count()
         print(f"Total products in database: {total}")
+
+        # Seed flower products
+        existing_flower_names = {p.name for p in db.query(Product).filter(Product.category == "flower").all()}
+        flowers_to_add = [f for f in FLOWERS if f["name"] not in existing_flower_names]
+        if flowers_to_add:
+            print(f"Seeding {len(flowers_to_add)} new flowers...")
+            for flower_data in flowers_to_add:
+                product = Product(
+                    id=uuid.uuid4(),
+                    name=flower_data["name"],
+                    description=f"Beautiful {flower_data['color']} {flower_data['style']} flowers - {flower_data['name']}",
+                    price=Decimal(str(flower_data["price"])),
+                    category="flower",
+                    product_type="flower",
+                    product_group="floral",
+                    image_url=f"/assets/products/flowers/{flower_data['image']}",
+                    is_available=True,
+                    status=ProductStatusEnum.active,
+                )
+                db.add(product)
+                db.flush()
+
+                inventory = Inventory(
+                    product_id=product.id,
+                    current_stock=50,
+                    reorder_point=10,
+                    unit_type="stems",
+                )
+                db.add(inventory)
+
+                flower = Flower(
+                    product_id=product.id,
+                    color=flower_data["color"],
+                    style=flower_data["style"],
+                    size="Standard",
+                    quantity=1,
+                    unit_price=Decimal(str(flower_data["price"])),
+                )
+                db.add(flower)
+
+            db.commit()
+            print(f"Added {len(flowers_to_add)} flowers to database")
+        else:
+            print("All flowers already exist in database")
+
+        # Seed filler products
+        existing_filler_names = {p.name for p in db.query(Product).filter(Product.category == "filler").all()}
+        fillers_to_add = [f for f in FILLERS if f["name"] not in existing_filler_names]
+        if fillers_to_add:
+            print(f"Seeding {len(fillers_to_add)} new fillers...")
+            for filler_data in fillers_to_add:
+                product = Product(
+                    id=uuid.uuid4(),
+                    name=filler_data["name"],
+                    description=f"{filler_data['color']} {filler_data['style']} filler - {filler_data['name']}",
+                    price=Decimal(str(filler_data["price"])),
+                    category="filler",
+                    product_type="filler",
+                    product_group="floral",
+                    image_url=f"/assets/products/fillers/{filler_data['image']}",
+                    is_available=True,
+                    status=ProductStatusEnum.active,
+                )
+                db.add(product)
+                db.flush()
+
+                inventory = Inventory(
+                    product_id=product.id,
+                    current_stock=50,
+                    reorder_point=10,
+                    unit_type="pieces",
+                )
+                db.add(inventory)
+
+            db.commit()
+            print(f"Added {len(fillers_to_add)} fillers to database")
+        else:
+            print("All fillers already exist in database")
 
     except Exception as e:
         db.rollback()
