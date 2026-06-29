@@ -30,6 +30,11 @@ router = APIRouter(prefix="/customization", tags=["Customization"])
 pollinations = PollinationsService()
 
 
+def _needs_box_container_rule(prompt_text: str) -> bool:
+    normalized = (prompt_text or "").lower()
+    return "box" in normalized or "acrylic" in normalized or "display container" in normalized
+
+
 def calculate_price_breakdown(
     flower: Optional[Flower],
     vase: Optional[Vase],
@@ -232,10 +237,20 @@ async def check_and_generate(
 
     # ── Step 7: Generate image via Pollinations (Using Optimized Prompt) ──
     base_optimized_prompt = ai_verdict.get("optimized_prompt") or payload.prompt_text
+    box_container_rule = ""
+    if _needs_box_container_rule(f"{payload.prompt_text} {base_optimized_prompt}"):
+        box_container_rule = (
+            "BOX CONTAINER RULE: The box is the vessel for the arrangement. "
+            "The clear acrylic flower box must be the visible container/base, not a decorative prop. "
+            "All flowers, fillers, and visible stems must originate from inside the box opening and stay contained within the footprint of the acrylic box. "
+            "Keep the transparent box walls and base clearly visible from a direct side profile. "
+            "Do not create a hand-tied bouquet, do not use wrapping paper, and do not place flowers outside, behind, beside, on top of, floating above, or wrapped around the exterior of the box. "
+        )
     
     final_image_prompt = (
         f"{base_optimized_prompt}. "
-        f"CRITICAL VISUAL RULE: Only depict the floral arrangement bouquet, vase, and wrapping paper. "
+        f"{box_container_rule}"
+        f"CRITICAL VISUAL RULE: Only depict the floral arrangement, bouquet wrap, vase, box/container, and selected florist materials. "
         f"DO NOT include any external add-on items like greeting cards, chocolates, teddy bears, balloons, jewelry, or extras in the image. "
         f"Focus solely on the clean florist presentation of the flowers."
     )

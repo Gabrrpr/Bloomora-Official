@@ -335,9 +335,7 @@ export const api = {
   },
 
   generateCardMessage: async (cardState) => {
-    // This points to the new Python route we just made!
-    const response = await api.post("/customization/generate-card", cardState);
-    return response.data;
+    return api.post("/customization/generate-card", cardState);
   },
 
   // ── Addresses ───────────────────────────────────────────────────────────

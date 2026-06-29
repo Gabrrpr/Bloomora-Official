@@ -28,7 +28,12 @@ export default function OAuthCallback({ onNavigate }) {
         if (response.ok && data.access_token) {
           localStorage.setItem("access_token", data.access_token)
           if (data.refresh_token) localStorage.setItem("refresh_token", data.refresh_token)
-          await setUserFromToken(data.access_token)
+          const userData = await setUserFromToken(data.access_token)
+          if (!userData) {
+            setStatus("Social login could not be completed.")
+            onNavigate("login")
+            return
+          }
           window.history.replaceState({}, "", "/")
           onNavigate("home")
           return

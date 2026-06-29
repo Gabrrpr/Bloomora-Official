@@ -40,10 +40,8 @@ class PollinationsService:
 
 
         img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
-        
-        # --- A. APPLY ESTING'S LOGO (Top-Left) ---
-        # --- A. APPLY ESTING'S LOGO (Top-Left) ---
-        try:
+    
+        try:    
             current_dir = Path(__file__).resolve().parent 
             apps_dir = current_dir.parent.parent.parent
             

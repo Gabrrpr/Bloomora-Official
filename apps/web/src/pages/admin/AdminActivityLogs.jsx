@@ -106,7 +106,7 @@ function RoleBadge({ role, isDark }) {
     staff:    { label: "Staff",    color: isDark ? "#60a5fa" : "#1d4ed8" },
     delivery: { label: "Delivery", color: isDark ? "#fb923c" : "#c2410c" },
   }
-  const s = cfg[role?.toLowerCase()] || { label: role || "System", color: isDark ? "#94a3b8" : "#475569" }
+  const s = cfg[role?.toLowerCase()] || { label: role || "Unknown", color: isDark ? "#94a3b8" : "#475569" }
   return <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: s.color }}>{s.label}</span>
 }
 
@@ -310,8 +310,8 @@ export default function AdminActivityLogs() {
     const rows = filtered.map(log => [
       log.id,
       new Date(log.created_at).toLocaleString("en-PH"),
-      log.staff_name || "System",
-      log.role || "N/A",
+      log.staff_name || "Unknown staff",
+      log.role || "Unknown",
       log.action,
       log.branch || "N/A",
       log.details || ""
@@ -658,7 +658,7 @@ export default function AdminActivityLogs() {
                       {/* Staff Name (Replaced User ID) */}
                       <td className="px-4 py-3 align-top">
                         <span className="text-sm font-semibold" style={{ color: cellTxt }}>
-                          {log.staff_name || "System"}
+                          {log.staff_name || "Unknown staff"}
                         </span>
                       </td>
 
@@ -762,8 +762,8 @@ export default function AdminActivityLogs() {
                           <tr key={log.id} className={i % 2 === 1 ? "alt" : ""}>
                             <td className="num nowrap muted">{n}</td>
                             <td className="nowrap">{log.created_at ? new Date(log.created_at).toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—"}</td>
-                            <td className="mono">{log.staff_name || "System"}</td>
-                            <td className="cap">{log.role || "System"}</td>
+                            <td className="mono">{log.staff_name || "Unknown staff"}</td>
+                            <td className="cap">{log.role || "Unknown"}</td>
                             <td className="cap muted">{log.branch || "—"}</td>
                             <td>
                               <span className="font-semibold">{log.action || "—"}</span>
