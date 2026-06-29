@@ -256,7 +256,7 @@ export default function MixAndMatchScreen() {
         }
 
         setCustomizationEnabled(toggleRes.enabled);
-        setProducts(productRes.filter((product) => product.is_available !== false && product.is_visible !== false));
+        setProducts(productRes.filter((product) => product.is_available !== false));
         setAiUsage(usageRes);
       } catch (loadError) {
         if (isActive) {
