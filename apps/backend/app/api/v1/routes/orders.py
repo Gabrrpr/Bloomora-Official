@@ -682,6 +682,41 @@ def _product_supports_branch(product: Product, branch: str) -> bool:
     normalized = {str(value).strip().lower() for value in branches}
     return branch.lower() in normalized or "all" in normalized
 
+def _branch_stock_attr(branch: str) -> str | None:
+    normalized = str(branch or "").strip().lower()
+    if normalized == "manila":
+        return "stock_manila"
+    if normalized == "pampanga":
+        return "stock_pampanga"
+    return None
+
+def _inventory_stock_for_branch(inventory: Inventory, branch: str) -> int:
+    attr = _branch_stock_attr(branch)
+    if attr and hasattr(inventory, attr):
+        return int(getattr(inventory, attr) or 0)
+    return int(inventory.current_stock or 0)
+
+def _active_reserved_quantity(db: Session, product_id, branch: str | None = None) -> int:
+    query = (
+        db.query(func.coalesce(func.sum(StockReservation.quantity), 0))
+        .join(OrderItem, OrderItem.id == StockReservation.order_item_id)
+        .join(Order, Order.id == OrderItem.order_id)
+        .filter(
+            StockReservation.product_id == product_id,
+            StockReservation.status == "active",
+            StockReservation.reserved_until > datetime.now(timezone.utc),
+        )
+    )
+    if branch:
+        query = query.filter(func.lower(func.coalesce(Order.branch_name, "")) == branch.strip().lower())
+    return int(query.scalar() or 0)
+
+def _deduct_inventory_stock(inventory: Inventory, quantity: int, branch: str) -> None:
+    inventory.current_stock = max(0, int(inventory.current_stock or 0) - quantity)
+    attr = _branch_stock_attr(branch)
+    if attr and hasattr(inventory, attr):
+        setattr(inventory, attr, max(0, int(getattr(inventory, attr) or 0) - quantity))
+
 @router.get("/my", response_model=List[dict])
 def get_my_orders(
     status: Optional[str] = Query(None, description="Filter by status"),
@@ -856,9 +891,9 @@ async def create_order(
                         inventory = db.query(Inventory).filter(
                             Inventory.product_id == component.product_id
                         ).with_for_update().first()
-                        if not inventory or inventory.current_stock < required:
+                        if not inventory or _inventory_stock_for_branch(inventory, raw_branch) < required:
                             raise HTTPException(status_code=400, detail="Insufficient raw materials for custom order.")
-                        inventory.current_stock -= required
+                        _deduct_inventory_stock(inventory, required, raw_branch)
                 unit_price = Decimal(str(arrangement.estimated_price or 0))
                 prepared_items.append(("arrangement", arrangement, quantity, unit_price))
             else:
@@ -873,12 +908,8 @@ async def create_order(
                         status_code=400,
                         detail=f"{product.name} is not available in the {raw_branch} branch.",
                     )
-                active_reserved = db.query(func.coalesce(func.sum(StockReservation.quantity), 0)).filter(
-                    StockReservation.product_id == item_uuid,
-                    StockReservation.status == "active",
-                    StockReservation.reserved_until > datetime.now(timezone.utc),
-                ).scalar()
-                available = inventory.current_stock - int(active_reserved or 0)
+                active_reserved = _active_reserved_quantity(db, item_uuid, raw_branch)
+                available = _inventory_stock_for_branch(inventory, raw_branch) - active_reserved
                 if available < quantity:
                     raise HTTPException(status_code=400, detail=f"Insufficient stock. Only {available} available.")
                 unit_price = Decimal(str(product.price or 0))
@@ -1165,9 +1196,10 @@ async def create_orders(
             if hasattr(arrangement, 'items') and arrangement.items:
                 for component in arrangement.items:
                     inv = db.query(Inventory).filter(Inventory.product_id == component.product_id).with_for_update().first()
-                    if not inv or inv.current_stock < (component.quantity * qty):
+                    required = component.quantity * qty
+                    if not inv or _inventory_stock_for_branch(inv, final_branch_name) < required:
                         raise HTTPException(status_code=400, detail="Insufficient raw materials for custom order.")
-                    inv.current_stock -= (component.quantity * qty)
+                    _deduct_inventory_stock(inv, required, final_branch_name)
                     if inv.current_stock <= 0:
                         prod = db.query(Product).filter(Product.id == component.product_id).first()
                         if prod: prod.is_available = False
@@ -1182,10 +1214,11 @@ async def create_orders(
             
             if not product or not product.is_available or not inventory:
                 raise HTTPException(status_code=404, detail=f"Product unavailable: {item_id}")
-            if inventory.current_stock < qty:
-                raise HTTPException(status_code=400, detail=f"Insufficient stock. Only {inventory.current_stock} left.")
+            branch_stock = _inventory_stock_for_branch(inventory, final_branch_name)
+            if branch_stock < qty:
+                raise HTTPException(status_code=400, detail=f"Insufficient stock. Only {branch_stock} left.")
             
-            inventory.current_stock -= qty
+            _deduct_inventory_stock(inventory, qty, final_branch_name)
             if inventory.current_stock <= 0:
                 product.is_available = False
             
