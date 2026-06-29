@@ -81,8 +81,8 @@ export type FeedAnalyticsEvent = {
 
 const installationFileUri = `${FileSystem.documentDirectory}feed-installation-id.txt`;
 const installationStorageKey = 'estings.feed-installation-id';
-const feedSchemaVersion = 2;
-const supportedFeedSchemaVersions = new Set([1, 2]);
+const feedSchemaVersion = 3;
+const supportedFeedSchemaVersions = new Set([3]);
 const feedCacheFileUri = `${FileSystem.documentDirectory}mobile-feed-cache-v${feedSchemaVersion}.json`;
 const feedCacheStorageKey = `estings.mobile-feed-cache-v${feedSchemaVersion}`;
 let installationIdPromise: Promise<string> | null = null;

@@ -144,6 +144,7 @@ export default function MixAndMatchScreen() {
   const [arrangementName, setArrangementName] = useState('AI Arrangement');
   const [cardMessage, setCardMessage] = useState('');
   const [isLoadingAddOns, setIsLoadingAddOns] = useState(false);
+  const [isSignedIn, setIsSignedIn] = useState(false);
   const [selectedAddOnIds, setSelectedAddOnIds] = useState<ReadonlySet<string>>(() => new Set());
   const [isHeaderSolid, setIsHeaderSolid] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -262,10 +263,7 @@ export default function MixAndMatchScreen() {
 
         if (!isActive) return;
 
-        if (!session) {
-          setError('Please sign in before using Mix & Match.');
-        }
-
+        setIsSignedIn(Boolean(session));
         setCustomizationEnabled(toggleRes.enabled);
         setProducts(productRes.filter((product) => product.is_available !== false));
         setAiUsage(usageRes);
@@ -436,6 +434,7 @@ export default function MixAndMatchScreen() {
 
     const session = await requireSignedIn('generate your arrangement');
     if (!session) {
+      setIsSignedIn(false);
       return;
     }
 
@@ -530,6 +529,15 @@ export default function MixAndMatchScreen() {
     setSelectedAddOnIds(new Set());
   }
 
+  const generationDisabled = isGenerating || isLoading || (activeStep.key === 'review' && !isSignedIn);
+  const generationLabel = activeStep.key === 'review'
+    ? isGenerating
+      ? 'Generating...'
+      : isSignedIn
+        ? 'Generate'
+        : 'Sign in to generate'
+    : 'Continue';
+
   const stepFooter = (
     <View style={styles.cardFooter}>
       <Pressable
@@ -551,11 +559,11 @@ export default function MixAndMatchScreen() {
 
       <Pressable
         accessibilityRole="button"
-        disabled={isGenerating || isLoading}
+        disabled={generationDisabled}
         onPress={handleNext}
-        style={({ pressed }) => [styles.continueButton, (isGenerating || isLoading) && styles.continueButtonDisabled, pressed && !isGenerating && !isLoading && styles.pressed]}>
-        <Text style={[styles.continueButtonText, (isGenerating || isLoading) && styles.continueButtonTextDisabled]}>
-          {activeStep.key === 'review' ? (isGenerating ? 'Generating...' : 'Generate') : 'Continue'}
+        style={({ pressed }) => [styles.continueButton, generationDisabled && styles.continueButtonDisabled, pressed && !generationDisabled && styles.pressed]}>
+        <Text style={[styles.continueButtonText, generationDisabled && styles.continueButtonTextDisabled]}>
+          {generationLabel}
         </Text>
         {isGenerating ? (
           <SpinningLoader />

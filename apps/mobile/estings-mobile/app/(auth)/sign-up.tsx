@@ -17,6 +17,7 @@ import {
 } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   KeyboardAvoidingView,
   Modal,
@@ -33,14 +34,22 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AddressMapPicker } from '@/components/address-map-picker';
 import { Fonts, theme } from '@/constants/theme';
+import { addressesApi, type AccountAddressPayload } from '@/services/addresses-api';
 import {
   authenticateWithBiometrics,
   getBiometricsAvailability,
   type BiometricsAvailability,
 } from '@/services/biometrics';
-import { registerWithPassword, sendSignUpOtp, verifySignUpOtp } from '@/services/auth-api';
+import { loginWithPassword, registerWithPassword, sendSignUpOtp, verifySignUpOtp } from '@/services/auth-api';
+import { type AuthSession } from '@/services/auth-session';
+import {
+  countryCodes,
+  ShippingAddressModal,
+  toCanonicalPhone,
+  type CountryCode,
+  type ShippingAddressFormValue,
+} from '@/components/shipping-address-modal';
 import {
   type FormErrors,
   isSixDigitOtp,
@@ -59,7 +68,8 @@ type SignUpField =
   | 'phone'
   | 'password'
   | 'confirmPassword'
-  | 'otp';
+  | 'otp'
+  | 'address';
 type SignUpPhase = 1 | 2 | 3;
 type SecurityStep = 'otp' | 'privacy' | 'biometrics';
 type GenderOption = 'Female' | 'Male' | 'Prefer not to say';
@@ -105,9 +115,16 @@ export default function SignUpScreen() {
   const [otp, setOtp] = useState('');
   const [securityStep, setSecurityStep] = useState<SecurityStep>('otp');
   const [address, setAddress] = useState('');
-  const [profileNote, setProfileNote] = useState('');
+  const [addressFormValue, setAddressFormValue] = useState<ShippingAddressFormValue | null>(null);
+  const [addressFirstName, setAddressFirstName] = useState('');
+  const [addressLastName, setAddressLastName] = useState('');
+  const [addressPhone, setAddressPhone] = useState('');
+  const [addressCountry, setAddressCountry] = useState<CountryCode>(countryCodes[0]);
+  const [createdSession, setCreatedSession] = useState<AuthSession | null>(null);
+  const [hasRegisteredAccount, setHasRegisteredAccount] = useState(false);
   const [errors, setErrors] = useState<FormErrors<SignUpField>>({});
   const [isCalendarVisible, setIsCalendarVisible] = useState(false);
+  const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
   const [isProtectionVisible, setIsProtectionVisible] = useState(false);
   const [isDiscardVisible, setIsDiscardVisible] = useState(false);
   const [resendSeconds, setResendSeconds] = useState(30);
@@ -117,6 +134,7 @@ export default function SignUpScreen() {
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
   const [isEnablingBiometrics, setIsEnablingBiometrics] = useState(false);
+  const [isFinishingProfile, setIsFinishingProfile] = useState(false);
 
   const hasEnteredSignUpData = [
     firstName,
@@ -129,7 +147,6 @@ export default function SignUpScreen() {
     confirmPassword,
     otp,
     address,
-    profileNote,
   ].some((value) => value.trim().length > 0);
   const hasPasswordInput = password.length > 0;
   const passwordRules = useMemo(() => getPasswordRules(password), [password]);
@@ -184,6 +201,16 @@ export default function SignUpScreen() {
 
     return () => clearTimeout(timer);
   }, [phase, resendSeconds, securityStep]);
+
+  useEffect(() => {
+    if (phase !== 3) {
+      return;
+    }
+
+    setAddressFirstName((current) => current || firstName);
+    setAddressLastName((current) => current || lastName);
+    setAddressPhone((current) => current || phone);
+  }, [firstName, lastName, phase, phone]);
 
   function setFieldError(field: SignUpField, message?: string) {
     setErrors((current) => {
@@ -329,18 +356,10 @@ export default function SignUpScreen() {
 
     try {
       await verifySignUpOtp(email, otp);
-      await registerWithPassword({
-        address,
-        email,
-        firstName,
-        lastName,
-        password,
-        phoneNumber: `+63${phone}`,
-      });
       setSecurityStep('privacy');
       setIsProtectionVisible(true);
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'Unable to verify and create your account.');
+      setSubmitError(error instanceof Error ? error.message : 'Unable to verify your email.');
     } finally {
       setIsVerifyingOtp(false);
     }
@@ -398,8 +417,72 @@ export default function SignUpScreen() {
     }
   }
 
-  function handleFinish() {
-    router.replace('/login');
+  async function handleProfileAddressSave(value: ShippingAddressFormValue) {
+    setAddress(value.formattedAddress);
+    setAddressFormValue(value);
+    setFieldError('address');
+  }
+
+  async function handleFinish() {
+    if (isFinishingProfile) {
+      return;
+    }
+
+    if (!addressFormValue || !address.trim()) {
+      setFieldError('address', 'Add your delivery address to finish account setup.');
+      setIsAddressModalOpen(true);
+      return;
+    }
+
+    const recipientName = [addressFirstName, addressLastName].filter(Boolean).join(' ').trim();
+
+    if (!recipientName || !addressPhone.trim()) {
+      Alert.alert('Complete recipient details', 'First name and phone number are required.');
+      setIsAddressModalOpen(true);
+      return;
+    }
+
+    setIsFinishingProfile(true);
+    setSubmitError(null);
+
+    try {
+      let session = createdSession;
+
+      if (!session) {
+        if (!hasRegisteredAccount) {
+          await registerWithPassword({
+            address: addressFormValue.formattedAddress,
+            email,
+            firstName,
+            lastName,
+            password,
+            phoneNumber: `+63${phone}`,
+          });
+          setHasRegisteredAccount(true);
+        }
+
+        session = await loginWithPassword(email, password);
+        setCreatedSession(session);
+      }
+
+      const payload: AccountAddressPayload = {
+        barangay: addressFormValue.barangay,
+        city: addressFormValue.city,
+        is_default: true,
+        label: addressFormValue.label || 'Home',
+        phone: toCanonicalPhone(addressPhone, addressCountry.code),
+        province: addressFormValue.province || addressFormValue.region,
+        recipient_name: recipientName,
+        street: addressFormValue.street,
+      };
+
+      await addressesApi.create(payload, session.accessToken);
+      router.replace('/(tabs)');
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Unable to finish account setup.');
+    } finally {
+      setIsFinishingProfile(false);
+    }
   }
 
   return (
@@ -707,7 +790,7 @@ export default function SignUpScreen() {
           <View style={styles.phaseBody}>
             <View style={styles.headerCopy}>
               <Text style={styles.title}>Personalize your profile</Text>
-              <Text style={styles.subtitle}>Pin your delivery area or skip for now.</Text>
+              <Text style={styles.subtitle}>Add your required default delivery address.</Text>
             </View>
 
             <View style={styles.profilePanel}>
@@ -715,27 +798,35 @@ export default function SignUpScreen() {
                 <MapPin size={theme.icon.sm} color={theme.colors.primary} strokeWidth={2.1} />
                 <Text style={styles.panelTitle}>Delivery location</Text>
               </View>
-              <AddressMapPicker onAddressChange={setAddress} />
-              <LabeledInput
-                icon={MapPin}
-                label="Delivery address"
-                multiline
-                onChangeText={setAddress}
-                placeholder="Street, barangay, city, province"
-                value={address}
-              />
-              <LabeledInput
-                icon={UserRound}
-                label="Profile note"
-                onChangeText={setProfileNote}
-                placeholder="Example: prefers pastel bouquets"
-                value={profileNote}
-              />
+              <View style={styles.addressLabelRow}>
+                <Text style={styles.fieldLabel}>Default shipping address</Text>
+                <Pressable onPress={() => setIsAddressModalOpen(true)} style={styles.changeAddressButton}>
+                  <Text style={styles.changeAddressButtonText}>{address.trim() ? 'Change Address' : '+ Add Address'}</Text>
+                </Pressable>
+              </View>
+              <Pressable
+                onPress={() => setIsAddressModalOpen(true)}
+                style={[
+                  styles.addressPreview,
+                  address.trim() ? styles.addressPreviewFilled : styles.addressPreviewEmpty,
+                  errors.address && styles.addressPreviewError,
+                ]}>
+                {address.trim() ? (
+                  <AddressPreview address={address} countryCode={addressCountry.code} firstName={addressFirstName} lastName={addressLastName} phone={addressPhone} />
+                ) : (
+                  <Text style={styles.noAddressText}>No Address Yet</Text>
+                )}
+              </Pressable>
+              {errors.address ? <Text style={styles.errorText}>{errors.address}</Text> : null}
             </View>
 
+            {submitError ? <Text style={styles.submitErrorText}>{submitError}</Text> : null}
             <View style={styles.stickyActions}>
-              <PrimaryButton label="Finish Account Setup" onPress={handleFinish} />
-              <SecondaryButton label="Skip for now" onPress={handleFinish} />
+              <PrimaryButton
+                disabled={!address.trim() || isFinishingProfile}
+                label={isFinishingProfile ? 'Saving address...' : 'Finish Account Setup'}
+                onPress={handleFinish}
+              />
             </View>
           </View>
         ) : null}
@@ -762,6 +853,22 @@ export default function SignUpScreen() {
         visible={isDiscardVisible}
         onCancel={() => setIsDiscardVisible(false)}
         onDiscard={handleDiscardAndSignIn}
+      />
+      <ShippingAddressModal
+        address={address}
+        country={addressCountry}
+        firstName={addressFirstName}
+        isDefaultAddress
+        lastName={addressLastName}
+        onClose={() => setIsAddressModalOpen(false)}
+        onCountryChange={setAddressCountry}
+        onFirstNameChange={setAddressFirstName}
+        onLastNameChange={setAddressLastName}
+        onPhoneChange={setAddressPhone}
+        onSave={handleProfileAddressSave}
+        phone={addressPhone}
+        title={address.trim() ? 'Change Shipping Address' : 'Add Shipping Address'}
+        visible={isAddressModalOpen}
       />
     </KeyboardAvoidingView>
   );
@@ -964,6 +1071,36 @@ function OtpCodeInput({
   );
 }
 
+function AddressPreview({
+  address,
+  countryCode,
+  firstName,
+  lastName,
+  phone,
+}: {
+  address: string;
+  countryCode: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+}) {
+  const parts = address.split(',').map((part) => part.trim()).filter(Boolean);
+  const fullName = [firstName, lastName].filter(Boolean).join(' ');
+  const formattedPhone = phone
+    ? `${countryCode} ${countryCode === '+63'
+      ? [phone.slice(0, 3), phone.slice(3, 6), phone.slice(6, 10)].filter(Boolean).join(' ')
+      : phone}`
+    : 'Contact number';
+
+  return (
+    <>
+      <Text style={styles.addressPrimary}>{parts[0] || 'Street address'}</Text>
+      <Text style={styles.addressSecondary}>{parts.slice(1).join(', ') || 'Barangay, City, Province, Country (PH)'}</Text>
+      <Text style={styles.addressSecondary}>{[formattedPhone, fullName || 'Recipient full name'].join(' - ')}</Text>
+    </>
+  );
+}
+
 function ProtectionConsentSheet({
   onAgree,
   onDecline,
@@ -1121,39 +1258,6 @@ function OnboardingField({
         ) : null}
       </View>
       {error ? <Text style={styles.errorText}>{error}</Text> : null}
-    </View>
-  );
-}
-
-function LabeledInput({
-  icon: Icon,
-  label,
-  multiline = false,
-  onChangeText,
-  placeholder,
-  value,
-}: {
-  icon: typeof UserRound;
-  label: string;
-  multiline?: boolean;
-  onChangeText: (value: string) => void;
-  placeholder: string;
-  value: string;
-}) {
-  return (
-    <View style={styles.labeledInputWrap}>
-      <Text style={styles.fieldLabel}>{label}</Text>
-      <View style={[styles.profileInputFrame, multiline && styles.profileInputFrameTall]}>
-        <Icon size={theme.icon.sm} color={theme.colors.textMuted} strokeWidth={2.1} />
-        <TextInput
-          multiline={multiline}
-          onChangeText={onChangeText}
-          placeholder={placeholder}
-          placeholderTextColor={theme.colors.textMuted}
-          style={[styles.profileInput, multiline && styles.profileInputTall]}
-          value={value}
-        />
-      </View>
     </View>
   );
 }
@@ -2170,37 +2274,62 @@ const styles = StyleSheet.create({
     fontSize: 18,
     lineHeight: 23,
   },
-  labeledInputWrap: {
-    gap: theme.spacing.sm,
-  },
-  profileInputFrame: {
+  addressLabelRow: {
     alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  changeAddressButton: {
+    backgroundColor: theme.colors.surface,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  changeAddressButtonText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 11,
+  },
+  addressPreview: {
     backgroundColor: theme.colors.surfaceAlt,
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
     borderWidth: theme.borderWidth,
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-    minHeight: 52,
-    paddingHorizontal: theme.spacing.md,
+    gap: 5,
+    minHeight: 96,
+    padding: theme.spacing.md,
   },
-  profileInputFrameTall: {
-    alignItems: 'flex-start',
-    minHeight: 92,
-    paddingTop: theme.spacing.md,
+  addressPreviewFilled: {
+    backgroundColor: theme.colors.greenSoft,
+    borderColor: theme.colors.primary,
+    borderWidth: 1.5,
   },
-  profileInput: {
+  addressPreviewEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addressPreviewError: {
+    borderColor: theme.colors.danger,
+  },
+  addressPrimary: {
     color: theme.colors.text,
-    flex: 1,
-    fontFamily: Fonts.sans,
-    fontSize: 15,
-    lineHeight: 20,
-    minHeight: 48,
-    padding: 0,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 14,
+    lineHeight: 19,
   },
-  profileInputTall: {
-    minHeight: 70,
-    textAlignVertical: 'top',
+  addressSecondary: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 12,
+    lineHeight: 17,
+  },
+  noAddressText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 13,
+    textAlign: 'center',
   },
   modalOverlay: {
     alignItems: 'center',

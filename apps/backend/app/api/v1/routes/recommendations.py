@@ -4,7 +4,7 @@ from typing import List
 from pydantic import BaseModel
 # Import your database session and models
 from app.core.dependencies import get_db, get_current_user
-from app.models import Product, Order, OrderItem, User
+from app.models import Product, Order, OrderItem, User, ProductStatusEnum
 
 # NOTE: pandas and scikit-learn are imported lazily inside the function
 # to avoid crashing the server at startup when they are not installed.
@@ -41,7 +41,11 @@ async def get_homepage_recommendations(
         active_products = (
             db.query(Product)
             .options(joinedload(Product.inventory))
-            .filter(Product.is_available == True)
+            .filter(
+                Product.is_available == True,
+                Product.is_visible == True,
+                Product.status != ProductStatusEnum.inactive,
+            )
             .all()
         )
         
