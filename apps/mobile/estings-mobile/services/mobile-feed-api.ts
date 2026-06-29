@@ -82,7 +82,7 @@ export type FeedAnalyticsEvent = {
 const installationFileUri = `${FileSystem.documentDirectory}feed-installation-id.txt`;
 const installationStorageKey = 'estings.feed-installation-id';
 const feedSchemaVersion = 3;
-const supportedFeedSchemaVersions = new Set([3]);
+const supportedFeedSchemaVersions = new Set([2, 3]);
 const feedCacheFileUri = `${FileSystem.documentDirectory}mobile-feed-cache-v${feedSchemaVersion}.json`;
 const feedCacheStorageKey = `estings.mobile-feed-cache-v${feedSchemaVersion}`;
 let installationIdPromise: Promise<string> | null = null;
@@ -245,7 +245,8 @@ export const mobileFeedApi = {
             return [];
           }
 
-          throw error;
+          console.warn('Unable to load mobile content feed posts:', error);
+          return [];
         });
         const productItems = response.items.filter((item) => item.type === 'product');
         response.items = [...posts.map(mapContentPost), ...productItems];

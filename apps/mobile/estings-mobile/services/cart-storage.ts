@@ -22,6 +22,10 @@ function isLocalOnlyItem(item: CartItem) {
   );
 }
 
+function isCartableItem(item: CartItem) {
+  return isLocalOnlyItem(item) || item.product.isVisible !== false;
+}
+
 export function clearCartItemsCache() {
   signedInCartCache = null;
 }
@@ -41,7 +45,7 @@ export async function getCartItems(options: CartReadOptions = {}) {
   const localOnlyItems = guestItems.filter(isLocalOnlyItem);
   if (guestItems.length) {
     const syncedItems = await userCartApi.sync(
-      guestItems.filter((item) => !isLocalOnlyItem(item)),
+      guestItems.filter((item) => !isLocalOnlyItem(item) && isCartableItem(item)),
       session,
     );
     await setGuestCartItems(localOnlyItems);
@@ -56,6 +60,10 @@ export async function getCartItems(options: CartReadOptions = {}) {
 }
 
 export async function addCartItem(product: Product, quantity = 1, cardMessage?: string) {
+  if (product.isVisible === false) {
+    throw new Error('This product is not available for cart checkout.');
+  }
+
   const session = await getAuthSession();
   if (session) {
     const items = await userCartApi.add(product, quantity, session, cardMessage);
@@ -105,7 +113,7 @@ export async function setCartItems(items: CartItem[]) {
 
   const localOnlyItems = items.filter(isLocalOnlyItem);
   await setGuestCartItems(localOnlyItems);
-  const databaseItems = items.filter((item) => !isLocalOnlyItem(item));
+  const databaseItems = items.filter((item) => !isLocalOnlyItem(item) && isCartableItem(item));
   const current = await userCartApi.get(session);
   const nextIds = new Set(databaseItems.map((item) => item.product.id));
   const removed = current.filter((item) => !nextIds.has(item.product.id));

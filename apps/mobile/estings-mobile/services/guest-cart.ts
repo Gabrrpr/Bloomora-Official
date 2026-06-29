@@ -22,6 +22,17 @@ function createCartItem(product: Product, quantity: number): CartItem {
   };
 }
 
+function isLocalOnlyProduct(product: Product) {
+  return (
+    product.id.startsWith('ai-arr-') ||
+    product.productType?.toLowerCase() === 'ai arrangement'
+  );
+}
+
+function isCartableProduct(product: Product) {
+  return isLocalOnlyProduct(product) || product.isVisible !== false;
+}
+
 function clampQuantity(quantity: number, stock?: number) {
   const maxQuantity = stock && stock > 0 ? stock : 99;
 
@@ -29,7 +40,7 @@ function clampQuantity(quantity: number, stock?: number) {
 }
 
 function sanitizeItems(items: CartItem[]) {
-  return items.filter((item) => item.product?.id && item.quantity > 0);
+  return items.filter((item) => item.product?.id && item.quantity > 0 && isCartableProduct(item.product));
 }
 
 async function writeGuestCart(items: CartItem[]) {
@@ -104,6 +115,10 @@ export async function setGuestCartItems(items: CartItem[]) {
 }
 
 export async function addGuestCartItem(product: Product, quantity = 1) {
+  if (!isCartableProduct(product)) {
+    throw new Error('This product is not available for cart checkout.');
+  }
+
   const items = await getGuestCartItems();
   const existingItem = items.find((item) => item.product.id === product.id);
 
@@ -165,6 +180,7 @@ export async function addAiArrangementToCart(input: AiArrangementCartInput) {
     id: productId,
     imageUrl: input.imageUrl,
     isActive: true,
+    isVisible: true,
     name: input.name,
     priceCents: input.priceCents,
     productType: 'Ai Arrangement',

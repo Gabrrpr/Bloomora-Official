@@ -171,7 +171,7 @@ export default function MixAndMatchScreen() {
   const fillerProducts = useMemo(() => availableProducts.filter(isFillerProduct), [availableProducts]);
   const wrapperProducts = useMemo(() => availableProducts.filter(isWrapperProduct), [availableProducts]);
   const vaseProducts = useMemo(() => availableProducts.filter(isVaseProduct), [availableProducts]);
-  const boxProducts = useMemo(() => availableProducts.filter(isBoxProduct), [availableProducts]);
+  const boxProducts = useMemo(() => products.filter(isBoxProduct), [products]);
   const accessoryProducts = useMemo(() => availableProducts.filter(isAccessoryProduct), [availableProducts]);
   const selectedFlowers = useMemo(
     () =>
@@ -1393,11 +1393,7 @@ function isVaseProduct(product: CustomizationProduct) {
 }
 
 function isBoxProduct(product: CustomizationProduct) {
-  const category = productCategory(product);
-  const type = productType(product);
-  const blob = productSearchBlob(product);
-  if (blob.includes('ribbon') || blob.includes('wrapper') || blob.includes('wrapping') || blob.includes('wrap') || category.includes('vase') || type.includes('vase')) return false;
-  return blob.includes('clear box') || category.includes('clear box') || type.includes('clear box');
+  return isSelectableProduct(product) && productCategory(product) === 'box';
 }
 
 function isAccessoryProduct(product: CustomizationProduct) {

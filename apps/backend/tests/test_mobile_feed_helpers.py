@@ -63,7 +63,7 @@ class MobileFeedHelperTests(unittest.TestCase):
         self.assertNotEqual(first, second)
 
     def test_feed_schema_version_is_explicit(self):
-        self.assertEqual(FEED_SCHEMA_VERSION, 2)
+        self.assertEqual(FEED_SCHEMA_VERSION, 3)
 
     def test_tab_tie_breakers_are_deterministic_and_distinct(self):
         product_id = "11111111-1111-1111-1111-111111111111"
