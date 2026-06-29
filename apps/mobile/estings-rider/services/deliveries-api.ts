@@ -61,8 +61,33 @@ export type RiderDeliveryOrder = {
   vehicleType?: string | null;
 };
 
+export type RiderProfile = {
+  activeDeliveries: number;
+  branch?: string | null;
+  completedDeliveries: number;
+  email: string;
+  firstName?: string | null;
+  id: string;
+  lastName?: string | null;
+  phoneNumber?: string | null;
+  profilePictureUrl?: string | null;
+  riderIsAvailable: boolean;
+  username?: string | null;
+};
+
 export async function getMyDeliveries() {
   return apiFetchWithSession<RiderDelivery[]>('/deliveries/rider/me');
+}
+
+export async function getRiderProfile() {
+  return apiFetchWithSession<RiderProfile>('/deliveries/rider/profile');
+}
+
+export async function updateRiderAvailability(riderIsAvailable: boolean) {
+  return apiFetchWithSession<RiderProfile>('/deliveries/rider/profile', {
+    body: JSON.stringify({ riderIsAvailable }),
+    method: 'PATCH',
+  });
 }
 
 export async function getMyDeliveryOrders() {
@@ -89,15 +114,19 @@ export async function updateDeliveryStatus(deliveryId: string, status: RiderDeli
 
 export async function submitDeliveryProof({
   deliveryId,
+  photoUri,
   proofNote,
-  proofPhotoUrl,
 }: {
   deliveryId: string;
+  photoUri: string;
   proofNote?: string;
-  proofPhotoUrl: string;
 }) {
   const formData = new FormData();
-  formData.append('proof_photo_url', proofPhotoUrl);
+  formData.append('file', {
+    name: `delivery-proof-${deliveryId}.jpg`,
+    type: 'image/jpeg',
+    uri: photoUri,
+  } as unknown as Blob);
   if (proofNote) {
     formData.append('proof_note', proofNote);
   }

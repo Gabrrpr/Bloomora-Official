@@ -1,7 +1,7 @@
 import Feather from '@expo/vector-icons/Feather';
-import { router } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { DeliveryStopCard, getDestination } from '@/components/rider/delivery-stop-card';
 import { RiderScreen } from '@/components/rider/screen';
@@ -13,33 +13,57 @@ export default function DeliveriesScreen() {
   const [query, setQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
+  const loadDeliveries = useCallback(async ({ showInitialLoader = false }: { showInitialLoader?: boolean } = {}) => {
+    if (showInitialLoader) {
+      setIsLoading(true);
+    }
+
+    try {
+      const nextDeliveries = await getMyDeliveries();
+      setDeliveries(nextDeliveries);
+      setError(null);
+    } catch (nextError) {
+      setDeliveries([]);
+      setError(nextError instanceof Error ? nextError.message : 'Unable to load deliveries.');
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
     let isMounted = true;
 
-    getMyDeliveries()
-      .then((nextDeliveries) => {
-        if (isMounted) {
+      getMyDeliveries()
+        .then((nextDeliveries) => {
+          if (!isMounted) return;
           setDeliveries(nextDeliveries);
           setError(null);
-        }
-      })
-      .catch((nextError) => {
-        if (isMounted) {
+        })
+        .catch((nextError) => {
+          if (!isMounted) return;
           setDeliveries([]);
           setError(nextError instanceof Error ? nextError.message : 'Unable to load deliveries.');
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      });
+        })
+        .finally(() => {
+          if (isMounted) {
+            setIsLoading(false);
+          }
+        });
 
     return () => {
       isMounted = false;
     };
-  }, []);
+    }, []),
+  );
+
+  function handleRefresh() {
+    setIsRefreshing(true);
+    void loadDeliveries();
+  }
 
   const filteredDeliveries = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -60,7 +84,9 @@ export default function DeliveriesScreen() {
   }, [deliveries, query]);
 
   return (
-    <RiderScreen title="Deliveries">
+    <RiderScreen
+      title="Deliveries"
+      refreshControl={<RefreshControl refreshing={isRefreshing} tintColor={theme.colors.primary} onRefresh={handleRefresh} />}>
       <View style={styles.searchBox}>
         <Feather color="#8F8F8F" name="search" size={22} />
         <TextInput

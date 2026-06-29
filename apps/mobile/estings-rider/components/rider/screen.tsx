@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { ScrollView, StyleSheet, Text, View, type ScrollViewProps } from 'react-native';
+import type { ReactElement, ReactNode } from 'react';
+import { ScrollView, StyleSheet, Text, View, type RefreshControlProps, type ScrollViewProps } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts, theme } from '@/constants/theme';
@@ -7,11 +7,13 @@ import { Fonts, theme } from '@/constants/theme';
 export function RiderScreen({
   children,
   headerAction,
+  refreshControl,
   subtitle,
   title,
 }: {
   children: ReactNode;
   headerAction?: ReactNode;
+  refreshControl?: ReactElement<RefreshControlProps>;
   subtitle?: string;
   title: string;
 }) {
@@ -20,6 +22,7 @@ export function RiderScreen({
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
+      refreshControl={refreshControl}
       showsVerticalScrollIndicator={false}
       style={styles.screen}
       contentContainerStyle={[

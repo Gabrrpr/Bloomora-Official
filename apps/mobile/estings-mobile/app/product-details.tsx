@@ -17,7 +17,7 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from 'react-native';
-import { ArrowLeft, Check, FileText, Heart, MessageCircle, Minus, Package, Plus, Share2, ShoppingBag, Star, User, WandSparkles, X } from 'lucide-react-native';
+import { ArrowLeft, Check, FileText, Heart, MessageCircle, Minus, Package, Plus, ReceiptText, Share2, ShoppingBag, Star, User, WandSparkles, X } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -30,6 +30,7 @@ import { ProductCard } from '@/components/product-card';
 import { formatPhp, type Product, type ProductColor } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { addCartItem, getCartItems } from '@/services/cart-storage';
+import { getFeedWishlistIds, setFeedWishlistId } from '@/services/feed-wishlist';
 import { shopApi, type ProductRatingSummary, type ProductReview } from '@/services/shop-api';
 import { getSelectedColorName, isFlowerProduct } from '@/utils/product-helpers';
 import { buildRelatedProductRecommendations, createRecommendationSeed } from '@/utils/product-recommendations';
@@ -225,6 +226,46 @@ export default function ProductDetailsScreen() {
   useEffect(() => {
     void loadCartItemCount();
   }, [loadCartItemCount]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    if (!productId) {
+      setIsFavorite(false);
+      return undefined;
+    }
+
+    getFeedWishlistIds()
+      .then((ids) => {
+        if (isActive) {
+          setIsFavorite(ids.has(productId));
+        }
+      })
+      .catch(() => {
+        if (isActive) {
+          setIsFavorite(false);
+        }
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [productId]);
+
+  const handleToggleFavorite = useCallback(async () => {
+    if (!product) {
+      return;
+    }
+
+    const nextFavorite = !isFavorite;
+    setIsFavorite(nextFavorite);
+    try {
+      await setFeedWishlistId(product.id, nextFavorite);
+    } catch {
+      setIsFavorite(!nextFavorite);
+      Alert.alert('Wishlist unavailable', 'Your wishlist could not be updated.');
+    }
+  }, [isFavorite, product]);
 
   const handleAddToCart = useCallback(async () => {
     if (isAdded) {
@@ -516,15 +557,28 @@ export default function ProductDetailsScreen() {
               {/* Product name + price */}
               <View style={styles.titleBlock}>
                 <View style={styles.priceRow}>
-                  <Text style={styles.price}>{formatPhp(product.priceCents)}</Text>
+                  <View style={styles.priceValueRow}>
+                    <Text style={styles.price}>{formatPhp(product.priceCents)}</Text>
+                    {product.originalPriceCents ? (
+                      <Text style={styles.originalPrice}>{formatPhp(product.originalPriceCents)}</Text>
+                    ) : null}
+                  </View>
                   <View style={styles.priceMetaRow}>
                     <Text style={styles.soldCountInlineText}>{soldCount.toLocaleString('en-PH')} sold</Text>
+                    <Pressable
+                      accessibilityLabel="Request quotation"
+                      accessibilityRole="button"
+                      hitSlop={10}
+                      onPress={handleOpenBulkQuotation}
+                      style={({ pressed }) => [styles.priceFavoriteButton, pressed && styles.pressed]}>
+                      <ReceiptText size={23} color={theme.colors.textMuted} strokeWidth={2.2} />
+                    </Pressable>
                     <Pressable
                       accessibilityLabel="Favorite product"
                       accessibilityRole="button"
                       accessibilityState={{ selected: isFavorite }}
                       hitSlop={10}
-                      onPress={() => setIsFavorite((current) => !current)}
+                      onPress={() => void handleToggleFavorite()}
                       style={({ pressed }) => [styles.priceFavoriteButton, isFavorite && styles.priceFavoriteButtonActive, pressed && styles.pressed]}>
                       <Heart
                         size={24}
@@ -1483,6 +1537,20 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sansExtraBold,
     fontSize: 32,
     lineHeight: 38,
+  },
+  priceValueRow: {
+    alignItems: 'baseline',
+    flex: 1,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  originalPrice: {
+    color: '#8C938D',
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 15,
+    lineHeight: 20,
+    textDecorationLine: 'line-through',
   },
   priceMetaRow: {
     alignItems: 'center',

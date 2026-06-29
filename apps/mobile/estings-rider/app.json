@@ -9,9 +9,11 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
+      "bundleIdentifier": "com.estings.rider",
       "supportsTablet": true
     },
     "android": {
+      "package": "com.estings.rider",
       "adaptiveIcon": {
         "backgroundColor": "#308D36",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -48,6 +50,12 @@
       ],
       "expo-secure-store"
     ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/0e07f456-cbda-4e62-b1a4-a5bac79ec741"
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

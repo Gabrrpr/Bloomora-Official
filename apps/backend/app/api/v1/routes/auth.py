@@ -370,6 +370,8 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
             "username": user.username,
             "phone_number": user.phone_number,
             "address": user.address,
+            "branch": user.branch.value if hasattr(user.branch, 'value') else user.branch,
+            "rider_is_available": bool(getattr(user, "rider_is_available", True)),
             "profile_picture_url": getattr(user, 'profile_picture_url', None)
         }
     }
@@ -507,4 +509,6 @@ def get_me(current_user: User = Depends(get_current_user)):
         "username": current_user.username,
         "phone_number": current_user.phone_number,
         "address": current_user.address,
+        "branch": current_user.branch.value if hasattr(current_user.branch, 'value') else current_user.branch,
+        "rider_is_available": bool(getattr(current_user, "rider_is_available", True)),
     }

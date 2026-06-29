@@ -81,3 +81,8 @@ export async function setFeedWishlistId(productId: string, shouldSave: boolean) 
   }
   await writeIds([...ids]);
 }
+
+export async function getSavedWishlistProducts<T extends { id: string }>(products: T[]) {
+  const wishlistIds = await getFeedWishlistIds();
+  return products.filter((product) => wishlistIds.has(product.id));
+}

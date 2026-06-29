@@ -24,6 +24,7 @@ import 'react-native-reanimated';
 
 import { ChatFloatingBubble } from '@/components/chat-floating-bubble';
 import { AdvertisementPopup } from '@/components/advertisement-popup';
+import { AppUpdateGate } from '@/components/app-update-gate';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { scheduleAppOpenCreateReminder } from '@/utils/push-notifications';
 import '@/utils/register-svg-layout-event';
@@ -95,6 +96,7 @@ export default function RootLayout() {
           <Stack.Screen name="search-results" options={{ headerShown: false }} />
           <Stack.Screen name="(modals)/modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
+        <AppUpdateGate />
         <ChatFloatingBubble />
         <AdvertisementPopup />
         <StatusBar backgroundColor="#FFFFFF" style="dark" translucent={false} />

@@ -89,8 +89,14 @@ export default function ReviewScreen() {
         ) : null}
         {selected ? (
           <View style={styles.card}>
-            {selected.image_url ? <Image source={{ uri: selected.image_url }} style={styles.productImage} /> : null}
-            <Text style={styles.title}>{selected.name}</Text>
+            <View style={styles.selectedProductPanel}>
+              {selected.image_url ? <Image source={{ uri: selected.image_url }} style={styles.productImage} /> : <View style={styles.productImageFallback}><Star color="#E8A928" size={28} /></View>}
+              <View style={styles.selectedProductCopy}>
+                <Text numberOfLines={2} style={styles.title}>{selected.name}</Text>
+                <Text style={styles.productMeta}>Order {orderId}</Text>
+                <Text style={styles.productMeta}>{selected.reviewed ? 'Already reviewed' : 'Ready for your review'}</Text>
+              </View>
+            </View>
             <View style={styles.stars}>
               {[1, 2, 3, 4, 5].map((value) => (
                 <Pressable key={value} onPress={() => setRating(value)}>
@@ -118,8 +124,12 @@ const styles = StyleSheet.create({
   productChipText: { color: theme.colors.text, fontFamily: Fonts.sansMedium, fontSize: 11 },
   productChipTextActive: { color: '#fff' },
   card: { alignItems: 'center', backgroundColor: '#fff', borderColor: '#DDD', borderRadius: 16, borderWidth: 1, gap: 16, padding: 18 },
-  productImage: { borderRadius: 12, height: 120, width: 120 },
-  title: { color: theme.colors.text, fontFamily: Fonts.sansSemiBold, fontSize: 18, textAlign: 'center' },
+  selectedProductPanel: { alignItems: 'center', alignSelf: 'stretch', backgroundColor: '#F7F7F7', borderColor: '#E3E3E3', borderRadius: 14, borderWidth: 1, flexDirection: 'row', gap: 12, padding: 12 },
+  selectedProductCopy: { flex: 1, gap: 4 },
+  productImage: { borderRadius: 12, height: 86, width: 86 },
+  productImageFallback: { alignItems: 'center', backgroundColor: '#ECECEC', borderRadius: 12, height: 86, justifyContent: 'center', width: 86 },
+  title: { color: theme.colors.text, fontFamily: Fonts.sansSemiBold, fontSize: 17, lineHeight: 22 },
+  productMeta: { color: theme.colors.textMuted, fontFamily: Fonts.sans, fontSize: 12, lineHeight: 16 },
   stars: { flexDirection: 'row', gap: 6 },
   input: { borderColor: '#CCC', borderRadius: 12, borderWidth: 1, color: theme.colors.text, minHeight: 120, padding: 13, textAlignVertical: 'top', width: '100%' },
   photoButton: { alignItems: 'center', borderColor: theme.colors.primary, borderRadius: 10, borderWidth: 1, flexDirection: 'row', gap: 7, minHeight: 46, justifyContent: 'center', width: '100%' },

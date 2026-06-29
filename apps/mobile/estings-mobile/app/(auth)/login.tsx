@@ -101,6 +101,11 @@ export default function LoginScreen() {
       setFailedSignInAttempts(0);
       router.replace('/(tabs)');
     } catch (error) {
+      if (error instanceof Error && error.message.includes('Only customer accounts')) {
+        setSubmitError(error.message);
+        return;
+      }
+
       if (!(error instanceof ApiError) || error.status !== 401) {
         setSubmitError(getNonCredentialSignInMessage(error));
         return;
@@ -137,9 +142,11 @@ export default function LoginScreen() {
       const message = error instanceof Error ? error.message : '';
 
       setSubmitError(
-        message.toLowerCase().includes('cancel')
-          ? 'Social sign in was cancelled.'
-          : `Unable to continue with ${provider === 'google' ? 'Google' : 'Facebook'}, please try again.`,
+        message.includes('Only customer accounts')
+          ? message
+          : message.toLowerCase().includes('cancel')
+            ? 'Social sign in was cancelled.'
+            : `Unable to continue with ${provider === 'google' ? 'Google' : 'Facebook'}, please try again.`,
       );
     } finally {
       setSocialSubmittingProvider(null);

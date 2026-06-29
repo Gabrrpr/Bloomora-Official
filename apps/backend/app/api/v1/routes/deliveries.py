@@ -351,7 +351,8 @@ def _serialize_admin_rider(db: Session, rider: User) -> dict:
         "isActive": rider.is_active,
         "isVerified": rider.is_verified and rider.is_staff_verified,
         "activeDeliveries": active_count,
-        "availability": "available" if active_count == 0 else "assigned",
+        "availability": "offline" if not getattr(rider, "rider_is_available", True) else "available" if active_count == 0 else "assigned",
+        "riderIsAvailable": bool(getattr(rider, "rider_is_available", True)),
         "lastAssignedAt": last_delivery.updated_at.isoformat() if last_delivery and last_delivery.updated_at else None,
         "assignedVehicle": _serialize_vehicle_item(assigned_vehicle) if assigned_vehicle else None,
         "activeDeliveryDetails": [serialize_delivery(d) for d in active_deliveries],
@@ -378,6 +379,60 @@ def _get_delivery_for_user(db: Session, delivery_id: str, user: User) -> Deliver
 
 
 # ── Rider Endpoints ──────────────────────────────────────────────────────────
+
+@router.get("/rider/profile", response_model=dict)
+def get_rider_profile(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_delivery),
+):
+    active_statuses = [
+        DeliveryStatusEnum.assigned,
+        DeliveryStatusEnum.picked_up,
+        DeliveryStatusEnum.out_for_delivery,
+        DeliveryStatusEnum.arrived,
+        DeliveryStatusEnum.issue_reported,
+    ]
+    active_count = db.query(Delivery).filter(
+        Delivery.rider_id == current_user.id,
+        Delivery.status.in_(active_statuses),
+    ).count()
+    completed_count = db.query(Delivery).filter(
+        Delivery.rider_id == current_user.id,
+        Delivery.status == DeliveryStatusEnum.delivered,
+    ).count()
+
+    return {
+        "id": str(current_user.id),
+        "email": current_user.email,
+        "firstName": current_user.first_name,
+        "lastName": current_user.last_name,
+        "username": current_user.username,
+        "phoneNumber": current_user.phone_number,
+        "branch": current_user.branch.value if hasattr(current_user.branch, "value") else current_user.branch,
+        "profilePictureUrl": current_user.profile_picture_url,
+        "riderIsAvailable": bool(getattr(current_user, "rider_is_available", True)),
+        "activeDeliveries": active_count,
+        "completedDeliveries": completed_count,
+    }
+
+
+@router.patch("/rider/profile", response_model=dict)
+def update_rider_profile(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_delivery),
+):
+    if "rider_is_available" in payload:
+        current_user.rider_is_available = bool(payload.get("rider_is_available"))
+    elif "riderIsAvailable" in payload:
+        current_user.rider_is_available = bool(payload.get("riderIsAvailable"))
+    else:
+        raise HTTPException(status_code=400, detail="riderIsAvailable is required.")
+
+    db.commit()
+    db.refresh(current_user)
+    return get_rider_profile(db=db, current_user=current_user)
+
 
 @router.get("/rider/me", response_model=list[dict])
 def get_my_deliveries(

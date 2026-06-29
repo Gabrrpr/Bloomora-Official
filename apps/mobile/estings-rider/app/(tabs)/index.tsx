@@ -1,7 +1,7 @@
 import Feather from '@expo/vector-icons/Feather';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DeliveryStopCard } from '@/components/rider/delivery-stop-card';
@@ -23,6 +23,7 @@ export default function HomeScreen() {
   const [rider, setRider] = useState<AuthUser | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isConfirmingPickup, setIsConfirmingPickup] = useState(false);
   const [pickupFailures, setPickupFailures] = useState<string[]>([]);
   const [selectedDeliveryId, setSelectedDeliveryId] = useState<string | null>(null);
@@ -42,8 +43,10 @@ export default function HomeScreen() {
   }, [activeDeliveries, selectedDeliveryId]);
   const nextStops = useMemo(() => activeDeliveries.filter((d) => d.id !== selectedDelivery?.id), [activeDeliveries, selectedDelivery?.id]);
 
-  const loadDeliveries = useCallback(async () => {
-    setIsLoading(true);
+  const loadDeliveries = useCallback(async ({ showInitialLoader = false }: { showInitialLoader?: boolean } = {}) => {
+    if (showInitialLoader) {
+      setIsLoading(true);
+    }
     setError(null);
 
     try {
@@ -67,12 +70,24 @@ export default function HomeScreen() {
       setError(nextError instanceof Error ? nextError.message : 'Unable to load deliveries.');
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
-    void loadDeliveries();
+    void loadDeliveries({ showInitialLoader: true });
   }, [loadDeliveries]);
+
+  useFocusEffect(
+    useCallback(() => {
+      void loadDeliveries();
+    }, [loadDeliveries]),
+  );
+
+  function handleRefresh() {
+    setIsRefreshing(true);
+    void loadDeliveries();
+  }
 
   function openDelivery(delivery: RiderDelivery) {
     setSelectedDeliveryId(delivery.id);
@@ -174,6 +189,7 @@ export default function HomeScreen() {
   return (
     <ScrollView
       contentInsetAdjustmentBehavior="automatic"
+      refreshControl={<RefreshControl refreshing={isRefreshing} tintColor={theme.colors.primary} onRefresh={handleRefresh} />}
       showsVerticalScrollIndicator={false}
       style={styles.screen}
       contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 112 }]}>
@@ -183,10 +199,10 @@ export default function HomeScreen() {
       </View>
 
       {isLoading ? <StatePanel icon="loader" title="Loading deliveries" text="Checking assigned orders." /> : null}
-      {error ? <StatePanel actionLabel="Try again" icon="alert-circle" text="Check your connection." title="Could not load deliveries" onAction={loadDeliveries} /> : null}
+      {error ? <StatePanel icon="alert-circle" text="Pull down to refresh when your connection is back." title="Could not load deliveries" /> : null}
 
       {!isLoading && !error && activeDeliveries.length === 0 ? (
-        <StatePanel actionLabel="Check again" icon="check-circle" text="No assigned deliveries right now." title="No active work" onAction={loadDeliveries} />
+        <StatePanel icon="check-circle" text="Pull down to check for new assignments." title="No active work" />
       ) : null}
 
       {!isLoading && !error && activeDeliveryOrder ? (
@@ -281,15 +297,11 @@ function CircleAction({
 }
 
 function StatePanel({
-  actionLabel,
   icon,
-  onAction,
   text,
   title,
 }: {
-  actionLabel?: string;
   icon: keyof typeof Feather.glyphMap;
-  onAction?: () => void;
   text: string;
   title: string;
 }) {
@@ -298,11 +310,6 @@ function StatePanel({
       <Feather color={theme.colors.primary} name={icon} size={24} />
       <Text style={styles.stateTitle}>{title}</Text>
       <Text selectable style={styles.stateText}>{text}</Text>
-      {actionLabel && onAction ? (
-        <Pressable accessibilityRole="button" style={({ pressed }) => [styles.stateAction, pressed && styles.pressed]} onPress={onAction}>
-          <Text style={styles.stateActionText}>{actionLabel}</Text>
-        </Pressable>
-      ) : null}
     </View>
   );
 }
@@ -454,20 +461,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sansBold,
     fontSize: 16,
     lineHeight: 22,
-  },
-  stateAction: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.pill,
-    justifyContent: 'center',
-    minHeight: 42,
-    paddingHorizontal: theme.spacing.lg,
-  },
-  stateActionText: {
-    color: theme.colors.white,
-    fontFamily: Fonts.sansMedium,
-    fontSize: 13,
-    lineHeight: 18,
   },
   statePanel: {
     alignItems: 'center',

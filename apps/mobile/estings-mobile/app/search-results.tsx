@@ -1,15 +1,18 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import {
+  Animated,
+  Easing,
   FlatList,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
 import { ArrowLeft, ChevronDown, Search, X } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppBrandHeader } from '@/components/app-brand-header';
@@ -17,7 +20,7 @@ import { EmptyState } from '@/components/bloom-ui';
 import { ProductCard } from '@/components/product-card';
 import { type Product } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
-import { shopApi } from '@/services/shop-api';
+import { shopApi, type CategoryHierarchyGroup } from '@/services/shop-api';
 import { getStoreBranch, setStoreBranch, type StoreBranch } from '@/services/branch-preference';
 
 const outlineColor = 'rgba(31, 42, 36, 0.11)';
@@ -48,13 +51,17 @@ export default function SearchResultsScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [branch, setBranch] = useState<StoreBranch>(initialBranch);
   const [isBranchPickerOpen, setIsBranchPickerOpen] = useState(false);
+  const [isCategorySheetMounted, setIsCategorySheetMounted] = useState(false);
+  const [isCategorySheetOpen, setIsCategorySheetOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [openFilter, setOpenFilter] = useState<'sort' | 'budget' | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categoryHierarchy, setCategoryHierarchy] = useState<CategoryHierarchyGroup[]>([]);
   const [query, setQuery] = useState(initialQuery);
   const [submittedQuery, setSubmittedQuery] = useState(initialQuery);
   const [selectedBudget, setSelectedBudget] = useState<BudgetOption>('all');
   const [selectedSort, setSelectedSort] = useState<SortOption>('all');
+  const categorySheetProgress = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const nextQuery = typeof params.q === 'string' ? params.q : '';
@@ -87,6 +94,26 @@ export default function SearchResultsScreen() {
   useEffect(() => {
     void loadProducts();
   }, [loadProducts]);
+
+  useEffect(() => {
+    let active = true;
+
+    void shopApi.getCategoryHierarchy({ branch })
+      .then((hierarchy) => {
+        if (active) {
+          setCategoryHierarchy(hierarchy);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setCategoryHierarchy(buildCategoryHierarchyFromProducts(products));
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [branch, products]);
 
   const normalizedQuery = submittedQuery.trim();
   const searchResults = useMemo(() => {
@@ -125,6 +152,46 @@ export default function SearchResultsScreen() {
     router.setParams({ branch: nextBranch });
   }, []);
 
+  const handleOpenCategorySheet = useCallback(() => {
+    setIsBranchPickerOpen(false);
+    setOpenFilter(null);
+    setIsCategorySheetOpen(true);
+    setIsCategorySheetMounted(true);
+    categorySheetProgress.stopAnimation();
+    Animated.timing(categorySheetProgress, {
+      duration: 220,
+      easing: Easing.out(Easing.cubic),
+      toValue: 1,
+      useNativeDriver: false,
+    }).start();
+  }, [categorySheetProgress]);
+
+  const handleCloseCategorySheet = useCallback(() => {
+    categorySheetProgress.stopAnimation();
+    Animated.timing(categorySheetProgress, {
+      duration: 180,
+      easing: Easing.in(Easing.cubic),
+      toValue: 0,
+      useNativeDriver: false,
+    }).start(({ finished }) => {
+      if (!finished) {
+        return;
+      }
+
+      setIsCategorySheetOpen(false);
+      setIsCategorySheetMounted(false);
+    });
+  }, [categorySheetProgress]);
+
+  const handleSelectCategory = useCallback((category?: string) => {
+    const nextQuery = category ?? '';
+    setQuery(nextQuery);
+    setSubmittedQuery(nextQuery);
+    setOpenFilter(null);
+    setIsCategorySheetOpen(false);
+    setIsCategorySheetMounted(false);
+  }, []);
+
   const renderProduct = useCallback(
     ({ item }: { item: Product }) => (
       <View style={styles.productCell}>
@@ -157,7 +224,7 @@ export default function SearchResultsScreen() {
     <View style={styles.screen}>
       <View style={styles.stickyHeader}>
         <AppBrandHeader
-          onMenuPress={() => router.push('/categories')}
+          onMenuPress={handleOpenCategorySheet}
           onStorePress={() => setIsBranchPickerOpen((current) => !current)}
           showMenuAction
           showSearchAction={false}
@@ -223,6 +290,16 @@ export default function SearchResultsScreen() {
         </View>
       </View>
 
+      {isCategorySheetMounted ? (
+        <CategorySelectorSheet
+          hierarchy={categoryHierarchy.length > 0 ? categoryHierarchy : buildCategoryHierarchyFromProducts(products)}
+          isOpen={isCategorySheetOpen}
+          onClose={handleCloseCategorySheet}
+          onSelectCategory={handleSelectCategory}
+          progress={categorySheetProgress}
+        />
+      ) : null}
+
       <FlatList
         columnWrapperStyle={styles.productRow}
         contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 104 }]}
@@ -281,6 +358,76 @@ function BranchPopover({
           );
         })}
       </View>
+    </View>
+  );
+}
+
+function CategorySelectorSheet({
+  hierarchy,
+  isOpen,
+  onClose,
+  onSelectCategory,
+  progress,
+}: {
+  hierarchy: CategoryHierarchyGroup[];
+  isOpen: boolean;
+  onClose: () => void;
+  onSelectCategory: (category?: string) => void;
+  progress: Animated.Value;
+}) {
+  const insets = useSafeAreaInsets();
+  const bottomClearance = Math.max(insets.bottom + 120, 136);
+  const backdropOpacity = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 0.34],
+  });
+  const translateX = progress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-320, 0],
+  });
+
+  return (
+    <View pointerEvents={isOpen ? 'auto' : 'none'} style={styles.categorySheetOverlay}>
+      <Animated.View style={[styles.categorySheetBackdrop, { opacity: backdropOpacity }]}>
+        <Pressable accessibilityLabel="Close categories" onPress={onClose} style={StyleSheet.absoluteFill} />
+      </Animated.View>
+      <Animated.View style={[styles.categorySheet, { transform: [{ translateX }] }]}>
+        <View style={styles.categorySheetHeader}>
+          <Text style={styles.categorySheetTitle}>All Categories</Text>
+          <Pressable accessibilityLabel="Close categories" accessibilityRole="button" hitSlop={8} onPress={onClose}>
+            <X size={theme.icon.sm} color={theme.colors.textMuted} />
+          </Pressable>
+        </View>
+        <ScrollView
+          contentContainerStyle={[styles.categorySheetContent, { paddingBottom: bottomClearance }]}
+          showsVerticalScrollIndicator={false}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => onSelectCategory()}
+            style={({ pressed }) => [styles.allProductsButton, pressed && styles.categoryMenuItemPressed]}>
+            <Text style={styles.allProductsText}>All Products</Text>
+          </Pressable>
+
+          {hierarchy.length > 0 ? (
+            hierarchy.map((group) => (
+              <View key={group.title} style={styles.categoryGroup}>
+                <Text style={styles.categoryGroupTitle}>{formatCategoryGroupTitle(group.title)}</Text>
+                {group.items.map((category) => (
+                  <Pressable
+                    key={`${group.title}-${category}`}
+                    accessibilityRole="button"
+                    onPress={() => onSelectCategory(category)}
+                    style={({ pressed }) => [styles.categoryMenuItem, pressed && styles.categoryMenuItemPressed]}>
+                    <Text numberOfLines={2} style={styles.categoryMenuItemText}>{category}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ))
+          ) : (
+            <Text style={styles.categoryEmptyText}>Categories are unavailable.</Text>
+          )}
+        </ScrollView>
+      </Animated.View>
     </View>
   );
 }
@@ -360,6 +507,49 @@ function sortProducts(products: Product[], sort: SortOption) {
   return sortedProducts;
 }
 
+function buildCategoryHierarchyFromProducts(products: Product[]): CategoryHierarchyGroup[] {
+  const groups = new Map<string, Set<string>>();
+
+  for (const product of products) {
+    const category = product.categoryName?.trim() || product.tag?.trim();
+
+    if (!category) {
+      continue;
+    }
+
+    const group = product.productGroup?.trim() || (isLikelyNonFloralCategory(category) ? 'Non-Floral' : 'Floral');
+    const groupItems = groups.get(group) ?? new Set<string>();
+    groupItems.add(category);
+    groups.set(group, groupItems);
+  }
+
+  return Array.from(groups, ([title, items]) => ({
+    title,
+    items: Array.from(items).sort((first, second) => first.localeCompare(second)),
+  })).sort((first, second) => getCategoryGroupPriority(first.title) - getCategoryGroupPriority(second.title) || first.title.localeCompare(second.title));
+}
+
+function getCategoryGroupPriority(title: string) {
+  const normalizedTitle = title.toLowerCase();
+
+  if (normalizedTitle.includes('floral') && !normalizedTitle.includes('non')) {
+    return 0;
+  }
+
+  if (normalizedTitle.includes('non')) {
+    return 1;
+  }
+
+  return 2;
+}
+
+function formatCategoryGroupTitle(title: string) {
+  return title.replace(/\s*-\s*/g, '-').toUpperCase();
+}
+
+function isLikelyNonFloralCategory(category: string) {
+  return /\b(non[\s-]?floral|accessory|basket|candle|card|gift|pot|ribbon|tool|vase|wrapper|wrapping)\b/i.test(category);
+}
 
 function SearchSkeleton() {
   const skeletonColumns = splitIntoColumns([0, 1, 2, 3]);
@@ -470,6 +660,91 @@ const styles = StyleSheet.create({
   },
   branchOptionTextActive: {
     color: theme.colors.white,
+  },
+  categorySheetOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 80,
+  },
+  categorySheetBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000000',
+  },
+  categorySheet: {
+    backgroundColor: theme.colors.white,
+    borderRightColor: outlineColor,
+    borderRightWidth: 1,
+    bottom: 0,
+    left: 0,
+    maxWidth: 330,
+    position: 'absolute',
+    top: 0,
+    width: '84%',
+  },
+  categorySheetHeader: {
+    alignItems: 'center',
+    borderBottomColor: outlineColor,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    minHeight: 72,
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: theme.spacing.md,
+  },
+  categorySheetTitle: {
+    color: '#111827',
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 18,
+    letterSpacing: 0,
+  },
+  categorySheetContent: {
+    gap: theme.spacing.lg,
+    paddingHorizontal: theme.spacing.xl,
+    paddingTop: theme.spacing.lg,
+  },
+  allProductsButton: {
+    alignSelf: 'flex-start',
+    borderRadius: 10,
+    justifyContent: 'center',
+    minHeight: 38,
+    paddingHorizontal: 2,
+  },
+  allProductsText: {
+    color: theme.colors.primary,
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 15,
+    lineHeight: 20,
+  },
+  categoryGroup: {
+    gap: theme.spacing.sm,
+  },
+  categoryGroupTitle: {
+    color: '#9CA3AF',
+    fontFamily: Fonts.sansExtraBold,
+    fontSize: 13,
+    letterSpacing: 0.8,
+    lineHeight: 18,
+  },
+  categoryMenuItem: {
+    borderRadius: 10,
+    justifyContent: 'center',
+    minHeight: 32,
+    paddingHorizontal: 2,
+    paddingVertical: 4,
+  },
+  categoryMenuItemPressed: {
+    backgroundColor: 'rgba(46, 139, 52, 0.08)',
+  },
+  categoryMenuItemText: {
+    color: '#4B5563',
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 15,
+    lineHeight: 21,
+  },
+  categoryEmptyText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 14,
+    lineHeight: 20,
   },
   backButton: {
     alignItems: 'center',

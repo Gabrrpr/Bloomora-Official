@@ -1,6 +1,6 @@
 import { Image } from 'expo-image';
 import { router, type Href } from 'expo-router';
-import { ImageOff, Star } from 'lucide-react-native';
+import { ImageOff, Star, UserRound } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -84,7 +84,7 @@ export default function MyRatingScreen() {
         ) : reviews.length === 0 ? (
           <EmptyState message="You have not submitted any reviews yet." />
         ) : (
-          reviews.map((review) => <ReviewCard key={review.id} review={review} />)
+          reviews.map((review) => <ReviewCard key={review.id} review={review} session={session} />)
         )}
       </ScrollView>
     </View>
@@ -119,9 +119,27 @@ function ToRateCard({ order }: { order: CustomerOrder }) {
   );
 }
 
-function ReviewCard({ review }: { review: MyReview }) {
+function ReviewCard({ review, session }: { review: MyReview; session: AuthSession }) {
+  const displayName = getDisplayName(session.user);
+
   return (
-    <View style={styles.card}>
+    <Pressable
+      accessibilityRole="button"
+      onPress={() => router.push(`/product-details?id=${encodeURIComponent(review.product_id)}` as Href)}
+      style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
+      <View style={styles.reviewerRow}>
+        {session.user.profile_picture_url ? (
+          <Image source={{ uri: session.user.profile_picture_url }} style={styles.avatar} />
+        ) : (
+          <View style={styles.avatarFallback}>
+            <UserRound color={theme.colors.primary} size={19} />
+          </View>
+        )}
+        <View style={styles.reviewerCopy}>
+          <Text style={styles.reviewerName}>{displayName}</Text>
+          <Text style={styles.cardMeta}>{formatDate(review.created_at)}</Text>
+        </View>
+      </View>
       <View style={styles.productRow}>
         {review.product_image_url || review.image_url ? <Image source={{ uri: review.product_image_url || review.image_url || '' }} style={styles.image} /> : <View style={styles.imageFallback}><Star color="#E8A928" size={22} /></View>}
         <View style={styles.cardCopy}>
@@ -129,11 +147,10 @@ function ReviewCard({ review }: { review: MyReview }) {
           <View style={styles.starsRow}>
             {[1, 2, 3, 4, 5].map((value) => <Star key={value} color="#E8A928" fill={value <= review.star_rating ? '#E8A928' : 'transparent'} size={15} />)}
           </View>
-          <Text style={styles.cardMeta}>{formatDate(review.created_at)}</Text>
         </View>
       </View>
       {review.comment ? <Text style={styles.reviewComment}>{review.comment}</Text> : null}
-    </View>
+    </Pressable>
   );
 }
 
@@ -154,6 +171,11 @@ function formatDate(value?: string | null) {
   return new Intl.DateTimeFormat('en-PH', { dateStyle: 'medium' }).format(date);
 }
 
+function getDisplayName(user: AuthSession['user']) {
+  const name = [user.first_name, user.last_name].map((part) => part?.trim()).filter(Boolean).join(' ');
+  return name || user.username || user.email;
+}
+
 const styles = StyleSheet.create({
   card: { backgroundColor: '#FFFFFF', borderColor: '#D8D8D8', borderRadius: 12, borderWidth: 1, gap: 14, padding: 14 },
   cardCopy: { flex: 1, gap: 5 },
@@ -165,6 +187,11 @@ const styles = StyleSheet.create({
   primaryButton: { alignItems: 'center', backgroundColor: theme.colors.primary, borderRadius: 8, justifyContent: 'center', minHeight: 44, paddingHorizontal: 18 },
   primaryButtonText: { color: '#FFFFFF', fontFamily: Fonts.sansSemiBold, fontSize: 14 },
   productRow: { alignItems: 'center', flexDirection: 'row', gap: 12 },
+  avatar: { backgroundColor: theme.colors.greenSoft, borderRadius: 18, height: 36, width: 36 },
+  avatarFallback: { alignItems: 'center', backgroundColor: theme.colors.greenSoft, borderRadius: 18, height: 36, justifyContent: 'center', width: 36 },
+  reviewerCopy: { flex: 1, gap: 2 },
+  reviewerName: { color: '#222222', fontFamily: Fonts.sansSemiBold, fontSize: 14, lineHeight: 18 },
+  reviewerRow: { alignItems: 'center', flexDirection: 'row', gap: 10 },
   reviewComment: { color: '#444444', fontFamily: Fonts.sans, fontSize: 13, lineHeight: 20 },
   screen: { backgroundColor: '#F5F5F5', flex: 1 },
   starsRow: { flexDirection: 'row', gap: 2 },
@@ -176,4 +203,5 @@ const styles = StyleSheet.create({
   tabText: { color: '#A7A7A7', fontFamily: Fonts.sansMedium, fontSize: 14 },
   tabTextActive: { color: theme.colors.primary, fontFamily: Fonts.sansSemiBold },
   tabs: { backgroundColor: '#FFFFFF', borderBottomColor: '#D7D7D7', borderBottomWidth: StyleSheet.hairlineWidth, flexDirection: 'row' },
+  pressed: { opacity: 0.76 },
 });

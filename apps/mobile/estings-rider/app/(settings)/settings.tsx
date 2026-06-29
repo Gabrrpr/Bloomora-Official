@@ -19,8 +19,6 @@ import {
   type BiometricsAvailability,
 } from '@/services/biometrics';
 
-type PermissionToggle = 'notifications' | 'location' | 'camera';
-
 const dangerTone = '#D96B6B';
 
 export default function RiderSettingsScreen() {
@@ -31,12 +29,6 @@ export default function RiderSettingsScreen() {
   const [biometricsMessage, setBiometricsMessage] = useState<string | null>(null);
   const [isScreenLockEnabled, setIsScreenLockEnabled] = useState(false);
   const [isLogoutVisible, setIsLogoutVisible] = useState(false);
-  const [permissions, setPermissions] = useState({
-    camera: true,
-    location: true,
-    notifications: true,
-  });
-
   useEffect(() => {
     let mounted = true;
 
@@ -62,13 +54,6 @@ export default function RiderSettingsScreen() {
     setIsLogoutVisible(false);
     await logout({ forgetAccount: true });
     router.replace('/login');
-  }
-
-  function handleTogglePermission(key: PermissionToggle, value: boolean) {
-    setPermissions((current) => ({
-      ...current,
-      [key]: value,
-    }));
   }
 
   async function handleToggleScreenLock(nextValue: boolean) {
@@ -171,30 +156,6 @@ export default function RiderSettingsScreen() {
             />
             <Text style={styles.statusText}>{screenLockStatus}</Text>
           </View>
-          <Divider />
-          <ToggleRow
-            description="Receive delivery assignments and route updates."
-            icon="bell"
-            label="Notifications"
-            value={permissions.notifications}
-            onValueChange={(value) => handleTogglePermission('notifications', value)}
-          />
-          <Divider />
-          <ToggleRow
-            description="Share location while coordinating deliveries."
-            icon="navigation"
-            label="Location Access"
-            value={permissions.location}
-            onValueChange={(value) => handleTogglePermission('location', value)}
-          />
-          <Divider />
-          <ToggleRow
-            description="Use camera for proof-of-delivery photos."
-            icon="camera"
-            label="Camera Access"
-            value={permissions.camera}
-            onValueChange={(value) => handleTogglePermission('camera', value)}
-          />
         </SettingsSection>
 
         <SettingsSection danger title="Danger Zone">

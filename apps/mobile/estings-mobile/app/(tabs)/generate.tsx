@@ -156,6 +156,15 @@ export default function GenerateScreen() {
     router.push(route);
   }, []);
 
+  const handleSkipIntro = useCallback(() => {
+    clearIdleTimer();
+    setShowSwipeGuide(false);
+    runOnUI(() => {
+      'worklet';
+      scrollTo(scrollRef, 0, sceneHeight * 3, true);
+    })();
+  }, [clearIdleTimer, sceneHeight, scrollRef]);
+
   const sceneFadeStyle = useAnimatedStyle(() => ({
     opacity: interpolate(scrollY.value, [sceneHeight * 2.35, sceneHeight * 2.9], [1, 0.18], Extrapolation.CLAMP),
     transform: [
@@ -224,7 +233,8 @@ export default function GenerateScreen() {
         </View>
       </Animated.ScrollView>
 
-      <TopScrollProgress scrollY={scrollY} sceneHeight={sceneHeight} />
+      <SideScrollProgress scrollY={scrollY} sceneHeight={sceneHeight} />
+      <SkipIntroButton onPress={handleSkipIntro} scrollY={scrollY} sceneHeight={sceneHeight} />
       <FinalHeader onSearchPress={() => setIsSearchOpen(true)} scrollY={scrollY} sceneHeight={sceneHeight} />
       <FloatingProductSearch onClose={() => setIsSearchOpen(false)} visible={isSearchOpen} />
 
@@ -269,18 +279,33 @@ function FinalHeader({
   );
 }
 
-function TopScrollProgress({ sceneHeight, scrollY }: { sceneHeight: number; scrollY: SharedValue<number> }) {
-  const progressStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(scrollY.value, [8, 70], [0, 1], Extrapolation.CLAMP),
-  }));
-
-  const fillStyle = useAnimatedStyle(() => ({
-    transform: [{ scaleX: interpolate(scrollY.value, [0, sceneHeight * 3], [0, 1], Extrapolation.CLAMP) }],
+function SkipIntroButton({ onPress, sceneHeight, scrollY }: { onPress: () => void; sceneHeight: number; scrollY: SharedValue<number> }) {
+  const buttonStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [0, 40, sceneHeight * 2.56, sceneHeight * 2.75], [0, 1, 1, 0], Extrapolation.CLAMP),
+    transform: [{ translateY: interpolate(scrollY.value, [0, 40], [-8, 0], Extrapolation.CLAMP) }],
   }));
 
   return (
-    <Animated.View pointerEvents="none" style={[styles.topProgressTrack, progressStyle]}>
-      <Animated.View style={[styles.topProgressFill, fillStyle]} />
+    <Animated.View style={[styles.skipIntroLayer, buttonStyle]}>
+      <Pressable accessibilityLabel="Skip introduction" accessibilityRole="button" onPress={onPress} style={({ pressed }) => [styles.skipIntroButton, pressed && styles.pressed]}>
+        <Text style={styles.skipIntroText}>Skip</Text>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function SideScrollProgress({ sceneHeight, scrollY }: { sceneHeight: number; scrollY: SharedValue<number> }) {
+  const progressStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [8, 70, sceneHeight * 2.56, sceneHeight * 2.76], [0, 1, 1, 0], Extrapolation.CLAMP),
+  }));
+
+  const fillStyle = useAnimatedStyle(() => ({
+    transform: [{ scaleY: interpolate(scrollY.value, [0, sceneHeight * 2.72], [0, 1], Extrapolation.CLAMP) }],
+  }));
+
+  return (
+    <Animated.View pointerEvents="none" style={[styles.sideProgressTrack, progressStyle]}>
+      <Animated.View style={[styles.sideProgressFill, fillStyle]} />
     </Animated.View>
   );
 }
@@ -802,24 +827,47 @@ const styles = StyleSheet.create({
     top: 0,
     zIndex: 0,
   },
-  topProgressTrack: {
-    backgroundColor: 'rgba(31, 42, 36, 0.16)',
-    borderBottomColor: 'rgba(255, 255, 255, 0.7)',
-    borderBottomWidth: 1,
-    height: 5,
-    left: 0,
+  sideProgressTrack: {
+    backgroundColor: 'rgba(31, 42, 36, 0.14)',
+    borderColor: 'rgba(255, 255, 255, 0.72)',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 156,
     overflow: 'hidden',
     position: 'absolute',
-    right: 0,
-    top: 0,
+    right: 18,
+    top: 168,
+    width: 6,
     zIndex: 30,
   },
-  topProgressFill: {
+  sideProgressFill: {
     backgroundColor: '#1F8A3B',
     height: '100%',
-    transformOrigin: 'left center',
+    transformOrigin: 'center bottom',
     width: '100%',
     boxShadow: '0 0 0 1px rgba(255,255,255,0.24) inset',
+  },
+  skipIntroLayer: {
+    position: 'absolute',
+    right: 18,
+    top: 72,
+    zIndex: 31,
+  },
+  skipIntroButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 255, 255, 0.92)',
+    borderColor: 'rgba(31, 42, 36, 0.12)',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 38,
+    paddingHorizontal: 16,
+  },
+  skipIntroText: {
+    color: theme.colors.primaryDark,
+    fontFamily: Fonts.sansBold,
+    fontSize: 13,
+    lineHeight: 17,
   },
   aiScene: {
     bottom: 92,
@@ -1242,5 +1290,9 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
     height: 28,
     width: 14,
+  },
+  pressed: {
+    opacity: 0.76,
+    transform: [{ scale: 0.98 }],
   },
 });

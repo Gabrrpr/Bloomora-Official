@@ -1,42 +1,86 @@
 import Feather from '@expo/vector-icons/Feather';
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { Pressable, RefreshControl, StyleSheet, Switch, Text, View } from 'react-native';
 
 import { RiderScreen } from '@/components/rider/screen';
 import { Fonts, theme } from '@/constants/theme';
-import { getAuthSession, type AuthUser } from '@/services/auth-session';
-import { getMyDeliveries, getMyDeliveryHistory } from '@/services/deliveries-api';
+import { getRiderProfile, updateRiderAvailability, type RiderProfile } from '@/services/deliveries-api';
 
 export default function ProfileScreen() {
-  const [rider, setRider] = useState<AuthUser | null>(null);
+  const [rider, setRider] = useState<RiderProfile | null>(null);
   const [activeCount, setActiveCount] = useState(0);
   const [completedCount, setCompletedCount] = useState(0);
-  const [isAvailable, setIsAvailable] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isUpdatingAvailability, setIsUpdatingAvailability] = useState(false);
+  const isAvailable = rider?.riderIsAvailable ?? false;
   const riderName = getRiderName(rider);
   const riderEmail = rider?.email ?? 'rider@estings.shop';
-  const profilePicture = rider?.profile_picture_url?.trim();
+  const profilePicture = rider?.profilePictureUrl?.trim();
 
-  useEffect(() => {
+  const loadProfile = useCallback(async ({ silent = false }: { silent?: boolean } = {}) => {
+    if (!silent) {
+      setIsRefreshing(true);
+    }
+
+    try {
+      const profile = await getRiderProfile();
+      setRider(profile);
+      setActiveCount(profile.activeDeliveries);
+      setCompletedCount(profile.completedDeliveries);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Unable to load rider profile.');
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
     let mounted = true;
 
-    void Promise.all([
-      getAuthSession(),
-      getMyDeliveries().catch(() => []),
-      getMyDeliveryHistory().catch(() => []),
-    ]).then(([session, activeDeliveries, completedDeliveries]) => {
-      if (mounted) {
-        setRider(session?.user ?? null);
-        setActiveCount(activeDeliveries.length);
-        setCompletedCount(completedDeliveries.length);
-      }
-    });
+      getRiderProfile()
+        .then((profile) => {
+          if (!mounted) return;
+          setRider(profile);
+          setActiveCount(profile.activeDeliveries);
+          setCompletedCount(profile.completedDeliveries);
+          setError(null);
+        })
+        .catch((nextError) => {
+          if (mounted) {
+            setError(nextError instanceof Error ? nextError.message : 'Unable to load rider profile.');
+          }
+        });
 
     return () => {
       mounted = false;
     };
-  }, []);
+    }, []),
+  );
+
+  async function handleAvailabilityChange(nextValue: boolean) {
+    const previousProfile = rider;
+    if (!previousProfile || isUpdatingAvailability) return;
+
+    setIsUpdatingAvailability(true);
+    setRider({ ...previousProfile, riderIsAvailable: nextValue });
+    try {
+      const nextProfile = await updateRiderAvailability(nextValue);
+      setRider(nextProfile);
+      setActiveCount(nextProfile.activeDeliveries);
+      setCompletedCount(nextProfile.completedDeliveries);
+      setError(null);
+    } catch (nextError) {
+      setRider(previousProfile);
+      setError(nextError instanceof Error ? nextError.message : 'Unable to update availability.');
+    } finally {
+      setIsUpdatingAvailability(false);
+    }
+  }
 
   return (
     <RiderScreen
@@ -45,7 +89,8 @@ export default function ProfileScreen() {
           <Feather color={theme.colors.text} name="settings" size={22} />
         </Pressable>
       }
-      title="Profile">
+      title="Profile"
+      refreshControl={<RefreshControl refreshing={isRefreshing} tintColor={theme.colors.primary} onRefresh={() => void loadProfile()} />}>
       <View style={styles.identityPanel}>
         <View style={styles.avatarRing}>
           <View style={styles.avatar}>
@@ -77,8 +122,15 @@ export default function ProfileScreen() {
           <Text style={styles.statusTitle}>Status: {isAvailable ? 'Available' : 'Offline'}</Text>
           <Text style={styles.statusText}>{isAvailable ? 'You are currently on standby.' : 'You will not appear available for new routes.'}</Text>
         </View>
-        <Switch value={isAvailable} trackColor={{ false: theme.colors.border, true: theme.colors.greenSoft }} thumbColor={theme.colors.primary} onValueChange={setIsAvailable} />
+        <Switch
+          disabled={isUpdatingAvailability || !rider}
+          value={isAvailable}
+          trackColor={{ false: theme.colors.border, true: theme.colors.greenSoft }}
+          thumbColor={theme.colors.primary}
+          onValueChange={(value) => void handleAvailabilityChange(value)}
+        />
       </View>
+      {error ? <Text selectable style={styles.errorText}>{error}</Text> : null}
     </RiderScreen>
   );
 }
@@ -92,14 +144,14 @@ function StatCell({ label, value }: { label: string; value: string }) {
   );
 }
 
-function getRiderName(user: AuthUser | null) {
-  const name = [user?.first_name, user?.last_name].filter(Boolean).join(' ').trim();
+function getRiderName(user: RiderProfile | null) {
+  const name = [user?.firstName, user?.lastName].filter(Boolean).join(' ').trim();
   return name || user?.username || "Esting's Rider";
 }
 
-function getRiderInitials(user: AuthUser | null) {
-  const first = user?.first_name?.trim();
-  const last = user?.last_name?.trim();
+function getRiderInitials(user: RiderProfile | null) {
+  const first = user?.firstName?.trim();
+  const last = user?.lastName?.trim();
   const initials = `${first?.[0] ?? ''}${last?.[0] ?? ''}`.toUpperCase();
   if (initials.length > 0) return initials;
 
@@ -147,6 +199,12 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     width: 36,
+  },
+  errorText: {
+    color: theme.colors.danger,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 12,
+    lineHeight: 17,
   },
   identityCopy: {
     flex: 1,

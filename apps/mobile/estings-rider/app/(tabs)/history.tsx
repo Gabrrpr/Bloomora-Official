@@ -1,6 +1,7 @@
 import Feather from '@expo/vector-icons/Feather';
-import { useEffect, useMemo, useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useMemo, useState } from 'react';
+import { RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { DeliveryStopCard, getDestination } from '@/components/rider/delivery-stop-card';
 import { RiderScreen } from '@/components/rider/screen';
@@ -14,32 +15,56 @@ export default function HistoryScreen() {
   const [query, setQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
+  const loadHistory = useCallback(async ({ showInitialLoader = false }: { showInitialLoader?: boolean } = {}) => {
+    if (showInitialLoader) {
+      setIsLoading(true);
+    }
+
+    try {
+      const nextDeliveries = await getMyDeliveryHistory();
+      setCompletedDeliveries(nextDeliveries);
+      setError(null);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Unable to load delivery history.');
+    } finally {
+      setIsLoading(false);
+      setIsRefreshing(false);
+    }
+  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
     let isMounted = true;
 
-    getMyDeliveryHistory()
-      .then((nextDeliveries) => {
-        if (isMounted) {
+      getMyDeliveryHistory()
+        .then((nextDeliveries) => {
+          if (!isMounted) return;
           setCompletedDeliveries(nextDeliveries);
           setError(null);
-        }
-      })
-      .catch((nextError) => {
-        if (isMounted) {
-          setError(nextError instanceof Error ? nextError.message : 'Unable to load delivery history.');
-        }
-      })
-      .finally(() => {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      });
+        })
+        .catch((nextError) => {
+          if (isMounted) {
+            setError(nextError instanceof Error ? nextError.message : 'Unable to load delivery history.');
+          }
+        })
+        .finally(() => {
+          if (isMounted) {
+            setIsLoading(false);
+          }
+        });
 
     return () => {
       isMounted = false;
     };
-  }, []);
+    }, []),
+  );
+
+  function handleRefresh() {
+    setIsRefreshing(true);
+    void loadHistory();
+  }
 
   const groups = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -61,7 +86,9 @@ export default function HistoryScreen() {
   }, [completedDeliveries, query]);
 
   return (
-    <RiderScreen title="History">
+    <RiderScreen
+      title="History"
+      refreshControl={<RefreshControl refreshing={isRefreshing} tintColor={theme.colors.primary} onRefresh={handleRefresh} />}>
       <View style={styles.searchBox}>
         <Feather color="#8F8F8F" name="search" size={22} />
         <TextInput

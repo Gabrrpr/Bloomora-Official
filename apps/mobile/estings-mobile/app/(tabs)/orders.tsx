@@ -239,12 +239,12 @@ function formatScheduleTime(value?: string | null) { const date = validDate(valu
 
 const styles = StyleSheet.create({
   screen: { backgroundColor: '#F5F5F5', flex: 1 },
-  tabsScroll: { backgroundColor: '#FFFFFF', flexGrow: 0 },
-  tabBar: { borderBottomColor: '#D7D7D7', borderBottomWidth: StyleSheet.hairlineWidth, paddingHorizontal: 8 },
-  tab: { alignItems: 'center', minWidth: 82, paddingHorizontal: 8, paddingTop: 16 },
+  tabsScroll: { backgroundColor: '#FFFFFF', flexGrow: 0, minHeight: 50 },
+  tabBar: { borderBottomColor: '#D7D7D7', borderBottomWidth: StyleSheet.hairlineWidth, minHeight: 50, paddingHorizontal: 8 },
+  tab: { alignItems: 'center', justifyContent: 'flex-end', minHeight: 50, minWidth: 82, paddingHorizontal: 8, paddingTop: 13 },
   tabText: { color: '#A7A7A7', fontFamily: Fonts.sansMedium, fontSize: 12 },
   tabTextActive: { color: theme.colors.primary, fontFamily: Fonts.sansSemiBold },
-  tabIndicator: { height: 3, marginTop: 12, width: '100%' },
+  tabIndicator: { borderRadius: 2, height: 3, marginTop: 12, width: '100%' },
   tabIndicatorActive: { backgroundColor: theme.colors.primary },
   content: { gap: 14, padding: 14 },
   searchField: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#D8D8D8', borderRadius: theme.radius.pill, borderWidth: 1, flexDirection: 'row', gap: 10, minHeight: 52, paddingHorizontal: 16 },

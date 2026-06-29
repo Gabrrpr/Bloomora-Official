@@ -32,7 +32,7 @@ export default function NotificationsScreen() {
   const [session, setSession] = useState<AuthSession | null>(null);
 
   const orderUpdate = useMemo(
-    () => notifications.find((notification) => isOrderUpdate(notification)),
+    () => notifications.filter((notification) => isOrderUpdate(notification)).sort(compareNotificationDateDesc)[0],
     [notifications],
   );
   const latestUpdates = useMemo(
@@ -112,7 +112,7 @@ export default function NotificationsScreen() {
       setUnreadCount((current) => Math.max(0, current - 1));
     }
     if (notification.orderId) {
-      router.push(`/order-details/${notification.orderId}` as never);
+      router.push('/(tabs)/orders?tab=all' as never);
     }
   }, [session]);
 
@@ -490,4 +490,13 @@ function isOrderUpdate(notification: MobileNotification) {
     return false;
   }
   return Boolean(notification.orderId) || notification.type.toLowerCase() === 'order' || normalized.includes('order #') || normalized.includes('payment');
+}
+
+function compareNotificationDateDesc(first: MobileNotification, second: MobileNotification) {
+  return getNotificationTime(second.createdAt) - getNotificationTime(first.createdAt);
+}
+
+function getNotificationTime(value?: string) {
+  const time = value ? new Date(value).getTime() : 0;
+  return Number.isNaN(time) ? 0 : time;
 }

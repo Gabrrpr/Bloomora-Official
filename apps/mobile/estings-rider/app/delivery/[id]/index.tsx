@@ -267,13 +267,16 @@ export default function DeliveryDetailsScreen() {
 
   async function handleSubmitProof() {
     if (!delivery) return;
+    if (!capturedPhotoUri) {
+      Alert.alert('Proof photo required', 'Take a proof photo before saving.');
+      return;
+    }
     setIsUpdating(true);
     try {
-      const proofPhotoUrl = capturedPhotoUri ?? `rider-proof://${delivery.id}/${Date.now()}`;
       const next = await submitDeliveryProof({
         deliveryId: delivery.id,
+        photoUri: capturedPhotoUri,
         proofNote,
-        proofPhotoUrl,
       });
       setDelivery(next);
       setIsCameraOpen(false);

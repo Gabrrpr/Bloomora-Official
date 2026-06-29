@@ -58,6 +58,7 @@ export async function loginWithPassword(identifier: string, password: string) {
     user: response.user,
   };
 
+  await ensureCustomerSession(session);
   await saveAuthSession(session);
 
   return session;
@@ -100,6 +101,7 @@ export async function loginWithOAuthProvider(provider: OAuthProvider) {
     },
   };
 
+  await ensureCustomerSession(session);
   await saveAuthSession(session);
 
   return session;
@@ -252,6 +254,15 @@ function getOAuthCodeFromUrl(url: string) {
     const match = /[?&]code=([^&]+)/.exec(url);
 
     return match ? decodeURIComponent(match[1]) : null;
+  }
+}
+
+async function ensureCustomerSession(session: AuthSession) {
+  const role = session.user.role?.trim().toLowerCase();
+
+  if (role && role !== 'customer') {
+    await clearAuthSession();
+    throw new Error('Only customer accounts can log in to Esting\'s Mobile.');
   }
 }
 

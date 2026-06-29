@@ -12,6 +12,7 @@ export type AuthUser = {
   last_name?: string | null;
   phone_number?: string | null;
   profile_picture_url?: string | null;
+  rider_is_available?: boolean | null;
   role?: string | null;
   username?: string | null;
 };

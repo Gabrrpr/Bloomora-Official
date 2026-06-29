@@ -1339,7 +1339,7 @@ function isMixAndMatchProduct(product: CustomizationProduct) {
   const blob = productSearchBlob(product);
 
   if (category === 'box') return false;
-  if (['filler', 'wrapping', 'vase', 'accessory', 'accesorry', 'flower', 'flowers'].includes(category)) return true;
+  if (['filler', 'wrapping', 'vase', 'ribbon', 'flower', 'flowers'].includes(category)) return true;
 
   if (product.is_visible === true) return false;
   return !/\b(bouquet|arrangement|flower box arrangement|vase arrangement|catalog|storefront)\b/.test(blob);
@@ -1385,7 +1385,7 @@ function isAccessoryProduct(product: CustomizationProduct) {
   const category = productCategory(product);
   const type = productType(product);
   const blob = productSearchBlob(product);
-  return isExactCategory(product, ['accessory', 'accesorry']) || type.includes('accessory') || type.includes('accesorry') || category.includes('ribbon') || type.includes('ribbon') || blob.includes('ribbon');
+  return category.includes('ribbon') || type.includes('ribbon') || blob.includes('ribbon');
 }
 
 function filterProductsForSearch(products: CustomizationProduct[], query: string) {
