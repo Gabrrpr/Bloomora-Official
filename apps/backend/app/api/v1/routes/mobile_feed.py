@@ -38,7 +38,7 @@ TABS = {"explore", "new", "for-you"}
 BRANCHES = {"all", "manila", "pampanga"}
 BOOSTS = {"none": 0.0, "low": 0.05, "medium": 0.10, "high": 0.15}
 EVENT_TYPES = {"impression", "open", "cta", "share", "like", "add_to_cart", "voucher_copy"}
-FEED_SCHEMA_VERSION = 2
+FEED_SCHEMA_VERSION = 3
 FOR_YOU_SENSITIVE_TERMS = {
     "buffet",
     "ceramic vase",

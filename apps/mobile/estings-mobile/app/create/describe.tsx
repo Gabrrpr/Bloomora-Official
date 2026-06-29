@@ -48,6 +48,7 @@ import { ProductAddOnSelector } from '@/components/product-add-on-selector';
 import { formatPhp, type Product } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { requireSignedIn } from '@/services/auth-guard';
+import { getAuthSession } from '@/services/auth-session';
 import { addAiArrangementToCart } from '@/services/guest-cart';
 import {
   checkAndGenerate,
@@ -120,6 +121,7 @@ export default function DescribeArrangementScreen() {
   const [arrangementName, setArrangementName] = useState('AI Arrangement');
   const [cardMessage, setCardMessage] = useState('');
   const [isLoadingAddOns, setIsLoadingAddOns] = useState(false);
+  const [isSignedIn, setIsSignedIn] = useState(false);
   const [selectedAddOnIds, setSelectedAddOnIds] = useState<ReadonlySet<string>>(() => new Set());
   const [isListening, setIsListening] = useState(false);
   const [speechLevel, setSpeechLevel] = useState(0);
@@ -225,10 +227,12 @@ export default function DescribeArrangementScreen() {
   useEffect(() => {
     async function load() {
       try {
-        const [toggleRes, usageRes] = await Promise.all([
+        const [session, toggleRes, usageRes] = await Promise.all([
+          getAuthSession(),
           isCustomizationEnabled().catch(() => ({ enabled: true })),
           getAiUsage().catch(() => ({ remaining: 5, limit: 5 })),
         ]);
+        setIsSignedIn(Boolean(session));
         setCustomizationEnabled(toggleRes.enabled);
         setAiUsage(usageRes);
       } catch {
@@ -308,6 +312,11 @@ export default function DescribeArrangementScreen() {
       return;
     }
     if (!prompt.trim() || isProcessing) return;
+    const session = await requireSignedIn('generate your arrangement');
+    if (!session) {
+      setIsSignedIn(false);
+      return;
+    }
     if (aiUsage && aiUsage.remaining === 0) {
       setError(`You have reached your daily limit of ${aiUsage.limit} AI generations. Please try again tomorrow.`);
       return;
@@ -532,14 +541,19 @@ export default function DescribeArrangementScreen() {
                   onPress={handleVoiceInput}
                 />
                 <SubmitPromptButton
-                  disabled={!hasPrompt || isProcessing || (aiUsage?.remaining === 0)}
+                  disabled={!hasPrompt || !isSignedIn || isProcessing || (aiUsage?.remaining === 0)}
                   isProcessing={isProcessing}
                   onSubmit={handleGenerate}
                 />
               </View>
             </View>
 
-            {aiUsage ? (
+            {!isSignedIn ? (
+              <View style={styles.usageRow}>
+                <Info color={theme.colors.primary} size={14} strokeWidth={2} />
+                <Text style={styles.usageText}>Sign in to generate an AI arrangement.</Text>
+              </View>
+            ) : aiUsage ? (
               <View style={styles.usageRow}>
                 <Sparkles color={theme.colors.primary} size={14} strokeWidth={2} />
                 <Text style={styles.usageText}>

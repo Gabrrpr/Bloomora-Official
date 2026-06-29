@@ -80,8 +80,9 @@ export async function loginWithOAuthProvider(provider: OAuthProvider) {
   await initializeApiBaseUrl();
 
   const apiBaseUrl = getApiBaseUrl().replace(/\/$/, '');
-  const webCallbackUrl = `${defaultWebBaseUrl.replace(/\/$/, '')}/oauth/callback`;
-  const authUrl = `${apiBaseUrl}/auth/${provider}`;
+  const webBaseUrl = defaultWebBaseUrl.replace(/\/$/, '');
+  const webCallbackUrl = `${webBaseUrl}/oauth/callback`;
+  const authUrl = `${apiBaseUrl}/auth/${provider}?frontend_url=${encodeURIComponent(webBaseUrl)}`;
   const authResult = await WebBrowser.openAuthSessionAsync(authUrl, webCallbackUrl, {
     preferEphemeralSession: false,
   });
