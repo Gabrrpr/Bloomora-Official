@@ -593,6 +593,7 @@ function QuoteLineRow({ label, unit, qty, txt, subTxt, addon, formatPrice }) {
 
 /* ── Quote Step ── */
 function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark, onBack, onClose, onOpenChat, isMobile, formatPrice }) {
+  const productImage = product.image || product.image_url || ""; 
   const [phase,  setPhase]  = useState("input")
   const [qtyStr, setQtyStr] = useState("")
   const [err,    setErr]    = useState("")
