@@ -211,7 +211,7 @@ export default function DescribeArrangement({ onNavigate }) {
     setFactIdx(Math.floor(Math.random() * FLOWER_FACTS.length))
 
     const prog = setInterval(() => {
-      setProgress(p => (p >= 90 ? 90 : p + Math.max(1, (92 - p) * 0.08)))
+      setProgress(p => (p >= 99 ? 99 : p + Math.max(0.25, (99 - p) * (0.05 + Math.random() * 0.04))))
     }, 280)
     const facts = setInterval(() => {
       setFactIdx(i => (i + 1) % FLOWER_FACTS.length)

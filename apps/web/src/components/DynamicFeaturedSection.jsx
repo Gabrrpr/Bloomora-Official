@@ -216,6 +216,7 @@ function SectionBlock({ data, products, onNavigate, onPreview, isDark }) {
                   style={{ backgroundColor: isDark ? "#1a2332" : "#ffffff", border: `1px solid ${isDark ? "#2d3748" : "#f3f4f6"}` }}>
                   <div className="relative aspect-square overflow-hidden bg-gray-50">
                     <img src={p.image} alt={p.name} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                    <div className="feat-sheen" />
                     {ribbon && ribbonColor && (
                       <div className="absolute top-3 left-0 z-10 shadow-sm">
                         <div className="text-[10px] font-bold text-white py-1 pr-3 pl-2.5" style={{ backgroundColor: ribbonColor, clipPath: "polygon(0 0,calc(100% - 6px) 0,100% 50%,calc(100% - 6px) 100%,0 100%)" }}>{ribbon}</div>

@@ -30,7 +30,7 @@ const FALLBACK_HEADER = {
 
 const mod = (n, m) => ((n % m) + m) % m
 
-export default function ChooseYourBloom({ branch: propBranch, onNavigate }) {
+export default function ChooseYourBloom({ branch: propBranch, onNavigate, onPreview }) {
   const { isDark } = useTheme()
   const branchContext = useBranch() || {}
   
@@ -70,21 +70,17 @@ export default function ChooseYourBloom({ branch: propBranch, onNavigate }) {
           return
         }
 
-        const products = (Array.isArray(productRows) ? productRows : []).map(p => ({
-          id: p.id,
-          name: p.name,
-          price: Number(p.price) || 0,
-          image: p.image || p.image_url || null,
-        }))
+        const productRowsArr = Array.isArray(productRows) ? productRows : []
 
         const resolved = carousel.slides
           .map(slide => {
-            const product = products.find(p => String(p.id) === String(slide.productId))
-            const src = product?.image || null
+            const product = productRowsArr.find(p => String(p.id) === String(slide.productId)) || null
+            const src = product?.image || product?.image_url || null
             const name = slide.name || product?.name || ""
             const tag = slide.tag || ""
             const price = slide.price || (product ? `₱${Number(product.price || 0).toLocaleString()}` : "")
-            return { src, name, tag, price }
+            // Keep the full product so the center image can open its preview.
+            return { src, name, tag, price, product }
           })
           .filter(b => b.src)
 
@@ -251,13 +247,27 @@ export default function ChooseYourBloom({ branch: propBranch, onNavigate }) {
 
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center w-[88%] sm:w-[62%]" style={{ maxWidth: 640, height: "100%" }}>
               <div key={index} className="flex items-center justify-center w-full h-full" style={{ animation: centerAnim }}>
-                <div className="relative inline-flex max-w-full max-h-full">
-                  <img src={center.src} alt={center.name} className="max-w-full max-h-full object-contain drop-shadow-xl block" />
+                <div
+                  className={`group relative inline-flex max-w-full max-h-full ${center.product ? "cursor-pointer" : ""}`}
+                  onClick={() => { if (center.product && onPreview) onPreview(center.product) }}
+                  role={center.product ? "button" : undefined}
+                  title={center.product ? "View details" : undefined}
+                >
+                  <img src={center.src} alt={center.name} className="max-w-full max-h-full object-contain drop-shadow-xl block transition-transform duration-300 group-hover:scale-[1.03]" />
                   <div className="bloom-sheen pointer-events-none absolute inset-0"
                     style={{
                       backgroundImage: "linear-gradient(135deg, transparent 35%, rgba(255,255,255,0.0) 42%, rgba(255,255,255,0.6) 50%, rgba(255,255,255,0.0) 58%, transparent 65%)",
                       backgroundSize: "250% 250%", backgroundRepeat: "no-repeat", WebkitMaskImage: `url(${center.src})`, maskImage: `url(${center.src})`, WebkitMaskSize: "contain", maskSize: "contain", WebkitMaskRepeat: "no-repeat", maskRepeat: "no-repeat", WebkitMaskPosition: "center", maskPosition: "center", mixBlendMode: "screen", animation: "bloomSheen 7s ease-in-out infinite"
                     }} />
+                  {center.product && (
+                    <div className="pointer-events-none absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      <span className="inline-flex items-center gap-1.5 px-5 py-2.5 rounded-full text-sm sm:text-base font-bold text-white shadow-xl"
+                        style={{ background: "linear-gradient(135deg,#0C573E,#2E8B34)" }}>
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1 1 0 010-.644C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z"/><path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                        View Details
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

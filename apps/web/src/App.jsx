@@ -228,9 +228,9 @@ function AppContent() {
     }
 
     // Standalone legal pages (their own back bar, no customer navbar) — like Terms.
-    if (page === "privacy") return <DataPrivacyPolicy onNavigate={navigate} />;
-    if (page === "ordering-fulfillment") return <OrderingAndFulfillment onNavigate={navigate} />;
-    if (page === "cookie-policy") return <CookiePolicy onNavigate={navigate} />;
+    if (page === "privacy") return <DataPrivacyPolicy onNavigate={navigate} onBack={() => navigate(prevPage)} />;
+    if (page === "ordering-fulfillment") return <OrderingAndFulfillment onNavigate={navigate} onBack={() => navigate(prevPage)} />;
+    if (page === "cookie-policy") return <CookiePolicy onNavigate={navigate} onBack={() => navigate(prevPage)} />;
 
     return (
       <>

@@ -285,7 +285,7 @@ export default function Testimonials() {
     : "none"
 
   return (
-    <section className="relative overflow-hidden max-w-[1600px] mx-auto py-[clamp(56px,7vw,100px)]">
+    <section className="relative overflow-hidden max-w-[1920px] mx-auto py-[clamp(56px,7vw,100px)]">
       <style>{carouselCss}</style>
 
       {/* Background image — a single, non-repeating image. On wide screens it

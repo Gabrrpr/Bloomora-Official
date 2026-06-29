@@ -33,7 +33,7 @@ def serialize_chat(msg: Chat) -> dict:
         "is_read": msg.is_read,
         "created_at": msg.created_at,
         # 🚀 ADDED CONTEXT SUPPORT
-        "context_id": getattr(msg, "context_id", None) 
+        "context_id": getattr(msg, "context_id", None),
     }
 
 

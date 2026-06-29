@@ -13,16 +13,16 @@ import c9  from "../../assets/customized/customized9.webp"
 import c10 from "../../assets/customized/customized10.webp"
 
 const ARRANGEMENTS = [
-  { id:1,  src:c1,  title:"Rose Cascade",   mood:"Romantic",   palette:["#e11d48","#f43f5e","#fda4af"], prompt:"A sweeping cascade of deep red roses with soft pink tips, perfect for a romantic anniversary gift." },
-  { id:2,  src:c2,  title:"Garden Whisper", mood:"Dreamy",     palette:["#7c3aed","#a78bfa","#ddd6fe"], prompt:"Dreamy lavender and violet blooms arranged loosely, like wildflowers freshly picked from a secret garden." },
-  { id:3,  src:c3,  title:"Sunlit Meadow",  mood:"Cheerful",   palette:["#d97706","#fbbf24","#fef3c7"], prompt:"Warm golden sunflowers and amber dahlias that feel like a bright and joyful summer afternoon." },
-  { id:4,  src:c4,  title:"Ivory Elegance", mood:"Classic",    palette:["#6b7280","#9ca3af","#f9fafb"], prompt:"Timeless white and ivory roses in a refined, structured arrangement perfect for formal occasions." },
-  { id:5,  src:c5,  title:"Blossom Storm",  mood:"Bold",       palette:["#db2777","#ec4899","#fbcfe8"], prompt:"Bold fuchsia and hot pink blooms bursting outward like a joyful explosion of color and energy." },
-  { id:6,  src:c6,  title:"Forest Calm",    mood:"Earthy",     palette:["#15803d","#22c55e","#bbf7d0"], prompt:"Earthy greens, eucalyptus, and ivory florals rooted in a calm and natural woodland aesthetic." },
-  { id:7,  src:c7,  title:"Lavender Dusk",  mood:"Serene",     palette:["#7e22ce","#c084fc","#ede9fe"], prompt:"Soft lavender and lilac blooms that glow gently, like the last light settling over a quiet open field." },
-  { id:8,  src:c8,  title:"Coral Sunrise",  mood:"Warm",       palette:["#ea580c","#fb923c","#fed7aa"], prompt:"Warm coral and peach roses that catch the first morning light in a bright and vibrant arrangement." },
-  { id:9,  src:c9,  title:"Midnight Bloom", mood:"Mysterious", palette:["#1e1b4b","#4338ca","#a5b4fc"], prompt:"Deep navy and indigo flowers with silver-tipped petals that carry an air of mystery and quiet elegance." },
-  { id:10, src:c10, title:"Peach Reverie",  mood:"Soft",       palette:["#be185d","#f9a8d4","#fdf2f8"], prompt:"Delicate peach and blush tones in a light, airy arrangement meant for a gentle and heartfelt gesture." },
+  { id:1,  src:c1,  title:"Ivory Serenity",   mood:"Graceful",    palette:["#f5f1e6","#a3b18a","#dde3d2"], prompt:"Elegant ivory white tulips with fresh eucalyptus in a clean, minimalist bouquet, creating a timeless and graceful arrangement." },
+  { id:2,  src:c2,  title:"Crimson Devotion", mood:"Romantic",    palette:["#991b1b","#e7d3b3","#f6c9d4"], prompt:"Rich red roses wrapped in kraft paper with a blush ribbon, forming a romantic bouquet full of warmth and affection." },
+  { id:3,  src:c3,  title:"Blush Reverie",    mood:"Gentle",      palette:["#f4c2cc","#ffffff","#c2cbb5"], prompt:"Soft blush roses paired with delicate white baby's breath in a light, airy bouquet meant for a gentle and heartfelt gesture." },
+  { id:4,  src:c4,  title:"Golden Radiance",  mood:"Cheerful",    palette:["#f5c518","#7a4a26","#14532d"], prompt:"Bright sunflowers gathered with lush greenery and wrapped simply, creating a cheerful bouquet bursting with sunshine." },
+  { id:5,  src:c5,  title:"Cotton Candy Bloom", mood:"Sweet",     palette:["#f6a8c0","#f3e8d3","#fdf7f0"], prompt:"Pink and cream roses arranged into a lush, rounded bouquet with a sweet and elegant romantic charm." },
+  { id:6,  src:c6,  title:"Ivory Elegance",   mood:"Refined",     palette:["#ffffff","#f3eee0","#a3b18a"], prompt:"Classic white roses accented with eucalyptus and wrapped naturally for a refined and sophisticated floral arrangement." },
+  { id:7,  src:c7,  title:"Pearl Bloom Box",  mood:"Modern",      palette:["#ffffff","#f4c2cc","#a3b18a"], prompt:"Luxurious white roses nestled inside a soft pink hat box with fresh greenery, offering a modern and elegant floral presentation." },
+  { id:8,  src:c8,  title:"Moonlit Garden",   mood:"Timeless",    palette:["#f8fbf7","#bcd4c0","#3f8a5b"], prompt:"A full dome of creamy white roses with eucalyptus displayed in a clear glass vase for a fresh and timeless centerpiece." },
+  { id:9,  src:c9,  title:"Pure Embrace",     mood:"Elegant",     palette:["#ffffff","#dfeadd","#9bb89f"], prompt:"Pristine white roses wrapped in crisp white paper with subtle greenery, creating a clean and elegant bouquet for any occasion." },
+  { id:10, src:c10, title:"Snow Whisper",     mood:"Serene",      palette:["#ffffff","#dde3d2","#a3b18a"], prompt:"Fresh white roses with delicate eucalyptus wrapped in translucent white paper, forming a simple and graceful bouquet with a serene aesthetic." },
 ]
 
 const N   = ARRANGEMENTS.length
@@ -33,7 +33,7 @@ const NAVBAR_H = 104
 
 export default function AIGalleryPage({ onNavigate }) {
   const { isDark } = useTheme()
-  const [center,  setCenter]  = useState(1)
+  const [center,  setCenter]  = useState(0)
   const [visible, setVisible] = useState(false)
   const touchX = useRef(null)
 
@@ -64,6 +64,31 @@ export default function AIGalleryPage({ onNavigate }) {
   }
 
   const active = ARRANGEMENTS[center]
+
+  // ── Typewriter loop for the title: type → pause → delete → retype ───────────
+  const [typed, setTyped] = useState("")
+  useEffect(() => {
+    const full = active.title
+    let i = 0
+    let deleting = false
+    let timer
+    const tick = () => {
+      if (!deleting) {
+        i++
+        setTyped(full.slice(0, i))
+        if (i >= full.length) { deleting = true; timer = setTimeout(tick, 1500); return }
+        timer = setTimeout(tick, 80)
+      } else {
+        i--
+        setTyped(full.slice(0, i))
+        if (i <= 0) { deleting = false; timer = setTimeout(tick, 450); return }
+        timer = setTimeout(tick, 40)
+      }
+    }
+    setTyped("")
+    timer = setTimeout(tick, 150)
+    return () => clearTimeout(timer)
+  }, [active.title])
 
   // ── Dark mode color tokens ─────────────────────────────────────────────────
   const bg         = isDark ? "#111827" : "#fff"
@@ -115,8 +140,16 @@ export default function AIGalleryPage({ onNavigate }) {
         .ag-thumb:hover  { opacity: 1 !important; transform: scale(1.07); }
         .ag-arrow  { transition: all 0.18s ease; }
         .ag-arrow:hover  { background: ${arrowHov} !important; }
+        .ag-back  { transition: all 0.18s ease; }
+        .ag-back:hover  { transform: translateX(-2px); box-shadow: 0 4px 14px rgba(0,0,0,0.14); }
         .ag-cta { transition: all 0.2s ease; }
         .ag-cta:hover { opacity: 0.88; transform: translateY(-1px); }
+        @keyframes agCaretBlink { 0%,49% { opacity: 1; } 50%,100% { opacity: 0; } }
+        .ag-caret {
+          display: inline-block; width: 2px; height: 0.95em; margin-left: 3px;
+          background: currentColor; vertical-align: -0.08em; border-radius: 1px;
+          animation: agCaretBlink 0.9s steps(1) infinite;
+        }
 
         @media (max-width: 768px) {
           .ag-root { position: static; height: auto; min-height: calc(100svh - ${NAVBAR_H}px); flex-direction: column; overflow: visible; }
@@ -147,7 +180,7 @@ export default function AIGalleryPage({ onNavigate }) {
           <div style={{ position:"absolute", inset:0, background:"linear-gradient(to top,rgba(0,0,0,0.52) 0%,transparent 42%)", pointerEvents:"none", zIndex:2 }}/>
 
           {/* Back */}
-          <button onClick={() => onNavigate?.("home")} className="ag-arrow"
+          <button onClick={() => onNavigate?.("home")} className="ag-back"
             style={{ position:"absolute", top:16, left:16, zIndex:20, display:"inline-flex", alignItems:"center", gap:6, color:backC, background:backBg, backdropFilter:"blur(8px)", WebkitBackdropFilter:"blur(8px)", border:`1px solid ${backBdr}`, borderRadius:50, padding:"7px 14px", fontSize:12, fontWeight:600, cursor:"pointer" }}>
             <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7"/></svg>
             Back
@@ -167,7 +200,7 @@ export default function AIGalleryPage({ onNavigate }) {
               {active.palette.map((c,i) => <div key={i} style={{ width:8, height:8, borderRadius:"50%", background:c, boxShadow:"0 0 0 1.5px rgba(255,255,255,0.4)" }}/>)}
             </div>
             <p style={{ color:"rgba(255,255,255,0.75)", fontSize:10, fontWeight:700, letterSpacing:"0.2em", textTransform:"uppercase", marginBottom:3, fontFamily:"inherit" }}>{active.mood} · AI-Generated</p>
-            <h3 style={{ color:"white", fontSize:"clamp(18px,2vw,26px)", fontWeight:800, lineHeight:1.15, margin:0, textShadow:"0 2px 10px rgba(0,0,0,0.45)", fontFamily:"inherit" }}>{active.title}</h3>
+            <h3 style={{ color:"white", fontSize:"clamp(18px,2vw,26px)", fontWeight:800, lineHeight:1.15, margin:0, minHeight:"1.15em", textShadow:"0 2px 10px rgba(0,0,0,0.45)", fontFamily:"inherit" }}>{typed}<span className="ag-caret"/></h3>
           </div>
         </div>
 
@@ -192,7 +225,7 @@ export default function AIGalleryPage({ onNavigate }) {
             </h1>
 
             {/* Body */}
-            <p style={{ color:bodyC, fontSize:"clamp(13px,1vw,14px)", lineHeight:1.75, maxWidth:340, margin:"0 0 18px", fontFamily:"inherit" }}>
+            <p style={{ color:bodyC, fontSize:"clamp(13px,1vw,14px)", lineHeight:1.7, maxWidth:560, margin:"0 0 18px", fontFamily:"inherit" }}>
               Tell us what you have in mind and our AI puts together a unique arrangement just for you. Every piece is one of a kind and made fresh for the occasion.
             </p>
 

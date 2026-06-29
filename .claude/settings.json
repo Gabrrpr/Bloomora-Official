@@ -11,7 +11,10 @@
       "Bash(npx esbuild *)",
       "Bash(awk 'NR>=820 && NR<=1010 && \\(/return \\\\\\(/ || /<nav/ || /<header/ || /logo/i || /Logo/ || /onClick=\\\\{\\\\\\(\\\\\\) => onNavigate\\\\\\(\"home\"\\\\\\)/ || /cartOpen/ || /setCartOpen/ || /h-\\\\[?[0-9]/ \\)' src/components/Navbar.jsx)",
       "Bash(perl -0pi -e 's/\\\\$\\\\{entered \\\\? \"deliv-rise\" : \"\"\\\\}/deliv-rise/g' src/pages/admin/AdminDelivery.jsx)",
-      "Bash(awk 'NR>=2095 && NR<=2170 && \\(/function /||/const t =/||/const \\\\{ isDark/||/const goTo/||/useTokens/\\)' src/pages/admin/AdminDashboard.jsx)"
+      "Bash(awk 'NR>=2095 && NR<=2170 && \\(/function /||/const t =/||/const \\\\{ isDark/||/const goTo/||/useTokens/\\)' src/pages/admin/AdminDashboard.jsx)",
+      "Bash(python3 -c \"import ast; ast.parse\\(open\\('alembic/versions/b6c7d8e9f0a1_add_rider_availability.py'\\).read\\(\\)\\); print\\('PY SYNTAX OK'\\)\")",
+      "Bash(ls -la mobile-preview)",
+      "Bash(ls homepage *)"
     ]
   }
 }

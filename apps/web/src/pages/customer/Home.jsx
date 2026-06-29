@@ -10,6 +10,7 @@ import DynamicFeaturedSections from "../../components/DynamicFeaturedSection.jsx
 import RecommendedProducts from "../../components/Recommendations.jsx"
 import CustomizeSection from "../../components/CustomizeSection.jsx"
 import Testimonials from "../../components/Testimonials.jsx"
+import MobileAppSection from "../../components/MobileAppSection.jsx"
 import HomeFAQ from "../../components/HomeFAQ.jsx"
 import Footer from "../../components/Footer.jsx"
 import FallingRoses from "../../components/FallingRoses.jsx"
@@ -178,7 +179,10 @@ export default function Home({ onNavigate, isCustomizationEnabled }) {
         key={`carousel-${branch}`}
         branch={branch}
         onNavigate={onNavigate}
+        onPreview={setPreviewProduct}
       />
+
+      <MobileAppSection />
 
       <DynamicFeaturedSections
         key={`featured-${branch}`}

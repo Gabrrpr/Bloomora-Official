@@ -118,7 +118,7 @@ export default function CustomizeSection({ onNavigate }) {
       {/* ═══════════════════════════════════════════════════════════
           SECTION 1 — Two Ways to Build (BG image)
       ══════════════════════════════════════════════════════════════ */}
-      <section className="relative overflow-hidden max-w-[1600px] mx-auto">
+      <section className="relative overflow-hidden max-w-[1920px] mx-auto">
         <style>{`
           @keyframes csArrowNudge { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(5px); } }
           .cs-arrow { animation: csArrowNudge 1.1s ease-in-out infinite; }

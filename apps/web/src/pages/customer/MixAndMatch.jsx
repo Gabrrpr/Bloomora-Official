@@ -2,11 +2,13 @@ import { useState, useEffect } from "react"
 import { createPortal } from "react-dom"
 import { api } from "../../services/api.js"
 import { addToCart } from "../../utils/cart.js"
+import { generateCardMessage, RELATIONSHIP_OPTIONS, OCCASION_OPTIONS, TONE_OPTIONS } from "../../utils/cardMessage.js"
 import { useTheme } from "../../context/ThemeContext"
 import FallbackImage from "../../components/FallbackImage.jsx" // 🚀 ADDED THIS IMPORT
 import arrangementBouquet from "../../assets/MakeItPersonal/arrangement_bouquet.webp"
 import arrangementBox from "../../assets/MakeItPersonal/arrangement_box.webp"
 import arrangementVase from "../../assets/MakeItPersonal/arrangement_vase.webp"
+import acrylicContainer from "../../assets/MakeItPersonal/AcrylicContainer.webp"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -15,10 +17,10 @@ const PLACEHOLDER_IMAGE = new URL("../../assets/default-img/ImageNotFound.webp",
 
 // 1. STEPS: 4-phase flow — Arrangement → Flowers → Wrapper → Accessory
 const STEPS = [
-  { label: "Arrangement", icon: "box" },   // bouquet / box / vase presentation
-  { label: "Flowers", icon: "flower" },     // flowers (with stem counter) + fillers
-  { label: "Wrapper", icon: "wrap" },       // wrapping paper
-  { label: "Accessory", icon: "extra" },    // finishing ribbon
+  { label: "Arrangement", icon: "box" },          // bouquet / box / vase presentation
+  { label: "Flowers & Fillers", icon: "flower" },  // flowers (with stem counter) + fillers
+  { label: "Container", icon: "wrap" },            // wrapper / vase / box
+  { label: "Accessories", icon: "extra" },         // finishing ribbon
 ]
 
 // Short per-step helper copy shown under the step heading.
@@ -47,7 +49,7 @@ const ARRANGEMENTS = [
     key: "box",
     label: "Box",
     desc: "Arranged in a gift box",
-    promptText: "arranged neatly inside a premium floral gift box, photographed from a direct side profile view at eye level, ensuring the entire side of the box is clearly visible with the flowers resting inside",
+    promptText: "arranged neatly inside a clear acrylic display box, photographed from a direct side profile view at eye level, ensuring the entire side of the transparent acrylic box is clearly visible with the flowers resting inside",
     image: arrangementBox,
     maxStems: 9,
     path: "M3 8h18v3H3V8Zm1 3h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9Zm8-7 3 4H9l3-4Z",
@@ -62,6 +64,18 @@ const ARRANGEMENTS = [
     path: "M8 3h8l-1 4c2 1.5 3 4 3 7 0 4-3 7-6 7s-6-3-6-7c0-3 1-5.5 3-7L8 3Z",
   },
 ]
+
+// The only container offered for the Box arrangement — a clear acrylic box.
+// It's a presentation choice (not a stocked product), so it isn't sent as a
+// wrapping_id; it just drives the AI prompt and the step's completion state.
+const ACRYLIC_BOX = {
+  id: "acrylic-box",
+  name: "Clear Acrylic Box",
+  image_url: acrylicContainer,
+  price: 0,
+  stock: 999,
+  stock_status: "in_stock",
+}
 
 // Fun facts cycled through while the AI generates the arrangement.
 const FLOWER_FACTS = [
@@ -250,6 +264,38 @@ export default function MixAndMatch({ onNavigate }) {
   const [customName, setCustomName] = useState("")
   const [lightboxOpen, setLightboxOpen] = useState(false)
 
+  // Greeting card (optional) — write it yourself or let the AI writer draft one
+  const [cardTo, setCardTo] = useState("")
+  const [cardFrom, setCardFrom] = useState("")
+  const [cardMessage, setCardMessage] = useState("")
+  const [showAIPanel, setShowAIPanel] = useState(false)
+  const [aiCardState, setAiCardState] = useState({ relationship: "", occasion: "", tone: "warm", extra: "" })
+  const [generatingCard, setGeneratingCard] = useState(false)
+  const [generatedCardMsg, setGeneratedCardMsg] = useState("")
+  const [cardError, setCardError] = useState("")
+
+  const handleGenerateCard = async () => {
+    if (!aiCardState.relationship || !aiCardState.occasion) {
+      setCardError("Please select a relationship and occasion.")
+      return
+    }
+    setCardError("")
+    setGeneratingCard(true)
+    setGeneratedCardMsg("")
+    try {
+      const text = await generateCardMessage(aiCardState)
+      setGeneratedCardMsg(text)
+    } catch {
+      setCardError("Could not generate message. Please try again.")
+    }
+    setGeneratingCard(false)
+  }
+
+  const acceptGeneratedMessage = () => {
+    setCardMessage(generatedCardMsg)
+    setShowAIPanel(false)
+  }
+
   useEffect(() => {
     document.body.style.overflow = lightboxOpen ? "hidden" : ""
     return () => { document.body.style.overflow = "" }
@@ -334,7 +380,7 @@ export default function MixAndMatch({ onNavigate }) {
     setFactIdx(Math.floor(Math.random() * FLOWER_FACTS.length))
 
     const prog = setInterval(() => {
-      setProgress(p => (p >= 90 ? 90 : p + Math.max(1, (92 - p) * 0.08)))
+      setProgress(p => (p >= 99 ? 99 : p + Math.max(0.25, (99 - p) * (0.05 + Math.random() * 0.04))))
     }, 280)
     const facts = setInterval(() => {
       setFactIdx(i => (i + 1) % FLOWER_FACTS.length)
@@ -364,7 +410,10 @@ export default function MixAndMatch({ onNavigate }) {
     return c === target || c === target + "s" || c + "s" === target;
   });
 
-  const selProd = (cat) => products.find(p => p.id === selections[cat]);
+  const selProd = (cat) => {
+    if (selections[cat] === ACRYLIC_BOX.id) return ACRYLIC_BOX
+    return products.find(p => p.id === selections[cat])
+  };
 
   // 🚀 FIX: Strictly block "pot fillers", but accept genuine fillers
   const isFiller = (p) => {
@@ -396,6 +445,17 @@ export default function MixAndMatch({ onNavigate }) {
 
   const maxStems = ARRANGEMENTS.find(a => a.key === arrangementType)?.maxStems ?? 24
   const atStemLimit = totalStems >= maxStems
+
+  // Phase 3 ("container") depends on the chosen arrangement style: a bouquet is
+  // wrapped, a vase arrangement picks a vase, a box arrangement picks a box.
+  // The selection is always stored under `selections.wrapping` so the generate
+  // payload (wrapping_id) stays the same regardless of container type.
+  const CONTAINER_INFO = {
+    bouquet: { cat: "wrapping", label: "Wrapper", plural: "wrappers", hint: "Select the wrapping for your arrangement." },
+    vase:    { cat: "vase",     label: "Vase",    plural: "vases",    hint: "Choose the vase for your arrangement." },
+    box:     { cat: "box",      label: "Box",     plural: "boxes",    hint: "Choose the box for your arrangement." },
+  }
+  const container = CONTAINER_INFO[arrangementType] || CONTAINER_INFO.bouquet
 
   // 🚀 FIX: Stop relying on 'stock_status' and check actual stock to bypass storefront rules
   const incFlower = (p) => {
@@ -438,8 +498,11 @@ export default function MixAndMatch({ onNavigate }) {
   const canProceed = () => {
     if (step === 0) return !!arrangementType;
     if (step === 1) return selectedFlowers.length > 0;
-    // Allow passing the wrapper step when no wrapping products exist yet.
-    if (step === 2) return !!selections.wrapping || getByCategory("wrapping").length === 0;
+    // Box always offers the acrylic container; for others, allow skipping when none exist.
+    if (step === 2) {
+      if (arrangementType === "box") return selections.wrapping === ACRYLIC_BOX.id;
+      return !!selections.wrapping || getByCategory(container.cat).length === 0;
+    }
     if (step === 3) return !!selections.ribbon;
     return false;
   }
@@ -482,7 +545,11 @@ export default function MixAndMatch({ onNavigate }) {
     if (flowerDesc.length) parts.push(flowerDesc.join(", "))
     if (arrangement) parts.push(arrangement.promptText)
     if (fillers.length) parts.push(`accented with ${fillers.map(p => p.name).join(", ")}`)
-    if (wrapping) parts.push(`wrapped with ${wrapping.attrs?.color || ""} ${wrapping.attrs?.style || ""} paper`.replace(/\s+/g, " ").trim())
+    if (wrapping) {
+      // The box's acrylic container is already described by the arrangement prompt.
+      if (arrangementType === "vase") parts.push(`arranged in a ${wrapping.attrs?.color || ""} ${wrapping.name}`.replace(/\s+/g, " ").trim())
+      else if (arrangementType === "bouquet") parts.push(`wrapped with ${wrapping.attrs?.color || ""} ${wrapping.attrs?.style || ""} paper`.replace(/\s+/g, " ").trim())
+    }
     if (accessory) parts.push(`finished with ${accessory.attrs?.name || accessory.name}`)
 
     const promptText = parts.length > 0 ? `A custom floral arrangement: ${parts.join(", ")}` : "A beautiful custom floral arrangement"
@@ -497,7 +564,8 @@ export default function MixAndMatch({ onNavigate }) {
       const data = await api.checkAndGenerate({
         prompt_text: promptText,
         flower_id: primaryFlower?.id || undefined,
-        wrapping_id: selections.wrapping || undefined,
+        // The acrylic box isn't a stocked product, so never send it as a wrapping_id.
+        wrapping_id: (selections.wrapping && selections.wrapping !== ACRYLIC_BOX.id) ? selections.wrapping : undefined,
         accessory_id: selections.ribbon || undefined,
       })
       if (data.unavailable_items?.length > 0) {
@@ -530,6 +598,13 @@ export default function MixAndMatch({ onNavigate }) {
     if (m[field]) { setSelections(p => ({ ...p, [m[field]]: id })); setUnavailableItems([]) }
   }
 
+  // Compose the To / message / From lines into a single greeting string for the cart.
+  const composedCard = [
+    cardTo.trim() && `To: ${cardTo.trim()}`,
+    cardMessage.trim(),
+    cardFrom.trim() && `From: ${cardFrom.trim()}`,
+  ].filter(Boolean).join("\n")
+
   const addToBag = async () => {
     if (!result) return
     const names = result.price_breakdown?.items?.map(i => i.product_name).join(", ") || "Custom"
@@ -538,6 +613,9 @@ export default function MixAndMatch({ onNavigate }) {
       group: "Mix and Match", groupIcon: "", name: customName || "Custom Arrangement",
       desc: `Mix & Match: ${names}`, qty: 1, price: result.price_breakdown?.total_price || 0,
       checked: true, img: result.generated_image_url, imgLabel: null,
+      cardMessage: composedCard || null,
+      cardTo: cardTo.trim() || null,
+      cardFrom: cardFrom.trim() || null,
     })
     onNavigate("cart")
   }
@@ -582,29 +660,11 @@ export default function MixAndMatch({ onNavigate }) {
                   <span className="text-base font-bold" style={{ color: subHeadC }}>Your Custom Arrangement</span>
                   <span className="text-sm" style={{ color: mutedC }}>AI preview</span>
                 </div>
-                
-                {/* AI disclaimer banner */}
-                  <div className="mx-7 mb-5 px-4 py-3 rounded-xl flex items-start gap-3"
-                    style={{
-                      backgroundColor: isDark ? "rgba(251,191,36,0.08)" : "#fffbeb",
-                      border: `1px solid ${isDark ? "rgba(251,191,36,0.25)" : "#fde68a"}`,
-                    }}>
-                    <svg className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: isDark ? "#fcd34d" : "#d97706" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <div>
-                      <p className="text-xs font-semibold mb-0.5" style={{ color: isDark ? "#fcd34d" : "#b45309" }}>
-                        AI-Generated Preview
-                        </p>
-                      <p className="text-xs leading-relaxed" style={{ color: isDark ? "#94a3b8" : "#78716c" }}>
-                        This image is generated by AI and is for visualization purposes only. Colors, proportions, and details may vary from the actual arrangement prepared by our florists. The final product will use the exact materials you selected.
-                      </p>
-                    </div>
-                  </div>
                 <button
                   onClick={() => {
                     setCompleted(false); setResult(null); setStep(0); setUnavailableItems([])
                     setArrangementType(null); setFlowerQty({}); setFillerIds([]); setSelections({ wrapping: null, ribbon: null })
+                    setCardTo(""); setCardFrom(""); setCardMessage(""); setShowAIPanel(false); setGeneratedCardMsg(""); setCardError("")
                   }}
                   className="px-3 py-1.5 rounded-lg transition text-sm"
                   style={{ color: mutedC }}
@@ -613,10 +673,29 @@ export default function MixAndMatch({ onNavigate }) {
                 </button>
               </div>
 
+              {/* AI disclaimer banner */}
+              <div className="mx-7 mb-5 px-4 py-3 rounded-xl flex items-start gap-3"
+                style={{
+                  backgroundColor: isDark ? "rgba(251,191,36,0.08)" : "#fffbeb",
+                  border: `1px solid ${isDark ? "rgba(251,191,36,0.25)" : "#fde68a"}`,
+                }}>
+                <svg className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: isDark ? "#fcd34d" : "#d97706" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <p className="text-xs font-semibold mb-0.5" style={{ color: isDark ? "#fcd34d" : "#b45309" }}>
+                    AI-Generated Preview
+                  </p>
+                  <p className="text-xs leading-relaxed" style={{ color: isDark ? "#94a3b8" : "#78716c" }}>
+                    This image is generated by AI and is for visualization purposes only. Colors, proportions, and details may vary from the actual arrangement prepared by our florists. The final product will use the exact materials you selected.
+                  </p>
+                </div>
+              </div>
+
               <div className="px-7 pb-7 flex flex-col sm:flex-row gap-6">
                 {/* AI Generated Image */}
                 <div
-                  className="relative w-full sm:w-72 h-96 rounded-2xl flex-shrink-0 flex items-center justify-center border overflow-hidden cursor-zoom-in group"
+                  className="relative w-full sm:w-[440px] aspect-square rounded-2xl flex-shrink-0 flex items-center justify-center border overflow-hidden cursor-zoom-in group"
                   style={{ borderColor: dividerC, backgroundColor: tilePlaceBg }}
                   onClick={() => result.generated_image_url && setLightboxOpen(true)}
                   title="Click for a closer look"
@@ -644,7 +723,9 @@ export default function MixAndMatch({ onNavigate }) {
                   }
                 </div>
 
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 flex flex-col sm:h-[440px]">
+                  {/* Scrollable details — keeps the row the height of the square image */}
+                  <div className="sm:flex-1 sm:min-h-0 sm:overflow-y-auto sm:pr-2">
                   <div className="mb-3">
                     <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: mutedC }}>Arrangement Name</label>
                     <input
@@ -679,7 +760,7 @@ export default function MixAndMatch({ onNavigate }) {
                   )}
 
                   {result.price_breakdown?.items?.length > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                    <div className="grid grid-cols-1 gap-5">
                       {/* Cost Breakdown — bordered table */}
                       <div>
                         <p className="text-sm font-semibold mb-2.5" style={{ color: subHeadC }}>Cost Breakdown</p>
@@ -723,24 +804,159 @@ export default function MixAndMatch({ onNavigate }) {
                     </div>
                   )}
 
+                  {/* Greeting card (optional) */}
+                  <div className="mt-6 pt-5 border-t" style={{ borderColor: dividerC }}>
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-sm font-semibold" style={{ color: subHeadC }}>
+                        Greeting card <span className="text-xs font-normal" style={{ color: mutedC }}>(optional)</span>
+                      </p>
+                      <button onClick={() => setShowAIPanel(!showAIPanel)} className="text-xs font-semibold flex items-center gap-1 hover:underline" style={{ color: accentG }}>
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                        </svg>
+                        {showAIPanel ? "Write it myself" : "Use AI writer"}
+                      </button>
+                    </div>
+
+                    {/* To / From */}
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>To</label>
+                        <input type="text" value={cardTo} onChange={e => setCardTo(e.target.value.slice(0, 40))}
+                          placeholder="Recipient's name"
+                          className="w-full rounded-lg px-3 py-2 text-sm border outline-none transition focus:ring-1 focus:ring-green-600"
+                          style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }} />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>From</label>
+                        <input type="text" value={cardFrom} onChange={e => setCardFrom(e.target.value.slice(0, 40))}
+                          placeholder="Your name"
+                          className="w-full rounded-lg px-3 py-2 text-sm border outline-none transition focus:ring-1 focus:ring-green-600"
+                          style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }} />
+                      </div>
+                    </div>
+
+                    {showAIPanel ? (
+                      <div className="p-4 rounded-xl border" style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>
+                        <div className="grid grid-cols-2 gap-3 mb-3">
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>Relationship *</label>
+                            <select value={aiCardState.relationship}
+                              onChange={e => { setAiCardState(s => ({ ...s, relationship: e.target.value })); setCardError("") }}
+                              className="w-full rounded-lg px-3 py-2 text-sm border outline-none transition"
+                              style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}>
+                              <option value="">Select...</option>
+                              {RELATIONSHIP_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>Occasion *</label>
+                            <select value={aiCardState.occasion}
+                              onChange={e => { setAiCardState(s => ({ ...s, occasion: e.target.value })); setCardError("") }}
+                              className="w-full rounded-lg px-3 py-2 text-sm border outline-none transition"
+                              style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}>
+                              <option value="">Select...</option>
+                              {OCCASION_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                            </select>
+                          </div>
+                        </div>
+                        <div className="mb-3">
+                          <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>Tone</label>
+                          <div className="flex gap-1.5 flex-wrap">
+                            {TONE_OPTIONS.map(t => (
+                              <button key={t.value} onClick={() => setAiCardState(s => ({ ...s, tone: t.value }))}
+                                className="px-2.5 py-1 rounded-full text-xs border transition-all"
+                                style={{
+                                  fontWeight: aiCardState.tone === t.value ? 600 : 400,
+                                  borderColor: aiCardState.tone === t.value ? accentG : tileBdr,
+                                  backgroundColor: aiCardState.tone === t.value ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : inputBg,
+                                  color: aiCardState.tone === t.value ? accentG : subHeadC
+                                }}>
+                                {t.label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="mb-3">
+                          <label className="block text-[10px] font-bold uppercase tracking-widest mb-1.5" style={{ color: mutedC }}>
+                            Extra context <span className="normal-case tracking-normal font-normal opacity-70">(optional)</span>
+                          </label>
+                          <input type="text" placeholder="e.g. She loves sunflowers, it's our 10th anniversary..."
+                            value={aiCardState.extra}
+                            onChange={e => setAiCardState(s => ({ ...s, extra: e.target.value }))}
+                            className="w-full rounded-lg px-3 py-2 text-sm border outline-none transition"
+                            style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }} />
+                        </div>
+                        {cardError && <p className="text-xs text-red-500 mb-3">{cardError}</p>}
+                        <button onClick={handleGenerateCard} disabled={generatingCard}
+                          className="w-full py-2.5 rounded-lg text-sm font-semibold flex items-center justify-center gap-2 border-none text-white cursor-pointer hover:opacity-90 transition disabled:opacity-70"
+                          style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+                          {generatingCard ? "Writing your message..." : "Generate message"}
+                        </button>
+                        {!generatingCard && generatedCardMsg && (
+                          <div className="mt-4 border rounded-xl overflow-hidden" style={{ borderColor: isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0" }}>
+                            <div className="p-3" style={{ backgroundColor: isDark ? "rgba(74,222,128,0.06)" : "#f0fdf4" }}>
+                              <p className="text-sm italic leading-relaxed" style={{ color: subHeadC }}>"{generatedCardMsg}"</p>
+                            </div>
+                            <div className="flex border-t" style={{ borderColor: isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0" }}>
+                              <button onClick={() => setGeneratedCardMsg("")} className="flex-1 py-2 text-xs font-semibold border-r hover:opacity-80"
+                                style={{ borderColor: isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0", color: bodyC, backgroundColor: isDark ? "#0f172a" : "white" }}>
+                                Try again
+                              </button>
+                              <button onClick={acceptGeneratedMessage} className="flex-1 py-2 text-xs font-bold hover:opacity-80"
+                                style={{ color: accentG, backgroundColor: isDark ? "#0f172a" : "white" }}>
+                                Use this message
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <textarea
+                          value={cardMessage}
+                          onChange={e => setCardMessage(e.target.value.slice(0, 160))}
+                          placeholder="Write a warm, kind message..."
+                          rows={3}
+                          className="w-full px-4 py-3 text-sm border rounded-xl focus:outline-none focus:ring-1 focus:ring-green-600 transition resize-none"
+                          style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
+                        />
+                        <p className="text-[10px] text-right mt-1" style={{ color: mutedC }}>{cardMessage.length} / 160</p>
+                      </>
+                    )}
+
+                    {/* Live preview of the card — consistent with the product preview design */}
+                    <div className="mt-4 border rounded-xl p-4" style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>
+                      <p className="text-[10px] font-semibold uppercase tracking-widest mb-2" style={{ color: mutedC }}>Preview</p>
+                      <p className="text-sm leading-relaxed min-h-10 mb-3 break-words whitespace-pre-line"
+                        style={{ color: cardMessage.trim() ? subHeadC : faintC, fontStyle: cardMessage.trim() ? "normal" : "italic" }}>
+                        {cardMessage.trim() || "Your message..."}
+                      </p>
+                      <div className="flex justify-between border-t pt-2" style={{ borderColor: tableRowBdr }}>
+                        <span className="text-sm" style={{ color: mutedC }}>To: <strong style={{ color: subHeadC }}>{cardTo.trim() || "..."}</strong></span>
+                        <span className="text-sm" style={{ color: mutedC }}>From: <strong style={{ color: subHeadC }}>{cardFrom.trim() || "..."}</strong></span>
+                      </div>
+                    </div>
+                  </div>
+                  </div>
+
                   <button
                     onClick={addToBag}
-                    className="mt-5 w-full py-3.5 text-base font-bold rounded-xl transition-all hover:brightness-105 active:scale-[0.98]"
+                    className="mt-4 w-full py-2.5 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors flex-shrink-0"
                     style={{ backgroundColor: accentG, color: isDark ? "#08120c" : "#ffffff" }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = accentDG)}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = accentG)}
                   >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                    </svg>
                     Add to shopping bag
                   </button>
                 </div>
               </div>
 
-              <div className="px-7 pb-5 flex items-start gap-2 border-t pt-4" style={{ borderColor: dividerC }}>
-                <svg className="w-4 h-4 flex-shrink-0 mt-0.5" style={{ color: faintC }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <p className="text-sm flex-1" style={{ color: mutedC }}>
-                  This is an AI-generated preview. Your bouquet will be prepared by our florists using the exact materials selected.
-                </p>
-                <span className="text-xs font-bold flex-shrink-0 ml-2" style={{ color: mutedC }}>POWERED BY pollinations.ai</span>
+              <div className="px-7 pb-5 flex items-center justify-end border-t pt-4" style={{ borderColor: dividerC }}>
+                <span className="text-xs font-bold" style={{ color: mutedC }}>POWERED BY pollinations.ai</span>
               </div>
             </div>
           </div>
@@ -910,9 +1126,9 @@ export default function MixAndMatch({ onNavigate }) {
               <span className="w-6 h-6 rounded-full text-xs font-bold flex items-center justify-center flex-shrink-0" style={{ backgroundColor: accentG, color: isDark ? "#08120c" : "#ffffff" }}>
                 {step + 1}
               </span>
-              <h2 className="text-base font-bold" style={{ color: headingC }}>Choose your {STEPS[step].label.toLowerCase()}</h2>
+              <h2 className="text-base font-bold" style={{ color: headingC }}>Choose your {(step === 2 ? container.label : STEPS[step].label).toLowerCase()}</h2>
             </div>
-            <p className="text-sm ml-8" style={{ color: mutedC }}>{STEP_HINTS[step]}</p>
+            <p className="text-sm ml-8" style={{ color: mutedC }}>{step === 2 ? container.hint : STEP_HINTS[step]}</p>
           </div>
 
           {loading ? (
@@ -1025,13 +1241,20 @@ export default function MixAndMatch({ onNavigate }) {
                 </div>
               )}
 
-              {/* ── Phase 3: Wrapper / Phase 4: Accessory ── */}
+              {/* ── Phase 3: Container (wrapper / vase / box) / Phase 4: Accessory ── */}
               {(step === 2 || step === 3) && (() => {
-                const cat = step === 2 ? "wrapping" : "ribbon"
-                const list = getByCategory(cat)
+                // selKey stays "wrapping" so the generate payload is unchanged;
+                // the category we filter by depends on the arrangement type.
+                const selKey = step === 2 ? "wrapping" : "ribbon"
+                const filterCat = step === 2 ? container.cat : "ribbon"
+                const emptyLabel = step === 2 ? container.plural : "ribbons"
+                // Box arrangement offers a single clear acrylic box (not a stocked product).
+                const list = (step === 2 && arrangementType === "box")
+                  ? [ACRYLIC_BOX]
+                  : getByCategory(filterCat)
                 return list.length === 0 ? (
                   <div className="text-center py-10">
-                    <p className="text-sm" style={{ color: mutedC }}>No {cat === "wrapping" ? "wrappers" : "ribbons"} available right now.</p>
+                    <p className="text-sm" style={{ color: mutedC }}>No {emptyLabel} available right now.</p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
@@ -1039,8 +1262,8 @@ export default function MixAndMatch({ onNavigate }) {
                       <ProductCard
                         key={p.id}
                         product={p}
-                        selected={selections[cat] === p.id}
-                        onClick={() => toggleProduct(cat, p.id)}
+                        selected={selections[selKey] === p.id}
+                        onClick={() => toggleProduct(selKey, p.id)}
                         disabled={p.stock <= 0 || p.status === "inactive"} // 🚀 FIX
                         tokens={tokens}
                       />

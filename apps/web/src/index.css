@@ -34,3 +34,24 @@
   animation: wishlistRing 0.46s ease-out forwards;
   pointer-events: none;
 }
+
+/* Diagonal "shine" sweep — same sheen used on Choose Your Bloom, applied to
+   featured product tiles. A bright diagonal band glides across the image. */
+@keyframes featSheen {
+  0%   { background-position: -100% -100%; }
+  70%  { background-position: 200% 200%; }
+  100% { background-position: 200% 200%; }
+}
+.feat-sheen {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: linear-gradient(135deg, transparent 35%, rgba(255,255,255,0) 42%, rgba(255,255,255,0.55) 50%, rgba(255,255,255,0) 58%, transparent 65%);
+  background-size: 250% 250%;
+  background-repeat: no-repeat;
+  mix-blend-mode: screen;
+  animation: featSheen 7s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .feat-sheen { animation: none !important; }
+}

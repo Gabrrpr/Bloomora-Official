@@ -138,7 +138,7 @@ export default function HeroCarousel({ onNavigate }) {
 
   return (
     <div
-      className="relative w-full max-w-[1600px] mx-auto overflow-hidden"
+      className="relative w-full max-w-[1920px] mx-auto overflow-hidden"
       style={{ height: "clamp(560px, 70vh, 720px)" }}
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}

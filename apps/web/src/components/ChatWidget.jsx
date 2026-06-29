@@ -10,6 +10,16 @@ const DG = "#0C573E"
 import estingsLogo from '../assets/EstingsLogo.svg'
 
 const QUICK_REPLIES = ["What flowers do you offer?", "How does delivery work?", "Can I customize a bouquet?", "What are your store hours?", "Do you deliver same day?"]
+
+// Rotating reassurance messages shown while an image is uploading/sending.
+const SENDING_MESSAGES = [
+  "Sending your photo… hang tight!",
+  "Wait a minute… don't leave!",
+  "Almost there… still uploading!",
+  "Just a sec, working on it…",
+  "Pushing your image through…",
+  "Nearly done… thanks for waiting!",
+]
 const WELCOME_MESSAGE = { id: 'welcome', from: "bot", text: "Hi there! 👋 Welcome to Esting's Flowers. How can we help you today? Please send us your message and a member of our team will personally get back to you within a few minutes. Thank you kindly for your patience." }
 const SIZES = { small: { w: 300, h: 400 }, medium: { w: 360, h: 500 }, large: { w: 440, h: 620 } }
 const CHAT_SESSION_KEY = 'bloomora_chat_session'
@@ -87,7 +97,20 @@ export default function ChatWidget() {
   const [attachedImage, setAttachedImage] = useState(null)
   const [attachedQuote, setAttachedQuote] = useState(null)
   const [sending, setSending] = useState(false)
+  const [uploadingImg, setUploadingImg] = useState(false) // image upload phase before the message is sent
+  const [attaching, setAttaching] = useState(false)        // brief decode while a freshly-picked photo loads
+  const [sendingMsgIdx, setSendingMsgIdx] = useState(0)
   const [allProducts, setAllProducts] = useState([])
+
+  // True while an image is uploading or the message is being sent.
+  const busy = uploadingImg || sending
+
+  // Rotate the reassurance text every ~1.6s while busy.
+  useEffect(() => {
+    if (!busy) { setSendingMsgIdx(0); return }
+    const t = setInterval(() => setSendingMsgIdx(i => (i + 1) % SENDING_MESSAGES.length), 1600)
+    return () => clearInterval(t)
+  }, [busy])
 
   // Rotating "nudge" bubble shown next to the launcher to invite a chat.
   const NUDGES = [
@@ -250,19 +273,18 @@ export default function ChatWidget() {
     setSending(true)
     
     // 1. Instantly show the bubble to the customer locally
-    setMessages(prev => [...prev, { 
-      id: Date.now(), 
-      from: "user", 
-      text: text || null, 
-      image: imageData || null, 
-      context_id: contextId 
+    setMessages(prev => [...prev, {
+      id: Date.now(),
+      from: "user",
+      text: text || null,
+      image: imageData || null,
+      context_id: contextId
     }])
-    
+
     setInput("")
     setAttachedImage(null)
     setAttachedProduct(null)
-    setTyping(true)
-    
+
     try {
       // 2. Prepare the exact payload
       const payload = {
@@ -271,16 +293,13 @@ export default function ChatWidget() {
         image_url: imageData || null,
         context_id: contextId || null
       };
-      
+
       console.log("🚀 SENDING PAYLOAD TO FASTAPI:", payload);
 
       // 3. FORCE DIRECT POST (Bypasses api.sendMessage cache)
       await api.post('/chats/messages', payload)
-      
-      setTyping(false)
     } catch (err) {
       console.error('Message send error:', err)
-      setTyping(false)
     } finally {
       setSending(false)
     }
@@ -289,24 +308,28 @@ export default function ChatWidget() {
   // 🚀 FIXED HANDLE SEND
   const handleSend = async () => {
     if (!input.trim() && !attachedImage && !attachedQuote && !attachedProduct) return
+    if (busy) return
     let imageUrl = null
-    
+
     if (attachedImage?.file) {
+      setUploadingImg(true)
       try {
         const result = await api.uploadChatImage(attachedImage.file)
         imageUrl = result.image_url
       } catch (err) {
         setMessages(prev => [...prev, { id: Date.now(), from: 'bot', text: 'Upload failed.' }])
+        setUploadingImg(false)
         return
       }
+      setUploadingImg(false)
     }
 
     // Capture the ID before clearing the state
     const contextIdToSend = attachedProduct ? attachedProduct.id : null;
     const outgoingText = [attachedQuote?.text, input.trim()].filter(Boolean).join("\n\n")
-    
+
     setAttachedQuote(null)
-    
+
     // Send it all!
     sendMessage(outgoingText, imageUrl, contextIdToSend)
   }
@@ -314,6 +337,7 @@ export default function ChatWidget() {
   const handleFileChange = (e) => {
     const file = e.target.files?.[0]
     if (!file || !file.type.startsWith("image/")) return
+    setAttaching(true)
     setAttachedImage({ file, previewUrl: URL.createObjectURL(file) })
     e.target.value = ""
   }
@@ -334,7 +358,7 @@ export default function ChatWidget() {
   const handleKeyDown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() } }
 
   const { w, h } = SIZES[size]
-  const canSend = (input.trim() || attachedImage || attachedQuote || attachedProduct) && user && sessionId && !sending
+  const canSend = (input.trim() || attachedImage || attachedQuote || attachedProduct) && user && sessionId && !busy
 
   return (
     <>
@@ -388,7 +412,7 @@ export default function ChatWidget() {
                     </button>
                   )}
                   <div style={{ maxWidth: "80%" }}>
-                    
+
                     {/* 🚀 Renders the Context Bubble immediately above the message! */}
                     {msg.context_id && (
                       <div className={msg.from === "user" ? "flex justify-end" : "flex justify-start"}>
@@ -459,6 +483,41 @@ export default function ChatWidget() {
               </div>
             )}
 
+            {/* Attached image (Pre-Send Preview) with attaching/sending loading */}
+            {attachedImage && (
+              <div className="px-3 pt-2 border-t" style={{ backgroundColor: inputAreaBg, borderColor: inputBdr }}>
+                <div className="flex items-center gap-2.5 p-2 rounded-xl" style={{ border: `1px solid ${isDark ? "#334155" : "#e5e7eb"}`, background: isDark ? "rgba(255,255,255,0.03)" : "#fafafa" }}>
+                  <div className="relative w-11 h-11 rounded-lg overflow-hidden flex-shrink-0 bg-black/5">
+                    <img src={attachedImage.previewUrl} alt="Attached" className="w-full h-full object-cover" onLoad={() => setAttaching(false)} />
+                    {(attaching || busy) && (
+                      <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: "rgba(0,0,0,0.45)" }}>
+                        <span className="w-5 h-5 rounded-full border-2 border-white/30 border-t-white animate-spin inline-block" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 pr-1">
+                    {busy ? (
+                      <p key={sendingMsgIdx} className="text-xs font-semibold m-0 sending-msg-fade" style={{ color: isDark ? "#4ade80" : G }}>
+                        {SENDING_MESSAGES[sendingMsgIdx]}
+                      </p>
+                    ) : attaching ? (
+                      <p className="text-xs font-medium m-0" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Attaching photo…</p>
+                    ) : (
+                      <>
+                        <p className="text-[9px] font-bold uppercase tracking-wider m-0" style={{ color: isDark ? "#4ade80" : G }}>Photo</p>
+                        <p className="text-xs font-bold m-0 truncate" style={{ color: isDark ? "#e5e7eb" : "#111827" }}>Ready to send</p>
+                      </>
+                    )}
+                  </div>
+                  {!busy && (
+                    <button onClick={removeAttachment} className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 text-white cursor-pointer border-none mr-1" style={{ backgroundColor: "#ef4444" }} title="Remove photo">
+                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Input row — logged in: show composer. Logged out: show a clear login notice. */}
             {!user ? (
               <div className="flex items-center gap-3 px-3.5 py-3.5 border-t" style={{ backgroundColor: isDark ? "rgba(74,222,128,0.10)" : "rgba(46,139,52,0.08)", borderColor: inputBdr }}>
@@ -480,8 +539,12 @@ export default function ChatWidget() {
 
               <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown} placeholder={attachedProduct ? `Ask about ${attachedProduct.name}...` : "Type your message..."} className="flex-1 px-3.5 py-2.5 text-sm rounded-xl border outline-none transition-all" style={{ borderColor: inputFieldBdr, backgroundColor: inputFieldBg, color: isDark ? "#e5e7eb" : "#111827" }} onFocus={e => e.target.style.borderColor = isDark ? "#4ade80" : G} onBlur={e => e.target.style.borderColor = inputFieldBdr} />
 
-              <button onClick={handleSend} disabled={!canSend} className="w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 cursor-pointer border-none" style={{ background: canSend ? `linear-gradient(135deg,${DG},${G})` : (isDark ? "#1e293b" : "#e5e7eb") }}>
-                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+              <button onClick={handleSend} disabled={!canSend} className="w-10 h-10 flex items-center justify-center rounded-xl flex-shrink-0 transition-all hover:opacity-90 active:scale-95 disabled:opacity-40 cursor-pointer border-none" style={{ background: (canSend || busy) ? `linear-gradient(135deg,${DG},${G})` : (isDark ? "#1e293b" : "#e5e7eb") }}>
+                {busy ? (
+                  <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin inline-block" />
+                ) : (
+                  <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
+                )}
               </button>
             </div>
             )}
