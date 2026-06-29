@@ -88,7 +88,7 @@ function Toast({ message }) {
 }
 
 // ── OverviewPanel ─────────────────────────────────────────────────────────────
-function OverviewPanel({ user, setPanel, isDark, showToast }) {
+function OverviewPanel({ user, setPanel, isDark, showToast, onNavigate }) {
   const { logout } = useAuth()
   const [showDelete, setShowDelete] = useState(false)
   const [deletePassword, setDeletePassword] = useState("")
@@ -122,6 +122,7 @@ function OverviewPanel({ user, setPanel, isDark, showToast }) {
       showToast("Account deleted successfully.")
       logout()
       onNavigate?.("home")
+      window.location.replace("/")
     } catch (err) {
       setDeleteError(err.message || "Failed to delete account.")
     } finally {

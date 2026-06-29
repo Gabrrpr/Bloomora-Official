@@ -439,6 +439,7 @@ export default function AdminOrders() {
       const pickupLabel = isPickup
         ? (pickupMode === "walkin" ? "Walk-in / on-the-spot pickup" : `Scheduled pickup: ${pickupDate}`)
         : "Delivery";
+      const paymongoReturnPath = `${window.location.origin}/admin?section=orders`;
       const payload = {
         items: posCart.map(i => ({ id: i.id, qty: i.qty })),
         customer_name: customerName,
@@ -449,7 +450,9 @@ export default function AdminOrders() {
         scheduled_at: scheduleValue,
         recipient_name: recipientName || customerName,
         payment_method: posPayMethod,
-        payment_reference: posPayMethod === "cash" ? "CASH-WALK-IN" : "PAYMONGO-PENDING", 
+        payment_reference: posPayMethod === "cash" ? "CASH-WALK-IN" : undefined,
+        paymongo_success_url: `${paymongoReturnPath}&pos_payment=success`,
+        paymongo_cancel_url: `${paymongoReturnPath}&pos_payment=cancelled`,
         branch_name: posBranch
       };
 
@@ -463,9 +466,12 @@ export default function AdminOrders() {
         responseData = await api.request({ method: "POST", url: "/orders/", data: payload });
       }
 
-      if (posPayMethod !== "cash" && responseData && responseData.checkout_url) {
-        window.location.href = responseData.checkout_url;
-        return; 
+      if (posPayMethod === "gcash") {
+        if (responseData?.checkout_url) {
+          window.location.href = responseData.checkout_url;
+          return;
+        }
+        throw new Error("PayMongo did not return a checkout link.");
       }
 
       setPosSuccess(true);
@@ -791,16 +797,25 @@ export default function AdminOrders() {
                         let parsedPB = null;
                         try { parsedPB = typeof item.price_breakdown === 'string' ? JSON.parse(item.price_breakdown) : item.price_breakdown; } catch(e){}
 
-                        // Try to find the array of materials in every possible location
+                        // Try to find the array of materials in every possible location.
+                        // AI arrangement payloads have existed in a few shapes across web/mobile.
                         let matArray = [];
                         if (Array.isArray(item.materials) && item.materials.length > 0) matArray = item.materials;
                         else if (Array.isArray(parsedPB?.items)) matArray = parsedPB.items;
                         else if (Array.isArray(parsedPB?.materials)) matArray = parsedPB.materials;
+                        else if (Array.isArray(parsedPB?.components)) matArray = parsedPB.components;
+                        else if (Array.isArray(parsedPB?.flowers)) matArray = parsedPB.flowers.map(m => ({ ...m, material_type: m.material_type || "Flower" }));
+                        else if (Array.isArray(parsedPB?.vases)) matArray = parsedPB.vases.map(m => ({ ...m, material_type: m.material_type || "Vase" }));
+                        else if (Array.isArray(parsedPB?.wrappings)) matArray = parsedPB.wrappings.map(m => ({ ...m, material_type: m.material_type || "Wrapping" }));
+                        else if (Array.isArray(parsedPB?.accessories)) matArray = parsedPB.accessories.map(m => ({ ...m, material_type: m.material_type || "Accessory" }));
+                        else if (Array.isArray(parsedPB?.add_ons)) matArray = parsedPB.add_ons.map(m => ({ ...m, material_type: m.material_type || "Add-on" }));
                         else if (Array.isArray(parsedCD?.price_breakdown?.items)) matArray = parsedCD.price_breakdown.items;
+                        else if (Array.isArray(parsedCD?.price_breakdown?.materials)) matArray = parsedCD.price_breakdown.materials;
                         else if (Array.isArray(parsedCD?.materials)) matArray = parsedCD.materials;
                         else if (Array.isArray(parsedCD?.items)) matArray = parsedCD.items;
+                        matArray = matArray.filter(Boolean);
 
-                        const aiTotal = parsedPB?.total_price || parsedCD?.price_breakdown?.total_price || 0;
+                        const aiTotal = parsedPB?.total_price || parsedPB?.total || parsedCD?.price_breakdown?.total_price || 0;
                         const isAI = !!(item.is_custom || parsedCD || item.arrangement_prompt);
 
                         // 🚀 PROMPT SANITIZER: Extract just the user intent
@@ -861,7 +876,7 @@ export default function AdminOrders() {
                               <div className="mt-2 p-3 rounded-md" style={{ background: isDark ? (isAI ? "rgba(168,85,247,0.08)" : "#111827") : (isAI ? "#faf5ff" : "white"), border: `1px solid ${isDark ? (isAI ? "rgba(168,85,247,0.25)" : "#334155") : (isAI ? "#e9d5ff" : "#e2e8f0")}` }}>
                                 <div className="flex items-center justify-between mb-2 pb-2 border-b" style={{ borderColor: isDark ? (isAI ? "rgba(168,85,247,0.15)" : "#1e293b") : (isAI ? "#e9d5ff" : "#f1f5f9") }}>
                                   <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: isAI ? (isDark ? "#c084fc" : "#7e22ce") : subTxt }}>
-                                    {isAI ? "✦ AI Custom Breakdown & Materials" : "Recipe / Materials Needed"}
+                                    {isAI ? "AI Custom Arrangement Reference" : "Recipe / Materials Needed"}
                                   </p>
                                   {aiTotal > 0 && (
                                     <p className="text-[10px] font-bold" style={{ color: isDark ? "#4ade80" : DG }}>
@@ -871,16 +886,25 @@ export default function AdminOrders() {
                                 </div>
                                 <div className="space-y-2">
                                   {matArray.map((mat, mIdx) => {
-                                    const mName = mat.product_name || mat.name || "Unknown Material";
-                                    const mQty = mat.quantity || 1;
-                                    const mSub = mat.subtotal;
+                                    const mName = mat.product_name || mat.name || mat.label || "Unknown Material";
+                                    const mQty = mat.quantity || mat.qty || 1;
+                                    const mUnit = mat.unit || mat.unit_type || "piece";
+                                    const mType = mat.material_type || mat.type || "Material";
+                                    const mUnitPrice = mat.unit_price ?? mat.price;
+                                    const mSub = mat.subtotal ?? mat.line_total;
+                                    const mStock = mat.stock ?? mat.current_stock;
                                     return (
-                                      <div key={mIdx} className="flex items-center justify-between gap-3">
+                                      <div key={mIdx} className="flex items-start justify-between gap-3 py-1">
                                         <div className="min-w-0">
                                           <p className="text-xs font-semibold truncate" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{mName}</p>
+                                          <p className="text-[10px] mt-0.5" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
+                                            {mType} · {Number(mQty).toLocaleString()} {mUnit}{mStock !== undefined ? ` · stock ${Number(mStock).toLocaleString()}` : ""}
+                                          </p>
                                         </div>
                                         <div className="text-right flex-shrink-0">
-                                          <p className="text-xs font-bold" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>x{Number(mQty).toLocaleString()}</p>
+                                          {mUnitPrice !== undefined && (
+                                            <p className="text-[10px]" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>₱{Number(mUnitPrice).toLocaleString()} ea</p>
+                                          )}
                                           {mSub !== undefined && (
                                             <p className="text-[10px] font-bold mt-0.5" style={{ color: isDark ? "#4ade80" : DG }}>₱{Number(mSub).toLocaleString()}</p>
                                           )}

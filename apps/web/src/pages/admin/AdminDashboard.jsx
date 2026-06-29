@@ -2210,7 +2210,11 @@ export default function AdminDashboard({ onNavigate }) {
   const { isDark } = useTheme()
   const t = useTokens(isDark)
 
-  const [active,        setActive]        = useState("Dashboard")
+  const [active,        setActive]        = useState(() => {
+    const params = new URLSearchParams(window.location.search)
+    const section = String(params.get("section") || params.get("admin_section") || "").toLowerCase()
+    return section === "orders" || params.has("pos_payment") ? "Orders" : "Dashboard"
+  })
   const [overlay,       setOverlay]       = useState(null)
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_MAX)
   const [mobileOpen,    setMobileOpen]   = useState(false)

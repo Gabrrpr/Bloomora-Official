@@ -99,6 +99,7 @@ def _minimal_order_payload(row) -> dict:
         "discount_amount": _safe_float(data.get("discount_amount"), 0.0),
         "scheduled_at": _safe_iso(data.get("scheduled_at")),
         "payment_status": data.get("payment_status") or "pending",
+        "payment_method": data.get("payment_method"),
         "payment_provider": data.get("payment_provider"),
         "checkout_url": data.get("checkout_url"),
         "paid_at": _safe_iso(data.get("paid_at")),
@@ -169,11 +170,16 @@ def _raw_list_orders(
                 o.discount_amount,
                 u.email AS customer_email,
                 u.phone_number AS customer_phone,
-                NULLIF(TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))), '') AS customer_name,
+                CASE
+                    WHEN LOWER(COALESCE(o.delivery_notes, '')) LIKE '%pos transaction%'
+                    THEN NULLIF(TRIM(CONCAT(COALESCE(o.recipient_first_name, ''), ' ', COALESCE(o.recipient_last_name, ''))), '')
+                    ELSE NULLIF(TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.last_name, ''))), '')
+                END AS customer_name,
                 COALESCE(p.name, a.name, 'Unknown Item') AS product_name,
                 COALESCE(p.image_url, a.generated_image_url, '') AS image_url,
                 t.id AS transaction_id,
                 CAST(t.status AS TEXT) AS payment_status,
+                CAST(t.payment_method AS TEXT) AS payment_method,
                 t.provider AS payment_provider,
                 t.checkout_url,
                 t.paid_at,
@@ -269,32 +275,60 @@ def _product_materials(db: Optional[Session], product: Optional[Product]) -> lis
         materials.append(_material_row(component, item.get("quantity") or item.get("qty") or 1))
     return materials
 
-def _custom_arrangement_materials(arrangement: Optional[Arrangement]) -> list[dict]:
+def _custom_arrangement_materials(arrangement: Optional[Arrangement], db: Optional[Session] = None) -> list[dict]:
     if not arrangement:
         return []
 
-    # ── Try price_breakdown first (AI-generated arrangements store materials here) ──
+    def _material_from_payload(item: dict, material_type: str = "Material") -> dict:
+        product_id = item.get("product_id") or item.get("id")
+        stock = item.get("stock")
+        unit = item.get("unit") or item.get("unit_type") or "piece"
+        if db and product_id:
+            try:
+                product_uuid = uuid.UUID(str(product_id))
+                product = db.query(Product).filter(Product.id == product_uuid).first()
+                if product:
+                    unit = product.inventory.unit_type if product.inventory and product.inventory.unit_type else unit
+                    stock = int(product.inventory.current_stock or 0) if product.inventory else stock
+            except Exception:
+                pass
+
+        return {
+            "product_id": str(product_id) if product_id else None,
+            "name": item.get("product_name") or item.get("name") or item.get("label") or "Unknown material",
+            "quantity": float(item.get("quantity") or item.get("qty") or 1),
+            "unit": unit,
+            "stock": int(stock or 0),
+            "material_type": item.get("material_type") or item.get("type") or material_type,
+            "unit_price": float(item.get("unit_price") or item.get("price") or 0),
+            "subtotal": float(item.get("subtotal") or item.get("line_total") or 0),
+        }
+
+    # Try price_breakdown first. AI-generated arrangements may store materials
+    # under items, materials, components, or grouped category arrays.
     pb = getattr(arrangement, "price_breakdown", None)
     if pb:
         try:
             import json
             if isinstance(pb, str):
                 pb = json.loads(pb)
-            items = pb.get("items", []) if isinstance(pb, dict) else []
+            items = []
+            if isinstance(pb, dict):
+                for key in ("items", "materials", "components"):
+                    if isinstance(pb.get(key), list):
+                        items.extend(pb[key])
+                for key, material_type in (
+                    ("flowers", "Flower"),
+                    ("vases", "Vase"),
+                    ("wrappings", "Wrapping"),
+                    ("accessories", "Accessory"),
+                    ("add_ons", "Add-on"),
+                    ("addons", "Add-on"),
+                ):
+                    if isinstance(pb.get(key), list):
+                        items.extend({**item, "material_type": item.get("material_type") or material_type} for item in pb[key])
             if items:
-                return [
-                    {
-                        "product_id": item.get("product_id"),
-                        "name": item.get("product_name") or item.get("name") or "Unknown",
-                        "quantity": float(item.get("quantity") or 1),
-                        "unit": "piece",
-                        "stock": 0,
-                        "material_type": item.get("material_type") or "Material",
-                        "unit_price": float(item.get("unit_price") or 0),
-                        "subtotal": float(item.get("subtotal") or 0),
-                    }
-                    for item in items
-                ]
+                return [_material_from_payload(item) for item in items if isinstance(item, dict)]
         except Exception:
             pass
 
@@ -381,7 +415,7 @@ def serialize_order(o) -> dict:
                     "quantity": qty,
                     "unit_price": safe_float(unit_price),
                     "line_total": safe_float(unit_price * qty),
-                    "materials": _custom_arrangement_materials(arrangement) if arrangement else _product_materials(db, product),
+                    "materials": _custom_arrangement_materials(arrangement, db) if arrangement else _product_materials(db, product),
                     "price_breakdown": getattr(arrangement, "price_breakdown", None) if arrangement else None,  # ← ADD
                     "arrangement_prompt": getattr(arrangement, "prompt_text", None) if arrangement else None,
                     "arrangement_description": getattr(arrangement, "description", None) if arrangement else None,
@@ -416,6 +450,23 @@ def serialize_order(o) -> dict:
                     or getattr(arrangement, 'image', "")
                 )
                 is_custom = True
+                serialized_items.append({
+                    "id": str(getattr(arrangement, "id", None)),
+                    "product_id": None,
+                    "arrangement_id": str(getattr(arrangement, "id", None)),
+                    "product_name": display_name,
+                    "image_url": img_url,
+                    "is_custom": True,
+                    "quantity": getattr(o, "quantity", 1) or 1,
+                    "unit_price": safe_float(getattr(arrangement, "estimated_price", None) or getattr(o, "total_amount", None), 0.0),
+                    "line_total": safe_float(getattr(o, "total_amount", None), 0.0),
+                    "materials": _custom_arrangement_materials(arrangement, db),
+                    "price_breakdown": getattr(arrangement, "price_breakdown", None),
+                    "arrangement_prompt": getattr(arrangement, "prompt_text", None),
+                    "arrangement_description": getattr(arrangement, "description", None),
+                    "card_message": None,
+                    "card_enabled": False,
+                })
 
         # 🚀 SMART REFERENCE EXTRACTION
         transaction = getattr(o, 'transaction', None)
@@ -442,7 +493,17 @@ def serialize_order(o) -> dict:
 
         customer_name = 'Unknown'
         try:
-            if user:
+            is_pos_order = "pos transaction" in str(getattr(o, "delivery_notes", "") or "").lower()
+            recipient_name = " ".join(
+                value for value in [
+                    str(getattr(o, "recipient_first_name", "") or "").strip(),
+                    str(getattr(o, "recipient_last_name", "") or "").strip(),
+                ]
+                if value
+            ).strip()
+            if is_pos_order and recipient_name:
+                customer_name = recipient_name
+            elif user:
                 fn = getattr(user, 'first_name', '') or ''
                 ln = getattr(user, 'last_name', '') or ''
                 customer_name = f"{fn} {ln}".strip() or getattr(user, 'email', 'Unknown')
@@ -469,6 +530,7 @@ def serialize_order(o) -> dict:
             "delivery_lng": float(o.delivery_lng) if getattr(o, 'delivery_lng', None) is not None else None,
             "delivery_geocode_precision": getattr(o, 'delivery_geocode_precision', None),
             "delivery_notes": getattr(o, 'delivery_notes', None),
+            "is_walk_in_pos": "pos transaction" in str(getattr(o, "delivery_notes", "") or "").lower(),
             "recipient_first_name": getattr(o, 'recipient_first_name', None),
             "recipient_last_name": getattr(o, 'recipient_last_name', None),
             "recipient_phone": getattr(o, 'recipient_phone', None),
@@ -485,6 +547,11 @@ def serialize_order(o) -> dict:
                 getattr(getattr(transaction, 'status', None), 'value', None)
                 if transaction and getattr(transaction, 'status', None) is not None
                 else (str(getattr(transaction, 'status', None)) if transaction else "pending")
+            ),
+            "payment_method": (
+                getattr(getattr(transaction, 'payment_method', None), 'value', None)
+                if transaction and getattr(transaction, 'payment_method', None) is not None
+                else (str(getattr(transaction, 'payment_method', None)) if transaction else None)
             ),
             "payment_provider": payment_provider,
             "checkout_url": checkout_url,
@@ -522,6 +589,7 @@ def serialize_order(o) -> dict:
             "delivery_lng": None,
             "delivery_geocode_precision": None,
             "delivery_notes": getattr(o, 'delivery_notes', None),
+            "is_walk_in_pos": "pos transaction" in str(getattr(o, "delivery_notes", "") or "").lower(),
             "recipient_first_name": getattr(o, 'recipient_first_name', None),
             "recipient_last_name": getattr(o, 'recipient_last_name', None),
             "recipient_phone": getattr(o, 'recipient_phone', None),
@@ -535,6 +603,7 @@ def serialize_order(o) -> dict:
             "discount_amount": 0.0,
             "scheduled_at": None,
             "payment_status": "pending",
+            "payment_method": None,
             "payment_provider": None,
             "checkout_url": None,
             "paid_at": None,
@@ -846,9 +915,9 @@ async def create_order(
             scheduled_at=scheduled_at,
             branch_name=raw_branch,
             checkout_attempt_id=attempt_id,
-            recipient_first_name=(payload.get("recipient") or {}).get("firstName") or payload.get("recipient_first_name"),
+            recipient_first_name=payload.get("customer_name") or (payload.get("recipient") or {}).get("firstName") or payload.get("recipient_first_name"),
             recipient_last_name=(payload.get("recipient") or {}).get("lastName") or payload.get("recipient_last_name"),
-            recipient_phone=(payload.get("recipient") or {}).get("phoneNumber") or payload.get("recipient_phone_number"),
+            recipient_phone=payload.get("customer_phone") or (payload.get("recipient") or {}).get("phoneNumber") or payload.get("recipient_phone_number"),
             recipient_type=payload.get("recipientType") or payload.get("recipient_type"),
             is_anonymous=bool(payload.get("isAnonymous") or payload.get("is_anonymous")),
             fulfillment_method=fulfillment_method,
@@ -908,6 +977,39 @@ async def create_order(
         )
         db.add(transaction)
         db.flush()
+
+        if payment_method == "gcash":
+            reference_number = f"PMO-{secrets.token_hex(6).upper()}"
+            checkout = await create_checkout_session(
+                cancel_url=payload.get("paymongo_cancel_url") or payload.get("cancel_url"),
+                line_items=[{
+                    "name": f"Bloomora POS Order ORD-{order.id.hex[:8].upper()}",
+                    "amount": to_paymongo_amount(Decimal(order.total_amount)),
+                    "currency": "PHP",
+                    "quantity": 1,
+                }],
+                reference_number=reference_number,
+                metadata={
+                    "order_ids": str(order.id),
+                    "user_id": str(current_user.id),
+                    "source": "admin_walk_in_pos",
+                    "branch": raw_branch,
+                    "payment_method": "gcash",
+                },
+                payment_method_types=["gcash"],
+                success_url=payload.get("paymongo_success_url") or payload.get("success_url"),
+            )
+            checkout_data = checkout.get("data", {})
+            checkout_id = checkout_data.get("id")
+            checkout_url = checkout_data.get("attributes", {}).get("checkout_url")
+
+            if not checkout_id or not checkout_url:
+                raise HTTPException(status_code=502, detail="PayMongo did not return a checkout URL.")
+
+            transaction.provider = "paymongo"
+            transaction.provider_checkout_session_id = checkout_id
+            transaction.checkout_url = checkout_url
+            transaction.reference_number = reference_number
 
         db.commit()
 
@@ -1267,14 +1369,29 @@ def list_transactions(
     current_user: User = Depends(require_staff),
 ):
     transactions = db.query(Transaction, Order, User).join(Order).join(User, Order.user_id == User.id).all()
+
+    def transaction_customer_name(order: Order, user: User) -> str:
+        is_pos_order = "pos transaction" in str(getattr(order, "delivery_notes", "") or "").lower()
+        recipient_name = " ".join(
+            value for value in [
+                str(getattr(order, "recipient_first_name", "") or "").strip(),
+                str(getattr(order, "recipient_last_name", "") or "").strip(),
+            ]
+            if value
+        ).strip()
+        if is_pos_order and recipient_name:
+            return recipient_name
+        return f"{user.first_name} {user.last_name}".strip() or user.email or "Guest"
     
     return [
         {
             "id": str(t.Transaction.id),
             "order_number": f"ORD-{t.Order.id.hex[:8].upper()}",
-            "customer_name": f"{t.User.first_name} {t.User.last_name}",
+            "customer_name": transaction_customer_name(t.Order, t.User),
+            "is_walk_in_pos": "pos transaction" in str(getattr(t.Order, "delivery_notes", "") or "").lower(),
             "type": "Sale", 
             "method": t.Transaction.payment_method.value if hasattr(t.Transaction.payment_method, 'value') else t.Transaction.payment_method,
+            "payment_provider": t.Transaction.provider,
             "status": t.Transaction.status.value if hasattr(t.Transaction.status, 'value') else t.Transaction.status,
             
             # 🚀 UPDATED: Prioritizes PayMongo ID, falls back to manual reference

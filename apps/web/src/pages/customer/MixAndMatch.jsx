@@ -49,7 +49,7 @@ const ARRANGEMENTS = [
     key: "box",
     label: "Box",
     desc: "Arranged in a gift box",
-    promptText: "arranged neatly inside a clear acrylic display box, photographed from a direct side profile view at eye level, ensuring the entire side of the transparent acrylic box is clearly visible with the flowers resting inside",
+    promptText: "arranged neatly inside a clear acrylic display box, with every flower stem and filler placed within the box opening, photographed from a direct side profile view at eye level, ensuring the entire side of the transparent acrylic box is clearly visible and no flowers sit outside, behind, beside, or wrapped around the exterior of the box",
     image: arrangementBox,
     maxStems: 9,
     path: "M3 8h18v3H3V8Zm1 3h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9Zm8-7 3 4H9l3-4Z",

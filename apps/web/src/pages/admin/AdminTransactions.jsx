@@ -155,10 +155,13 @@ export default function AdminTransactions() {
       let rawList = Array.isArray(rawData) ? rawData : (rawData.orders || rawData.transactions || rawData.data || []);
 
       const normalizedList = rawList.map(t => {
+        const rawProvider = String(t.payment_provider || t.provider || t.transaction?.provider || "").toLowerCase();
+        const isWalkInPos = Boolean(t.is_walk_in_pos) || String(t.delivery_notes || "").toLowerCase().includes("pos transaction");
         const rawMethod = String(t.payment_method || t.method || t.payment_type || "N/A").toLowerCase();
         let cleanMethod = "Other";
         if (rawMethod.includes("maya")) cleanMethod = "Maya";
         else if (rawMethod.includes("gcash")) cleanMethod = "GCash";
+        else if (isWalkInPos && rawProvider.includes("paymongo") && rawMethod.includes("ewallet")) cleanMethod = "GCash";
         else if (rawMethod.includes("card") || rawMethod.includes("credit") || rawMethod.includes("debit") || rawMethod.includes("paymongo")) cleanMethod = "Online Payment";
         else if (rawMethod.includes("bank") || rawMethod.includes("transfer") || rawMethod.includes("qrph")) cleanMethod = "QRPh / Bank";
         else if (rawMethod.includes("cash")) cleanMethod = "Cash";
@@ -195,6 +198,7 @@ export default function AdminTransactions() {
         return {
           id: t.id || t.order_id || `txn_${Math.floor(Math.random()*10000)}`,
           customer_name: t.customer_name || t.customer?.name || t.user?.name || t.billing_name || "Guest",
+          is_walk_in_pos: isWalkInPos,
           payment_reference: referenceValue, // 🚀 Uses the new truffle-pig extraction method
           payment_method: cleanMethod,
           total_price: price,
@@ -351,7 +355,13 @@ export default function AdminTransactions() {
   const handleCSV = () => {
     const headers = COLS.slice(0, -1);
     const rows = filtered.map(t => [
-      t.id, t.customer_name, t.payment_reference || "N/A", t.payment_method, t.total_price, t.payment_status, new Date(t.created_at).toLocaleString()
+      t.id,
+      t.is_walk_in_pos ? `${t.customer_name} (Walk-in POS)` : t.customer_name,
+      t.payment_reference || "N/A",
+      t.payment_method,
+      t.total_price,
+      t.payment_status,
+      new Date(t.created_at).toLocaleString()
     ]);
     const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(",")).join("\n")
     const a = Object.assign(document.createElement("a"), {
@@ -698,7 +708,15 @@ export default function AdminTransactions() {
                         onMouseEnter={e => e.currentTarget.style.backgroundColor = rowHover}
                         onMouseLeave={e => e.currentTarget.style.backgroundColor = idx % 2 === 0 ? cardBg : (isDark ? "#111827" : "#f9fafb")}>
                       <td className="px-4 py-3 text-sm font-semibold" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>#{t.id.slice(0, 8)}</td>
-                      <td className="px-4 py-3 text-sm" style={{ color: subTxt }}>{t.customer_name}</td>
+                      <td className="px-4 py-3 text-sm" style={{ color: subTxt }}>
+                        <span className="block font-medium" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{t.customer_name}</span>
+                        {t.is_walk_in_pos && (
+                          <span className="inline-flex mt-1 px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide"
+                            style={{ backgroundColor: isDark ? "rgba(59,130,246,0.14)" : "#eff6ff", color: isDark ? "#93c5fd" : "#1d4ed8" }}>
+                            Walk-in POS
+                          </span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-sm font-mono" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>
                         {t.payment_reference || <span className="italic opacity-50">None</span>}
                       </td>
@@ -794,7 +812,7 @@ export default function AdminTransactions() {
                           <tr key={t.id} className={i % 2 === 1 ? "alt" : ""}>
                             <td className="num nowrap muted">{n}</td>
                             <td className="mono">#{String(t.id).slice(0, 8)}</td>
-                            <td>{t.customer_name || "—"}</td>
+                            <td>{t.customer_name || "—"}{t.is_walk_in_pos ? " (Walk-in POS)" : ""}</td>
                             <td className="mono muted">{t.payment_reference || "—"}</td>
                             <td className="muted">{t.payment_method}</td>
                             <td className="muted nowrap">{new Date(t.created_at).toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" })}</td>
@@ -865,6 +883,9 @@ export default function AdminTransactions() {
                  <div>
                    <p className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>Customer</p>
                    <p className="text-sm font-semibold" style={{ color: isDark ? "#e2e8f0" : "#111827" }}>{selectedTransaction.customer_name}</p>
+                   {selectedTransaction.is_walk_in_pos && (
+                     <p className="text-[11px] font-bold uppercase tracking-wide mt-1" style={{ color: isDark ? "#93c5fd" : "#1d4ed8" }}>Walk-in POS</p>
+                   )}
                  </div>
                  <div>
                    <p className="text-[11px] font-bold uppercase tracking-wider mb-1" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>Date & Time</p>
