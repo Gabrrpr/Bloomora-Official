@@ -284,17 +284,39 @@ def get_activity_logs(db: Session = Depends(get_db)):
         .all()
     )
     
-    return [
-        {
+    result = []
+    for log in logs:
+        user = log.user
+        if not user and log.user_id:
+            user = db.query(User).filter(User.id == log.user_id).first()
+        role = (
+            getattr(user.role, "value", user.role)
+            if user and user.role
+            else log.role
+        )
+        branch = (
+            getattr(user.branch, "value", user.branch)
+            if user and user.branch
+            else log.branch
+        )
+        staff_name = None
+        if user:
+            staff_name = " ".join(
+                part for part in [user.first_name, user.last_name] if part
+            ).strip() or user.email or user.username
+
+        result.append({
             "id": str(log.id),
             "user_id": str(log.user_id) if log.user_id else None,
-            "role": log.role,
+            "staff_name": staff_name,
+            "role": role,
             "action": log.action,
-            "branch": getattr(log.user.branch, "value", log.user.branch) if log.user and log.user.branch else None,
+            "branch": branch,
+            "details": log.details,
             "created_at": log.created_at.isoformat() if log.created_at else None
-        }
-        for log in logs
-    ]
+        })
+
+    return result
 
 @router.get("/{user_id}", response_model=dict)
 def get_user(

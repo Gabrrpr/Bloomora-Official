@@ -5,8 +5,8 @@ from sqlalchemy.exc import IntegrityError
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 import uuid
-import secrets
 import os
+from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 load_dotenv()
 
@@ -37,8 +37,36 @@ BACKEND_URL = BACKEND_URL.rstrip("/")
 
 GOOGLE_REDIRECT_URI  = f"{BACKEND_URL}/api/v1/auth/google/callback"
 FACEBOOK_REDIRECT_URI = f"{BACKEND_URL}/api/v1/auth/facebook/callback"
-OAUTH_CALLBACK_URL = f"{FRONTEND_URL}/oauth/callback"
-LOGIN_URL = f"{FRONTEND_URL}/login"
+LOCAL_FRONTEND_URLS = {
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+    "http://localhost:5176",
+    "http://localhost:5177",
+    "http://localhost:5178",
+    "http://localhost:5179",
+}
+ALLOWED_FRONTEND_URLS = {
+    FRONTEND_URL,
+    "https://estings.shop",
+    "https://www.estings.shop",
+    *LOCAL_FRONTEND_URLS,
+    *{
+        origin.strip().rstrip("/")
+        for origin in os.getenv("CORS_ORIGINS", "").split(",")
+        if origin.strip()
+    },
+}
+
+def normalize_frontend_url(value: str | None) -> str:
+    if not value:
+        return FRONTEND_URL
+
+    normalized = value.strip().rstrip("/")
+    return normalized if normalized in ALLOWED_FRONTEND_URLS else FRONTEND_URL
+
+def oauth_frontend_url(request: Request) -> str:
+    return normalize_frontend_url(request.session.pop("oauth_frontend_url", FRONTEND_URL))
 
 # ── OAuth Setup ───────────────────────────────────────────────────────────────
 oauth = OAuth()
@@ -106,26 +134,33 @@ class RefreshTokenRequest(BaseModel):
 
 
 # ── Secure OAuth Token Exchange ───────────────────────────────────────────────
-_oauth_codes: dict[str, dict] = {}
+oauth_exchange_serializer = URLSafeTimedSerializer(
+    settings.SECRET_KEY,
+    salt="oauth-token-exchange",
+)
+OAUTH_EXCHANGE_MAX_AGE_SECONDS = 120
 
 def store_oauth_tokens(access_token: str, refresh_token: str, role: str) -> str:
-    """Store token payload pair server-side, return a one-time code safe for URL."""
-    code = secrets.token_urlsafe(32)
-    _oauth_codes[code] = {"access_token": access_token, "refresh_token": refresh_token, "role": role}
-    return code
+    """Return a short-lived signed code safe for frontend redirects."""
+    return oauth_exchange_serializer.dumps({
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "role": role,
+    })
 
 @router.get("/oauth/exchange")
 def exchange_oauth_code(code: str):
     """Frontend calls this immediately after redirect."""
-    data = _oauth_codes.get(code) # Use .get() instead of .pop() to inspect first
-    
-    if not data:
-        # If it's already gone, maybe it was already processed?
-        # For now, let's keep the error but make it descriptive
-        raise HTTPException(status_code=400, detail="Invalid or expired code.")
+    try:
+        data = oauth_exchange_serializer.loads(
+            code,
+            max_age=OAUTH_EXCHANGE_MAX_AGE_SECONDS,
+        )
+    except SignatureExpired:
+        raise HTTPException(status_code=400, detail="OAuth login expired. Please try again.")
+    except BadSignature:
+        raise HTTPException(status_code=400, detail="Invalid OAuth login code.")
 
-    # Only pop it if we are sure we are returning it
-    _oauth_codes.pop(code) 
     return {
         "access_token": data["access_token"], 
         "refresh_token": data["refresh_token"], 
@@ -413,14 +448,21 @@ def refresh_token(payload: RefreshTokenRequest, db: Session = Depends(get_db)):
 # ── Google OAuth ──────────────────────────────────────────────────────────────
 @router.get("/google")
 async def google_login(request: Request):
+    request.session["oauth_frontend_url"] = normalize_frontend_url(
+        request.query_params.get("frontend_url")
+    )
     return await oauth.google.authorize_redirect(request, GOOGLE_REDIRECT_URI)
 
 
 @router.get("/google/callback")
 async def google_callback(request: Request, db: Session = Depends(get_db)):
+    frontend_url = oauth_frontend_url(request)
+    login_url = f"{frontend_url}/login"
+    oauth_callback_url = f"{frontend_url}/oauth/callback"
+
     error = request.query_params.get("error")
     if error:
-        return RedirectResponse(url=f"{LOGIN_URL}?error=google_auth_failed")
+        return RedirectResponse(url=f"{login_url}?error=google_auth_failed")
 
     try:
         # 🚀 SECURITY FIX: Use Authlib wrapper to securely enforce and check state CSRF parameter
@@ -430,7 +472,7 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
 
         email = user_info.get("email")
         if not email:
-            return RedirectResponse(url=f"{FRONTEND_URL}/?error=no_email")
+            return RedirectResponse(url=f"{frontend_url}/?error=no_email")
 
         first_name = user_info.get("given_name", "")
         last_name = user_info.get("family_name", "User")
@@ -444,24 +486,31 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         role = user.role.value if hasattr(user.role, 'value') else user.role
 
         exchange_code = store_oauth_tokens(jwt_access, jwt_refresh, role)
-        return RedirectResponse(url=f"{OAUTH_CALLBACK_URL}?code={exchange_code}")
+        return RedirectResponse(url=f"{oauth_callback_url}?code={exchange_code}")
 
     except Exception as e:
         print("Google OAuth error:", e)
-        return RedirectResponse(url=f"{LOGIN_URL}?error=google_auth_failed")
+        return RedirectResponse(url=f"{login_url}?error=google_auth_failed")
 
 
 # ── Facebook OAuth ────────────────────────────────────────────────────────────
 @router.get("/facebook")
 async def facebook_login(request: Request):
+    request.session["oauth_frontend_url"] = normalize_frontend_url(
+        request.query_params.get("frontend_url")
+    )
     return await oauth.facebook.authorize_redirect(request, FACEBOOK_REDIRECT_URI)
 
 
 @router.get("/facebook/callback")
 async def facebook_callback(request: Request, db: Session = Depends(get_db)):
+    frontend_url = oauth_frontend_url(request)
+    login_url = f"{frontend_url}/login"
+    oauth_callback_url = f"{frontend_url}/oauth/callback"
+
     error = request.query_params.get("error")
     if error:
-        return RedirectResponse(url=f"{LOGIN_URL}?error=facebook_auth_failed")
+        return RedirectResponse(url=f"{login_url}?error=facebook_auth_failed")
 
     try:
         token = await oauth.facebook.authorize_access_token(request)
@@ -485,14 +534,14 @@ async def facebook_callback(request: Request, db: Session = Depends(get_db)):
         role = user.role.value if hasattr(user.role, 'value') else user.role
 
         exchange_code = store_oauth_tokens(jwt_access, jwt_refresh, role)
-        return RedirectResponse(url=f"{OAUTH_CALLBACK_URL}?code={exchange_code}")
+        return RedirectResponse(url=f"{oauth_callback_url}?code={exchange_code}")
 
     except HTTPException as e:
         print("Facebook OAuth error:", e.detail)
-        return RedirectResponse(url=f"{LOGIN_URL}?error=facebook_email_required")
+        return RedirectResponse(url=f"{login_url}?error=facebook_email_required")
     except Exception as e:
         print("Facebook OAuth error:", e)
-        return RedirectResponse(url=f"{LOGIN_URL}?error=facebook_auth_failed")
+        return RedirectResponse(url=f"{login_url}?error=facebook_auth_failed")
 
 
 # ── Me ────────────────────────────────────────────────────────────────────────

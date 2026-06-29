@@ -72,11 +72,11 @@ export async function loginUser(email, password) {
 }
 
 export function googleLogin() {
-  window.location.href = `${API_BASE}/auth/google`;
+  window.location.href = `${API_BASE}/auth/google?frontend_url=${encodeURIComponent(window.location.origin)}`;
 }
 
 export function facebookLogin() {
-  window.location.href = `${API_BASE}/auth/facebook`;
+  window.location.href = `${API_BASE}/auth/facebook?frontend_url=${encodeURIComponent(window.location.origin)}`;
 }
 
 export async function sendForgotPasswordOtp(email) {

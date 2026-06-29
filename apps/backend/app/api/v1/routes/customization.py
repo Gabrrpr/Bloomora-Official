@@ -241,8 +241,10 @@ async def check_and_generate(
     if _needs_box_container_rule(f"{payload.prompt_text} {base_optimized_prompt}"):
         box_container_rule = (
             "BOX CONTAINER RULE: The box is the vessel for the arrangement. "
-            "All flowers, fillers, and stems must be inside the clear acrylic box opening, emerging from within the box. "
-            "Keep the box visible from the side. Do not place flowers outside, behind, beside, on top of, or wrapped around the exterior of the box. "
+            "The clear acrylic flower box must be the visible container/base, not a decorative prop. "
+            "All flowers, fillers, and visible stems must originate from inside the box opening and stay contained within the footprint of the acrylic box. "
+            "Keep the transparent box walls and base clearly visible from a direct side profile. "
+            "Do not create a hand-tied bouquet, do not use wrapping paper, and do not place flowers outside, behind, beside, on top of, floating above, or wrapped around the exterior of the box. "
         )
     
     final_image_prompt = (

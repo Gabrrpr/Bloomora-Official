@@ -41,7 +41,7 @@ class PollinationsService:
 
         img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
     
-        try:
+        try:    
             current_dir = Path(__file__).resolve().parent 
             apps_dir = current_dir.parent.parent.parent
             
