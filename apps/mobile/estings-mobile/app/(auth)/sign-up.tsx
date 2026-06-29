@@ -116,6 +116,7 @@ export default function SignUpScreen() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSendingOtp, setIsSendingOtp] = useState(false);
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [isEnablingBiometrics, setIsEnablingBiometrics] = useState(false);
 
   const hasEnteredSignUpData = [
     firstName,
@@ -365,6 +366,13 @@ export default function SignUpScreen() {
   }
 
   async function handleEnableBiometrics() {
+    if (isEnablingBiometrics) {
+      return;
+    }
+
+    setIsEnablingBiometrics(true);
+    setBiometricsMessage(null);
+
     try {
       const availability = await getBiometricsAvailability();
       setBiometricsAvailability(availability);
@@ -385,6 +393,8 @@ export default function SignUpScreen() {
       setBiometricsMessage(result.error ?? 'Biometric setup was not completed.');
     } catch (error) {
       setBiometricsMessage(error instanceof Error ? error.message : 'Biometric setup is unavailable right now.');
+    } finally {
+      setIsEnablingBiometrics(false);
     }
   }
 
@@ -681,8 +691,12 @@ export default function SignUpScreen() {
                 </View>
 
                 <View style={styles.stickyActions}>
-                  <PrimaryButton label="Enable" onPress={handleEnableBiometrics} />
-                  <SecondaryButton label="Skip" onPress={() => setPhase(3)} />
+                  <PrimaryButton
+                    disabled={isEnablingBiometrics}
+                    label={isEnablingBiometrics ? 'Waiting for fingerprint...' : 'Enable'}
+                    onPress={handleEnableBiometrics}
+                  />
+                  <SecondaryButton label="Skip" onPress={() => !isEnablingBiometrics && setPhase(3)} />
                 </View>
               </>
             )}

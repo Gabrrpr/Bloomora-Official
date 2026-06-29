@@ -1,7 +1,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { CheckCircle2, Copy, HelpCircle, ImageOff, MessageCircle, Package } from 'lucide-react-native';
+import { CheckCircle2, Copy, HelpCircle, ImageOff, MapPin, MessageCircle, Package, Truck, UserRound } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -184,6 +184,7 @@ export default function OrderDetailsScreen() {
               </View>
               <DetailValue label="Address" value={order.deliveryAddress || `Pickup at ${order.branch || "Esting's"}`} />
               {order.deliveryNotes ? <DetailValue label="Delivery Notes" value={order.deliveryNotes} /> : null}
+              {order.deliveryTracking ? <DeliveryTrackingView order={order} /> : null}
               <View style={styles.divider} />
 
               <Text style={styles.sectionTitle}>Order Summary</Text>
@@ -247,6 +248,92 @@ function DetailValue({ label, value }: { label: string; value: string }) {
 
 function SummaryRow({ emphasized = false, label, value }: { emphasized?: boolean; label: string; value: string }) {
   return <View style={styles.summaryRow}><Text style={[styles.summaryLabel, emphasized && styles.totalText]}>{label}</Text><Text selectable style={[styles.summaryValue, emphasized && styles.totalValue]}>{value}</Text></View>;
+}
+
+function DeliveryTrackingView({ order }: { order: CustomerOrder }) {
+  const tracking = order.deliveryTracking;
+  if (!tracking) return null;
+
+  const timeline = [
+    { key: 'assigned', label: 'Assigned', time: tracking.assignedAt },
+    { key: 'picked-up', label: 'Picked up', time: tracking.pickedUpAt },
+    { key: 'out-for-delivery', label: 'Out for delivery', time: tracking.inTransitAt },
+    { key: 'arrived', label: 'Arrived', time: tracking.arrivedAt },
+    { key: 'completed', label: 'Completed', time: tracking.deliveredAt },
+  ];
+
+  return (
+    <View style={styles.trackingCard}>
+      <View style={styles.trackingHeader}>
+        <Truck color={theme.colors.primary} size={20} />
+        <View style={styles.trackingHeaderCopy}>
+          <Text style={styles.trackingTitle}>Delivery Tracking</Text>
+          <Text selectable style={styles.trackingMeta}>Delivery ID: {tracking.deliveryId || 'To be assigned'}</Text>
+        </View>
+      </View>
+
+      <View style={styles.trackingTimeline}>
+        {timeline.map((item) => {
+          const done = Boolean(item.time);
+          return (
+            <View key={item.key} style={styles.trackingStep}>
+              <View style={[styles.trackingDot, done && styles.trackingDotDone]}>
+                {done ? <CheckCircle2 color="#FFFFFF" size={12} /> : null}
+              </View>
+              <View style={styles.trackingStepCopy}>
+                <Text style={[styles.trackingStepLabel, done && styles.trackingStepLabelDone]}>{item.label}</Text>
+                <Text style={styles.trackingStepTime}>{item.time ? formatDateTime(item.time) : 'Pending'}</Text>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+
+      <View style={styles.trackingDetailsGrid}>
+        <TrackingDetail icon="truck" label="Status" value={formatLabel(tracking.status || order.status)} />
+        <TrackingDetail icon="user" label="Rider" value={tracking.rider?.name || 'To be assigned'} />
+        <TrackingDetail icon="map" label="Vehicle" value={formatVehicle(tracking.vehicle)} />
+      </View>
+
+      {tracking.proofPhotoUrl ? (
+        <View style={styles.proofPanel}>
+          <Image contentFit="cover" source={{ uri: tracking.proofPhotoUrl }} style={styles.proofImage} />
+          <View style={styles.proofCopy}>
+            <Text style={styles.proofTitle}>Proof of delivery</Text>
+            {tracking.proofNote ? <Text style={styles.proofText}>{tracking.proofNote}</Text> : null}
+            {tracking.deliveredAt ? <Text style={styles.proofText}>Completed {formatDateTime(tracking.deliveredAt)}</Text> : null}
+          </View>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function TrackingDetail({
+  icon,
+  label,
+  value,
+}: {
+  icon: 'map' | 'truck' | 'user';
+  label: string;
+  value: string;
+}) {
+  const Icon = icon === 'user' ? UserRound : icon === 'map' ? MapPin : Truck;
+
+  return (
+    <View style={styles.trackingDetail}>
+      <Icon color={theme.colors.primary} size={16} />
+      <Text style={styles.fieldLabel}>{label}</Text>
+      <Text selectable style={styles.trackingDetailValue}>{value}</Text>
+    </View>
+  );
+}
+
+function formatVehicle(vehicle: NonNullable<CustomerOrder['deliveryTracking']>['vehicle']) {
+  if (!vehicle) return 'To be assigned';
+  const plate = vehicle.plateNumber || 'No plate';
+  const model = [vehicle.brand, vehicle.model].filter(Boolean).join(' ');
+  return model ? `${plate} - ${model}` : plate;
 }
 
 function getHeroTitle(order: CustomerOrder) {
@@ -335,6 +422,27 @@ const styles = StyleSheet.create({
   supportButtonDark: { backgroundColor: '#383838', borderColor: '#383838' },
   supportButtonOutlineText: { color: '#444444', fontFamily: Fonts.sans, fontSize: 16 },
   supportButtonText: { color: '#FFFFFF', fontFamily: Fonts.sans, fontSize: 16 },
+  proofCopy: { flex: 1, gap: 3 },
+  proofImage: { backgroundColor: '#ECECEC', borderRadius: theme.radius.sm, height: 82, width: 82 },
+  proofPanel: { alignItems: 'center', backgroundColor: '#F6F8F6', borderColor: '#E1E6E1', borderRadius: theme.radius.sm, borderWidth: 1, flexDirection: 'row', gap: 12, padding: 12 },
+  proofText: { color: '#666666', fontFamily: Fonts.sans, fontSize: 12, lineHeight: 17 },
+  proofTitle: { color: '#333333', fontFamily: Fonts.sansMedium, fontSize: 14 },
   primaryButton: { alignItems: 'center', backgroundColor: theme.colors.primary, borderRadius: theme.radius.sm, justifyContent: 'center', minHeight: 54 },
   primaryButtonText: { color: '#FFFFFF', fontFamily: Fonts.sansMedium, fontSize: 16 },
+  trackingCard: { backgroundColor: '#FFFFFF', borderColor: '#D7D7D7', borderRadius: theme.radius.sm, borderWidth: 1, gap: 14, padding: 14 },
+  trackingDetail: { backgroundColor: '#F6F8F6', borderColor: '#E1E6E1', borderRadius: theme.radius.sm, borderWidth: 1, flex: 1, gap: 4, minHeight: 84, padding: 10 },
+  trackingDetailsGrid: { flexDirection: 'row', gap: 8 },
+  trackingDetailValue: { color: '#333333', fontFamily: Fonts.sansMedium, fontSize: 11, lineHeight: 16 },
+  trackingDot: { alignItems: 'center', backgroundColor: '#D7D7D7', borderRadius: 10, height: 20, justifyContent: 'center', width: 20 },
+  trackingDotDone: { backgroundColor: theme.colors.primary },
+  trackingHeader: { alignItems: 'center', flexDirection: 'row', gap: 10 },
+  trackingHeaderCopy: { flex: 1, gap: 2 },
+  trackingMeta: { color: '#777777', fontFamily: Fonts.sans, fontSize: 11 },
+  trackingStep: { alignItems: 'center', flexDirection: 'row', gap: 10 },
+  trackingStepCopy: { flex: 1, gap: 2 },
+  trackingStepLabel: { color: '#777777', fontFamily: Fonts.sans, fontSize: 13 },
+  trackingStepLabelDone: { color: '#333333', fontFamily: Fonts.sansMedium },
+  trackingStepTime: { color: '#999999', fontFamily: Fonts.sans, fontSize: 11 },
+  trackingTimeline: { gap: 10 },
+  trackingTitle: { color: '#333333', fontFamily: Fonts.sansMedium, fontSize: 17 },
 });

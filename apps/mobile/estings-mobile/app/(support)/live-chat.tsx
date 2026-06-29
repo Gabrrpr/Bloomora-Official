@@ -186,6 +186,7 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
   const [quickReplySetIndex, setQuickReplySetIndex] = useState(0);
   const [activeFloatingMenu, setActiveFloatingMenu] = useState<FloatingMenuType | null>(null);
   const [composerHeight, setComposerHeight] = useState(64);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isChatAgreementVisible, setIsChatAgreementVisible] = useState(!hasAcceptedChatAgreementThisSession);
   const [emptySheetType, setEmptySheetType] = useState<EmptySheetType | null>(null);
@@ -238,7 +239,7 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
   const latestCustomerMessageId = useMemo(() => getLatestCustomerMessageId(messages), [messages]);
   const headerTopPadding = insets.top > 0 ? insets.top + 2 : theme.spacing.lg;
   const bottomSystemInset = Math.max(insets.bottom, theme.spacing.sm);
-  const composerBottomPadding = bottomSystemInset + theme.spacing.xs;
+  const composerBottomPadding = bottomSystemInset + theme.spacing.xs + (Platform.OS === 'android' ? keyboardHeight : 0);
   const floatingMenuBottom = composerHeight + theme.spacing.sm;
   const chatOptionsTop = headerTopPadding + 64;
 
@@ -457,7 +458,8 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
 
     const showSubscription = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      () => {
+      (event) => {
+        setKeyboardHeight(event.endCoordinates.height);
         setActiveFloatingMenu(null);
         setTimeout(scrollToLatest, 80);
       }
@@ -465,6 +467,7 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
     const hideSubscription = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       () => {
+        setKeyboardHeight(0);
         setTimeout(scrollToLatest, 80);
       }
     );

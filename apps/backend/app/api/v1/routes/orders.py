@@ -224,6 +224,7 @@ def _delivery_tracking(order: Order) -> dict:
     rider = delivery.rider if delivery else None
     vehicle = delivery.vehicle if delivery else None
     return {
+        "delivery_id": str(delivery.id) if delivery else None,
         "provider": order.delivery_provider,
         "lalamove_order_id": order.lalamove_order_id,
         "lalamove_share_link": order.lalamove_share_link,
@@ -234,6 +235,13 @@ def _delivery_tracking(order: Order) -> dict:
             else (str(delivery.status) if delivery else None)
         ),
         "estimated_arrival": delivery.estimated_arrival.isoformat() if delivery and delivery.estimated_arrival else None,
+        "assigned_at": delivery.assigned_at.isoformat() if delivery and getattr(delivery, "assigned_at", None) else None,
+        "picked_up_at": delivery.picked_up_at.isoformat() if delivery and delivery.picked_up_at else None,
+        "in_transit_at": delivery.in_transit_at.isoformat() if delivery and delivery.in_transit_at else None,
+        "arrived_at": delivery.arrived_at.isoformat() if delivery and delivery.arrived_at else None,
+        "delivered_at": delivery.delivered_at.isoformat() if delivery and delivery.delivered_at else None,
+        "proof_photo_url": delivery.proof_photo_url if delivery else None,
+        "proof_note": delivery.proof_note if delivery else None,
         "rider": {
             "id": str(rider.id),
             "name": f"{rider.first_name} {rider.last_name}".strip() or rider.username,

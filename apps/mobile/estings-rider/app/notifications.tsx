@@ -14,6 +14,7 @@ import {
 
 export default function RiderNotificationsScreen() {
   const insets = useSafeAreaInsets();
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [notifications, setNotifications] = useState<RiderNotification[]>([]);
 
@@ -23,9 +24,16 @@ export default function RiderNotificationsScreen() {
   );
 
   const loadNotifications = useCallback(async () => {
-    const nextNotifications = await getRiderNotifications();
-    setNotifications(nextNotifications);
-    setIsRefreshing(false);
+    try {
+      const nextNotifications = await getRiderNotifications();
+      setNotifications(nextNotifications);
+      setErrorMessage(null);
+    } catch (error) {
+      setNotifications([]);
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to load notifications.');
+    } finally {
+      setIsRefreshing(false);
+    }
   }, []);
 
   useFocusEffect(
@@ -93,7 +101,9 @@ export default function RiderNotificationsScreen() {
         <Text style={styles.countText}>{unreadCount} unread</Text>
       </View>
 
-      {notifications.length === 0 ? (
+      {errorMessage ? (
+        <NotificationState icon="alert-circle" title="Notifications unavailable" description={`${errorMessage} Pull down to try again.`} />
+      ) : notifications.length === 0 ? (
         <EmptyNotificationState />
       ) : (
         <View style={styles.sectionBlock}>
@@ -113,13 +123,31 @@ export default function RiderNotificationsScreen() {
 
 function EmptyNotificationState() {
   return (
+    <NotificationState
+      icon="bell"
+      title="No notifications yet"
+      description="Delivery assignments, route changes, and completed deliveries will appear here."
+    />
+  );
+}
+
+function NotificationState({
+  description,
+  icon,
+  title,
+}: {
+  description: string;
+  icon: keyof typeof Feather.glyphMap;
+  title: string;
+}) {
+  return (
     <View style={styles.emptyState}>
       <View style={styles.emptyIcon}>
-        <Feather color={theme.colors.primary} name="bell" size={31} />
+        <Feather color={theme.colors.primary} name={icon} size={31} />
       </View>
       <View style={styles.emptyCopy}>
-        <Text style={styles.emptyTitle}>No notifications yet</Text>
-        <Text style={styles.emptyDescription}>Delivery assignments, route changes, and completed deliveries will appear here.</Text>
+        <Text style={styles.emptyTitle}>{title}</Text>
+        <Text style={styles.emptyDescription}>{description}</Text>
       </View>
     </View>
   );

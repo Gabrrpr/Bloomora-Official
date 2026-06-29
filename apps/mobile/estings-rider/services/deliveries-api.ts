@@ -11,6 +11,7 @@ export type RiderDeliveryStatus =
 
 export type RiderDelivery = {
   address: string;
+  assignedAt?: string | null;
   arrivedAt?: string | null;
   assignedArea?: string | null;
   assignedVehicle?: {
@@ -31,6 +32,7 @@ export type RiderDelivery = {
   id: string;
   imageUrl?: string | null;
   inTransitAt?: string | null;
+  itemCount?: number | null;
   itemSummary: string;
   orderId: string;
   orderNumber: string;

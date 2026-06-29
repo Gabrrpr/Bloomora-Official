@@ -75,20 +75,53 @@ export async function authenticateWithBiometrics(promptMessage: string): Promise
     };
   }
 
-  const result = await LocalAuthentication.authenticateAsync({
-    cancelLabel: 'Cancel',
-    fallbackLabel: 'Use device passcode',
-    promptMessage,
-  });
+  try {
+    const result = await LocalAuthentication.authenticateAsync({
+      biometricsSecurityLevel: 'strong',
+      cancelLabel: 'Cancel',
+      disableDeviceFallback: true,
+      fallbackLabel: '',
+      promptMessage,
+      requireConfirmation: true,
+    });
 
-  if (result.success) {
-    return { success: true };
+    if (result.success) {
+      return { success: true };
+    }
+
+    return {
+      error: getAuthenticationErrorMessage(result.error),
+      success: false,
+    };
+  } catch {
+    return {
+      error: 'Biometric confirmation could not be started. Please try again or skip this step.',
+      success: false,
+    };
   }
+}
 
-  return {
-    error: 'Biometric confirmation was not completed.',
-    success: false,
-  };
+function getAuthenticationErrorMessage(error?: string) {
+  switch (error) {
+    case 'app_cancel':
+    case 'system_cancel':
+      return 'Biometric confirmation was interrupted. Please try again.';
+    case 'authentication_failed':
+      return 'Fingerprint was not recognized. Please try again.';
+    case 'lockout':
+      return 'Too many attempts. Unlock your device and try again.';
+    case 'not_available':
+    case 'not_enrolled':
+    case 'passcode_not_set':
+      return 'Set up fingerprint or screen lock in device settings first.';
+    case 'timeout':
+      return 'Biometric confirmation timed out. Please try again.';
+    case 'user_cancel':
+    case 'user_fallback':
+      return 'Biometric confirmation was not completed.';
+    default:
+      return 'Biometric confirmation was not completed.';
+  }
 }
 
 function getBiometricsLabel(types: LocalAuthentication.AuthenticationType[]) {

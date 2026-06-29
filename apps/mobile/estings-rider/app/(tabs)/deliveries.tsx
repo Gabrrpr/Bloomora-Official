@@ -101,7 +101,13 @@ export default function DeliveriesScreen() {
       <View style={styles.list}>
         {isLoading ? <Text style={styles.stateText}>Loading assigned deliveries...</Text> : null}
         {error ? <Text selectable style={styles.stateText}>{error}</Text> : null}
-        {!isLoading && !error && filteredDeliveries.length === 0 ? <Text style={styles.stateText}>No deliveries found.</Text> : null}
+        {!isLoading && !error && filteredDeliveries.length === 0 ? (
+          <EmptyState
+            icon="package"
+            title={query.trim() ? 'No deliveries found' : 'No active work'}
+            text={query.trim() ? 'Try a different order, recipient, or address.' : 'Assigned deliveries will appear here when dispatch sends new work.'}
+          />
+        ) : null}
         {filteredDeliveries.map((delivery) => (
           <DeliveryStopCard
             key={delivery.id}
@@ -115,7 +121,58 @@ export default function DeliveriesScreen() {
   );
 }
 
+function EmptyState({
+  icon,
+  text,
+  title,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  text: string;
+  title: string;
+}) {
+  return (
+    <View style={styles.emptyState}>
+      <View style={styles.emptyIcon}>
+        <Feather color={theme.colors.primary} name={icon} size={26} />
+      </View>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyText}>{text}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
+  emptyIcon: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.greenSoft,
+    borderRadius: theme.radius.pill,
+    height: 58,
+    justifyContent: 'center',
+    width: 58,
+  },
+  emptyState: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: 'rgba(31, 42, 36, 0.08)',
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    padding: theme.spacing.xl,
+  },
+  emptyText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  emptyTitle: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansBold,
+    fontSize: 17,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
   list: {
     gap: theme.spacing.md,
   },

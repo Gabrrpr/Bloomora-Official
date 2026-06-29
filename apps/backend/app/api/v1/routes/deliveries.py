@@ -3,8 +3,8 @@ import mimetypes
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile
-from sqlalchemy import func
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
+from sqlalchemy import func, inspect
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.dependencies import get_current_user, get_db, require_delivery, require_staff
@@ -20,6 +20,7 @@ from app.models import (
     OrderStatusEnum,
     PaymentStatusEnum,
     BranchEnum,
+    Notification,
     RoleEnum,
     Transaction,
     User,
@@ -52,6 +53,20 @@ def _order_status_value(status) -> str:
 
 def _delivery_order_status_value(status) -> str:
     return status.value if hasattr(status, "value") else str(status)
+
+
+def _notification_delivery_id_filter(delivery_id):
+    if hasattr(Notification, "delivery_id"):
+        return Notification.delivery_id == delivery_id
+    return Notification.order_id.isnot(None)
+
+
+def _has_delivery_id_column(db: Session) -> bool:
+    try:
+        return any(column["name"] == "delivery_id" for column in inspect(db.bind).get_columns("notifications"))
+    except Exception:
+        db.rollback()
+        return False
 
 
 def _delivery_query(db: Session):
@@ -137,6 +152,12 @@ def _serialize_items(order: Order) -> tuple[str, list[str]]:
     return ", ".join(item_names), handling_notes
 
 
+def _delivery_item_count(order: Order) -> int:
+    if getattr(order, "items", None):
+        return sum(1 for item in order.items or [] if item)
+    return 1
+
+
 def _serialize_delivery_image(order: Order) -> str | None:
     for item in order.items or []:
         product = item.product
@@ -162,27 +183,41 @@ def _recipient_phone(order: Order) -> str:
     return order.recipient_phone or getattr(order.user, "phone_number", None) or ""
 
 
+def _recipient_name(order: Order) -> str:
+    explicit_name = " ".join(
+        value
+        for value in [order.recipient_first_name, order.recipient_last_name]
+        if value
+    ).strip()
+    if explicit_name:
+        return explicit_name
+
+    user = getattr(order, "user", None)
+    user_name = _user_name(user)
+    if user_name:
+        return user_name
+
+    return "Recipient"
+
+
 def serialize_delivery(delivery: Delivery) -> dict:
     order = delivery.order
     if not order:
         raise HTTPException(status_code=500, detail="Delivery has no linked order.")
 
     item_summary, handling_notes = _serialize_items(order)
-    recipient_name = " ".join(
-        value
-        for value in [order.recipient_first_name, order.recipient_last_name]
-        if value
-    ).strip()
+    recipient_name = _recipient_name(order)
 
     return {
         "id": str(delivery.id),
         "orderId": str(order.id),
         "orderNumber": f"ORD-{order.id.hex[:8].upper()}",
-        "recipientName": recipient_name or "Recipient",
+        "recipientName": recipient_name,
         "recipientPhone": _recipient_phone(order),
         "address": order.delivery_address or "",
         "branch": order.branch_name,
         "imageUrl": _serialize_delivery_image(order),
+        "itemCount": _delivery_item_count(order),
         "itemSummary": item_summary,
         "handlingNotes": handling_notes,
         "deliveryNotes": order.delivery_notes,
@@ -196,6 +231,7 @@ def serialize_delivery(delivery: Delivery) -> dict:
         "assignedArea": delivery.assigned_area,
         "scheduledAt": order.scheduled_at.isoformat() if order.scheduled_at else None,
         "estimatedArrival": delivery.estimated_arrival.isoformat() if delivery.estimated_arrival else None,
+        "assignedAt": delivery.assigned_at.isoformat() if getattr(delivery, "assigned_at", None) else None,
         "pickedUpAt": delivery.picked_up_at.isoformat() if delivery.picked_up_at else None,
         "inTransitAt": delivery.in_transit_at.isoformat() if delivery.in_transit_at else None,
         "arrivedAt": delivery.arrived_at.isoformat() if delivery.arrived_at else None,
@@ -209,16 +245,12 @@ def serialize_delivery(delivery: Delivery) -> dict:
 
 def _serialize_assignable_order(order: Order) -> dict:
     item_summary, handling_notes = _serialize_items(order)
-    recipient_name = " ".join(
-        value
-        for value in [order.recipient_first_name, order.recipient_last_name]
-        if value
-    ).strip()
+    recipient_name = _recipient_name(order)
 
     return {
         "id": str(order.id),
         "orderNumber": f"ORD-{order.id.hex[:8].upper()}",
-        "recipientName": recipient_name or "Recipient",
+        "recipientName": recipient_name,
         "recipientPhone": _recipient_phone(order),
         "address": order.delivery_address,
         "branch": order.branch_name,
@@ -290,7 +322,7 @@ def _normalize_rider_step_status(delivery: Delivery) -> DeliveryStatusEnum:
         order_status = delivery.order.status if delivery.order else None
         if delivery.in_transit_at or order_status == OrderStatusEnum.out_for_delivery:
             return DeliveryStatusEnum.out_for_delivery
-        if delivery.picked_up_at or order_status == OrderStatusEnum.ready_for_pickup:
+        if delivery.picked_up_at:
             return DeliveryStatusEnum.picked_up
 
     return current_status
@@ -357,6 +389,87 @@ def _serialize_admin_rider(db: Session, rider: User) -> dict:
         "assignedVehicle": _serialize_vehicle_item(assigned_vehicle) if assigned_vehicle else None,
         "activeDeliveryDetails": [serialize_delivery(d) for d in active_deliveries],
     }
+
+
+def _ensure_rider_can_receive_dispatch(rider: User) -> None:
+    if not rider or rider.role != RoleEnum.delivery:
+        raise HTTPException(status_code=400, detail="Select a valid delivery rider.")
+    if not rider.is_active or not rider.is_verified or not rider.is_staff_verified:
+        raise HTTPException(status_code=400, detail="Rider account must be active and verified.")
+    if not getattr(rider, "rider_is_available", True):
+        raise HTTPException(status_code=400, detail="Rider is offline and cannot receive dispatch orders.")
+
+
+def _create_rider_assignment_notification(db: Session, delivery: Delivery) -> None:
+    if not delivery.rider_id or not delivery.order_id:
+        return
+
+    has_delivery_id_column = _has_delivery_id_column(db)
+    order_number = f"ORD-{delivery.order_id.hex[:8].upper()}"
+    existing_query = db.query(Notification).filter(
+        Notification.user_id == delivery.rider_id,
+        Notification.type == "delivery",
+        Notification.order_id == delivery.order_id,
+    )
+    if has_delivery_id_column and hasattr(Notification, "delivery_id"):
+        existing_query = existing_query.filter(Notification.delivery_id == delivery.id)
+    existing = existing_query.first()
+    if existing:
+        return
+
+    notification = Notification(
+        id=uuid.uuid4(),
+        user_id=delivery.rider_id,
+        type="delivery",
+        title="New delivery assigned",
+        message=f"{order_number} has been assigned to you. Check the delivery details before pickup.",
+        order_id=delivery.order_id,
+        is_global=False,
+    )
+    if has_delivery_id_column and hasattr(notification, "delivery_id"):
+        notification.delivery_id = delivery.id
+    db.add(notification)
+
+
+def _create_customer_delivery_notification_once(db: Session, delivery: Delivery, status: DeliveryStatusEnum) -> None:
+    if not delivery.order or status not in {DeliveryStatusEnum.out_for_delivery, DeliveryStatusEnum.delivered}:
+        return
+
+    order = delivery.order
+    order_number = f"ORD-{order.id.hex[:8].upper()}"
+    title, message = {
+        DeliveryStatusEnum.out_for_delivery: (
+            "On Its Way!",
+            f"Your order {order_number} is out for delivery.",
+        ),
+        DeliveryStatusEnum.delivered: (
+            "Order Delivered",
+            f"Your order {order_number} has been delivered.",
+        ),
+    }[status]
+
+    existing = db.query(Notification).filter(
+        Notification.user_id == order.user_id,
+        Notification.type == "order",
+        Notification.order_id == order.id,
+        Notification.title == title,
+    ).first()
+    if existing:
+        return
+
+    has_delivery_id_column = _has_delivery_id_column(db)
+    notification = Notification(
+        id=uuid.uuid4(),
+        user_id=order.user_id,
+        type="order",
+        title=title,
+        message=message,
+        order_id=order.id,
+        is_global=False,
+    )
+    if has_delivery_id_column and hasattr(notification, "delivery_id"):
+        notification.delivery_id = delivery.id
+    db.add(notification)
 
 
 def _get_delivery_for_user(db: Session, delivery_id: str, user: User) -> Delivery:
@@ -721,10 +834,7 @@ def create_delivery_order(
         raise HTTPException(status_code=400, detail="Invalid rider or order ID.")
 
     rider = db.query(User).filter(User.id == rider_uuid).first()
-    if not rider or rider.role != RoleEnum.delivery:
-        raise HTTPException(status_code=400, detail="Select a valid delivery rider.")
-    if not rider.is_active or not rider.is_verified or not rider.is_staff_verified:
-        raise HTTPException(status_code=400, detail="Rider account must be active and verified.")
+    _ensure_rider_can_receive_dispatch(rider)
 
     vehicle = None
     vehicle_id = payload.get("vehicle_id") or payload.get("vehicleId")
@@ -770,8 +880,9 @@ def create_delivery_order(
     )
     db.add(delivery_order)
 
+    now = datetime.now(timezone.utc)
     for order in orders:
-        db.add(Delivery(
+        delivery = Delivery(
             id=uuid.uuid4(),
             order_id=order.id,
             delivery_order_id=delivery_order.id,
@@ -779,7 +890,10 @@ def create_delivery_order(
             vehicle_id=vehicle.id if vehicle else None,
             assigned_area=order.branch_name or branch,
             status=DeliveryStatusEnum.assigned,
-        ))
+            assigned_at=now,
+        )
+        db.add(delivery)
+        _create_rider_assignment_notification(db, delivery)
         order.status = OrderStatusEnum.ready_for_pickup
 
     db.commit()
@@ -807,10 +921,7 @@ def assign_delivery(
         raise HTTPException(status_code=404, detail="Order not found.")
 
     rider = db.query(User).filter(User.id == rider_uuid).first()
-    if not rider or rider.role != RoleEnum.delivery:
-        raise HTTPException(status_code=400, detail="Select a valid delivery rider.")
-    if not rider.is_active or not rider.is_verified or not rider.is_staff_verified:
-        raise HTTPException(status_code=400, detail="Rider account must be active and verified.")
+    _ensure_rider_can_receive_dispatch(rider)
 
     payment_status = order.transaction.status if order.transaction else None
     if payment_status != PaymentStatusEnum.paid:
@@ -828,6 +939,7 @@ def assign_delivery(
     delivery.rider_id = rider.id
     delivery.assigned_area = str(payload.get("assigned_area") or payload.get("assignedArea") or "").strip() or None
     delivery.status = DeliveryStatusEnum.assigned
+    delivery.assigned_at = datetime.now(timezone.utc)
     order.status = OrderStatusEnum.ready_for_pickup
 
     vehicle_id = payload.get("vehicle_id") or payload.get("vehicleId")
@@ -841,6 +953,7 @@ def assign_delivery(
         except ValueError:
             raise HTTPException(status_code=400, detail="Invalid vehicle ID.")
 
+    _create_rider_assignment_notification(db, delivery)
     db.commit()
     db.refresh(delivery)
     return serialize_delivery(_delivery_query(db).filter(Delivery.id == delivery.id).first())
@@ -1002,6 +1115,7 @@ def update_delivery_status(
             delivery.picked_up_at = now
         delivery.in_transit_at = now
         delivery.order.status = OrderStatusEnum.out_for_delivery
+        _create_customer_delivery_notification_once(db, delivery, next_status)
     elif next_status == DeliveryStatusEnum.arrived:
         delivery.arrived_at = now
         delivery.order.status = OrderStatusEnum.out_for_delivery
@@ -1011,6 +1125,7 @@ def update_delivery_status(
         delivery.delivered_at = now
         delivery.order.status = OrderStatusEnum.delivered
         delivery.order.can_review = True
+        _create_customer_delivery_notification_once(db, delivery, next_status)
 
     delivery.status = next_status
     _sync_delivery_order_status(delivery.delivery_order)
@@ -1022,29 +1137,53 @@ def update_delivery_status(
 @router.post("/{delivery_id}/proof", response_model=dict)
 async def submit_delivery_proof(
     delivery_id: str,
-    proof_photo_url: Optional[str] = Form(None),
-    proof_note: Optional[str] = Form(None),
-    file: UploadFile | None = File(None),
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_delivery),
 ):
     delivery = _get_delivery_for_user(db, delivery_id, current_user)
 
-    final_photo_url = (proof_photo_url or "").strip()
-    if file:
-        if not file.content_type or not file.content_type.startswith("image/"):
+    proof_note = None
+    final_photo_url = ""
+    upload = None
+
+    content_type = request.headers.get("content-type", "")
+    if "application/json" in content_type:
+        payload = await request.json()
+        final_photo_url = str(payload.get("proof_photo_url") or payload.get("proofPhotoUrl") or "").strip()
+        proof_note = payload.get("proof_note") or payload.get("proofNote")
+    else:
+        try:
+            form = await request.form()
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail="Invalid proof upload form data.") from exc
+
+        final_photo_url = str(form.get("proof_photo_url") or form.get("proofPhotoUrl") or "").strip()
+        proof_note = form.get("proof_note") or form.get("proofNote")
+        upload = form.get("file") or form.get("photo") or form.get("proof_photo") or form.get("proofPhoto")
+
+    if upload:
+        if not hasattr(upload, "read") or not hasattr(upload, "content_type"):
+            raise HTTPException(status_code=400, detail="Proof upload must be sent as a file.")
+
+        upload_filename = str(getattr(upload, "filename", "") or "").lower()
+        upload_content_type = str(getattr(upload, "content_type", "") or "")
+        image_extensions = (".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif")
+        looks_like_image = upload_content_type.startswith("image/") or upload_filename.endswith(image_extensions)
+
+        if not looks_like_image:
             raise HTTPException(status_code=400, detail="Proof file must be an image.")
 
-        file_bytes = await file.read()
+        file_bytes = await upload.read()
         if len(file_bytes) > 8 * 1024 * 1024:
             raise HTTPException(status_code=413, detail="Proof photo must be 8 MB or smaller.")
 
-        ext = mimetypes.guess_extension(file.content_type) or ".jpg"
+        ext = mimetypes.guess_extension(upload_content_type) or ".jpg"
         filename = f"{delivery.id}/{uuid.uuid4()}{ext}"
         supabase.storage.from_("delivery-proofs").upload(
             path=filename,
             file=file_bytes,
-            file_options={"content-type": file.content_type, "x-upsert": "true"},
+            file_options={"content-type": upload_content_type if upload_content_type.startswith("image/") else "image/jpeg", "x-upsert": "true"},
         )
         final_photo_url = supabase.storage.from_("delivery-proofs").get_public_url(filename)
 

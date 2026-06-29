@@ -1,7 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
-
-const riderNotificationsStorageKey = 'estings.rider.notifications';
+import { apiFetchWithSession } from '@/services/api-client';
 
 export type RiderNotification = {
   createdAt: string;
@@ -9,28 +6,25 @@ export type RiderNotification = {
   id: string;
   isRead: boolean;
   message: string;
+  orderId?: string;
   title: string;
   type: 'delivery' | 'general';
 };
 
-let memoryNotifications: RiderNotification[] | null = null;
+type BackendNotification = {
+  created_at?: string | null;
+  delivery_id?: string | null;
+  id: string;
+  is_read?: boolean | null;
+  message?: string | null;
+  order_id?: string | null;
+  title?: string | null;
+  type?: string | null;
+};
 
 export async function getRiderNotifications(): Promise<RiderNotification[]> {
-  if (memoryNotifications) {
-    return memoryNotifications;
-  }
-
-  const storedNotifications =
-    Platform.OS === 'web'
-      ? globalThis.localStorage?.getItem(riderNotificationsStorageKey)
-      : await SecureStore.getItemAsync(riderNotificationsStorageKey);
-
-  if (!storedNotifications) {
-    memoryNotifications = [];
-    return memoryNotifications;
-  }
-
-  return parseNotifications(storedNotifications);
+  const notifications = await apiFetchWithSession<BackendNotification[]>('/notifications/');
+  return notifications.map(mapBackendNotification).filter((notification) => notification.type === 'delivery');
 }
 
 export async function addCompletedDeliveryNotification({
@@ -42,79 +36,42 @@ export async function addCompletedDeliveryNotification({
   orderNumber: string;
   recipientName: string;
 }) {
-  const currentNotifications = await getRiderNotifications();
-  const nextNotification: RiderNotification = {
+  return {
     createdAt: new Date().toISOString(),
     deliveryId,
-    id: `delivery-completed-${deliveryId}-${Date.now()}`,
-    isRead: false,
+    id: `delivery-completed-${deliveryId}`,
+    isRead: true,
     message: `${orderNumber} for ${recipientName} has been marked delivered.`,
     title: 'You have completed a delivery',
-    type: 'delivery',
+    type: 'delivery' as const,
   };
-  const nextNotifications = [nextNotification, ...currentNotifications].slice(0, 50);
-
-  await saveRiderNotifications(nextNotifications);
-
-  return nextNotification;
 }
 
 export async function markRiderNotificationRead(notificationId: string) {
-  const currentNotifications = await getRiderNotifications();
-  const nextNotifications = currentNotifications.map((notification) =>
-    notification.id === notificationId ? { ...notification, isRead: true } : notification,
-  );
-
-  await saveRiderNotifications(nextNotifications);
-
-  return nextNotifications;
+  await apiFetchWithSession<{ status: string }>(`/notifications/${encodeURIComponent(notificationId)}/read`, {
+    method: 'PATCH',
+  });
+  return getRiderNotifications();
 }
 
 export async function markAllRiderNotificationsRead() {
-  const currentNotifications = await getRiderNotifications();
-  const nextNotifications = currentNotifications.map((notification) => ({ ...notification, isRead: true }));
-
-  await saveRiderNotifications(nextNotifications);
-
-  return nextNotifications;
+  await apiFetchWithSession<{ status: string }>('/notifications/read-all', {
+    method: 'PATCH',
+  });
+  return getRiderNotifications();
 }
 
-async function saveRiderNotifications(notifications: RiderNotification[]) {
-  memoryNotifications = notifications;
-  const serializedNotifications = JSON.stringify(notifications);
+function mapBackendNotification(notification: BackendNotification): RiderNotification {
+  const normalizedType = (notification.type ?? '').toLowerCase();
 
-  if (Platform.OS === 'web') {
-    globalThis.localStorage?.setItem(riderNotificationsStorageKey, serializedNotifications);
-    return;
-  }
-
-  await SecureStore.setItemAsync(riderNotificationsStorageKey, serializedNotifications);
-}
-
-function parseNotifications(serializedNotifications: string): RiderNotification[] {
-  try {
-    const parsed = JSON.parse(serializedNotifications);
-
-    if (!Array.isArray(parsed)) {
-      memoryNotifications = [];
-      return memoryNotifications;
-    }
-
-    memoryNotifications = parsed
-      .map((notification): RiderNotification => ({
-        createdAt: typeof notification.createdAt === 'string' ? notification.createdAt : new Date().toISOString(),
-        deliveryId: typeof notification.deliveryId === 'string' ? notification.deliveryId : undefined,
-        id: typeof notification.id === 'string' ? notification.id : `${Date.now()}`,
-        isRead: notification.isRead === true,
-        message: typeof notification.message === 'string' ? notification.message : 'You have a rider update.',
-        title: typeof notification.title === 'string' ? notification.title : 'Notification',
-        type: notification.type === 'delivery' ? 'delivery' : 'general',
-      }))
-      .slice(0, 50);
-
-    return memoryNotifications;
-  } catch {
-    memoryNotifications = [];
-    return memoryNotifications;
-  }
+  return {
+    createdAt: notification.created_at ?? new Date().toISOString(),
+    deliveryId: notification.delivery_id ?? undefined,
+    id: notification.id,
+    isRead: notification.is_read === true,
+    message: notification.message ?? 'You have a rider update.',
+    orderId: notification.order_id ?? undefined,
+    title: notification.title ?? 'Notification',
+    type: normalizedType === 'delivery' ? 'delivery' : 'general',
+  };
 }

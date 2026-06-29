@@ -1,5 +1,5 @@
 import Feather from '@expo/vector-icons/Feather';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { RefreshControl, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -102,7 +102,9 @@ export default function HistoryScreen() {
 
       {isLoading ? <Text style={styles.stateText}>Loading completed deliveries...</Text> : null}
       {error ? <Text selectable style={styles.stateText}>{error}</Text> : null}
-      {!isLoading && !error && completedDeliveries.length === 0 ? <Text style={styles.stateText}>No completed deliveries yet.</Text> : null}
+      {!isLoading && !error && completedDeliveries.length === 0 ? (
+        <EmptyState icon="clock" title="No completed deliveries yet" text="Completed and failed deliveries will appear here with their update times." />
+      ) : null}
 
       {!isLoading && !error ? (
         <View style={styles.groups}>
@@ -112,7 +114,12 @@ export default function HistoryScreen() {
               {groups[group].length > 0 ? (
                 <View style={styles.list}>
                   {groups[group].map((delivery) => (
-                    <DeliveryStopCard key={delivery.id} delivery={delivery} variant="completed" />
+                    <DeliveryStopCard
+                      key={delivery.id}
+                      delivery={delivery}
+                      variant="completed"
+                      onPress={() => router.push({ pathname: '/delivery/[id]', params: { id: delivery.id } })}
+                    />
                   ))}
                 </View>
               ) : null}
@@ -121,6 +128,26 @@ export default function HistoryScreen() {
         </View>
       ) : null}
     </RiderScreen>
+  );
+}
+
+function EmptyState({
+  icon,
+  text,
+  title,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  text: string;
+  title: string;
+}) {
+  return (
+    <View style={styles.emptyState}>
+      <View style={styles.emptyIcon}>
+        <Feather color={theme.colors.primary} name={icon} size={26} />
+      </View>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      <Text style={styles.emptyText}>{text}</Text>
+    </View>
   );
 }
 
@@ -159,6 +186,37 @@ function getDayDiff(now: Date, then: Date) {
 }
 
 const styles = StyleSheet.create({
+  emptyIcon: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.greenSoft,
+    borderRadius: theme.radius.pill,
+    height: 58,
+    justifyContent: 'center',
+    width: 58,
+  },
+  emptyState: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.surface,
+    borderColor: 'rgba(31, 42, 36, 0.08)',
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    padding: theme.spacing.xl,
+  },
+  emptyText: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 13,
+    lineHeight: 19,
+    textAlign: 'center',
+  },
+  emptyTitle: {
+    color: theme.colors.text,
+    fontFamily: Fonts.sansBold,
+    fontSize: 17,
+    lineHeight: 22,
+    textAlign: 'center',
+  },
   group: {
     gap: theme.spacing.md,
   },

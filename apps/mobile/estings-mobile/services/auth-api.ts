@@ -39,6 +39,18 @@ type ProfilePictureResponse = {
   url?: string | null;
 };
 
+type UpdateProfilePayload = {
+  firstName?: string;
+  lastName?: string;
+  middleName?: string;
+  phoneNumber?: string;
+  username?: string;
+};
+
+type UpdateProfileResponse = AuthMessageResponse & {
+  user: AuthUser;
+};
+
 const productionWebBaseUrl = 'https://blueviolet-otter-621683.hostingersite.com';
 const defaultWebBaseUrl = process.env.EXPO_PUBLIC_WEB_URL ?? (__DEV__ ? 'http://localhost:5173' : productionWebBaseUrl);
 
@@ -245,6 +257,41 @@ export async function uploadProfilePicture(imageUri: string, session: AuthSessio
   await saveAuthSession(nextSession);
 
   return nextSession;
+}
+
+export async function updateMyProfile(payload: UpdateProfilePayload, session: AuthSession) {
+  const response = await apiFetch<UpdateProfileResponse>('/users/me', {
+    body: JSON.stringify({
+      first_name: payload.firstName?.trim(),
+      last_name: payload.lastName?.trim(),
+      middle_name: payload.middleName?.trim() || null,
+      phone_number: payload.phoneNumber?.trim(),
+      username: payload.username?.trim(),
+    }),
+    method: 'PATCH',
+    token: session.accessToken,
+  });
+
+  const nextSession: AuthSession = {
+    ...session,
+    user: response.user,
+  };
+
+  await saveAuthSession(nextSession);
+
+  return nextSession;
+}
+
+export async function deleteMyAccount(password: string, session: AuthSession) {
+  const response = await apiFetch<AuthMessageResponse>('/users/me', {
+    body: JSON.stringify({ password }),
+    method: 'DELETE',
+    token: session.accessToken,
+  });
+
+  await clearAuthSession();
+
+  return response;
 }
 
 function getOAuthCodeFromUrl(url: string) {

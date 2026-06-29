@@ -652,7 +652,7 @@ export function ChatFloatingBubble() {
             style={styles.chatOverlayBackdrop}
             onPress={() => setIsChatOverlayVisible(false)}
           />
-          <View style={[styles.chatOverlayPanel, { maxHeight: height - insets.top - insets.bottom - 42 }]}>
+          <View style={[styles.chatOverlayPanel, { maxHeight: height - insets.top - insets.bottom - 42, marginBottom: Math.max(12, insets.bottom + 8) }]}>
             <LiveChatScreen onRequestClose={() => setIsChatOverlayVisible(false)} />
           </View>
         </View>
@@ -826,7 +826,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.white,
     borderRadius: 12,
     height: '86%',
-    marginBottom: 12,
     overflow: 'hidden',
   },
 });

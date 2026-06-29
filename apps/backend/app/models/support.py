@@ -79,6 +79,7 @@ class Notification(Base):
     
     # 🚀 Includes your existing order_id relation
     order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id", ondelete="SET NULL"), nullable=True)
+    delivery_id = Column(UUID(as_uuid=True), ForeignKey("deliveries.id", ondelete="SET NULL"), nullable=True)
     
     is_read = Column(Boolean, default=False)
     

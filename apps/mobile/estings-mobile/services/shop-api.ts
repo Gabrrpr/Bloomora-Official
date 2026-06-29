@@ -208,6 +208,7 @@ export function mapBackendProduct(product: BackendProduct): Product {
     id: product.id,
     imageUrl: normalizeImageUrl(product.image_url),
     isActive: product.is_available !== false,
+    isVisible: product.is_visible === true,
     isFlashSale: product.is_flash_sale === true,
     isPromoted: product.is_promoted === true,
     name: product.name,
@@ -227,7 +228,7 @@ function isCustomerCatalogProduct(product: BackendProduct) {
 
   return (
     product.is_available !== false &&
-    product.is_visible !== false &&
+    product.is_visible === true &&
     category !== 'advertisement' &&
     status !== 'inactive'
   );

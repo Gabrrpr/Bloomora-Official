@@ -10,7 +10,19 @@ from PIL import Image
 from app.api.v1.routes.auth import hash_password, generate_username 
 from app.core.dependencies import get_db, get_current_user, require_staff
 from app.core.supabase import supabase
-from app.models import User, RoleEnum, BranchEnum, ActivityLog, WishlistItem, Product
+from app.core.security import verify_password
+from app.models import (
+    User,
+    RoleEnum,
+    BranchEnum,
+    ActivityLog,
+    WishlistItem,
+    Product,
+    Order,
+    Transaction,
+    OrderStatusEnum,
+    PaymentStatusEnum,
+)
 from pydantic import BaseModel, EmailStr
 from app.services.email_service import send_otp_email, send_staff_confirm_email
 from app.utils.logger import log_activity
@@ -82,6 +94,7 @@ class UserUpdateRequest(BaseModel):
     first_name: Optional[str] = None
     middle_name: Optional[str] = None
     last_name: Optional[str] = None
+    username: Optional[str] = None
     role: Optional[str] = None
     branch: Optional[str] = None
     phone_number: Optional[str] = None
@@ -89,6 +102,20 @@ class UserUpdateRequest(BaseModel):
     is_active: Optional[bool] = None
     is_verified: Optional[bool] = None
     must_change_password: Optional[bool] = None
+
+class DeleteMyAccountRequest(BaseModel):
+    password: str
+
+TERMINAL_ORDER_STATUSES = {
+    OrderStatusEnum.completed,
+    OrderStatusEnum.delivered,
+    OrderStatusEnum.cancelled,
+    OrderStatusEnum.payment_failed,
+}
+
+PENDING_TRANSACTION_STATUSES = {
+    PaymentStatusEnum.pending,
+}
     
 
 # ── Routes ───────────────────────────────────────────────────────────────────
@@ -347,6 +374,14 @@ def update_me(
     if payload.first_name is not None: user.first_name = payload.first_name
     if payload.middle_name is not None: user.middle_name = payload.middle_name
     if payload.last_name is not None: user.last_name = payload.last_name
+    if payload.username is not None:
+        username = payload.username.strip()
+        if not username:
+            raise HTTPException(status_code=400, detail="Username is required.")
+        existing_user = db.query(User).filter(User.username == username, User.id != user.id).first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Username already taken.")
+        user.username = username
     if payload.phone_number is not None: user.phone_number = payload.phone_number
     if payload.address is not None: user.address = payload.address
 
@@ -472,10 +507,43 @@ def update_user(
 
 @router.delete("/me", response_model=dict)
 def delete_my_account(
+    payload: DeleteMyAccountRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     try:
+        if not payload.password or not verify_password(payload.password, current_user.password_hash or ""):
+            raise HTTPException(status_code=401, detail="Password confirmation failed.")
+
+        active_order = (
+            db.query(Order)
+            .filter(
+                Order.user_id == current_user.id,
+                Order.status.notin_(TERMINAL_ORDER_STATUSES),
+            )
+            .first()
+        )
+        if active_order:
+            raise HTTPException(
+                status_code=409,
+                detail="Account deletion is not allowed while you have an active or pending order.",
+            )
+
+        pending_transaction = (
+            db.query(Transaction)
+            .join(Order, Transaction.order_id == Order.id)
+            .filter(
+                Order.user_id == current_user.id,
+                Transaction.status.in_(PENDING_TRANSACTION_STATUSES),
+            )
+            .first()
+        )
+        if pending_transaction:
+            raise HTTPException(
+                status_code=409,
+                detail="Account deletion is not allowed while you have a pending transaction.",
+            )
+
         # 1. Delete avatar from Supabase storage
         if current_user.profile_picture_url:
             try:
@@ -503,7 +571,10 @@ def delete_my_account(
         db.query(WishlistItem).filter(WishlistItem.user_id == current_user.id).delete(synchronize_session=False)
 
         db.commit()
-        return {"status": "success", "message": "Account deleted permanently."}
+        return {"status": "success", "message": "Account deleted. Order and transaction records are retained for store fulfillment and sales history."}
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to delete account: {str(e)}")

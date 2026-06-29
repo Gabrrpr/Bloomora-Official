@@ -137,6 +137,28 @@ export default function HomeScreen() {
     void Linking.openURL(`https://waze.com/ul?q=${encodedAddress}&navigate=yes`);
   }
 
+  function handleOpenMapApp() {
+    void Linking.openURL('https://www.google.com/maps');
+  }
+
+  function handleOpenWazeApp() {
+    void Linking.openURL('https://waze.com/ul');
+  }
+
+  async function handleOpenContactsApp() {
+    const opened = await Linking.canOpenURL('contacts://')
+      .then((canOpen) => (canOpen ? Linking.openURL('contacts://').then(() => true) : false))
+      .catch(() => false);
+
+    if (!opened) {
+      Alert.alert('Contacts unavailable', 'Open your contacts app from the device home screen.');
+    }
+  }
+
+  async function handleOpenMessagesApp() {
+    await Linking.openURL('sms:');
+  }
+
   async function handleOpenContacts(delivery: RiderDelivery) {
     if (!delivery.recipientPhone) {
       Alert.alert('No phone number', 'This delivery has no recipient phone number.');
@@ -202,7 +224,15 @@ export default function HomeScreen() {
       {error ? <StatePanel icon="alert-circle" text="Pull down to refresh when your connection is back." title="Could not load deliveries" /> : null}
 
       {!isLoading && !error && activeDeliveries.length === 0 ? (
-        <StatePanel icon="check-circle" text="Pull down to check for new assignments." title="No active work" />
+        <>
+          <StatePanel icon="check-circle" text="Pull down to check for new assignments." title="No active work" />
+          <View style={styles.actionRail}>
+            <CircleAction icon="map-pin" label="Google Maps" onPress={handleOpenMapApp} />
+            <CircleAction icon="navigation" label="Waze" onPress={handleOpenWazeApp} />
+            <CircleAction icon="user" label="Contacts" onPress={() => void handleOpenContactsApp()} />
+            <CircleAction icon="message-square" label="Messages" onPress={() => void handleOpenMessagesApp()} />
+          </View>
+        </>
       ) : null}
 
       {!isLoading && !error && activeDeliveryOrder ? (

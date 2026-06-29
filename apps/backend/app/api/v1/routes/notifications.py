@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import text, desc
+from sqlalchemy import inspect, text, desc
 from typing import List
 import uuid
 
@@ -9,6 +9,14 @@ from app.models.user import RoleEnum, User
 from app.models import Order, Product, Inventory, Chat
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
+
+
+def _has_delivery_id_column(db: Session) -> bool:
+    try:
+        return any(column["name"] == "delivery_id" for column in inspect(db.bind).get_columns("notifications"))
+    except Exception:
+        db.rollback()
+        return False
 
 
 @router.get("/unread-count")
@@ -36,9 +44,10 @@ def get_notifications(
     current_user: User = Depends(get_current_user),
 ):
     is_customer = current_user.role == RoleEnum.customer
+    delivery_id_select = "delivery_id" if _has_delivery_id_column(db) else "NULL AS delivery_id"
     rows = db.execute(
-        text("""
-            SELECT id, type, title, message, order_id, is_read, created_at
+        text(f"""
+            SELECT id, type, title, message, order_id, {delivery_id_select}, is_read, created_at
             FROM notifications
             WHERE (user_id = :uid OR is_global = true)
               AND NOT (:is_customer AND type = 'message' AND is_global = true)
@@ -56,6 +65,7 @@ def get_notifications(
             "title": r.title,
             "message": r.message,
             "order_id": str(r.order_id) if r.order_id else None,
+            "delivery_id": str(r.delivery_id) if getattr(r, "delivery_id", None) else None,
             "is_read": r.is_read,
             "created_at": r.created_at.isoformat(),
         }

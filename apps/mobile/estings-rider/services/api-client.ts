@@ -52,6 +52,14 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
       const body = await response.json();
       if (typeof body?.detail === 'string') {
         message = body.detail;
+      } else if (Array.isArray(body?.detail)) {
+        message = body.detail
+          .map((item: { loc?: unknown[]; msg?: string }) => {
+            const field = Array.isArray(item.loc) ? item.loc.filter(Boolean).join('.') : '';
+            return [field, item.msg].filter(Boolean).join(': ');
+          })
+          .filter(Boolean)
+          .join('\n') || message;
       }
     } catch {
       // Keep fallback message.

@@ -45,7 +45,7 @@ import {
   type BiometricsAvailability,
 } from '@/services/biometrics';
 import { clearAuthSession, getAuthSession, type AuthSession } from '@/services/auth-session';
-import { resetForgotPassword, sendForgotPasswordOtp } from '@/services/auth-api';
+import { deleteMyAccount, resetForgotPassword, sendForgotPasswordOtp, updateMyProfile } from '@/services/auth-api';
 import { isSixDigitOtp, isValidEmail, isValidPhilippinePhone, required } from '@/utils/auth-validation';
 
 type RowIcon = typeof Pencil;
@@ -86,6 +86,10 @@ export default function SettingsScreen() {
   const isSignedIn = Boolean(session);
   const [activeView, setActiveView] = useState<ActiveView>('settings');
   const [isLogoutVisible, setIsLogoutVisible] = useState(false);
+  const [isDeleteVisible, setIsDeleteVisible] = useState(false);
+  const [deletePassword, setDeletePassword] = useState('');
+  const [deleteMessage, setDeleteMessage] = useState<string | null>(null);
+  const [isDeletingAccount, setIsDeletingAccount] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [pushNotificationsEnabled, setPushNotificationsEnabled] = useState(true);
   const [biometricsEnabled, setBiometricsEnabled] = useState(false);
@@ -134,19 +138,20 @@ export default function SettingsScreen() {
 
           if (nextSession?.user) {
             const nextFirstName = nextSession.user.first_name?.trim() || '';
+            const nextMiddleName = nextSession.user.middle_name?.trim() || '';
             const nextLastName = nextSession.user.last_name?.trim() || '';
             const nextEmail = nextSession.user.email?.trim() || '';
             const nextPhone = nextSession.user.phone_number?.trim() || '';
             const nextUsername = nextSession.user.username?.trim() || nextEmail;
 
             setFirstName(nextFirstName || nextUsername || 'Estings');
-            setMiddleName('');
+            setMiddleName(nextMiddleName);
             setLastName(nextLastName);
             setEmail(nextEmail);
             setPhone(nextPhone);
             setUsername(nextUsername);
             setDraftFirstName(nextFirstName || nextUsername || 'Estings');
-            setDraftMiddleName('');
+            setDraftMiddleName(nextMiddleName);
             setDraftLastName(nextLastName);
             setDraftPhone(nextPhone);
             setDraftUsername(nextUsername);
@@ -184,6 +189,42 @@ export default function SettingsScreen() {
     await clearAuthSession();
     setSession(null);
     router.replace('/(tabs)/me');
+  }
+
+  async function handleOpenDeleteAccount() {
+    await confirmSensitiveAction(
+      () => {
+        setDeletePassword('');
+        setDeleteMessage(null);
+        setIsDeleteVisible(true);
+      },
+      `Confirm with ${biometricsAvailability?.label ?? 'biometrics'} before deleting your account.`,
+    );
+  }
+
+  async function handleDeleteAccount() {
+    if (!session || isDeletingAccount) {
+      return;
+    }
+
+    if (!deletePassword) {
+      setDeleteMessage('Enter your password to continue.');
+      return;
+    }
+
+    setIsDeletingAccount(true);
+    setDeleteMessage(null);
+
+    try {
+      await deleteMyAccount(deletePassword, session);
+      setIsDeleteVisible(false);
+      setSession(null);
+      router.replace('/(tabs)/me');
+    } catch (error) {
+      setDeleteMessage(error instanceof Error ? error.message : 'Unable to delete account.');
+    } finally {
+      setIsDeletingAccount(false);
+    }
   }
 
   function handleBack() {
@@ -261,22 +302,52 @@ export default function SettingsScreen() {
     }
   }
 
-  function handleSaveAccountField(field: EditableAccountField) {
+  async function handleSaveAccountField(field: EditableAccountField) {
+    if (!session) {
+      return;
+    }
+
     if (field === 'displayName' && required(draftFirstName) && required(draftLastName)) {
-      setFirstName(draftFirstName.trim());
-      setMiddleName(draftMiddleName.trim());
-      setLastName(draftLastName.trim());
+      try {
+        const nextSession = await updateMyProfile({
+          firstName: draftFirstName,
+          lastName: draftLastName,
+          middleName: draftMiddleName,
+        }, session);
+        setSession(nextSession);
+        setFirstName(nextSession.user.first_name?.trim() || draftFirstName.trim());
+        setMiddleName(nextSession.user.middle_name?.trim() || '');
+        setLastName(nextSession.user.last_name?.trim() || draftLastName.trim());
+        setActiveView('account');
+      } catch (error) {
+        setBiometricsMessage(error instanceof Error ? error.message : 'Unable to update account details.');
+      }
+      return;
     }
 
     if (field === 'phone' && isValidPhilippinePhone(draftPhone)) {
-      setPhone(draftPhone.trim());
+      try {
+        const nextSession = await updateMyProfile({ phoneNumber: draftPhone }, session);
+        setSession(nextSession);
+        setPhone(nextSession.user.phone_number?.trim() || '');
+        setActiveView('account');
+      } catch (error) {
+        setBiometricsMessage(error instanceof Error ? error.message : 'Unable to update phone number.');
+      }
+      return;
     }
 
     if (field === 'username' && required(draftUsername)) {
-      setUsername(draftUsername.trim());
+      try {
+        const nextSession = await updateMyProfile({ username: draftUsername }, session);
+        setSession(nextSession);
+        setUsername(nextSession.user.username?.trim() || draftUsername.trim());
+        setActiveView('account');
+      } catch (error) {
+        setBiometricsMessage(error instanceof Error ? error.message : 'Unable to update username.');
+      }
+      return;
     }
-
-    setActiveView('account');
   }
 
   async function handleOpenPassword() {
@@ -506,6 +577,7 @@ export default function SettingsScreen() {
             phone={phone}
             username={username}
             onOpenDisplayName={() => openAccountEdit('displayName')}
+            onOpenDeleteAccount={handleOpenDeleteAccount}
             onOpenPassword={handleOpenPassword}
             onOpenPhone={() => openAccountEdit('phone')}
             onOpenUsername={handleOpenUsername}
@@ -547,7 +619,7 @@ export default function SettingsScreen() {
 
         {activeView === 'username' ? (
           <AccountFieldEditView
-            helperText="This is only a frontend profile value for now."
+            helperText="This username is saved to your Esting's account."
             label="Username"
             maxLength={32}
             value={draftUsername}
@@ -629,6 +701,60 @@ export default function SettingsScreen() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        animationType="fade"
+        transparent
+        visible={isDeleteVisible}
+        onRequestClose={() => setIsDeleteVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalIconWrap}>
+              <Trash2 size={26} color={pastelDanger} strokeWidth={2.3} />
+            </View>
+            <View style={styles.modalCopy}>
+              <Text style={styles.modalTitle}>Delete account?</Text>
+              <Text style={styles.modalMessage}>
+                Your profile will be anonymized. Store order, delivery, item, and transaction records are kept for sales tracking and fulfillment history.
+              </Text>
+            </View>
+            <TextInput
+              autoCapitalize="none"
+              autoCorrect={false}
+              onChangeText={(value) => {
+                setDeletePassword(value);
+                setDeleteMessage(null);
+              }}
+              placeholder="Enter your password"
+              placeholderTextColor={theme.colors.textMuted}
+              secureTextEntry
+              style={styles.usernameInput}
+              value={deletePassword}
+            />
+            {deleteMessage ? <Text style={styles.errorText}>{deleteMessage}</Text> : null}
+            <View style={styles.modalActions}>
+              <Pressable
+                style={styles.cancelButton}
+                onPress={() => {
+                  setIsDeleteVisible(false);
+                  setDeletePassword('');
+                  setDeleteMessage(null);
+                }}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                disabled={!deletePassword || isDeletingAccount}
+                style={[
+                  styles.confirmLogoutButton,
+                  (!deletePassword || isDeletingAccount) && styles.saveButtonDisabled,
+                ]}
+                onPress={handleDeleteAccount}>
+                <Text style={styles.confirmLogoutText}>{isDeletingAccount ? 'Checking...' : 'Delete account'}</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </>
   );
 }
@@ -674,6 +800,7 @@ function AccountView({
   displayName,
   email,
   onOpenDisplayName,
+  onOpenDeleteAccount,
   onOpenPassword,
   onOpenPhone,
   onOpenUsername,
@@ -683,6 +810,7 @@ function AccountView({
   displayName: string;
   email: string;
   onOpenDisplayName: () => void;
+  onOpenDeleteAccount: () => void;
   onOpenPassword: () => void;
   onOpenPhone: () => void;
   onOpenUsername: () => void;
@@ -711,7 +839,7 @@ function AccountView({
 
       <SettingsSection danger title="Account Management">
         <View style={styles.groupCard}>
-          <SettingsRow danger icon={Trash2} title="Delete account" />
+          <SettingsRow danger icon={Trash2} title="Delete account" onPress={onOpenDeleteAccount} />
         </View>
       </SettingsSection>
     </>

@@ -11,6 +11,7 @@ export type Product = {
   tag: string;
   imageUrl?: string;
   isActive?: boolean;
+  isVisible?: boolean;
   isFlashSale?: boolean;
   isPromoted?: boolean;
   categoryId: string;

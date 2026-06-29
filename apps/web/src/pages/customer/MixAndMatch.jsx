@@ -12,6 +12,17 @@ import acrylicContainer from "../../assets/MakeItPersonal/AcrylicContainer.webp"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
+const GENERATION_PROBLEM_MESSAGE = "There is a problem generating this arrangement. Please try again."
+
+function formatGenerationError(message, fallback = GENERATION_PROBLEM_MESSAGE) {
+  const trimmedMessage = typeof message === "string" ? message.trim() : ""
+
+  if (!trimmedMessage || /internal\s+server\s+error/i.test(trimmedMessage)) {
+    return fallback
+  }
+
+  return trimmedMessage
+}
 
 const PLACEHOLDER_IMAGE = new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href
 
@@ -575,10 +586,10 @@ export default function MixAndMatch({ onNavigate }) {
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
         setCompleted(true)
       } else {
-        setError(data.message || "Generation failed.")
+        setError(formatGenerationError(data.message, "Generation failed."))
       }
     } catch (e) {
-      setError(e.message || "Failed to generate.")
+      setError(formatGenerationError(e.message))
     } finally {
       setGenerating(false)
     }

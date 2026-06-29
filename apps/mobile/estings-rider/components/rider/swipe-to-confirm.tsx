@@ -24,8 +24,10 @@ export function SwipeToConfirm({
   const translateX = useRef(new Animated.Value(0)).current;
   const opacity = useRef(new Animated.Value(1)).current;
   const confirmedRef = useRef(false);
+  const maxSlideRef = useRef(0);
 
   const maxSlide = trackWidth - THUMB_SIZE - TRACK_PADDING * 2;
+  maxSlideRef.current = Math.max(0, maxSlide);
 
   // Reset when disabled changes back to false (e.g. new delivery loaded)
   useEffect(() => {
@@ -45,18 +47,23 @@ export function SwipeToConfirm({
       },
       onPanResponderMove: (_, gestureState) => {
         if (disabled || confirmedRef.current) return;
-        const clamped = Math.max(0, Math.min(gestureState.dx, maxSlide));
+        const currentMaxSlide = maxSlideRef.current;
+        if (currentMaxSlide <= 0) return;
+
+        const clamped = Math.max(0, Math.min(gestureState.dx, currentMaxSlide));
         translateX.setValue(clamped);
       },
       onPanResponderRelease: (_, gestureState) => {
         if (disabled || confirmedRef.current) return;
+        const currentMaxSlide = maxSlideRef.current;
+        if (currentMaxSlide <= 0) return;
 
-        if (gestureState.dx >= maxSlide * 0.85) {
+        if (gestureState.dx >= currentMaxSlide * 0.85) {
           // Snap to end, confirm
           Animated.spring(translateX, {
             friction: 8,
             tension: 120,
-            toValue: maxSlide,
+            toValue: currentMaxSlide,
             useNativeDriver: true,
           }).start(async () => {
             if (!confirmedRef.current) {
@@ -81,13 +88,22 @@ export function SwipeToConfirm({
 
   // Text opacity fades as thumb moves right
   const textOpacity = trackWidth > 0
-    ? translateX.interpolate({ extrapolate: 'clamp', inputRange: [0, maxSlide * 0.5], outputRange: [1, 0] })
+    ? translateX.interpolate({ extrapolate: 'clamp', inputRange: [0, Math.max(1, maxSlide) * 0.5], outputRange: [1, 0] })
     : opacity;
+  const progressWidth = trackWidth > 0
+    ? translateX.interpolate({
+        extrapolate: 'clamp',
+        inputRange: [0, Math.max(1, maxSlide)],
+        outputRange: [THUMB_SIZE + TRACK_PADDING * 2, trackWidth],
+      })
+    : THUMB_SIZE + TRACK_PADDING * 2;
 
   return (
     <View
       style={[styles.track, disabled && styles.trackDisabled]}
       onLayout={(e) => setTrackWidth(e.nativeEvent.layout.width)}>
+
+      <Animated.View style={[styles.progressFill, { width: progressWidth }]} />
 
       {/* Label */}
       <Animated.Text style={[styles.label, { opacity: textOpacity }]}>
@@ -139,6 +155,14 @@ const styles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
     textAlign: 'center',
+    zIndex: 1,
+  },
+  progressFill: {
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    top: 0,
   },
   sublabel: {
     color: 'rgba(255,255,255,0.7)',
@@ -146,6 +170,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 14,
     textAlign: 'center',
+    zIndex: 1,
   },
   thumb: {
     alignItems: 'center',
@@ -157,6 +182,7 @@ const styles = StyleSheet.create({
     left: TRACK_PADDING,
     position: 'absolute',
     width: THUMB_SIZE,
+    zIndex: 2,
   },
   thumbConfirmed: {
     backgroundColor: 'rgba(255,255,255,0.35)',

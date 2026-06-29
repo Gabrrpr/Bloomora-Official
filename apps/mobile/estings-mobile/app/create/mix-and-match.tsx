@@ -51,6 +51,17 @@ const arrangementBouquet = require('@/assets/images/make-it-personal/arrangement
 const arrangementBox = require('@/assets/images/make-it-personal/arrangement_box.webp');
 const arrangementVase = require('@/assets/images/make-it-personal/arrangement_vase.webp');
 const pollinationsCredit = require('@/assets/images/make-it-personal/pollinations-ai.png');
+const generationProblemMessage = 'There is a problem generating this arrangement. Please try again.';
+
+function formatGenerationError(message?: string | null, fallback = generationProblemMessage) {
+  const trimmedMessage = message?.trim();
+
+  if (!trimmedMessage || /internal\s+server\s+error/i.test(trimmedMessage)) {
+    return fallback;
+  }
+
+  return trimmedMessage;
+}
 
 type ArrangementType = 'bouquet' | 'box' | 'vase';
 type StepKey = 'arrangement' | 'flowers' | 'container' | 'accessories' | 'review';
@@ -458,11 +469,11 @@ export default function MixAndMatchScreen() {
         setAiUsage((current) => (current ? { ...current, remaining: data.remaining_generations ?? current.remaining } : current));
         scrollRef.current?.scrollTo({ animated: true, y: 0 });
       } else {
-        setError(data.message || 'Generation failed. Please try another selection.');
+        setError(formatGenerationError(data.message, 'Generation failed. Please try another selection.'));
         setAiUsage((current) => (current ? { ...current, remaining: data.remaining_generations ?? current.remaining } : current));
       }
     } catch (generateError) {
-      setError(generateError instanceof Error ? generateError.message : 'Failed to generate arrangement.');
+      setError(formatGenerationError(generateError instanceof Error ? generateError.message : null));
     } finally {
       setIsGenerating(false);
     }

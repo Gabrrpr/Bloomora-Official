@@ -10,6 +10,7 @@ export type CustomerOrder = {
   deliveryNotes?: string | null;
   deliveryFee: number;
   deliveryProvider?: string | null;
+  deliveryTracking?: CustomerDeliveryTracking | null;
   discountAmount: number;
   expiresAt?: string | null;
   hasReviewed: boolean;
@@ -40,6 +41,36 @@ export type CustomerOrder = {
   updatedAt?: string | null;
 };
 
+export type CustomerDeliveryTracking = {
+  assignedAt?: string | null;
+  arrivedAt?: string | null;
+  deliveredAt?: string | null;
+  deliveryId?: string | null;
+  estimatedArrival?: string | null;
+  inTransitAt?: string | null;
+  lalamoveOrderId?: string | null;
+  lalamoveShareLink?: string | null;
+  lalamoveStatus?: string | null;
+  pickedUpAt?: string | null;
+  proofNote?: string | null;
+  proofPhotoUrl?: string | null;
+  provider?: string | null;
+  rider?: {
+    id: string;
+    name?: string | null;
+    phone?: string | null;
+  } | null;
+  status?: string | null;
+  vehicle?: {
+    brand?: string | null;
+    color?: string | null;
+    id: string;
+    model?: string | null;
+    plateNumber?: string | null;
+    vehicleType?: string | null;
+  } | null;
+};
+
 export type CustomerOrderItem = {
   cardEnabled?: boolean;
   cardMessage?: string | null;
@@ -60,6 +91,7 @@ type BackendOrder = {
   delivery_notes?: string | null;
   delivery_fee?: number | null;
   delivery_provider?: string | null;
+  delivery_tracking?: BackendDeliveryTracking | null;
   discount_amount?: number | null;
   expires_at?: string | null;
   has_reviewed?: boolean | null;
@@ -87,6 +119,36 @@ type BackendOrder = {
   status?: string | null;
   total_amount?: number | null;
   updated_at?: string | null;
+};
+
+type BackendDeliveryTracking = {
+  assigned_at?: string | null;
+  arrived_at?: string | null;
+  delivered_at?: string | null;
+  delivery_id?: string | null;
+  estimated_arrival?: string | null;
+  in_transit_at?: string | null;
+  lalamove_order_id?: string | null;
+  lalamove_share_link?: string | null;
+  lalamove_status?: string | null;
+  picked_up_at?: string | null;
+  proof_note?: string | null;
+  proof_photo_url?: string | null;
+  provider?: string | null;
+  rider?: {
+    id: string;
+    name?: string | null;
+    phone?: string | null;
+  } | null;
+  status?: string | null;
+  vehicle?: {
+    brand?: string | null;
+    color?: string | null;
+    id: string;
+    model?: string | null;
+    plate_number?: string | null;
+    vehicle_type?: string | null;
+  } | null;
 };
 
 type BackendOrderItem = {
@@ -158,6 +220,7 @@ function mapBackendOrder(order: BackendOrder): CustomerOrder {
     deliveryNotes: order.delivery_notes,
     deliveryFee: Number(order.delivery_fee ?? 0),
     deliveryProvider: order.delivery_provider,
+    deliveryTracking: mapDeliveryTracking(order.delivery_tracking),
     discountAmount: Number(order.discount_amount ?? 0),
     expiresAt: order.expires_at,
     hasReviewed: order.has_reviewed === true,
@@ -189,6 +252,40 @@ function mapBackendOrder(order: BackendOrder): CustomerOrder {
   };
 }
 
+function mapDeliveryTracking(tracking?: BackendDeliveryTracking | null): CustomerDeliveryTracking | null {
+  if (!tracking || (!tracking.status && !tracking.delivery_id && !tracking.lalamove_share_link)) {
+    return null;
+  }
+
+  return {
+    assignedAt: tracking.assigned_at,
+    arrivedAt: tracking.arrived_at,
+    deliveredAt: tracking.delivered_at,
+    deliveryId: tracking.delivery_id,
+    estimatedArrival: tracking.estimated_arrival,
+    inTransitAt: tracking.in_transit_at,
+    lalamoveOrderId: tracking.lalamove_order_id,
+    lalamoveShareLink: tracking.lalamove_share_link,
+    lalamoveStatus: tracking.lalamove_status,
+    pickedUpAt: tracking.picked_up_at,
+    proofNote: tracking.proof_note,
+    proofPhotoUrl: tracking.proof_photo_url,
+    provider: tracking.provider,
+    rider: tracking.rider,
+    status: tracking.status,
+    vehicle: tracking.vehicle
+      ? {
+          brand: tracking.vehicle.brand,
+          color: tracking.vehicle.color,
+          id: tracking.vehicle.id,
+          model: tracking.vehicle.model,
+          plateNumber: tracking.vehicle.plate_number,
+          vehicleType: tracking.vehicle.vehicle_type,
+        }
+      : null,
+  };
+}
+
 function groupCheckoutOrders(orders: CustomerOrder[]) {
   const groups = new Map<string, CustomerOrder[]>();
 
@@ -213,6 +310,7 @@ function mergeCheckoutOrders(orders: CustomerOrder[]) {
   const items = orders.flatMap((order) => order.items);
   const allPaid = orders.every((order) => order.paymentStatus === 'paid');
   const status = getLeastAdvancedStatus(orders.map((order) => order.status));
+  const deliveryTracking = orders.find((order) => order.deliveryTracking)?.deliveryTracking ?? first.deliveryTracking;
 
   return {
     ...first,
@@ -221,6 +319,7 @@ function mergeCheckoutOrders(orders: CustomerOrder[]) {
     items,
     orderIds: orders.flatMap((order) => order.orderIds),
     orderNumber: `ORDER-${first.orderNumber.replace(/^ORD-/, '')}`,
+    deliveryTracking,
     paymentStatus: allPaid ? 'paid' : 'pending',
     productName: `${items[0]?.productName ?? 'Flower order'} + ${items.length - 1} more`,
     quantity: items.reduce((total, item) => total + item.quantity, 0),

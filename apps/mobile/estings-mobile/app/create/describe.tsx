@@ -76,6 +76,17 @@ const EXAMPLE_PROMPTS = [
 const OBJECT_WORDS = ['bouquet', 'arrangement', 'flower box', 'gift', 'floral base'];
 
 const MAX_PROMPT_LENGTH = 500;
+const generationProblemMessage = 'There is a problem generating this arrangement. Please try again.';
+
+function formatGenerationError(message?: string | null, fallback = generationProblemMessage) {
+  const trimmedMessage = message?.trim();
+
+  if (!trimmedMessage || /internal\s+server\s+error/i.test(trimmedMessage)) {
+    return fallback;
+  }
+
+  return trimmedMessage;
+}
 
 type SpeechRecognitionModule = {
   abort: () => void;
@@ -339,10 +350,10 @@ export default function DescribeArrangementScreen() {
           scrollRef.current?.scrollTo({ animated: true, y: 0 });
         }, 300);
       } else {
-        setError(data.message || 'Generation failed. Please try again.');
+        setError(formatGenerationError(data.message, 'Generation failed. Please try again.'));
       }
     } catch (e: any) {
-      setError(e.message || 'Failed to generate arrangement. Please try again.');
+      setError(formatGenerationError(e.message));
     } finally {
       setIsProcessing(false);
     }

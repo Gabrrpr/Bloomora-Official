@@ -186,8 +186,10 @@ function getSupportedDeliveryArea(address: string) {
   return null;
 }
 
-function getDeliveryProviderForArea(area: string | null): DeliveryProvider {
-  return area === 'Metro Manila' ? 'lalamove' : 'standard';
+function getDeliveryProviderForArea(area: string | null): DeliveryProvider | null {
+  if (area === 'Metro Manila') return 'lalamove';
+  if (area === 'Pampanga') return 'standard';
+  return null;
 }
 
 function getDeliveryProvinceLabel(address: string) {
@@ -345,15 +347,20 @@ export default function CheckoutScreen() {
     () => getSupportedDeliveryArea(deliveryAddress),
     [deliveryAddress],
   );
+  const activeDeliveryProvider = useMemo(
+    () => (fulfillmentMethod === 'delivery' ? getDeliveryProviderForArea(deliveryArea) : null),
+    [deliveryArea, fulfillmentMethod],
+  );
+  const displayedDeliveryProvider = activeDeliveryProvider ?? deliveryProvider;
   const deliveryProvinceLabel = useMemo(
     () => getDeliveryProvinceLabel(deliveryAddress),
     [deliveryAddress],
   );
 
   useEffect(() => {
-    if (fulfillmentMethod !== 'delivery') return;
-    setDeliveryProvider(getDeliveryProviderForArea(deliveryArea));
-  }, [deliveryArea, fulfillmentMethod]);
+    if (!activeDeliveryProvider || activeDeliveryProvider === deliveryProvider) return;
+    setDeliveryProvider(activeDeliveryProvider);
+  }, [activeDeliveryProvider, deliveryProvider]);
 
   useEffect(() => {
     let active = true;
@@ -562,12 +569,16 @@ export default function CheckoutScreen() {
     setIsPaying(true);
     try {
       const selectedSlot = timeSlots.find((slot) => slot.id === selectedTime);
+      const checkoutDeliveryProvider =
+        fulfillmentMethod === 'delivery'
+          ? getDeliveryProviderForArea(getSupportedDeliveryArea(deliveryAddress))
+          : null;
       const created = await createOrdersFromCart({
         attemptId: checkoutAttemptIdRef.current,
         deliveryAddress: fulfillmentMethod === 'delivery' ? deliveryAddress.trim() : '',
         deliveryDate: selectedDate.toISOString(),
         deliveryNotes: specialInstructions.trim(),
-        deliveryProvider: fulfillmentMethod === 'delivery' ? deliveryProvider : undefined,
+        deliveryProvider: checkoutDeliveryProvider ?? undefined,
         fulfillmentMethod,
         isAnonymous: sendAnonymously,
         items,
@@ -688,7 +699,7 @@ export default function CheckoutScreen() {
             </View>
             {deliveryArea === 'Metro Manila' ? (
               <DeliveryProviderOption
-                active={deliveryProvider === 'lalamove'}
+                active={displayedDeliveryProvider === 'lalamove'}
                 image={lalamoveLogo}
                 label="Lalamove"
                 note="For Metro Manila orders"
@@ -696,7 +707,7 @@ export default function CheckoutScreen() {
               />
             ) : deliveryArea === 'Pampanga' ? (
               <DeliveryProviderOption
-                active={deliveryProvider === 'standard'}
+                active={displayedDeliveryProvider === 'standard'}
                 image={estingsDeliveryLogo}
                 label="Esting's Standard Delivery"
                 note="For Pampanga orders"

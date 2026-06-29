@@ -38,6 +38,8 @@ class User(Base):
     branch = Column(Enum(BranchEnum), nullable=True)
     is_active = Column(Boolean, default=True)
     is_verified = Column(Boolean, default=False)
+    is_deleted = Column(Boolean, default=False, nullable=False)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     must_change_password = Column(Boolean, default=False)
     rider_is_available = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), default=now_utc)

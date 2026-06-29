@@ -52,6 +52,10 @@ export const ProductCard = memo(function ProductCard({ product, style }: Product
     router.push(`/product-details?id=${encodeURIComponent(product.id)}`);
   }, [product.id]);
 
+  if (product.isVisible !== true) {
+    return null;
+  }
+
   return (
     <Pressable
       accessibilityLabel={`View ${product.name} details`}

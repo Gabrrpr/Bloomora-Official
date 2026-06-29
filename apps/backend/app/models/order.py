@@ -141,6 +141,7 @@ class Delivery(Base):
     lalamove_order_id = Column(String(255), nullable=True)
     delivery_fee = Column(Numeric(10, 2), nullable=True)
     estimated_arrival = Column(DateTime(timezone=True), nullable=True)
+    assigned_at = Column(DateTime(timezone=True), nullable=True)
     picked_up_at = Column(DateTime(timezone=True), nullable=True)
     in_transit_at = Column(DateTime(timezone=True), nullable=True)
     arrived_at = Column(DateTime(timezone=True), nullable=True)

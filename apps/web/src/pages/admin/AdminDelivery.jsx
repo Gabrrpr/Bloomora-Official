@@ -215,6 +215,13 @@ function riderInitials(name = "") {
   );
 }
 
+function branchSelectValue(branch) {
+  if (!branch) return "";
+  const normalized = String(branch).trim().toLowerCase();
+  const match = BRANCHES.find((option) => option.toLowerCase() === normalized);
+  return match || branch;
+}
+
 // Fallback logic to robustly connect the vehicle with the rider regardless of exact DB naming convention
 const getVehicleForRider = (vehicles, rider) => {
   if (!rider) return null;
@@ -240,6 +247,30 @@ const getVehicleForRider = (vehicles, rider) => {
     String(v.riderId) === riderId ||
     String(v.rider_id) === riderId
   ) || null;
+};
+
+const isRiderAccountAssignable = (rider) => Boolean((rider?.isActive ?? rider?.is_active) && (rider?.isVerified ?? rider?.is_verified));
+const isRiderOnline = (rider) => Boolean(rider?.riderIsAvailable ?? rider?.rider_is_available ?? rider?.availability !== "offline");
+const canDispatchToRider = (rider) => isRiderAccountAssignable(rider) && isRiderOnline(rider);
+
+const riderStatusText = (rider) => {
+  if (!(rider?.isActive ?? rider?.is_active)) return "Inactive";
+  if (!(rider?.isVerified ?? rider?.is_verified)) return "Unverified";
+  if (!isRiderOnline(rider)) return "Offline";
+  return statusLabel(rider?.availability || "active");
+};
+
+const riderStatusTone = (rider, isDark) => {
+  if (!isRiderAccountAssignable(rider) || !isRiderOnline(rider)) {
+    return {
+      color: isDark ? "#fca5a5" : "#b91c1c",
+      backgroundColor: isDark ? "rgba(248,113,113,0.12)" : "#fff1f2",
+    };
+  }
+  return {
+    color: isDark ? "#86efac" : "#15803d",
+    backgroundColor: isDark ? "rgba(34,197,94,0.12)" : "#f0fdf4",
+  };
 };
 
 export default function AdminDeliveryFixed() {
@@ -299,6 +330,7 @@ export default function AdminDeliveryFixed() {
   const [savingVehicle, setSavingVehicle] = useState(false);
   const [deletingVehicleId, setDeletingVehicleId] = useState(null);
   const [detailModal, setDetailModal] = useState({ type: "", item: null });
+  const [savingRiderId, setSavingRiderId] = useState("");
 
   const [deliveryFee, setDeliveryFee] = useState("150");
   const [minOrder, setMinOrder] = useState("500");
@@ -399,12 +431,17 @@ export default function AdminDeliveryFixed() {
   }, [search]);
 
   const availableRiders = useMemo(
-    () => riders.filter((r) => (r.isActive ?? r.is_active) && (r.isVerified ?? r.is_verified) && r.availability === "available"),
+    () => riders.filter((r) => canDispatchToRider(r) && r.availability === "available"),
     [riders]
   );
 
   const assignableRiders = useMemo(
-    () => riders.filter((r) => (r.isActive ?? r.is_active) && (r.isVerified ?? r.is_verified)),
+    () => riders.filter(canDispatchToRider),
+    [riders]
+  );
+
+  const riderAccountOptions = useMemo(
+    () => riders.filter(isRiderAccountAssignable),
     [riders]
   );
 
@@ -415,7 +452,7 @@ export default function AdminDeliveryFixed() {
       const haystack = [r.name, r.email, phone, r.branch].filter(Boolean).join(" ").toLowerCase();
       const isActive = r.isActive ?? r.is_active;
       const isVerified = r.isVerified ?? r.is_verified;
-      const status = !isActive ? "inactive" : !isVerified ? "unverified" : r.availability;
+      const status = !isActive ? "inactive" : !isVerified ? "unverified" : !isRiderOnline(r) ? "offline" : r.availability;
       return (!q || haystack.includes(q)) && (!statusFilter || status === statusFilter);
     });
 
@@ -454,6 +491,7 @@ export default function AdminDeliveryFixed() {
 
   const assignedDeliveries = riders.reduce((sum, rider) => sum + (Number(rider.activeDeliveries ?? rider.active_deliveries) || 0), 0);
   const inactiveRiders = riders.filter((r) => !(r.isActive ?? r.is_active) || !(r.isVerified ?? r.is_verified)).length;
+  const offlineRiders = riders.filter((r) => isRiderAccountAssignable(r) && !isRiderOnline(r)).length;
 
   const saveConfig = async () => {
     await api.updateDeliverySettings({
@@ -481,6 +519,11 @@ export default function AdminDeliveryFixed() {
   const createDispatch = async () => {
     if (!dispatchForm.rider_id) {
       setLoadError("Select a rider before creating a dispatch.");
+      return;
+    }
+    const selectedRider = riders.find((r) => String(r.id) === String(dispatchForm.rider_id));
+    if (!canDispatchToRider(selectedRider)) {
+      setLoadError("Selected rider is offline or unavailable. Choose an active rider before dispatching.");
       return;
     }
     if (selectedOrders.size === 0) {
@@ -513,6 +556,11 @@ export default function AdminDeliveryFixed() {
   const assignOrder = async (order) => {
     const riderId = assignments[order.id];
     if (!riderId) return;
+    const selectedRider = riders.find((r) => String(r.id) === String(riderId));
+    if (!canDispatchToRider(selectedRider)) {
+      setLoadError("Selected rider is offline or unavailable. Choose an active rider before assigning.");
+      return;
+    }
 
     setAssigningOrder(order.id);
     setLoadError("");
@@ -561,6 +609,11 @@ export default function AdminDeliveryFixed() {
 
   const handleReassign = async () => {
     if (!reassignData.riderId) return;
+    const selectedRider = riders.find((r) => String(r.id) === String(reassignData.riderId));
+    if (!canDispatchToRider(selectedRider)) {
+      setLoadError("Selected rider is offline or unavailable. Choose an active rider before reassigning.");
+      return;
+    }
     setReassigning(true);
     setLoadError("");
     try {
@@ -607,6 +660,11 @@ export default function AdminDeliveryFixed() {
 
   const bulkAssignOrders = async () => {
     if (!bulkRiderId || selectedOrders.size === 0) return;
+    const selectedRider = riders.find((r) => String(r.id) === String(bulkRiderId));
+    if (!canDispatchToRider(selectedRider)) {
+      setLoadError("Selected rider is offline or unavailable. Choose an active rider before assigning.");
+      return;
+    }
 
     setBulkAssigning(true);
     setLoadError("");
@@ -722,12 +780,61 @@ export default function AdminDeliveryFixed() {
     }
   };
 
+  const handleUpdateRiderBranch = async (rider, branch) => {
+    setSavingRiderId(rider.id);
+    setLoadError("");
+    try {
+      await api.updateUser(rider.id, { branch });
+      await loadDeliveryData();
+    } catch (err) {
+      setLoadError(err?.message || "Failed to update rider branch.");
+    } finally {
+      setSavingRiderId("");
+    }
+  };
+
+  const handleUpdateRiderVehicle = async (rider, vehicleId) => {
+    setSavingRiderId(rider.id);
+    setLoadError("");
+    try {
+      const currentVehicle = getVehicleForRider(vehicles, rider);
+      if (currentVehicle && String(currentVehicle.id) !== String(vehicleId || "")) {
+        await api.assignVehicleRider(currentVehicle.id, null);
+      }
+      if (vehicleId) {
+        await api.assignVehicleRider(vehicleId, rider.id);
+      }
+      await loadDeliveryData();
+    } catch (err) {
+      setLoadError(err?.message || "Failed to update rider vehicle.");
+    } finally {
+      setSavingRiderId("");
+    }
+  };
+
   const detailRow = (label, value) => (
     <div className="rounded-lg border px-4 py-3" style={{ borderColor: toolbarBdr, backgroundColor: isDark ? "#111827" : "#f8fafc" }}>
       <p className="text-[11px] font-bold uppercase tracking-wider" style={{ color: isDark ? "#64748b" : "#9ca3af" }}>{label}</p>
       <p className="text-sm font-semibold mt-1 break-words" style={{ color: isDark ? "#f8fafc" : "#111827" }}>{value || "-"}</p>
     </div>
   );
+
+  const proofPanel = (delivery) => {
+    const proofUrl = delivery?.proofPhotoUrl || delivery?.proof_photo_url;
+    const proofNote = delivery?.proofNote || delivery?.proof_note;
+    if (!proofUrl) return null;
+
+    return (
+      <div className="rounded-lg border p-3 flex gap-3 mt-3" style={{ borderColor: toolbarBdr, backgroundColor: isDark ? "#111827" : "#f8fafc" }}>
+        <img src={proofUrl} alt="Proof of delivery" className="h-20 w-20 rounded-lg object-cover border" style={{ borderColor: toolbarBdr }} />
+        <div className="min-w-0">
+          <p className="text-xs font-bold uppercase tracking-wider" style={{ color: isDark ? "#86efac" : "#15803d" }}>Proof of delivery</p>
+          {proofNote ? <p className="text-sm mt-1 break-words" style={{ color: isDark ? "#e2e8f0" : "#374151" }}>{proofNote}</p> : null}
+          <a href={proofUrl} target="_blank" rel="noreferrer" className="text-xs font-bold mt-2 inline-block" style={{ color: "#2563eb" }}>Open full image</a>
+        </div>
+      </div>
+    );
+  };
 
   const renderDetailContent = () => {
     const item = detailModal.item;
@@ -743,7 +850,7 @@ export default function AdminDeliveryFixed() {
             {detailRow("Email", item.email)}
             {detailRow("Phone", item.phoneNumber || item.phone_number)}
             {detailRow("Branch", item.branch)}
-            {detailRow("Availability", statusLabel(item.availability))}
+            {detailRow("Availability", riderStatusText(item))}
             {detailRow("Active Deliveries", item.activeDeliveries ?? item.active_deliveries ?? 0)}
             {detailRow("Assigned Vehicle", vehicle ? `${vehicle.plateNumber || vehicle.plate_number || "-"} (${statusLabel(vehicle.vehicleType || vehicle.vehicle_type)})` : "-")}
             {detailRow("Verification", (item.isVerified ?? item.is_verified) ? "Verified" : "Unverified")}
@@ -759,6 +866,7 @@ export default function AdminDeliveryFixed() {
                     <div>
                       <p className="text-sm font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>{delivery.orderNumber || delivery.order_number}</p>
                       <p className="text-xs mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{delivery.itemSummary || delivery.item_summary || "-"}</p>
+                      {proofPanel(delivery)}
                     </div>
                     <button type="button" onClick={() => openReassignModal(delivery, item.id)} className="px-3 py-2 text-xs font-bold text-white rounded-lg" style={{ backgroundColor: "#2563eb" }}>
                       Reassign
@@ -813,6 +921,7 @@ export default function AdminDeliveryFixed() {
                   <span className="text-[11px] font-bold px-2 py-1 rounded inline-block mt-2" style={{ color: isDark ? "#86efac" : "#15803d", backgroundColor: isDark ? "rgba(34,197,94,0.12)" : "#f0fdf4" }}>
                     {statusLabel(delivery.status)}
                   </span>
+                  {proofPanel(delivery)}
                 </div>
               ))}
             </div>
@@ -822,16 +931,24 @@ export default function AdminDeliveryFixed() {
     }
 
     return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {detailRow("Order Number", item.orderNumber || item.order_number)}
-        {detailRow("Status", statusLabel(item.status))}
-        {detailRow("Recipient", item.recipientName || item.recipient_name)}
-        {detailRow("Phone", item.recipientPhone || item.recipient_phone)}
-        {detailRow("Branch", item.branch)}
-        {detailRow("Schedule", formatDate(item.scheduledAt || item.scheduled_at))}
-        {detailRow("Items", item.itemSummary || item.item_summary)}
-        {detailRow("Address", item.address || item.deliveryAddress || item.delivery_address)}
-      </div>
+      <>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {detailRow("Order Number", item.orderNumber || item.order_number)}
+          {detailRow("Status", statusLabel(item.status))}
+          {detailRow("Recipient", item.recipientName || item.recipient_name)}
+          {detailRow("Phone", item.recipientPhone || item.recipient_phone)}
+          {detailRow("Branch", item.branch)}
+          {detailRow("Schedule", formatDate(item.scheduledAt || item.scheduled_at))}
+          {detailRow("Items", item.itemSummary || item.item_summary)}
+          {detailRow("Address", item.address || item.deliveryAddress || item.delivery_address)}
+          {detailRow("Assigned", formatDate(item.assignedAt || item.assigned_at))}
+          {detailRow("Picked Up", formatDate(item.pickedUpAt || item.picked_up_at))}
+          {detailRow("Out For Delivery", formatDate(item.inTransitAt || item.in_transit_at))}
+          {detailRow("Arrived", formatDate(item.arrivedAt || item.arrived_at))}
+          {detailRow("Completed", formatDate(item.deliveredAt || item.delivered_at))}
+        </div>
+        {proofPanel(item)}
+      </>
     );
   };
 
@@ -839,7 +956,7 @@ export default function AdminDeliveryFixed() {
   const printTime = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" });
   const printScope = [
     branchFilter ? `Branch: ${branchFilter}` : "All branches",
-    `${availableRiders.length} available rider${availableRiders.length === 1 ? "" : "s"}`,
+    `${availableRiders.length} online idle rider${availableRiders.length === 1 ? "" : "s"}`,
     `${pendingOrders.length} pending order${pendingOrders.length === 1 ? "" : "s"}`,
   ].join(" - ");
 
@@ -911,7 +1028,7 @@ export default function AdminDeliveryFixed() {
       <div className={`grid grid-cols-2 lg:grid-cols-4 gap-4 no-print deliv-rise`} style={{ animationDelay: "0.18s" }}>
         <GreenCard label="Ready for dispatch" sublabel="Ready pickup orders" value={pendingOrders.length} sub="Needs dispatch" />
         <WhiteCard label="Active dispatches" sublabel="In-house routes" value={deliveryOrders.length} sub="Currently assigned" accentColor="#3b82f6" />
-        <WhiteCard label="Available riders" sublabel="Verified and idle" value={availableRiders.length} sub={`${inactiveRiders} unavailable`} accentColor="#22c55e" />
+        <WhiteCard label="Rider management" sublabel="Online and idle" value={availableRiders.length} sub={`${offlineRiders} offline, ${inactiveRiders} unavailable`} accentColor="#22c55e" />
         <WhiteCard label="Assigned stops" sublabel="Active rider load" value={assignedDeliveries} sub={branchFilter || "All branches"} accentColor="#f59e0b" />
       </div>
 
@@ -1382,7 +1499,7 @@ export default function AdminDeliveryFixed() {
             <p className="value">{pendingOrders.length}</p>
           </div>
           <div className="print-card">
-            <p className="label">Available Riders</p>
+            <p className="label">Active Riders</p>
             <p className="value">{availableRiders.length}</p>
           </div>
           <div className="print-card">
@@ -1406,6 +1523,7 @@ export default function AdminDeliveryFixed() {
                 <option value="">Status: All</option>
                 <option value="available">Available</option>
                 <option value="assigned">Assigned</option>
+                <option value="offline">Offline</option>
                 <option value="inactive">Inactive</option>
                 <option value="unverified">Unverified</option>
               </FDrop>
@@ -1446,31 +1564,44 @@ export default function AdminDeliveryFixed() {
               <section className="rounded-xl border overflow-hidden" style={{ borderColor: cardBdr, backgroundColor: cardBg }}>
                 <div className="px-5 py-4 flex items-center justify-between gap-3" style={{ borderBottom: `1px solid ${isDark ? "#243142" : "#eef2f6"}`, backgroundColor: toolbarBg }}>
                   <div>
-                    <h2 className="text-base font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>Available Delivery Riders</h2>
-                    <p className="text-sm mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Verified riders ready for delivery work.</p>
+                    <h2 className="text-base font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>Delivery Riders</h2>
+                    <p className="text-sm mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>View status, branch, and assigned vehicle.</p>
                   </div>
-                  <span className="text-xs font-bold px-3 py-1.5 rounded-full" style={{ color: isDark ? "#cbd5e1" : "#475569", backgroundColor: isDark ? "#1f2937" : "#f3f6f8" }}>{availableRiders.length} available</span>
+                  <span className="text-xs font-bold px-3 py-1.5 rounded-full" style={{ color: isDark ? "#cbd5e1" : "#475569", backgroundColor: isDark ? "#1f2937" : "#f3f6f8" }}>{availableRiders.length} active</span>
                 </div>
                 <div>
                   {filteredRiders.length === 0 ? (
                     <EmptyState title="No riders found" subtitle="Try another branch, status, or search term." isDark={isDark} />
                   ) : filteredRiders.map((rider, index) => {
                     const vehicle = getVehicleForRider(vehicles, rider);
-                    const unavailable = !(rider.isActive ?? rider.is_active) || !(rider.isVerified ?? rider.is_verified);
+                    const statusTone = riderStatusTone(rider, isDark);
+                    const availableVehicles = vehicles.filter((v) => {
+                      if (!(v.isActive ?? v.is_active)) return false;
+                      const assignedRiderId = v.assignedRiderId || v.assigned_rider_id;
+                      return !assignedRiderId || String(assignedRiderId) === String(rider.id);
+                    });
                     return (
-                      <div key={rider.id} className="px-5 py-4 flex items-center justify-between gap-4 transition-colors hover:bg-gray-50 dark:hover:bg-slate-800/40" style={{ borderTop: index === 0 ? "none" : `1px solid ${isDark ? "#243142" : "#eef2f6"}` }}>
+                      <div key={rider.id} className="px-5 py-4 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_150px_190px_140px] gap-3 items-center transition-colors hover:bg-gray-50 dark:hover:bg-slate-800/40" style={{ borderTop: index === 0 ? "none" : `1px solid ${isDark ? "#243142" : "#eef2f6"}` }}>
                         <div className="min-w-0 flex items-center gap-3">
                           <div className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white overflow-hidden shrink-0" style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
                             {rider.profilePictureUrl || rider.profile_picture_url ? <img src={rider.profilePictureUrl || rider.profile_picture_url} alt={rider.name} className="w-full h-full object-cover" /> : riderInitials(rider.name)}
                           </div>
                           <div className="min-w-0">
                             <p className="text-sm font-bold truncate" style={{ color: isDark ? "#f8fafc" : "#111827" }}>{rider.name || "Unnamed Rider"}</p>
-                            <p className="text-xs mt-1 truncate" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{rider.branch || "No branch"} - {vehicle ? vehicle.plateNumber || vehicle.plate_number : "No vehicle"}</p>
+                            <p className="text-xs mt-1 truncate" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>{rider.email || rider.phoneNumber || rider.phone_number || "-"}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="hidden sm:inline text-xs font-semibold" style={{ color: unavailable ? (isDark ? "#fca5a5" : "#b91c1c") : (isDark ? "#94a3b8" : "#64748b") }}>
-                            {unavailable ? "Unavailable" : statusLabel(rider.availability)}
+                        <FDrop value={branchSelectValue(rider.branch)} onChange={(value) => handleUpdateRiderBranch(rider, value)} isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt}>
+                          <option value="">No branch</option>
+                          {BRANCHES.map((branch) => <option key={branch} value={branch}>{branch}</option>)}
+                        </FDrop>
+                        <FDrop value={vehicle?.id || ""} onChange={(value) => handleUpdateRiderVehicle(rider, value)} isDark={isDark} inputBg={inputBg} inputBdr={inputBdr} inputTxt={inputTxt}>
+                          <option value="">No vehicle</option>
+                          {availableVehicles.map((v) => <option key={v.id} value={v.id}>{v.plateNumber || v.plate_number}</option>)}
+                        </FDrop>
+                        <div className="flex items-center justify-end gap-2 shrink-0">
+                          <span className="text-xs font-bold px-3 py-1.5 rounded-full" style={statusTone}>
+                            {savingRiderId === rider.id ? "Saving" : riderStatusText(rider)}
                           </span>
                           <button type="button" onClick={() => setDetailModal({ type: "rider", item: rider })} className="px-3 py-2 text-xs font-bold border rounded-lg transition-all hover:bg-gray-50 dark:hover:bg-slate-800" style={{ borderColor: inputBdr, color: inputTxt, backgroundColor: inputBg }}>View</button>
                         </div>
@@ -1579,11 +1710,11 @@ export default function AdminDeliveryFixed() {
           <div className="px-6 pt-6 pb-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
               <div>
-                <h2 className="text-lg font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>Available Delivery Riders</h2>
-                <p className="text-sm mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Verified riders can receive pending delivery orders.</p>
+                <h2 className="text-lg font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>Delivery Riders</h2>
+                <p className="text-sm mt-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>View rider status, branch, assigned vehicle, and current work.</p>
               </div>
               <span className="text-sm font-bold px-3 py-1.5 rounded-full" style={{ color: isDark ? "#86efac" : DG, backgroundColor: isDark ? "rgba(34,197,94,0.12)" : "#f0fdf4" }}>
-                {availableRiders.length} available
+                {availableRiders.length} active
               </span>
             </div>
           </div>
@@ -1743,9 +1874,9 @@ export default function AdminDeliveryFixed() {
                                 style={{ borderColor: inputBdr, backgroundColor: inputBg, color: inputTxt }}
                               >
                                 <option value="">Assign Rider</option>
-                                {assignableRiders.map((r) => (
+                                {riderAccountOptions.map((r) => (
                                   <option key={r.id} value={r.id}>
-                                    {r.name}
+                                    {r.name} ({riderStatusText(r)})
                                   </option>
                                 ))}
                               </select>
@@ -2035,7 +2166,7 @@ export default function AdminDeliveryFixed() {
           </div>
 
           <div className="print-only print-table">
-            <h3>Available Riders</h3>
+            <h3>Delivery Riders</h3>
             <table>
               <thead>
                 <tr>

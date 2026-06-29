@@ -59,6 +59,7 @@ export default function DeliveryDetailsScreen() {
   }>();
 
   const deliveryId = params.id ?? '';
+  const dispatchId = params.dispatchId;
   const stopIndex = params.stopIndex ? parseInt(params.stopIndex, 10) : null;
   const stopTotal = params.stopTotal ? parseInt(params.stopTotal, 10) : null;
   const hasStopContext = stopIndex !== null && stopTotal !== null;
@@ -252,6 +253,28 @@ export default function DeliveryDetailsScreen() {
     setIsCameraOpen(true);
   }
 
+  function handleCloseCamera() {
+    setIsCameraOpen(false);
+    setCameraStage('preview');
+    setCapturedPhotoUri(null);
+  }
+
+  function handleDiscardCapturedPhoto() {
+    setCapturedPhotoUri(null);
+    setCameraStage('preview');
+  }
+
+  function returnToDeliveryDetails(nextDelivery: RiderDelivery) {
+    handleCloseCamera();
+
+    const nextParams: { id: string; dispatchId?: string; stopIndex?: string; stopTotal?: string } = { id: nextDelivery.id };
+    if (dispatchId) nextParams.dispatchId = dispatchId;
+    if (stopIndex !== null) nextParams.stopIndex = String(stopIndex);
+    if (stopTotal !== null) nextParams.stopTotal = String(stopTotal);
+
+    router.replace({ pathname: '/delivery/[id]', params: nextParams });
+  }
+
   async function handleCapture() {
     if (!cameraRef.current) return;
     try {
@@ -279,8 +302,7 @@ export default function DeliveryDetailsScreen() {
         proofNote,
       });
       setDelivery(next);
-      setIsCameraOpen(false);
-      setCapturedPhotoUri(null);
+      returnToDeliveryDetails(next);
     } catch (nextError) {
       Alert.alert('Proof failed', nextError instanceof Error ? nextError.message : 'Try again.');
     } finally {
@@ -379,6 +401,22 @@ export default function DeliveryDetailsScreen() {
               </View>
             </SectionCard>
 
+            <SectionCard title="Timeline">
+              <View style={styles.timelineList}>
+                {getTimelineItems(delivery).map((item) => (
+                  <View key={item.key} style={styles.timelineRow}>
+                    <View style={[styles.timelineDot, item.done && styles.timelineDotDone]}>
+                      {item.done ? <Feather color={theme.colors.white} name="check" size={11} /> : null}
+                    </View>
+                    <View style={styles.timelineCopy}>
+                      <Text style={[styles.timelineLabel, item.done && styles.timelineLabelDone]}>{item.label}</Text>
+                      <Text style={styles.timelineTime}>{item.time ? formatDisplayDateTime(item.time) : 'Pending'}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </SectionCard>
+
             <SectionCard title="Recipient">
               <InfoRow icon="user" label="Name" value={delivery.recipientName} />
               <InfoRow icon="phone" label="Phone" value={delivery.recipientPhone || 'No phone number'} onPress={delivery.recipientPhone ? handleCallRecipient : undefined} />
@@ -433,10 +471,11 @@ export default function DeliveryDetailsScreen() {
             {delivery.proofPhotoUrl ? (
               <SectionCard title="Proof">
                 <View style={styles.proofPreview}>
-                  <Feather color={theme.colors.primary} name="camera" size={26} />
+                  <Image contentFit="cover" source={{ uri: delivery.proofPhotoUrl }} style={styles.proofImage} />
                   <View style={styles.proofCopy}>
                     <Text style={styles.proofText}>Proof photo added</Text>
                     {delivery.proofNote ? <Text style={styles.proofNote}>{delivery.proofNote}</Text> : null}
+                    {delivery.deliveredAt ? <Text style={styles.proofNote}>Completed {formatDisplayDateTime(delivery.deliveredAt)}</Text> : null}
                   </View>
                 </View>
               </SectionCard>
@@ -484,11 +523,18 @@ export default function DeliveryDetailsScreen() {
         )}
       </View>
 
-      <Modal animationType="slide" visible={isCameraOpen} onRequestClose={() => setIsCameraOpen(false)}>
+      <Modal animationType="slide" visible={isCameraOpen} onRequestClose={handleCloseCamera}>
         <View style={styles.cameraScreen}>
           {cameraStage === 'preview' ? (
             <>
               <CameraView ref={cameraRef} facing="back" style={styles.cameraPreview}>
+                <View pointerEvents="none" style={styles.cameraGrid}>
+                  <View style={[styles.cameraGridLineVertical, { left: '33.333%' }]} />
+                  <View style={[styles.cameraGridLineVertical, { left: '66.666%' }]} />
+                  <View style={[styles.cameraGridLineHorizontal, { top: '33.333%' }]} />
+                  <View style={[styles.cameraGridLineHorizontal, { top: '66.666%' }]} />
+                  <View style={styles.cameraCenterMark} />
+                </View>
                 <View style={styles.cameraGuide}>
                   <View style={styles.cameraGuideFrame}>
                     <Text style={styles.cameraGuideText}>Include flowers and door or gate in frame</Text>
@@ -499,18 +545,35 @@ export default function DeliveryDetailsScreen() {
                 </View>
               </CameraView>
               <View style={styles.cameraFooter}>
-                <Pressable accessibilityRole="button" style={styles.cameraCancelButton} onPress={() => setIsCameraOpen(false)}>
-                  <Text style={styles.cameraCancelText}>Cancel</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button" style={styles.cameraShutterButton} onPress={() => void handleCapture()}>
-                  <View style={styles.cameraShutterInner} />
-                </Pressable>
-                <View style={styles.cameraSpacer} />
+                <View style={styles.cameraFooterSide}>
+                  <Pressable accessibilityRole="button" style={styles.cameraCancelButton} onPress={handleCloseCamera}>
+                    <Text style={styles.cameraCancelText}>Cancel</Text>
+                  </Pressable>
+                </View>
+                <View style={styles.cameraFooterCenter}>
+                  <Pressable accessibilityRole="button" style={styles.cameraShutterButton} onPress={() => void handleCapture()}>
+                    <View style={styles.cameraShutterInner} />
+                  </Pressable>
+                </View>
+                <View style={styles.cameraFooterSide} />
               </View>
             </>
           ) : (
             <>
-              {capturedPhotoUri ? <Image contentFit="cover" source={{ uri: capturedPhotoUri }} style={styles.cameraPreview} /> : null}
+              <View style={styles.cameraReviewPreview}>
+                {capturedPhotoUri ? <Image contentFit="cover" source={{ uri: capturedPhotoUri }} style={styles.cameraReviewImage} /> : null}
+                <View style={styles.cameraReviewTopBar}>
+                  <Pressable accessibilityRole="button" style={styles.cameraIconButton} onPress={handleDiscardCapturedPhoto}>
+                    <Feather color={theme.colors.white} name="trash-2" size={20} />
+                  </Pressable>
+                  <View style={styles.cameraReviewTitlePill}>
+                    <Text numberOfLines={1} style={styles.cameraReviewTitle}>Review proof photo</Text>
+                  </View>
+                  <Pressable accessibilityRole="button" style={styles.cameraIconButton} onPress={handleCloseCamera}>
+                    <Feather color={theme.colors.white} name="x" size={21} />
+                  </Pressable>
+                </View>
+              </View>
               <View style={styles.proofForm}>
                 <Text style={styles.proofFormLabel}>Proof note</Text>
                 <TextInput
@@ -524,11 +587,12 @@ export default function DeliveryDetailsScreen() {
                 />
               </View>
               <View style={styles.cameraFooter}>
-                <Pressable accessibilityRole="button" style={styles.cameraCancelButton} onPress={() => {
-                  setCapturedPhotoUri(null);
-                  setCameraStage('preview');
-                }}>
+                <Pressable accessibilityRole="button" style={styles.cameraCancelButton} onPress={handleDiscardCapturedPhoto}>
                   <Text style={styles.cameraCancelText}>Retake</Text>
+                </Pressable>
+                <Pressable accessibilityRole="button" style={styles.cameraDeleteButton} onPress={handleDiscardCapturedPhoto}>
+                  <Feather color={theme.colors.white} name="trash-2" size={18} />
+                  <Text style={styles.cameraCancelText}>Delete</Text>
                 </Pressable>
                 <Pressable accessibilityRole="button" disabled={isUpdating} style={styles.cameraCaptureButton} onPress={() => void handleSubmitProof()}>
                   <Feather color={theme.colors.white} name="check" size={20} />
@@ -662,6 +726,16 @@ function getNextAction(status: RiderDeliveryStatus, hasProof: boolean) {
   return null;
 }
 
+function getTimelineItems(delivery: RiderDelivery) {
+  return [
+    { key: 'assigned', label: 'Assigned', time: delivery.assignedAt ?? delivery.scheduledAt },
+    { key: 'picked-up', label: 'Picked up', time: delivery.pickedUpAt },
+    { key: 'out-for-delivery', label: 'Out for delivery', time: delivery.inTransitAt },
+    { key: 'arrived', label: 'Arrived', time: delivery.arrivedAt },
+    { key: 'completed', label: 'Completed', time: delivery.deliveredAt },
+  ].map((item) => ({ ...item, done: Boolean(item.time) }));
+}
+
 function formatDisplayTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
@@ -672,6 +746,17 @@ function formatDisplayTime(value: string) {
 }
 
 function formatDisplayDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat('en-PH', {
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    month: 'short',
+  }).format(date);
+}
+
+function formatDisplayDateTime(value: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return new Intl.DateTimeFormat('en-PH', {
@@ -733,6 +818,14 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     padding: theme.spacing.lg,
   },
+  cameraFooterCenter: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  cameraFooterSide: {
+    flex: 1,
+    minWidth: 76,
+  },
   cameraGuide: {
     alignItems: 'center',
     flex: 1,
@@ -754,8 +847,53 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     textAlign: 'center',
   },
+  cameraCenterMark: {
+    borderColor: 'rgba(255,255,255,0.62)',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 18,
+    left: '50%',
+    marginLeft: -9,
+    marginTop: -9,
+    position: 'absolute',
+    top: '50%',
+    width: 18,
+  },
+  cameraGrid: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  cameraGridLineHorizontal: {
+    backgroundColor: 'rgba(255,255,255,0.28)',
+    height: StyleSheet.hairlineWidth,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+  },
+  cameraGridLineVertical: {
+    backgroundColor: 'rgba(255,255,255,0.28)',
+    bottom: 0,
+    position: 'absolute',
+    top: 0,
+    width: StyleSheet.hairlineWidth,
+  },
   cameraPreview: {
     flex: 1,
+  },
+  cameraDeleteButton: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    justifyContent: 'center',
+    minHeight: 52,
+    paddingHorizontal: theme.spacing.sm,
+  },
+  cameraIconButton: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.52)',
+    borderRadius: theme.radius.pill,
+    height: 44,
+    justifyContent: 'center',
+    width: 44,
   },
   cameraRecipientTag: {
     alignSelf: 'center',
@@ -770,6 +908,39 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sansSemiBold,
     fontSize: 13,
     lineHeight: 17,
+  },
+  cameraReviewImage: {
+    height: '100%',
+    width: '100%',
+  },
+  cameraReviewPreview: {
+    backgroundColor: '#050505',
+    flex: 1,
+  },
+  cameraReviewTitle: {
+    color: theme.colors.white,
+    fontFamily: Fonts.sansBold,
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  cameraReviewTitlePill: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.52)',
+    borderRadius: theme.radius.pill,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 44,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  cameraReviewTopBar: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    left: 0,
+    padding: theme.spacing.lg,
+    position: 'absolute',
+    right: 0,
+    top: 0,
   },
   cameraScreen: {
     backgroundColor: '#111111',
@@ -788,9 +959,6 @@ const styles = StyleSheet.create({
     borderRadius: 28,
     height: 56,
     width: 56,
-  },
-  cameraSpacer: {
-    flex: 1,
   },
   card: {
     backgroundColor: theme.colors.surface,
@@ -1161,6 +1329,12 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 2,
   },
+  proofImage: {
+    backgroundColor: theme.colors.surfaceAlt,
+    borderRadius: 14,
+    height: 72,
+    width: 72,
+  },
   proofForm: {
     backgroundColor: '#111111',
     gap: theme.spacing.sm,
@@ -1243,5 +1417,43 @@ const styles = StyleSheet.create({
     lineHeight: 12,
     maxWidth: 72,
     textAlign: 'center',
+  },
+  timelineCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  timelineDot: {
+    alignItems: 'center',
+    backgroundColor: '#DADADA',
+    borderRadius: theme.radius.pill,
+    height: 24,
+    justifyContent: 'center',
+    width: 24,
+  },
+  timelineDotDone: {
+    backgroundColor: theme.colors.primary,
+  },
+  timelineLabel: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansSemiBold,
+    fontSize: 14,
+    lineHeight: 19,
+  },
+  timelineLabelDone: {
+    color: theme.colors.text,
+  },
+  timelineList: {
+    gap: theme.spacing.md,
+  },
+  timelineRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+  },
+  timelineTime: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 12,
+    lineHeight: 17,
   },
 });

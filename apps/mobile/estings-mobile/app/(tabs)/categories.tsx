@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { router, type Href } from 'expo-router';
 import { Image } from 'expo-image';
 import {
   Animated,
   Easing,
   FlatList,
+  Modal,
   Platform,
   Pressable,
   RefreshControl,
@@ -12,9 +13,10 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
-import { Search, Star, WifiOff, X, Zap } from 'lucide-react-native';
+import { Clock, MapPin, Phone, Search, Star, WifiOff, X, Zap } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppBrandHeader } from '@/components/app-brand-header';
@@ -23,7 +25,13 @@ import { ProductCard } from '@/components/product-card';
 import { formatPhp, type Product } from '@/constants/shop';
 import { theme } from '@/constants/theme';
 import { shopApi } from '@/services/shop-api';
-import { getStoreBranch, setStoreBranch, type StoreBranch } from '@/services/branch-preference';
+import {
+  getAcknowledgedStoreBranch,
+  getStoreBranch,
+  setAcknowledgedStoreBranch,
+  setStoreBranch,
+  type StoreBranch,
+} from '@/services/branch-preference';
 import {
   mobileContentService,
   type CategoryBanner,
@@ -79,6 +87,28 @@ const preferredNonFloralCategoryOrder = [
   'accessory',
   'accessories',
 ];
+const branchDetails: Record<StoreBranch, {
+  address: string;
+  hours: string;
+  image: number;
+  name: string;
+  phone: string;
+}> = {
+  manila: {
+    address: 'Laon-Laan Cor. Dos Castillas St., Sampaloc, Manila',
+    hours: 'Mon - Sat, 9:00 AM - 9:00 PM',
+    image: require('@/assets/images/branches/manila-branch.webp'),
+    name: 'Manila Branch',
+    phone: '+63 918 902 2401',
+  },
+  pampanga: {
+    address: 'McArthur Hi-way, Dolores, San Fernando, Pampanga',
+    hours: 'Mon - Sat, 7:30 AM - 5:00 PM',
+    image: require('@/assets/images/branches/pampanga-branch.webp'),
+    name: 'Pampanga Branch',
+    phone: '+63 045 961 5378',
+  },
+};
 
 export default function CategoriesScreen() {
   const insets = useSafeAreaInsets();
@@ -93,7 +123,9 @@ export default function CategoriesScreen() {
   const [productOrderSeed, setProductOrderSeed] = useState(() => createRecommendationSeed());
   const [query, setQuery] = useState('');
   const [branch, setBranch] = useState<StoreBranch>('manila');
+  const [hasLoadedBranchPreference, setHasLoadedBranchPreference] = useState(false);
   const [isBranchPickerOpen, setIsBranchPickerOpen] = useState(false);
+  const [isBranchConfirmationOpen, setIsBranchConfirmationOpen] = useState(false);
   const [isCategorySheetMounted, setIsCategorySheetMounted] = useState(false);
   const [isCategorySheetOpen, setIsCategorySheetOpen] = useState(false);
   const categorySheetProgress = useRef(new Animated.Value(0)).current;
@@ -123,8 +155,39 @@ export default function CategoriesScreen() {
   }, [branch]);
 
   useEffect(() => {
-    void getStoreBranch().then(setBranch);
+    let active = true;
+
+    void getStoreBranch().then((storedBranch) => {
+      if (!active) {
+        return;
+      }
+
+      setBranch(storedBranch);
+      setHasLoadedBranchPreference(true);
+    });
+
+    return () => {
+      active = false;
+    };
   }, []);
+
+  useEffect(() => {
+    if (!hasLoadedBranchPreference) {
+      return;
+    }
+
+    let active = true;
+
+    void getAcknowledgedStoreBranch().then((acknowledgedBranch) => {
+      if (active && acknowledgedBranch !== branch) {
+        setIsBranchConfirmationOpen(true);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [branch, hasLoadedBranchPreference]);
 
   useEffect(() => {
     void loadCatalog();
@@ -271,7 +334,13 @@ export default function CategoriesScreen() {
     setBranch(nextBranch);
     void setStoreBranch(nextBranch);
     setIsBranchPickerOpen(false);
+    setIsBranchConfirmationOpen(true);
   }, []);
+
+  const handleConfirmBranch = useCallback(() => {
+    setIsBranchConfirmationOpen(false);
+    void setAcknowledgedStoreBranch(branch);
+  }, [branch]);
 
   const handleSelectCategory = useCallback((category?: string) => {
     setIsCategorySheetOpen(false);
@@ -351,6 +420,12 @@ export default function CategoriesScreen() {
         />
       ) : null}
 
+      <BranchConfirmationModal
+        branch={branch}
+        onConfirm={handleConfirmBranch}
+        visible={isBranchConfirmationOpen}
+      />
+
       <FlatList
         data={isLoading || errorMessage ? [] : renderableSections}
         keyExtractor={(section) => section.id}
@@ -367,6 +442,104 @@ export default function CategoriesScreen() {
         updateCellsBatchingPeriod={70}
         windowSize={Platform.OS === 'android' ? 5 : 7}
       />
+    </View>
+  );
+}
+
+function BranchConfirmationModal({
+  branch,
+  onConfirm,
+  visible,
+}: {
+  branch: StoreBranch;
+  onConfirm: () => void;
+  visible: boolean;
+}) {
+  const { height, width } = useWindowDimensions();
+  const info = branchDetails[branch];
+  const isCompact = height < 700;
+  const cardWidth = Math.min(width - 32, 380);
+  const imageHeight = Math.max(150, Math.min(isCompact ? 188 : 220, height * 0.28));
+
+  return (
+    <Modal animationType="fade" onRequestClose={onConfirm} transparent visible={visible}>
+      <View style={styles.branchConfirmationOverlay}>
+        <View style={[styles.branchConfirmationCard, { width: cardWidth }]}>
+          <Image
+            accessibilityLabel={`${info.name} storefront`}
+            contentFit="cover"
+            source={info.image}
+            style={[styles.branchConfirmationImage, { height: imageHeight }]}
+          />
+          <Pressable
+            accessibilityLabel="Close branch confirmation"
+            accessibilityRole="button"
+            hitSlop={10}
+            onPress={onConfirm}
+            style={({ pressed }) => [
+              styles.branchConfirmationClose,
+              pressed && styles.branchConfirmationClosePressed,
+            ]}>
+            <X color={theme.colors.white} size={22} strokeWidth={2.5} />
+          </Pressable>
+
+          <View style={styles.branchConfirmationBody}>
+            <View style={styles.branchConfirmationHeading}>
+              <Text style={styles.branchConfirmationEyebrow}>{"YOU'VE SELECTED"}</Text>
+              <Text style={styles.branchConfirmationTitle}>{info.name}</Text>
+              <View style={styles.branchConfirmationTitleRule} />
+            </View>
+
+            <View style={styles.branchConfirmationDetails}>
+              <BranchConfirmationDetail
+                icon={<MapPin color={theme.colors.primary} size={18} strokeWidth={2.4} />}
+                label="Address"
+                value={info.address}
+              />
+              <BranchConfirmationDetail
+                icon={<Clock color={theme.colors.primary} size={18} strokeWidth={2.4} />}
+                label="Store Hours"
+                value={info.hours}
+              />
+              <BranchConfirmationDetail
+                icon={<Phone color={theme.colors.primary} size={18} strokeWidth={2.4} />}
+                label="Phone"
+                value={info.phone}
+              />
+            </View>
+
+            <Pressable
+              accessibilityRole="button"
+              onPress={onConfirm}
+              style={({ pressed }) => [
+                styles.branchConfirmationButton,
+                pressed && styles.branchConfirmationButtonPressed,
+              ]}>
+              <Text style={styles.branchConfirmationButtonText}>Got it, continue shopping</Text>
+            </Pressable>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function BranchConfirmationDetail({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <View style={styles.branchConfirmationDetail}>
+      <View style={styles.branchConfirmationDetailIcon}>{icon}</View>
+      <View style={styles.branchConfirmationDetailCopy}>
+        <Text style={styles.branchConfirmationDetailLabel}>{label}</Text>
+        <Text selectable style={styles.branchConfirmationDetailValue}>{value}</Text>
+      </View>
     </View>
   );
 }
@@ -1227,6 +1400,124 @@ const styles = StyleSheet.create({
   },
   branchOptionTextActive: {
     color: theme.colors.white,
+  },
+  branchConfirmationOverlay: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 19, 0.62)',
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.xl,
+  },
+  branchConfirmationCard: {
+    backgroundColor: theme.colors.white,
+    borderRadius: 24,
+    boxShadow: '0 24px 58px rgba(15, 23, 19, 0.28)',
+    elevation: 12,
+    maxHeight: '92%',
+    overflow: 'hidden',
+  },
+  branchConfirmationImage: {
+    backgroundColor: theme.colors.greenSoft,
+    width: '100%',
+  },
+  branchConfirmationClose: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(31, 42, 36, 0.48)',
+    borderRadius: theme.radius.pill,
+    height: 44,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 14,
+    top: 14,
+    width: 44,
+  },
+  branchConfirmationClosePressed: {
+    backgroundColor: 'rgba(31, 42, 36, 0.68)',
+    transform: [{ scale: 0.96 }],
+  },
+  branchConfirmationBody: {
+    gap: 20,
+    padding: 24,
+    paddingTop: 22,
+  },
+  branchConfirmationHeading: {
+    gap: 7,
+  },
+  branchConfirmationEyebrow: {
+    color: '#9CA3AF',
+    fontFamily: 'Inter_800ExtraBold',
+    fontSize: 12,
+    letterSpacing: 1.1,
+    lineHeight: 16,
+  },
+  branchConfirmationTitle: {
+    color: theme.colors.primary,
+    fontFamily: 'Inter_800ExtraBold',
+    fontSize: 26,
+    letterSpacing: 0,
+    lineHeight: 32,
+  },
+  branchConfirmationTitleRule: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: theme.radius.pill,
+    height: 3,
+    width: 48,
+  },
+  branchConfirmationDetails: {
+    gap: 15,
+  },
+  branchConfirmationDetail: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 14,
+  },
+  branchConfirmationDetailIcon: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(46, 139, 52, 0.10)',
+    borderRadius: 12,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  branchConfirmationDetailCopy: {
+    flex: 1,
+    gap: 3,
+    minWidth: 0,
+    paddingTop: 1,
+  },
+  branchConfirmationDetailLabel: {
+    color: '#9CA3AF',
+    fontFamily: 'Inter_800ExtraBold',
+    fontSize: 12,
+    letterSpacing: 0.6,
+    lineHeight: 16,
+    textTransform: 'uppercase',
+  },
+  branchConfirmationDetailValue: {
+    color: '#374151',
+    fontFamily: 'Inter_500Medium',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  branchConfirmationButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.primary,
+    borderRadius: 14,
+    justifyContent: 'center',
+    minHeight: 54,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  branchConfirmationButtonPressed: {
+    backgroundColor: theme.colors.primaryDark,
+    transform: [{ scale: 0.98 }],
+  },
+  branchConfirmationButtonText: {
+    color: theme.colors.white,
+    fontFamily: 'Inter_800ExtraBold',
+    fontSize: 15,
+    lineHeight: 20,
+    textAlign: 'center',
   },
   categorySheetOverlay: {
     ...StyleSheet.absoluteFillObject,

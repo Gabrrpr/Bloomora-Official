@@ -8,6 +8,17 @@ import { generateCardMessage, RELATIONSHIP_OPTIONS, OCCASION_OPTIONS, TONE_OPTIO
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
+const GENERATION_PROBLEM_MESSAGE = "There is a problem generating this arrangement. Please try again."
+
+function formatGenerationError(message, fallback = GENERATION_PROBLEM_MESSAGE) {
+  const trimmedMessage = typeof message === "string" ? message.trim() : ""
+
+  if (!trimmedMessage || /internal\s+server\s+error/i.test(trimmedMessage)) {
+    return fallback
+  }
+
+  return trimmedMessage
+}
 
 const PROMPT_TIPS = [
   { title: "Theme or occasion", content: "Specify a theme, occasion, or the vibe you want: e.g. 'A romantic Valentine's Day arrangement' or 'A cheerful birthday arrangement.'" },
@@ -348,10 +359,10 @@ export default function DescribeArrangement({ onNavigate }) {
         setCustomName(data.price_breakdown?.items?.[0]?.product_name || "AI Arrangement")
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
       } else {
-        setError(data.message || "Generation failed. Please try again.")
+        setError(formatGenerationError(data.message, "Generation failed. Please try again."))
       }
     } catch (e) {
-      setError(e.message || "Failed to generate arrangement. Please try again.")
+      setError(formatGenerationError(e.message))
     } finally {
       setLoading(false)
     }

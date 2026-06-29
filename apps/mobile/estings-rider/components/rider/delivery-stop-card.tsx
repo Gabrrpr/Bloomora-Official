@@ -86,9 +86,11 @@ export function DeliveryStopCard({
                 <Text style={styles.productText}>product image</Text>
               )}
             </View>
-            <View style={[styles.moreBox, dark && styles.productBoxDark]}>
-              <Text style={styles.moreText}>+{getExtraItemCount(delivery)}</Text>
-            </View>
+            {getExtraItemCount(delivery) > 0 ? (
+              <View style={[styles.moreBox, dark && styles.productBoxDark]}>
+                <Text style={styles.moreText}>+{getExtraItemCount(delivery)}</Text>
+              </View>
+            ) : null}
           </View>
 
           <View style={styles.actionRow}>
@@ -152,7 +154,14 @@ function getProgress(status: RiderDeliveryStatus) {
 }
 
 function getExtraItemCount(delivery: RiderDelivery) {
-  return Math.max(1, Math.min(9, delivery.handlingNotes.length || 2));
+  const itemCount = Number(delivery.itemCount ?? deriveItemCount(delivery.itemSummary));
+  if (!Number.isFinite(itemCount) || itemCount <= 1) return 0;
+  return Math.min(9, itemCount - 1);
+}
+
+function deriveItemCount(summary: string) {
+  if (!summary.trim()) return 1;
+  return summary.split(',').filter((part) => part.trim()).length || 1;
 }
 
 const styles = StyleSheet.create({

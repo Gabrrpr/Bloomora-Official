@@ -11,6 +11,7 @@ import { StatusBar } from 'expo-status-bar';
 import { View } from 'react-native';
 import 'react-native-reanimated';
 
+import { AppUpdateGate } from '@/components/app-update-gate';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export const unstable_settings = {
@@ -54,6 +55,7 @@ export default function RootLayout() {
           <Stack.Screen name="dispatch/[id]/index" options={{ headerShown: false }} />
           <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
         </Stack>
+        <AppUpdateGate />
         <StatusBar backgroundColor="#FFFFFF" style="dark" translucent={false} />
       </View>
     </ThemeProvider>
