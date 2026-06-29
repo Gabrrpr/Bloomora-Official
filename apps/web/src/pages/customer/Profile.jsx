@@ -40,11 +40,11 @@ export default function Profile({ onNavigate }) {
   const setupMode = user && !user.is_profile_complete;
   const [editing, setEditing] = useState(setupMode);
   const [saved, setSaved] = useState(false);
-  const [avatarSrc, setAvatarSrc] = useState(null);
+  const [avatarSrc, setAvatarSrc] = useState(user?.profile_picture_url || user?.profilePictureUrl || null);
   const [usernameCheck, setUsernameCheck] = useState("");
   const [passwordMatch, setPasswordMatch] = useState(true);
   const fileInputRef = useRef(null);
-  const { isDark } = useTheme();
+  const { isDark, toggleDark } = useTheme();
 
   const [form, setForm] = useState({
     username: user?.username || "",
@@ -145,17 +145,19 @@ export default function Profile({ onNavigate }) {
   // Load User Info, Addresses, and Wishlist
   useEffect(() => {
     if (user) {
+      setAvatarSrc(user.profile_picture_url || user.profilePictureUrl || null);
       setForm({
         username: user.username || "",
-        firstName: user.firstName || "",
-        middleName: user.middleName || "",
-        lastName: user.lastName || "",
+        firstName: user.first_name || user.firstName || "",
+        middleName: user.middle_name || user.middleName || "",
+        lastName: user.last_name || user.lastName || "",
         email: user.email || "",
-        phone: user.phoneNumber || "",
+        phone: user.phone_number || user.phoneNumber || "",
         password: "",
         confirmPassword: "",
         address: user.address || "",
-        birthdate: "",
+        birthdate: user.date_of_birth || "",
+        preferredCurrency: user.preferred_currency || user.preferredCurrency || "PHP",
       });
       setSavedForm({ ...form });
     }
