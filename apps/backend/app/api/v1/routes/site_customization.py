@@ -24,7 +24,7 @@ DEFAULT_HERO_SLIDES = [
     {
         "id": 1,
         "tag": "Esting's Flower International Inc.",
-        "headline": "Fresh Blooms,\nSince 1959",
+        "headline": "Timeless Floristry,\nSince 1959",
         "description": "Since 1959, we've been part of countless moments big and small. Every arrangement is made by hand with fresh flowers and genuine care.",
         "cta": "Shop Flowers",
         "ctaSecondary": "View Occasions",

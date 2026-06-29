@@ -415,6 +415,8 @@ export default function Login({ onNavigate }) {
                 <p className="text-center text-xs text-gray-400 mt-3">
                   By signing in, you agree to our{" "}
                   <button onClick={() => onNavigate("terms")} className="underline hover:text-gray-600">Terms & Conditions</button>
+                  {" "}and{" "}
+                  <button onClick={() => onNavigate("privacy")} className="underline hover:text-gray-600">Data Privacy Policy</button>
                 </p>
 
               </div>

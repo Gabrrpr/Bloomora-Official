@@ -4,6 +4,7 @@ import { sendOtp, verifyOtp, registerUser } from "../services/auth"
 import { regions, getProvinces } from "../utils/philippines"
 import FlowerPanel from "../components/FlowerPanel"
 import TermsModal from "../components/TermsModal"
+import PrivacyModal from "../components/PrivacyModal"
 import estingsLogo from "../assets/Estings.svg"
 import bgImg from "../assets/BG_LoginRegister.webp"
 
@@ -189,6 +190,7 @@ export default function Register({ onNavigate }) {
   const [step, setStep]   = useState("form")
   const [otp, setOtp]     = useState("")
   const [showTerms, setShowTerms] = useState(false)
+  const [showPrivacy, setShowPrivacy] = useState(false)
 
   // ── Init form from sessionStorage (single source of truth) ──────────────
   const initial = loadDraft()
@@ -401,6 +403,11 @@ export default function Register({ onNavigate }) {
         open={showTerms}
         onClose={() => setShowTerms(false)}
         onAgree={() => setAgreeTerms(true)}
+      />
+
+      <PrivacyModal
+        open={showPrivacy}
+        onClose={() => setShowPrivacy(false)}
       />
 
       <div className="hidden lg:block lg:w-1/2 flex-shrink-0 sticky top-0 h-screen">
@@ -644,7 +651,9 @@ export default function Register({ onNavigate }) {
                 <label className="flex items-start gap-2 cursor-pointer mt-4">
                   <input type="checkbox" checked={agreeTerms} onChange={e => setAgreeTerms(e.target.checked)} className="w-4 h-4 rounded accent-green-600 mt-0.5" />
                   <span className="text-sm text-gray-600">I agree to the{" "}
-                    <button type="button" onClick={() => setShowTerms(true)} className="text-green-700 hover:underline font-medium">Terms &amp; Conditions</button>
+                    <button type="button" onClick={(e) => { e.preventDefault(); setShowTerms(true) }} className="text-green-700 hover:underline font-medium">Terms &amp; Conditions</button>
+                    {" "}and{" "}
+                    <button type="button" onClick={(e) => { e.preventDefault(); setShowPrivacy(true) }} className="text-green-700 hover:underline font-medium">Data Privacy Policy</button>
                   </span>
                 </label>
 

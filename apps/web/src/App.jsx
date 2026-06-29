@@ -223,7 +223,7 @@ function AppContent() {
       if (page === "login") return <Login onNavigate={navigate} />;
       if (page === "register") return <Register onNavigate={navigate} />;
       if (page === "forgot-password") return <ForgotPassword onNavigate={navigate} />;
-      if (page === "terms") return <TermsAndConditions onNavigate={navigate} />;
+      if (page === "terms") return <TermsAndConditions onNavigate={navigate} onBack={() => navigate(prevPage)} />;
       if (page === "activate-staff") return <ActivateStaff onNavigate={navigate} />;
     }
 
