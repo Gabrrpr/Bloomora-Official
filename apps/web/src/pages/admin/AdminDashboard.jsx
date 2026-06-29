@@ -2216,6 +2216,7 @@ export default function AdminDashboard({ onNavigate }) {
     return section === "orders" || params.has("pos_payment") ? "Orders" : "Dashboard"
   })
   const [overlay,       setOverlay]       = useState(null)
+  const [visitedPanels, setVisitedPanels] = useState(() => new Set([active]))
   const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_MAX)
   const [mobileOpen,    setMobileOpen]   = useState(false)
   const [notifOpen,     setNotifOpen]    = useState(false)
@@ -2277,21 +2278,28 @@ export default function AdminDashboard({ onNavigate }) {
 
   const goTo = panel => { setActive(panel); setOverlay(null); setUserOpen(false); setNotifOpen(false) }
 
-  const renderMain = () => {
-    if (overlay === "profile")       return <MyProfilePanel user={user} onBack={() => setOverlay(null)} />
-    if (overlay === "notifications") return <NotificationsPage notifications={notifications} onBack={() => setOverlay(null)} />
-    switch (active) {
-      case "Dashboard":      return <DashboardPanel user={user} onNavigate={goTo} />
-      case "Orders":         return <AdminOrders />
-      case "Products":       return <AdminProducts onNavigate={goTo} />
-      case "Inventory":      return <AdminInventory />
-      case "Staffs":         return <AdminStaff />
-      case "Customers":      return <AdminCustomers onNavigate={onNavigate} />
-      case "Messages":       return <AdminChat />
-      case "Activity Logs":  return <AdminActivityLogs />
-      case "Transactions":   return <AdminTransactions />
-      case "Delivery":       return <AdminDelivery />
-      case "Settings":       return <AdminSettings />
+  useEffect(() => {
+    setVisitedPanels(prev => {
+      if (prev.has(active)) return prev
+      const next = new Set(prev)
+      next.add(active)
+      return next
+    })
+  }, [active])
+
+  const renderPanel = (panel) => {
+    switch (panel) {
+      case "Dashboard":         return <DashboardPanel user={user} onNavigate={goTo} />
+      case "Orders":            return <AdminOrders />
+      case "Products":          return <AdminProducts onNavigate={goTo} />
+      case "Inventory":         return <AdminInventory />
+      case "Staffs":            return <AdminStaff />
+      case "Customers":         return <AdminCustomers onNavigate={onNavigate} />
+      case "Messages":          return <AdminChat />
+      case "Activity Logs":     return <AdminActivityLogs />
+      case "Transactions":      return <AdminTransactions />
+      case "Delivery":          return <AdminDelivery />
+      case "Settings":          return <AdminSettings />
       case "Hero Section":      return <AdminHero />
       case "Advertisements":    return <AdminAdvertisements />
       case "Promotions":        return <AdminPromotions />
@@ -2300,9 +2308,20 @@ export default function AdminDashboard({ onNavigate }) {
       case "Legal":             return <AdminLegal />
       case "Campaigns":         return <AdminCampaigns />
       case "Mobile Feed":       return <AdminMobileFeed />
-      case "Preview Site":      return <PreviewSitePanel onBack={()=>goTo("Dashboard")} />
-      default:               return <ComingSoon label={active} />
+      case "Preview Site":      return <PreviewSitePanel onBack={() => goTo("Dashboard")} />
+      default:                  return <ComingSoon label={panel} />
     }
+  }
+
+  const renderMain = () => {
+    if (overlay === "profile") return <MyProfilePanel user={user} onBack={() => setOverlay(null)} />
+    if (overlay === "notifications") return <NotificationsPage notifications={notifications} onBack={() => setOverlay(null)} />
+
+    return Array.from(visitedPanels).map(panel => (
+      <section key={panel} style={{ display: panel === active ? "block" : "none" }}>
+        {renderPanel(panel)}
+      </section>
+    ))
   }
 
 

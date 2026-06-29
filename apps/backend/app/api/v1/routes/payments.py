@@ -258,6 +258,26 @@ def _checkout_is_paid(checkout: dict[str, Any]) -> bool:
         )
     ) or bool(attributes.get("paid_at") or payment_attributes.get("paid_at"))
 
+def _branch_stock_attr(branch: str) -> str | None:
+    normalized = str(branch or "").strip().lower()
+    if normalized == "manila":
+        return "stock_manila"
+    if normalized == "pampanga":
+        return "stock_pampanga"
+    return None
+
+def _inventory_stock_for_branch(inventory: Inventory, branch: str) -> int:
+    attr = _branch_stock_attr(branch)
+    if attr and hasattr(inventory, attr):
+        return int(getattr(inventory, attr) or 0)
+    return int(inventory.current_stock or 0)
+
+def _deduct_inventory_stock(inventory: Inventory, quantity: int, branch: str) -> None:
+    inventory.current_stock = max(0, int(inventory.current_stock or 0) - quantity)
+    attr = _branch_stock_attr(branch)
+    if attr and hasattr(inventory, attr):
+        setattr(inventory, attr, max(0, int(getattr(inventory, attr) or 0) - quantity))
+
 
 def _convert_reservations(db: Session, order: Order):
     for item in order.items or []:
@@ -270,9 +290,9 @@ def _convert_reservations(db: Session, order: Order):
         inventory = db.query(Inventory).filter(
             Inventory.product_id == reservation.product_id
         ).with_for_update().first()
-        if not inventory or inventory.current_stock < reservation.quantity:
+        if not inventory or _inventory_stock_for_branch(inventory, order.branch_name) < reservation.quantity:
             raise HTTPException(status_code=409, detail="Reserved stock is no longer available.")
-        inventory.current_stock -= reservation.quantity
+        _deduct_inventory_stock(inventory, reservation.quantity, order.branch_name)
         reservation.status = "converted"
         reservation.converted_at = datetime.now(timezone.utc)
 

@@ -12,7 +12,7 @@ from PIL import Image
 from supabase import create_client, Client
 from app.core.config import settings
 from app.core.dependencies import get_db, get_current_user, require_staff
-from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum, Review, Order, OrderItem, ProductRecipe
+from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum, Review, Order, OrderItem, ProductRecipe, StockReservation
 from app.models.campaigns import Campaign
 from app.utils.logger import log_activity
 
@@ -60,6 +60,49 @@ def sync_product_availability(product: Product, inv=None) -> None:
         product.status = ProductStatusEnum.active
     elif not has_stock and product_status_value(product) == ProductStatusEnum.active.value:
         product.status = ProductStatusEnum.out_of_stock
+
+def _branch_stock_key(branch: str) -> Optional[str]:
+    normalized = str(branch or "").strip().lower()
+    if normalized == "manila":
+        return "stock_manila"
+    if normalized == "pampanga":
+        return "stock_pampanga"
+    return None
+
+def _active_reservations_by_product(db: Session, product_ids: list[uuid.UUID]) -> dict[str, dict[str, int]]:
+    if not product_ids:
+        return {}
+
+    rows = (
+        db.query(
+            StockReservation.product_id,
+            Order.branch_name,
+            func.coalesce(func.sum(StockReservation.quantity), 0),
+        )
+        .join(OrderItem, OrderItem.id == StockReservation.order_item_id)
+        .join(Order, Order.id == OrderItem.order_id)
+        .filter(
+            StockReservation.product_id.in_(product_ids),
+            StockReservation.status == "active",
+            StockReservation.reserved_until > datetime.now(timezone.utc),
+        )
+        .group_by(StockReservation.product_id, Order.branch_name)
+        .all()
+    )
+
+    summary: dict[str, dict[str, int]] = {}
+    for product_id, branch_name, reserved_qty in rows:
+        pid = str(product_id)
+        qty = int(reserved_qty or 0)
+        bucket = summary.setdefault(pid, {"stock": 0, "stock_manila": 0, "stock_pampanga": 0})
+        bucket["stock"] += qty
+        key = _branch_stock_key(branch_name)
+        if key:
+            bucket[key] += qty
+    return summary
+
+def _subtract_reserved_stock(stock_value: int, reserved_value: int) -> int:
+    return max(0, int(stock_value or 0) - int(reserved_value or 0))
 
 def serialize_product(p: Product) -> dict:
     inv = p.inventory
@@ -461,11 +504,25 @@ def get_admin_products(
             inv_by_product_id[pid] = r
 
         products = db.query(Product).order_by(Product.created_at.desc()).all()
+        reservations_by_product = _active_reservations_by_product(db, [p.id for p in products])
 
         result: List[dict] = []
         for p in products:
             pid = str(p.id)
             inv = inv_by_product_id.get(pid)
+            reserved = reservations_by_product.get(pid, {})
+            raw_stock = int(inv.get("current_stock") or 0) if inv else 0
+            raw_stock_manila = int(inv.get("stock_manila") or 0) if inv else 0
+            raw_stock_pampanga = int(inv.get("stock_pampanga") or 0) if inv else 0
+            available_stock = _subtract_reserved_stock(raw_stock, reserved.get("stock", 0))
+            available_stock_manila = _subtract_reserved_stock(raw_stock_manila, reserved.get("stock_manila", 0))
+            available_stock_pampanga = _subtract_reserved_stock(raw_stock_pampanga, reserved.get("stock_pampanga", 0))
+            availability_inv = {
+                **(inv or {}),
+                "current_stock": available_stock,
+                "stock_manila": available_stock_manila,
+                "stock_pampanga": available_stock_pampanga,
+            }
             
             cost_per_unit = float(inv.get("cost_per_unit")) if inv and inv.get("cost_per_unit") is not None else None
             current_price = float(p.price) if p.price else 0
@@ -483,13 +540,16 @@ def get_admin_products(
                 "category": p.category.value if hasattr(p.category, "value") else p.category,
         "image_url": p.image_url,
         "image": p.image_url,
-                "is_available": effective_is_available(p, inv),
+                "is_available": effective_is_available(p, availability_inv),
                 "status": product_status_value(p),
                 "created_at": p.created_at.isoformat() if p.created_at else None,
                 "updated_at": p.updated_at.isoformat() if p.updated_at else None,
-                "stock": int(inv.get("current_stock") or 0) if inv else 0,
-                "stock_manila": int(inv.get("stock_manila") or 0) if inv else 0,
-                "stock_pampanga": int(inv.get("stock_pampanga") or 0) if inv else 0,
+                "stock": available_stock,
+                "stock_manila": available_stock_manila,
+                "stock_pampanga": available_stock_pampanga,
+                "reserved_stock": int(reserved.get("stock", 0) or 0),
+                "reserved_stock_manila": int(reserved.get("stock_manila", 0) or 0),
+                "reserved_stock_pampanga": int(reserved.get("stock_pampanga", 0) or 0),
                 "reorder_point": int(inv.get("reorder_point") or 10) if inv else 10,
                 "unit_type": inv.get("unit_type") if inv and inv.get("unit_type") else "piece",
                 "cost_per_unit": cost_per_unit,
