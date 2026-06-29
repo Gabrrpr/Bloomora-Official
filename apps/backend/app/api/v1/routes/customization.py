@@ -240,19 +240,17 @@ async def check_and_generate(
     box_container_rule = ""
     if _needs_box_container_rule(f"{payload.prompt_text} {base_optimized_prompt}"):
         box_container_rule = (
-            "BOX CONTAINER RULE: The box is the vessel for the arrangement. "
-            "The clear acrylic flower box must be the visible container/base, not a decorative prop. "
-            "All flowers, fillers, and visible stems must originate from inside the box opening and stay contained within the footprint of the acrylic box. "
-            "Keep the transparent box walls and base clearly visible from a direct side profile. "
-            "Do not create a hand-tied bouquet, do not use wrapping paper, and do not place flowers outside, behind, beside, on top of, floating above, or wrapped around the exterior of the box. "
+            "Reference style: premium lidded transparent square acrylic flower gift box. "
+            "Low three-quarter top product view across the clear lid and front wall. "
+            "Flowers are inside the closed box, visible through lid and walls, packed below the rim with short hidden stems. "
+            "Satin ribbon crosses over lid and down the front; no readable text. "
+            "No bouquet rising out, no wrapper, no tied stems, no flowers outside the box. "
         )
     
     final_image_prompt = (
         f"{base_optimized_prompt}. "
         f"{box_container_rule}"
-        f"CRITICAL VISUAL RULE: Only depict the floral arrangement, bouquet wrap, vase, box/container, and selected florist materials. "
-        f"DO NOT include any external add-on items like greeting cards, chocolates, teddy bears, balloons, jewelry, or extras in the image. "
-        f"Focus solely on the clean florist presentation of the flowers."
+        f"Only show the selected florist materials. No cards, chocolates, balloons, jewelry, people, text, or watermarks."
     )
     
     generated_url = await pollinations.generate_arrangement_image(

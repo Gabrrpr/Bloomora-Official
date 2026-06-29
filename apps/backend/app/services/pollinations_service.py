@@ -24,7 +24,8 @@ class PollinationsService:
 
 
         safe_prompt = f"{optimized_prompt}, elegant floral arrangement, professional photography, clean background, highly detailed, no people, no text, no watermarks, safe for work"
-        encoded_prompt = quote(safe_prompt)
+        safe_prompt = " ".join(safe_prompt.split())[:900]
+        encoded_prompt = quote(safe_prompt, safe="")
         clean_key = settings.POLLINATIONS_API_KEY.strip()
         pollinations_url = f"{self.base_url}{encoded_prompt}?width=1024&height=1024&model={self.model}&nologo=true&seed=42&key={clean_key}"
 

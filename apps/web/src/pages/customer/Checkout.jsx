@@ -248,14 +248,19 @@ export default function Checkout({ onNavigate }) {
       : manualForm.province || manualAddressText
   )
   const isManilaAddress = deliveryAddressBranch === "Manila"
+  const isPampangaAddress = deliveryAddressBranch === "Pampanga"
   const isLalamoveAvailable = lalamoveEnabled && isManilaAddress
+  const isStandardDeliveryAvailable = !deliveryAddressText || isPampangaAddress
   const showStandardDelivery = true
 
   useEffect(() => {
     if (fulfillmentMethod === "lalamove" && !isLalamoveAvailable) {
       setFulfillmentMethod(showStandardDelivery ? "delivery" : "pickup")
     }
-  }, [fulfillmentMethod, isLalamoveAvailable, showStandardDelivery])
+    if (fulfillmentMethod === "delivery" && !isStandardDeliveryAvailable) {
+      setFulfillmentMethod(isLalamoveAvailable ? "lalamove" : "pickup")
+    }
+  }, [fulfillmentMethod, isLalamoveAvailable, isStandardDeliveryAvailable, showStandardDelivery])
 
   const getDeliveryDetails = () => {
     if (fulfillmentMethod === "pickup") {
@@ -545,6 +550,10 @@ export default function Checkout({ onNavigate }) {
         setError("Please select or add a complete delivery address and phone number before placing an order.");
         return;
       }
+      if (!isStandardDeliveryAvailable) {
+        setError("Standard delivery is only available for Pampanga addresses. Please select Lalamove or Pickup for Manila.");
+        return;
+      }
     } else if (fulfillmentMethod === "lalamove") {
       if (!deliveryDetails.address || !deliveryDetails.phone) {
         setError("Please provide a complete delivery address and phone number for Lalamove delivery.");
@@ -586,6 +595,10 @@ export default function Checkout({ onNavigate }) {
     if (fulfillmentMethod === "delivery") {
       if (!deliveryDetails.address || !deliveryDetails.phone) {
         setError("Please select or add a complete delivery address and phone number.");
+        return;
+      }
+      if (!isStandardDeliveryAvailable) {
+        setError("Standard delivery is only available for Pampanga addresses. Please select Lalamove or Pickup for Manila.");
         return;
       }
     } else if (fulfillmentMethod === "lalamove") {
@@ -871,8 +884,8 @@ export default function Checkout({ onNavigate }) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
                 {showStandardDelivery && (
                   <div
-                    onClick={() => { setFulfillmentMethod("delivery") }}
-                    className={`border-2 rounded-lg p-3.5 cursor-pointer transition ${fulfillmentMethod === "delivery" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200 hover:border-gray-300"}`}
+                    onClick={() => { if (isStandardDeliveryAvailable) setFulfillmentMethod("delivery") }}
+                    className={`border-2 rounded-lg p-3.5 transition ${isStandardDeliveryAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-60"} ${fulfillmentMethod === "delivery" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200 hover:border-gray-300"}`}
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${fulfillmentMethod === "delivery" ? "border-[#2E8B34]" : "border-gray-300"}`}>
@@ -880,7 +893,11 @@ export default function Checkout({ onNavigate }) {
                       </div>
                       <span className={`text-sm font-semibold ${fulfillmentMethod === "delivery" ? "text-[#2E8B34]" : "text-gray-700"}`}>Standard</span>
                     </div>
-                      <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">Manila and Pampanga<br />Scheduled by branch team</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">
+                        {isStandardDeliveryAvailable
+                          ? "Pampanga addresses only"
+                          : "Available only for Pampanga addresses"}<br />Scheduled by branch team
+                      </p>
                   </div>
                 )}
 

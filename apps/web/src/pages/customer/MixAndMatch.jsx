@@ -60,7 +60,7 @@ const ARRANGEMENTS = [
     key: "box",
     label: "Box",
     desc: "Arranged in a gift box",
-    promptText: "arranged inside a clear acrylic flower box container, with the acrylic box acting as the vessel/base of the arrangement. Every flower, filler, and visible stem must originate from inside the box opening and remain contained within the footprint of the acrylic box. The transparent box walls and base must be clearly visible from a direct side profile at eye level. Do not make a hand-tied bouquet, do not use wrapping paper, and do not place any flowers outside, behind, beside, on top of, floating above, or wrapped around the exterior of the box",
+    promptText: "arranged like a premium lidded acrylic flower gift box, similar to a transparent square cube box product photo. Use a low three-quarter top view looking across the clear lid and slightly down into the box. The selected flowers must be inside the closed clear acrylic box, visible through the transparent lid and side walls, with blooms packed below the lid/rim and short hidden stems inside the box. Add a clean satin ribbon crossing over the lid and down the front of the box. Do not make a bouquet rising out of the box, do not use wrapping paper, and do not place flowers outside, above, or around the exterior of the box",
     image: arrangementBox,
     maxStems: 9,
     path: "M3 8h18v3H3V8Zm1 3h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9Zm8-7 3 4H9l3-4Z",
