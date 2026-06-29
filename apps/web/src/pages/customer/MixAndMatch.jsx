@@ -360,7 +360,7 @@ export default function MixAndMatch({ onNavigate }) {
         
         // 🚀 FIX: Safely extract products so we don't accidentally wipe the array
         const allProds = Array.isArray(prodRes) ? prodRes : (prodRes.products || prodRes.data || []);
-        setProducts(allProds.filter(p => p.is_visible !== false))
+        setProducts(allProds)
         setAiUsage(usageRes)
       } catch (e) {
         console.error("Failed to load products", e)
@@ -426,16 +426,13 @@ export default function MixAndMatch({ onNavigate }) {
     return c.includes("filler") || n.includes("filler") || t.includes("filler");
   };
 
-  // 🚀 FIX: Broad match to catch all flowers, ignoring the storefront 'is_available' flag
+  // Mix and Match main flowers must be loose customization materials, not bouquet catalog products.
   const flowerList = products.filter(p => {
     if (isFiller(p)) return false;
-    
+
     const c = getCat(p);
-    const t = (p.product_type || "").toLowerCase();
-    
-    return c.includes("flower") || t.includes("flower") || 
-           c === "roses" || c === "tulips" || c === "sunflowers" || 
-           c === "carnations" || c === "lilies" || c === "peonies" || c === "orchids";
+
+    return c === "flower" || c === "flowers";
   });
 
   const fillerList = products.filter(isFiller);
