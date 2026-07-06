@@ -2,6 +2,7 @@ import { useTheme } from "../../context/ThemeContext"
 
 export const DG = "#0C573E"
 export const G  = "#2E8B34"
+export const ADMIN_PAGE_SIZE = 25
 
 // ── Shared token hook ─────────────────────────────────────────────────────────
 function useTokens() {

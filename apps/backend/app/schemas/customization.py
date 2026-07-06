@@ -9,6 +9,7 @@ class CustomizationRequest(BaseModel):
     vase_id: Optional[UUID] = None
     wrapping_id: Optional[UUID] = None
     accessory_id: Optional[UUID] = None
+    arrangement_type: Optional[str] = None
 
 
 class AlternativeItem(BaseModel):

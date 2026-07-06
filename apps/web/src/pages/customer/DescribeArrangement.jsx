@@ -157,7 +157,7 @@ export default function DescribeArrangement({ onNavigate }) {
       try {
         const [toggleRes, productsRes, usageRes] = await Promise.all([
           api.isCustomizationEnabled().catch(() => ({ enabled: true })),
-          api.getProducts(),
+          api.getCustomizationProducts(),
           api.getAiUsage().catch(() => ({ remaining: 5, limit: 5 })),
         ])
         setCustomizationEnabled(toggleRes.enabled)

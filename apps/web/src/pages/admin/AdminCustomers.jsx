@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
-import { DG, G, StatusBadge, TH, EmptyRow, TableWrap, ExportBtn } from "./_adminShared"
+import { DG, G, ADMIN_PAGE_SIZE, StatusBadge, TH, EmptyRow, TableWrap, ExportBtn } from "./_adminShared"
 
 const STATUS_OPTIONS = ["All", "Active", "Inactive", "Blocked", "Unverified"]
 const ORDERS_OPTIONS = ["All Orders", "No orders yet", "1–5 orders", "6–20 orders", "21–50 orders", "50+ orders"]
@@ -81,6 +81,8 @@ export default function AdminCustomers({ onNavigate }) {
   const [ordersFilter, setOrdersFilter] = useState("All Orders")
   const [dateFilter, setDateFilter]     = useState("Last Order: Any")
   const [customers, setCustomers]       = useState([])
+  const [customerTotal, setCustomerTotal] = useState(0)
+  const [page, setPage]                 = useState(1)
   const [loading, setLoading]           = useState(true)
   const [error, setError]               = useState(null)
   // Add this inside AdminCustomers()
@@ -107,7 +109,7 @@ const [viewingCustomer, setViewingCustomer] = useState(null);
   const fetchCustomers = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const params = { role: "customer" }
+      const params = { role: "customer", limit: ADMIN_PAGE_SIZE, offset: (page - 1) * ADMIN_PAGE_SIZE }
       if (search.trim()) params.search = search.trim()
       if (statusFilter !== "All") {
         const map = { Active: "active", Inactive: "inactive", Blocked: "inactive", Unverified: "unverified" }
@@ -115,14 +117,16 @@ const [viewingCustomer, setViewingCustomer] = useState(null);
       }
       const data = await api.getUsers(params)
       setCustomers(data.users || [])
+      setCustomerTotal(data.total || 0)
     } catch (err) {
       setError(err.message || "Failed to load customers")
     } finally {
       setLoading(false)
     }
-  }, [search, statusFilter])
+  }, [search, statusFilter, page])
 
   useEffect(() => { fetchCustomers() }, [fetchCustomers])
+  useEffect(() => { setPage(1) }, [search, statusFilter, ordersFilter, dateFilter])
 
   // Play the entrance animation once the data has loaded, then turn it off so it
   // doesn't replay on later re-renders. Resets while loading so refreshing re-animates.
@@ -149,7 +153,7 @@ const [viewingCustomer, setViewingCustomer] = useState(null);
     return () => clearTimeout(timer)
   }, [search])
 
-  const total       = customers.length
+  const total       = customerTotal
   const activeCount = customers.filter(c => c.is_active && c.is_verified).length
   const inactive    = customers.filter(c => !c.is_active).length
   const unverified  = customers.filter(c => !c.is_verified).length
@@ -167,6 +171,8 @@ const [viewingCustomer, setViewingCustomer] = useState(null);
       (c.email || "").toLowerCase().includes(search.toLowerCase())
     return matchStatus && matchSearch
   })
+  const totalPages = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE))
+  const pageSafe = Math.min(page, totalPages)
 
   const STAT_CARDS = [
     { label: "Total Customers",    sub: "All registered",     value: total,       green: true  },
@@ -406,18 +412,27 @@ const [viewingCustomer, setViewingCustomer] = useState(null);
         {/* Pagination */}
         <div className="flex items-center justify-between px-4 sm:px-5 py-3 flex-wrap gap-2"
           style={{ borderTop: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
-          <span className="text-sm" style={{ color: subTxt }}>Showing {filtered.length} of {total} customers</span>
+          <span className="text-sm" style={{ color: subTxt }}>
+            Showing {filtered.length > 0 ? (pageSafe - 1) * ADMIN_PAGE_SIZE + 1 : 0} to {Math.min((pageSafe - 1) * ADMIN_PAGE_SIZE + filtered.length, total)} of {total} customers
+          </span>
           <div className="flex items-center gap-1">
-            {["←", "1", "2", "3", "→"].map((p, i) => (
-              <button key={i} className="px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all"
-                style={{
-                  background: p === "1" ? `linear-gradient(135deg,${DG},${G})` : isDark ? "#1e293b" : "white",
-                  color: p === "1" ? "white" : isDark ? "#94a3b8" : "#6b7280",
-                  border: p === "1" ? "none" : `1px solid ${isDark ? "#374151" : "#e2e8f0"}`,
-                }}>
-                {p}
-              </button>
-            ))}
+            <button
+              disabled={pageSafe <= 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              className="px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all disabled:opacity-50"
+              style={{ background: isDark ? "#1e293b" : "white", color: isDark ? "#94a3b8" : "#6b7280", border: `1px solid ${isDark ? "#374151" : "#e2e8f0"}` }}>
+              Prev
+            </button>
+            <span className="px-2.5 py-1.5 rounded-md text-xs font-semibold text-white" style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
+              {pageSafe}
+            </span>
+            <button
+              disabled={pageSafe >= totalPages}
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              className="px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all disabled:opacity-50"
+              style={{ background: isDark ? "#1e293b" : "white", color: isDark ? "#94a3b8" : "#6b7280", border: `1px solid ${isDark ? "#374151" : "#e2e8f0"}` }}>
+              Next
+            </button>
           </div>
         </div>
       </div>

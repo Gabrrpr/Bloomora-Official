@@ -21,10 +21,15 @@ export function ProductRecommendationGallery({
 
   return (
     <View style={styles.recommendationSection}>
-      <View style={styles.recommendationTitleRow}>
-        <View style={styles.titleLine} />
-        <Text style={styles.recommendationTitle}>You May Also Like</Text>
-        <View style={styles.titleLine} />
+      <View style={styles.recommendationHeader}>
+        <View style={styles.recommendationTitleRow}>
+          <View style={styles.titleLine} />
+          <Text style={styles.recommendationTitle}>You May Also Like</Text>
+          <View style={styles.titleLine} />
+        </View>
+        <Text style={styles.recommendationSubtitle}>
+          Ranked by a content-based match across product details, tags, occasion, and price.
+        </Text>
       </View>
       {isLoading && products.length === 0 ? (
         <ProductRecommendationSkeleton />
@@ -110,6 +115,9 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     justifyContent: 'center',
   },
+  recommendationHeader: {
+    gap: 6,
+  },
   titleLine: {
     backgroundColor: hairlineColor,
     flex: 1,
@@ -120,6 +128,14 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sansSemiBold,
     fontSize: 17,
     lineHeight: 23,
+  },
+  recommendationSubtitle: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 12,
+    lineHeight: 17,
+    paddingHorizontal: theme.spacing.md,
+    textAlign: 'center',
   },
   recommendationGrid: {
     flexDirection: 'row',

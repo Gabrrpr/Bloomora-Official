@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, Fragment } from "react"
 import { useTheme } from "../../context/ThemeContext"
-import { DG, G } from "./_adminShared"
+import { DG, G, ADMIN_PAGE_SIZE } from "./_adminShared"
 import { api } from "../../services/api.js"
 import estingsWordmark from "../../assets/Estings.svg"
 
@@ -148,7 +148,7 @@ function FlowerLoader({ message = "Loading...", isDark = false }) {
 }
 
 const COLS = ["Timestamp", "Staff Name", "Role", "Action Type", "Branch", "Details"]
-const PAGE_SIZE = 20
+const PAGE_SIZE = ADMIN_PAGE_SIZE
 
 export default function AdminActivityLogs() {
   const { isDark } = useTheme()

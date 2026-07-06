@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session, object_session, joinedload
 from sqlalchemy import or_, func, String, text
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
-from decimal import Decimal
+from decimal import Decimal, ROUND_CEILING
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from app.services.email_service import send_order_status_email
@@ -120,6 +120,7 @@ def _raw_list_orders(
     status: Optional[str],
     search: Optional[str],
     branch: Optional[str],
+    date_range: Optional[str],
     limit: int,
     offset: int,
 ) -> list[dict]:
@@ -131,6 +132,10 @@ def _raw_list_orders(
     if branch:
         clauses.append("LOWER(COALESCE(o.branch_name, '')) = :branch")
         params["branch"] = branch.lower()
+    created_after = _date_range_start(date_range)
+    if created_after:
+        clauses.append("o.created_at >= :created_after")
+        params["created_after"] = created_after
     if search:
         clauses.append(
             "("
@@ -198,14 +203,36 @@ def _raw_list_orders(
     ).all()
     return [_minimal_order_payload(row) for row in rows]
 
-def _material_row(product: Optional[Product], quantity, material_type: str = "Recipe item") -> dict:
+def _date_range_start(date_range: Optional[str]) -> Optional[datetime]:
+    if not date_range:
+        return datetime.now(timezone.utc) - timedelta(days=30)
+
+    key = str(date_range).strip().lower().replace(" ", "_")
+    now = datetime.now(timezone.utc)
+    if key in {"all", "all_time"}:
+        return None
+    if key == "today":
+        return now.replace(hour=0, minute=0, second=0, microsecond=0)
+    if key == "this_week":
+        start = now - timedelta(days=now.weekday())
+        return start.replace(hour=0, minute=0, second=0, microsecond=0)
+    if key == "this_month":
+        return now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    if key in {"last_30_days", "recent", "recent_30_days"}:
+        return now - timedelta(days=30)
+    return now - timedelta(days=30)
+
+def _material_row(product: Optional[Product], quantity, material_type: str = "Recipe item", branch: Optional[str] = None) -> dict:
     qty = float(quantity or 0)
+    stock = 0
+    if product and product.inventory:
+        stock = _inventory_stock_for_branch(product.inventory, branch) if branch else int(product.inventory.current_stock or 0)
     return {
         "product_id": str(product.id) if product else None,
         "name": product.name if product else "Unknown material",
         "quantity": qty,
         "unit": product.inventory.unit_type if product and product.inventory and product.inventory.unit_type else "piece",
-        "stock": int(product.inventory.current_stock or 0) if product and product.inventory else 0,
+        "stock": stock,
         "material_type": material_type,
     }
 
@@ -258,13 +285,13 @@ def _delivery_tracking(order: Order) -> dict:
     }
 
 
-def _product_materials(db: Optional[Session], product: Optional[Product]) -> list[dict]:
+def _product_materials(db: Optional[Session], product: Optional[Product], branch: Optional[str] = None) -> list[dict]:
     if not db or not product:
         return []
 
     rows = db.query(ProductRecipe).filter(ProductRecipe.parent_product_id == product.id).all()
     if rows:
-        return [_material_row(row.component_product, row.quantity_required) for row in rows]
+        return [_material_row(row.component_product, row.quantity_required, branch=branch) for row in rows]
 
     composition = getattr(product, "composition", None) or []
     if not isinstance(composition, list):
@@ -280,10 +307,10 @@ def _product_materials(db: Optional[Session], product: Optional[Product]) -> lis
         except ValueError:
             continue
         component = db.query(Product).filter(Product.id == component_uuid).first()
-        materials.append(_material_row(component, item.get("quantity") or item.get("qty") or 1))
+        materials.append(_material_row(component, item.get("quantity") or item.get("qty") or 1, branch=branch))
     return materials
 
-def _custom_arrangement_materials(arrangement: Optional[Arrangement], db: Optional[Session] = None) -> list[dict]:
+def _custom_arrangement_materials(arrangement: Optional[Arrangement], db: Optional[Session] = None, branch: Optional[str] = None) -> list[dict]:
     if not arrangement:
         return []
 
@@ -297,7 +324,7 @@ def _custom_arrangement_materials(arrangement: Optional[Arrangement], db: Option
                 product = db.query(Product).filter(Product.id == product_uuid).first()
                 if product:
                     unit = product.inventory.unit_type if product.inventory and product.inventory.unit_type else unit
-                    stock = int(product.inventory.current_stock or 0) if product.inventory else stock
+                    stock = _inventory_stock_for_branch(product.inventory, branch) if product.inventory and branch else (int(product.inventory.current_stock or 0) if product.inventory else stock)
             except Exception:
                 pass
 
@@ -354,7 +381,7 @@ def _custom_arrangement_materials(arrangement: Optional[Arrangement], db: Option
         product = getattr(part, "product", None)
         quantity = getattr(part, "quantity", 1) or 1
         if product:
-            materials.append(_material_row(product, quantity, material_type))
+            materials.append(_material_row(product, quantity, material_type, branch=branch))
         else:
             materials.append({
                 "product_id": None,
@@ -402,6 +429,7 @@ def serialize_order(o) -> dict:
         total_qty = getattr(o, 'quantity', 1) or 1
 
         serialized_items = []
+        order_branch = getattr(o, "branch_name", None)
         if getattr(o, "items", None):
             for item in o.items:
                 product = getattr(item, "product", None)
@@ -423,7 +451,7 @@ def serialize_order(o) -> dict:
                     "quantity": qty,
                     "unit_price": safe_float(unit_price),
                     "line_total": safe_float(unit_price * qty),
-                    "materials": _custom_arrangement_materials(arrangement, db) if arrangement else _product_materials(db, product),
+                    "materials": _custom_arrangement_materials(arrangement, db, order_branch) if arrangement else _product_materials(db, product, order_branch),
                     "price_breakdown": getattr(arrangement, "price_breakdown", None) if arrangement else None,  # ← ADD
                     "arrangement_prompt": getattr(arrangement, "prompt_text", None) if arrangement else None,
                     "arrangement_description": getattr(arrangement, "description", None) if arrangement else None,
@@ -468,7 +496,7 @@ def serialize_order(o) -> dict:
                     "quantity": getattr(o, "quantity", 1) or 1,
                     "unit_price": safe_float(getattr(arrangement, "estimated_price", None) or getattr(o, "total_amount", None), 0.0),
                     "line_total": safe_float(getattr(o, "total_amount", None), 0.0),
-                    "materials": _custom_arrangement_materials(arrangement, db),
+                    "materials": _custom_arrangement_materials(arrangement, db, getattr(o, "branch_name", None)),
                     "price_breakdown": getattr(arrangement, "price_breakdown", None),
                     "arrangement_prompt": getattr(arrangement, "prompt_text", None),
                     "arrangement_description": getattr(arrangement, "description", None),
@@ -717,6 +745,31 @@ def _deduct_inventory_stock(inventory: Inventory, quantity: int, branch: str) ->
     if attr and hasattr(inventory, attr):
         setattr(inventory, attr, max(0, int(getattr(inventory, attr) or 0) - quantity))
 
+def _required_stock_units(quantity) -> int:
+    value = Decimal(str(quantity or 0))
+    return int(value.to_integral_value(rounding=ROUND_CEILING))
+
+def _deduct_product_recipe_materials(db: Session, product: Product, order_quantity: int, branch: str) -> bool:
+    rows = db.query(ProductRecipe).filter(ProductRecipe.parent_product_id == product.id).all()
+    if not rows:
+        return False
+
+    required_materials = []
+    for row in rows:
+        required = _required_stock_units(Decimal(str(row.quantity_required or 0)) * Decimal(str(order_quantity or 1)))
+        inventory = db.query(Inventory).filter(Inventory.product_id == row.component_product_id).with_for_update().first()
+        component_name = row.component_product.name if row.component_product else "Recipe material"
+        if not inventory or _inventory_stock_for_branch(inventory, branch) < required:
+            raise HTTPException(status_code=400, detail=f"Insufficient stock for {component_name}.")
+        required_materials.append((inventory, required))
+
+    for inventory, required in required_materials:
+        _deduct_inventory_stock(inventory, required, branch)
+        if int(inventory.current_stock or 0) <= 0 and inventory.product:
+            inventory.product.is_available = False
+
+    return True
+
 @router.get("/my", response_model=List[dict])
 def get_my_orders(
     status: Optional[str] = Query(None, description="Filter by status"),
@@ -735,59 +788,27 @@ def list_orders(
     status: Optional[str] = Query(None, description="Filter by status"),
     search: Optional[str] = Query(None, description="Search by order number or customer name/email"),
     branch: Optional[str] = Query(None, description="Filter by branch"),
-    limit: int = Query(100, ge=1, le=500),
+    date_range: Optional[str] = Query("last_30_days", description="Recent date window. Use all_time to include older orders."),
+    limit: int = Query(25, ge=1, le=100),
     offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
-    # Do not eager-load transactions here. Legacy rows can contain old payment
-    # enum strings; lazy access lets serialize_order isolate a bad row instead
-    # of letting one transaction crash the whole dashboard list.
-    query = db.query(Order)
-    
     if status:
-        try: query = query.filter(Order.status == OrderStatusEnum(status.lower()))
-        except ValueError: raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
-
-    # 🚀 THE SILVER BULLET: Filter by the Order's delivery branch, NOT the User's profile!
-    if branch:
-        query = query.filter(func.lower(Order.branch_name) == branch.lower())
-
-    if search:
-        search_term = f"%{search}%"
-        # We still join User here so we can search by customer name/email
-        query = query.join(User).filter(
-            or_(
-                func.cast(Order.id, String).ilike(search_term),
-                User.first_name.ilike(search_term),
-                User.last_name.ilike(search_term),
-                User.email.ilike(search_term),
-            )
-        )
-
-    try:
-        orders = query.order_by(Order.created_at.desc()).offset(offset).limit(limit).all()
-        return [serialize_order(o) for o in orders]
-    except Exception as exc:
-        # If DB schema is out of sync (e.g., missing delivery_lat/lng columns),
-        # we still want the endpoint to work for the admin dashboard.
-        db.rollback()
         try:
-            import logging
-            logging.getLogger(__name__).exception(
-                "Falling back to raw order list after ORM load failed: %s",
-                exc,
-            )
-        except Exception:
-            pass
-        return _raw_list_orders(
-            db,
-            status=status,
-            search=search,
-            branch=branch,
-            limit=limit,
-            offset=offset,
-        )
+            OrderStatusEnum(status.lower())
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+
+    return _raw_list_orders(
+        db,
+        status=status,
+        search=search,
+        branch=branch,
+        date_range=date_range,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.get("/{order_id}", response_model=dict)
@@ -895,25 +916,34 @@ async def create_order(
                             raise HTTPException(status_code=400, detail="Insufficient raw materials for custom order.")
                         _deduct_inventory_stock(inventory, required, raw_branch)
                 unit_price = Decimal(str(arrangement.estimated_price or 0))
-                prepared_items.append(("arrangement", arrangement, quantity, unit_price))
+                prepared_items.append(("arrangement", arrangement, quantity, unit_price, False))
             else:
                 product = db.query(Product).filter(Product.id == item_uuid).first()
                 inventory = db.query(Inventory).filter(
                     Inventory.product_id == item_uuid
                 ).with_for_update().first()
-                if not product or not product.is_available or not inventory:
+                has_recipe = bool(db.query(ProductRecipe.id).filter(ProductRecipe.parent_product_id == item_uuid).first())
+                if not product or not product.is_available:
                     raise HTTPException(status_code=404, detail=f"Product unavailable: {item_id}")
                 if not _product_supports_branch(product, raw_branch):
                     raise HTTPException(
                         status_code=400,
                         detail=f"{product.name} is not available in the {raw_branch} branch.",
                     )
-                active_reserved = _active_reserved_quantity(db, item_uuid, raw_branch)
-                available = _inventory_stock_for_branch(inventory, raw_branch) - active_reserved
-                if available < quantity:
-                    raise HTTPException(status_code=400, detail=f"Insufficient stock. Only {available} available.")
                 unit_price = Decimal(str(product.price or 0))
-                prepared_items.append(("product", product, quantity, unit_price))
+                if has_recipe:
+                    _deduct_product_recipe_materials(db, product, quantity, raw_branch)
+                else:
+                    if not inventory:
+                        raise HTTPException(status_code=404, detail=f"Product unavailable: {item_id}")
+                    active_reserved = _active_reserved_quantity(db, item_uuid, raw_branch)
+                    available = _inventory_stock_for_branch(inventory, raw_branch) - active_reserved
+                    if available < quantity:
+                        raise HTTPException(status_code=400, detail=f"Insufficient stock. Only {available} available.")
+                    _deduct_inventory_stock(inventory, quantity, raw_branch)
+                    if int(inventory.current_stock or 0) <= 0:
+                        product.is_available = False
+                prepared_items.append(("product", product, quantity, unit_price, False))
 
             if unit_price <= 0:
                 raise HTTPException(status_code=400, detail=f"Invalid price for item: {item_id}")
@@ -937,6 +967,19 @@ async def create_order(
             promo, discount_amount = validate_voucher(db, voucher_code, total_amount)
             normalized_voucher = promo.code
 
+        pos_discount_type = str(payload.get("pos_discount_type") or payload.get("discount_type") or "none").strip().lower()
+        pos_discount_id = str(payload.get("pos_discount_id") or payload.get("discount_id_number") or "").strip()
+        if pos_discount_type in {"senior", "pwd"}:
+            if not pos_discount_id:
+                raise HTTPException(status_code=400, detail="Senior/PWD ID number is required to apply the discount.")
+            discount_amount += (total_amount * Decimal("0.20")).quantize(Decimal("0.01"))
+
+        special_note = payload.get("special_note")
+        if pos_discount_type in {"senior", "pwd"}:
+            discount_label = "Senior Citizen" if pos_discount_type == "senior" else "PWD"
+            discount_note = f"{discount_label} discount applied. ID No: {pos_discount_id}"
+            special_note = f"{special_note}\n{discount_note}" if special_note else discount_note
+
         order = Order(
             id=uuid.uuid4(),
             user_id=current_user.id,
@@ -944,13 +987,13 @@ async def create_order(
             arrangement_id=None,
             quantity=sum(item[2] for item in prepared_items),
             total_amount=total_amount,
-            status=OrderStatusEnum.pending_payment,
+            status=OrderStatusEnum.paid if payment_method == "cash" else OrderStatusEnum.pending_payment,
             delivery_address=delivery_address,
             delivery_lat=delivery_lat,
             delivery_lng=delivery_lng,
             delivery_geocode_precision=delivery_geocode_precision,
             delivery_notes=delivery_notes,
-            special_note=payload.get("special_note"),
+            special_note=special_note,
             scheduled_at=scheduled_at,
             branch_name=raw_branch,
             checkout_attempt_id=attempt_id,
@@ -976,7 +1019,7 @@ async def create_order(
             str(item.get("id")).replace("arr-", ""): item
             for item in cart_items
         }
-        for item_type, entity, quantity, unit_price in prepared_items:
+        for item_type, entity, quantity, unit_price, should_reserve_stock in prepared_items:
             incoming = incoming_by_id.get(str(entity.id), {})
             card_message = str(incoming.get("card_message") or incoming.get("cardMessage") or "").strip() or None
             order_item = OrderItem(
@@ -990,7 +1033,7 @@ async def create_order(
             )
             db.add(order_item)
             db.flush()
-            if item_type == "product":
+            if item_type == "product" and should_reserve_stock:
                 db.add(StockReservation(
                     order_item_id=order_item.id,
                     product_id=entity.id,
@@ -1004,13 +1047,15 @@ async def create_order(
         except ValueError:
             method_enum = PaymentMethodEnum.ewallet
         is_online = payment_method in {"gcash", "paymaya", "card", "qrph", "paymongo", "ewallet"}
+        is_cash = payment_method == "cash"
         transaction = Transaction(
             id=uuid.uuid4(),
             order_id=order.id,
             payment_method=method_enum.value,
             total_amount=order.total_amount,
-            status=PaymentStatusEnum.pending.value,
-            expires_at=reserved_until,
+            status=PaymentStatusEnum.paid.value if is_cash else PaymentStatusEnum.pending.value,
+            paid_at=datetime.now(timezone.utc) if is_cash else None,
+            expires_at=None if is_cash else reserved_until,
             reference_number=payload.get("payment_reference") or None,
             provider="paymongo" if is_online else "manual",
         )

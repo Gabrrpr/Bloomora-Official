@@ -508,10 +508,15 @@ export default function CartScreen() {
 
       if (row.type === 'recommendation-title') {
         return (
-          <View style={[styles.recommendationTitleRow, styles.sectionSpacing]}>
-            <View style={styles.titleLine} />
-            <Text style={styles.recommendationTitle}>You May Also Like</Text>
-            <View style={styles.titleLine} />
+          <View style={[styles.recommendationHeader, styles.sectionSpacing]}>
+            <View style={styles.recommendationTitleRow}>
+              <View style={styles.titleLine} />
+              <Text style={styles.recommendationTitle}>You May Also Like</Text>
+              <View style={styles.titleLine} />
+            </View>
+            <Text style={styles.recommendationSubtitle}>
+              Content-based matches from what is already in your cart.
+            </Text>
           </View>
         );
       }
@@ -1544,6 +1549,9 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     justifyContent: 'center',
   },
+  recommendationHeader: {
+    gap: 6,
+  },
   titleLine: {
     backgroundColor: hairlineColor,
     flex: 1,
@@ -1554,6 +1562,13 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sansSemiBold,
     fontSize: 17,
     lineHeight: 23,
+  },
+  recommendationSubtitle: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 12,
+    lineHeight: 17,
+    textAlign: 'center',
   },
   recommendationGrid: {
     flexDirection: 'row',

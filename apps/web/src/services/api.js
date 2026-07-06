@@ -188,7 +188,7 @@ export const api = {
   },
 
   // ── Users (Admin) ─────────────────────────────────────────────────────────
-  async getUsers({ role, branch, status, search, limit = 100, offset = 0 } = {}) {
+  async getUsers({ role, branch, status, search, limit = 25, offset = 0 } = {}) {
     const params = new URLSearchParams();
     if (role) params.append('role', role);
     if (branch) params.append('branch', branch);
@@ -255,11 +255,12 @@ export const api = {
     return api.get(`/orders/my?${params.toString()}`);
   },
 
-  async getAdminOrders({ status, search, branch, limit = 100, offset = 0 } = {}) {
+  async getAdminOrders({ status, search, branch, date_range, limit = 25, offset = 0 } = {}) {
     const params = new URLSearchParams();
     if (status && status !== 'All') params.append('status', status.toLowerCase().replace(/ /g, '_'));
     if (search) params.append('search', search);
     if (branch && branch !== 'All Branches') params.append('branch', branch.toLowerCase());
+    if (date_range && date_range !== 'All Time') params.append('date_range', date_range.toLowerCase().replace(/ /g, '_'));
     params.append('limit', String(limit));
     params.append('offset', String(offset));
     return api.get(`/orders/?${params.toString()}`);

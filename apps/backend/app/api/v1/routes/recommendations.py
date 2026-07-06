@@ -25,7 +25,7 @@ async def get_homepage_recommendations(
     current_user: User = Depends(get_current_user)
 ):
     try:
-        # Lazy-import heavy ML dependencies so the server starts even without them
+ 
         try:
             import pandas as pd
             from sklearn.feature_extraction.text import TfidfVectorizer
@@ -36,7 +36,7 @@ async def get_homepage_recommendations(
                 detail="Recommendation engine unavailable: pandas/scikit-learn not installed.",
             )
 
-        # 1. Fetch data
+
         past_orders = db.query(Order).filter(Order.user_id == current_user.id).all()
         active_products = (
             db.query(Product)
@@ -52,7 +52,7 @@ async def get_homepage_recommendations(
         if not active_products:
             return []
 
-        # 2. BULLETPROOF DATA EXTRACTION
+
         catalog_data = []
         for p in active_products:
             inv = getattr(p, "inventory", None)
@@ -73,12 +73,12 @@ async def get_homepage_recommendations(
             
         df = pd.DataFrame(catalog_data)
         
-        # 3. Create metadata soup safely
+   
         df["name_clean"] = df["name"].fillna("").astype(str).str.lower()
         df["cat_clean"] = df["category"].fillna("").astype(str).str.lower()
         df["metadata_soup"] = df["name_clean"] + " " + df["cat_clean"]
 
-        # 4. Build purchase history from both legacy single-product orders and current order items.
+ 
         bought_product_ids = {
             str(o.product_id)
             for o in past_orders
@@ -108,17 +108,17 @@ async def get_homepage_recommendations(
         if not user_profile_string:
             return []
 
-        # 6. TF-IDF and Cosine Similarity
+      
         tfidf = TfidfVectorizer(stop_words="english")
         catalog_matrix = tfidf.fit_transform(df["metadata_soup"])
         user_vector = tfidf.transform([user_profile_string])
         cosine_sim = cosine_similarity(user_vector, catalog_matrix)
 
-        # 7. Sort scores
+     
         sim_scores = list(enumerate(cosine_sim[0]))
         sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
 
-        # 8. Filter out items they already bought
+   
         recommended_indices = []
         for score in sim_scores:
             idx = score[0]
@@ -132,7 +132,7 @@ async def get_homepage_recommendations(
             top_all = [score[0] for score in sim_scores[:limit]]
             recommended_indices = list(dict.fromkeys(recommended_indices + top_all))[:limit]
 
-        # 9. Return results
+    
         recommended_df = df.iloc[recommended_indices]
         return recommended_df.drop(columns=["metadata_soup", "name_clean", "cat_clean"]).to_dict(orient="records")
 

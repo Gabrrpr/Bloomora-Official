@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, Fragment } from "react"
+import { useState, useEffect, useCallback, useMemo, Fragment } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
-import { DG, G, StatusBadge } from "./_adminShared"
+import { DG, G, ADMIN_PAGE_SIZE, StatusBadge } from "./_adminShared"
 import { Pagination } from "./_adminShared"
 import estingsWordmark from "../../assets/Estings.svg"
 // 🚀 NEW: Import Fallback Image
@@ -18,6 +18,7 @@ const MANUAL_ORDER_STATUSES = [
 const SEARCH_SAMPLES = ["John Dela Cruz", "ORD-5FA237AC", "Maria Santos", "ORD-9C4E1B07"]
 const BRANCHES       = ["All Branches", "Manila", "Pampanga"]
 const DATE_RANGES    = ["All Time", "Today", "This Week", "This Month", "Last 30 Days"]
+const POS_GRID_LIMIT = 80
 
 const PRINT_STATUS_META = [
   { key: "Pending",         label: "Pending",         cls: "s-pending"   },
@@ -134,11 +135,11 @@ function statusToApi(status) {
 export default function AdminOrders() {
   const { isDark } = useTheme()
 
-  const PAGE_SIZE = 35;
+  const PAGE_SIZE = ADMIN_PAGE_SIZE;
   const [search, setSearch]         = useState("")
   const [statusFilter, setStatus]   = useState("All")
   const [branch, setBranch]         = useState("All Branches")
-  const [dateRange, setDateRange]   = useState("All Time")
+  const [dateRange, setDateRange]   = useState("Last 30 Days")
   const [orders, setOrders]         = useState([])
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState(null)
@@ -160,6 +161,9 @@ export default function AdminOrders() {
   const [posRef, setPosRef] = useState("")
   const [posLoading, setPosLoading] = useState(false)
   const [posSearch, setPosSearch] = useState("")
+  const [posCatalogMode, setPosCatalogMode] = useState("products")
+  const [posDiscountType, setPosDiscountType] = useState("none")
+  const [posDiscountId, setPosDiscountId] = useState("")
   
   // 🚀 NEW: POS Resizer State
   const [posWidth, setPosWidth] = useState(1152); // Default max-w-6xl size
@@ -205,34 +209,34 @@ export default function AdminOrders() {
   }, [statusFilter, search, branch, dateRange])
 
   useEffect(() => { fetchOrders() }, [fetchOrders])
+  useEffect(() => { setPage(1) }, [statusFilter, search, branch, dateRange])
+
+  const loadPosCatalog = useCallback(async () => {
+    setPosCatalogLoading(true);
+    try {
+      const adminRes = await (api.getAdminProducts ? api.getAdminProducts() : api.get("/products/admin/all"));
+      const adminList = Array.isArray(adminRes) ? adminRes : (adminRes.data || []);
+      const byId = new Map();
+      adminList.forEach(item => {
+        if (!item?.id || item.status === "inactive") return;
+        const previous = byId.get(item.id) || {};
+        byId.set(item.id, { ...previous, ...item });
+      });
+      setPosProducts([...byId.values()]);
+    } catch (e) {
+      console.warn("Failed to load POS catalog:", e);
+    } finally {
+      setPosCatalogLoading(false);
+    }
+  }, [])
 
   useEffect(() => {
-    if (posOpen && posProducts.length === 0) {
-      const loadCatalog = async () => {
-        setPosCatalogLoading(true);
-        try {
-          const [adminRes, customizationRes] = await Promise.all([
-            api.getAdminProducts ? api.getAdminProducts() : api.get("/products/admin/all"),
-            api.getCustomizationProducts ? api.getCustomizationProducts() : api.get("/products/customization/all"),
-          ]);
-          const adminList = Array.isArray(adminRes) ? adminRes : (adminRes.data || []);
-          const customizationList = Array.isArray(customizationRes) ? customizationRes : (customizationRes.data || []);
-          const byId = new Map();
-          [...adminList, ...customizationList].forEach(item => {
-            if (!item?.id || item.is_available === false || item.status === "inactive") return;
-            const previous = byId.get(item.id) || {};
-            byId.set(item.id, { ...previous, ...item });
-          });
-          setPosProducts([...byId.values()]);
-        } catch (e) {
-          console.warn("Failed to load POS catalog:", e);
-        } finally {
-          setPosCatalogLoading(false);
-        }
-      }
-      loadCatalog();
-    }
-  }, [posOpen])
+    if (posOpen) loadPosCatalog();
+  }, [posOpen, loadPosCatalog])
+
+  useEffect(() => {
+    setPosCategory("All")
+  }, [posCatalogMode])
 
   // Animate the drawer out before unmounting (smooth slide back to the right).
   const closePos = () => {
@@ -309,17 +313,44 @@ export default function AdminOrders() {
     modalFtrBdr: isDark ? "#1e293b" : "#f1f5f9",
   }
 
+  const formatPosCategory = (value) => {
+    const raw = String(value || "").trim()
+    if (!raw) return ""
+    return raw
+      .replace(/[_-]+/g, " ")
+      .replace(/\s+/g, " ")
+      .toLowerCase()
+      .replace(/(^|\s)\w/g, c => c.toUpperCase())
+  }
+
   const posItemCategory = (p) => {
-    const raw = String(p?.product_group || p?.product_type || p?.category_name || p?.category || "Other").toLowerCase();
-    if (raw.includes("flower") || raw.includes("rose") || raw.includes("tulip") || raw.includes("carnation")) return "Flowers";
-    if (raw.includes("vase")) return "Vases";
-    if (raw.includes("wrap")) return "Wrapping";
-    if (raw.includes("accessor") || raw.includes("add")) return "Add-ons";
-    if (raw.includes("arrangement") || raw.includes("bouquet") || raw.includes("floral")) return "Arrangements";
-    return raw ? raw.replace(/(^|\s|-)\w/g, c => c.toUpperCase()).replace(/-/g, " ") : "Other";
+    const actualCategory = formatPosCategory(p?.category_name || p?.category)
+    if (actualCategory) return actualCategory
+
+    const fallback = String(p?.product_type || p?.product_group || "Other").toLowerCase()
+    if (fallback.includes("flower") || fallback.includes("rose") || fallback.includes("tulip") || fallback.includes("carnation")) return "Flowers"
+    if (fallback.includes("vase")) return "Vases"
+    if (fallback.includes("wrap")) return "Wrapping"
+    if (fallback.includes("box") || fallback.includes("container")) return "Containers"
+    if (fallback.includes("accessor") || fallback.includes("add")) return "Add-ons"
+    if (fallback.includes("arrangement") || fallback.includes("bouquet") || fallback.includes("floral")) return "Arrangements"
+    return formatPosCategory(fallback) || "Other"
   };
 
-  const posItemKind = (p) => ["Flowers", "Vases", "Wrapping", "Add-ons"].includes(posItemCategory(p)) ? "Material" : "Product";
+  const isPosMaterial = (p) => {
+    const raw = String(`${p?.product_group || ""} ${p?.product_type || ""} ${p?.category_name || ""} ${p?.category || ""} ${p?.name || ""}`).toLowerCase()
+    return p?.is_customization_material === true
+      || raw.includes("material")
+      || raw.includes("raw")
+      || raw.includes("stem")
+      || raw.includes("filler")
+      || raw.includes("ribbon")
+      || raw.includes("floral foam")
+      || p?.is_customization_item === true
+      || p?.for_customization === true
+  }
+
+  const posCatalogTypeLabel = (p) => isPosMaterial(p) ? "Customized" : "Existing Product";
 
   // 🚀 NEW: Get Strictly Branch-based Stock from adminInventory/inventory Array
   // Format a Philippine mobile number as the user types: "+63 917 123 4567".
@@ -364,6 +395,25 @@ export default function AdminOrders() {
     return 0;
   }
 
+  const getProductById = (id) => posProducts.find(p => String(p.id) === String(id))
+
+  const hasPosRecipe = (p) => Array.isArray(p?.composition) && p.composition.length > 0
+
+  const getBuildableStock = (p) => {
+    if (!hasPosRecipe(p)) return Number(getBranchStock(p) || 0)
+
+    let maxBuildable = Infinity
+    for (const item of p.composition) {
+      const componentId = item.product_id || item.id
+      const required = Number(item.quantity || item.qty || 1)
+      const component = getProductById(componentId)
+      if (!component || required <= 0) return 0
+      const componentStock = Number(getBranchStock(component) || 0)
+      maxBuildable = Math.min(maxBuildable, Math.floor(componentStock / required))
+    }
+    return Number.isFinite(maxBuildable) ? Math.max(0, maxBuildable) : 0
+  }
+
   // Handle Drag / Resize logic for the POS Drawer
   const startResizing = useCallback((e) => {
     e.preventDefault();
@@ -385,30 +435,72 @@ export default function AdminOrders() {
     window.addEventListener("mouseup", onMouseUp);
   }, [posWidth]);
 
-  const posCategories = ["All", ...new Set(posProducts.map(p => {
-    return posItemCategory(p);
-  }))].filter(Boolean);
+  const scopedPosProducts = useMemo(() => (
+    posProducts.filter(p => posCatalogMode === "materials" ? isPosMaterial(p) : !isPosMaterial(p))
+  ), [posProducts, posCatalogMode])
 
-  const filteredPosProducts = posProducts.filter(p => {
-    const matchSearch = !posSearch || p.name?.toLowerCase().includes(posSearch.toLowerCase());
-    const pCat = posItemCategory(p);
-    const matchCategory = posCategory === "All" || pCat === posCategory;
-    
-    return matchSearch && matchCategory;
-  });
+  const posCategoryCounts = useMemo(() => (
+    scopedPosProducts.reduce((counts, p) => {
+      const category = posItemCategory(p)
+      counts[category] = (counts[category] || 0) + 1
+      return counts
+    }, {})
+  ), [scopedPosProducts])
+
+  const posCategories = useMemo(() => (
+    ["All", ...Object.keys(posCategoryCounts).sort((a, b) => a.localeCompare(b))]
+  ), [posCategoryCounts]);
+
+  const filteredPosProducts = useMemo(() => {
+    const query = posSearch.trim().toLowerCase()
+    return scopedPosProducts.filter(p => {
+      const matchSearch = !query || String(p.name || "").toLowerCase().includes(query);
+      const pCat = posItemCategory(p);
+      const matchCategory = posCategory === "All" || pCat === posCategory;
+      
+      return matchSearch && matchCategory;
+    });
+  }, [scopedPosProducts, posSearch, posCategory]);
+
+  const visiblePosProducts = useMemo(() => (
+    filteredPosProducts.slice(0, POS_GRID_LIMIT)
+  ), [filteredPosProducts]);
+
+  const posSubtotal = useMemo(() => (
+    posCart.reduce((sum, i) => sum + (Number(i.price || 0) * Number(i.qty || 0)), 0)
+  ), [posCart])
+  const posDiscountAmount = posDiscountType === "none" ? 0 : Math.round(posSubtotal * 0.20 * 100) / 100
+  const posTotalDue = Math.max(0, posSubtotal - posDiscountAmount)
 
   const handleAddToCart = (prod) => {
+    const currentStock = Number(getBuildableStock(prod) || 0)
     setPosCart(prev => {
       const existing = prev.find(i => i.id === prod.id);
-      if (existing) return prev.map(i => i.id === prod.id ? { ...i, qty: i.qty + 1 } : i);
-      return [...prev, { id: prod.id, name: prod.name, price: parseFloat(prod.price || 500), qty: 1, category: posItemCategory(prod), kind: posItemKind(prod) }];
+      if (existing) {
+        if (existing.qty >= currentStock) {
+          showPosToast("warning", `${prod.name} can only be built ${currentStock} time${currentStock === 1 ? "" : "s"} from ${posBranch} materials.`)
+          return prev
+        }
+        return prev.map(i => i.id === prod.id ? { ...i, qty: i.qty + 1 } : i);
+      }
+      if (currentStock <= 0) {
+        showPosToast("warning", `${prod.name} does not have enough ${posBranch} materials.`)
+        return prev
+      }
+      return [...prev, { id: prod.id, name: prod.name, price: parseFloat(prod.price || 500), qty: 1, category: posItemCategory(prod), kind: posCatalogTypeLabel(prod) }];
     });
   }
 
   const handleUpdateQty = (id, delta) => {
     setPosCart(prev => prev.map(i => {
       if (i.id === id) {
+        const product = posProducts.find(p => p.id === id)
+        const currentStock = product ? Number(getBuildableStock(product) || 0) : Infinity
         const newQty = i.qty + delta;
+        if (newQty > currentStock) {
+          showPosToast("warning", `${i.name} can only be built ${currentStock} time${currentStock === 1 ? "" : "s"} from ${posBranch} materials.`)
+          return i
+        }
         return newQty > 0 ? { ...i, qty: newQty } : i;
       }
       return i;
@@ -429,6 +521,7 @@ export default function AdminOrders() {
     if (!customerName.trim()) return showPosToast("warning", "Customer name is required.");
     if (fulfillmentMethod === "delivery" && !deliveryAddress.trim()) return showPosToast("warning", "Delivery address is required.");
     if (fulfillmentMethod === "pickup" && pickupMode === "scheduled" && !pickupDate) return showPosToast("warning", "Select a pickup date.");
+    if (posDiscountType !== "none" && !posDiscountId.trim()) return showPosToast("warning", "Enter the Senior/PWD ID number to apply the discount.");
     
     setPosLoading(true);
     try {
@@ -451,6 +544,8 @@ export default function AdminOrders() {
         recipient_name: recipientName || customerName,
         payment_method: posPayMethod,
         payment_reference: posPayMethod === "cash" ? "CASH-WALK-IN" : undefined,
+        pos_discount_type: posDiscountType,
+        pos_discount_id: posDiscountType === "none" ? undefined : posDiscountId.trim(),
         paymongo_success_url: `${paymongoReturnPath}&pos_payment=success`,
         paymongo_cancel_url: `${paymongoReturnPath}&pos_payment=cancelled`,
         branch_name: posBranch
@@ -476,6 +571,7 @@ export default function AdminOrders() {
 
       setPosSuccess(true);
       fetchOrders();
+      loadPosCatalog();
       setTimeout(() => {
         setPosCart([]);
         setPosRef("");
@@ -486,6 +582,8 @@ export default function AdminOrders() {
         setPickupMode("walkin");
         setPickupDate("");
         setRecipientName("");
+        setPosDiscountType("none");
+        setPosDiscountId("");
         setPosSuccess(false);
         setPosOpen(false);
       }, 1500);
@@ -876,7 +974,7 @@ export default function AdminOrders() {
                               <div className="mt-2 p-3 rounded-md" style={{ background: isDark ? (isAI ? "rgba(168,85,247,0.08)" : "#111827") : (isAI ? "#faf5ff" : "white"), border: `1px solid ${isDark ? (isAI ? "rgba(168,85,247,0.25)" : "#334155") : (isAI ? "#e9d5ff" : "#e2e8f0")}` }}>
                                 <div className="flex items-center justify-between mb-2 pb-2 border-b" style={{ borderColor: isDark ? (isAI ? "rgba(168,85,247,0.15)" : "#1e293b") : (isAI ? "#e9d5ff" : "#f1f5f9") }}>
                                   <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: isAI ? (isDark ? "#c084fc" : "#7e22ce") : subTxt }}>
-                                    {isAI ? "AI Custom Arrangement Reference" : "Recipe / Materials Needed"}
+                                    {isAI ? "Materials Used / Cost Breakdown" : "Recipe / Materials Needed"}
                                   </p>
                                   {aiTotal > 0 && (
                                     <p className="text-[10px] font-bold" style={{ color: isDark ? "#4ade80" : DG }}>
@@ -1031,6 +1129,32 @@ export default function AdminOrders() {
                   </select>
                 </div>
 
+                <div className="px-4 py-3 bg-white dark:bg-slate-800 flex flex-wrap items-center gap-2 flex-shrink-0" style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#eef1f4"}` }}>
+                  {[
+                    { key: "products", label: "Existing Products" },
+                    { key: "materials", label: "Customized" },
+                  ].map(option => (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => {
+                        setPosCatalogMode(option.key)
+                        setPosCategory("All")
+                      }}
+                      className="px-3 py-1.5 text-xs font-bold rounded-lg border transition-all"
+                      style={{
+                        backgroundColor: posCatalogMode === option.key ? (isDark ? "rgba(74,222,128,0.14)" : "#f0fdf4") : (isDark ? "#0f172a" : "#f8fafc"),
+                        borderColor: posCatalogMode === option.key ? (isDark ? "#4ade80" : G) : (isDark ? "#334155" : "#e2e8f0"),
+                        color: posCatalogMode === option.key ? (isDark ? "#4ade80" : DG) : (isDark ? "#94a3b8" : "#64748b"),
+                      }}>
+                      {option.label}
+                    </button>
+                  ))}
+                  <span className="text-[11px] ml-1" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
+                    {posCatalogMode === "materials" ? "Raw inventory items used for customized arrangements" : "Ready-made products and arrangements"}
+                  </span>
+                </div>
+
                 {/* Categories Scroll Bar */}
                 <div className="px-4 py-3 bg-white dark:bg-slate-800 overflow-x-auto whitespace-nowrap flex gap-2 no-scrollbar flex-shrink-0" style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#eef1f4"}` }}>
                   {posCategories.map(c => (
@@ -1041,6 +1165,7 @@ export default function AdminOrders() {
                           : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100 dark:bg-slate-800 dark:border-slate-600 dark:text-gray-300"
                       }`}>
                       {c}
+                      <span className="ml-1 opacity-60">({c === "All" ? scopedPosProducts.length : posCategoryCounts[c] || 0})</span>
                     </button>
                   ))}
                 </div>
@@ -1054,29 +1179,62 @@ export default function AdminOrders() {
                     </div>
                   ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-                    {filteredPosProducts.map(p => {
+                    {visiblePosProducts.map(p => {
                       const inCartQty = posCart.find(i => i.id === p.id)?.qty || 0
                       const itemCategory = posItemCategory(p)
-                      const itemKind = posItemKind(p)
-                      const currentBranchStock = getBranchStock(p)
+                      const catalogType = posCatalogTypeLabel(p)
+                      const isRecipeArrangement = hasPosRecipe(p)
+                      const availableStock = Math.max(0, getBuildableStock(p) - inCartQty)
+                      const isOutOfStock = availableStock <= 0
 
                       return (
-                        <button key={p.id} onClick={() => handleAddToCart(p)}
+                        <button key={p.id} onClick={() => isOutOfStock ? showPosToast("warning", `${p.name} is out of stock in ${posBranch}.`) : handleAddToCart(p)}
                           className="relative flex flex-col items-center p-3 rounded-xl border transition-all active:scale-95"
                           style={{
-                            borderColor: inCartQty > 0 ? (isDark ? "#4ade80" : G) : (isDark ? "#334155" : "#e2e8f0"),
+                            borderColor: isOutOfStock ? (isDark ? "#475569" : "#e5e7eb") : inCartQty > 0 ? (isDark ? "#4ade80" : G) : (isDark ? "#334155" : "#e2e8f0"),
                             backgroundColor: isDark ? "#1e293b" : "white",
                             boxShadow: inCartQty > 0 ? `0 0 0 2px ${isDark ? "rgba(74,222,128,0.18)" : "rgba(46,139,52,0.12)"}` : "none",
-                          }}
-                          onMouseEnter={e => { if (!inCartQty) e.currentTarget.style.borderColor = isDark ? "#4ade80" : G }}
-                          onMouseLeave={e => { if (!inCartQty) e.currentTarget.style.borderColor = isDark ? "#334155" : "#e2e8f0" }}>
+                            cursor: isOutOfStock ? "not-allowed" : "pointer",
+                            opacity: isOutOfStock ? 0.72 : 1,
+                          }}>
                           {inCartQty > 0 && (
                             <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full text-[11px] font-bold flex items-center justify-center text-white shadow-md z-10"
                               style={{ background: `linear-gradient(135deg,${DG},${G})` }}>{inCartQty}</span>
                           )}
                           <div className="relative w-full aspect-square rounded-md mb-2 flex items-center justify-center overflow-hidden group"
                             style={{ backgroundColor: isDark ? "#0f172a" : "#f1f5f9" }}>
-                            <img src={p.image_url || p.image || ImageNotFound} alt={p.name} className="w-full h-full object-cover" />
+                            <img
+                              src={p.image_url || p.image || ImageNotFound}
+                              alt={p.name}
+                              loading="lazy"
+                              decoding="async"
+                              className="w-full h-full object-cover"
+                              onError={e => { e.currentTarget.src = ImageNotFound }}
+                            />
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              title="Preview arrangement"
+                              aria-label={`Preview ${p.name}`}
+                              onClick={e => {
+                                e.preventDefault()
+                                e.stopPropagation()
+                                openImagePreview(p.image_url || p.image || ImageNotFound, p.name)
+                              }}
+                              onKeyDown={e => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                  openImagePreview(p.image_url || p.image || ImageNotFound, p.name)
+                                }
+                              }}
+                              className="absolute bottom-2 right-2 w-8 h-8 rounded-full flex items-center justify-center shadow-md transition-all hover:scale-105"
+                              style={{ backgroundColor: isDark ? "rgba(15,23,42,0.86)" : "rgba(255,255,255,0.92)", color: isDark ? "#e2e8f0" : "#0f172a", border: `1px solid ${isDark ? "rgba(148,163,184,0.35)" : "rgba(15,23,42,0.12)"}` }}
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-4.35-4.35M10.5 18a7.5 7.5 0 110-15 7.5 7.5 0 010 15zM10.5 7.5v6m-3-3h6" />
+                              </svg>
+                            </span>
                           </div>
                           <p className="text-xs font-bold text-center leading-tight line-clamp-2 w-full" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{p.name}</p>
                           <div className="flex items-center justify-center gap-1.5 mt-1 flex-wrap">
@@ -1085,18 +1243,25 @@ export default function AdminOrders() {
                               {itemCategory}
                             </span>
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide"
-                              style={{ backgroundColor: itemKind === "Material" ? (isDark ? "rgba(59,130,246,0.14)" : "#eff6ff") : (isDark ? "rgba(74,222,128,0.14)" : "#f0fdf4"), color: itemKind === "Material" ? (isDark ? "#93c5fd" : "#1d4ed8") : (isDark ? "#4ade80" : DG) }}>
-                              {itemKind}
+                              style={{ backgroundColor: catalogType === "Customized" ? (isDark ? "rgba(59,130,246,0.14)" : "#eff6ff") : (isDark ? "rgba(74,222,128,0.14)" : "#f0fdf4"), color: catalogType === "Customized" ? (isDark ? "#93c5fd" : "#1d4ed8") : (isDark ? "#4ade80" : DG) }}>
+                              {catalogType}
                             </span>
                           </div>
                           <p className="text-[10px] mt-1" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
-                            Stock: {currentBranchStock}
+                            {isRecipeArrangement
+                              ? (isOutOfStock ? "Materials unavailable" : `Buildable: ${availableStock}`)
+                              : (isOutOfStock ? "Out of stock" : `Available: ${availableStock}`)}
                           </p>
                           <p className="text-sm font-semibold mt-1" style={{ color: isDark ? "#4ade80" : DG }}>₱{(p.price || 500).toLocaleString()}</p>
                         </button>
                       )
                     })}
                     {filteredPosProducts.length === 0 && <p className="col-span-3 text-center text-sm mt-10 text-gray-500">No items found in this category.</p>}
+                    {filteredPosProducts.length > visiblePosProducts.length && (
+                      <p className="col-span-full text-center text-xs mt-2" style={{ color: isDark ? "#94a3b8" : "#64748b" }}>
+                        Showing first {visiblePosProducts.length} of {filteredPosProducts.length}. Search or choose a category to narrow the list.
+                      </p>
+                    )}
                   </div>
                   )}
                 </div>
@@ -1266,12 +1431,72 @@ export default function AdminOrders() {
                       )}
                     </div>
                   )}
+
+                  <div className="space-y-3 border-t pt-4" style={{ borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
+                    <label className="text-[10px] font-bold uppercase tracking-wider" style={{ color: subTxt }}>Customer Discount</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { key: "none", label: "None" },
+                        { key: "senior", label: "Senior" },
+                        { key: "pwd", label: "PWD" },
+                      ].map(option => (
+                        <button
+                          key={option.key}
+                          type="button"
+                          onClick={() => {
+                            setPosDiscountType(option.key)
+                            if (option.key === "none") setPosDiscountId("")
+                          }}
+                          className="py-2 px-2 text-xs font-bold rounded-lg border transition-all"
+                          style={{
+                            backgroundColor: posDiscountType === option.key ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : "transparent",
+                            borderColor: posDiscountType === option.key ? (isDark ? "#4ade80" : G) : (isDark ? "#334155" : "#e2e8f0"),
+                            color: posDiscountType === option.key ? (isDark ? "#4ade80" : DG) : (isDark ? "#94a3b8" : "#64748b"),
+                          }}
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                    {posDiscountType !== "none" && (
+                      <input
+                        placeholder={posDiscountType === "senior" ? "Senior Citizen ID number" : "PWD ID number"}
+                        value={posDiscountId}
+                        onChange={e => setPosDiscountId(e.target.value)}
+                        className="w-full px-3 py-2 text-sm border rounded-lg outline-none"
+                        style={{ borderColor: isDark ? "#334155" : "#e2e8f0", backgroundColor: isDark ? "#1e293b" : "white", color: isDark ? "#e2e8f0" : "#1e293b" }}
+                      />
+                    )}
+                    {posDiscountAmount > 0 && (
+                      <p className="text-[11px] leading-relaxed" style={{ color: subTxt }}>
+                        Applies a 20% discount to the POS subtotal.
+                      </p>
+                    )}
+                  </div>
                 </div>
                 </div>
 
                 {/* Footer (Payment & Submit) — pinned at the bottom */}
                 <div className="p-5 border-t bg-gray-50 dark:bg-slate-900 flex-shrink-0" style={{ borderColor: isDark ? "#1e293b" : "#e2e8f0" }}>
-                  <div className="flex justify-between items-center mb-4">
+                  <div className="space-y-1 mb-4">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="font-semibold text-gray-500">Subtotal</span>
+                      <span className="font-bold" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>PHP {posSubtotal.toLocaleString()}</span>
+                    </div>
+                    {posDiscountAmount > 0 && (
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-semibold" style={{ color: isDark ? "#93c5fd" : "#1d4ed8" }}>
+                          {posDiscountType === "senior" ? "Senior Discount" : "PWD Discount"} (20%)
+                        </span>
+                        <span className="font-bold" style={{ color: isDark ? "#93c5fd" : "#1d4ed8" }}>-PHP {posDiscountAmount.toLocaleString()}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center pt-2">
+                       <span className="text-sm font-semibold text-gray-500">Total Due</span>
+                       <span className="text-2xl font-bold text-green-600">PHP {posTotalDue.toLocaleString()}</span>
+                    </div>
+                  </div>
+                  <div className="hidden">
                      <span className="text-sm font-semibold text-gray-500">Total Due</span>
                      <span className="text-2xl font-bold text-green-600">₱{posCart.reduce((sum, i) => sum + (i.price * i.qty), 0).toLocaleString()}</span>
                   </div>

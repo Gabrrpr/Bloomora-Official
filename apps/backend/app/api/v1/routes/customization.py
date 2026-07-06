@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func, or_
 from typing import List, Optional
 from pydantic import BaseModel
 from google.genai import types
@@ -30,9 +31,8 @@ router = APIRouter(prefix="/customization", tags=["Customization"])
 pollinations = PollinationsService()
 
 
-def _needs_box_container_rule(prompt_text: str) -> bool:
-    normalized = (prompt_text or "").lower()
-    return "box" in normalized or "acrylic" in normalized or "display container" in normalized
+def _needs_box_container_rule(arrangement_type: Optional[str]) -> bool:
+    return str(arrangement_type or "").strip().lower() == "box"
 
 
 def calculate_price_breakdown(
@@ -185,7 +185,32 @@ async def check_and_generate(
         )
 
     # ── Step 4: Gemini Intelligent Prompt Validation ──────────────────────
-    db_products = db.query(Product.name).filter(Product.is_available == True).all()
+    material_keywords = [
+        "flower", "flowers", "vase", "wrapping", "wrapper", "ribbon",
+        "accessory", "accessories", "add-on", "addon", "filler", "stem",
+        "box", "container", "foam", "material", "raw",
+    ]
+    arrangement_keywords = ["arrangement", "bouquet", "floral design", "gift set"]
+    material_text = func.lower(func.concat(
+        func.coalesce(Product.category, ""), " ",
+        func.coalesce(Product.product_type, ""), " ",
+        func.coalesce(Product.product_group, ""), " ",
+        func.coalesce(Product.name, ""),
+    ))
+    material_match = or_(
+        Product.is_customization_material == True,
+        *[material_text.ilike(f"%{keyword}%") for keyword in material_keywords],
+    )
+    arrangement_match = or_(
+        *[material_text.ilike(f"%{keyword}%") for keyword in arrangement_keywords],
+    )
+    db_products = (
+        db.query(Product.name)
+        .filter(Product.is_available == True, Product.status != "inactive")
+        .filter(material_match)
+        .filter(~arrangement_match)
+        .all()
+    )
     inventory_names = [p[0] for p in db_products]
     
     if not inventory_names:
@@ -238,7 +263,7 @@ async def check_and_generate(
     # ── Step 7: Generate image via Pollinations (Using Optimized Prompt) ──
     base_optimized_prompt = ai_verdict.get("optimized_prompt") or payload.prompt_text
     box_container_rule = ""
-    if _needs_box_container_rule(f"{payload.prompt_text} {base_optimized_prompt}"):
+    if _needs_box_container_rule(payload.arrangement_type):
         box_container_rule = (
             "Reference style: premium lidded transparent square acrylic flower gift box. "
             "Low three-quarter top product view across the clear lid and front wall. "

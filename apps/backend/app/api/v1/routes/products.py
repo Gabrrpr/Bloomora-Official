@@ -104,6 +104,23 @@ def _active_reservations_by_product(db: Session, product_ids: list[uuid.UUID]) -
 def _subtract_reserved_stock(stock_value: int, reserved_value: int) -> int:
     return max(0, int(stock_value or 0) - int(reserved_value or 0))
 
+def _is_customization_material_product(product: Product) -> bool:
+    raw = " ".join([
+        str(getattr(product, "category", "") or ""),
+        str(getattr(product, "product_type", "") or ""),
+        str(getattr(product, "product_group", "") or ""),
+        str(getattr(product, "name", "") or ""),
+    ]).lower()
+    if any(term in raw for term in ("arrangement", "bouquet", "gift set", "floral design")):
+        return False
+    if bool(getattr(product, "is_customization_material", False)):
+        return True
+    return any(term in raw for term in (
+        "flower", "rose", "tulip", "carnation", "sunflower", "stem",
+        "vase", "wrapping", "wrapper", "ribbon", "accessory", "add-on",
+        "addon", "filler", "box", "container", "foam", "material", "raw",
+    ))
+
 def serialize_product(p: Product) -> dict:
     inv = p.inventory
 
@@ -123,6 +140,7 @@ def serialize_product(p: Product) -> dict:
         "product_group": p.product_group,
         "product_type": p.product_type,
         "category": p.category,
+        "is_customization_material": bool(getattr(p, "is_customization_material", False)),
         "image_url": p.image_url,
         "image": p.image_url,
         "is_available": effective_is_available(p, inv),
@@ -280,6 +298,9 @@ def get_customization_products(db: Session = Depends(get_db)):
 
     result = []
     for p in products:
+        if not _is_customization_material_product(p):
+            continue
+
         inv = p.inventory
         stock = inv.current_stock if inv else 0
         reorder = inv.reorder_point if inv else 10
@@ -304,7 +325,10 @@ def get_customization_products(db: Session = Depends(get_db)):
             "is_visible": p.is_visible,
             "product_group": p.product_group.lower().strip() if p.product_group else "",
             "product_type": p.product_type.lower().strip() if p.product_type else "",
+            "is_customization_material": bool(getattr(p, "is_customization_material", False)),
             "stock": stock,
+            "stock_manila": getattr(inv, "stock_manila", 0) if inv else 0,
+            "stock_pampanga": getattr(inv, "stock_pampanga", 0) if inv else 0,
             "stock_status": stock_status,
         }
 
@@ -537,9 +561,12 @@ def get_admin_products(
                 "description": p.description,
                 "care_guide": getattr(p, "care_guide", None),
                 "price": current_price,
+                "product_group": p.product_group,
+                "product_type": p.product_type,
                 "category": p.category.value if hasattr(p.category, "value") else p.category,
-        "image_url": p.image_url,
-        "image": p.image_url,
+                "image_url": p.image_url,
+                "image": p.image_url,
+                "is_customization_material": bool(getattr(p, "is_customization_material", False)),
                 "is_available": effective_is_available(p, availability_inv),
                 "status": product_status_value(p),
                 "created_at": p.created_at.isoformat() if p.created_at else None,

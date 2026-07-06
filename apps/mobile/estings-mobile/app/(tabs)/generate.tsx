@@ -26,14 +26,14 @@ import { getAuthSession } from '@/services/auth-session';
 
 const SCENES = [
   {
-    eyebrow: 'Your idea, guided by AI',
+    eyebrow: 'Content-based floral AI',
     title: 'Describe your dream bouquet.',
-    body: 'Start with your words, mood, colors, and occasion.',
+    body: 'The algorithm reads your words, mood, colors, and occasion to shape a bouquet concept around your content.',
   },
   {
-    eyebrow: 'From prompt to preview',
+    eyebrow: 'From content to preview',
     title: "Esting's turns your idea into a first look.",
-    body: 'Our AI helps translate your creativity into a bouquet concept.',
+    body: 'Your prompt becomes the signal: the AI translates those details into a florist-ready visual direction.',
   },
   {
     eyebrow: 'Prefer full control?',
@@ -47,7 +47,7 @@ const METHOD_CARDS = [
     accent: '#D94E78',
     background: '#FFFFFF',
     iconBackground: 'rgba(217, 78, 120, 0.1)',
-    description: 'Write your idea and preview a bouquet concept.',
+    description: 'Write your idea and let the content-based algorithm preview a bouquet concept.',
     icon: Sparkles,
     title: 'Describe Your Arrangement',
   },
@@ -430,7 +430,7 @@ function AnimatedSelectionIntro({ sceneHeight, scrollY }: { sceneHeight: number;
       <Text style={styles.selectionTitle}>
         So, how do you want to <Text style={styles.selectionTitleAccent}>create?</Text>
       </Text>
-      <Text style={styles.selectionBody}>Start with a written idea or build every detail by hand.</Text>
+      <Text style={styles.selectionBody}>Start with a written idea powered by content-based AI, or build every detail by hand.</Text>
     </Animated.View>
   );
 }

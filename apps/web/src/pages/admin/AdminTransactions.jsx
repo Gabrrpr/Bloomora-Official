@@ -1,14 +1,14 @@
 import { useState, useEffect, useMemo, Fragment } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
-import { DG, G, StatusBadge, ActionBtns,BranchBadge } from "./_adminShared"
+import { DG, G, ADMIN_PAGE_SIZE, StatusBadge, ActionBtns,BranchBadge } from "./_adminShared"
 import estingsWordmark from "../../assets/Estings.svg"
 
 const DATE_OPTIONS   = ["All Time", "Today", "Yesterday", "This Week", "This Month"]
 const TYPE_OPTIONS   = ["Type: All", "Sale", "Refund", "Void"]
 const METHOD_OPTIONS = ["Method: All", "Cash", "GCash", "Maya", "Credit Card", "Bank Transfer"]
 const STATUS_OPTIONS = ["Status: All", "Paid", "Pending", "Failed", "Refunded"]
-const ITEMS_PER_PAGE = 35 // 🚀 Added Pagination Limit
+const ITEMS_PER_PAGE = ADMIN_PAGE_SIZE
 
 const SEARCH_SAMPLES = ["John Dela Cruz", "Maria Santos", "Carlo Ramos", "Angela Cruz"]
 

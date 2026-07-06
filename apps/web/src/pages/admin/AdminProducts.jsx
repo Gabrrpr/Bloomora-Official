@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, Fragment } from "react"
 import { createPortal } from "react-dom"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
-import { DG, G, StatusBadge, TH, TD, ActionBtns, EmptyRow, TableWrap, ExportBtn } from "./_adminShared"
+import { DG, G, ADMIN_PAGE_SIZE, StatusBadge, TH, TD, ActionBtns, EmptyRow, TableWrap, ExportBtn } from "./_adminShared"
 import FallbackImage from "../../components/FallbackImage.jsx"
 import estingsWordmark from "../../assets/Estings.svg"
 
@@ -2176,7 +2176,7 @@ function RenameCategoryModal({ categories, onClose, onSuccess }) {
 export default function AdminProducts({ onNavigate }) {
   const d = useAdminTokens()
   const { isDark } = d
-  const PAGE_SIZE = 35
+  const PAGE_SIZE = ADMIN_PAGE_SIZE
 
   const [search, setSearch]               = useState("")
   const [category, setCategory]           = useState("")

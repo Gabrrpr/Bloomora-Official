@@ -446,6 +446,9 @@ export default function ProductDetailsScreen() {
               <Text style={styles.recommendationTitle}>You May Also Like</Text>
               <View style={styles.recommendationTitleLine} />
             </View>
+            <Text style={styles.recommendationSubtitle}>
+              Content-based picks using category, occasion, price, tags, and description matches.
+            </Text>
           </View>
         );
       }
@@ -1985,6 +1988,14 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sansSemiBold,
     fontSize: 17,
     lineHeight: 23,
+  },
+  recommendationSubtitle: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sans,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 6,
+    textAlign: 'center',
   },
   recommendationGridRow: {
     backgroundColor: pageBackground,

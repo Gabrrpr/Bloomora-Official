@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "../../context/ThemeContext";
-import { DG, G, GreenCard, WhiteCard } from "./_adminShared";
+import { DG, G, ADMIN_PAGE_SIZE, GreenCard, WhiteCard } from "./_adminShared";
 import estingsWordmark from "../../assets/Estings.svg";
 import { api } from "../../services/api";
 
@@ -351,7 +351,7 @@ export default function AdminDeliveryFixed() {
     setLoadError("");
     try {
       const riderQuery = branchFilter ? `?branch=${encodeURIComponent(branchFilter)}` : "";
-      const orderQuery = `?branch=${encodeURIComponent(branchFilter)}&limit=100`;
+      const orderQuery = `?branch=${encodeURIComponent(branchFilter)}&limit=${ADMIN_PAGE_SIZE}`;
 
       const [settingsResult, ridersResult, ordersResult, deliveryOrdersResult, vehiclesResult] = await Promise.allSettled([
         api.getCheckoutSettings(),

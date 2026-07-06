@@ -571,6 +571,7 @@ export default function MixAndMatch({ onNavigate }) {
     try {
       const data = await api.checkAndGenerate({
         prompt_text: promptText,
+        arrangement_type: arrangementType,
         flower_id: primaryFlower?.id || undefined,
         // The acrylic box isn't a stocked product, so never send it as a wrapping_id.
         wrapping_id: (selections.wrapping && selections.wrapping !== ACRYLIC_BOX.id) ? selections.wrapping : undefined,

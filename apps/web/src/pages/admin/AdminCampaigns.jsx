@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
-import { DG, G, WhiteCard, ActionBtns, EmptyRow, TableWrap, TH, TD } from "./_adminShared"
+import { DG, G, ADMIN_PAGE_SIZE, WhiteCard, ActionBtns, EmptyRow, TableWrap, TH, TD } from "./_adminShared"
 
-const PAGE_SIZE = 10
+const PAGE_SIZE = ADMIN_PAGE_SIZE
 
 // Animated flower shown while the campaigns are still loading.
 function FlowerLoader({ message = "Loading...", isDark = false }) {

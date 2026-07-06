@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, Fragment } from "react"
 import { createPortal } from "react-dom"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
-import { DG, G, ActionBtns } from "./_adminShared"
+import { DG, G, ADMIN_PAGE_SIZE, ActionBtns } from "./_adminShared"
 import estingsWordmark from "../../assets/Estings.svg"
 
 // Example item names cycled through the search box as an animated, typewriter-style hint.
@@ -900,7 +900,7 @@ function Pagination({ showing, page, totalPages, onPageChange, isDark }) {
 // ── Main Component ──
 export default function AdminInventory() {
   const { isDark } = useTheme()
-  const PAGE_SIZE = 15
+  const PAGE_SIZE = ADMIN_PAGE_SIZE
   
   // States
   const [inventory, setInventory] = useState([])

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
-import { DG, G, Pagination } from "./_adminShared"
+import { DG, G, ADMIN_PAGE_SIZE, Pagination } from "./_adminShared"
 
 // Example user IDs cycled through the search box as an animated, typewriter-style hint.
 const SEARCH_SAMPLES = ["a3f9c2b1", "7d4e8f02", "c4e71a05", "5fa237ac"]
@@ -210,22 +210,22 @@ function ExportStaffBtn({ data=[], d }) {
 }
 
 // ── Pagination ────────────────────────────────────────────────────────────────
-function StaffPagination({ total=0, d }) {
-  const dis = total===0
+function StaffPagination({ showing=0, total=0, page=1, totalPages=1, onPageChange, d }) {
+  const dis = total === 0
+  const canPrev = page > 1
+  const canNext = page < totalPages
   const base = "px-3 py-1.5 text-xs font-semibold border rounded-md transition-all"
-  const ok   = { borderColor:d.inputBdr, color:d.cellC, cursor:"pointer", backgroundColor:d.inputBg }
-  const off  = { borderColor:d.hdrBdr,  color:d.muted, cursor:"not-allowed", backgroundColor:d.hdrBg }
+  const ok = { borderColor: d.inputBdr, color: d.cellC, cursor: "pointer", backgroundColor: d.inputBg }
+  const off = { borderColor: d.hdrBdr, color: d.muted, cursor: "not-allowed", backgroundColor: d.hdrBg }
   return (
-    <div className="flex items-center justify-between px-5 py-3" style={{ borderTop:`1px solid ${d.hdrBdr}` }}>
-      <p className="text-xs" style={{ color:d.muted }}>
-        {dis ? "Showing 0 staff accounts" : `Showing ${total} staff account${total!==1?"s":""}`}
+    <div className="flex items-center justify-between px-5 py-3" style={{ borderTop: `1px solid ${d.hdrBdr}` }}>
+      <p className="text-xs" style={{ color: d.muted }}>
+        {dis ? "Showing 0 staff accounts" : `Showing ${showing} of ${total} staff account${total !== 1 ? "s" : ""}`}
       </p>
       <div className="flex items-center gap-1">
-        {["← Prev","1","2","3","Next →"].map(lbl => (
-          <button key={lbl} disabled={dis} className={base} style={dis?off:ok}
-            onMouseEnter={e=>{if(!dis){e.currentTarget.style.borderColor="#4ade80";e.currentTarget.style.color="#4ade80"}}}
-            onMouseLeave={e=>{if(!dis){e.currentTarget.style.borderColor=d.inputBdr;e.currentTarget.style.color=d.cellC}}}>{lbl}</button>
-        ))}
+        <button disabled={!canPrev} onClick={() => onPageChange?.(page - 1)} className={base} style={!canPrev ? off : ok}>Prev</button>
+        <button className={base} style={dis ? off : { ...ok, color: "#fff", background: `linear-gradient(135deg,${DG},${G})`, borderColor: "transparent" }}>{page}</button>
+        <button disabled={!canNext} onClick={() => onPageChange?.(page + 1)} className={base} style={!canNext ? off : ok}>Next</button>
       </div>
     </div>
   )
@@ -750,6 +750,7 @@ export default function AdminStaff() {
   const [roleFilter, setRole]         = useState("")
   const [staff, setStaff]             = useState([])
   const [total, setTotal]             = useState(0)
+  const [page, setPage]               = useState(1)
   const [loading, setLoading]         = useState(true)
   const [error, setError]             = useState(null)
   // One-time entrance animation; dropped once it plays so it never replays.
@@ -763,25 +764,25 @@ export default function AdminStaff() {
   const fetchStaff = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const params = { limit: 500 }
-      if (search.trim()) params.search = search.trim()
-      if (branchFilter) params.branch = branchFilter.toLowerCase()
-      if (roleFilter)   params.role   = roleFilter.toLowerCase()
+      const baseParams = { limit: ADMIN_PAGE_SIZE, offset: (page - 1) * ADMIN_PAGE_SIZE }
+      if (search.trim()) baseParams.search = search.trim()
+      if (branchFilter) baseParams.branch = branchFilter.toLowerCase()
       if (statusFilter) {
         const m = { Active:"active", Inactive:"inactive", Suspended:"inactive", "Pending Activation":"pending" }
-        params.status = m[statusFilter]||statusFilter.toLowerCase()
+        baseParams.status = m[statusFilter]||statusFilter.toLowerCase()
       }
-      const data = await api.getUsers(params)
-      const users = data.users || []
-      const staffRoles = new Set(["admin", "staff", "delivery"])
-      const visibleUsers = roleFilter
-        ? users
-        : users.filter(user => staffRoles.has(String(user.role || "").toLowerCase()))
-      setStaff(visibleUsers); setTotal(roleFilter ? (data.total || visibleUsers.length) : visibleUsers.length)
+      const roles = roleFilter ? [roleFilter.toLowerCase()] : ["admin", "staff", "delivery"]
+      const responses = await Promise.all(roles.map(role => api.getUsers({ ...baseParams, role })))
+      const users = responses.flatMap(data => data.users || [])
+      users.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+      const visibleUsers = roleFilter ? users : users.slice(0, ADMIN_PAGE_SIZE)
+      const nextTotal = responses.reduce((sum, data) => sum + (data.total || 0), 0)
+      setStaff(visibleUsers); setTotal(nextTotal || visibleUsers.length)
     } catch(err){setError(err.message||"Failed to load staff")} finally{setLoading(false)}
-  }, [search,branchFilter,roleFilter,statusFilter])
+  }, [search,branchFilter,roleFilter,statusFilter,page])
 
   useEffect(() => { fetchStaff() }, [fetchStaff])
+  useEffect(() => { setPage(1) }, [search, branchFilter, roleFilter, statusFilter])
 
   // Play the entrance animation once the data has loaded, then turn it off.
   useEffect(() => {
@@ -810,6 +811,8 @@ export default function AdminStaff() {
   const adminCount    = staff.filter(s => s.role==="admin").length
   const staffCount    = staff.filter(s => s.role==="staff").length
   const deliveryCount = staff.filter(s => s.role==="delivery").length
+  const totalPages = Math.max(1, Math.ceil(total / ADMIN_PAGE_SIZE))
+  const pageSafe = Math.min(page, totalPages)
 
   const confirmDeactivate = async () => {
     if (!deactivating) return
@@ -1083,7 +1086,14 @@ export default function AdminStaff() {
           )}
         </div>
 
-        <StaffPagination total={total} d={d}/>
+        <StaffPagination
+          showing={staff.length}
+          total={total}
+          page={pageSafe}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          d={d}
+        />
       </div>
     </div>
   )
