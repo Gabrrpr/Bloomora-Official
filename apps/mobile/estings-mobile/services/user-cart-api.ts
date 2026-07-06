@@ -10,6 +10,7 @@ type BackendProduct = {
   id: string;
   image_url?: string | null;
   is_available?: boolean | null;
+  is_visible?: boolean | null;
   name: string;
   original_price?: number | null;
   price: number;
@@ -60,6 +61,7 @@ function mapProduct(product: BackendProduct): Product {
       ? product.image_url?.trim()
       : undefined,
     isActive: product.is_available !== false,
+    isVisible: product.is_visible === true,
     name: product.name,
     originalPriceCents:
       originalPrice > price ? Math.round(originalPrice * 100) : undefined,

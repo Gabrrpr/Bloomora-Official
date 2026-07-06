@@ -2,8 +2,9 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as Network from 'expo-network';
 import { Platform } from 'react-native';
 
+export const PRODUCTION_API_BASE_URL = 'https://api.estings.shop/api/v1';
 export const DEFAULT_API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL ?? 'https://api.estings.shop/api/v1';
+  process.env.EXPO_PUBLIC_API_URL ?? PRODUCTION_API_BASE_URL;
 
 const apiBaseUrlFileUri = `${FileSystem.documentDirectory}api-base-url.json`;
 const apiBaseUrlStorageKey = 'estings.api-base-url';
@@ -171,6 +172,18 @@ async function fetchWithRecovery(
 
     try {
       return await fetchFromBaseUrl(path, DEFAULT_API_BASE_URL, requestOptions, headers, token);
+    } catch {
+      await assertNetworkConnection();
+    }
+  }
+
+  if (normalizeBaseUrl(currentBaseUrl) !== normalizeBaseUrl(PRODUCTION_API_BASE_URL)) {
+    try {
+      const productionResponse = await fetchFromBaseUrl(path, PRODUCTION_API_BASE_URL, requestOptions, headers, token);
+      apiBaseUrl = PRODUCTION_API_BASE_URL;
+      hasLoadedStoredApiBaseUrl = true;
+      await clearStoredApiBaseUrl();
+      return productionResponse;
     } catch {
       await assertNetworkConnection();
     }

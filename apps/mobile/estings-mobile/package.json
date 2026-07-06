@@ -5,7 +5,6 @@
   "scripts": {
     "start": "expo start",
     "start:local": "expo start",
-    "start:render": "set EXPO_PUBLIC_API_URL=https://api.estings.shop/api/v1&& expo start --clear",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo run:android",
     "ios": "expo run:ios",

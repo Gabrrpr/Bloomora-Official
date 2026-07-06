@@ -7,6 +7,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from sqlalchemy import func, inspect
 from sqlalchemy.orm import Session, joinedload
 
+from app.core.config import settings
 from app.core.dependencies import get_current_user, get_db, require_delivery, require_staff
 from app.core.supabase import supabase
 from app.utils.lalamove import book_lalamove_delivery
@@ -29,6 +30,8 @@ from app.models import (
 )
 
 router = APIRouter(prefix="/deliveries", tags=["Deliveries"])
+
+DELIVERY_PROOFS_BUCKET = "delivery-proofs"
 
 RIDER_STATUS_ORDER = [
     DeliveryStatusEnum.assigned,
@@ -78,6 +81,43 @@ def _delivery_query(db: Session):
         joinedload(Delivery.vehicle),
         joinedload(Delivery.delivery_order),
     )
+
+
+def _is_missing_storage_bucket_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return "bucket" in message and any(term in message for term in ("not found", "does not exist", "not exist"))
+
+
+def _upload_delivery_proof_photo(filename: str, file_bytes: bytes, content_type: str) -> str:
+    file_options = {
+        "content-type": content_type if content_type.startswith("image/") else "image/jpeg",
+        "x-upsert": "true",
+    }
+
+    try:
+        supabase.storage.from_(DELIVERY_PROOFS_BUCKET).upload(
+            path=filename,
+            file=file_bytes,
+            file_options=file_options,
+        )
+        return supabase.storage.from_(DELIVERY_PROOFS_BUCKET).get_public_url(filename)
+    except Exception as exc:
+        fallback_bucket = (settings.SUPABASE_BUCKET or "").strip()
+        if not fallback_bucket or fallback_bucket == DELIVERY_PROOFS_BUCKET or not _is_missing_storage_bucket_error(exc):
+            print(f"Delivery proof upload error: {exc}")
+            raise HTTPException(status_code=502, detail="Could not upload proof photo. Please try again.") from exc
+
+        fallback_path = f"{DELIVERY_PROOFS_BUCKET}/{filename}"
+        try:
+            supabase.storage.from_(fallback_bucket).upload(
+                path=fallback_path,
+                file=file_bytes,
+                file_options=file_options,
+            )
+            return supabase.storage.from_(fallback_bucket).get_public_url(fallback_path)
+        except Exception as fallback_exc:
+            print(f"Delivery proof fallback upload error: {fallback_exc}")
+            raise HTTPException(status_code=502, detail="Could not upload proof photo. Please try again.") from fallback_exc
 
 
 def _delivery_order_query(db: Session):
@@ -1180,12 +1220,7 @@ async def submit_delivery_proof(
 
         ext = mimetypes.guess_extension(upload_content_type) or ".jpg"
         filename = f"{delivery.id}/{uuid.uuid4()}{ext}"
-        supabase.storage.from_("delivery-proofs").upload(
-            path=filename,
-            file=file_bytes,
-            file_options={"content-type": upload_content_type if upload_content_type.startswith("image/") else "image/jpeg", "x-upsert": "true"},
-        )
-        final_photo_url = supabase.storage.from_("delivery-proofs").get_public_url(filename)
+        final_photo_url = _upload_delivery_proof_photo(filename, file_bytes, upload_content_type)
 
     if not final_photo_url:
         raise HTTPException(status_code=400, detail="Proof photo is required.")
