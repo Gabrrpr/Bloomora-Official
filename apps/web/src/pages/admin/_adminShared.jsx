@@ -36,6 +36,7 @@ const BADGE = {
   "Pending":          { bg: "#fef9c3", color: "#92400e", dot: "#eab308" },
   "Ready for Pickup": { bg: "#ffedd5", color: "#9a3412", dot: "#f97316" },
   "Delivered":        { bg: "#dcfce7", color: "#15803d", dot: "#22c55e" },
+  "Completed":        { bg: "#dcfce7", color: "#15803d", dot: "#22c55e" },
   "Paid":             { bg: "#f0fdf4", color: "#166534", dot: "#22c55e" },
   "Unpaid":           { bg: "#fee2e2", color: "#dc2626", dot: "#ef4444" },
   "Refunded":         { bg: "#fef3c7", color: "#92400e", dot: "#f59e0b" },

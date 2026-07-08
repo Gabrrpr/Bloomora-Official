@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react"
+import React, { useState, useRef, useEffect, useCallback, useMemo } from "react"
 import { createPortal } from "react-dom"
 import { useNavigate } from "react-router-dom"
 import { useAuth } from "../../context/AuthContext"
@@ -1511,36 +1511,123 @@ function MyProfilePanel({ user, onBack }) {
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────
-function NotificationsPage({ notifications = [], onBack }) {
+const NOTIFICATION_FILTERS = [
+  { key: "all", label: "All", types: [] },
+  { key: "unread", label: "Unread", unreadOnly: true },
+  { key: "orders", label: "Orders", types: ["order"] },
+  { key: "inventory", label: "Inventory", types: ["inventory", "stock"] },
+  { key: "messages", label: "Messages", types: ["message", "chat"] },
+  { key: "system", label: "System", types: ["system", "delivery", "payment", "promotion"] },
+]
+
+function notificationTime(iso) {
+  const timestamp = new Date(iso).getTime()
+  return Number.isFinite(timestamp) ? timestamp : 0
+}
+
+function notificationAgeLabel(iso) {
+  const timestamp = notificationTime(iso)
+  if (!timestamp) return "Unknown time"
+  const diff = Date.now() - timestamp
+  const mins = Math.max(0, Math.floor(diff / 60000))
+  if (mins < 1) return "Just now"
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  return `${Math.floor(hrs / 24)}d ago`
+}
+
+function notificationDayGroup(iso) {
+  const timestamp = notificationTime(iso)
+  if (!timestamp) return "Earlier"
+  const created = new Date(timestamp)
+  const today = new Date()
+  const startToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime()
+  const startCreated = new Date(created.getFullYear(), created.getMonth(), created.getDate()).getTime()
+  const dayDiff = Math.round((startToday - startCreated) / 86400000)
+  if (dayDiff === 0) return "Today"
+  if (dayDiff === 1) return "Yesterday"
+  if (dayDiff < 7) return "This week"
+  return "Earlier"
+}
+
+function notificationMeta(type = "") {
+  const normalized = String(type || "system").toLowerCase()
+  if (normalized.includes("order")) return { label: "Order", tone: "#2563eb", bg: "rgba(37,99,235,0.1)", d: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414A1 1 0 0119 9.414V19a2 2 0 01-2 2z" }
+  if (normalized.includes("inventory") || normalized.includes("stock")) return { label: "Inventory", tone: "#d97706", bg: "rgba(217,119,6,0.12)", d: "M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" }
+  if (normalized.includes("message") || normalized.includes("chat")) return { label: "Message", tone: "#7c3aed", bg: "rgba(124,58,237,0.1)", d: "M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" }
+  if (normalized.includes("delivery")) return { label: "Delivery", tone: "#0891b2", bg: "rgba(8,145,178,0.1)", d: "M8 4H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-2m-4-1v8m0 0l3-3m-3 3L9 8" }
+  return { label: "System", tone: G, bg: "rgba(46,139,52,0.1)", d: "M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" }
+}
+
+function organizeNotifications(notifications, activeFilter) {
+  const filter = NOTIFICATION_FILTERS.find(item => item.key === activeFilter) || NOTIFICATION_FILTERS[0]
+  const filtered = notifications
+    .filter(notification => {
+      const type = String(notification.type || "system").toLowerCase()
+      if (filter.unreadOnly) return !notification.is_read
+      if (!filter.types.length) return true
+      return filter.types.some(allowed => type.includes(allowed))
+    })
+    .sort((a, b) => {
+      if (Boolean(a.is_read) !== Boolean(b.is_read)) return a.is_read ? 1 : -1
+      return notificationTime(b.created_at) - notificationTime(a.created_at)
+    })
+
+  return filtered.reduce((groups, notification) => {
+    const label = notificationDayGroup(notification.created_at)
+    const last = groups[groups.length - 1]
+    if (last?.label === label) last.items.push(notification)
+    else groups.push({ label, items: [notification] })
+    return groups
+  }, [])
+}
+
+function NotificationsPage({ notifications = [], onBack, onMarkAllRead }) {
   const { isDark } = useTheme()
   const t = useTokens(isDark)
-
-  const timeAgo = (iso) => {
-    const diff = Date.now() - new Date(iso).getTime()
-    const mins = Math.floor(diff / 60000)
-    if (mins < 1) return "Just now"
-    if (mins < 60) return `${mins}m ago`
-    const hrs = Math.floor(mins / 60)
-    if (hrs < 24) return `${hrs}h ago`
-    return `${Math.floor(hrs / 24)}d ago`
-  }
+  const [activeFilter, setActiveFilter] = useState("all")
+  const groups = useMemo(() => organizeNotifications(notifications, activeFilter), [notifications, activeFilter])
+  const unreadTotal = useMemo(() => notifications.filter(n => !n.is_read).length, [notifications])
+  const counts = useMemo(() => NOTIFICATION_FILTERS.reduce((acc, filter) => {
+    acc[filter.key] = filter.key === "all"
+      ? notifications.length
+      : organizeNotifications(notifications, filter.key).reduce((sum, group) => sum + group.items.length, 0)
+    return acc
+  }, {}), [notifications])
 
   return (
     <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold" style={{ color: t.textPrimary }}>Notifications</h1>
-        <div className="flex items-center gap-2">
-          <button className="text-xs font-semibold px-3 py-2 border rounded-md transition-all"
-            style={{ borderColor: t.cardBorder, color: t.textSecondary }}>Mark all as read</button>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-xl font-bold" style={{ color: t.textPrimary }}>Notifications</h1>
+          <p className="text-xs mt-1" style={{ color: t.textMuted }}>
+            {notifications.length} total - {unreadTotal} unread - newest activity first
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={onMarkAllRead} disabled={unreadTotal === 0}
+            className="text-xs font-semibold px-3 py-2 border rounded-md transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ borderColor: t.cardBorder, color: unreadTotal > 0 ? (isDark ? "#4ade80" : G) : t.textMuted }}>Mark all as read</button>
           <button onClick={onBack} className="flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold border rounded-md transition-all"
             style={{ borderColor: t.cardBorder, color: t.textSecondary }}>← Back</button>
         </div>
       </div>
       <div className="rounded-xl overflow-hidden" style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
-        <div className="flex px-2 pt-2" style={{ borderBottom: `1px solid ${t.tableBorder}` }}>
-          {["All","Orders","Messages","System"].map(tt => (
-            <button key={tt} className="px-4 py-2.5 text-sm font-semibold border-b-2 transition-all mr-1"
-              style={{ borderColor: tt === "All" ? G : "transparent", color: tt === "All" ? (isDark ? "#4ade80" : G) : t.textMuted }}>{tt}</button>
+        <div className="flex gap-2 px-3 py-3 overflow-x-auto" style={{ borderBottom: `1px solid ${t.tableBorder}`, backgroundColor: t.tableHead }}>
+          {NOTIFICATION_FILTERS.map(filter => (
+            <button key={filter.key} onClick={() => setActiveFilter(filter.key)}
+              className="flex items-center gap-2 px-3 py-2 text-xs font-bold rounded-md border transition-all whitespace-nowrap"
+              style={{
+                borderColor: activeFilter === filter.key ? (isDark ? "rgba(74,222,128,0.45)" : "#bbf7d0") : t.cardBorder,
+                backgroundColor: activeFilter === filter.key ? (isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4") : "transparent",
+                color: activeFilter === filter.key ? (isDark ? "#4ade80" : G) : t.textMuted,
+              }}>
+              {filter.label}
+              <span className="px-1.5 py-0.5 rounded-full text-[10px]" style={{ backgroundColor: isDark ? "rgba(255,255,255,0.08)" : "#eef2f7", color: t.textMuted }}>
+                {counts[filter.key] || 0}
+              </span>
+            </button>
           ))}
         </div>
         {notifications.length === 0 ? (
@@ -1554,21 +1641,47 @@ function NotificationsPage({ notifications = [], onBack }) {
             <p className="text-sm font-semibold" style={{ color: t.textSecondary }}>All caught up!</p>
             <p className="text-xs mt-1 max-w-xs" style={{ color: t.textMuted }}>No notifications right now.</p>
           </div>
+        ) : groups.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center px-4">
+            <p className="text-sm font-semibold" style={{ color: t.textSecondary }}>Nothing in this view</p>
+            <p className="text-xs mt-1 max-w-xs" style={{ color: t.textMuted }}>Try another notification category.</p>
+          </div>
         ) : (
           <div className="flex flex-col">
-            {notifications.map((n) => (
-              <div key={n.id} className="px-5 py-4 border-b transition-colors"
-                style={{ borderColor: t.tableBorder, backgroundColor: n.is_read ? "transparent" : (isDark ? "rgba(74,222,128,0.06)" : "#f0fdf4") }}>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-sm font-semibold truncate" style={{ color: t.textPrimary }}>{n.title || "Notification"}</span>
-                      {!n.is_read && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: isDark ? "#4ade80" : "#2E8B34" }} />}
-                    </div>
-                    {n.message && <p className="text-xs leading-relaxed line-clamp-3" style={{ color: t.textSecondary }}>{n.message}</p>}
-                    <p className="text-[10px] mt-2 font-medium uppercase tracking-wider" style={{ color: t.textMuted }}>{n.type || "system"} · {timeAgo(n.created_at)}</p>
-                  </div>
+            {groups.map(group => (
+              <div key={group.label}>
+                <div className="px-5 py-2.5 text-[11px] font-bold uppercase tracking-wider"
+                  style={{ color: t.textMuted, backgroundColor: isDark ? "rgba(255,255,255,0.025)" : "#f8fafc", borderBottom: `1px solid ${t.tableBorder}` }}>
+                  {group.label}
                 </div>
+                {group.items.map((n) => {
+                  const meta = notificationMeta(n.type)
+                  return (
+                    <div key={n.id} className="px-5 py-4 border-b transition-colors"
+                      style={{ borderColor: t.tableBorder, backgroundColor: n.is_read ? "transparent" : (isDark ? "rgba(74,222,128,0.06)" : "#f0fdf4") }}>
+                      <div className="flex items-start gap-3">
+                        <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: meta.bg, color: meta.tone }}>
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={meta.d}/>
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-sm font-semibold truncate" style={{ color: t.textPrimary }}>{n.title || "Notification"}</span>
+                            {!n.is_read && <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: isDark ? "#4ade80" : "#2E8B34" }} />}
+                          </div>
+                          {n.message && <p className="text-xs leading-relaxed line-clamp-3" style={{ color: t.textSecondary }}>{n.message}</p>}
+                          <div className="flex items-center gap-2 mt-2 flex-wrap">
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full" style={{ color: meta.tone, backgroundColor: meta.bg }}>{meta.label}</span>
+                            <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: t.textMuted }}>{notificationAgeLabel(n.created_at)}</span>
+                            {n.order_id && <span className="text-[10px] font-medium" style={{ color: t.textMuted }}>Order linked</span>}
+                            {n.delivery_id && <span className="text-[10px] font-medium" style={{ color: t.textMuted }}>Delivery linked</span>}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             ))}
           </div>
@@ -1581,16 +1694,10 @@ function NotificationsPage({ notifications = [], onBack }) {
 function NotificationPanel({ notifications, unreadCount, loading, onMarkAllRead, onViewAll, onNotificationClick }) {
   const { isDark } = useTheme()
   const t = useTokens(isDark)
-
-  const timeAgo = (iso) => {
-    const diff = Date.now() - new Date(iso).getTime()
-    const mins = Math.floor(diff / 60000)
-    if (mins < 1) return "Just now"
-    if (mins < 60) return `${mins}m ago`
-    const hrs = Math.floor(mins / 60)
-    if (hrs < 24) return `${hrs}h ago`
-    return `${Math.floor(hrs / 24)}d ago`
-  }
+  const organizedPreview = useMemo(() => [...notifications].sort((a, b) => {
+    if (Boolean(a.is_read) !== Boolean(b.is_read)) return a.is_read ? 1 : -1
+    return notificationTime(b.created_at) - notificationTime(a.created_at)
+  }), [notifications])
 
   return (
     <div className="absolute right-0 top-full mt-2 rounded-xl overflow-hidden z-50"
@@ -1631,7 +1738,9 @@ function NotificationPanel({ notifications, unreadCount, loading, onMarkAllRead,
           </div>
         ) : (
           <div className="flex flex-col">
-            {notifications.slice(0, 8).map((n) => (
+            {organizedPreview.slice(0, 8).map((n) => {
+              const meta = notificationMeta(n.type)
+              return (
               <button
                 key={n.id}
                 onClick={() => onNotificationClick(n)}
@@ -1641,14 +1750,20 @@ function NotificationPanel({ notifications, unreadCount, loading, onMarkAllRead,
                 onMouseLeave={e => e.currentTarget.style.backgroundColor = n.is_read ? "transparent" : (isDark ? "rgba(74,222,128,0.06)" : "#f0fdf4")}
               >
                 <div className="flex items-start justify-between gap-2">
+                  <span className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: meta.bg, color: meta.tone }}>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d={meta.d}/>
+                    </svg>
+                  </span>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold truncate" style={{ color: t.textPrimary }}>{n.title || "Notification"}</p>
                     {n.message && <p className="text-xs mt-0.5 line-clamp-2" style={{ color: t.textMuted }}>{n.message}</p>}
                   </div>
-                  <span className="text-[10px] flex-shrink-0 mt-0.5" style={{ color: t.textMuted }}>{timeAgo(n.created_at)}</span>
+                  <span className="text-[10px] flex-shrink-0 mt-0.5" style={{ color: t.textMuted }}>{notificationAgeLabel(n.created_at)}</span>
                 </div>
               </button>
-            ))}
+              )
+            })}
           </div>
         )}
       </div>
@@ -2261,6 +2376,12 @@ export default function AdminDashboard({ onNavigate }) {
     loadNotifications()
   }, [loadNotifications])
 
+  const handleMarkAllNotificationsRead = useCallback(async () => {
+    await api.markAllNotificationsRead()
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
+    setUnreadCount(0)
+  }, [])
+
   const handleLogout  = () => { logout(); onNavigate("login") }
   const toggleSidebar = () => {
     if (window.innerWidth >= 1024) setSidebarWidth(w => w > SIDEBAR_MIN + 10 ? SIDEBAR_MIN : SIDEBAR_MAX)
@@ -2315,7 +2436,7 @@ export default function AdminDashboard({ onNavigate }) {
 
   const renderMain = () => {
     if (overlay === "profile") return <MyProfilePanel user={user} onBack={() => setOverlay(null)} />
-    if (overlay === "notifications") return <NotificationsPage notifications={notifications} onBack={() => setOverlay(null)} />
+    if (overlay === "notifications") return <NotificationsPage notifications={notifications} onBack={() => setOverlay(null)} onMarkAllRead={handleMarkAllNotificationsRead} />
 
     return Array.from(visitedPanels).map(panel => (
       <section key={panel} style={{ display: panel === active ? "block" : "none" }}>
@@ -2397,11 +2518,7 @@ export default function AdminDashboard({ onNavigate }) {
                    notifications={notifications}
                    unreadCount={unreadCount}
                    loading={loadingNotifs}
-                   onMarkAllRead={async () => {
-                     await api.markAllNotificationsRead()
-                     setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
-                     setUnreadCount(0)
-                   }}
+                   onMarkAllRead={handleMarkAllNotificationsRead}
                    onViewAll={() => { setOverlay("notifications"); setNotifOpen(false) }}
                    onNotificationClick={async (notification) => {
                      if (!notification.is_read) {

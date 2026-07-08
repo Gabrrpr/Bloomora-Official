@@ -7,11 +7,12 @@ import estingsWordmark from "../../assets/Estings.svg"
 // 🚀 NEW: Import Fallback Image
 import ImageNotFound from "../../assets/default-img/ImageNotFound.webp"
 
-const ORDER_STATUSES = ["All", "Pending", "Confirmed", "Preparing", "Ready for Pickup", "Out for Delivery", "Delivered", "Cancelled"]
+const ORDER_STATUSES = ["All", "Pending", "Confirmed", "Preparing", "Ready for Pickup", "Out for Delivery", "Delivered", "Completed", "Cancelled"]
 const MANUAL_ORDER_STATUSES = [
   { label: "Confirmed", value: "confirmed" },
   { label: "Preparing", value: "preparing" },
   { label: "Ready for Pickup", value: "ready_for_pickup" },
+  { label: "Completed", value: "completed" },
   { label: "Cancelled", value: "cancelled" },
 ]
 
@@ -26,6 +27,7 @@ const PRINT_STATUS_META = [
   { key: "Preparing",       label: "Preparing",       cls: "s-preparing" },
   { key: "Out for Delivery", label: "Out for Delivery", cls: "s-ofd"       },
   { key: "Delivered",       label: "Delivered",       cls: "s-delivered" },
+  { key: "Completed",       label: "Completed",       cls: "s-delivered" },
   { key: "Cancelled",       label: "Cancelled",       cls: "s-cancelled" },
 ]
 
@@ -609,6 +611,7 @@ export default function AdminOrders() {
   const pct = n => (filtered.length ? (n / filtered.length) * 100 : 0)
 
   const deliveredCount  = statusCounts["Delivered"] || 0
+  const completedCount  = statusCounts["Completed"] || 0
   const cancelledCount  = statusCounts["Cancelled"] || 0
   const openOrders      = (statusCounts["Pending"] || 0) + (statusCounts["Confirmed"] || 0) + (statusCounts["Preparing"] || 0) + (statusCounts["Ready for Pickup"] || 0) + (statusCounts["Out for Delivery"] || 0)
   const filteredValue   = filtered.reduce((s, o) => s + (parseFloat(o.total_amount || 0) || 0), 0)
@@ -1724,7 +1727,7 @@ export default function AdminOrders() {
           <div className="op-card c-cancel">
             <p className="label">Cancelled</p>
             <p className="value red">{cancelledCount}</p>
-            <p className="cap">{deliveredCount} delivered</p>
+            <p className="cap">{deliveredCount + completedCount} completed/delivered</p>
           </div>
         </div>
 

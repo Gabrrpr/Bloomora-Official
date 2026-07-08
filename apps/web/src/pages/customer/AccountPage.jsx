@@ -6,6 +6,7 @@ import Footer from "../../components/Footer"
 import { api } from "../../services/api.js"
 import { API_BASE } from "../../config/api.js"
 import { regions, getProvinces } from "../../utils/philippines"
+import Orders from "./Orders"
 
 const G   = "#2E8B34"
 const DG  = "#0C573E"
@@ -229,23 +230,10 @@ function OverviewPanel({ user, setPanel, isDark, showToast, onNavigate }) {
 
 // ── OrdersPanel ───────────────────────────────────────────────────────────────
 function OrdersPanel({ onNavigate, isDark }) {
-  const iconBg = isDark ? "#1e293b" : "#f3f4f6"
-  const iconC  = isDark ? "#334155" : "#d1d5db"
-  const headC  = isDark ? "#f1f5f9" : "#374151"
-  const subC   = isDark ? "#64748b" : "#9ca3af"
   return (
     <div>
       <SectionHeader title="My Orders" description="Track and manage your recent purchases." isDark={isDark}/>
-      <div className="flex flex-col items-center py-12 sm:py-16 text-center">
-        <div className="w-16 h-16 rounded-full flex items-center justify-center mb-5" style={{ backgroundColor:iconBg }}>
-          <svg className="w-7 h-7" style={{ color:iconC }} fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.2">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.119 1.007Z"/>
-          </svg>
-        </div>
-        <p className="text-base font-semibold mb-1" style={{ color:headC }}>No orders yet</p>
-        <p className="text-sm mb-6" style={{ color:subC }}>When you place an order, it will appear here.</p>
-        <PrimaryBtn onClick={() => onNavigate?.("shop")}>Browse Our Shop</PrimaryBtn>
-      </div>
+      <Orders onNavigate={onNavigate} embedded />
     </div>
   )
 }

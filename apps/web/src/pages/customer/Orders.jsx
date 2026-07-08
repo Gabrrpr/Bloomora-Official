@@ -2,11 +2,11 @@ import { useState, useEffect } from "react"
 import { api } from "../../services/api.js"
 import { useTheme } from "../../context/ThemeContext"
 
-const TABS = ["All", "Pending", "Preparing", "Out for Delivery", "Delivered", "Cancelled"]
+const TABS = ["All", "Pending", "Preparing", "Out for Delivery", "Delivered", "Completed", "Cancelled"]
 
 const STATUS_META = {
   delivered:        { color: "#2D5016", bg: "#EEF5E6", label: "Delivered" },
-  completed:        { color: "#2D5016", bg: "#EEF5E6", label: "Delivered" },
+  completed:        { color: "#2D5016", bg: "#EEF5E6", label: "Completed" },
   preparing:        { color: "#185FA5", bg: "#E8F0FA", label: "Preparing" },
   pending:          { color: "#8A6020", bg: "#FDF4E3", label: "Pending" },
   out_for_delivery: { color: "#7A3B1E", bg: "#FAEAE4", label: "Out for Delivery" },
@@ -17,8 +17,6 @@ const DEFAULT_STATUS = { color: "#8A6020", bg: "#FDF4E3", label: "Pending" }
 
 function formatStatus(s) {
   if (!s) return "Pending"
-  const normalized = s.toLowerCase()
-  if (normalized === "completed") return "Delivered"
   return s.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
 }
 
@@ -234,7 +232,7 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
   )
 }
 
-export default function Orders({ onNavigate }) {
+export default function Orders({ onNavigate, embedded = false }) {
   const { isDark } = useTheme()
   const headingC = isDark ? "#f3f4f6" : "#1C2B14"
   const lineBdr  = isDark ? "#2d3748" : "#E8EDE3"
@@ -269,7 +267,7 @@ export default function Orders({ onNavigate }) {
     : orders.filter(o => formatStatus(o.status) === tab)
 
   return (
-    <div className="min-h-screen orders-root">
+    <div className={`${embedded ? "" : "min-h-screen"} orders-root`}>
       <style>{`
         @keyframes ordersRise {
           from { opacity: 0; transform: translateY(12px); }
@@ -289,12 +287,12 @@ export default function Orders({ onNavigate }) {
         [data-theme="dark"] .orders-root .border-gray-100{border-color:#2d3748 !important}
       `}</style>
 
-      <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8">
+      <div className={embedded ? "max-w-3xl" : "max-w-3xl mx-auto px-4 py-6 sm:py-8"}>
 
         {/* Header */}
         <div className="flex items-center justify-between gap-3 mb-5" style={{ animation: "ordersRise 0.4s ease both" }}>
           <h1 className="text-xl sm:text-2xl font-bold tracking-tight" style={{ color: headingC }}>
-            Track My Order
+            {embedded ? "My Orders" : "Track My Order"}
           </h1>
           {!loading && (
             <span className="text-xs font-semibold px-3 py-1.5 rounded-full whitespace-nowrap"

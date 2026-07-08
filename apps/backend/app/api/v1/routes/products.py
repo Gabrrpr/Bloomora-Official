@@ -822,6 +822,36 @@ def update_product(
         raise HTTPException(status_code=404, detail="Product not found")
 
     try:
+        inv = db.query(Inventory).filter(Inventory.product_id == product.id).first()
+        product_before = {
+            "Name": product.name,
+            "Group": product.product_group,
+            "Description": product.description,
+            "Care guide": product.care_guide,
+            "Selling price": product.price,
+            "Category": product.category,
+            "Product type": product.product_type,
+            "Status": getattr(product.status, "value", product.status),
+            "Available": product.is_available,
+            "Visible": product.is_visible,
+            "Image": product.image_url,
+            "Season": product.season_key,
+            "Limited start": product.limited_start_at,
+            "Limited end": product.limited_end_at,
+            "Composition": product.composition,
+            "Occasions": product.occasions,
+            "Branches": product.branches,
+            "Tags": product.tags,
+        }
+        inventory_before = {
+            "Total stock": getattr(inv, "current_stock", None),
+            "Manila stock": getattr(inv, "stock_manila", None),
+            "Pampanga stock": getattr(inv, "stock_pampanga", None),
+            "Unit type": getattr(inv, "unit_type", None),
+            "Reorder point": getattr(inv, "reorder_point", None),
+            "Cost per unit": getattr(inv, "cost_per_unit", None),
+        }
+
         if name is not None:
             product.name = name
         if group is not None:
@@ -904,7 +934,6 @@ def update_product(
                 pass
 
         if any(v is not None for v in [stock, stock_manila, stock_pampanga, unit_type, reorder_point, cost_val]):
-            inv = db.query(Inventory).filter(Inventory.product_id == product.id).first()
             if not inv:
                 inv = Inventory(product_id=product.id, current_stock=stock or 0, reorder_point=reorder_point or 10)
                 db.add(inv)
@@ -920,13 +949,65 @@ def update_product(
 
         db.commit()
         db.refresh(product)
+
+        def audit_value(value):
+            if hasattr(value, "value"):
+                value = value.value
+            if isinstance(value, Decimal):
+                return str(value)
+            if isinstance(value, (list, dict)):
+                return json.dumps(value, ensure_ascii=False)
+            if value is True:
+                return "Yes"
+            if value is False:
+                return "No"
+            if value in (None, ""):
+                return "empty"
+            return str(value)
+
+        product_after = {
+            "Name": product.name,
+            "Group": product.product_group,
+            "Description": product.description,
+            "Care guide": product.care_guide,
+            "Selling price": product.price,
+            "Category": product.category,
+            "Product type": product.product_type,
+            "Status": getattr(product.status, "value", product.status),
+            "Available": product.is_available,
+            "Visible": product.is_visible,
+            "Image": product.image_url,
+            "Season": product.season_key,
+            "Limited start": product.limited_start_at,
+            "Limited end": product.limited_end_at,
+            "Composition": product.composition,
+            "Occasions": product.occasions,
+            "Branches": product.branches,
+            "Tags": product.tags,
+        }
+        inventory_after = {
+            "Total stock": getattr(inv, "current_stock", None),
+            "Manila stock": getattr(inv, "stock_manila", None),
+            "Pampanga stock": getattr(inv, "stock_pampanga", None),
+            "Unit type": getattr(inv, "unit_type", None),
+            "Reorder point": getattr(inv, "reorder_point", None),
+            "Cost per unit": getattr(inv, "cost_per_unit", None),
+        }
+        changed_fields = []
+        for label, before_value in {**product_before, **inventory_before}.items():
+            after_value = {**product_after, **inventory_after}.get(label)
+            if audit_value(before_value) != audit_value(after_value):
+                changed_fields.append(f"{label}: {audit_value(before_value)} -> {audit_value(after_value)}")
+        details = "; ".join(changed_fields[:12]) if changed_fields else "No field-level changes detected."
+        if len(changed_fields) > 12:
+            details += f"; +{len(changed_fields) - 12} more"
         
         log_activity(
             db=db,
-            action=f"Update Record: Staff/Admin updated details for product '{product.name}'",
+            action=f"Update Record: Updated product '{product.name}'",
+            details=details,
             user_id=str(current_user.id), 
-            role=current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
-            ip_address=request.client.host if request.client else "Unknown"
+            role=current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
         )
 
         return {"status": "success", "product": serialize_product(product)}

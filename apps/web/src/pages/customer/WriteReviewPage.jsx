@@ -174,8 +174,8 @@ export default function WriteReviewPage({ onNavigate, orderId }) {
       <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#f5f5f2" }}>
         <div className="flex-1 flex items-center justify-center px-4">
           <div className="text-center">
-            <p className="text-xl font-bold text-gray-900 mb-2">Not delivered yet</p>
-            <p className="text-gray-400 text-sm mb-5">You can review once your order has been delivered.</p>
+            <p className="text-xl font-bold text-gray-900 mb-2">Order not completed yet</p>
+            <p className="text-gray-400 text-sm mb-5">You can review once your order has been completed.</p>
             <button onClick={() => onNavigate?.("orders")} className="text-sm font-semibold" style={{ color: G }}>
               View order status
             </button>
@@ -270,7 +270,7 @@ export default function WriteReviewPage({ onNavigate, orderId }) {
               <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
-              Delivered
+              {currentStatus === "completed" ? "Completed" : "Delivered"}
             </span>
           </div>
         </div>

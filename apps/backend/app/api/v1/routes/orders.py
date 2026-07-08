@@ -1378,6 +1378,7 @@ def _notify_order(db: Session, order: Order, status: str):
         "preparing":        ("We're Preparing Your Order 🌿", "Your order {num} is now being prepared by our florists."),
         "out_for_delivery": ("On Its Way! 🚚",             "Your order {num} is out for delivery. Expect it soon!"),
         "delivered":        ("Order Delivered 🎉",         "Your order {num} has been delivered. Enjoy your blooms!"),
+        "completed":        ("Order Completed",            "Your order {num} is complete. You can now leave a review."),
         "cancelled":        ("Order Cancelled",            "Your order {num} has been cancelled. Contact us if this was a mistake."),
     }
 
@@ -1531,6 +1532,7 @@ def force_order_status(
         "confirmed": OrderStatusEnum.confirmed,
         "preparing": OrderStatusEnum.preparing,
         "ready_for_pickup": OrderStatusEnum.ready_for_pickup,
+        "completed": OrderStatusEnum.completed,
         "cancelled": OrderStatusEnum.cancelled,
     }
 
@@ -1541,16 +1543,20 @@ def force_order_status(
         _convert_reservations(db, order) 
         _increment_sold_count(db, order)
     elif status in allowed_manual_statuses:
-        if status == "ready_for_pickup":
+        if status in {"ready_for_pickup", "completed"}:
             payment_status = order.transaction.status if order.transaction else None
             if payment_status != PaymentStatusEnum.paid:
-                raise HTTPException(status_code=400, detail="Only paid orders can be marked ready for pickup.")
+                raise HTTPException(status_code=400, detail="Only paid orders can be marked ready for pickup or completed.")
         order.status = allowed_manual_statuses[status]
+        if status == "completed":
+            order.can_review = True
     else:
         raise HTTPException(
             status_code=400,
-            detail="Select confirmed, preparing, ready_for_pickup, or cancelled from Orders. Delivery statuses are managed in the delivery module.",
+            detail="Select confirmed, preparing, ready_for_pickup, completed, or cancelled from Orders. Delivery statuses are managed in the delivery module.",
         )
         
     db.commit()
+    if status == "completed":
+        _notify_order(db, order, "completed")
     return {"status": "success", "new_status": order.status}

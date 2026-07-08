@@ -110,6 +110,37 @@ function RoleBadge({ role, isDark }) {
   return <span className="text-xs font-semibold uppercase tracking-wider" style={{ color: s.color }}>{s.label}</span>
 }
 
+function splitAction(action = "") {
+  const parts = String(action || "").split(":")
+  if (parts.length < 2) return { type: action || "System Action", summary: action || "System activity" }
+  return {
+    type: parts[0].trim(),
+    summary: parts.slice(1).join(":").trim() || action,
+  }
+}
+
+function extractQuotedTarget(text = "") {
+  const match = String(text || "").match(/'([^']+)'|"([^"]+)"/)
+  return match?.[1] || match?.[2] || ""
+}
+
+function getSpecificActivity(log) {
+  const { type, summary } = splitAction(log.action)
+  const target = extractQuotedTarget(log.action)
+  const details = String(log.details || "").trim()
+  const cleanedSummary = summary
+    .replace(/^Staff\/Admin\s+/i, "")
+    .replace(/\s*'[^']+'\s*$/, target ? "" : "")
+    .trim()
+
+  return {
+    type,
+    target,
+    summary: cleanedSummary || summary || type,
+    details: details || (target ? `Target record: ${target}` : ""),
+  }
+}
+
 // Animated flower shown while the logs are still loading.
 function FlowerLoader({ message = "Loading...", isDark = false }) {
   const petals = [
@@ -147,7 +178,7 @@ function FlowerLoader({ message = "Loading...", isDark = false }) {
   )
 }
 
-const COLS = ["Timestamp", "Staff Name", "Role", "Action Type", "Branch", "Details"]
+const COLS = ["Timestamp", "Staff Name", "Role", "Action Type", "Branch", "Specific Activity"]
 const PAGE_SIZE = ADMIN_PAGE_SIZE
 
 export default function AdminActivityLogs() {
@@ -210,11 +241,14 @@ export default function AdminActivityLogs() {
   }, [search])
 
   const filtered = logs.filter(log => {
+    const activity = getSpecificActivity(log)
     const matchSearch = !search ||
       log.action?.toLowerCase().includes(search.toLowerCase()) ||
       log.branch?.toLowerCase().includes(search.toLowerCase()) ||
       log.staff_name?.toLowerCase().includes(search.toLowerCase()) ||
-      log.details?.toLowerCase().includes(search.toLowerCase())
+      log.details?.toLowerCase().includes(search.toLowerCase()) ||
+      activity.target?.toLowerCase().includes(search.toLowerCase()) ||
+      activity.summary?.toLowerCase().includes(search.toLowerCase())
 
     const matchAction = actionFilter === "All Actions" || log.action?.toLowerCase().includes(actionFilter.toLowerCase())
 
@@ -306,16 +340,21 @@ export default function AdminActivityLogs() {
   ].filter(Boolean).join("   ·   ")
 
   const handleCSV = () => {
-    const headers = ["ID", "Timestamp", "Staff Name", "Role", "Action", "Branch", "Details"]
-    const rows = filtered.map(log => [
-      log.id,
-      new Date(log.created_at).toLocaleString("en-PH"),
-      log.staff_name || "Unknown staff",
-      log.role || "Unknown",
-      log.action,
-      log.branch || "N/A",
-      log.details || ""
-    ])
+    const headers = ["ID", "Timestamp", "Staff Name", "Role", "Action Type", "Branch", "Activity", "Target", "Details"]
+    const rows = filtered.map(log => {
+      const activity = getSpecificActivity(log)
+      return [
+        log.id,
+        new Date(log.created_at).toLocaleString("en-PH"),
+        log.staff_name || "Unknown staff",
+        log.role || "Unknown",
+        activity.type,
+        log.branch || "N/A",
+        activity.summary,
+        activity.target || "",
+        activity.details || "",
+      ]
+    })
     const csv = [headers, ...rows].map(r => r.map(v => `"${v}"`).join(",")).join("\n")
     const a = Object.assign(document.createElement("a"), {
       href: URL.createObjectURL(new Blob([csv], { type: "text/csv" })),
@@ -639,7 +678,9 @@ export default function AdminActivityLogs() {
                     </td>
                   </tr>
                 ) : (
-                  paginated.map((log, idx) => (
+                  paginated.map((log, idx) => {
+                    const activity = getSpecificActivity(log)
+                    return (
                     <tr key={log.id} 
                       style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#f8fafc"}`, backgroundColor: isDark ? (idx % 2 === 0 ? "#1a2332" : "#111827") : "white" }}
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.04)" : "#f8fffe"}
@@ -672,7 +713,7 @@ export default function AdminActivityLogs() {
                         <ActionBadge action={log.action} isDark={isDark} />
                       </td>
 
-                      {/* Branch (Replaced IP Address) */}
+                      {/* Branch */}
                       <td className="px-4 py-3 align-top">
                         <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold capitalize ${
                           log.branch?.toLowerCase() === "pampanga" 
@@ -687,12 +728,32 @@ export default function AdminActivityLogs() {
 
                       {/* Details (Replaced full action text column) */}
                       <td className="px-4 py-3 align-top">
-                        <span className="text-sm leading-snug break-words block max-w-xs" style={{ color: subTxt }}>
-                          {log.details || "—"}
-                        </span>
+                        <div className="max-w-md">
+                          <p className="text-sm font-semibold leading-snug break-words" style={{ color: cellTxt }}>
+                            {activity.summary}
+                          </p>
+                          {activity.target && (
+                            <p className="text-xs mt-1 leading-snug break-words" style={{ color: isDark ? "#4ade80" : DG }}>
+                              Target: {activity.target}
+                            </p>
+                          )}
+                          {activity.details && (
+                            <p className="text-xs mt-1.5 leading-relaxed break-words" style={{ color: subTxt }}>
+                              {activity.details}
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {log.id && (
+                              <span className="text-[10px] font-medium px-2 py-0.5 rounded" style={{ color: subTxt, backgroundColor: isDark ? "#0f172a" : "#f8fafc" }}>
+                                ID {String(log.id).slice(0, 8)}
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </td>
                     </tr>
-                  ))
+                    )
+                  })
                 )}
               </tbody>
             </table>
@@ -758,6 +819,7 @@ export default function AdminActivityLogs() {
                       </tr>
                       {g.items.map((log, i) => {
                         n += 1
+                        const activity = getSpecificActivity(log)
                         return (
                           <tr key={log.id} className={i % 2 === 1 ? "alt" : ""}>
                             <td className="num nowrap muted">{n}</td>
@@ -766,8 +828,9 @@ export default function AdminActivityLogs() {
                             <td className="cap">{log.role || "Unknown"}</td>
                             <td className="cap muted">{log.branch || "—"}</td>
                             <td>
-                              <span className="font-semibold">{log.action || "—"}</span>
-                              {log.details && <span className="block mt-0.5 text-[8px] text-gray-500">{log.details}</span>}
+                              <span className="font-semibold">{activity.summary || "—"}</span>
+                              {activity.target && <span className="block mt-0.5 text-[8px] text-gray-500">Target: {activity.target}</span>}
+                              {activity.details && <span className="block mt-0.5 text-[8px] text-gray-500">{activity.details}</span>}
                             </td>
                           </tr>
                         )

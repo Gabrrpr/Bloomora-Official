@@ -155,11 +155,11 @@ function ConvoItem({ convo, isActive, onClick, isDark }) {
       </div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between mb-0.5 gap-2">
-          <span className="text-sm truncate" style={{ color: nameTxt, fontWeight: unread ? 800 : 500 }}>{convo.user_name}</span>
-          <span className="text-[11px] flex-shrink-0" style={{ color: unread ? G : timeTxt, fontWeight: unread ? 700 : 400 }}>{convo.time || ""}</span>
+          <span className="text-sm truncate" style={{ color: nameTxt, fontWeight: 500 }}>{convo.user_name}</span>
+          <span className="text-[11px] flex-shrink-0" style={{ color: unread ? G : timeTxt, fontWeight: 400 }}>{convo.time || ""}</span>
         </div>
         <div className="flex items-center gap-2">
-          <p className="text-xs truncate flex-1" style={{ color: unread ? nameTxt : subTxt, fontWeight: unread ? 700 : 400 }}>{convo.last_message || "No messages yet"}</p>
+          <p className="text-xs truncate flex-1" style={{ color: unread ? nameTxt : subTxt, fontWeight: 400 }}>{convo.last_message || "No messages yet"}</p>
         </div>
       </div>
     </button>
