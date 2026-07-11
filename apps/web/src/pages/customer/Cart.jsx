@@ -44,8 +44,12 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
     let active = true
     getCart().then(nextItems => {
       if (!active) return
-      setItems(nextItems)
-      setCartCount(getCartCount(nextItems))
+      const uncheckedItems = nextItems.map(item => ({ ...item, checked: false }))
+      setItems(uncheckedItems)
+      setCartCount(getCartCount(uncheckedItems))
+      if (nextItems.some(item => item.checked)) {
+        setCart(uncheckedItems).catch(error => console.error("Failed to reset cart selection:", error))
+      }
     }).catch(error => console.error("Failed to load cart:", error))
     return () => { active = false }
   }, [setCartCount])

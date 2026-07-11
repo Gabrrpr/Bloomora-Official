@@ -8,6 +8,20 @@ export type DeliverySettings = {
   timezone: string;
 };
 
+export type ShippingMethod = {
+  id: string;
+  code: string;
+  courier_name: string;
+  delivery_type: string;
+  description?: string | null;
+  logo_url?: string | null;
+  service_area: 'manila' | 'pampanga' | 'nationwide';
+  base_rate: number;
+  sort_order: number;
+  is_active: boolean;
+  supports_live_booking: boolean;
+};
+
 export type AppliedVoucher = {
   code: string;
   discount: number;
@@ -24,7 +38,7 @@ export type ActiveAdvertisement = {
 };
 
 export async function getCheckoutSettings() {
-  return apiFetch<{ delivery: DeliverySettings }>('/commerce/checkout-settings');
+  return apiFetch<{ delivery: DeliverySettings; shipping_methods?: ShippingMethod[] }>('/commerce/checkout-settings');
 }
 
 export async function validateVoucher({

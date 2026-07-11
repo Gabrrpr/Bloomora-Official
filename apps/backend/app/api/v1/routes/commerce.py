@@ -6,12 +6,13 @@ from decimal import Decimal
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy import or_
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 from supabase import create_client
 
 from app.core.config import settings
 from app.core.dependencies import get_db, get_current_user, require_staff
-from app.models import Advertisement, Campaign, CommerceSetting, PromoCode, User
+from app.models import Advertisement, Campaign, CommerceSetting, PromoCode, ShippingMethod, User
 
 
 router = APIRouter(prefix="/commerce", tags=["Commerce"])
@@ -29,6 +30,19 @@ class DeliverySettingsPayload(BaseModel):
     minimum_order: float = Field(ge=0)
     same_day_cutoff: str = Field(pattern=r"^(?:[01]\d|2[0-3]):[0-5]\d$")
     timezone: str = "Asia/Manila"
+
+
+class ShippingMethodPayload(BaseModel):
+    code: str = Field(min_length=1, max_length=50)
+    courier_name: str = Field(min_length=1, max_length=120)
+    delivery_type: str = Field(min_length=1, max_length=120)
+    description: str | None = None
+    logo_url: str | None = None
+    service_area: str = Field(default="nationwide", pattern=r"^(manila|pampanga|nationwide)$")
+    base_rate: float = Field(ge=0)
+    sort_order: int = 0
+    is_active: bool = True
+    supports_live_booking: bool = False
 
 
 class PromoPayload(BaseModel):
@@ -100,6 +114,22 @@ def serialize_ad(ad: Advertisement) -> dict:
     }
 
 
+def serialize_shipping_method(method: ShippingMethod, base_rate_override: float | None = None) -> dict:
+    return {
+        "id": str(method.id),
+        "code": method.code,
+        "courier_name": method.courier_name,
+        "delivery_type": method.delivery_type,
+        "description": method.description,
+        "logo_url": method.logo_url,
+        "service_area": method.service_area,
+        "base_rate": float(base_rate_override if base_rate_override is not None else (method.base_rate or 0)),
+        "sort_order": method.sort_order,
+        "is_active": bool(method.is_active),
+        "supports_live_booking": bool(method.supports_live_booking),
+    }
+
+
 def validate_voucher(db: Session, code: str, subtotal: Decimal) -> tuple[PromoCode, Decimal]:
     normalized = code.strip().upper()
     promo = db.query(PromoCode).filter(PromoCode.code == normalized).first()
@@ -126,7 +156,21 @@ def validate_voucher(db: Session, code: str, subtotal: Decimal) -> tuple[PromoCo
 
 @router.get("/checkout-settings")
 def checkout_settings(db: Session = Depends(get_db)):
-    return {"delivery": get_delivery_settings(db)}
+    delivery = get_delivery_settings(db)
+    try:
+        shipping_methods = db.query(ShippingMethod).filter(
+            ShippingMethod.is_active.is_(True)
+        ).order_by(ShippingMethod.sort_order.asc(), ShippingMethod.courier_name.asc()).all()
+    except ProgrammingError:
+        db.rollback()
+        shipping_methods = []
+    return {
+        "delivery": delivery,
+        "shipping_methods": [
+            serialize_shipping_method(method, base_rate_override=delivery.get("delivery_fee", 0))
+            for method in shipping_methods
+        ],
+    }
 
 
 @router.put("/delivery-settings")
@@ -142,6 +186,58 @@ def update_delivery_settings(
     row.value = json.dumps(payload.model_dump())
     db.commit()
     return {"delivery": payload.model_dump()}
+
+
+@router.get("/shipping-methods")
+def list_shipping_methods(
+    include_inactive: bool = Query(default=False),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    query = db.query(ShippingMethod)
+    if not include_inactive:
+        query = query.filter(ShippingMethod.is_active.is_(True))
+    return [
+        serialize_shipping_method(method)
+        for method in query.order_by(ShippingMethod.sort_order.asc(), ShippingMethod.courier_name.asc()).all()
+    ]
+
+
+@router.post("/shipping-methods", status_code=201)
+def create_shipping_method(
+    payload: ShippingMethodPayload,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    code = payload.code.strip().lower().replace(" ", "_")
+    if db.query(ShippingMethod).filter(ShippingMethod.code == code).first():
+        raise HTTPException(status_code=409, detail="Shipping method code already exists.")
+    method = ShippingMethod(**{**payload.model_dump(exclude={"code"}), "code": code})
+    db.add(method)
+    db.commit()
+    db.refresh(method)
+    return serialize_shipping_method(method)
+
+
+@router.put("/shipping-methods/{method_id}")
+def update_shipping_method(
+    method_id: str,
+    payload: ShippingMethodPayload,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    method = db.query(ShippingMethod).filter(ShippingMethod.id == method_id).first()
+    if not method:
+        raise HTTPException(status_code=404, detail="Shipping method not found.")
+    code = payload.code.strip().lower().replace(" ", "_")
+    clash = db.query(ShippingMethod).filter(ShippingMethod.code == code, ShippingMethod.id != method.id).first()
+    if clash:
+        raise HTTPException(status_code=409, detail="Shipping method code already exists.")
+    for key, value in payload.model_dump().items():
+        setattr(method, key, code if key == "code" else value)
+    db.commit()
+    db.refresh(method)
+    return serialize_shipping_method(method)
 
 
 @router.post("/vouchers/validate")

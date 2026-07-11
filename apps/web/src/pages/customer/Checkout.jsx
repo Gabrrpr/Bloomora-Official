@@ -1,9 +1,14 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { api } from "../../services/api.js"
 import { getCart, clearCart } from "../../utils/cart.js"
 import { useAuth } from "../../context/AuthContext"
 import { computeDiscount } from "../../utils/vouchers.js"
 import { API_BASE } from "../../config/api.js"
+import moveItLogo from "../../assets/shipping/Move-It-Logo_Red-Dirty.webp"
+import lalamoveLogo from "../../assets/shipping/Lalamove-Logo.webp"
+import grabExpressLogo from "../../assets/shipping/grabexpress.webp"
+import lbcLogo from "../../assets/shipping/493-4939965_lbc-express-logo-png-removebg-preview.webp"
+import jtExpressLogo from "../../assets/shipping/JT-Express-Logo.webp"
 
 const G = "#2E8B34"
 const DG = "#0C573E"
@@ -21,14 +26,75 @@ const PICKUP_BRANCHES = {
   },
 }
 
+const SHIPPING_METHOD_LOGOS = {
+  move_it: moveItLogo,
+  lalamove: lalamoveLogo,
+  grabexpress: grabExpressLogo,
+  lbc: lbcLogo,
+  jt_express: jtExpressLogo,
+}
+
+const NCR_ADDRESS_MARKERS = [
+  "metro manila",
+  "national capital region",
+  " ncr",
+  "caloocan",
+  "las pinas",
+  "las piñas",
+  "makati",
+  "malabon",
+  "mandaluyong",
+  "manila",
+  "marikina",
+  "muntinlupa",
+  "navotas",
+  "paranaque",
+  "parañaque",
+  "pasay",
+  "pasig",
+  "pateros",
+  "quezon city",
+  "san juan",
+  "taguig",
+  "valenzuela",
+]
+
+function ShippingLogo({ method }) {
+  const [failed, setFailed] = useState(false)
+  const logoSrc = method?.logo_url || SHIPPING_METHOD_LOGOS[method?.code]
+  const initials = String(method?.courier_name || "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0])
+    .join("")
+    .toUpperCase() || "S"
+
+  return (
+    <div className="w-9 h-9 rounded-md border border-gray-100 bg-white flex items-center justify-center overflow-hidden flex-shrink-0">
+      {logoSrc && !failed ? (
+        <img
+          src={logoSrc}
+          alt={`${method.courier_name} logo`}
+          className="w-full h-full object-contain p-1"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span className="text-[11px] font-extrabold text-[#2E8B34]">{initials}</span>
+      )}
+    </div>
+  )
+}
+
 export default function Checkout({ onNavigate }) {
   const { user } = useAuth()
   const [cartItems, setCartItems] = useState([])
   const deliveryTime = "Anytime"
   const [paymentMethod, setPaymentMethod] = useState("paymongo");
   const [fulfillmentMethod, setFulfillmentMethod] = useState("delivery");
-  const [lalamoveEnabled, setLalamoveEnabled] = useState(false);
   const [deliverySettings, setDeliverySettings] = useState({ delivery_fee: 100, minimum_order: 0, same_day_cutoff: "14:00" });
+  const [shippingMethods, setShippingMethods] = useState([]);
+  const [selectedShippingMethodId, setSelectedShippingMethodId] = useState(null);
   const [referenceNumber, setReferenceNumber] = useState("")
   const [voucher, setVoucher] = useState("")
   const [appliedVoucher, setAppliedVoucher] = useState(null)
@@ -51,6 +117,7 @@ export default function Checkout({ onNavigate }) {
   const [loadingAddresses, setLoadingAddresses] = useState(true)
 
   const [showManualModal, setShowManualModal] = useState(false)
+  const [mapFullscreenOpen, setMapFullscreenOpen] = useState(false)
   const [saveAddressToBook, setSaveAddressToBook] = useState(false)
   const [manualForm, setManualForm] = useState({
     recipient_name: "",
@@ -70,14 +137,11 @@ export default function Checkout({ onNavigate }) {
 
   useEffect(() => {
     api.getCheckoutSettings()
-      .then(data => setDeliverySettings(current => ({ ...current, ...(data.delivery || {}) })))
+      .then(data => {
+        setDeliverySettings(current => ({ ...current, ...(data.delivery || {}) }))
+        setShippingMethods(Array.isArray(data.shipping_methods) ? data.shipping_methods : [])
+      })
       .catch(() => {})
-  }, [])
-
-  useEffect(() => {
-    api.getLalamoveEnabled()
-      .then(data => setLalamoveEnabled(Boolean(data.enabled)))
-      .catch(() => setLalamoveEnabled(false))
   }, [])
 
   useEffect(() => {
@@ -154,9 +218,6 @@ export default function Checkout({ onNavigate }) {
   }, [])
 
   const subtotal = cartItems.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0)
- 	const shipping = cartItems.length > 0 && (fulfillmentMethod === "delivery" || fulfillmentMethod === "lalamove") ? Number(deliverySettings.delivery_fee || 0) : 0
-  const discount = computeDiscount(appliedVoucher, subtotal)
-  const total = Math.max(0, subtotal + shipping - discount)
 
   const applyVoucher = async () => {
     if (!cartItems.length) return setVoucherMsg({ type: "error", text: "Add products before applying a voucher." })
@@ -228,7 +289,7 @@ export default function Checkout({ onNavigate }) {
     const p = (provinceOrAddress || "").toLowerCase()
     if (!p) return null
     if (p.includes("pampanga") || p.includes("angeles") || p.includes("mabalacat") || p.includes("san fernando")) return "Pampanga"
-    if (p.includes("manila") || p.includes("ncr") || p.includes("quezon") || p.includes("makati") || p.includes("pasig") || p.includes("taguig") || p.includes("caloocan") || p.includes("paranaque") || p.includes("valenzuela") || p.includes("muntinlupa") || p.includes("mandaluyong") || p.includes("marikina") || p.includes("pasay")) return "Manila"
+    if (NCR_ADDRESS_MARKERS.some(marker => p.includes(marker))) return "Manila"
     return null
   }
 
@@ -244,23 +305,42 @@ export default function Checkout({ onNavigate }) {
   const deliveryAddressText = recipientType === "myself" ? selectedAddressText : manualAddressText
   const deliveryAddressBranch = provinceToBranch(
     recipientType === "myself"
-      ? (selectedAddress ? selectedAddress.province || selectedAddressText : selectedAddressText)
-      : manualForm.province || manualAddressText
+      ? (selectedAddress ? [selectedAddress.street, selectedAddress.barangay, selectedAddress.city, selectedAddress.province, selectedAddressText].filter(Boolean).join(", ") : selectedAddressText)
+      : [manualForm.street, manualForm.barangay, manualForm.city, manualForm.province, manualAddressText].filter(Boolean).join(", ")
   )
-  const isManilaAddress = deliveryAddressBranch === "Manila"
-  const isPampangaAddress = deliveryAddressBranch === "Pampanga"
-  const isLalamoveAvailable = lalamoveEnabled && isManilaAddress
-  const isStandardDeliveryAvailable = !deliveryAddressText || isPampangaAddress
-  const showStandardDelivery = true
+  const methodSupportsBranch = (method, branch) => {
+    const area = String(method?.service_area || "nationwide").toLowerCase()
+    if (area === "nationwide") return true
+    if (!branch) return false
+    return area === String(branch).toLowerCase()
+  }
+  const serviceAreaLabel = (method) => {
+    const area = String(method?.service_area || "nationwide").toLowerCase()
+    if (area === "manila") return "Metro Manila / NCR"
+    if (area === "pampanga") return "Pampanga"
+    return "supported areas"
+  }
+  const availableShippingMethods = useMemo(
+    () => shippingMethods.filter(method => methodSupportsBranch(method, deliveryAddressBranch)),
+    [shippingMethods, deliveryAddressBranch]
+  )
+  const selectedShippingMethod = availableShippingMethods.find(method => method.id === selectedShippingMethodId) || null
+  const shipping = cartItems.length > 0 && fulfillmentMethod === "delivery"
+    ? Number(selectedShippingMethod?.base_rate ?? deliverySettings.delivery_fee ?? 0)
+    : 0
+  const discount = computeDiscount(appliedVoucher, subtotal)
+  const total = Math.max(0, subtotal + shipping - discount)
 
   useEffect(() => {
-    if (fulfillmentMethod === "lalamove" && !isLalamoveAvailable) {
-      setFulfillmentMethod(showStandardDelivery ? "delivery" : "pickup")
+    if (fulfillmentMethod !== "delivery") return
+    if (availableShippingMethods.length === 0) {
+      setSelectedShippingMethodId(null)
+      return
     }
-    if (fulfillmentMethod === "delivery" && !isStandardDeliveryAvailable) {
-      setFulfillmentMethod(isLalamoveAvailable ? "lalamove" : "pickup")
+    if (!selectedShippingMethodId || !availableShippingMethods.some(method => method.id === selectedShippingMethodId)) {
+      setSelectedShippingMethodId(availableShippingMethods[0].id)
     }
-  }, [fulfillmentMethod, isLalamoveAvailable, isStandardDeliveryAvailable, showStandardDelivery])
+  }, [fulfillmentMethod, availableShippingMethods, selectedShippingMethodId])
 
   const getDeliveryDetails = () => {
     if (fulfillmentMethod === "pickup") {
@@ -268,13 +348,6 @@ export default function Checkout({ onNavigate }) {
         name: fullName,
         phone: customer?.phone_number || user?.phoneNumber || "",
         address: `Pickup - ${pickupBranch.label}: ${pickupBranch.address}`,
-      }
-    }
-    if (fulfillmentMethod === "lalamove") {
-      return {
-        name: fullName,
-        phone: customer?.phone_number || user?.phoneNumber || "",
-        address: deliveryAddressText,
       }
     }
     if (recipientType === "myself") {
@@ -312,12 +385,10 @@ export default function Checkout({ onNavigate }) {
 
   const addressBranch = (fulfillmentMethod === "pickup")
     ? pickupBranchName
-    : (fulfillmentMethod === "lalamove")
-      ? deliveryAddressBranch
-      : provinceToBranch(
+    : provinceToBranch(
         recipientType === "myself" 
-          ? (selectedAddress ? selectedAddress.province : (customer?.address || user?.address)) 
-          : manualForm.province
+          ? (selectedAddress ? [selectedAddress.street, selectedAddress.barangay, selectedAddress.city, selectedAddress.province, selectedAddressText].filter(Boolean).join(", ") : (customer?.address || user?.address)) 
+          : [manualForm.street, manualForm.barangay, manualForm.city, manualForm.province, manualAddressText].filter(Boolean).join(", ")
       )
   
   const needsBranchConfirm = fulfillmentMethod === "delivery" && selectedStoreBranch && addressBranch && (selectedStoreBranch.toLowerCase() !== addressBranch.toLowerCase())
@@ -410,7 +481,7 @@ export default function Checkout({ onNavigate }) {
   }
 
   const buildDeliveryNotes = () =>
-    `[BRANCH:${addressBranch || "Manila"}] ${fulfillmentMethod === "pickup" ? `Pickup at ${pickupBranch.label}` : `Delivery time: ${deliveryTime}`} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone || "No phone provided"})${appliedVoucher ? ` | Voucher: ${appliedVoucher.code}` : ""}`
+    `[BRANCH:${addressBranch || "Manila"}] ${fulfillmentMethod === "pickup" ? `Pickup at ${pickupBranch.label}` : `Delivery via ${selectedShippingMethod?.courier_name || "selected courier"} (${selectedShippingMethod?.delivery_type || deliveryTime})`} | Recipient: ${deliveryDetails.name} (${deliveryDetails.phone || "No phone provided"})${appliedVoucher ? ` | Voucher: ${appliedVoucher.code}` : ""}`
 
   const buildOrderData = (orderIds) => ({
     orderIds,
@@ -477,6 +548,9 @@ export default function Checkout({ onNavigate }) {
         payment_method: paymentMethod,
         payment_reference: referenceNumber.trim(),
         fulfillment_method: fulfillmentMethod,
+        shipping_method_id: fulfillmentMethod === "delivery" ? selectedShippingMethod?.id : null,
+        shipping_method_code: fulfillmentMethod === "delivery" ? selectedShippingMethod?.code : null,
+        delivery_provider: fulfillmentMethod === "delivery" ? selectedShippingMethod?.code : null,
         special_note: orderNote.trim() || null,
         delivery_lat: activeDeliveryPin?.lat ?? null,
         delivery_lng: activeDeliveryPin?.lng ?? null,
@@ -550,21 +624,12 @@ export default function Checkout({ onNavigate }) {
         setError("Please select or add a complete delivery address and phone number before placing an order.");
         return;
       }
-      if (!isStandardDeliveryAvailable) {
-        setError("Standard delivery is only available for Pampanga addresses. Please select Lalamove or Pickup for Manila.");
+      if (!selectedShippingMethod) {
+        setError("Please select an available shipping option for this address.");
         return;
       }
-    } else if (fulfillmentMethod === "lalamove") {
-      if (!deliveryDetails.address || !deliveryDetails.phone) {
-        setError("Please provide a complete delivery address and phone number for Lalamove delivery.");
-        return;
-      }
-      if (!isLalamoveAvailable) {
-        setError("Lalamove is only available within Metro Manila. Please provide a valid Manila address.");
-        return;
-      }
-      if (!activeDeliveryPin?.lat || !activeDeliveryPin?.lng) {
-        setError("Please confirm the delivery pin before using Lalamove.");
+      if (selectedShippingMethod.supports_live_booking && (!activeDeliveryPin?.lat || !activeDeliveryPin?.lng)) {
+        setError(`Please confirm the delivery pin before using ${selectedShippingMethod.courier_name}.`);
         return;
       }
     } else {
@@ -597,21 +662,12 @@ export default function Checkout({ onNavigate }) {
         setError("Please select or add a complete delivery address and phone number.");
         return;
       }
-      if (!isStandardDeliveryAvailable) {
-        setError("Standard delivery is only available for Pampanga addresses. Please select Lalamove or Pickup for Manila.");
+      if (!selectedShippingMethod) {
+        setError("Please select an available shipping option for this address.");
         return;
       }
-    } else if (fulfillmentMethod === "lalamove") {
-      if (!deliveryDetails.address || !deliveryDetails.phone) {
-        setError("Please provide a complete delivery address and phone number for Lalamove delivery.");
-        return;
-      }
-      if (!isLalamoveAvailable) {
-        setError("Lalamove is only available within Metro Manila. Please provide a valid Manila address.");
-        return;
-      }
-      if (!activeDeliveryPin?.lat || !activeDeliveryPin?.lng) {
-        setError("Please confirm the delivery pin before using Lalamove.");
+      if (selectedShippingMethod.supports_live_booking && (!activeDeliveryPin?.lat || !activeDeliveryPin?.lng)) {
+        setError(`Please confirm the delivery pin before using ${selectedShippingMethod.courier_name}.`);
         return;
       }
     } else if (!deliveryDetails.phone) {
@@ -835,13 +891,20 @@ export default function Checkout({ onNavigate }) {
                 </div>
 
                 {activeDeliveryPin && (
-                  <div className="rounded-xl overflow-hidden border border-gray-100 bg-gray-50 mb-3 h-48">
+                  <div className="relative rounded-xl overflow-hidden border border-gray-100 bg-gray-50 mb-3 h-48">
                     <iframe
                       title="Delivery pin map"
                       src={makeMapUrl(activeDeliveryPin)}
                       className="w-full h-full border-0"
                       loading="lazy"
                     />
+                    <button
+                      type="button"
+                      onClick={() => setMapFullscreenOpen(true)}
+                      className="absolute right-2 top-2 px-2.5 py-1.5 text-[11px] font-bold rounded-md bg-white/95 text-gray-700 border border-gray-200 shadow-sm hover:bg-[#F0F7F1] hover:text-[#2E8B34]"
+                    >
+                      Full screen
+                    </button>
                   </div>
                 )}
 
@@ -882,45 +945,38 @@ export default function Checkout({ onNavigate }) {
               {/* Delivery option */}
               <p className="text-xs font-medium text-gray-500 mb-3">Fulfillment method</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-                {showStandardDelivery && (
-                  <div
-                    onClick={() => { if (isStandardDeliveryAvailable) setFulfillmentMethod("delivery") }}
-                    className={`border-2 rounded-lg p-3.5 transition ${isStandardDeliveryAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-60"} ${fulfillmentMethod === "delivery" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200 hover:border-gray-300"}`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${fulfillmentMethod === "delivery" ? "border-[#2E8B34]" : "border-gray-300"}`}>
-                        {fulfillmentMethod === "delivery" && <div className="w-2.5 h-2.5 rounded-full bg-[#2E8B34]" />}
+                {shippingMethods.map(method => {
+                  const isAvailable = methodSupportsBranch(method, deliveryAddressBranch)
+                  const isSelected = fulfillmentMethod === "delivery" && selectedShippingMethodId === method.id
+                  return (
+                    <div
+                      key={method.id}
+                      onClick={() => {
+                        if (!isAvailable) return
+                        setFulfillmentMethod("delivery")
+                        setSelectedShippingMethodId(method.id)
+                      }}
+                      className={`border-2 rounded-lg p-3.5 transition ${isAvailable ? "cursor-pointer hover:border-gray-300" : "cursor-not-allowed opacity-60"} ${isSelected ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200"}`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? "border-[#2E8B34]" : "border-gray-300"}`}>
+                            {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-[#2E8B34]" />}
+                          </div>
+                          <ShippingLogo method={method} />
+                          <span className={`text-sm font-semibold truncate ${isSelected ? "text-[#2E8B34]" : "text-gray-700"}`}>{method.courier_name}</span>
+                        </div>
+                        <span className="text-xs font-bold text-gray-700 flex-shrink-0">₱{Number(method.base_rate || 0).toLocaleString()}</span>
                       </div>
-                      <span className={`text-sm font-semibold ${fulfillmentMethod === "delivery" ? "text-[#2E8B34]" : "text-gray-700"}`}>Standard</span>
-                    </div>
                       <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">
-                        {isStandardDeliveryAvailable
-                          ? "Pampanga addresses only"
-                          : "Available only for Pampanga addresses"}<br />Scheduled by branch team
+                        {method.delivery_type}<br />
+                        {isAvailable
+                          ? (method.description || "Available for this address")
+                          : `Available only within ${serviceAreaLabel(method)}`}
                       </p>
-                  </div>
-                )}
-
-                {lalamoveEnabled && (
-                  <div
-                    onClick={() => { if (isLalamoveAvailable) setFulfillmentMethod("lalamove") }}
-                    className={`border-2 rounded-lg p-3.5 transition ${isLalamoveAvailable ? "cursor-pointer" : "cursor-not-allowed opacity-60"} ${fulfillmentMethod === "lalamove" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200 hover:border-gray-300"}`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${fulfillmentMethod === "lalamove" ? "border-[#2E8B34]" : "border-gray-300"}`}>
-                        {fulfillmentMethod === "lalamove" && <div className="w-2.5 h-2.5 rounded-full bg-[#2E8B34]" />}
-                      </div>
-                      <span className={`text-sm font-semibold ${fulfillmentMethod === "lalamove" ? "text-[#2E8B34]" : "text-gray-700"}`}>Lalamove</span>
                     </div>
-                    <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">
-                      {isLalamoveAvailable
-                        ? "Manila eligible address"
-                        : deliveryAddressText
-                          ? "Available only for Manila addresses"
-                          : "Add a Manila delivery address to use this"}<br />Fast same-day delivery
-                    </p>
-                  </div>
-                )}
+                  )
+                })}
 
                 <div
                   onClick={() => { setFulfillmentMethod("pickup") }}
@@ -1212,6 +1268,38 @@ export default function Checkout({ onNavigate }) {
       </div>
 
       {/* Manual Recipient Modal */}
+      {mapFullscreenOpen && activeDeliveryPin && (
+        <div className="fixed inset-0 z-[60] bg-black/70 p-3 sm:p-6 flex items-center justify-center">
+          <div className="bg-white rounded-xl w-full h-full max-w-6xl max-h-[92vh] shadow-2xl overflow-hidden flex flex-col">
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-gray-800">Delivery pin</h3>
+                <p className="text-xs text-gray-500 truncate">{activeDeliveryPin.label}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMapFullscreenOpen(false)}
+                className="w-9 h-9 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center justify-center flex-shrink-0"
+                aria-label="Close full screen map"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <iframe
+              title="Delivery pin full screen map"
+              src={makeMapUrl(activeDeliveryPin)}
+              className="w-full flex-1 border-0"
+              loading="lazy"
+            />
+            <div className="px-4 py-2 border-t border-gray-100 text-[11px] text-gray-500">
+              Coordinates: {Number(activeDeliveryPin.lat).toFixed(6)}, {Number(activeDeliveryPin.lng).toFixed(6)}
+            </div>
+          </div>
+        </div>
+      )}
+
       {showManualModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl w-full max-w-md p-5 sm:p-6 shadow-xl max-h-[90vh] overflow-y-auto">

@@ -1047,6 +1047,20 @@ export default function AdminOrders() {
                   <p className="text-sm font-medium" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{viewingOrder.delivery_address}</p>
                 </div>
 
+                <div className="space-y-1">
+                  <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: subTxt }}>Fulfillment</p>
+                  <p className="text-sm font-medium" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>
+                    {viewingOrder.fulfillment_method === "pickup"
+                      ? "Pickup"
+                      : `Delivery${viewingOrder.courier_selected ? ` via ${viewingOrder.courier_selected}` : ""}`}
+                  </p>
+                  {viewingOrder.fulfillment_method !== "pickup" && (
+                    <p className="text-xs" style={{ color: subTxt }}>
+                      {[viewingOrder.shipping_delivery_type, `₱${Number(viewingOrder.delivery_fee || 0).toLocaleString()} paid`].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
+                </div>
+
                 <div className="flex gap-4">
                   <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: subTxt }}>Payment</p>

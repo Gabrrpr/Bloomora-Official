@@ -46,6 +46,7 @@ import {
   validateVoucher,
   type AppliedVoucher,
   type DeliverySettings,
+  type ShippingMethod,
 } from '@/services/commerce-api';
 import {
   findLocationByName,
@@ -93,6 +94,30 @@ const timeSlots: TimeSlot[] = [
   { enabled: true, id: 'anytime', label: 'Anytime of the day' },
   { enabled: false, id: 'morning', label: '9:00 AM – 12:00 PM' },
   { enabled: false, id: 'afternoon', label: '1:00 PM – 6:00 PM' },
+];
+const ncrAddressMarkers = [
+  'metro manila',
+  'national capital region',
+  ' ncr',
+  'caloocan',
+  'las pinas',
+  'las piñas',
+  'makati',
+  'malabon',
+  'mandaluyong',
+  'manila',
+  'marikina',
+  'muntinlupa',
+  'navotas',
+  'paranaque',
+  'parañaque',
+  'pasay',
+  'pasig',
+  'pateros',
+  'quezon city',
+  'san juan',
+  'taguig',
+  'valenzuela',
 ];
 const countryCodes: CountryCode[] = [
   { code: '+63', flag: '🇵🇭', name: 'Philippines' },
@@ -165,12 +190,7 @@ function formatPhoneForDisplay(phone: string, countryCode: string) {
 
 function getSupportedDeliveryArea(address: string) {
   const normalizedAddress = address.toLowerCase();
-  if (
-    normalizedAddress.includes('metro manila') ||
-    normalizedAddress.includes('national capital region') ||
-    normalizedAddress.includes(' ncr') ||
-    normalizedAddress.includes('manila')
-  ) {
+  if (ncrAddressMarkers.some((marker) => normalizedAddress.includes(marker))) {
     return 'Metro Manila';
   }
 
@@ -309,6 +329,7 @@ export default function CheckoutScreen() {
     same_day_cutoff: '14:00',
     timezone: 'Asia/Manila',
   });
+  const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
   const [voucherError, setVoucherError] = useState<string | null>(null);
   const isTodayUnavailable = useMemo(() => {
@@ -324,10 +345,14 @@ export default function CheckoutScreen() {
 
   const summary = useMemo(() => {
     const subtotalCents = items.reduce((total, item) => total + item.product.priceCents * item.quantity, 0);
-    const feeCents = fulfillmentMethod === 'delivery' ? Math.round(deliverySettings.delivery_fee * 100) : 0;
+    const provider = getDeliveryProviderForArea(getSupportedDeliveryArea(deliveryAddress)) ?? deliveryProvider;
+    const providerCode = provider === 'standard' ? 'lbc' : provider;
+    const shippingMethod = shippingMethods.find((method) => method.code === providerCode);
+    const deliveryFee = shippingMethod?.base_rate ?? deliverySettings.delivery_fee;
+    const feeCents = fulfillmentMethod === 'delivery' ? Math.round(deliveryFee * 100) : 0;
     const discountCents = Math.round((appliedVoucher?.discount ?? 0) * 100);
     return { discountCents, feeCents, subtotalCents, totalCents: Math.max(0, subtotalCents + feeCents - discountCents) };
-  }, [appliedVoucher?.discount, deliverySettings.delivery_fee, fulfillmentMethod, items]);
+  }, [appliedVoucher?.discount, deliveryAddress, deliveryProvider, deliverySettings.delivery_fee, fulfillmentMethod, items, shippingMethods]);
   const addressLines = useMemo(() => {
     const parts = deliveryAddress.split(',').map((part) => part.trim()).filter(Boolean);
     const fullName = [recipientFirstName, recipientLastName].filter(Boolean).join(' ');
@@ -380,6 +405,7 @@ export default function CheckoutScreen() {
         setItems(selectedIds.size ? hydratedItems.filter((item) => selectedIds.has(item.product.id)) : hydratedItems);
         setSession(nextSession);
         if (checkoutSettings?.delivery) setDeliverySettings(checkoutSettings.delivery);
+        setShippingMethods(Array.isArray(checkoutSettings?.shipping_methods) ? checkoutSettings.shipping_methods : []);
         let savedAddress: AccountAddress | null = null;
 
         if (nextSession?.accessToken) {

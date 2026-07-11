@@ -87,6 +87,9 @@ class Order(Base):
     recipient_type = Column(String(20), nullable=True)
     is_anonymous = Column(Boolean, default=False)
     fulfillment_method = Column(String(20), nullable=True)
+    shipping_method_id = Column(UUID(as_uuid=True), ForeignKey("shipping_methods.id"), nullable=True)
+    courier_selected = Column(String(120), nullable=True)
+    shipping_delivery_type = Column(String(120), nullable=True)
     delivery_provider = Column(String(50), nullable=True)
     lalamove_order_id = Column(String(255), nullable=True)
     lalamove_share_link = Column(Text, nullable=True)
@@ -101,6 +104,7 @@ class Order(Base):
     arrangement = relationship("Arrangement", back_populates="orders")
     transaction = relationship("Transaction", back_populates="order", uselist=False)
     delivery = relationship("Delivery", back_populates="order", uselist=False)
+    shipping_method = relationship("ShippingMethod", foreign_keys=[shipping_method_id])
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
 
 

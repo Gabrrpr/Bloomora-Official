@@ -13,7 +13,7 @@ import secrets
 
 # 🚀 INJECTED SECURE DEPENDENCIES
 from app.core.dependencies import get_db, get_current_user, require_staff
-from app.models import User, RoleEnum, Order, OrderItem, StockReservation, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory, ProductRecipe
+from app.models import User, RoleEnum, Order, OrderItem, StockReservation, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory, ProductRecipe, ShippingMethod
 from app.utils.lalamove import book_lalamove_delivery
 
 # We use your dedicated PayMongo service instead of raw requests!
@@ -91,7 +91,10 @@ def _minimal_order_payload(row) -> dict:
         "recipient_phone": data.get("recipient_phone"),
         "recipient_type": data.get("recipient_type"),
         "fulfillment_method": data.get("fulfillment_method") or "delivery",
-        "delivery_provider": None,
+        "shipping_method_id": str(data.get("shipping_method_id")) if data.get("shipping_method_id") is not None else None,
+        "courier_selected": data.get("courier_selected"),
+        "shipping_delivery_type": data.get("shipping_delivery_type"),
+        "delivery_provider": data.get("delivery_provider"),
         "time_slot": data.get("time_slot"),
         "subtotal_amount": _safe_float(data.get("subtotal_amount") or data.get("total_amount"), 0.0),
         "delivery_fee": _safe_float(data.get("delivery_fee"), 0.0),
@@ -168,6 +171,10 @@ def _raw_list_orders(
                 o.recipient_phone,
                 o.recipient_type,
                 o.fulfillment_method,
+                o.shipping_method_id,
+                o.courier_selected,
+                o.shipping_delivery_type,
+                o.delivery_provider,
                 o.time_slot,
                 o.subtotal_amount,
                 o.delivery_fee,
@@ -244,6 +251,62 @@ def _coordinate(value):
         return Decimal(str(value))
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid delivery coordinates.")
+
+
+def _shipping_method_payload(method: ShippingMethod | None) -> dict | None:
+    if not method:
+        return None
+    return {
+        "id": str(method.id),
+        "code": method.code,
+        "courier_name": method.courier_name,
+        "delivery_type": method.delivery_type,
+        "description": method.description,
+        "logo_url": method.logo_url,
+        "service_area": method.service_area,
+        "base_rate": float(method.base_rate or 0),
+        "supports_live_booking": bool(method.supports_live_booking),
+    }
+
+
+def _selected_shipping_method(db: Session, payload: dict) -> ShippingMethod | None:
+    raw_id = str(payload.get("shipping_method_id") or payload.get("shippingMethodId") or "").strip()
+    raw_code = str(
+        payload.get("shipping_method_code")
+        or payload.get("shippingMethodCode")
+        or payload.get("delivery_provider")
+        or payload.get("deliveryProvider")
+        or ""
+    ).strip().lower()
+    if raw_code == "standard":
+        raw_code = "lbc"
+    if raw_id:
+        try:
+            method_uuid = uuid.UUID(raw_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid shipping method.")
+        method = db.query(ShippingMethod).filter(
+            ShippingMethod.id == method_uuid,
+            ShippingMethod.is_active.is_(True),
+        ).first()
+    elif raw_code:
+        method = db.query(ShippingMethod).filter(
+            ShippingMethod.code == raw_code,
+            ShippingMethod.is_active.is_(True),
+        ).first()
+    else:
+        method = None
+    if raw_id or raw_code:
+        if not method:
+            raise HTTPException(status_code=400, detail="Selected shipping method is unavailable.")
+    return method
+
+
+def _shipping_method_supports_branch(method: ShippingMethod, branch: str) -> bool:
+    area = str(method.service_area or "nationwide").lower()
+    if area == "nationwide":
+        return True
+    return area == str(branch or "").lower()
 
 
 def _delivery_tracking(order: Order) -> dict:
@@ -572,7 +635,11 @@ def serialize_order(o) -> dict:
             "recipient_phone": getattr(o, 'recipient_phone', None),
             "recipient_type": getattr(o, 'recipient_type', None),
             "fulfillment_method": getattr(o, 'fulfillment_method', None) or "delivery",
+            "shipping_method_id": str(getattr(o, 'shipping_method_id', None)) if getattr(o, 'shipping_method_id', None) else None,
+            "courier_selected": getattr(o, 'courier_selected', None),
+            "shipping_delivery_type": getattr(o, 'shipping_delivery_type', None),
             "delivery_provider": getattr(o, 'delivery_provider', None),
+            "shipping_method": _shipping_method_payload(getattr(o, "shipping_method", None)),
             "time_slot": getattr(o, 'time_slot', None),
             "subtotal_amount": safe_float(getattr(o, 'subtotal_amount', None) or getattr(o, 'total_amount', None), 0.0),
             "delivery_fee": safe_float(getattr(o, 'delivery_fee', None) or 0, 0.0),
@@ -631,7 +698,11 @@ def serialize_order(o) -> dict:
             "recipient_phone": getattr(o, 'recipient_phone', None),
             "recipient_type": getattr(o, 'recipient_type', None),
             "fulfillment_method": getattr(o, 'fulfillment_method', None) or 'delivery',
+            "shipping_method_id": str(getattr(o, 'shipping_method_id', None)) if getattr(o, 'shipping_method_id', None) else None,
+            "courier_selected": getattr(o, 'courier_selected', None),
+            "shipping_delivery_type": getattr(o, 'shipping_delivery_type', None),
             "delivery_provider": getattr(o, 'delivery_provider', None),
+            "shipping_method": None,
             "time_slot": getattr(o, 'time_slot', None),
             "subtotal_amount": 0.0,
             "delivery_fee": 0.0,
@@ -656,27 +727,37 @@ def serialize_order(o) -> dict:
 
 
 
+NCR_ADDRESS_MARKERS = (
+    "metro manila",
+    "national capital region",
+    " ncr",
+    "caloocan",
+    "las pinas",
+    "las piñas",
+    "makati",
+    "malabon",
+    "mandaluyong",
+    "manila",
+    "marikina",
+    "muntinlupa",
+    "navotas",
+    "paranaque",
+    "parañaque",
+    "pasay",
+    "pasig",
+    "pateros",
+    "quezon city",
+    "san juan",
+    "taguig",
+    "valenzuela",
+)
+
+
 def _derive_delivery_branch(address: str) -> str:
     normalized = (address or "").lower()
     if any(value in normalized for value in ("pampanga", "angeles", "mabalacat", "san fernando")):
         return "Pampanga"
-    if any(value in normalized for value in (
-        "metro manila",
-        "national capital region",
-        " ncr",
-        "manila",
-        "quezon",
-        "makati",
-        "pasig",
-        "taguig",
-        "caloocan",
-        "paranaque",
-        "valenzuela",
-        "muntinlupa",
-        "mandaluyong",
-        "marikina",
-        "pasay",
-    )):
+    if any(value in normalized for value in NCR_ADDRESS_MARKERS):
         return "Manila"
     raise HTTPException(
         status_code=400,
@@ -862,7 +943,11 @@ async def create_order(
             return _created_order_response(existing_order)
 
     delivery_notes = payload.get("delivery_notes", "")
-    fulfillment_method = payload.get("fulfillmentMethod") or payload.get("fulfillment_method") or "delivery"
+    fulfillment_method = str(payload.get("fulfillmentMethod") or payload.get("fulfillment_method") or "delivery").lower()
+    has_explicit_shipping_method = bool(payload.get("shipping_method_id") or payload.get("shippingMethodId") or payload.get("shipping_method_code") or payload.get("shippingMethodCode"))
+    shipping_method = _selected_shipping_method(db, payload)
+    if shipping_method and fulfillment_method != "pickup":
+        fulfillment_method = "delivery"
     delivery_address = payload.get("delivery_address", "")
     raw_branch = (
         _derive_delivery_branch(delivery_address)
@@ -871,14 +956,20 @@ async def create_order(
     )
     if raw_branch not in {"Manila", "Pampanga"}:
         raise HTTPException(status_code=400, detail="Select either the Manila or Pampanga branch.")
-    if fulfillment_method == "delivery" and raw_branch == "Manila":
+    if shipping_method and fulfillment_method != "pickup" and not _shipping_method_supports_branch(shipping_method, raw_branch):
+        raise HTTPException(
+            status_code=400,
+            detail=f"{shipping_method.courier_name} is not available for {raw_branch} addresses.",
+        )
+    if not shipping_method and fulfillment_method == "delivery" and raw_branch == "Manila":
         raise HTTPException(status_code=400, detail="Standard delivery is not available for Manila. Please select Lalamove or Pickup.")
-    if fulfillment_method == "lalamove" and raw_branch != "Manila":
+    if not shipping_method and fulfillment_method == "lalamove" and raw_branch != "Manila":
         raise HTTPException(status_code=400, detail="Lalamove delivery is available only for Manila addresses.")
     delivery_lat = _coordinate(payload.get("delivery_lat"))
     delivery_lng = _coordinate(payload.get("delivery_lng"))
     delivery_geocode_precision = str(payload.get("delivery_geocode_precision") or "").strip() or None
-    if fulfillment_method == "lalamove" and (delivery_lat is None or delivery_lng is None):
+    needs_delivery_pin = fulfillment_method == "lalamove" or (has_explicit_shipping_method and shipping_method and shipping_method.supports_live_booking)
+    if needs_delivery_pin and (delivery_lat is None or delivery_lng is None):
         raise HTTPException(status_code=400, detail="Please confirm the exact delivery pin before selecting Lalamove.")
     delivery_settings = get_delivery_settings(db)
     scheduled_at = _validate_delivery_date(
@@ -949,11 +1040,10 @@ async def create_order(
                 raise HTTPException(status_code=400, detail=f"Invalid price for item: {item_id}")
             total_amount += unit_price * quantity
 
-        delivery_fee = (
-            Decimal(str(delivery_settings["delivery_fee"]))
-            if fulfillment_method in {"delivery", "lalamove"}
-            else Decimal("0.00")
-        )
+        if fulfillment_method in {"delivery", "lalamove"}:
+            delivery_fee = Decimal(str(delivery_settings["delivery_fee"]))
+        else:
+            delivery_fee = Decimal("0.00")
         minimum_order = Decimal(str(delivery_settings["minimum_order"]))
         if total_amount < minimum_order:
             raise HTTPException(
@@ -1003,7 +1093,10 @@ async def create_order(
             recipient_type=payload.get("recipientType") or payload.get("recipient_type"),
             is_anonymous=bool(payload.get("isAnonymous") or payload.get("is_anonymous")),
             fulfillment_method=fulfillment_method,
-            delivery_provider=payload.get("deliveryProvider") or payload.get("delivery_provider"),
+            shipping_method_id=shipping_method.id if shipping_method else None,
+            courier_selected=shipping_method.courier_name if shipping_method else None,
+            shipping_delivery_type=shipping_method.delivery_type if shipping_method else None,
+            delivery_provider=(shipping_method.code if shipping_method else (payload.get("deliveryProvider") or payload.get("delivery_provider"))),
             time_slot=payload.get("timeSlot") or payload.get("time_slot") or "anytime",
             subtotal_amount=total_amount,
             delivery_fee=delivery_fee,
@@ -1097,7 +1190,12 @@ async def create_order(
 
         db.commit()
 
-        if fulfillment_method == "lalamove" or payload.get("delivery_method") == "lalamove":
+        should_book_lalamove = (
+            fulfillment_method == "lalamove"
+            or payload.get("delivery_method") == "lalamove"
+            or (has_explicit_shipping_method and shipping_method and shipping_method.code == "lalamove")
+        )
+        if should_book_lalamove:
             try:
                 print("Dispatching Lalamove rider...")
                 lalamove_res = book_lalamove_delivery(

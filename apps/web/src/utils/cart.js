@@ -76,7 +76,7 @@ function normalizeCartItem(entry) {
     desc: webItem.desc || product.description || product.category || "",
     price: Number(webItem.price ?? product.price ?? 0),
     img: webItem.img || webItem.image || webItem.image_url || product.image_url || "",
-    checked: webItem.checked !== false,
+    checked: webItem.checked === true,
     qty: Number.isFinite(qty) && qty > 0 ? qty : 1,
   }
 }
@@ -134,8 +134,8 @@ export async function addToCart(item) {
   if (!isAuthenticated()) {
     const cart = readGuestCart()
     const existing = cart.find((entry) => entry.id === item.id && entry.group === item.group)
-    if (existing) Object.assign(existing, item, { qty: (existing.qty || 1) + (item.qty || 1), checked: true })
-    else cart.push({ ...item, checked: true, qty: item.qty || 1 })
+    if (existing) Object.assign(existing, item, { qty: (existing.qty || 1) + (item.qty || 1), checked: item.checked === true })
+    else cart.push({ ...item, checked: item.checked === true, qty: item.qty || 1 })
     writeGuestCart(cart)
     return cart
   }
@@ -143,7 +143,7 @@ export async function addToCart(item) {
   try {
     // 🚀 CRITICAL FIX: Use /cart/web/items and send { item } as the payload
     // This allows the backend WebCartItemPayload to accept custom "arr-..." IDs!
-    const response = await api.post("/cart/web/items", { item });
+    const response = await api.post("/cart/web/items", { item: { ...item, checked: item.checked === true } });
     
     const nextItems = mapResponse(response);
     broadcastCartUpdate(nextItems);
