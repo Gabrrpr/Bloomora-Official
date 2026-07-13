@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Body, Query, Request
-from sqlalchemy.orm import Session, object_session, joinedload
+from sqlalchemy.orm import Session, object_session, joinedload, selectinload
 from sqlalchemy import or_, func, String, text
 from sqlalchemy.exc import IntegrityError
 from typing import List, Optional
@@ -13,7 +13,7 @@ import secrets
 
 # 🚀 INJECTED SECURE DEPENDENCIES
 from app.core.dependencies import get_db, get_current_user, require_staff
-from app.models import User, RoleEnum, Order, OrderItem, StockReservation, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory, ProductRecipe, ShippingMethod
+from app.models import User, RoleEnum, Order, OrderItem, StockReservation, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory, ProductRecipe, ShippingMethod, Delivery
 from app.utils.lalamove import book_lalamove_delivery
 
 # We use your dedicated PayMongo service instead of raw requests!
@@ -456,7 +456,7 @@ def _custom_arrangement_materials(arrangement: Optional[Arrangement], db: Option
             })
     return materials
 
-def serialize_order(o) -> dict:
+def serialize_order(o, include_details: bool = True) -> dict:
     # Never let serialization crash the /orders list endpoint.
     try:
         try:
@@ -514,10 +514,10 @@ def serialize_order(o) -> dict:
                     "quantity": qty,
                     "unit_price": safe_float(unit_price),
                     "line_total": safe_float(unit_price * qty),
-                    "materials": _custom_arrangement_materials(arrangement, db, order_branch) if arrangement else _product_materials(db, product, order_branch),
-                    "price_breakdown": getattr(arrangement, "price_breakdown", None) if arrangement else None,  # ← ADD
-                    "arrangement_prompt": getattr(arrangement, "prompt_text", None) if arrangement else None,
-                    "arrangement_description": getattr(arrangement, "description", None) if arrangement else None,
+                    "materials": (_custom_arrangement_materials(arrangement, db, order_branch) if arrangement else _product_materials(db, product, order_branch)) if include_details else [],
+                    "price_breakdown": getattr(arrangement, "price_breakdown", None) if arrangement and include_details else None,  # ← ADD
+                    "arrangement_prompt": getattr(arrangement, "prompt_text", None) if arrangement and include_details else None,
+                    "arrangement_description": getattr(arrangement, "description", None) if arrangement and include_details else None,
                     "card_message": getattr(item, "card_message", None),
                     "card_enabled": bool(getattr(item, "card_enabled", False)),
                 })
@@ -559,10 +559,10 @@ def serialize_order(o) -> dict:
                     "quantity": getattr(o, "quantity", 1) or 1,
                     "unit_price": safe_float(getattr(arrangement, "estimated_price", None) or getattr(o, "total_amount", None), 0.0),
                     "line_total": safe_float(getattr(o, "total_amount", None), 0.0),
-                    "materials": _custom_arrangement_materials(arrangement, db, getattr(o, "branch_name", None)),
-                    "price_breakdown": getattr(arrangement, "price_breakdown", None),
-                    "arrangement_prompt": getattr(arrangement, "prompt_text", None),
-                    "arrangement_description": getattr(arrangement, "description", None),
+                    "materials": _custom_arrangement_materials(arrangement, db, getattr(o, "branch_name", None)) if include_details else [],
+                    "price_breakdown": getattr(arrangement, "price_breakdown", None) if include_details else None,
+                    "arrangement_prompt": getattr(arrangement, "prompt_text", None) if include_details else None,
+                    "arrangement_description": getattr(arrangement, "description", None) if include_details else None,
                     "card_message": None,
                     "card_enabled": False,
                 })
@@ -854,15 +854,29 @@ def _deduct_product_recipe_materials(db: Session, product: Product, order_quanti
 @router.get("/my", response_model=List[dict])
 def get_my_orders(
     status: Optional[str] = Query(None, description="Filter by status"),
+    limit: int = Query(8, ge=1, le=50),
+    offset: int = Query(0, ge=0),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    query = db.query(Order).filter(Order.user_id == current_user.id)
+    query = (
+        db.query(Order)
+        .options(
+            joinedload(Order.user),
+            joinedload(Order.transaction),
+            joinedload(Order.shipping_method),
+            joinedload(Order.delivery).joinedload(Delivery.rider),
+            joinedload(Order.delivery).joinedload(Delivery.vehicle),
+            selectinload(Order.items).joinedload(OrderItem.product),
+            selectinload(Order.items).joinedload(OrderItem.arrangement),
+        )
+        .filter(Order.user_id == current_user.id)
+    )
     if status:
         try: query = query.filter(Order.status == OrderStatusEnum(status.lower()))
         except ValueError: raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
-    orders = query.order_by(Order.created_at.desc()).all()
-    return [serialize_order(o) for o in orders]
+    orders = query.order_by(Order.created_at.desc()).offset(offset).limit(limit).all()
+    return [serialize_order(o, include_details=False) for o in orders]
 
 @router.get("/", response_model=List[dict])
 def list_orders(

@@ -118,6 +118,7 @@ export default function DescribeArrangement({ onNavigate }) {
   const [fetchingProducts, setFetchingProducts] = useState(true)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [customName, setCustomName] = useState("")
+  const [imageSuggestion, setImageSuggestion] = useState("")
   const MAX = 500
 
   const [typedPlaceholder, setTypedPlaceholder] = useState("")
@@ -253,6 +254,43 @@ export default function DescribeArrangement({ onNavigate }) {
     setSelectedAddOns(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
   }
 
+  const normalizeGeneratedResult = (data) => {
+    if (!data?.price_breakdown?.items) return data
+
+    const pricedItems = data.price_breakdown.items.map(item => {
+      const dbPrice = getProductPrice(item.product_id)
+      const qty = Math.max(1, Number(item.quantity) || 1)
+      const unitPrice = dbPrice > 0 ? dbPrice : Number(item.unit_price) || 0
+      return {
+        ...item,
+        quantity: qty,
+        unit_price: unitPrice,
+        subtotal: unitPrice * qty,
+      }
+    })
+
+    const groupedMap = pricedItems.reduce((acc, item) => {
+      const key = item.product_id || item.product_name
+      if (!acc[key]) {
+        acc[key] = { ...item }
+      } else {
+        acc[key].quantity += item.quantity
+        acc[key].subtotal += item.subtotal
+      }
+      return acc
+    }, {})
+
+    const items = Object.values(groupedMap)
+    return {
+      ...data,
+      price_breakdown: {
+        ...data.price_breakdown,
+        items,
+        total_price: items.reduce((sum, item) => sum + item.subtotal, 0),
+      },
+    }
+  }
+
   const handleGenerateCard = async () => {
     // 🚀 NEW: Redirect guests to login
     if (!localStorage.getItem('access_token')) {
@@ -327,37 +365,81 @@ export default function DescribeArrangement({ onNavigate }) {
         setUnavailableItems(data.unavailable_items)
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
       } else if (data.success) {
-        if (data.price_breakdown?.items) {
-          const pricedItems = data.price_breakdown.items.map(item => {
-            const dbPrice = getProductPrice(item.product_id)
-            const qty = item.quantity || 1
-            return {
-              ...item,
-              quantity: qty,
-              unit_price: dbPrice > 0 ? dbPrice : item.unit_price,
-              subtotal: dbPrice > 0 ? dbPrice * qty : item.subtotal,
-            }
-          })
-
-          const groupedMap = pricedItems.reduce((acc, item) => {
-            const key = item.product_name;
-            if (!acc[key]) {
-              acc[key] = { ...item };
-            } else {
-              acc[key].quantity += item.quantity;
-              acc[key].subtotal += item.subtotal;
-            }
-            return acc;
-          }, {});
-
-          data.price_breakdown.items = Object.values(groupedMap);
-          data.price_breakdown.total_price = data.price_breakdown.items.reduce((sum, item) => sum + item.subtotal, 0)
-        }
+        const normalizedData = normalizeGeneratedResult(data)
 
         setProgress(100)
-        setResult(data)
-        setCustomName(data.price_breakdown?.items?.[0]?.product_name || "AI Arrangement")
+        setResult(normalizedData)
+        setCustomName(normalizedData.price_breakdown?.items?.[0]?.product_name || "AI Arrangement")
+        setAiUsage(prev => prev ? { ...prev, remaining: normalizedData.remaining_generations } : prev)
+      } else {
+        setError(formatGenerationError(data.message, "Generation failed. Please try again."))
+      }
+    } catch (e) {
+      setError(formatGenerationError(e.message))
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const updateBreakdownQuantity = (idx, nextQuantity) => {
+    setResult(prev => {
+      if (!prev?.price_breakdown?.items) return prev
+      const items = prev.price_breakdown.items.map((item, itemIdx) => {
+        if (itemIdx !== idx) return item
+        const quantity = Math.max(1, Number(nextQuantity) || 1)
+        const unitPrice = Number(item.unit_price) || 0
+        return {
+          ...item,
+          quantity,
+          subtotal: unitPrice * quantity,
+        }
+      })
+
+      return {
+        ...prev,
+        price_breakdown: {
+          ...prev.price_breakdown,
+          items,
+          total_price: items.reduce((sum, item) => sum + (Number(item.subtotal) || 0), 0),
+        },
+      }
+    })
+  }
+
+  const handleRegenerateFromEdits = async () => {
+    if (!localStorage.getItem('access_token')) {
+      window.location.href = '/login';
+      return;
+    }
+
+    if (!result?.price_breakdown?.items?.length) return
+    if (!customizationEnabled) {
+      setError("AI Customization is temporarily disabled during peak seasons.")
+      return
+    }
+
+    const editedRecipe = result.price_breakdown.items
+      .map(item => `${item.quantity} ${item.product_name}`)
+      .join(", ")
+    const suggestionText = imageSuggestion.trim()
+    const revisedPrompt = `Customer originally requested: "${prompt.trim()}". Regenerate the floral arrangement image using this exact updated item recipe and quantities: ${editedRecipe}. ${suggestionText ? `Customer visual preferences: ${suggestionText}.` : ""} Keep the same listed materials and quantities, interpret the customer's visual preferences for style, color balance, shape, fullness, angle, and mood. Ultra-realistic professional florist portfolio photo, studio lighting, clean neutral background, no people, no readable text, no watermarks.`
+
+    setLoading(true)
+    setError(null)
+    setUnavailableItems([])
+
+    try {
+      const data = await api.checkAndGenerate({ prompt_text: revisedPrompt })
+
+      if (data.unavailable_items && data.unavailable_items.length > 0) {
+        setUnavailableItems(data.unavailable_items)
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
+      } else if (data.success) {
+        const normalizedData = normalizeGeneratedResult(data)
+        setProgress(100)
+        setResult(normalizedData)
+        setCustomName(prev => prev || normalizedData.price_breakdown?.items?.[0]?.product_name || "AI Arrangement")
+        setAiUsage(prev => prev ? { ...prev, remaining: normalizedData.remaining_generations } : prev)
       } else {
         setError(formatGenerationError(data.message, "Generation failed. Please try again."))
       }
@@ -442,6 +524,7 @@ export default function DescribeArrangement({ onNavigate }) {
     setCardMessage("");
     setShowAIPanel(false);
     setGeneratedCardMsg("");
+    setImageSuggestion("");
   }
 
   const arrangementName = result?.price_breakdown?.items?.[0]?.product_name || "AI Arrangement"
@@ -976,10 +1059,31 @@ export default function DescribeArrangement({ onNavigate }) {
                           {result.price_breakdown?.items?.map((item, idx) => (
                             <tr key={idx} className="border-b" style={{ borderColor: tableRowBdr }}>
                               <td className="px-3 py-2.5" style={{ color: bodyC }}>
-                                {item.product_name}
-                                {item.quantity > 1 && (
-                                  <span className="ml-1.5 text-xs font-semibold px-1.5 py-0.5 rounded-md" style={{ color: mutedC, backgroundColor: isDark ? "#0f172a" : "#f3f4f6" }}>×{item.quantity}</span>
-                                )}
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className="min-w-0">{item.product_name}</span>
+                                  <div className="inline-flex items-center rounded-lg border overflow-hidden flex-shrink-0" style={{ borderColor: tileBdr, backgroundColor: inputBg }}>
+                                    <button
+                                      type="button"
+                                      aria-label={`Decrease ${item.product_name}`}
+                                      onClick={() => updateBreakdownQuantity(idx, item.quantity - 1)}
+                                      disabled={item.quantity <= 1}
+                                      className="w-8 h-8 flex items-center justify-center text-sm font-bold transition disabled:opacity-35 disabled:cursor-not-allowed"
+                                      style={{ color: subHeadC }}
+                                    >
+                                      -
+                                    </button>
+                                    <span className="w-8 text-center text-xs font-bold" style={{ color: headingC }}>{item.quantity}</span>
+                                    <button
+                                      type="button"
+                                      aria-label={`Increase ${item.product_name}`}
+                                      onClick={() => updateBreakdownQuantity(idx, item.quantity + 1)}
+                                      className="w-8 h-8 flex items-center justify-center text-sm font-bold transition"
+                                      style={{ color: accentG }}
+                                    >
+                                      +
+                                    </button>
+                                  </div>
+                                </div>
                               </td>
                               <td className="px-3 py-2.5 text-right font-medium whitespace-nowrap" style={{ color: subHeadC }}>₱{(+item.subtotal).toLocaleString()}</td>
                             </tr>
@@ -1003,6 +1107,32 @@ export default function DescribeArrangement({ onNavigate }) {
                           </tr>
                         </tbody>
                       </table>
+                    </div>
+                    <div className="mt-4 p-4 rounded-xl border" style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>
+                      <label className="text-[11px] font-semibold uppercase tracking-wider block mb-2" style={{ color: mutedC }}>Suggestions for the regenerated image</label>
+                      <textarea
+                        value={imageSuggestion}
+                        onChange={e => setImageSuggestion(e.target.value.slice(0, 260))}
+                        placeholder="e.g. Make it fuller, softer pink, more elegant, lower bouquet shape, brighter lighting..."
+                        rows={3}
+                        className="w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-1 focus:ring-green-600 transition resize-none"
+                        style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
+                      />
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <span className="text-[10px]" style={{ color: mutedC }}>{imageSuggestion.length} / 260</span>
+                        <button
+                          type="button"
+                          onClick={handleRegenerateFromEdits}
+                          disabled={loading || aiUsage?.remaining === 0}
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white rounded-lg transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                          style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M7.977 14.652H2.985m18.03-10.296v4.992m0 0h-4.992m4.992 0-3.181-3.183a8.25 8.25 0 0 0-13.803 3.7" />
+                          </svg>
+                          Regenerate image
+                        </button>
+                      </div>
                     </div>
                   </div>
 

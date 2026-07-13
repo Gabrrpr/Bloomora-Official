@@ -18,20 +18,18 @@ from app.core.dependencies import get_current_user
 from pydantic import BaseModel, EmailStr, field_validator 
 from typing import Optional
 from authlib.integrations.starlette_client import OAuth
-
-# 🚀 IMPORT ALL CORE SECURITY OPERATIONS DIRECLY
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 
-# Import the limiter from your main app instance
+
 from app.core.limiter import limiter
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
-# 🚀 DYNAMIC URL CONFIGURATION
+
 FRONTEND_URL = os.getenv("FRONTEND_URL", "https://estings.shop")
 BACKEND_URL = os.getenv("BACKEND_URL", "https://api.estings.shop")
 
-# Strip trailing slashes just in case they accidentally get added in Coolify
+
 FRONTEND_URL = FRONTEND_URL.rstrip("/")
 BACKEND_URL = BACKEND_URL.rstrip("/")
 
@@ -68,7 +66,7 @@ def normalize_frontend_url(value: str | None) -> str:
 def oauth_frontend_url(request: Request) -> str:
     return normalize_frontend_url(request.session.pop("oauth_frontend_url", FRONTEND_URL))
 
-# ── OAuth Setup ───────────────────────────────────────────────────────────────
+
 oauth = OAuth()
 oauth.register(
     name='google',
@@ -271,7 +269,6 @@ def verify_otp(payload: VerifyOTPRequest, db: Session = Depends(get_db)):
 # ── Register ──────────────────────────────────────────────────────────────────
 @router.post("/register", status_code=201)
 def register(payload: RegisterRequest, db: Session = Depends(get_db)):
-    # 1. Hard check for password length to protect bcrypt
     if len(payload.password) > 72:
         raise HTTPException(status_code=400, detail="Password is too long (max 72 characters).")
 

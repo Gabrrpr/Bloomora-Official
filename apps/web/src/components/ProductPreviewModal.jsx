@@ -1810,13 +1810,6 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
           <DescriptionSection product={product} isDark={isDark}/>
           
           {/* 🚀 THE FIX: This is where the Similar Products properly belong! */}
-          <SuggestionsSection 
-             suggestions={suggestedProducts} 
-             isDark={isDark} 
-             onClose={onClose} 
-             onNavigate={onNavigate} 
-             formatPrice={formatPrice}
-          />
           
           <QtySection {...qtyProps}/>
           <div className="pb-5" style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
@@ -1858,6 +1851,13 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
             )}
           </div>
           <DeliverySection {...deliveryProps}/>
+          <SuggestionsSection
+             suggestions={suggestedProducts}
+             isDark={isDark}
+             onClose={onClose}
+             onNavigate={onNavigate}
+             formatPrice={formatPrice}
+          />
         </div>
       )}
       {tab === "care"    && <CareSection isDark={isDark} product={product}/>}
@@ -2094,7 +2094,11 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
           </div>
         )}
 
-        <style>{`.pm-scroll::-webkit-scrollbar{width:0}`}</style>
+        <style>{`
+          .pm-scroll::-webkit-scrollbar{width:0}
+          .hide-scrollbar{scrollbar-width:none;-ms-overflow-style:none}
+          .hide-scrollbar::-webkit-scrollbar{display:none}
+        `}</style>
       </div>
     )
   }
@@ -2108,6 +2112,8 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
         .pm-scroll::-webkit-scrollbar{width:4px}
         .pm-scroll::-webkit-scrollbar-thumb{background:${isDark?"#4ade80":G};border-radius:4px}
         .pm-scroll::-webkit-scrollbar-thumb:hover{background:${isDark?"#22c55e":DG}}
+        .hide-scrollbar{scrollbar-width:none;-ms-overflow-style:none}
+        .hide-scrollbar::-webkit-scrollbar{display:none}
       `}</style>
 
       <div className="pm-page fixed left-0 right-0 bottom-0 z-[40] flex flex-col box-border"

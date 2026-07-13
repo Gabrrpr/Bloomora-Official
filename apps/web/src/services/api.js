@@ -249,9 +249,11 @@ export const api = {
     return api.patch(`/orders/${orderId}/force-status`, { status });
   },
 
-  async getMyOrders(status) {
+  async getMyOrders(status, { limit, offset } = {}) {
     const params = new URLSearchParams();
     if (status && status !== 'All' && status !== 'today') params.append('status', status.toLowerCase().replace(/ /g, '_'));
+    if (limit !== undefined) params.append('limit', String(limit));
+    if (offset !== undefined) params.append('offset', String(offset));
     return api.get(`/orders/my?${params.toString()}`);
   },
 
@@ -267,8 +269,22 @@ export const api = {
   },
 
   // ── Products (Public) ───────────────────────────────────────────────────
-  async getProducts() {
-    return api.get('/products/');
+  async getProducts({ limit, offset, campaignKey, category, categories, productType, occasion, branch, minPrice, maxPrice, sort, paginated = false } = {}) {
+    const params = new URLSearchParams();
+    if (campaignKey) params.append('campaign_key', campaignKey);
+    if (category) params.append('category', category);
+    if (categories) params.append('categories', Array.isArray(categories) ? categories.join(',') : categories);
+    if (productType) params.append('product_type', Array.isArray(productType) ? productType.join(',') : productType);
+    if (occasion) params.append('occasion', Array.isArray(occasion) ? occasion.join(',') : occasion);
+    if (branch) params.append('branch', branch);
+    if (minPrice !== undefined) params.append('min_price', String(minPrice));
+    if (maxPrice !== undefined) params.append('max_price', String(maxPrice));
+    if (sort) params.append('sort', sort);
+    if (limit !== undefined) params.append('limit', String(limit));
+    if (offset !== undefined) params.append('offset', String(offset));
+    if (paginated) params.append('paginated', 'true');
+    const query = params.toString();
+    return api.get(`/products/${query ? `?${query}` : ''}`);
   },
 
   async getCustomizationProducts() {

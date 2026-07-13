@@ -192,6 +192,20 @@ export default function Checkout({ onNavigate }) {
   }, [])
 
   useEffect(() => {
+    if (!mapFullscreenOpen) return
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    const onKeyDown = (event) => {
+      if (event.key === "Escape") setMapFullscreenOpen(false)
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener("keydown", onKeyDown)
+    }
+  }, [mapFullscreenOpen])
+
+  useEffect(() => {
     async function loadAddresses() {
       const token = localStorage.getItem("access_token")
       if (!token) {
@@ -1267,10 +1281,30 @@ export default function Checkout({ onNavigate }) {
         </div>
       </div>
 
-      {/* Manual Recipient Modal */}
+      {/* Map Preview Modal */}
       {mapFullscreenOpen && activeDeliveryPin && (
-        <div className="fixed inset-0 z-[60] bg-black/70 p-3 sm:p-6 flex items-center justify-center">
-          <div className="bg-white rounded-xl w-full h-full max-w-6xl max-h-[92vh] shadow-2xl overflow-hidden flex flex-col">
+        <div
+          className="fixed inset-0 z-[60] bg-black/75 p-3 sm:p-5 flex items-center justify-center overflow-hidden"
+          onClick={() => setMapFullscreenOpen(false)}
+        >
+          <button
+            type="button"
+            onClick={() => setMapFullscreenOpen(false)}
+            className="fixed left-1/2 top-3 sm:top-5 -translate-x-1/2 h-11 px-4 rounded-full bg-white text-gray-800 border border-gray-200 shadow-xl hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-bold"
+            style={{ zIndex: 70 }}
+            aria-label="Close full screen map"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M6 18 18 6M6 6l12 12" />
+            </svg>
+            Close map
+          </button>
+
+          <div
+            className="bg-white rounded-xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col"
+            style={{ height: "min(78dvh, 720px)", maxHeight: "calc(100dvh - 4.5rem)", marginTop: "2.75rem" }}
+            onClick={event => event.stopPropagation()}
+          >
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="text-sm font-bold text-gray-800">Delivery pin</h3>
@@ -1279,12 +1313,9 @@ export default function Checkout({ onNavigate }) {
               <button
                 type="button"
                 onClick={() => setMapFullscreenOpen(false)}
-                className="w-9 h-9 rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 flex items-center justify-center flex-shrink-0"
-                aria-label="Close full screen map"
+                className="px-3 py-2 rounded-lg bg-gray-900 text-white text-xs font-bold hover:bg-gray-700 flex-shrink-0"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18 18 6M6 6l12 12" />
-                </svg>
+                Close
               </button>
             </div>
             <iframe
@@ -1293,8 +1324,15 @@ export default function Checkout({ onNavigate }) {
               className="w-full flex-1 border-0"
               loading="lazy"
             />
-            <div className="px-4 py-2 border-t border-gray-100 text-[11px] text-gray-500">
-              Coordinates: {Number(activeDeliveryPin.lat).toFixed(6)}, {Number(activeDeliveryPin.lng).toFixed(6)}
+            <div className="px-4 py-2 border-t border-gray-100 text-[11px] text-gray-500 flex items-center justify-between gap-3">
+              <span>Coordinates: {Number(activeDeliveryPin.lat).toFixed(6)}, {Number(activeDeliveryPin.lng).toFixed(6)}</span>
+              <button
+                type="button"
+                onClick={() => setMapFullscreenOpen(false)}
+                className="text-[11px] font-bold text-[#2E8B34] hover:underline flex-shrink-0"
+              >
+                Close map
+              </button>
             </div>
           </div>
         </div>

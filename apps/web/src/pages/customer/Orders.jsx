@@ -1,32 +1,49 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { api } from "../../services/api.js"
 import { useTheme } from "../../context/ThemeContext"
+import Footer from "../../components/Footer.jsx"
 
-const TABS = ["All", "Pending", "Preparing", "Out for Delivery", "Delivered", "Completed", "Cancelled"]
+const TABS = ["All", "Pending", "Confirmed", "Preparing", "Ready for Pickup", "Out for Delivery", "Delivered", "Completed", "Cancelled"]
+const ORDERS_PAGE_SIZE = 8
 
 const STATUS_META = {
   delivered:        { color: "#2D5016", bg: "#EEF5E6", label: "Delivered" },
   completed:        { color: "#2D5016", bg: "#EEF5E6", label: "Completed" },
+  confirmed:        { color: "#245B2A", bg: "#EAF7EC", label: "Confirmed" },
   preparing:        { color: "#185FA5", bg: "#E8F0FA", label: "Preparing" },
+  ready_for_pickup: { color: "#5A3B9E", bg: "#F0EBF8", label: "Ready for Pickup" },
   pending:          { color: "#8A6020", bg: "#FDF4E3", label: "Pending" },
+  pending_payment:  { color: "#8A6020", bg: "#FDF4E3", label: "Pending" },
+  paid:             { color: "#8A6020", bg: "#FDF4E3", label: "Pending" },
+  processing:       { color: "#185FA5", bg: "#E8F0FA", label: "Preparing" },
   out_for_delivery: { color: "#7A3B1E", bg: "#FAEAE4", label: "Out for Delivery" },
   cancelled:        { color: "#7A2020", bg: "#FAE8E8", label: "Cancelled" },
+  payment_failed:   { color: "#7A2020", bg: "#FAE8E8", label: "Cancelled" },
 }
 
 const DEFAULT_STATUS = { color: "#8A6020", bg: "#FDF4E3", label: "Pending" }
 
 function formatStatus(s) {
   if (!s) return "Pending"
-  return s.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
+  const key = String(s).toLowerCase()
+  return (STATUS_META[key]?.label) || key.replace(/_/g, " ").replace(/\b\w/g, l => l.toUpperCase())
+}
+
+function statusKey(status) {
+  return String(status || "pending").toLowerCase()
+}
+
+function customerStatusLabel(status) {
+  return formatStatus(statusKey(status))
 }
 
 function OrderCard({ order, onNavigate, idx = 0 }) {
-  const statusKey = (order.status || "pending").toLowerCase()
-  const meta = STATUS_META[statusKey] || DEFAULT_STATUS
+  const currentStatusKey = statusKey(order.status)
+  const meta = STATUS_META[currentStatusKey] || DEFAULT_STATUS
 
-  const isPending = ["pending", "preparing"].includes(statusKey)
-  const isDelivered = ["delivered", "completed"].includes(statusKey)
-  const isOutForDelivery = statusKey === "out_for_delivery"
+  const isPending = customerStatusLabel(order.status) === "Pending"
+  const isDelivered = ["delivered", "completed"].includes(currentStatusKey)
+  const isOutForDelivery = currentStatusKey === "out_for_delivery"
   const tracking = order.delivery_tracking || {}
   const rider = tracking.rider
   const vehicle = tracking.vehicle
@@ -44,23 +61,23 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
 
   return (
     <div
-      className="bg-white rounded-xl mb-3 overflow-hidden"
+      className="bg-white rounded-2xl mb-4 overflow-hidden"
       style={{
-        animation: `ordersRise 0.45s ease ${0.1 + idx * 0.06}s both`,
+        animation: `ordersRise 0.32s ease ${Math.min(0.18, idx * 0.025)}s both`,
         border: `1px solid ${lineBdr}`,
         borderLeft: `3px solid ${meta.color}`,
-        boxShadow: "0 1px 4px rgba(45,80,22,0.06)",
+        boxShadow: "0 8px 22px rgba(45,80,22,0.07)",
       }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-5 py-3" style={{ borderBottom: `1px solid ${innerBdr}` }}>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-3 px-4 sm:px-6 py-4" style={{ borderBottom: `1px solid ${innerBdr}` }}>
+        <div className="flex items-center gap-2 min-w-0">
           {/* Leaf icon */}
           <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="#8FAF6B" strokeWidth="1.8">
             <path strokeLinecap="round" strokeLinejoin="round"
               d="M12 2C6.5 2 3 7 3 12c0 4 2.5 7.5 6 9l3-9 3 9c3.5-1.5 6-5 6-9 0-5-3.5-10-9-10z" />
           </svg>
-          <span className="text-[13px] font-medium text-gray-700 tracking-tight">
+          <span className="text-sm font-semibold text-gray-700 tracking-tight truncate">
             Esting's Flowers International
           </span>
         </div>
@@ -73,11 +90,11 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
       </div>
 
       {/* Item */}
-      <div className="px-5 py-4 flex items-start gap-4">
+      <div className="px-4 sm:px-6 py-5 flex items-start gap-4 sm:gap-5">
         <img
           src={order.image_url || "https://images.unsplash.com/photo-1582794543139-8ac9cb0f7b11?q=80&w=200&auto=format&fit=crop"}
           alt={order.product_name}
-          className="w-[76px] h-[76px] rounded-lg object-cover flex-shrink-0"
+          className="w-24 h-24 sm:w-28 sm:h-28 rounded-xl object-cover flex-shrink-0"
           style={{ border: `1px solid ${lineBdr}` }}
           onError={e => { e.target.src = "https://images.unsplash.com/photo-1582794543139-8ac9cb0f7b11?q=80&w=200&auto=format&fit=crop" }}
         />
@@ -90,17 +107,17 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
               Custom Arrangement
             </span>
           )}
-          <p className="text-[14px] text-gray-800 font-medium line-clamp-2 mb-1 leading-snug">
+          <p className="text-base text-gray-800 font-semibold line-clamp-2 mb-1 leading-snug">
             {order.product_name}
           </p>
           <p className="text-[11px] text-gray-400 mb-3 font-mono tracking-wide">
             #{order.order_number}
           </p>
-          <div className="flex items-center justify-between">
-            <span className="text-[13px] font-semibold text-gray-800">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-base font-bold text-gray-800">
               ₱{(order.unit_price || 0).toLocaleString()}
             </span>
-            <span className="text-[11px] text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full border border-gray-100">
+            <span className="text-xs text-gray-400 bg-gray-50 px-2.5 py-1 rounded-full border border-gray-100">
               qty {order.quantity}
             </span>
           </div>
@@ -108,21 +125,21 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
       </div>
 
       {/* Footer */}
-      <div className="px-5 py-3" style={{ borderTop: `1px solid ${innerBdr}`, background: footerBg }}>
-        <div className="flex flex-wrap items-center justify-between gap-y-3 gap-x-2">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[11px] text-gray-400">Order total</span>
+      <div className="px-4 sm:px-6 py-4" style={{ borderTop: `1px solid ${innerBdr}`, background: footerBg }}>
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(180px,1fr)_auto] gap-3 lg:gap-4 lg:items-center">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-gray-400">Order total</span>
             <span
-              className="text-[15px] font-bold"
+              className="text-lg font-bold"
               style={{ color: isDelivered ? (isDark ? "#86efac" : "#2D5016") : (isDark ? "#d6b89a" : "#5A3E28") }}
             >
               ₱{(order.total_amount || 0).toLocaleString()}
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="orders-actions flex items-center gap-2 overflow-x-auto lg:overflow-visible lg:flex-wrap lg:justify-end pb-1 lg:pb-0">
             {isDelivered && order.has_reviewed && (
-              <span className="text-[11px] flex items-center gap-1 font-medium" style={{ color: isDark ? "#86efac" : "#2D5016" }}>
+              <span className="text-xs flex items-center gap-1 font-medium flex-shrink-0" style={{ color: isDark ? "#86efac" : "#2D5016" }}>
                 <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
                 </svg>
@@ -131,7 +148,7 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
             )}
 
             <button
-              className="px-3.5 py-1.5 text-[12px] font-medium rounded-lg transition"
+              className="flex-shrink-0 min-w-max px-4 py-2 text-sm font-semibold rounded-lg transition"
               style={{ border: `1px solid ${btnBdr}`, color: greenTxt, background: btnBg }}
               onMouseEnter={e => e.currentTarget.style.background = btnHovG}
               onMouseLeave={e => e.currentTarget.style.background = btnBg}
@@ -144,7 +161,7 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
                 onClick={() => {
                   window.open(tracking.lalamove_share_link, "_blank", "noopener,noreferrer")
                 }}
-                className="px-3.5 py-1.5 text-[12px] font-semibold rounded-lg transition text-white"
+                className="flex-shrink-0 min-w-max px-4 py-2 text-sm font-semibold rounded-lg transition text-white"
                 style={{ background: "#4A6741" }}
                 onMouseEnter={e => e.currentTarget.style.background = "#3A5332"}
                 onMouseLeave={e => e.currentTarget.style.background = "#4A6741"}
@@ -155,7 +172,7 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
 
             {isPending && (
               <button
-                className="px-3.5 py-1.5 text-[12px] font-medium rounded-lg transition"
+                className="flex-shrink-0 min-w-max px-4 py-2 text-sm font-semibold rounded-lg transition"
                 style={{ border: `1px solid ${btnBdr}`, color: redTxt, background: btnBg }}
                 onMouseEnter={e => e.currentTarget.style.background = btnHovR}
                 onMouseLeave={e => e.currentTarget.style.background = btnBg}
@@ -168,7 +185,7 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
               <>
                 <button
                   onClick={() => onNavigate("shop")}
-                  className="px-3.5 py-1.5 text-[12px] font-medium rounded-lg transition"
+                  className="flex-shrink-0 min-w-max px-4 py-2 text-sm font-semibold rounded-lg transition"
                   style={{ border: `1px solid ${btnBdr}`, color: greenTxt, background: btnBg }}
                   onMouseEnter={e => e.currentTarget.style.background = btnHovG}
                   onMouseLeave={e => e.currentTarget.style.background = btnBg}
@@ -178,7 +195,7 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
                 {!order.has_reviewed && (
                   <button
                     onClick={() => onNavigate("write-review", order.id)}
-                    className="px-3.5 py-1.5 text-[12px] font-semibold rounded-lg transition text-white"
+                    className="flex-shrink-0 min-w-max px-4 py-2 text-sm font-semibold rounded-lg transition text-white"
                     style={{ background: "#2D5016" }}
                     onMouseEnter={e => e.currentTarget.style.background = "#1E3A0F"}
                     onMouseLeave={e => e.currentTarget.style.background = "#2D5016"}
@@ -191,7 +208,7 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
           </div>
         </div>
         {(tracking.lalamove_share_link || rider || vehicle || tracking.lalamove_status || tracking.status) && (
-          <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 text-xs">
             {(tracking.lalamove_status || tracking.status) && (
               <div className="rounded-lg border border-gray-100 bg-white px-3 py-2">
                 <span className="text-gray-400">Delivery status</span>
@@ -244,29 +261,74 @@ export default function Orders({ onNavigate, embedded = false }) {
   const [tab, setTab] = useState("All")
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(true)
   const [error, setError] = useState(null)
+  const loadMoreRef = useRef(null)
+  const nextOffsetRef = useRef(0)
+  const loadingMoreRef = useRef(false)
+  const hasMoreRef = useRef(true)
+
+  const loadOrders = useCallback(async ({ reset = false } = {}) => {
+    const offset = reset ? 0 : nextOffsetRef.current
+    if (!reset && (loadingMoreRef.current || !hasMoreRef.current)) return
+
+    if (reset) {
+      setLoading(true)
+      setError(null)
+      setHasMore(true)
+      hasMoreRef.current = true
+      nextOffsetRef.current = 0
+    } else {
+      loadingMoreRef.current = true
+      setLoadingMore(true)
+    }
+
+    try {
+      const data = await api.getMyOrders(null, { limit: ORDERS_PAGE_SIZE, offset })
+      const batch = Array.isArray(data) ? data : []
+
+      setOrders(prev => reset ? batch : [...prev, ...batch])
+      nextOffsetRef.current = offset + batch.length
+      const more = batch.length === ORDERS_PAGE_SIZE
+      setHasMore(more)
+      hasMoreRef.current = more
+    } catch (e) {
+      setError(e.message || "Failed to load orders")
+      if (reset) setOrders([])
+    } finally {
+      setLoading(false)
+      setLoadingMore(false)
+      loadingMoreRef.current = false
+    }
+  }, [])
 
   useEffect(() => {
-    async function load() {
-      setLoading(true); setError(null)
-      try {
-        const data = await api.getMyOrders(tab === "All" ? null : tab)
-        setOrders(Array.isArray(data) ? data : [])
-      } catch (e) {
-        setError(e.message || "Failed to load orders")
-        setOrders([])
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [tab])
+    loadOrders({ reset: true })
+  }, [loadOrders])
 
-  const filtered = tab === "All"
-    ? orders
-    : orders.filter(o => formatStatus(o.status) === tab)
+  const filtered = useMemo(
+    () => tab === "All" ? orders : orders.filter(o => customerStatusLabel(o.status) === tab),
+    [orders, tab]
+  )
+
+  useEffect(() => {
+    const node = loadMoreRef.current
+    if (!node || loading || loadingMore || !hasMore) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) loadOrders()
+      },
+      { rootMargin: "360px 0px" }
+    )
+
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [hasMore, loading, loadingMore, loadOrders, tab])
 
   return (
+    <>
     <div className={`${embedded ? "" : "min-h-screen"} orders-root`}>
       <style>{`
         @keyframes ordersRise {
@@ -285,9 +347,11 @@ export default function Orders({ onNavigate, embedded = false }) {
         [data-theme="dark"] .orders-root .text-gray-700{color:#cbd5e1 !important}
         [data-theme="dark"] .orders-root .text-gray-400{color:#94a3b8 !important}
         [data-theme="dark"] .orders-root .border-gray-100{border-color:#2d3748 !important}
+        .orders-actions{scrollbar-width:none;-ms-overflow-style:none}
+        .orders-actions::-webkit-scrollbar{display:none}
       `}</style>
 
-      <div className={embedded ? "max-w-3xl" : "max-w-3xl mx-auto px-4 py-6 sm:py-8"}>
+      <div className={embedded ? "max-w-5xl" : "max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8"}>
 
         {/* Header */}
         <div className="flex items-center justify-between gap-3 mb-5" style={{ animation: "ordersRise 0.4s ease both" }}>
@@ -342,7 +406,7 @@ export default function Orders({ onNavigate, embedded = false }) {
             </svg>
             Loading your orders…
           </div>
-        ) : filtered.length === 0 ? (
+        ) : filtered.length === 0 && !hasMore ? (
           <div
             className="bg-white rounded-xl p-16 text-center"
             style={{ border: `1px solid ${lineBdr}`, boxShadow: "0 1px 4px rgba(45,80,22,0.05)" }}
@@ -371,7 +435,31 @@ export default function Orders({ onNavigate, embedded = false }) {
         )}
         </div>
 
+        {!loading && (
+          <div
+            ref={loadMoreRef}
+            className="py-5 text-center"
+            style={{ color: mutedC }}
+          >
+            {loadingMore ? (
+              <div className="text-xs font-semibold">Loading more orders...</div>
+            ) : hasMore ? (
+              <button
+                onClick={() => loadOrders()}
+                className="px-5 py-2 text-xs font-semibold rounded-full transition active:scale-95"
+                style={{ background: isDark ? "#1a2332" : "white", color: headingC, border: `1px solid ${lineBdr}` }}
+              >
+                Load more orders
+              </button>
+            ) : orders.length > 0 ? (
+              <div className="text-xs font-semibold">You've reached the end</div>
+            ) : null}
+          </div>
+        )}
+
       </div>
     </div>
+    {!embedded && <Footer onNavigate={onNavigate} />}
+    </>
   )
 }

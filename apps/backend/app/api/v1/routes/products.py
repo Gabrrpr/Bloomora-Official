@@ -364,6 +364,7 @@ def get_customization_products(db: Session = Depends(get_db)):
 def get_category_hierarchy(db: Session = Depends(get_db)):
     products = db.query(Product).filter(Product.status != ProductStatusEnum.inactive, Product.is_visible == True).all()
     hierarchy_dict = {}
+    occasion_labels = {}
     NON_FLORAL_CATS = ["wrapping", "accessory", "vase", "tools", "pot", "pot fillers", "candles"]
 
     for p in products:
@@ -376,19 +377,42 @@ def get_category_hierarchy(db: Session = Depends(get_db)):
             group = "non-floral" if cat in NON_FLORAL_CATS else "uncategorized"
 
         if group not in hierarchy_dict:
-            hierarchy_dict[group] = set()
+            hierarchy_dict[group] = {}
 
         if cat:
-            hierarchy_dict[group].add(cat)
+            if cat not in hierarchy_dict[group]:
+                hierarchy_dict[group][cat] = set()
+            product_type = (p.product_type or "").lower().strip()
+            if product_type:
+                hierarchy_dict[group][cat].add(product_type)
+
+        raw_occasions = getattr(p, "occasions", []) or []
+        if isinstance(raw_occasions, str):
+            try:
+                raw_occasions = json.loads(raw_occasions)
+            except Exception:
+                raw_occasions = raw_occasions.split(",")
+        if isinstance(raw_occasions, list):
+            for occasion in raw_occasions:
+                label = str(occasion or "").strip()
+                if label:
+                    occasion_labels[label.lower()] = label
 
     def title_case(s: str):
         return " ".join(w.capitalize() for w in s.replace("_", " ").split("-"))
 
     result = []
+    occasions = sorted(occasion_labels.values(), key=lambda x: x.lower())
     for group_name, cats in hierarchy_dict.items():
+        cat_titles = {cat: title_case(cat) for cat in cats.keys()}
         result.append({
             "title": title_case(group_name),
-            "items": sorted([title_case(c) for c in cats]),
+            "items": sorted(cat_titles.values()),
+            "types": {
+                cat_titles[cat]: sorted([title_case(t) for t in types])
+                for cat, types in cats.items()
+            },
+            "occasions": occasions,
         })
 
     result.sort(
@@ -418,10 +442,20 @@ def get_product_reviews(product_id: str, db: Session = Depends(get_db)):
         for r in reviews
     ]
 
-@router.get("/", response_model=List[dict])
+@router.get("/")
 def get_products(
     branch: Optional[str] = Query(None),
     campaign_key: Optional[str] = Query(None),
+    category: Optional[str] = Query(None),
+    categories: Optional[str] = Query(None),
+    product_type: Optional[str] = Query(None),
+    occasion: Optional[str] = Query(None),
+    min_price: Optional[float] = Query(None),
+    max_price: Optional[float] = Query(None),
+    sort: Optional[str] = Query(None),
+    limit: int = Query(0, ge=0, le=100),
+    offset: int = Query(0, ge=0),
+    paginated: bool = Query(False),
     db: Session = Depends(get_db),
 ):
     query = (
@@ -446,6 +480,38 @@ def get_products(
             )
         )
 
+    category_values = [
+        value.strip().lower()
+        for value in str(categories or category or "").split(",")
+        if value.strip()
+    ]
+    if category_values and "all" not in category_values:
+        query = query.filter(func.lower(cast(Product.category, String)).in_(category_values))
+
+    type_values = [
+        value.strip().lower()
+        for value in str(product_type or "").split(",")
+        if value.strip()
+    ]
+    if type_values:
+        query = query.filter(func.lower(func.coalesce(Product.product_type, "")).in_(type_values))
+
+    occasion_values = [
+        value.strip().lower()
+        for value in str(occasion or "").split(",")
+        if value.strip()
+    ]
+    if occasion_values:
+        query = query.filter(or_(*[
+            cast(Product.occasions, String).ilike(f"%{value}%")
+            for value in occasion_values
+        ]))
+
+    if min_price is not None:
+        query = query.filter(Product.price >= min_price)
+    if max_price is not None:
+        query = query.filter(Product.price <= max_price)
+
     active_campaign = None
     normalized_campaign_key = (campaign_key or "").strip()
     if normalized_campaign_key:
@@ -464,7 +530,61 @@ def get_products(
             return []
         query = query.filter(Product.campaigns.any(Campaign.id == active_campaign.id))
 
-    products = query.all()
+    sort_key = (sort or "").strip().lower()
+    total = query.count()
+    use_balanced_all = (
+        paginated
+        and not category_values
+        and not type_values
+        and not occasion_values
+        and not normalized_campaign_key
+        and sort_key in {"", "best-selling"}
+    )
+
+    if use_balanced_all and limit:
+        rows_for_order = (
+            query.with_entities(Product.id, Product.category, Product.created_at)
+            .order_by(func.lower(cast(Product.category, String)).asc(), Product.created_at.desc())
+            .all()
+        )
+        by_category = {}
+        for product_id, product_category, _created_at in rows_for_order:
+            category_key = str(product_category or "uncategorized").lower().strip()
+            by_category.setdefault(category_key, []).append(product_id)
+
+        ordered_ids = []
+        while any(by_category.values()):
+            for category_key in sorted(by_category.keys()):
+                if by_category[category_key]:
+                    ordered_ids.append(by_category[category_key].pop(0))
+
+        page_ids = ordered_ids[offset:offset + limit]
+        if page_ids:
+            product_by_id = {
+                product.id: product
+                for product in (
+                    db.query(Product)
+                    .outerjoin(Inventory, Product.id == Inventory.product_id)
+                    .options(joinedload(Product.inventory))
+                    .filter(Product.id.in_(page_ids))
+                    .all()
+                )
+            }
+            products = [product_by_id[product_id] for product_id in page_ids if product_id in product_by_id]
+        else:
+            products = []
+    elif sort_key == "price-asc":
+        query = query.order_by(Product.price.asc(), Product.created_at.desc())
+        products = query.offset(offset).limit(limit).all() if limit else query.all()
+    elif sort_key == "price-desc":
+        query = query.order_by(Product.price.desc(), Product.created_at.desc())
+        products = query.offset(offset).limit(limit).all() if limit else query.all()
+    elif sort_key == "newest":
+        query = query.order_by(Product.created_at.desc())
+        products = query.offset(offset).limit(limit).all() if limit else query.all()
+    else:
+        query = query.order_by(Product.created_at.desc())
+        products = query.offset(offset).limit(limit).all() if limit else query.all()
     review_summaries = get_review_summaries(db, [p.id for p in products])
 
     rows = []
@@ -498,6 +618,14 @@ def get_products(
             "review_count": review_summaries.get(p.id, {}).get("review_count", 0),
         }
         rows.append(apply_campaign_discount(product_data, active_campaign))
+    if paginated:
+        return {
+            "items": rows,
+            "total": total,
+            "limit": limit,
+            "offset": offset,
+            "has_more": bool(limit and offset + len(rows) < total),
+        }
     return rows
 
 @router.get("/admin/all", response_model=List[dict])

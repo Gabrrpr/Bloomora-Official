@@ -22,10 +22,12 @@ const SORT_OPTIONS = [
   { value:"rating",       label:"Top Rated" },
   { value:"newest",       label:"Newest" },
 ]
+const SHOP_PAGE_SIZE = 16
 
 const discount = (orig, price) => Math.round((1 - price / orig) * 100)
 
 const normalizeFilterValue = value => (value || "").toString().trim().toLowerCase()
+const normalizeCat = (s) => (s || "").toString().trim().toLowerCase()
 
 // Friendlier display names for certain occasion tags (matching still uses the raw tag).
 const OCCASION_DISPLAY = { "get well": "Get Well Soon" }
@@ -268,6 +270,7 @@ function ListCardMobile({ product, wishlist, toggleWishlist, onPreview }) {
 
 function SidebarContent({ 
   products, 
+  categoryHierarchy = [],
   activeCategory, 
   setActiveCategory, 
   activeTypes,
@@ -320,27 +323,50 @@ function SidebarContent({
   const groupedHierarchy = { floral: {}, 'non-floral': {} };
   
   const HIDDEN_CATS = ["add-on", "addon", "wrapping", "ribbon", "filler"];
-  (products || []).forEach(p => {
-    const catNorm = (p.category || "").toLowerCase().trim();
-    if (HIDDEN_CATS.includes(catNorm)) return;
+  if (categoryHierarchy.length > 0) {
+    categoryHierarchy.forEach(groupData => {
+      const group = normalizeCat(groupData.title || "uncategorized");
+      if (!groupedHierarchy[group]) groupedHierarchy[group] = {};
 
-    const group = (p.product_group || 'floral').toLowerCase().trim();
-    const cat = p.category || "Uncategorized";
-    const type = p.product_type;
-    
-    if (!groupedHierarchy[group]) groupedHierarchy[group] = {};
-    if (!groupedHierarchy[group][cat]) groupedHierarchy[group][cat] = new Set();
-    if (type) groupedHierarchy[group][cat].add(type);
-  });
+      ;(groupData.items || []).forEach(cat => {
+        const catNorm = normalizeCat(cat);
+        if (HIDDEN_CATS.includes(catNorm)) return;
+
+        groupedHierarchy[group][cat] = new Set(groupData.types?.[cat] || []);
+      });
+    });
+  } else {
+    (products || []).forEach(p => {
+      const catNorm = (p.category || "").toLowerCase().trim();
+      if (HIDDEN_CATS.includes(catNorm)) return;
+
+      const group = (p.product_group || 'floral').toLowerCase().trim();
+      const cat = p.category || "Uncategorized";
+      const type = p.product_type;
+      
+      if (!groupedHierarchy[group]) groupedHierarchy[group] = {};
+      if (!groupedHierarchy[group][cat]) groupedHierarchy[group][cat] = new Set();
+      if (type) groupedHierarchy[group][cat].add(type);
+    });
+  }
 
   const occasionMap = new Map();
-  (products || []).forEach(p => {
-    toFilterList(p.occasions).forEach(occ => {
+  const hierarchyOccasions = categoryHierarchy.flatMap(groupData => groupData.occasions || []);
+  if (hierarchyOccasions.length > 0) {
+    hierarchyOccasions.forEach(occ => {
       const label = (occ || "").toString().trim();
       const key = normalizeFilterValue(label);
       if (key && !occasionMap.has(key)) occasionMap.set(key, label);
     });
-  });
+  } else {
+    (products || []).forEach(p => {
+      toFilterList(p.occasions).forEach(occ => {
+        const label = (occ || "").toString().trim();
+        const key = normalizeFilterValue(label);
+        if (key && !occasionMap.has(key)) occasionMap.set(key, label);
+      });
+    });
+  }
   const uniqueOccasions = Array.from(occasionMap.values()).sort((a, b) => a.localeCompare(b));
 
   return (
@@ -515,7 +541,7 @@ function SidebarContent({
   )
 }
 
-function MobileFilterDrawer({ open, onClose, products, activeCategory, setActiveCategory, priceRange, setPriceRange, activeTypes, setActiveTypes, selectedLocations, setSelectedLocations, selectedOccasions, setSelectedOccasions }) {
+function MobileFilterDrawer({ open, onClose, products, categoryHierarchy, activeCategory, setActiveCategory, priceRange, setPriceRange, activeTypes, setActiveTypes, selectedLocations, setSelectedLocations, selectedOccasions, setSelectedOccasions }) {
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden"
     else document.body.style.overflow = ""
@@ -535,6 +561,7 @@ function MobileFilterDrawer({ open, onClose, products, activeCategory, setActive
           <div style={{ padding:"12px 24px 32px" }}>
             <SidebarContent
               products={products}
+              categoryHierarchy={categoryHierarchy}
               activeCategory={activeCategory}
               setActiveCategory={setActiveCategory}
               activeTypes={activeTypes}
@@ -603,6 +630,8 @@ export default function Shop({ onNavigate, initialCategory }) {
 
   const [products, setProducts]               = useState([])
   const [productsLoading, setProductsLoading] = useState(true)
+  const [productPage, setProductPage]         = useState(1)
+  const [productTotal, setProductTotal]       = useState(0)
   const [viewAs, setViewAs]                   = useState("grid4") // 🚀 Default to denser grid now that we support 5
   const [sortBy, setSortBy]                   = useState("best-selling")
   const [activeCategory, setActiveCategory]   = useState("All")
@@ -625,6 +654,16 @@ export default function Shop({ onNavigate, initialCategory }) {
   const sortRef = useRef(null)
   const sortMenuRef = useRef(null)
   const searchInputRef = useRef(null)
+
+  const mapProductForShop = (p) => ({
+    ...p,
+    image: p.image_url || p.image || new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href,
+    original: p.original_price || null,
+    rating: ratingFromProduct(p),
+    reviews: reviewCountFromProduct(p),
+    ribbon: p.ribbon || null,
+    search_tags: p.search_tags || p.tags || [],
+  })
 
   // Typewriter placeholder for the search bar — types a phrase, pauses, deletes,
   // then moves to the next. Driven straight to the DOM (no state) so the whole
@@ -712,14 +751,26 @@ export default function Shop({ onNavigate, initialCategory }) {
   }, []);
 
   useEffect(() => {
-    setProductsLoading(true)
     api.get("/products/categories/hierarchy") 
       .then(data => { if (data) setCategoryHierarchy(data); })
       .catch(err => console.error("Failed to load hierarchy", err));
+  }, [])
 
-    const productEndpoint = activeCampaignKey
-      ? `/products/?campaign_key=${encodeURIComponent(activeCampaignKey)}`
-      : "/products/"
+  useEffect(() => {
+    setProductPage(1)
+  }, [activeCampaignKey, activeCategory, activeTypes, selectedLocations, selectedOccasions, priceRange, sortBy])
+
+  const activeCategoryNorm = normalizeCat(activeCategory)
+  const activeParentGroup = categoryHierarchy.find(g => normalizeCat(g.title) === activeCategoryNorm)
+  const activeCategoryItems = activeParentGroup?.items || []
+  const categoryFilter = activeCategoryNorm && activeCategoryNorm !== "all" && activeCategoryItems.length === 0 ? activeCategory : undefined
+  const categoriesFilter = activeCategoryItems.length > 0 ? activeCategoryItems : undefined
+  const branchFilter = selectedLocations.length === 1 ? selectedLocations[0] : undefined
+
+  useEffect(() => {
+    setProductsLoading(true)
+
+    const offset = (productPage - 1) * SHOP_PAGE_SIZE
 
     if (activeCampaignKey) {
       api.getActiveCampaigns()
@@ -732,27 +783,32 @@ export default function Shop({ onNavigate, initialCategory }) {
       setActiveCampaign(null)
     }
 
-    api.get(productEndpoint)
+    api.getProducts({
+      campaignKey: activeCampaignKey || undefined,
+      category: categoryFilter,
+      categories: categoriesFilter,
+      productType: activeTypes,
+      occasion: selectedOccasions,
+      branch: branchFilter,
+      minPrice: priceRange[0],
+      maxPrice: priceRange[1],
+      sort: sortBy,
+      limit: SHOP_PAGE_SIZE,
+      offset,
+      paginated: true,
+    })
       .then(data => {
-        if (data && data.length > 0) {
-          const mapped = data.map(p => ({
-            ...p,
-            image: p.image_url || new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href,
-            original: p.original_price || null, 
-            rating: ratingFromProduct(p),
-            reviews: reviewCountFromProduct(p),
-            ribbon: p.ribbon || null,
-            search_tags: p.search_tags || p.tags || [],
-          }));
-          setProducts(mapped);
-        } else { setProducts([]); }
+        const items = Array.isArray(data) ? data : (data?.items || [])
+        setProducts(items.map(mapProductForShop))
+        setProductTotal(Number(data?.total ?? items.length) || 0)
       })
       .catch(err => {
         console.error("Failed to load products", err);
         setProducts([]);
+        setProductTotal(0);
       })
       .finally(() => setProductsLoading(false));
-  }, [activeCampaignKey]);
+  }, [activeCampaignKey, productPage, categoryFilter, categoriesFilter, activeTypes, selectedOccasions, branchFilter, priceRange, sortBy]);
   
 
   useEffect(() => {
@@ -819,8 +875,6 @@ export default function Shop({ onNavigate, initialCategory }) {
     }
   }
   
-  const normalizeCat = (s) => (s || "").toString().trim().toLowerCase();
-
   const getSidebarCategories = () => {
     const activeNorm = normalizeCat(activeCategory);
     if (!activeNorm || activeNorm === "all") {
@@ -856,16 +910,7 @@ export default function Shop({ onNavigate, initialCategory }) {
 
         if (!alive) return
 
-        const mapped = Array.isArray(res)
-          ? res.map(p => ({
-              ...p,
-              image: p.image_url || p.image || new URL("../../assets/default-img/ImageNotFound.webp", import.meta.url).href,
-              rating: ratingFromProduct(p),
-              reviews: reviewCountFromProduct(p),
-              ribbon: p.ribbon || null,
-              original: p.original_price || null,
-            }))
-          : []
+        const mapped = Array.isArray(res) ? res.map(mapProductForShop) : []
 
         setSearchResults(mapped)
       } catch (e) {
@@ -966,6 +1011,12 @@ export default function Shop({ onNavigate, initialCategory }) {
   const currentSortLabel    = SORT_OPTIONS.find(o => o.value === sortBy)?.label || "Best Selling"
   const activeFiltersCount  = (activeCategory !== "All" ? 1 : 0) + (selectedOccasions.length) + (selectedLocations.length)
   const visibleViews        = VIEW_ALL.filter(v => !isMobile || v.mobileVisible)
+  const usingSearchResults  = searchResults !== null
+  const totalPages          = Math.max(1, Math.ceil(productTotal / SHOP_PAGE_SIZE))
+  const pageStart           = productTotal === 0 ? 0 : (productPage - 1) * SHOP_PAGE_SIZE + 1
+  const pageEnd             = Math.min(productTotal, productPage * SHOP_PAGE_SIZE)
+  const pageNumbers         = Array.from({ length: totalPages }, (_, i) => i + 1)
+    .filter(page => totalPages <= 7 || page === 1 || page === totalPages || Math.abs(page - productPage) <= 1)
 
   return (
     <div className="min-h-screen bg-white shop-root">
@@ -997,6 +1048,7 @@ export default function Shop({ onNavigate, initialCategory }) {
         open={filterOpen}
         onClose={() => setFilterOpen(false)}
         products={products}
+        categoryHierarchy={categoryHierarchy}
         activeCategory={activeCategory}
         setActiveCategory={setActiveCategory}
         activeTypes={activeTypes}
@@ -1015,6 +1067,7 @@ export default function Shop({ onNavigate, initialCategory }) {
           <aside className="w-48 hidden lg:block flex-shrink-0" style={{ animation:"shopRise 0.5s ease 0.05s both" }}>
             <SidebarContent
               products={products} 
+              categoryHierarchy={categoryHierarchy}
               activeCategory={activeCategory} 
               setActiveCategory={setActiveCategory}
               activeTypes={activeTypes}
@@ -1114,7 +1167,9 @@ export default function Shop({ onNavigate, initialCategory }) {
                     )
                   })}
                 </div>
-                <span className="text-xs text-gray-400">{filtered.length} items</span>
+                <span className="text-xs text-gray-400">
+                  {usingSearchResults ? `${filtered.length} items` : `Showing ${pageStart}-${pageEnd} of ${productTotal}`}
+                </span>
               </div>
 
               <div className="relative z-50" ref={sortRef}>
@@ -1199,15 +1254,59 @@ export default function Shop({ onNavigate, initialCategory }) {
                   className="text-sm font-semibold hover:underline" style={{ color:G }}>Clear filters</button>
               </div>
             ) : (
-              <div style={getGridStyle()}>
-                {filtered.map((product, idx) => (
-                  <div key={product.id} style={{ animation:`shopRise 0.45s ease ${0.16 + Math.min(idx, 16) * 0.04}s both` }}>
-                    {viewAs === "list"
-                      ? (isMobile ? <ListCardMobile product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/> : <ListCardDesktop product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/>)
-                      : <GridCard product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/>}
+              <>
+                <div style={getGridStyle()}>
+                  {filtered.map((product, idx) => (
+                    <div key={product.id} style={{ animation:`shopRise 0.45s ease ${0.16 + Math.min(idx, 16) * 0.04}s both` }}>
+                      {viewAs === "list"
+                        ? (isMobile ? <ListCardMobile product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/> : <ListCardDesktop product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/>)
+                        : <GridCard product={product} wishlist={wishlist} toggleWishlist={toggleWishlist} onPreview={setPreviewProduct}/>}
+                    </div>
+                  ))}
+                </div>
+
+                {!usingSearchResults && totalPages > 1 && (
+                  <div className="flex items-center justify-center gap-2 mt-8 flex-wrap">
+                    <button
+                      disabled={productPage <= 1}
+                      onClick={() => setProductPage(page => Math.max(1, page - 1))}
+                      className="px-3 py-2 text-xs font-bold rounded-lg border transition disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ borderColor: isDark ? "#2d3748" : "#e5e7eb", color: isDark ? "#e5e7eb" : "#374151", backgroundColor: isDark ? "#1a2332" : "white" }}
+                    >
+                      Previous
+                    </button>
+                    {pageNumbers.map((page, idx) => {
+                      const prev = pageNumbers[idx - 1]
+                      const showGap = prev && page - prev > 1
+                      const active = page === productPage
+                      return (
+                        <span key={page} className="flex items-center gap-2">
+                          {showGap && <span className="text-xs text-gray-400">...</span>}
+                          <button
+                            onClick={() => setProductPage(page)}
+                            className="w-9 h-9 text-xs font-bold rounded-lg border transition"
+                            style={{
+                              borderColor: active ? G : (isDark ? "#2d3748" : "#e5e7eb"),
+                              color: active ? "white" : (isDark ? "#e5e7eb" : "#374151"),
+                              backgroundColor: active ? G : (isDark ? "#1a2332" : "white"),
+                            }}
+                          >
+                            {page}
+                          </button>
+                        </span>
+                      )
+                    })}
+                    <button
+                      disabled={productPage >= totalPages}
+                      onClick={() => setProductPage(page => Math.min(totalPages, page + 1))}
+                      className="px-3 py-2 text-xs font-bold rounded-lg border transition disabled:opacity-40 disabled:cursor-not-allowed"
+                      style={{ borderColor: isDark ? "#2d3748" : "#e5e7eb", color: isDark ? "#e5e7eb" : "#374151", backgroundColor: isDark ? "#1a2332" : "white" }}
+                    >
+                      Next
+                    </button>
                   </div>
-                ))}
-              </div>
+                )}
+              </>
             )}
           </div>
         </div>

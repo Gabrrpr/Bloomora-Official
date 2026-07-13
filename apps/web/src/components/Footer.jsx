@@ -355,7 +355,7 @@ export default function Footer({ onNavigate }) {
   }, [])
 
   return (
-    <div className="max-w-[1920px] mx-auto">
+    <div className="w-full overflow-hidden">
       <FlowerBorder />
 
       <footer style={{ backgroundColor: FOOTER_BG, color: "white" }}>

@@ -201,6 +201,36 @@ function QtyCounter({qty,setQty,error}){
   )
 }
 
+function SuggestionsStrip({ suggestedProducts = [], isDark, onClose, onNavigate }) {
+  if (!suggestedProducts.length) return null
+
+  return (
+    <div className="mt-5 mb-5 pt-5" style={{ borderTop: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
+      <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: isDark ? "#4ade80" : DG }}>
+        You Might Also Like
+      </p>
+      <div className="flex gap-3 overflow-x-auto pb-2 -mr-4 pr-4 pms-suggestions-scroll">
+        {suggestedProducts.map(s => (
+          <button
+            key={s.id}
+            onClick={() => {
+              onClose()
+              onNavigate(`/product/${s.id}`)
+            }}
+            className="flex-shrink-0 w-28 rounded-lg overflow-hidden border cursor-pointer text-left p-0 transition-transform hover:scale-105"
+            style={{ borderColor: isDark ? "#334155" : "#e5e7eb", background: "transparent" }}>
+            <img src={s.image_url || s.image || "/placeholder.webp"} className="w-full h-24 object-cover" alt={s.name} />
+            <div className="p-2">
+              <p className="text-[10px] font-bold truncate" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>{s.name}</p>
+              <p className="text-[10px] font-bold mt-0.5" style={{ color: isDark ? "#4ade80" : G }}>â‚±{(+s.price).toLocaleString()}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function ProductPreviewModalSimple({product,onClose,onNavigate}){
   const[qty,setQty]=useState(1)
   const[delivType,setDelivType]=useState(null)
@@ -258,6 +288,8 @@ export default function ProductPreviewModalSimple({product,onClose,onNavigate}){
       <style>{`
         .pms-scroll::-webkit-scrollbar{width:4px}
         .pms-scroll::-webkit-scrollbar-thumb{background:${isDark?"#334155":"#e5e7eb"};border-radius:4px}
+        .pms-suggestions-scroll{scrollbar-width:none;-ms-overflow-style:none}
+        .pms-suggestions-scroll::-webkit-scrollbar{display:none}
         @media(max-width:900px){
           .pms-wrap{flex-direction:column!important;border-radius:14px!important}
           .pms-img{width:100%!important;height:auto!important;aspect-ratio:1/1!important;min-height:unset!important;max-height:none!important;flex-shrink:0!important}
@@ -415,7 +447,7 @@ export default function ProductPreviewModalSimple({product,onClose,onNavigate}){
                     })()}
 
                     {/* 🚀 ADDED SUGGESTIONS SECTION FOR SIMPLE MODAL */}
-                    {suggestedProducts.length > 0 && (
+                    {false && suggestedProducts.length > 0 && (
                       <div className="mt-5 mb-5 pt-5" style={{ borderTop: `1px solid ${isDark ? "#1e293b" : "#f3f4f6"}` }}>
                         <p className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: isDark ? "#4ade80" : DG }}>
                           You Might Also Like
@@ -483,6 +515,13 @@ export default function ProductPreviewModalSimple({product,onClose,onNavigate}){
                       </div>
                       {showCal&&delivType==="custom"&&<MiniCalendar selected={customDate} onSelect={d=>{setCustDate(d);setShowCal(false);setErrors(e=>({...e,date:false}))}}/>}
                     </div>
+
+                    <SuggestionsStrip
+                      suggestedProducts={suggestedProducts}
+                      isDark={isDark}
+                      onClose={onClose}
+                      onNavigate={onNavigate}
+                    />
 
                     {!product.description&&!product.dimensions&&(
                       <p className="text-sm leading-relaxed" style={{color:isDark?"#64748b":"#6b7280"}}>Each piece is carefully selected for quality. Perfect for any home or as a thoughtful gift.</p>
