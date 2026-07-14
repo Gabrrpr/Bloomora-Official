@@ -1065,20 +1065,22 @@ export default function Shop({ onNavigate, initialCategory }) {
         <div className="flex gap-6 lg:gap-8">
 
           <aside className="w-48 hidden lg:block flex-shrink-0" style={{ animation:"shopRise 0.5s ease 0.05s both" }}>
-            <SidebarContent
-              products={products} 
-              categoryHierarchy={categoryHierarchy}
-              activeCategory={activeCategory} 
-              setActiveCategory={setActiveCategory}
-              activeTypes={activeTypes}
-              setActiveTypes={setActiveTypes}
-              priceRange={priceRange}
-              setPriceRange={setPriceRange}
-              selectedLocations={selectedLocations}
-              setSelectedLocations={setSelectedLocations}
-              selectedOccasions={selectedOccasions}
-              setSelectedOccasions={setSelectedOccasions}
-            />
+            <div className="sticky top-24 overflow-y-auto pr-1" style={{ maxHeight: "calc(100vh - 7rem)" }}>
+              <SidebarContent
+                products={products} 
+                categoryHierarchy={categoryHierarchy}
+                activeCategory={activeCategory} 
+                setActiveCategory={setActiveCategory}
+                activeTypes={activeTypes}
+                setActiveTypes={setActiveTypes}
+                priceRange={priceRange}
+                setPriceRange={setPriceRange}
+                selectedLocations={selectedLocations}
+                setSelectedLocations={setSelectedLocations}
+                selectedOccasions={selectedOccasions}
+                setSelectedOccasions={setSelectedOccasions}
+              />
+            </div>
           </aside>
 
           <div className="flex-1 min-w-0">

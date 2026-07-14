@@ -21,6 +21,12 @@ router = APIRouter(prefix="/chats", tags=["Chats"])
 UPLOAD_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads", "chat_images")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+AUTO_REPLY_MESSAGE = (
+    "Hi! Thanks for reaching out to Esting's Flowers. "
+    "We received your message and a staff member will reply shortly. "
+    "Please keep this chat open for updates."
+)
+
 
 def serialize_chat(msg: Chat) -> dict:
     """Convert a Chat ORM object to a plain dict compatible with MessageOut."""
@@ -123,9 +129,11 @@ async def create_message(
         verified_user_id = current_user.id
     else:
         verified_user_id = message.user_id
+
+    existing_count = db.query(Chat).filter(Chat.user_id == verified_user_id).count()
     
     new_message = Chat(
-        user_id=message.user_id,
+        user_id=verified_user_id,
         message=message.text,
         sender=sender,
         image_url=message.image_url,
@@ -138,8 +146,8 @@ async def create_message(
 
     payload = {
         "id": str(new_message.id),
-        "customer_id": str(message.user_id),
-        "user_id": str(message.user_id),
+        "customer_id": str(verified_user_id),
+        "user_id": str(verified_user_id),
         "message": new_message.message,
         "image_url": new_message.image_url,
         "sender": sender,
@@ -150,7 +158,7 @@ async def create_message(
 
     if sender == 'customer':
         try:
-            await manager.send_to_user(str(message.user_id), payload)
+            await manager.send_to_user(str(verified_user_id), payload)
         except Exception as e:
             print(f"❌ HTTP-WS Customer Echo Error: {e}")
 
@@ -173,9 +181,41 @@ async def create_message(
         except Exception as e:
             print(f"❌ Notification Insert Error: {e}")
             db.rollback()
+        if existing_count == 0:
+            try:
+                auto_reply = Chat(
+                    user_id=verified_user_id,
+                    message=AUTO_REPLY_MESSAGE,
+                    sender="staff",
+                    image_url=None,
+                    is_read=0,
+                    context_id=None,
+                )
+                db.add(auto_reply)
+                db.commit()
+                db.refresh(auto_reply)
+
+                auto_payload = {
+                    "id": str(auto_reply.id),
+                    "customer_id": str(verified_user_id),
+                    "user_id": str(verified_user_id),
+                    "message": auto_reply.message,
+                    "image_url": auto_reply.image_url,
+                    "sender": "staff",
+                    "created_at": auto_reply.created_at.isoformat(),
+                    "is_read": auto_reply.is_read,
+                    "context_id": auto_reply.context_id,
+                    "is_auto_reply": True,
+                }
+
+                await manager.send_to_user(str(verified_user_id), auto_payload)
+                await manager.broadcast_to_staff(auto_payload)
+            except Exception as e:
+                print(f"Auto Reply Error: {e}")
+                db.rollback()
     else:
         try:
-            await manager.send_to_user(str(message.user_id), payload)
+            await manager.send_to_user(str(verified_user_id), payload)
         except Exception as e:
             print(f"❌ HTTP-WS Customer Send Error: {e}")
 

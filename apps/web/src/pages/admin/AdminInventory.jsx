@@ -8,6 +8,23 @@ import estingsWordmark from "../../assets/Estings.svg"
 // Example item names cycled through the search box as an animated, typewriter-style hint.
 const SEARCH_SAMPLES = ["Red Roses", "Baby's Breath", "Floral Foam", "Satin Ribbon"]
 
+const isInventoryMaterialItem = (item) => {
+  if (!item || item.status === "inactive") return false
+
+  const composition = Array.isArray(item.composition) ? item.composition : []
+  if (composition.length > 0) return false
+
+  const searchable = [
+    item.category,
+    item.product_type,
+    item.product_group,
+    item.group,
+    item.name,
+  ].filter(Boolean).join(" ").toLowerCase()
+
+  return !/(arrangement|bouquet|funerary|funeral|inaugural)/i.test(searchable)
+}
+
 // ── Flower petal loader ──
 function FlowerLoader({ message = "Loading...", isDark = false }) {
   const petals = [
@@ -984,22 +1001,7 @@ export default function AdminInventory() {
     setLoading(true)
     try { 
       const data = await api.get("/products/admin/all"); 
-      const activeItems = (data || []).filter(item => {
-        if (item.status === 'inactive') return false;
-        
-        const cat = (item.category || "").toLowerCase();
-        const type = (item.product_type || "").toLowerCase();
-        const group = (item.product_group || "").toLowerCase();
-        
-        if (
-          cat.includes("bouquet") || cat.includes("arrangement") ||
-          type.includes("bouquet") || type.includes("arrangement") ||
-          group.includes("bouquet") || group.includes("arrangement")
-        ) {
-          return false;
-        }
-        return true; 
-      });
+      const activeItems = (data || []).filter(isInventoryMaterialItem);
       setInventory(activeItems); 
     }
     catch (err) { console.error("Failed to load inventory:", err) }

@@ -299,10 +299,16 @@ export default function DynamicFeaturedSections({ branch, onNavigate, onPreview 
   const activeSections = useMemo(() => {
     if (!rawSettingsData) return []
 
-    // Check if the database has our new multi-branch structure
-    const isMultiBranchFormat = rawSettingsData.Manila || rawSettingsData.Pampanga;
+    // Check if the database has our new multi-branch structure.
+    // Store settings may use Manila/Pampanga, manila/pampanga, or mixed casing.
+    const branchKey = Object.keys(rawSettingsData || {}).find(
+      key => key.toLowerCase() === normalizedBranch.toLowerCase()
+    )
+    const isMultiBranchFormat = Object.keys(rawSettingsData || {}).some(
+      key => ["manila", "pampanga"].includes(key.toLowerCase())
+    )
     const targetBranchData = isMultiBranchFormat
-      ? (rawSettingsData[normalizedBranch] || {})
+      ? (rawSettingsData[branchKey] || {})
       : rawSettingsData;
 
     return Object.keys(targetBranchData)
@@ -324,6 +330,7 @@ export default function DynamicFeaturedSections({ branch, onNavigate, onPreview 
 
   // 🚀 INSTANT PRODUCT FILTER: Filter inventory by physical branch availability
   const activeBranchProducts = useMemo(() => {
+    const branchNorm = (branch || "").toString().trim().toLowerCase()
     return rawProductsData
       .map(p => ({
         ...p,
@@ -331,9 +338,12 @@ export default function DynamicFeaturedSections({ branch, onNavigate, onPreview 
         name: p.name || "Unnamed",
         price: Number(p.price) || 0,
         image: p.image || p.image_url || null,
-        branches: p.branches || [] // Ensure branches are recognized
+        branches: Array.isArray(p.branches) ? p.branches : [] // Ensure branches are recognized
       }))
-      .filter(p => p.branches?.includes(branch)) // 💥 Filter down to local inventory
+      .filter(p => {
+        const productBranches = p.branches.map(b => String(b || "").trim().toLowerCase()).filter(Boolean)
+        return productBranches.length === 0 || productBranches.includes(branchNorm)
+      })
   }, [rawProductsData, branch])
 
   return (

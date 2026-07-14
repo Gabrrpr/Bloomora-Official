@@ -641,7 +641,7 @@ export default function MixAndMatch({ onNavigate }) {
     return (
       <>
         <div className="min-h-screen flex items-start justify-center" style={{ background: pageBg }}>
-          <div className="w-full max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+          <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7">
 
             {/* Page heading */}
             <div className="text-center mb-6">
@@ -701,10 +701,10 @@ export default function MixAndMatch({ onNavigate }) {
                 </div>
               </div>
 
-              <div className="px-7 pb-7 flex flex-col sm:flex-row gap-6">
+              <div className="px-7 pb-7 flex flex-col lg:flex-row gap-6">
                 {/* AI Generated Image */}
                 <div
-                  className="relative w-full sm:w-[440px] aspect-square rounded-2xl flex-shrink-0 flex items-center justify-center border overflow-hidden cursor-zoom-in group"
+                  className="relative w-full lg:w-[520px] xl:w-[560px] aspect-square rounded-2xl flex-shrink-0 flex items-center justify-center border overflow-hidden cursor-zoom-in group"
                   style={{ borderColor: dividerC, backgroundColor: tilePlaceBg }}
                   onClick={() => result.generated_image_url && setLightboxOpen(true)}
                   title="Click for a closer look"
@@ -732,9 +732,9 @@ export default function MixAndMatch({ onNavigate }) {
                   }
                 </div>
 
-                <div className="flex-1 min-w-0 flex flex-col sm:h-[440px]">
+                <div className="flex-1 min-w-0 flex flex-col lg:h-[560px]">
                   {/* Scrollable details — keeps the row the height of the square image */}
-                  <div className="sm:flex-1 sm:min-h-0 sm:overflow-y-auto sm:pr-2">
+                  <div className="lg:flex-1 lg:min-h-0 lg:overflow-y-auto lg:pr-2">
                   <div className="mb-3">
                     <label className="text-xs font-semibold uppercase tracking-wider" style={{ color: mutedC }}>Arrangement Name</label>
                     <input
@@ -1030,7 +1030,7 @@ export default function MixAndMatch({ onNavigate }) {
   return (
     <>
     <div className="min-h-screen flex items-start justify-center" style={{ background: pageBg }}>
-      <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <div className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 sm:py-7">
 
         {/* Page heading */}
         <div className="text-center mb-6" style={{ animation: "mmEnter 0.6s ease 0.05s both" }}>
@@ -1211,7 +1211,7 @@ export default function MixAndMatch({ onNavigate }) {
                     {flowerList.length === 0 ? (
                       <p className="text-sm py-6 text-center" style={{ color: mutedC }}>No flowers available right now.</p>
                     ) : (
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-3">
                         {flowerList.map(p => (
                           <FlowerCard
                             key={p.id}
@@ -1233,7 +1233,7 @@ export default function MixAndMatch({ onNavigate }) {
                       <p className="text-sm font-semibold mb-3" style={{ color: subHeadC }}>
                         Fillers <span className="font-normal" style={{ color: mutedC }}>(optional)</span>
                       </p>
-                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6 gap-3">
                         {fillerList.map(p => (
                           <ProductCard
                             key={p.id}
@@ -1266,7 +1266,7 @@ export default function MixAndMatch({ onNavigate }) {
                     <p className="text-sm" style={{ color: mutedC }}>No {emptyLabel} available right now.</p>
                   </div>
                 ) : (
-                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-3">
+                  <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 xl:grid-cols-6 gap-3">
                     {list.map(p => (
                       <ProductCard
                         key={p.id}

@@ -1,5 +1,5 @@
 
-import { useState, useEffect, useCallback, Fragment } from "react"
+import { useState, useEffect, useCallback, useRef, Fragment } from "react"
 import { createPortal } from "react-dom"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
@@ -75,6 +75,27 @@ const productStockInfo = (product) => {
   if (stock <= 0) return { label: "Out of stock", level: "out" }
   if (stock <= reorderPoint) return { label: "Low stock", level: "low" }
   return { label: "In stock", level: "ok" }
+}
+
+const isRecipeMaterialProduct = (product, excludedProductId = null) => {
+  if (!product) return false
+  if (excludedProductId && String(product.id) === String(excludedProductId)) return false
+
+  const status = String(product.status || "").toLowerCase()
+  if (status === "inactive") return false
+
+  const composition = Array.isArray(product.composition) ? product.composition : []
+  if (composition.length > 0) return false
+
+  const searchable = [
+    product.category,
+    product.product_type,
+    product.product_group,
+    product.group,
+    product.name,
+  ].filter(Boolean).join(" ").toLowerCase()
+
+  return !/(arrangement|bouquet|funerary|funeral|inaugural)/i.test(searchable)
 }
 
 function FlowerLoader({ message = "Loading products...", isDark = false }) {
@@ -396,6 +417,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
   const [isSaving, setIsSaving] = useState(false)
   const [isCustomCategory, setIsCustomCategory] = useState(false)
   const [careTipInput, setCareTipInput] = useState("")
+  const backdropMouseDownRef = useRef(false)
   const set = key => val => setForm(f => ({...f,[key]:val}))
 
   const addCareTip = () => {
@@ -582,9 +604,28 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
     if (form.branches.length === 0) return false;
     return form.branches.every(b => !p.branches || p.branches.length === 0 || p.branches.includes(b));
   };
+  const isFloral = (p) => {
+    const g = (p.product_group || p.group || "").toLowerCase();
+    const c = (p.category || "").toLowerCase();
+    return g === "floral" || c.includes("flower") || c.includes("rose") || c.includes("bouquet");
+  };
 
-  const floralMaterials = products.filter(p => (p.group?.toLowerCase() === 'floral' || p.category?.toLowerCase() === 'flower') && isMaterialAvailableInSelectedBranches(p));
-  const nonFloralMaterials = products.filter(p => (p.group?.toLowerCase() !== 'floral' && p.category?.toLowerCase() !== 'flower') && isMaterialAvailableInSelectedBranches(p));
+  const availableMaterials = products.filter(p =>
+    isRecipeMaterialProduct(p) && isMaterialAvailableInSelectedBranches(p)
+  );
+
+  const materialCategories = ["All", ...Array.from(new Set(availableMaterials.map(p =>
+    p.category ? p.category.charAt(0).toUpperCase() + p.category.slice(1) : ""
+  ).filter(Boolean)))];
+
+  const filteredMaterials = availableMaterials.filter(p => {
+    const matchSearch = p.name.toLowerCase().includes(materialSearch.toLowerCase());
+    const matchCat = materialCat === "All" || (p.category?.toLowerCase() === materialCat.toLowerCase());
+    return matchSearch && matchCat;
+  });
+
+  const floralMaterials = filteredMaterials.filter(isFloral);
+  const nonFloralMaterials = filteredMaterials.filter(p => !isFloral(p));
   const selectedMaterial = products.find(p => p.id === compSelection);
 
   const MaterialDropdownRow = ({ p }) => {
@@ -616,7 +657,11 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ backgroundColor:d.overlayBg, backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)", zIndex:9999, top:0, left:0, width:"100vw", height:"100vh" }}
-      onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+      onMouseDown={e => { backdropMouseDownRef.current = e.target === e.currentTarget }}
+      onMouseUp={e => {
+        if (backdropMouseDownRef.current && e.target === e.currentTarget) onClose()
+        backdropMouseDownRef.current = false
+      }}>
       <div className="rounded-xl w-full overflow-hidden flex flex-col"
         style={{ maxWidth:"700px", maxHeight:"90vh", boxShadow:"0 24px 64px rgba(0,0,0,0.5)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
 
@@ -1202,6 +1247,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
   const [lightboxSrc, setLightboxSrc] = useState(null)
   const [isSaving, setIsSaving] = useState(false)
   const [careTipInput, setCareTipInput] = useState("")
+  const backdropMouseDownRef = useRef(false)
   const set = key => val => setForm(f=>({...f,[key]:val}))
 
   const addCareTip = () => {
@@ -1390,7 +1436,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
   };
 
   const availableMaterials = products.filter(p =>
-    isMaterialAvailableInSelectedBranches(p) && p.is_visible !== false
+    isRecipeMaterialProduct(p, product.id) && isMaterialAvailableInSelectedBranches(p)
   );
 
   const materialCategories = ["All", ...Array.from(new Set(availableMaterials.map(p => 
@@ -1436,7 +1482,11 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ backgroundColor:d.overlayBg, backdropFilter:"blur(4px)", WebkitBackdropFilter:"blur(4px)", zIndex:9999, top:0, left:0, width:"100vw", height:"100vh" }}
-      onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
+      onMouseDown={e => { backdropMouseDownRef.current = e.target === e.currentTarget }}
+      onMouseUp={e => {
+        if (backdropMouseDownRef.current && e.target === e.currentTarget) onClose()
+        backdropMouseDownRef.current = false
+      }}>
       <div className="rounded-xl w-full overflow-hidden flex flex-col"
         style={{ maxWidth:"700px", maxHeight:"90vh", boxShadow:"0 24px 64px rgba(0,0,0,0.5)", border:`1px solid ${d.modalBdr}`, backgroundColor:d.modalBg }}>
 
