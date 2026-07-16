@@ -1,5 +1,6 @@
 import httpx
 import io
+import secrets
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 from supabase import create_client, Client
@@ -34,7 +35,7 @@ class PollinationsService:
                 "not a vase, not a hand-tied bouquet, no ribbon, no wrapping paper, no flowers outside the box, "
                 "no flowers rising above the lid, no people, no watermarks"
             )
-            return [f"{style_prompt}. Selected materials and colors from request: {optimized_prompt}", style_prompt]
+            return [polished_prompt, f"{optimized_prompt}. {style_prompt}"]
         elif style == "vase":
             style_prompt = (
                 "Elegant fresh flower vase arrangement, upright vase fully visible from eye level, balanced "
@@ -45,15 +46,15 @@ class PollinationsService:
             style_prompt = (
                 "Full upright hand-tied bouquet centered on a clean white studio background, front eye-level "
                 "florist product photo with slight high angle, rounded full flower cluster at the top, layered "
-                "folded wrapping paper flaring outward around the blooms, large decorative bow tied at the front "
-                "lower center, wrapped stem bundle tapering downward, whole bouquet visible from flower tips to "
+                "realistic folded wrapping material flaring outward around the blooms, natural creases and contact "
+                "shadows, only recipe-listed finishing materials, wrapped stem bundle tapering downward, whole bouquet visible from flower tips to "
                 "bottom wrap, no vase, no acrylic box, no basket, no top-down flat lay, no people, no text, no watermarks"
             )
 
-        return [polished_prompt, style_prompt]
+        return [polished_prompt, f"{optimized_prompt}. {style_prompt}"]
 
-    def _pollinations_urls(self, encoded_prompt: str, clean_key: str, attempt: int):
-        query = f"width=768&height=768&model={self.model}&nologo=true&seed={41 + attempt}"
+    def _pollinations_urls(self, encoded_prompt: str, clean_key: str, seed: int):
+        query = f"width=768&height=768&model={self.model}&nologo=true&seed={seed}"
         if clean_key:
             query = f"{query}&key={clean_key}"
 
@@ -137,13 +138,16 @@ class PollinationsService:
         prompt_variants = self._build_prompt_variants(optimized_prompt, arrangement_type)
         clean_key = settings.POLLINATIONS_API_KEY.strip()
         image_bytes = None
+        generation_seed = secrets.randbelow(2_000_000_000)
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
             for attempt, prompt_variant in enumerate(prompt_variants, start=1):
-                safe_prompt = " ".join(prompt_variant.split())[:900]
+                # Preserve the exact recipe plus arrangement-specific visual rules.
+                safe_prompt = " ".join(prompt_variant.split())[:3000]
                 encoded_prompt = quote(safe_prompt, safe="")
 
-                for url_index, pollinations_url in enumerate(self._pollinations_urls(encoded_prompt, clean_key, attempt), start=1):
+                attempt_seed = generation_seed + attempt
+                for url_index, pollinations_url in enumerate(self._pollinations_urls(encoded_prompt, clean_key, attempt_seed), start=1):
                     try:
                         resp = await client.get(pollinations_url, timeout=httpx.Timeout(55.0, connect=15.0))
                         resp.raise_for_status()
@@ -170,14 +174,14 @@ class PollinationsService:
                     break
 
         if not image_bytes:
-            print("Pollinations timed out or failed on all attempts. Using local demo preview fallback.")
-            image_bytes = self._create_demo_preview(optimized_prompt, arrangement_type)
+            print("Pollinations timed out or failed on all attempts. No generic preview will be substituted.")
+            return None
 
         try:
             img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")
         except Exception as e:
-            print(f"Generated image could not be opened: {e}. Using local demo preview fallback.")
-            img = Image.open(io.BytesIO(self._create_demo_preview(optimized_prompt, arrangement_type))).convert("RGBA")
+            print(f"Generated image could not be opened: {e}.")
+            return None
 
         try:
             current_dir = Path(__file__).resolve().parent

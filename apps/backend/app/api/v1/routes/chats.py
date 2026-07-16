@@ -263,19 +263,6 @@ async def create_message(
         except Exception as e:
             print(f"❌ Notification Insert Error: {e}")
             db.rollback()
-<<<<<<< Updated upstream
-        automated_reply = get_automated_support_reply(
-            new_message.message,
-            _load_help_settings(db),
-        )
-        if not automated_reply and existing_count == 0:
-            automated_reply = AutomatedSupportReply(
-                message=AUTO_REPLY_MESSAGE,
-                topic="welcome",
-            )
-
-        if automated_reply:
-=======
         predetermined_reply = get_predetermined_reply(new_message.message)
         if predetermined_reply:
             try:
@@ -309,23 +296,33 @@ async def create_message(
             except Exception as e:
                 print(f"Predetermined Auto Reply Error: {e}")
                 db.rollback()
-        elif existing_count == 0:
->>>>>>> Stashed changes
-            try:
-                persisted_reply = _persist_automated_reply(
-                    db,
-                    verified_user_id,
-                    automated_reply,
+        else:
+            automated_reply = get_automated_support_reply(
+                new_message.message,
+                _load_help_settings(db),
+            )
+            if not automated_reply and existing_count == 0:
+                automated_reply = AutomatedSupportReply(
+                    message=AUTO_REPLY_MESSAGE,
+                    topic="welcome",
                 )
-            except Exception as e:
-                print(f"Automated support persistence error: {e}")
-                db.rollback()
-            else:
+
+            if automated_reply:
                 try:
-                    await _broadcast_automated_reply(verified_user_id, persisted_reply)
+                    persisted_reply = _persist_automated_reply(
+                        db,
+                        verified_user_id,
+                        automated_reply,
+                    )
                 except Exception as e:
-                    # The reply is already safely stored; polling/history can still deliver it.
-                    print(f"Automated support broadcast error: {e}")
+                    print(f"Automated support persistence error: {e}")
+                    db.rollback()
+                else:
+                    try:
+                        await _broadcast_automated_reply(verified_user_id, persisted_reply)
+                    except Exception as e:
+                        # The reply is already safely stored; polling/history can still deliver it.
+                        print(f"Automated support broadcast error: {e}")
     else:
         try:
             await manager.send_to_user(str(verified_user_id), payload)

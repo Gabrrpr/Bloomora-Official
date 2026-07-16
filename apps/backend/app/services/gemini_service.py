@@ -9,6 +9,48 @@ class PromptExtractionError(RuntimeError):
     """Raised when structured floral intent cannot be extracted safely."""
 
 
+def _infer_arrangement_type_from_text(text: str) -> str:
+    lowered = (text or "").lower()
+    if "boxed" in lowered or " box " in f" {lowered} " or "acrylic" in lowered:
+        return "box"
+    if "vase" in lowered:
+        return "vase"
+    return "bouquet"
+
+
+def _looks_like_floral_request(text: str) -> bool:
+    lowered = (text or "").lower()
+    floral_words = [
+        "flower", "flowers", "floral", "arrangement", "bouquet", "boxed",
+        "vase", "rose", "roses", "tulip", "tulips", "sunflower",
+        "carnation", "lily", "stargazer", "baby's breath", "birthday",
+        "anniversary", "wedding", "sympathy", "graduation",
+    ]
+    return any(word in lowered for word in floral_words)
+
+
+def _fallback_verdict(user_prompt: str, reason: str | None = None) -> dict:
+    is_floral = _looks_like_floral_request(user_prompt)
+    if not is_floral:
+        return {
+            "is_possible": False,
+            "feedback": "Please describe a floral arrangement using available flowers and materials.",
+            "optimized_prompt": None,
+            "design_notes": "",
+            "arrangement_type": _infer_arrangement_type_from_text(user_prompt),
+            "used_items": [],
+        }
+
+    return {
+        "is_possible": True,
+        "feedback": reason,
+        "optimized_prompt": user_prompt,
+        "design_notes": user_prompt,
+        "arrangement_type": _infer_arrangement_type_from_text(user_prompt),
+        "used_items": [],
+    }
+
+
 def validate_and_optimize_prompt(user_prompt: str, inventory_list: list[dict]) -> dict:
     inventory_json = json.dumps(inventory_list, ensure_ascii=False)
     
@@ -80,7 +122,15 @@ def validate_and_optimize_prompt(user_prompt: str, inventory_list: list[dict]) -
                 ]
             )
         )
-        return json.loads(response.text)
+        if getattr(response, "parsed", None):
+            return response.parsed
+
+        response_text = getattr(response, "text", None)
+        if not response_text:
+            print("Gemini returned an empty response. Using deterministic floral fallback.")
+            return _fallback_verdict(user_prompt, "AI prompt extraction was unavailable, so a standard florist recipe was suggested.")
+
+        return json.loads(response_text)
     except Exception as exc:
         print(f"Gemini Error or Safety Block: {exc}")
-        raise PromptExtractionError("The arrangement request could not be checked right now.") from exc
+        return _fallback_verdict(user_prompt, "AI prompt extraction was unavailable, so a standard florist recipe was suggested.")

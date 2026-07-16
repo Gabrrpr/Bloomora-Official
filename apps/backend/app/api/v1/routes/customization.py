@@ -4,6 +4,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 from google.genai import types
 import uuid
+import re
 
 from app.core.dependencies import get_db, get_current_user
 from app.models import User, Arrangement
@@ -49,7 +50,6 @@ router = APIRouter(prefix="/customization", tags=["Customization"])
 pollinations = PollinationsService()
 
 
-<<<<<<< Updated upstream
 def _merge_explicit_materials(
     payload: CustomizationRequest,
     requested_materials: list[RequestedMaterial],
@@ -72,7 +72,23 @@ def _merge_explicit_materials(
                 1,
             )
     return [*merged.values(), *unknown_items]
-=======
+
+
+def _merge_prompt_requested_materials(
+    ai_materials: list[RequestedMaterial],
+    prompt_materials: list[RequestedMaterial],
+) -> list[RequestedMaterial]:
+    """Keep Gemini's quantities while restoring any stocked flowers named in the prompt."""
+    merged: dict[str, RequestedMaterial] = {}
+    for material in ai_materials:
+        key = material.product_id or f"unknown:{material.product_name.casefold()}"
+        merged[key] = material
+    for material in prompt_materials:
+        key = material.product_id or f"unknown:{material.product_name.casefold()}"
+        merged.setdefault(key, material)
+    return list(merged.values())
+
+
 def _needs_box_container_rule(arrangement_type: Optional[str]) -> bool:
     return str(arrangement_type or "").strip().lower() in {"box", "boxed", "boxed arrangement"}
 
@@ -116,12 +132,14 @@ def _arrangement_visual_rule(arrangement_type: str) -> str:
     return (
         "Visual style lock: bouquet arrangement. Match this product style: a full upright hand-tied bouquet centered on a clean "
         "white studio background, photographed from a front eye-level product view with a very slight high angle so the flower "
-        "cluster is visible. Use layered folded wrapping paper flaring outward around the blooms, with a large decorative bow "
-        "tied at the front lower center. The bouquet should have a rounded/full flower head cluster at the top, visible fillers "
-        "and greenery between blooms, and the wrapped stem bundle tapering downward below the bow. Keep the whole bouquet visible "
+        "cluster is visible. Make the selected wrapping look physically realistic: layered overlapping panels around the stems, "
+        "believable material thickness, natural folds and creases, slightly irregular edges, compression where it is held, and soft "
+        "contact shadows between layers. Match its real material finish, such as matte fibrous kraft paper or glossy translucent "
+        "cellophane. Never render the wrapping as a flat pasted texture, a rigid geometric cone, floating sheets, or a smooth CGI shell. "
+        "Secure it only with finishing materials explicitly listed in the recipe. The bouquet should have a rounded/full flower head "
+        "cluster at the top and the wrapped stem bundle tapering downward. Keep the whole bouquet visible "
         "from flower tips to bottom wrap. Do not show a vase, acrylic box, basket, top-down flat lay, or loose flowers outside the wrapper. "
     )
->>>>>>> Stashed changes
 
 
 def _calculate_complete_recipe_price(recipe, inventory_catalog) -> PriceBreakdown:
@@ -159,6 +177,30 @@ def _recipe_product_id(recipe, inventory_catalog, material_type: str) -> Optiona
     return uuid.UUID(match) if match else None
 
 
+def _recipe_material_name(recipe, inventory_catalog, material_type: str) -> Optional[str]:
+    inventory_by_id = {item.product_id: item for item in inventory_catalog}
+    return next(
+        (
+            inventory_by_id[item.product_id].product_name
+            for item in recipe
+            if item.product_id
+            and inventory_by_id.get(item.product_id)
+            and inventory_by_id[item.product_id].material_type == material_type
+        ),
+        None,
+    )
+
+
+def _lookup_arrangement_material(db: Session, model, product_id: Optional[uuid.UUID], product_name: Optional[str] = None):
+    if product_id and hasattr(model, "product_id"):
+        match = db.query(model).filter(model.product_id == product_id).first()
+        if match:
+            return match
+    if product_name and hasattr(model, "name"):
+        return db.query(model).filter(model.name == product_name).first()
+    return None
+
+
 def _quantity_adjustment_response(
     adjustment: QuantityAdjustment,
     remaining: int,
@@ -170,8 +212,13 @@ def _quantity_adjustment_response(
         message = "Here is a complete stocked recipe for your arrangement."
     elif adjustment.code == "material_unavailable":
         message = "Some requested materials are unavailable, so we prepared a stocked alternative."
+    elif adjustment.code == "quantity_adjustment_required":
+        message = (
+            f"This {label} is above the {adjustment.max_stems}-stem limit, "
+            "so we prepared a smaller stocked recipe below."
+        )
     else:
-        message = f"This {label} needs smaller quantities. Review the suggested recipe."
+        message = f"This {label} needs stock adjustments. Review the suggested recipe below."
     return CustomizationResponse(
         success=False,
         message=message,
@@ -179,6 +226,31 @@ def _quantity_adjustment_response(
         remaining_generations=remaining,
         validation=QuantityValidation(**adjustment.__dict__),
     )
+
+
+def _suggested_items_to_recipe(adjustment: QuantityAdjustment) -> list[RequestedMaterial]:
+    return [
+        RequestedMaterial(
+            product_id=item.get("product_id"),
+            product_name=item.get("product_name") or "",
+            quantity=max(1, int(item.get("quantity") or 1)),
+        )
+        for item in adjustment.suggested_items
+        if item.get("product_id")
+    ]
+
+
+def _has_explicit_quantity_request(prompt_text: str) -> bool:
+    prompt = str(prompt_text or "").lower()
+    if re.search(r"\b\d[\d,]*\b", prompt):
+        return True
+    quantity_words = (
+        "one", "two", "three", "four", "five", "six", "seven", "eight",
+        "nine", "ten", "eleven", "twelve", "thirteen", "fourteen",
+        "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty",
+        "dozen",
+    )
+    return any(re.search(rf"\b{word}\b", prompt) for word in quantity_words)
 
 
 @router.get("/ai-usage", tags=["Customization"])
@@ -284,8 +356,10 @@ async def check_and_generate(
         payload.prompt_text,
         inventory_catalog,
     )
-    if not requested_materials:
-        requested_materials = prompt_requested_materials
+    requested_materials = _merge_prompt_requested_materials(
+        requested_materials,
+        prompt_requested_materials,
+    )
     requested_materials = _merge_explicit_materials(
         payload,
         requested_materials,
@@ -310,8 +384,13 @@ async def check_and_generate(
             inventory_catalog,
             ai_verdict.get("feedback"),
         )
-        remaining = get_remaining_generations(db, current_user.id)
-        return _quantity_adjustment_response(recovery, remaining)
+        recipe_from_suggestion = _suggested_items_to_recipe(recovery)
+        if recipe_from_suggestion:
+            arrangement_type = recovery.arrangement_type
+            requested_materials = recipe_from_suggestion
+        else:
+            remaining = get_remaining_generations(db, current_user.id)
+            return _quantity_adjustment_response(recovery, remaining)
 
     if requested_materials:
         quantity_adjustment = build_quantity_adjustment(
@@ -320,8 +399,22 @@ async def check_and_generate(
             inventory_catalog,
         )
         if quantity_adjustment:
-            remaining = get_remaining_generations(db, current_user.id)
-            return _quantity_adjustment_response(quantity_adjustment, remaining)
+            can_auto_apply_suggestion = (
+                not has_explicit_selection
+                and not _has_explicit_quantity_request(payload.prompt_text)
+                and bool(quantity_adjustment.suggested_items)
+            )
+            if can_auto_apply_suggestion:
+                recipe_from_suggestion = _suggested_items_to_recipe(quantity_adjustment)
+                if recipe_from_suggestion:
+                    arrangement_type = quantity_adjustment.arrangement_type
+                    requested_materials = recipe_from_suggestion
+                else:
+                    remaining = get_remaining_generations(db, current_user.id)
+                    return _quantity_adjustment_response(quantity_adjustment, remaining)
+            else:
+                remaining = get_remaining_generations(db, current_user.id)
+                return _quantity_adjustment_response(quantity_adjustment, remaining)
 
     if not requested_materials and (
         ai_verdict.get("is_possible") or is_probably_floral_request(payload.prompt_text)
@@ -331,8 +424,13 @@ async def check_and_generate(
             inventory_catalog,
             ai_verdict.get("feedback"),
         )
-        remaining = get_remaining_generations(db, current_user.id)
-        return _quantity_adjustment_response(recovery, remaining)
+        recipe_from_suggestion = _suggested_items_to_recipe(recovery)
+        if recipe_from_suggestion:
+            arrangement_type = recovery.arrangement_type
+            requested_materials = recipe_from_suggestion
+        else:
+            remaining = get_remaining_generations(db, current_user.id)
+            return _quantity_adjustment_response(recovery, remaining)
 
     if not ai_verdict.get("is_possible"):
         remaining = get_remaining_generations(db, current_user.id)
@@ -359,7 +457,7 @@ async def check_and_generate(
         arrangement_type,
         requested_materials,
         refreshed_inventory,
-        include_finishing_suggestions=False,
+        include_finishing_suggestions=True,
     )
     if not recipe_has_flowers(complete_recipe, refreshed_inventory):
         recovery = build_default_recipe_suggestion(
@@ -375,6 +473,7 @@ async def check_and_generate(
             complete_recipe,
             refreshed_inventory,
             missing_presentation,
+            include_finishing_suggestions=True,
         )
         remaining = get_remaining_generations(db, current_user.id)
         return _quantity_adjustment_response(recovery, remaining)
@@ -402,10 +501,11 @@ async def check_and_generate(
     vase_product_id = _recipe_product_id(complete_recipe, refreshed_inventory, "vase")
     wrapping_product_id = _recipe_product_id(complete_recipe, refreshed_inventory, "wrapping")
     accessory_product_id = _recipe_product_id(complete_recipe, refreshed_inventory, "accessory")
-    flower = db.query(Flower).filter(Flower.product_id == flower_product_id).first() if flower_product_id else None
-    vase = db.query(Vase).filter(Vase.product_id == vase_product_id).first() if vase_product_id else None
-    wrapping = db.query(Wrapping).filter(Wrapping.product_id == wrapping_product_id).first() if wrapping_product_id else None
-    accessory = db.query(Accessory).filter(Accessory.product_id == accessory_product_id).first() if accessory_product_id else None
+    vase_product_name = _recipe_material_name(complete_recipe, refreshed_inventory, "vase")
+    flower = _lookup_arrangement_material(db, Flower, flower_product_id)
+    vase = _lookup_arrangement_material(db, Vase, vase_product_id, vase_product_name)
+    wrapping = _lookup_arrangement_material(db, Wrapping, wrapping_product_id)
+    accessory = _lookup_arrangement_material(db, Accessory, accessory_product_id)
 
     # ── Step 6: Save arrangement ──────────────────────────────────────────
     arrangement = Arrangement(
@@ -421,28 +521,16 @@ async def check_and_generate(
     db.refresh(arrangement)
 
     # ── Step 7: Generate image via Pollinations (Using Optimized Prompt) ──
-<<<<<<< Updated upstream
-=======
-    base_optimized_prompt = ai_verdict.get("optimized_prompt") or payload.prompt_text
-    inferred_arrangement_type = _infer_arrangement_type(payload.arrangement_type, payload.prompt_text)
-    style_visual_rule = _arrangement_visual_rule(inferred_arrangement_type)
-    image_recipe_prompt = payload.prompt_text if inferred_arrangement_type == "box" else base_optimized_prompt
+    style_visual_rule = _arrangement_visual_rule(arrangement_type)
+    # Keep the exact stocked recipe first so downstream length limits cannot
+    # truncate the customer's requested materials.
+    final_image_prompt = f"{final_image_prompt} {style_visual_rule}"
     
-    final_image_prompt = (
-        f"{style_visual_rule}"
-        f"Florist recipe and customer request: {image_recipe_prompt}. "
-        f"Only show the selected florist materials. No cards, chocolates, balloons, jewelry, people, text, or watermarks."
-    )
-    
->>>>>>> Stashed changes
     generated_url = await pollinations.generate_arrangement_image(
         db=db,
         arrangement_id=str(arrangement.id),
         optimized_prompt=final_image_prompt,
-<<<<<<< Updated upstream
-=======
-        arrangement_type=inferred_arrangement_type,
->>>>>>> Stashed changes
+        arrangement_type=arrangement_type,
     )
 
     if not generated_url:

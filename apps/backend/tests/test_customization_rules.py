@@ -179,6 +179,10 @@ class CustomizationRuleTests(unittest.TestCase):
         image_prompt = build_complete_image_prompt("bouquet", recipe, inventory, "romantic pink style")
         self.assertIn("Kraft Wrapper", image_prompt)
         self.assertIn("never shown as loose flowers", image_prompt)
+        self.assertIn("overlapping layers", image_prompt)
+        self.assertIn("natural folds and creases", image_prompt)
+        self.assertIn("soft contact shadows", image_prompt)
+        self.assertIn("Do not render flat wrapping", image_prompt)
 
     def test_unavailable_requested_wrapper_returns_a_stocked_wrapper_correction(self):
         inventory = [

@@ -42,6 +42,8 @@ class CustomizationQuantityRouteTests(unittest.TestCase):
         )
         for item in price.items:
             self.assertIn(item.product_name, image_prompt)
+        self.assertIn("Mandatory visible flower varieties: 14 Roses", image_prompt)
+        self.assertIn("clearly recognizable", image_prompt)
 
     def test_review_only_uses_gemini_recipe_without_image_credit_or_database_writes(self):
         inventory = [
@@ -95,6 +97,92 @@ class CustomizationQuantityRouteTests(unittest.TestCase):
         gemini_review.assert_called_once()
         usage_log.assert_not_called()
         image_generation.assert_not_awaited()
+
+    def test_review_price_includes_finishing_materials_used_by_image_recipe(self):
+        inventory = [
+            InventoryMaterial("rose", "Roses", "flower", "fresh flower", 30, 100),
+            InventoryMaterial("wrap", "Kraft Wrapper", "wrapping", "wrapping", 20, 50),
+            InventoryMaterial("filler", "Baby's Breath", "filler", "filler", 20, 25),
+            InventoryMaterial("ribbon", "Satin Ribbon", "accessory", "ribbon", 20, 15),
+        ]
+        verdict = {
+            "is_possible": True,
+            "feedback": "The requested bouquet is available.",
+            "arrangement_type": "bouquet",
+            "design_notes": "romantic style",
+            "used_items": [
+                {"product_id": "rose", "name": "Roses", "quantity": 12},
+            ],
+        }
+        session = WriteTrackingSession()
+
+        with (
+            patch("app.api.v1.routes.customization.load_customization_inventory", return_value=inventory),
+            patch("app.api.v1.routes.customization.validate_and_optimize_prompt", return_value=verdict),
+            patch("app.api.v1.routes.customization.get_remaining_generations", return_value=5),
+        ):
+            response = asyncio.run(
+                check_and_generate(
+                    CustomizationRequest(
+                        prompt_text="A bouquet with 12 Roses",
+                        review_only=True,
+                    ),
+                    session,
+                    SimpleNamespace(id="customer"),
+                )
+            )
+
+        self.assertTrue(response.success)
+        self.assertEqual(
+            {item.product_name for item in response.price_breakdown.items},
+            {"Roses", "Kraft Wrapper", "Baby's Breath", "Satin Ribbon"},
+        )
+        self.assertEqual(response.price_breakdown.total_price, 1290)
+        self.assertEqual(session.added, [])
+        self.assertEqual(session.commits, 0)
+
+    def test_prompt_named_flowers_are_restored_when_ai_omits_one(self):
+        inventory = [
+            InventoryMaterial("tulip", "Tulips", "flower", "fresh flower", 30, 90),
+            InventoryMaterial("sunflower", "Sunflowers", "flower", "fresh flower", 30, 80),
+            InventoryMaterial("wrap", "Kraft Wrapper", "wrapping", "wrapping", 20, 50),
+        ]
+        verdict = {
+            "is_possible": True,
+            "feedback": "A Valentine's bouquet is available.",
+            "arrangement_type": "bouquet",
+            "design_notes": "romantic Valentine's gift",
+            # Simulate Gemini recognizing only one of the two named flowers.
+            "used_items": [
+                {"product_id": "sunflower", "name": "Sunflowers", "quantity": 6},
+            ],
+        }
+        session = WriteTrackingSession()
+
+        with (
+            patch("app.api.v1.routes.customization.load_customization_inventory", return_value=inventory),
+            patch("app.api.v1.routes.customization.validate_and_optimize_prompt", return_value=verdict),
+            patch("app.api.v1.routes.customization.get_remaining_generations", return_value=5),
+        ):
+            response = asyncio.run(
+                check_and_generate(
+                    CustomizationRequest(
+                        prompt_text="Make me a bouquet that contains tulips and sunflowers for my girlfriend for Valentines",
+                        review_only=True,
+                    ),
+                    session,
+                    SimpleNamespace(id="customer"),
+                )
+            )
+
+        self.assertTrue(response.success)
+        quantities = {
+            item.product_name: item.quantity
+            for item in response.price_breakdown.items
+        }
+        self.assertEqual(quantities["Tulips"], 6)
+        self.assertEqual(quantities["Sunflowers"], 6)
+        self.assertIn("Kraft Wrapper", quantities)
 
     def test_quantity_correction_returns_before_writes_or_generation(self):
         inventory = [

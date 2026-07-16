@@ -130,6 +130,7 @@ export default function DescribeArrangement({ onNavigate }) {
   const [customizationEnabled, setCustomizationEnabled] = useState(true)
   const [aiUsage, setAiUsage] = useState(null)
   const [unavailableItems, setUnavailableItems] = useState([])
+  const [recipeReview, setRecipeReview] = useState(null)
   const [fetchingProducts, setFetchingProducts] = useState(true)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [customName, setCustomName] = useState("")
@@ -413,32 +414,14 @@ export default function DescribeArrangement({ onNavigate }) {
     setError(null)
     setResult(null)
     setUnavailableItems([])
+    setRecipeReview(null)
     setSelectedAddOns([])
 
     try {
-      const availableInventory = products
-        .filter(p => {
-           if (!p.is_available || p.status === "inactive") return false;
-           const branchStock = currentBranch === "Pampanga" ? p.stock_pampanga : (p.stock_manila ?? p.stock);
-           const inBranch = p.branches?.includes(currentBranch) || !p.branches || p.branches.length === 0;
-           return branchStock > 0 && inBranch;
-        })
-        .map(p => p.name)
-        .join(", ");
-
       const inferredStyle = inferArrangementStyle([], prompt)
-      const styleSpecificVisualRule = getArrangementVisualRule(inferredStyle)
-
-      const superchargedPrompt = normalizeArrangementStyle(inferredStyle) === "box"
-        ? `Customer Request: "${prompt.trim()}". Create ONLY a boxed flower arrangement. Do not reinterpret this as a bouquet, vase arrangement, gift basket, jewelry box, or wrapped flowers. Flower stem capacity rule: boxed arrangement up to ${ARRANGEMENT_STEM_LIMITS.boxed} flower stems. Strict inventory rules: You MUST ONLY pick flowers and compatible materials from this exact list of available stock: [${availableInventory}]. Strict visual rules for the image generator: ${styleSpecificVisualRule} Ultra-realistic florist product photography, studio lighting, clean white background, lifelike textures, natural lighting.`
-        : `Customer Request: "${prompt.trim()}". 
-          If the request is vague (like just an occasion or color), act as an expert florist and invent a beautiful recipe that perfectly matches the vibe. 
-          Arrangement type: choose the best style from the customer's request: bouquet, boxed arrangement, or vase arrangement. Flower stem capacity rules: bouquet up to ${ARRANGEMENT_STEM_LIMITS.bouquet} flower stems, boxed arrangement up to ${ARRANGEMENT_STEM_LIMITS.boxed} flower stems, and vase arrangement up to ${ARRANGEMENT_STEM_LIMITS.vase} flower stems. Wrapping, ribbon, box, vase, accessories, and add-ons do not count as flower stems.
-          Strict inventory rules: You MUST ONLY pick flowers, vases, and wrappings from this exact list of available stock: [${availableInventory}]. 
-          Strict visual rules for the image generator: ${styleSpecificVisualRule} Ultra-realistic florist product photography, studio lighting, elegant floral design, lifelike textures, natural lighting. NO artificial-looking gloss, NO cartoonish colors.`;
 
       const payload = {
-        prompt_text: superchargedPrompt,
+        prompt_text: prompt.trim(),
         arrangement_type: normalizeArrangementStyle(inferredStyle),
       }
       if (selectedMaterials.flower) payload.flower_id = selectedMaterials.flower;
@@ -448,7 +431,11 @@ export default function DescribeArrangement({ onNavigate }) {
       
       const data = await api.checkAndGenerate(payload)
 
-      if (data.unavailable_items && data.unavailable_items.length > 0) {
+      if (data.validation) {
+        setRecipeReview({ ...data.validation, message: data.message })
+        setError(null)
+        setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
+      } else if (data.unavailable_items && data.unavailable_items.length > 0) {
         setUnavailableItems(data.unavailable_items)
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
       } else if (data.success) {
@@ -520,6 +507,7 @@ export default function DescribeArrangement({ onNavigate }) {
     setLoading(true)
     setError(null)
     setUnavailableItems([])
+    setRecipeReview(null)
 
     try {
       const revisedStyle = inferArrangementStyle(result.price_breakdown.items)
@@ -528,7 +516,11 @@ export default function DescribeArrangement({ onNavigate }) {
         arrangement_type: normalizeArrangementStyle(revisedStyle),
       })
 
-      if (data.unavailable_items && data.unavailable_items.length > 0) {
+      if (data.validation) {
+        setRecipeReview({ ...data.validation, message: data.message })
+        setError(null)
+        setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
+      } else if (data.unavailable_items && data.unavailable_items.length > 0) {
         setUnavailableItems(data.unavailable_items)
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
       } else if (data.success) {
@@ -611,12 +603,22 @@ export default function DescribeArrangement({ onNavigate }) {
     if (category) {
       setSelectedMaterials(prev => ({ ...prev, [category]: productId }))
       setUnavailableItems([])
+      setRecipeReview(null)
     }
+  }
+
+  const useSuggestedRecipe = () => {
+    if (recipeReview?.suggested_prompt) {
+      setPrompt(recipeReview.suggested_prompt.slice(0, MAX))
+    }
+    setRecipeReview(null)
+    setError(null)
   }
 
   const resetAll = () => {
     setResult(null); 
     setUnavailableItems([]); 
+    setRecipeReview(null);
     setSelectedAddOns([]);
     setCardMessage("");
     setShowAIPanel(false);
@@ -738,7 +740,11 @@ export default function DescribeArrangement({ onNavigate }) {
                     <button
                       key={text}
                       type="button"
-                      onClick={() => setPrompt(text)}
+                      onClick={() => {
+                        setPrompt(text)
+                        setRecipeReview(null)
+                        setError(null)
+                      }}
                       className="flex-shrink-0 px-3 py-2 rounded-full text-xs font-semibold border transition-all hover:shadow-sm"
                       style={{
                         borderColor: isDark ? "rgba(249,168,212,0.28)" : "#fbcfe8",
@@ -765,7 +771,11 @@ export default function DescribeArrangement({ onNavigate }) {
               <div className="flex items-center justify-between mt-2.5">
                 <span className="text-sm" style={{ color: mutedC }}>{prompt.length} / {MAX}</span>
                 <button
-                  onClick={() => setPrompt(EXAMPLE_PROMPTS[Math.floor(Math.random() * EXAMPLE_PROMPTS.length)])}
+                  onClick={() => {
+                    setPrompt(EXAMPLE_PROMPTS[Math.floor(Math.random() * EXAMPLE_PROMPTS.length)])
+                    setRecipeReview(null)
+                    setError(null)
+                  }}
                   className="text-sm font-semibold hover:underline"
                   style={{ color: accentG }}
                 >
@@ -904,6 +914,50 @@ export default function DescribeArrangement({ onNavigate }) {
                 </button>
               </div>
             </div>
+
+            {recipeReview?.suggested_items?.length > 0 && (
+              <div className="border rounded-2xl p-6"
+                style={{ backgroundColor: cardBg, borderColor: isDark ? "rgba(245,158,11,0.3)" : "#fde68a" }}>
+                <div className="flex items-start justify-between gap-4 mb-4">
+                  <div className="flex items-start gap-2.5">
+                    <svg className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: "#f59e0b" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6M9 8h6M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
+                    </svg>
+                    <div>
+                      <h3 className="text-base font-semibold" style={{ color: subHeadC }}>Suggested stocked recipe</h3>
+                      <p className="text-sm mt-1" style={{ color: bodyC }}>
+                        {recipeReview.message || "We adjusted the recipe to fit the available stock and arrangement limit."}
+                      </p>
+                    </div>
+                  </div>
+                  {recipeReview.suggested_prompt && (
+                    <button
+                      type="button"
+                      onClick={useSuggestedRecipe}
+                      className="px-3 py-2 rounded-lg text-sm font-semibold transition hover:brightness-105 whitespace-nowrap"
+                      style={{ backgroundColor: isDark ? "rgba(74,222,128,0.12)" : "#dcfce7", color: accentG }}
+                    >
+                      Use recipe
+                    </button>
+                  )}
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {recipeReview.suggested_items.map((item, idx) => (
+                    <div key={`${item.product_id || item.product_name}-${idx}`} className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5"
+                      style={{ borderColor: dividerC, backgroundColor: subtleBoxBg }}>
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold truncate" style={{ color: subHeadC }}>{item.product_name}</p>
+                        <p className="text-xs capitalize" style={{ color: mutedC }}>{item.material_type || "material"}</p>
+                      </div>
+                      <span className="text-sm font-bold whitespace-nowrap" style={{ color: accentG }}>x{item.quantity}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs mt-3" style={{ color: mutedC }}>
+                  This appears only when the requested idea needs stock or stem-limit adjustment before image generation.
+                </p>
+              </div>
+            )}
 
             {unavailableItems.length > 0 && (
               <div className="border rounded-2xl p-6"

@@ -272,6 +272,7 @@ export default function MixAndMatch({ onNavigate }) {
   const [result, setResult] = useState(null)
   const [error, setError] = useState("")
   const [unavailableItems, setUnavailableItems] = useState([])
+  const [recipeReview, setRecipeReview] = useState(null)
   const [aiUsage, setAiUsage] = useState(null)
   const [customName, setCustomName] = useState("")
   const [lightboxOpen, setLightboxOpen] = useState(false)
@@ -480,6 +481,7 @@ export default function MixAndMatch({ onNavigate }) {
       return { ...prev, [p.id]: cur + 1 }
     })
     setError("")
+    setRecipeReview(null)
   }
 
   const decFlower = (p) => {
@@ -491,17 +493,20 @@ export default function MixAndMatch({ onNavigate }) {
     return next
   })
   setError("")
+  setRecipeReview(null)
 }
 
   const toggleFiller = (id) => {
     setFillerIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
     setError("")
+    setRecipeReview(null)
   }
 
   // Single-select toggle for wrapper / accessory.
   const toggleProduct = (cat, id) => {
     setSelections(prev => ({ ...prev, [cat]: prev[cat] === id ? null : id }))
     setError("")
+    setRecipeReview(null)
   }
 
   const canProceed = () => {
@@ -536,7 +541,7 @@ export default function MixAndMatch({ onNavigate }) {
       setError("AI Customization is temporarily disabled during peak seasons.")
       return
     }
-    setGenerating(true); setError(""); setUnavailableItems([])
+    setGenerating(true); setError(""); setUnavailableItems([]); setRecipeReview(null)
 
     const arrangement = ARRANGEMENTS.find(a => a.key === arrangementType)
     const wrapping  = selProd("wrapping")
@@ -578,7 +583,10 @@ export default function MixAndMatch({ onNavigate }) {
         wrapping_id: (selections.wrapping && selections.wrapping !== ACRYLIC_BOX.id) ? selections.wrapping : undefined,
         accessory_id: selections.ribbon || undefined,
       })
-      if (data.unavailable_items?.length > 0) {
+      if (data.validation) {
+        setRecipeReview({ ...data.validation, message: data.message })
+        setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
+      } else if (data.unavailable_items?.length > 0) {
         setUnavailableItems(data.unavailable_items)
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
       } else if (data.success) {
@@ -602,10 +610,11 @@ export default function MixAndMatch({ onNavigate }) {
       // Swap the unavailable flower for the suggested alternative, keeping 1 stem.
       setFlowerQty(prev => ({ ...prev, [id]: prev[id] || 1 }))
       setUnavailableItems([])
+      setRecipeReview(null)
       return
     }
     const m = { wrapping_id: "wrapping", accessory_id: "accessory" }
-    if (m[field]) { setSelections(p => ({ ...p, [m[field]]: id })); setUnavailableItems([]) }
+    if (m[field]) { setSelections(p => ({ ...p, [m[field]]: id })); setUnavailableItems([]); setRecipeReview(null) }
   }
 
   // Compose the To / message / From lines into a single greeting string for the cart.
@@ -672,7 +681,7 @@ export default function MixAndMatch({ onNavigate }) {
                 </div>
                 <button
                   onClick={() => {
-                    setCompleted(false); setResult(null); setStep(0); setUnavailableItems([])
+                    setCompleted(false); setResult(null); setStep(0); setUnavailableItems([]); setRecipeReview(null)
                     setArrangementType(null); setFlowerQty({}); setFillerIds([]); setSelections({ wrapping: null, ribbon: null })
                     setCardTo(""); setCardFrom(""); setCardMessage(""); setShowAIPanel(false); setGeneratedCardMsg(""); setCardError("")
                   }}
@@ -1087,6 +1096,38 @@ export default function MixAndMatch({ onNavigate }) {
           </div>
         )}
 
+        {recipeReview?.suggested_items?.length > 0 && (
+          <div className="mb-5 border rounded-2xl p-6"
+            style={{ backgroundColor: cardBg, borderColor: isDark ? "rgba(245,158,11,0.3)" : "#fde68a" }}>
+            <div className="flex items-start gap-2.5 mb-4">
+              <svg className="w-5 h-5 mt-0.5 flex-shrink-0" style={{ color: "#f59e0b" }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6M9 8h6M5 4h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z" />
+              </svg>
+              <div>
+                <h3 className="text-base font-semibold" style={{ color: subHeadC }}>Suggested stocked recipe</h3>
+                <p className="text-sm mt-1" style={{ color: bodyC }}>
+                  {recipeReview.message || "We adjusted the recipe to fit available stock and the arrangement limit."}
+                </p>
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {recipeReview.suggested_items.map((item, idx) => (
+                <div key={`${item.product_id || item.product_name}-${idx}`} className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2.5"
+                  style={{ borderColor: dividerC, backgroundColor: subtleBoxBg }}>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold truncate" style={{ color: subHeadC }}>{item.product_name}</p>
+                    <p className="text-xs capitalize" style={{ color: mutedC }}>{item.material_type || "material"}</p>
+                  </div>
+                  <span className="text-sm font-bold whitespace-nowrap" style={{ color: accentG }}>x{item.quantity}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs mt-3" style={{ color: mutedC }}>
+              Use this as the guide for reducing stems or swapping unavailable materials, then generate again.
+            </p>
+          </div>
+        )}
+
         {/* Unavailable items */}
         {unavailableItems.length > 0 && (
           <div className="mb-5 border rounded-2xl p-6"
@@ -1156,7 +1197,7 @@ export default function MixAndMatch({ onNavigate }) {
                     return (
                       <button
                         key={a.key}
-                        onClick={() => { setArrangementType(a.key); setError("") }}
+                        onClick={() => { setArrangementType(a.key); setError(""); setRecipeReview(null) }}
                         className="flex flex-col items-center gap-3 p-4 rounded-2xl border-2 transition-all hover:brightness-[1.02]"
                         style={{ borderColor: sel ? accentG : tileBdr, backgroundColor: sel ? tileSelBg : tileBg }}
                       >
