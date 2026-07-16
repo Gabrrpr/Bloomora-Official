@@ -35,14 +35,15 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts, theme } from '@/constants/theme';
-import { addressesApi, type AccountAddressPayload } from '@/services/addresses-api';
 import {
   authenticateWithBiometrics,
   getBiometricsAvailability,
+  setLocalAuthenticationEnabled,
   type BiometricsAvailability,
 } from '@/services/biometrics';
 import { loginWithPassword, registerWithPassword, sendSignUpOtp, verifySignUpOtp } from '@/services/auth-api';
-import { type AuthSession } from '@/services/auth-session';
+import { addressesApi } from '@/services/addresses-api';
+import { setStoreBranch } from '@/services/branch-preference';
 import {
   countryCodes,
   ShippingAddressModal,
@@ -120,7 +121,6 @@ export default function SignUpScreen() {
   const [addressLastName, setAddressLastName] = useState('');
   const [addressPhone, setAddressPhone] = useState('');
   const [addressCountry, setAddressCountry] = useState<CountryCode>(countryCodes[0]);
-  const [createdSession, setCreatedSession] = useState<AuthSession | null>(null);
   const [hasRegisteredAccount, setHasRegisteredAccount] = useState(false);
   const [errors, setErrors] = useState<FormErrors<SignUpField>>({});
   const [isCalendarVisible, setIsCalendarVisible] = useState(false);
@@ -404,6 +404,7 @@ export default function SignUpScreen() {
       const result = await authenticateWithBiometrics(`Enable ${availability.label} for Esting's.`);
 
       if (result.success) {
+        await setLocalAuthenticationEnabled(true);
         setBiometricsMessage(`${availability.label} is enabled for your Esting's account.`);
         setPhase(3);
         return;
@@ -418,8 +419,11 @@ export default function SignUpScreen() {
   }
 
   async function handleProfileAddressSave(value: ShippingAddressFormValue) {
-    setAddress(value.formattedAddress);
-    setAddressFormValue(value);
+    const nextValue = value.verificationToken
+      ? value
+      : { ...value, verificationToken: addressFormValue?.verificationToken ?? null };
+    setAddress(nextValue.formattedAddress);
+    setAddressFormValue(nextValue);
     setFieldError('address');
   }
 
@@ -428,7 +432,7 @@ export default function SignUpScreen() {
       return;
     }
 
-    if (!addressFormValue || !address.trim()) {
+    if (!addressFormValue || !address.trim() || !addressFormValue.verificationToken) {
       setFieldError('address', 'Add your delivery address to finish account setup.');
       setIsAddressModalOpen(true);
       return;
@@ -446,37 +450,37 @@ export default function SignUpScreen() {
     setSubmitError(null);
 
     try {
-      let session = createdSession;
-
-      if (!session) {
-        if (!hasRegisteredAccount) {
-          await registerWithPassword({
-            address: addressFormValue.formattedAddress,
-            email,
-            firstName,
-            lastName,
-            password,
-            phoneNumber: `+63${phone}`,
-          });
-          setHasRegisteredAccount(true);
-        }
-
-        session = await loginWithPassword(email, password);
-        setCreatedSession(session);
+      if (!hasRegisteredAccount) {
+        await registerWithPassword({
+          address: addressFormValue.formattedAddress,
+          email,
+          firstName,
+          lastName,
+          password,
+          phoneNumber: `+63${phone}`,
+        });
+        setHasRegisteredAccount(true);
       }
 
-      const payload: AccountAddressPayload = {
-        barangay: addressFormValue.barangay,
-        city: addressFormValue.city,
-        is_default: true,
-        label: addressFormValue.label || 'Home',
-        phone: toCanonicalPhone(addressPhone, addressCountry.code),
-        province: addressFormValue.province || addressFormValue.region,
-        recipient_name: recipientName,
-        street: addressFormValue.street,
-      };
+      const session = await loginWithPassword(email, password);
+      const verifiedAddress = addressFormValue.verifiedAddress;
+      const existingAddresses = await addressesApi.list(session.accessToken);
+      const alreadySaved = existingAddresses.some((savedAddress) => (
+        savedAddress.is_verified
+        && Math.abs(savedAddress.latitude - verifiedAddress.latitude) < 0.00001
+        && Math.abs(savedAddress.longitude - verifiedAddress.longitude) < 0.00001
+      ));
 
-      await addressesApi.create(payload, session.accessToken);
+      if (!alreadySaved) {
+        await addressesApi.create({
+          is_default: true,
+          label: addressFormValue.label || 'Home',
+          phone: toCanonicalPhone(addressPhone, addressCountry.code),
+          recipient_name: recipientName,
+          verified_address: verifiedAddress,
+        }, session.accessToken);
+      }
+      await setStoreBranch(addressFormValue.verifiedAddress.required_branch === 'Pampanga' ? 'pampanga' : 'manila');
       router.replace('/(tabs)');
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Unable to finish account setup.');
@@ -856,8 +860,10 @@ export default function SignUpScreen() {
       />
       <ShippingAddressModal
         address={address}
+        addressDetails={addressFormValue?.addressDetails}
         country={addressCountry}
         firstName={addressFirstName}
+        initialAddress={addressFormValue?.verifiedAddress}
         isDefaultAddress
         lastName={addressLastName}
         onClose={() => setIsAddressModalOpen(false)}

@@ -66,6 +66,7 @@ export type CustomizationProduct = {
   id: string;
   image_url?: string | null;
   is_available?: boolean;
+  is_customization_material?: boolean;
   is_visible?: boolean | null;
   name: string;
   price: number;

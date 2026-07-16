@@ -25,6 +25,7 @@ export type BackendProduct = {
   id: string;
   image_url?: string | null;
   is_available?: boolean | null;
+  is_customization_material?: boolean | null;
   is_visible?: boolean | null;
   is_flash_sale?: boolean | null;
   is_promoted?: boolean | null;
@@ -102,6 +103,8 @@ type CatalogRequestOptions = {
 const productCacheDurationMs = 30_000;
 let productCache: { products: Product[]; storedAt: number } | null = null;
 let productRequest: Promise<Product[]> | null = null;
+let customizationMaterialCache: { ids: Set<string>; storedAt: number } | null = null;
+let customizationMaterialRequest: Promise<Set<string>> | null = null;
 
 function toCategoryId(category?: string | null) {
   return `cat-${(category || 'flowers').toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
@@ -228,10 +231,46 @@ function isCustomerCatalogProduct(product: BackendProduct) {
 
   return (
     product.is_available !== false &&
+    product.is_customization_material !== true &&
     product.is_visible === true &&
     category !== 'advertisement' &&
     status !== 'inactive'
   );
+}
+
+async function getCustomizationMaterialIds(forceRefresh = false) {
+  const now = Date.now();
+
+  if (
+    !forceRefresh &&
+    customizationMaterialCache &&
+    now - customizationMaterialCache.storedAt < productCacheDurationMs
+  ) {
+    return customizationMaterialCache.ids;
+  }
+
+  if (!forceRefresh && customizationMaterialRequest) {
+    return customizationMaterialRequest;
+  }
+
+  const request = apiFetch<Array<Pick<BackendProduct, 'id' | 'is_customization_material'>>>(
+    '/products/customization/all',
+  )
+    .then((products) => {
+      const ids = new Set(
+        products
+          .filter((product) => product.is_customization_material === true)
+          .map((product) => product.id),
+      );
+      customizationMaterialCache = { ids, storedAt: Date.now() };
+      return ids;
+    })
+    .finally(() => {
+      customizationMaterialRequest = null;
+    });
+
+  customizationMaterialRequest = request;
+  return request;
 }
 
 function getCategoriesFromProducts(products: Product[]): Category[] {
@@ -333,9 +372,14 @@ function buildCatalogPath(options: CatalogRequestOptions = {}) {
 }
 
 async function fetchBackendProducts(options: CatalogRequestOptions = {}) {
-  const products = await apiFetch<BackendProduct[]>(buildCatalogPath(options));
+  const [products, customizationMaterialIds] = await Promise.all([
+    apiFetch<BackendProduct[]>(buildCatalogPath(options)),
+    getCustomizationMaterialIds(options.forceRefresh),
+  ]);
   return products
-    .filter(isCustomerCatalogProduct)
+    .filter((product) => (
+      isCustomerCatalogProduct(product) && !customizationMaterialIds.has(product.id)
+    ))
     .map(mapBackendProduct)
     .sort((first, second) => {
       const imagePriority = Number(Boolean(second.imageUrl)) - Number(Boolean(first.imageUrl));
@@ -458,8 +502,15 @@ export const shopApi = {
     if (options?.branch && options.branch !== 'all') {
       params.set('branch', options.branch);
     }
-    const products = await apiFetch<BackendProduct[]>(`/recommendations/home?${params.toString()}`);
-    const mappedProducts = products.filter(isCustomerCatalogProduct).map(mapBackendProduct);
+    const [products, customizationMaterialIds] = await Promise.all([
+      apiFetch<BackendProduct[]>(`/recommendations/home?${params.toString()}`),
+      getCustomizationMaterialIds(),
+    ]);
+    const mappedProducts = products
+      .filter((product) => (
+        isCustomerCatalogProduct(product) && !customizationMaterialIds.has(product.id)
+      ))
+      .map(mapBackendProduct);
     if (!options?.branch || options.branch === 'all') {
       return mappedProducts;
     }
@@ -475,11 +526,23 @@ export const shopApi = {
     }
   },
   async getCategoryHierarchy(options?: CatalogRequestOptions) {
+    const products = await getBackendProducts(options);
+    const visibleCategories = new Set(
+      products
+        .map((product) => product.categoryName?.trim().toLowerCase())
+        .filter((category): category is string => Boolean(category)),
+    );
+
     try {
       const hierarchy = await apiFetch<unknown[]>('/products/categories/hierarchy');
       const normalizedHierarchy = hierarchy
         .map(normalizeCategoryHierarchyGroup)
         .filter((group): group is CategoryHierarchyGroup => Boolean(group))
+        .map((group) => ({
+          ...group,
+          items: group.items.filter((item) => visibleCategories.has(item.trim().toLowerCase())),
+        }))
+        .filter((group) => group.items.length > 0)
         .sort(compareCategoryGroups);
 
       if (normalizedHierarchy.length > 0) {
@@ -489,7 +552,6 @@ export const shopApi = {
       console.warn('Failed to load category hierarchy.', error);
     }
 
-    const products = await getBackendProducts(options);
     return getCategoryHierarchyFromProducts(products);
   },
   async getCatalog(options?: CatalogRequestOptions) {

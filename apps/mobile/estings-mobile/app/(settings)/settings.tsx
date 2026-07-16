@@ -42,6 +42,8 @@ import { Fonts, theme } from '@/constants/theme';
 import {
   authenticateWithBiometrics,
   getBiometricsAvailability,
+  getLocalAuthenticationEnabled,
+  setLocalAuthenticationEnabled,
   type BiometricsAvailability,
 } from '@/services/biometrics';
 import { clearAuthSession, getAuthSession, type AuthSession } from '@/services/auth-session';
@@ -173,9 +175,10 @@ export default function SettingsScreen() {
   useEffect(() => {
     let isMounted = true;
 
-    getBiometricsAvailability().then((availability) => {
+    Promise.all([getBiometricsAvailability(), getLocalAuthenticationEnabled()]).then(([availability, enabled]) => {
       if (isMounted) {
         setBiometricsAvailability(availability);
+        setBiometricsEnabled(enabled);
       }
     });
 
@@ -441,8 +444,9 @@ export default function SettingsScreen() {
 
   async function handleToggleBiometrics(nextValue: boolean) {
     if (!nextValue) {
+      await setLocalAuthenticationEnabled(false);
       setBiometricsEnabled(false);
-      setBiometricsMessage('Biometric protection is off.');
+      setBiometricsMessage('Device confirmation is off.');
       return;
     }
 
@@ -458,8 +462,9 @@ export default function SettingsScreen() {
     const result = await authenticateWithBiometrics(`Enable ${availability.label} for Esting's.`);
 
     if (result.success) {
+      await setLocalAuthenticationEnabled(true);
       setBiometricsEnabled(true);
-      setBiometricsMessage(`${availability.label} is enabled for sensitive account actions.`);
+      setBiometricsMessage(`${availability.label} is enabled for sensitive actions and checkout.`);
       return;
     }
 
@@ -859,13 +864,13 @@ function SecurityView({
 }) {
   const isAvailable = availability?.isAvailable ?? false;
   const biometricLabel = availability?.label ?? 'Biometrics';
-  const statusText = message ?? availability?.unavailableReason ?? `${biometricLabel} can protect profile edits and password changes.`;
+  const statusText = message ?? availability?.unavailableReason ?? `${biometricLabel} can protect profile changes and checkout.`;
 
   return (
     <SettingsSection title="Security">
       <View style={styles.groupCard}>
         <ToggleRow
-          description={`Require ${biometricLabel} before editing profile details or changing your password.`}
+          description={`Require ${biometricLabel} before account changes and continuing to payment.`}
           disabled={!isAvailable}
           icon={Fingerprint}
           title={biometricLabel}

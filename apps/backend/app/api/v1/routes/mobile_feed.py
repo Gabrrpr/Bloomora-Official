@@ -1,10 +1,7 @@
 import base64
-import hashlib
 import json
-import math
 import re
 import uuid
-from collections import Counter
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
@@ -22,46 +19,28 @@ from app.models import (
     CampaignReaction,
     FeedEvent,
     FeedPlacement,
-    Inventory,
     Product,
     ProductFeedControl,
     PromoCode,
-    Review,
     User,
     WishlistItem,
+)
+from app.services.mobile_recommendations import (
+    MOBILE_FEED_TABS,
+    branch_stock as _branch_stock,
+    for_you_product_bucket as _for_you_product_bucket,
+    product_tie_breaker as _product_tie_breaker,
+    rank_mobile_feed_products,
 )
 
 
 router = APIRouter(prefix="/mobile-feed", tags=["Mobile Feed"])
 optional_bearer = HTTPBearer(auto_error=False)
-TABS = {"explore", "new", "for-you"}
+TABS = MOBILE_FEED_TABS
 BRANCHES = {"all", "manila", "pampanga"}
 BOOSTS = {"none": 0.0, "low": 0.05, "medium": 0.10, "high": 0.15}
 EVENT_TYPES = {"impression", "open", "cta", "share", "like", "add_to_cart", "voucher_copy"}
 FEED_SCHEMA_VERSION = 3
-FOR_YOU_SENSITIVE_TERMS = {
-    "buffet",
-    "ceramic vase",
-    "condolence",
-    "congratulation stand",
-    "event",
-    "funeral",
-    "funerary",
-    "inaugural",
-    "memorial",
-    "opening",
-    "pot",
-    "reception",
-    "standing arrangement",
-    "sympathy",
-    "tabletop arrangement",
-    "urn",
-    "vase",
-    "vertical arrangement",
-    "wreath",
-    "wreath arrangement",
-}
-FOR_YOU_GIFT_TERMS = {"accessory", "add on", "add-on", "addon", "chocolate", "gift"}
 
 
 class CampaignPayload(BaseModel):
@@ -375,22 +354,6 @@ def _apply_post(
     return campaign
 
 
-def _branch_stock(product: Product, branch: str) -> int:
-    inventory = product.inventory
-    if not inventory:
-        return 0
-    if branch == "manila":
-        return int(inventory.stock_manila or 0)
-    if branch == "pampanga":
-        return int(inventory.stock_pampanga or 0)
-    return int(inventory.current_stock or 0)
-
-
-def _product_matches_branch(product: Product, branch: str) -> bool:
-    branches = [str(value).lower() for value in (product.branches or [])]
-    return not branches or branch == "all" or branch in branches or "all" in branches
-
-
 def _active_control(controls: list[ProductFeedControl], branch: str, now: datetime) -> Optional[ProductFeedControl]:
     candidates = [c for c in controls if c.branch in {"all", branch}]
     candidates.sort(key=lambda c: c.branch == branch, reverse=True)
@@ -401,158 +364,6 @@ def _active_control(controls: list[ProductFeedControl], branch: str, now: dateti
             continue
         return control
     return None
-
-
-def _normalize(value: float, maximum: float) -> float:
-    return value / maximum if maximum > 0 else 0.0
-
-
-def _normalized_product_terms(product: Product) -> list[str]:
-    raw_values: list[Any] = [
-        product.category,
-        product.product_group,
-        product.product_type,
-        product.name,
-        product.description,
-    ]
-    raw_values.extend(product.tags or [])
-    raw_values.extend(product.occasions or [])
-    return [str(value).strip().lower() for value in raw_values if str(value or "").strip()]
-
-
-def _for_you_product_bucket(product: Product) -> Optional[int]:
-    terms = _normalized_product_terms(product)
-    haystack = " ".join(terms)
-    if any(term in haystack for term in FOR_YOU_SENSITIVE_TERMS):
-        return None
-    if product.category and str(product.category).strip().lower() == "bouquet":
-        return 0
-    if "bouquet" in terms or "bouquet" in haystack:
-        return 0
-    if any(term in haystack for term in FOR_YOU_GIFT_TERMS):
-        return 1
-    return None
-
-
-def _product_tie_breaker(
-    tab: str,
-    branch: str,
-    product_id: uuid.UUID,
-    created_at: Optional[datetime],
-    user_id: Optional[uuid.UUID] = None,
-) -> int | float:
-    if tab == "new":
-        return -(created_at.timestamp() if created_at else 0)
-    actor_seed = str(user_id) if user_id and tab == "for-you" else branch
-    digest = hashlib.sha256(f"{tab}:{actor_seed}:{product_id}".encode()).hexdigest()
-    return int(digest[:12], 16)
-
-
-def _rank_products(
-    db: Session,
-    tab: str,
-    branch: str,
-    user: Optional[User],
-) -> list[dict]:
-    now = _now()
-    products = (
-        db.query(Product)
-        .options(joinedload(Product.inventory))
-        .filter(
-            Product.is_available.is_(True),
-            Product.is_visible.is_(True),
-            Product.status != "inactive",
-        )
-        .all()
-    )
-    rating_rows = (
-        db.query(Review.product_id, func.avg(Review.star_rating), func.count(Review.id))
-        .group_by(Review.product_id)
-        .all()
-    )
-    ratings = {product_id: (float(avg or 0), int(count or 0)) for product_id, avg, count in rating_rows}
-    wishlist_ids: set[uuid.UUID] = set()
-    preferred_categories: Counter[str] = Counter()
-    if user:
-        wishlist_rows = (
-            db.query(WishlistItem.product_id, Product.category)
-            .join(Product, Product.id == WishlistItem.product_id)
-            .filter(WishlistItem.user_id == user.id)
-            .all()
-        )
-        wishlist_ids = {row[0] for row in wishlist_rows}
-        preferred_categories.update(str(row[1]).lower() for row in wishlist_rows if row[1])
-
-    eligible: list[Product] = []
-    for product in products:
-        if not _product_matches_branch(product, branch) or _branch_stock(product, branch) <= 0:
-            continue
-        if product.limited_start_at and product.limited_start_at > now:
-            continue
-        if product.limited_end_at and product.limited_end_at < now:
-            continue
-        if tab == "for-you" and _for_you_product_bucket(product) is None:
-            continue
-        eligible.append(product)
-
-    max_sold = max((int(product.sold_count or 0) for product in eligible), default=0)
-    scored: list[tuple[int, float, int | float, str, Product]] = []
-    for product in eligible:
-        rating, review_count = ratings.get(product.id, (0.0, 0))
-        sold_score = _normalize(float(product.sold_count or 0), float(max_sold))
-        rating_score = rating / 5 if rating else 0
-        age_days = max((now - product.created_at).total_seconds() / 86400, 0) if product.created_at else 365
-        recency = math.exp(-age_days / 30)
-        category_affinity = 1.0 if str(product.category).lower() in preferred_categories else 0.0
-        wished = 1.0 if product.id in wishlist_ids else 0.0
-        if tab == "new":
-            base_score = recency * 0.65 + sold_score * 0.20 + rating_score * 0.15
-        elif tab == "for-you":
-            base_score = category_affinity * 0.40 + sold_score * 0.28 + rating_score * 0.22 + recency * 0.10
-            if not user or not preferred_categories:
-                base_score = sold_score * 0.55 + rating_score * 0.25 + recency * 0.20
-        else:
-            base_score = sold_score * 0.48 + rating_score * 0.32 + recency * 0.20
-        score = base_score
-        feed_bucket = _for_you_product_bucket(product) if tab == "for-you" else 0
-        tie_breaker = _product_tie_breaker(
-            tab,
-            branch,
-            product.id,
-            product.created_at,
-            user.id if user else None,
-        )
-        scored.append((feed_bucket or 0, score, tie_breaker, str(product.id), product))
-
-    scored.sort(key=lambda item: (item[0], -item[1], item[2], item[3]))
-    result = []
-    for _, score, _, _, product in scored:
-        rating, review_count = ratings.get(product.id, (0.0, 0))
-        stock = _branch_stock(product, branch)
-        result.append({
-            "type": "product",
-            "id": str(product.id),
-            "score": round(score, 5),
-            "product": {
-                "id": str(product.id),
-                "name": product.name,
-                "description": product.description,
-                "price": float(product.price or 0),
-                "original_price": float(product.original_price) if product.original_price else None,
-                "category": product.category,
-                "product_group": product.product_group,
-                "product_type": product.product_type,
-                "tags": product.tags or [],
-                "image_url": product.image_url,
-                "stock": stock,
-                "rating": round(rating, 1),
-                "review_count": review_count,
-                "is_new": bool(product.created_at and (now - product.created_at).days <= 30),
-                "is_wishlisted": product.id in wishlist_ids,
-                "boost_level": "none",
-            },
-        })
-    return result
 
 
 def _promotion_items(db: Session, tab: str, branch: str, user: Optional[User]) -> list[tuple[int, dict]]:
@@ -624,7 +435,7 @@ def _promotion_items(db: Session, tab: str, branch: str, user: Optional[User]) -
 
 
 def _assemble_feed(db: Session, tab: str, branch: str, user: Optional[User]) -> list[dict]:
-    return _rank_products(db, tab, branch, user)
+    return rank_mobile_feed_products(db, tab, branch, user)
 
 
 @router.get("")

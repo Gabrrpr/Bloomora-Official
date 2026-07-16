@@ -1,4 +1,9 @@
+import * as FileSystem from 'expo-file-system/legacy';
 import * as LocalAuthentication from 'expo-local-authentication';
+import { Platform } from 'react-native';
+
+const localAuthenticationStorageKey = 'estings.local-authentication-enabled';
+const localAuthenticationFileUri = `${FileSystem.documentDirectory}local-authentication-enabled.txt`;
 
 export type BiometricsAvailability = {
   hasHardware: boolean;
@@ -14,35 +19,57 @@ export type BiometricsResult = {
   success: boolean;
 };
 
+export async function getLocalAuthenticationEnabled() {
+  try {
+    const storedValue = Platform.OS === 'web'
+      ? globalThis.localStorage?.getItem(localAuthenticationStorageKey)
+      : (await FileSystem.getInfoAsync(localAuthenticationFileUri)).exists
+        ? await FileSystem.readAsStringAsync(localAuthenticationFileUri)
+        : null;
+
+    return storedValue === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export async function setLocalAuthenticationEnabled(enabled: boolean) {
+  const storedValue = String(enabled);
+
+  if (Platform.OS === 'web') {
+    globalThis.localStorage?.setItem(localAuthenticationStorageKey, storedValue);
+    return;
+  }
+
+  await FileSystem.writeAsStringAsync(localAuthenticationFileUri, storedValue);
+}
+
 export async function getBiometricsAvailability(): Promise<BiometricsAvailability> {
   try {
-    const [hasHardware, isEnrolled, supportedTypes] = await Promise.all([
+    const [hasHardware, isBiometricEnrolled, supportedTypes, enrolledLevel] = await Promise.all([
       LocalAuthentication.hasHardwareAsync(),
       LocalAuthentication.isEnrolledAsync(),
       LocalAuthentication.supportedAuthenticationTypesAsync(),
+      LocalAuthentication.getEnrolledLevelAsync(),
     ]);
 
-    const label = getBiometricsLabel(supportedTypes);
+    const hasDeviceAuthentication = enrolledLevel !== LocalAuthentication.SecurityLevel.NONE;
+    const hasBiometricAuthentication = enrolledLevel >= LocalAuthentication.SecurityLevel.BIOMETRIC_WEAK;
+    const isEnrolled = isBiometricEnrolled || hasDeviceAuthentication;
+    const label = hasBiometricAuthentication && supportedTypes.length
+      ? getBiometricsLabel(supportedTypes)
+      : hasDeviceAuthentication
+        ? 'Screen lock'
+        : 'Device authentication';
 
-    if (!hasHardware) {
+    if (!hasDeviceAuthentication) {
       return {
         hasHardware,
         isAvailable: false,
         isEnrolled,
         label,
         supportedTypes,
-        unavailableReason: 'Biometrics are not available on this device.',
-      };
-    }
-
-    if (!isEnrolled) {
-      return {
-        hasHardware,
-        isAvailable: false,
-        isEnrolled,
-        label,
-        supportedTypes,
-        unavailableReason: 'Set up biometrics in your device settings first.',
+        unavailableReason: 'Set up a fingerprint, face scan, PIN, or pattern in your device settings first.',
       };
     }
 
@@ -58,9 +85,9 @@ export async function getBiometricsAvailability(): Promise<BiometricsAvailabilit
       hasHardware: false,
       isAvailable: false,
       isEnrolled: false,
-      label: 'Biometrics',
+      label: 'Device authentication',
       supportedTypes: [],
-      unavailableReason: 'Biometric status could not be checked.',
+      unavailableReason: 'Device authentication could not be checked.',
     };
   }
 }
@@ -70,17 +97,17 @@ export async function authenticateWithBiometrics(promptMessage: string): Promise
 
   if (!availability.isAvailable) {
     return {
-      error: availability.unavailableReason ?? 'Biometrics are unavailable.',
+      error: availability.unavailableReason ?? 'Device authentication is unavailable.',
       success: false,
     };
   }
 
   try {
     const result = await LocalAuthentication.authenticateAsync({
-      biometricsSecurityLevel: 'strong',
+      biometricsSecurityLevel: 'weak',
       cancelLabel: 'Cancel',
-      disableDeviceFallback: true,
-      fallbackLabel: '',
+      disableDeviceFallback: false,
+      fallbackLabel: 'Use device passcode',
       promptMessage,
       requireConfirmation: true,
     });
@@ -95,7 +122,7 @@ export async function authenticateWithBiometrics(promptMessage: string): Promise
     };
   } catch {
     return {
-      error: 'Biometric confirmation could not be started. Please try again or skip this step.',
+      error: 'Device confirmation could not be started. Please try again.',
       success: false,
     };
   }
@@ -105,9 +132,9 @@ function getAuthenticationErrorMessage(error?: string) {
   switch (error) {
     case 'app_cancel':
     case 'system_cancel':
-      return 'Biometric confirmation was interrupted. Please try again.';
+      return 'Device confirmation was interrupted. Please try again.';
     case 'authentication_failed':
-      return 'Fingerprint was not recognized. Please try again.';
+      return 'That did not match. Please try again.';
     case 'lockout':
       return 'Too many attempts. Unlock your device and try again.';
     case 'not_available':
@@ -115,12 +142,12 @@ function getAuthenticationErrorMessage(error?: string) {
     case 'passcode_not_set':
       return 'Set up fingerprint or screen lock in device settings first.';
     case 'timeout':
-      return 'Biometric confirmation timed out. Please try again.';
+      return 'Device confirmation timed out. Please try again.';
     case 'user_cancel':
     case 'user_fallback':
-      return 'Biometric confirmation was not completed.';
+      return 'Device confirmation was cancelled.';
     default:
-      return 'Biometric confirmation was not completed.';
+      return 'Device confirmation was not completed.';
   }
 }
 

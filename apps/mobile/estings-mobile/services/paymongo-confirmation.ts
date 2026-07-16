@@ -4,12 +4,13 @@ import { getPayMongoPaymentStatus, type PayMongoPaymentStatusResponse } from '@/
 import type { AuthSession } from '@/services/auth-session';
 
 export type PayMongoReceipt = {
-  amount: number;
+  checkoutSessionId?: string | null;
   orderNumbers: string[];
+  orderTotal: number;
   paidAt?: string | null;
   paymentMethod?: string | null;
+  provider?: string | null;
   paymentStatus: string;
-  reference?: string | null;
   transactionId?: string | null;
 };
 
@@ -36,6 +37,9 @@ export async function confirmPayMongoOrders({
     ? await getOrderById({ orderId: normalizedOrderIds.join(','), session }).catch(() => undefined)
     : undefined;
   const allPaid = statuses.length > 0 && statuses.every((status) => status.payment_status === 'paid');
+  const statusOrderNumbers = statuses
+    .map((status) => status.order?.order_number ?? '')
+    .filter(Boolean);
   const purchasedProductIds = [
     ...(order?.items ?? []).map((item) => item.productId),
     ...statuses.flatMap((status) => status.order?.items?.map((item) => item.product_id) ?? []),
@@ -46,12 +50,16 @@ export async function confirmPayMongoOrders({
     order,
     purchasedProductIds: [...new Set(purchasedProductIds)],
     receipt: {
-      amount: Number(order?.totalAmount ?? 0),
-      orderNumbers: order?.orderIds?.length ? [order.orderNumber] : statuses.map((status) => status.order?.order_number ?? '').filter(Boolean),
+      checkoutSessionId: statuses.find((status) => status.checkout_session_id)?.checkout_session_id
+        ?? order?.paymentReference,
+      orderNumbers: statusOrderNumbers.length
+        ? statusOrderNumbers
+        : order?.orderNumber ? [order.orderNumber] : [],
+      orderTotal: Number(order?.totalAmount ?? 0),
       paidAt: order?.paidAt ?? statuses.find((status) => status.paid_at)?.paid_at,
-      paymentMethod: order?.paymentProvider ?? statuses.find((status) => status.provider)?.provider,
+      paymentMethod: order?.paymentMethod,
+      provider: order?.paymentProvider ?? statuses.find((status) => status.provider)?.provider,
       paymentStatus: allPaid ? 'paid' : order?.paymentStatus ?? statuses[0]?.payment_status ?? 'pending',
-      reference: order?.paymentReference,
       transactionId: order?.transactionId,
     },
     statuses,

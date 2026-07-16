@@ -583,10 +583,10 @@ def serialize_order(o, include_details: bool = True) -> dict:
 
         branch_val = "—"
         try:
-            if user and getattr(user, 'branch', None):
+            if getattr(o, 'branch_name', None):
+                branch_val = getattr(o, 'branch_name')
+            elif user and getattr(user, 'branch', None):
                 branch_val = getattr(getattr(user, 'branch', None), 'value', None) or str(user.branch)
-            else:
-                branch_val = getattr(o, 'branch_name', None) or "—"
         except Exception:
             branch_val = getattr(o, 'branch_name', None) or "—"
 
@@ -763,6 +763,18 @@ def _derive_delivery_branch(address: str) -> str:
         status_code=400,
         detail="Delivery is currently available only within Metro Manila and Pampanga.",
     )
+
+
+def _resolve_checkout_branch(payload: dict, fulfillment_method: str, delivery_address: str) -> str:
+    requested_branch = str(payload.get("branch_name") or payload.get("branch") or "").strip().title()
+    branch = requested_branch or (
+        _derive_delivery_branch(delivery_address)
+        if fulfillment_method in {"delivery", "lalamove"}
+        else "Manila"
+    )
+    if branch not in {"Manila", "Pampanga"}:
+        raise HTTPException(status_code=400, detail="Select either the Manila or Pampanga branch.")
+    return branch
 
 
 def _validate_delivery_date(value, fulfillment_method: str, cutoff: str = "14:00") -> datetime:
@@ -957,8 +969,17 @@ async def create_order(
             return _created_order_response(existing_order)
 
     delivery_notes = payload.get("delivery_notes", "")
-    fulfillment_method = str(payload.get("fulfillmentMethod") or payload.get("fulfillment_method") or "delivery").lower()
-    has_explicit_shipping_method = bool(payload.get("shipping_method_id") or payload.get("shippingMethodId") or payload.get("shipping_method_code") or payload.get("shippingMethodCode"))
+    fulfillment_method = str(payload.get("fulfillmentMethod") or payload.get("fulfillment_method") or "delivery").strip().lower()
+    if fulfillment_method not in {"delivery", "lalamove", "pickup"}:
+        raise HTTPException(status_code=400, detail="Choose Standard delivery, Lalamove, or Store pickup.")
+    has_explicit_shipping_method = bool(
+        payload.get("shipping_method_id")
+        or payload.get("shippingMethodId")
+        or payload.get("shipping_method_code")
+        or payload.get("shippingMethodCode")
+        or payload.get("delivery_provider")
+        or payload.get("deliveryProvider")
+    )
     shipping_method = _selected_shipping_method(db, payload)
     if shipping_method and fulfillment_method != "pickup":
         fulfillment_method = "delivery"

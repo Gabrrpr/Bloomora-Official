@@ -1,6 +1,7 @@
 import { apiFetch } from '@/services/api-client';
 import type { AuthSession } from '@/services/auth-session';
 import type { CartItem } from '@/constants/shop';
+import type { VerifiedAddress } from '@/services/location-api';
 
 type CreateOrdersResponse = {
   order?: {
@@ -43,8 +44,10 @@ export type PayMongoPaymentStatusResponse = {
 
 export async function createOrdersFromCart({
   attemptId,
+  branch,
   deliveryAddress,
   deliveryDate,
+  deliveryLocation,
   deliveryNotes = '',
   deliveryProvider,
   fulfillmentMethod = 'delivery',
@@ -56,12 +59,17 @@ export async function createOrdersFromCart({
   session,
   timeSlot = 'anytime',
 }: {
+  addressDetails?: string;
+  addressId?: string;
+  addressVerificationToken?: string;
   attemptId: string;
+  branch: 'manila' | 'pampanga';
   deliveryAddress?: string;
   deliveryDate?: string;
+  deliveryLocation?: Pick<VerifiedAddress, 'geocode_precision' | 'latitude' | 'longitude'>;
   deliveryNotes?: string;
   deliveryProvider?: string;
-  fulfillmentMethod?: 'delivery' | 'pickup';
+  fulfillmentMethod?: 'delivery' | 'lalamove' | 'pickup';
   isAnonymous?: boolean;
   items: CartItem[];
   recipient?: {
@@ -77,8 +85,12 @@ export async function createOrdersFromCart({
   return apiFetch<CreateOrdersResponse>('/orders/', {
     body: JSON.stringify({
       attemptId,
-      delivery_address: deliveryAddress ?? session.user.address ?? '',
+      branch_name: branch,
+      delivery_address: deliveryAddress ?? '',
       delivery_date: deliveryDate,
+      delivery_geocode_precision: deliveryLocation?.geocode_precision || undefined,
+      delivery_lat: Number.isFinite(deliveryLocation?.latitude) ? deliveryLocation?.latitude : undefined,
+      delivery_lng: Number.isFinite(deliveryLocation?.longitude) ? deliveryLocation?.longitude : undefined,
       delivery_notes: deliveryNotes,
       delivery_provider: deliveryProvider,
       fulfillment_method: fulfillmentMethod,

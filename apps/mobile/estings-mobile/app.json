@@ -57,6 +57,14 @@
           ]
         }
       ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Esting's to choose payment screenshots and order photos.",
+          "savePhotosPermission": "Allow Esting's to save payment receipts to Photos.",
+          "granularPermissions": []
+        }
+      ],
       "expo-notifications",
       [
         "expo-splash-screen",

@@ -1,4 +1,5 @@
 import unittest
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -12,6 +13,7 @@ from app.api.v1.routes.mobile_feed import (
     _for_you_product_bucket,
     _product_tie_breaker,
 )
+from app.services.mobile_recommendations import product_score
 
 
 class MobileFeedHelperTests(unittest.TestCase):
@@ -135,6 +137,37 @@ class MobileFeedHelperTests(unittest.TestCase):
             ),
         ]
         self.assertTrue(all(_for_you_product_bucket(product) is None for product in products))
+
+    def test_explore_score_uses_popularity_rating_and_recency(self):
+        now = datetime.now(timezone.utc)
+        product = SimpleNamespace(
+            category="bouquet",
+            created_at=now,
+            sold_count=100,
+        )
+        score = product_score("explore", product, 5.0, 100, Counter(), now)
+        self.assertAlmostEqual(score, 1.0)
+
+    def test_new_score_prioritizes_recency(self):
+        now = datetime.now(timezone.utc)
+        recent = SimpleNamespace(category="bouquet", created_at=now, sold_count=0)
+        older = SimpleNamespace(
+            category="bouquet",
+            created_at=now - timedelta(days=60),
+            sold_count=0,
+        )
+        recent_score = product_score("new", recent, 0.0, 0, Counter(), now)
+        older_score = product_score("new", older, 0.0, 0, Counter(), now)
+        self.assertGreater(recent_score, older_score)
+
+    def test_for_you_score_rewards_wishlist_category(self):
+        now = datetime.now(timezone.utc)
+        preferred = SimpleNamespace(category="bouquet", created_at=now, sold_count=0)
+        other = SimpleNamespace(category="gift", created_at=now, sold_count=0)
+        categories = Counter({"bouquet": 1})
+        preferred_score = product_score("for-you", preferred, 0.0, 0, categories, now)
+        other_score = product_score("for-you", other, 0.0, 0, categories, now)
+        self.assertGreater(preferred_score, other_score)
 
 
 if __name__ == "__main__":

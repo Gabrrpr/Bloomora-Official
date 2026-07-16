@@ -1,0 +1,433 @@
+import { Platform } from 'react-native';
+
+import { assertNetworkConnection } from '@/services/api-client';
+
+export type ServiceZone = 'ncr' | 'pampanga' | 'unsupported';
+export type RequiredBranch = 'Manila' | 'Pampanga' | null;
+export type DeliveryProvider = 'lalamove' | 'standard' | null;
+
+export type VerifiedAddress = {
+  formatted_address: string;
+  street: string;
+  barangay: string | null;
+  city: string;
+  province: string;
+  region: string | null;
+  zip_code: string | null;
+  country_code: string;
+  latitude: number;
+  longitude: number;
+  geocode_precision: string;
+  geocode_provider: string;
+  geocode_place_id: string | null;
+  service_zone: ServiceZone;
+  required_branch: RequiredBranch;
+  delivery_provider: DeliveryProvider;
+  is_serviceable: boolean;
+};
+
+export type AddressVerification = {
+  address: VerifiedAddress;
+  attribution: string;
+  /** A client-side selection marker. The unchanged backend does not verify or consume this value. */
+  verificationToken: string;
+};
+
+type NominatimAddress = Record<string, unknown> & {
+  amenity?: string;
+  building?: string;
+  city?: string;
+  city_district?: string;
+  country?: string;
+  country_code?: string;
+  county?: string;
+  district?: string;
+  hamlet?: string;
+  house_name?: string;
+  house_number?: string;
+  leisure?: string;
+  municipality?: string;
+  neighbourhood?: string;
+  office?: string;
+  path?: string;
+  pedestrian?: string;
+  postcode?: string;
+  province?: string;
+  quarter?: string;
+  region?: string;
+  residential?: string;
+  road?: string;
+  shop?: string;
+  state?: string;
+  state_district?: string;
+  suburb?: string;
+  town?: string;
+  tourism?: string;
+  village?: string;
+};
+
+type NominatimReverseResponse = {
+  addresstype?: string;
+  address?: NominatimAddress;
+  category?: string;
+  display_name?: string;
+  error?: string;
+  lat?: string;
+  licence?: string;
+  lon?: string;
+  osm_id?: number | string;
+  osm_type?: string;
+  place_id?: number | string;
+  type?: string;
+};
+
+const NOMINATIM_BASE_URL = (
+  process.env.EXPO_PUBLIC_NOMINATIM_BASE_URL ?? 'https://nominatim.openstreetmap.org'
+).replace(/\/$/, '');
+const NOMINATIM_USER_AGENT = 'EstingsMobile/1.0 (https://estings.shop)';
+const OSM_ATTRIBUTION = 'Data © OpenStreetMap contributors, ODbL 1.0';
+const CACHE_TTL_MS = 30 * 60 * 1000;
+const CACHE_MAX_ENTRIES = 200;
+const REQUEST_INTERVAL_MS = 1_050;
+const REQUEST_TIMEOUT_MS = 15_000;
+
+const reverseCache = new Map<string, { expiresAt: number; value: AddressVerification }>();
+let requestQueue: Promise<void> = Promise.resolve();
+let nextRequestAt = 0;
+
+export async function reverseGeocodeLocation(
+  latitude: number,
+  longitude: number,
+  signal?: AbortSignal,
+): Promise<AddressVerification> {
+  assertValidCoordinates(latitude, longitude);
+  throwIfAborted(signal);
+
+  const cacheKey = `${latitude.toFixed(5)},${longitude.toFixed(5)}`;
+  const cached = reverseCache.get(cacheKey);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
+
+  if (cached) {
+    reverseCache.delete(cacheKey);
+  }
+
+  return enqueueNominatimRequest(async () => {
+    throwIfAborted(signal);
+    await assertNetworkConnection();
+
+    const response = await fetchReverseGeocode(latitude, longitude, signal);
+    const value = normalizeNominatimResult(response, latitude, longitude);
+    cacheResult(cacheKey, value);
+    return value;
+  }, signal);
+}
+
+export function getAddressZoneLabel(address: Pick<VerifiedAddress, 'service_zone'>) {
+  if (address.service_zone === 'ncr') {
+    return 'NCR · Manila branch · Lalamove';
+  }
+
+  if (address.service_zone === 'pampanga') {
+    return "Pampanga · Esting's standard delivery";
+  }
+
+  return 'Outside Esting\'s delivery area';
+}
+
+async function fetchReverseGeocode(
+  latitude: number,
+  longitude: number,
+  parentSignal?: AbortSignal,
+): Promise<NominatimReverseResponse> {
+  const params = new URLSearchParams({
+    addressdetails: '1',
+    format: 'jsonv2',
+    lat: String(latitude),
+    lon: String(longitude),
+    zoom: '18',
+  });
+  const controller = new AbortController();
+  let didTimeOut = false;
+  const abortFromParent = () => controller.abort();
+  const timeout = setTimeout(() => {
+    didTimeOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
+
+  parentSignal?.addEventListener('abort', abortFromParent, { once: true });
+
+  try {
+    const response = await fetch(`${NOMINATIM_BASE_URL}/reverse?${params.toString()}`, {
+      headers: {
+        Accept: 'application/json',
+        'Accept-Language': 'en-PH,en',
+        ...(Platform.OS === 'web' ? {} : { 'User-Agent': NOMINATIM_USER_AGENT }),
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      if (response.status === 429) {
+        throw new Error('Address verification is busy. Wait a moment, then try the pin again.');
+      }
+
+      throw new Error(`OpenStreetMap address verification failed (${response.status}).`);
+    }
+
+    return (await response.json()) as NominatimReverseResponse;
+  } catch (error) {
+    if (parentSignal?.aborted) {
+      throw createAbortError();
+    }
+
+    if (didTimeOut) {
+      throw new Error('Address verification timed out. Check your connection and try again.');
+    }
+
+    throw error instanceof Error
+      ? error
+      : new Error('This pin could not be verified with OpenStreetMap.');
+  } finally {
+    clearTimeout(timeout);
+    parentSignal?.removeEventListener('abort', abortFromParent);
+  }
+}
+
+function normalizeNominatimResult(
+  result: NominatimReverseResponse,
+  pinnedLatitude: number,
+  pinnedLongitude: number,
+): AddressVerification {
+  if (result.error) {
+    throw new Error(result.error);
+  }
+
+  const raw = result.address ?? {};
+  const countryCode = cleanString(raw.country_code).toLowerCase();
+
+  if (countryCode !== 'ph') {
+    throw new Error('Choose a delivery pin within the Philippines.');
+  }
+
+  const serviceZone = classifyServiceZone(raw);
+  const road = firstString(raw.road, raw.pedestrian, raw.residential, raw.path);
+  const houseNumber = cleanString(raw.house_number);
+  const houseName = firstString(
+    raw.house_name,
+    raw.building,
+    raw.amenity,
+    raw.shop,
+    raw.office,
+    raw.tourism,
+    raw.leisure,
+  );
+  const street = [houseNumber || houseName, road].filter(Boolean).join(' ').trim();
+  const city = firstString(raw.city, raw.town, raw.municipality);
+  const barangay = firstString(
+    raw.village,
+    raw.quarter,
+    raw.neighbourhood,
+    raw.suburb,
+    raw.city_district,
+    raw.district,
+  );
+  const region = firstString(raw.region, raw.state);
+  const province = serviceZone === 'ncr'
+    ? 'Metro Manila'
+    : serviceZone === 'pampanga'
+      ? 'Pampanga'
+      : firstString(raw.province, raw.state_district, raw.state, raw.county);
+  const providerDisplayName = cleanString(result.display_name);
+
+  if (!providerDisplayName || !street || !city || !province) {
+    throw new Error(
+      'OpenStreetMap does not have a complete street, city, and province for this pin. Move the pin to the exact building or entrance.',
+    );
+  }
+
+  const isServiceable = serviceZone !== 'unsupported';
+  const formattedAddress = [street, barangay, city, province, cleanString(raw.postcode), 'Philippines']
+    .filter(Boolean)
+    .filter((part, index, parts) => parts.indexOf(part) === index)
+    .join(', ');
+  const placeId = result.place_id === undefined || result.place_id === null
+    ? null
+    : String(result.place_id);
+  const address: VerifiedAddress = {
+    barangay: barangay || null,
+    city,
+    country_code: countryCode,
+    delivery_provider: serviceZone === 'ncr' ? 'lalamove' : serviceZone === 'pampanga' ? 'standard' : null,
+    formatted_address: formattedAddress,
+    geocode_place_id: placeId,
+    geocode_precision: `reverse_${cleanString(result.addresstype) || cleanString(result.type) || 'address'}`,
+    geocode_provider: 'nominatim',
+    is_serviceable: isServiceable,
+    latitude: pinnedLatitude,
+    longitude: pinnedLongitude,
+    province,
+    region: region || null,
+    required_branch: serviceZone === 'ncr' ? 'Manila' : serviceZone === 'pampanga' ? 'Pampanga' : null,
+    service_zone: serviceZone,
+    street,
+    zip_code: cleanString(raw.postcode) || null,
+  };
+
+  return {
+    address,
+    attribution: cleanString(result.licence) || OSM_ATTRIBUTION,
+    verificationToken: makeLocalSelectionToken(result, pinnedLatitude, pinnedLongitude),
+  };
+}
+
+function classifyServiceZone(address: NominatimAddress): ServiceZone {
+  const isoCodes = Object.entries(address)
+    .filter(([key]) => key.toUpperCase().startsWith('ISO3166-2-LVL'))
+    .map(([, value]) => normalizeName(value));
+  const administrativeAreas = [
+    address.region,
+    address.state,
+    address.state_district,
+    address.province,
+    address.county,
+  ].map(normalizeName).filter(Boolean);
+
+  if (
+    isoCodes.includes('ph-00')
+    || administrativeAreas.some((area) => (
+      area === 'ncr'
+      || area === 'metro manila'
+      || area === 'metropolitan manila'
+      || area === 'national capital region'
+      || area === 'kalakhang maynila'
+    ))
+  ) {
+    return 'ncr';
+  }
+
+  if (
+    isoCodes.includes('ph-pam')
+    || administrativeAreas.some((area) => (
+      area === 'pampanga'
+      || area === 'province of pampanga'
+      || area === 'lalawigan ng pampanga'
+    ))
+  ) {
+    return 'pampanga';
+  }
+
+  // Deliberately do not infer a zone from city names such as San Fernando.
+  // Those names occur in other provinces and would create false serviceability.
+  return 'unsupported';
+}
+
+function makeLocalSelectionToken(
+  result: NominatimReverseResponse,
+  latitude: number,
+  longitude: number,
+) {
+  const sourceId = result.place_id ?? result.osm_id ?? 'unknown';
+  const sourceType = cleanString(result.osm_type) || 'place';
+  return `local:nominatim:${sourceType}:${sourceId}:${latitude.toFixed(6)},${longitude.toFixed(6)}`;
+}
+
+function enqueueNominatimRequest<T>(task: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+  const queued = requestQueue.then(async () => {
+    throwIfAborted(signal);
+    const delayMs = Math.max(0, nextRequestAt - Date.now());
+
+    if (delayMs > 0) {
+      await abortableDelay(delayMs, signal);
+    }
+
+    throwIfAborted(signal);
+    nextRequestAt = Date.now() + REQUEST_INTERVAL_MS;
+    return task();
+  });
+
+  requestQueue = queued.then(() => undefined, () => undefined);
+  return queued;
+}
+
+function cacheResult(key: string, value: AddressVerification) {
+  if (reverseCache.size >= CACHE_MAX_ENTRIES) {
+    const oldestKey = reverseCache.keys().next().value as string | undefined;
+    if (oldestKey) {
+      reverseCache.delete(oldestKey);
+    }
+  }
+
+  reverseCache.set(key, { expiresAt: Date.now() + CACHE_TTL_MS, value });
+}
+
+function assertValidCoordinates(latitude: number, longitude: number) {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new Error('The selected map pin is invalid.');
+  }
+
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    throw new Error('The selected map pin is outside valid map coordinates.');
+  }
+
+  // Avoid spending a public Nominatim request on pins that cannot be in the Philippines.
+  if (latitude < 4.2 || latitude > 21.5 || longitude < 116 || longitude > 127) {
+    throw new Error('Choose a delivery pin within the Philippines.');
+  }
+}
+
+function cleanString(value: unknown) {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, ' ') : '';
+}
+
+function firstString(...values: unknown[]) {
+  for (const value of values) {
+    const cleaned = cleanString(value);
+    if (cleaned) {
+      return cleaned;
+    }
+  }
+
+  return '';
+}
+
+function normalizeName(value: unknown) {
+  return cleanString(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+}
+
+function createAbortError() {
+  const error = new Error('The address verification request was cancelled.');
+  error.name = 'AbortError';
+  return error;
+}
+
+function abortableDelay(durationMs: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(createAbortError());
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener('abort', handleAbort);
+      resolve();
+    }, durationMs);
+    const handleAbort = () => {
+      clearTimeout(timeout);
+      reject(createAbortError());
+    };
+
+    signal?.addEventListener('abort', handleAbort, { once: true });
+  });
+}

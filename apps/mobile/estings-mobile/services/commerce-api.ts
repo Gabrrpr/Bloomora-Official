@@ -41,6 +41,10 @@ export async function getCheckoutSettings() {
   return apiFetch<{ delivery: DeliverySettings; shipping_methods?: ShippingMethod[] }>('/commerce/checkout-settings');
 }
 
+export async function getLalamoveEnabled() {
+  return apiFetch<{ enabled: boolean }>('/products/admin/settings/lalamove');
+}
+
 export async function validateVoucher({
   code,
   session,

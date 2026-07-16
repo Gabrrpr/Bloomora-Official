@@ -310,7 +310,7 @@ export default function CartScreen() {
 
       const checkoutQuery = hydratedSelectedItems.map((item) => item.product.id).join(',');
       const voucherQuery = appliedVoucher ? `&voucher=${encodeURIComponent(appliedVoucher.code)}` : '';
-      router.push(`/checkout?ids=${encodeURIComponent(checkoutQuery)}${voucherQuery}`);
+      router.push(`/checkout?ids=${encodeURIComponent(checkoutQuery)}&branch=${branch}${voucherQuery}`);
     } catch (error) {
       if (error instanceof ApiError && error.status === 401) {
         await clearAuthSession();

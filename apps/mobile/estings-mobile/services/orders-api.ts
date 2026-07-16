@@ -22,6 +22,7 @@ export type CustomerOrder = {
   orderNumber: string;
   orderIds: string[];
   paidAt?: string | null;
+  paymentMethod?: string | null;
   paymentProvider?: string | null;
   paymentReference?: string | null;
   paymentStatus: string;
@@ -101,6 +102,7 @@ type BackendOrder = {
   items?: BackendOrderItem[] | null;
   order_number?: string | null;
   paid_at?: string | null;
+  payment_method?: string | null;
   payment_provider?: string | null;
   payment_reference?: string | null;
   payment_status?: string | null;
@@ -232,6 +234,7 @@ function mapBackendOrder(order: BackendOrder): CustomerOrder {
     orderNumber: order.order_number || `ORD-${order.id.slice(0, 8).toUpperCase()}`,
     orderIds: [order.id],
     paidAt: order.paid_at,
+    paymentMethod: order.payment_method,
     paymentProvider: order.payment_provider,
     paymentReference: order.payment_reference,
     paymentStatus: order.payment_status || 'pending',
@@ -320,10 +323,13 @@ function mergeCheckoutOrders(orders: CustomerOrder[]) {
     orderIds: orders.flatMap((order) => order.orderIds),
     orderNumber: `ORDER-${first.orderNumber.replace(/^ORD-/, '')}`,
     deliveryTracking,
+    deliveryFee: orders.reduce((total, order) => total + order.deliveryFee, 0),
+    discountAmount: orders.reduce((total, order) => total + order.discountAmount, 0),
     paymentStatus: allPaid ? 'paid' : 'pending',
     productName: `${items[0]?.productName ?? 'Flower order'} + ${items.length - 1} more`,
     quantity: items.reduce((total, item) => total + item.quantity, 0),
     status,
+    subtotalAmount: orders.reduce((total, order) => total + order.subtotalAmount, 0),
     totalAmount: orders.reduce((total, order) => total + order.totalAmount, 0),
   };
 }
