@@ -28,6 +28,39 @@ AUTO_REPLY_MESSAGE = (
     "Please keep this chat open for updates."
 )
 
+PREDETERMINED_REPLIES = {
+    "what flowers do you offer?": (
+        "We offer fresh roses, carnations, tulips, sunflowers, lilies, Ecuador roses, China roses, "
+        "and seasonal blooms depending on branch availability. You can browse the Shop page to see "
+        "the flowers and arrangements currently available."
+    ),
+    "how does delivery work?": (
+        "Delivery is arranged based on your selected branch and address. During checkout, the system "
+        "checks available shipping methods and calculates the delivery fee. You can also track your "
+        "order status from My Orders after checkout."
+    ),
+    "can i customize a bouquet?": (
+        "Yes. You can customize arrangements through Mix and Match or Describe Your Arrangement. "
+        "You may choose bouquet, boxed, or vase styles depending on available materials, and our team "
+        "can assist if you need a specific look."
+    ),
+    "what are your store hours?": (
+        "Our online store follows Philippine Standard Time. Same-day delivery eligibility depends on "
+        "shop hours, branch availability, and the order cutoff. If the shop is closed, the system will "
+        "guide you before checkout."
+    ),
+    "do you deliver same day?": (
+        "Yes, same-day delivery may be available when the order is placed before the cutoff time and "
+        "the selected items are available at the chosen branch. Orders placed after the cutoff are "
+        "usually scheduled for the next delivery day."
+    ),
+}
+
+
+def get_predetermined_reply(message_text: str | None) -> str | None:
+    normalized = " ".join((message_text or "").strip().lower().split())
+    return PREDETERMINED_REPLIES.get(normalized)
+
 
 def serialize_chat(msg: Chat) -> dict:
     """Convert a Chat ORM object to a plain dict compatible with MessageOut."""
@@ -230,6 +263,7 @@ async def create_message(
         except Exception as e:
             print(f"❌ Notification Insert Error: {e}")
             db.rollback()
+<<<<<<< Updated upstream
         automated_reply = get_automated_support_reply(
             new_message.message,
             _load_help_settings(db),
@@ -241,6 +275,42 @@ async def create_message(
             )
 
         if automated_reply:
+=======
+        predetermined_reply = get_predetermined_reply(new_message.message)
+        if predetermined_reply:
+            try:
+                auto_reply = Chat(
+                    user_id=verified_user_id,
+                    message=predetermined_reply,
+                    sender="staff",
+                    image_url=None,
+                    is_read=0,
+                    context_id=None,
+                )
+                db.add(auto_reply)
+                db.commit()
+                db.refresh(auto_reply)
+
+                auto_payload = {
+                    "id": str(auto_reply.id),
+                    "customer_id": str(verified_user_id),
+                    "user_id": str(verified_user_id),
+                    "message": auto_reply.message,
+                    "image_url": auto_reply.image_url,
+                    "sender": "staff",
+                    "created_at": auto_reply.created_at.isoformat(),
+                    "is_read": auto_reply.is_read,
+                    "context_id": auto_reply.context_id,
+                    "is_auto_reply": True,
+                }
+
+                await manager.send_to_user(str(verified_user_id), auto_payload)
+                await manager.broadcast_to_staff(auto_payload)
+            except Exception as e:
+                print(f"Predetermined Auto Reply Error: {e}")
+                db.rollback()
+        elif existing_count == 0:
+>>>>>>> Stashed changes
             try:
                 persisted_reply = _persist_automated_reply(
                     db,

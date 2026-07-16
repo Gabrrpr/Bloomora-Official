@@ -26,6 +26,33 @@ function isValidEmail(v) {
   return /^[^\s@]+@[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/.test(v.trim())
 }
 
+const DISPOSABLE_EMAIL_DOMAINS = new Set([
+  "10minutemail.com",
+  "guerrillamail.com",
+  "mailinator.com",
+  "minitts.net",
+  "tempmail.com",
+  "temp-mail.org",
+  "throwawaymail.com",
+  "yopmail.com",
+  "solarnyx.com",
+])
+
+const DISPOSABLE_EMAIL_KEYWORDS = [
+  "10minute",
+  "disposable",
+  "guerrilla",
+  "minit",
+  "throwaway",
+  "temp",
+  "yopmail",
+]
+
+function isDisposableEmail(v) {
+  const domain = String(v || "").split("@").pop()?.trim().toLowerCase()
+  return DISPOSABLE_EMAIL_DOMAINS.has(domain) || DISPOSABLE_EMAIL_KEYWORDS.some(keyword => domain?.includes(keyword))
+}
+
 /** PH phone: must be exactly +63 followed by 10 digits, second digit 9 (mobile prefix) */
 function isValidPHPhone(v) {
   return /^\+639\d{9}$/.test(v)
@@ -225,6 +252,7 @@ export default function Register({ onNavigate }) {
       case "email":
         if (!value.trim()) return setErr("email", "Email is required.")
         if (!isValidEmail(value)) return setErr("email", "Enter a valid email (e.g. juan@gmail.com).")
+        if (isDisposableEmail(value)) return setErr("email", "Temporary email addresses are not supported. Please use a personal email you can access.")
         return clearErr("email")
 
       case "phone":
@@ -336,6 +364,7 @@ export default function Register({ onNavigate }) {
 
     if (!isValidName(form.firstName) || !isValidName(form.lastName)) { setError("Please enter a valid first and last name."); return false }
     if (!isValidEmail(form.email)) { setError("Please enter a valid email address (e.g. juan@gmail.com)."); return false }
+    if (isDisposableEmail(form.email)) { setError("Temporary email addresses are not supported. Please use a personal email you can access."); return false }
     if (!isValidPHPhone(form.phone)) { setError("Please enter a valid PH mobile number (+63 9XX XXX XXXX)."); return false }
     if (form.username && !isValidUsername(form.username)) { setError("Username must be 3–30 characters (letters, numbers, _ or .)."); return false }
     if (passwordStrength !== "strong") { setError("Password must be strong (8+ chars, uppercase, number, special)."); return false }
@@ -352,8 +381,19 @@ export default function Register({ onNavigate }) {
     if (!validateAll()) return
     setLoadingMsg("Sending verification code...")
     setLoading(true)
-    try { await sendOtp(form.email); setStep("otp") }
-    catch (err) { setError(err.message || "Failed to send OTP. Please try again.") }
+    try {
+      await sendOtp(form.email)
+      setStep("otp")
+    }
+    catch (err) {
+      const message = err.message || "Failed to send OTP. Please try again."
+      if (/verification code right now|SMTP|sender address rejected|not owned by user|5\.7\.1|553/i.test(message)) {
+        setError("Email delivery is not available right now, but your OTP was generated. Use the code printed in the backend terminal.")
+        setStep("otp")
+      } else {
+        setError(message)
+      }
+    }
     finally { setLoading(false) }
   }
 
@@ -678,9 +718,17 @@ export default function Register({ onNavigate }) {
                           if (i < 5) document.getElementById(`otp-${i + 1}`)?.focus()
                         }}
                         onKeyDown={e => {
-                          if (e.key === "Backspace" && !otp[i] && i > 0) {
-                            const arr = otp.split(""); arr[i - 1] = ""; setOtp(arr.join(""))
-                            document.getElementById(`otp-${i - 1}`)?.focus()
+                          if (e.key === "Backspace") {
+                            e.preventDefault()
+                            const arr = otp.split("")
+                            if (arr[i]) {
+                              arr[i] = ""
+                              setOtp(arr.join(""))
+                            } else if (i > 0) {
+                              arr[i - 1] = ""
+                              setOtp(arr.join(""))
+                              document.getElementById(`otp-${i - 1}`)?.focus()
+                            }
                           }
                         }}
                         onPaste={e => {

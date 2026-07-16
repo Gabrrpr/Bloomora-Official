@@ -1,5 +1,16 @@
 import { API_BASE } from "../config/api"
 
+const cleanAuthError = (message, fallback) => {
+  const text = String(message || "").trim()
+
+  if (!text) return fallback
+  if (/SMTP|sender address rejected|not owned by user|Failed to send OTP email|5\.7\.1|553/i.test(text)) {
+    return "We couldn't send the verification code right now. Please try again later or use a personal email address."
+  }
+
+  return text
+}
+
 export async function sendOtp(email) {
   const response = await fetch(`${API_BASE}/auth/send-otp`, {
     method: 'POST',
@@ -14,7 +25,7 @@ export async function sendOtp(email) {
     } catch (e) {
       // Ignore
     }
-    throw new Error(errorMsg)
+    throw new Error(cleanAuthError(errorMsg, "Failed to send OTP"))
   }
   return response.json()
 }
@@ -87,7 +98,7 @@ export async function sendForgotPasswordOtp(email) {
   })
   if (!response.ok) {
     const err = await response.json()
-    throw new Error(err.detail || 'Failed to send OTP')
+    throw new Error(cleanAuthError(err.detail, "Failed to send OTP"))
   }
   return response.json()
 }

@@ -2,11 +2,15 @@ import os
 import random
 import string
 import smtplib
+import ssl
+from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.utils import formataddr
 from dotenv import load_dotenv
 
-load_dotenv()
+BACKEND_ENV_PATH = Path(__file__).resolve().parents[2] / ".env"
+load_dotenv(dotenv_path=BACKEND_ENV_PATH, override=True)
 
 # Official Esting's wordmark (inline SVG so the real logo renders without an
 # external image host). Single-colour vector — same artwork as Estings.svg.
@@ -27,13 +31,24 @@ def _send_email_via_hostinger(to_email: str, subject: str, html_content: str):
     # Clean up the variables
     smtp_user = os.getenv("SMTP_USER", "").strip(' "\'')
     smtp_pass = os.getenv("SMTP_PASSWORD", "").strip(' "\'')
-    sender_email = os.getenv("SMTP_FROM_EMAIL", "").strip(' "\'')
+    sender_email = os.getenv("SMTP_FROM_EMAIL", "").strip(' "\'') or smtp_user
+    sender_name = os.getenv("SMTP_FROM_NAME", "Esting's Flowers").strip(' "\'')
+    is_resend = "resend.com" in (smtp_host or "").lower()
+
+    if not smtp_host or not smtp_user or not smtp_pass:
+        return False, "SMTP is not fully configured. Please check SMTP_HOST, SMTP_USER, and SMTP_PASSWORD."
+
+    if is_resend and (not sender_email or sender_email.lower() == "resend"):
+        return False, "Resend SMTP requires SMTP_FROM_EMAIL to be a verified sender address or domain."
+
+    if smtp_user.lower() != sender_email.lower():
+        print(f"SMTP sender mismatch: SMTP_USER={smtp_user}, SMTP_FROM_EMAIL={sender_email}")
 
     msg = MIMEMultipart()
     
     # 🚀 THE FIX: Send strictly the raw email address. 
     # Do not include "Esting's Flowers" here to bypass Hostinger's strict filter.
-    msg["From"] = sender_email
+    msg["From"] = formataddr((sender_name, sender_email))
     msg["To"] = to_email
     msg["Subject"] = subject
 
@@ -41,13 +56,31 @@ def _send_email_via_hostinger(to_email: str, subject: str, html_content: str):
 
     try:
         print(f"🚀 Attempting to send live email to {to_email}...")
-        with smtplib.SMTP_SSL(smtp_host, smtp_port) as server:
-            server.login(smtp_user, smtp_pass)
-            server.send_message(msg)
+        envelope_from = sender_email if is_resend else smtp_user
+
+        if smtp_port == 465:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, context=ssl.create_default_context()) as server:
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg, from_addr=envelope_from, to_addrs=[to_email])
+        else:
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                server.ehlo()
+                server.starttls(context=ssl.create_default_context())
+                server.ehlo()
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg, from_addr=envelope_from, to_addrs=[to_email])
         print(f"✅ Success! Email delivered to {to_email}")
         return True, None
     except Exception as e:
-        print(f"❌ SMTP Error sending to {to_email}: {str(e)}")
+        raw_error = str(e)
+        if "not owned by user" in raw_error or "sender address rejected" in raw_error or "5.7.1" in raw_error:
+            print(
+                "SMTP sender verification error. Verify SMTP_FROM_EMAIL in your mail provider "
+                f"before live email can be delivered. recipient={to_email}, sender={sender_email}, host={smtp_host}"
+            )
+            return False, "SMTP sender is not verified or not allowed by the email provider."
+
+        print(f"SMTP Error sending to {to_email}: {type(e).__name__}")
         return False, str(e)
 
 

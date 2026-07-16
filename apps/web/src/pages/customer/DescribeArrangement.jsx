@@ -3,6 +3,13 @@ import { createPortal } from "react-dom"
 import { api } from "../../services/api.js"
 import { addToCart } from "../../utils/cart.js"
 import { useTheme } from "../../context/ThemeContext"
+import {
+  ARRANGEMENT_STEM_LIMITS,
+  getArrangementStemLimit as getSharedArrangementStemLimit,
+  getArrangementStyleLabel as getSharedArrangementStyleLabel,
+  getArrangementVisualRule,
+  normalizeArrangementStyle,
+} from "../../utils/arrangementRules.js"
 
 import { generateCardMessage, RELATIONSHIP_OPTIONS, OCCASION_OPTIONS, TONE_OPTIONS } from "../../utils/cardMessage.js"
 
@@ -23,14 +30,22 @@ function formatGenerationError(message, fallback = GENERATION_PROBLEM_MESSAGE) {
 const PROMPT_TIPS = [
   { title: "Theme or occasion", content: "Specify a theme, occasion, or the vibe you want: e.g. 'A romantic Valentine's Day arrangement' or 'A cheerful birthday arrangement.'" },
   { title: "Colors you'd like", content: "Mention any specific colors or a color palette: e.g. 'Soft pink and cream' or 'Vibrant and colorful.'" },
-  { title: "Tell your favorite flower", content: "This means the main flower you want to see the most in the bouquet. Example: 'I like roses. They look soft and romantic, with full petals and a gentle color.'" },
+  { title: "Tell your favorite flower", content: "This means the main flower you want to see the most in the arrangement. Example: 'I like roses. They look soft and romantic, with full petals and a gentle color.'" },
 ]
 
 const EXAMPLE_PROMPTS = [
   "I'm ordering this for Valentine's Day. She likes pink and soft, romantic styles.",
   "Something cheerful and bright with sunflowers for a birthday.",
   "Elegant white and green arrangement for a wedding centerpiece.",
-  "Soft lavender and cream bouquet for a graduation gift.",
+  "Soft lavender and cream vase arrangement for a graduation gift.",
+]
+
+const PROMPT_SUGGESTIONS = [
+  "Romantic pink rose bouquet with soft wrapping",
+  "Bright boxed birthday arrangement with sunflowers and warm colors",
+  "Elegant white and green vase arrangement for a formal event",
+  "Pastel bouquet with lavender, cream, and a soft rounded shape",
+  "Minimal bouquet with roses, baby's breath, and clean wrapping",
 ]
 
 const MATERIAL_CATEGORIES = [
@@ -125,6 +140,7 @@ export default function DescribeArrangement({ onNavigate }) {
   const [promptFocused, setPromptFocused] = useState(false)
   const [progress, setProgress] = useState(0)
   const [factIdx, setFactIdx] = useState(0)
+  const promptSuggestionsRef = useRef(null)
 
   // ── Dark-mode color tokens ──
   const pageBg       = isDark ? "radial-gradient(1100px 600px at 50% -8%, #0f2018 0%, #0d1a14 45%, #0f172a 100%)" : "radial-gradient(1100px 600px at 50% -8%, #eaf6ec 0%, #f4f9f1 45%, #fbf7ef 100%)"
@@ -243,6 +259,68 @@ export default function DescribeArrangement({ onNavigate }) {
     return p ? parseFloat(p.price) : 0
   }
 
+  const getProductCategory = (productId, fallback = "") => {
+    const product = products.find(p => String(p.id) === String(productId))
+    return String(product?.category || product?.category_name || fallback || "").toLowerCase()
+  }
+
+  const isFlowerBreakdownItem = (item) => {
+    const typeText = String(item?.material_type || "").toLowerCase()
+    const categoryText = getProductCategory(item?.product_id, typeText)
+    const nameText = String(item?.product_name || "").toLowerCase()
+
+    if (categoryText.includes("flower") || typeText.includes("flower")) return true
+    if (categoryText.includes("vase") || categoryText.includes("wrapping") || categoryText.includes("ribbon") || categoryText.includes("accessor")) return false
+    return ["rose", "sunflower", "tulip", "carnation", "stargazer", "lily", "lavender", "baby"].some(word => nameText.includes(word))
+  }
+
+  const getFlowerStemTotal = (items = []) => (
+    items.reduce((sum, item) => sum + (isFlowerBreakdownItem(item) ? Number(item.quantity || 0) : 0), 0)
+  )
+
+  const inferArrangementStyle = (items = [], promptText = prompt) => {
+    const text = [
+      promptText,
+      imageSuggestion,
+      ...items.map(item => `${item?.product_name || ""} ${item?.material_type || ""}`),
+    ].join(" ").toLowerCase()
+    const hasSelectedVase = Boolean(selectedMaterials.vase)
+
+    if (hasSelectedVase || text.includes("vase")) return "vase"
+    if (text.includes("box") || text.includes("boxed")) return "box"
+    return "bouquet"
+  }
+
+  const getArrangementStemLimit = (items = [], promptText = prompt) => (
+    getSharedArrangementStemLimit(inferArrangementStyle(items, promptText))
+  )
+
+  const getArrangementStyleLabel = (items = [], promptText = prompt) => (
+    getSharedArrangementStyleLabel(inferArrangementStyle(items, promptText))
+  )
+
+  const getRemainingFlowerStems = (items = [], currentIndex = -1) => {
+    const stemLimit = getArrangementStemLimit(items)
+    const usedByOthers = items.reduce((sum, item, idx) => {
+      if (idx === currentIndex || !isFlowerBreakdownItem(item)) return sum
+      return sum + Number(item.quantity || 0)
+    }, 0)
+    return Math.max(0, stemLimit - usedByOthers)
+  }
+
+  const capFlowerStemItems = (items = []) => {
+    const stemLimit = getArrangementStemLimit(items)
+    let usedStems = 0
+    return items.map(item => {
+      if (!isFlowerBreakdownItem(item)) return item
+      const unitPrice = Number(item.unit_price) || 0
+      const allowed = Math.max(0, stemLimit - usedStems)
+      const quantity = Math.max(allowed > 0 ? 1 : 0, Math.min(Number(item.quantity) || 1, allowed))
+      usedStems += quantity
+      return { ...item, quantity, subtotal: unitPrice * quantity }
+    }).filter(item => !isFlowerBreakdownItem(item) || Number(item.quantity || 0) > 0)
+  }
+
   const toggleMaterial = (category, productId) => {
     setSelectedMaterials(prev => ({
       ...prev,
@@ -280,7 +358,7 @@ export default function DescribeArrangement({ onNavigate }) {
       return acc
     }, {})
 
-    const items = Object.values(groupedMap)
+    const items = capFlowerStemItems(Object.values(groupedMap))
     return {
       ...data,
       price_breakdown: {
@@ -348,12 +426,21 @@ export default function DescribeArrangement({ onNavigate }) {
         .map(p => p.name)
         .join(", ");
 
-      const superchargedPrompt = `Customer Request: "${prompt.trim()}". 
-        If the request is vague (like just an occasion or color), act as an expert florist and invent a beautiful recipe that perfectly matches the vibe. 
-        Strict inventory rules: You MUST ONLY pick flowers, vases, and wrappings from this exact list of available stock: [${availableInventory}]. 
-        Strict visual rules for the image generator: Ultra-realistic 8k macro photography, studio lighting, hyper-detailed, elegant floral design, lifelike textures, natural lighting. NO artificial-looking gloss, NO cartoonish colors. Professional florist portfolio shot, eye-level, standing upright against a clean, neutral background. DO NOT use a top-down view.`;
+      const inferredStyle = inferArrangementStyle([], prompt)
+      const styleSpecificVisualRule = getArrangementVisualRule(inferredStyle)
 
-      const payload = { prompt_text: superchargedPrompt }
+      const superchargedPrompt = normalizeArrangementStyle(inferredStyle) === "box"
+        ? `Customer Request: "${prompt.trim()}". Create ONLY a boxed flower arrangement. Do not reinterpret this as a bouquet, vase arrangement, gift basket, jewelry box, or wrapped flowers. Flower stem capacity rule: boxed arrangement up to ${ARRANGEMENT_STEM_LIMITS.boxed} flower stems. Strict inventory rules: You MUST ONLY pick flowers and compatible materials from this exact list of available stock: [${availableInventory}]. Strict visual rules for the image generator: ${styleSpecificVisualRule} Ultra-realistic florist product photography, studio lighting, clean white background, lifelike textures, natural lighting.`
+        : `Customer Request: "${prompt.trim()}". 
+          If the request is vague (like just an occasion or color), act as an expert florist and invent a beautiful recipe that perfectly matches the vibe. 
+          Arrangement type: choose the best style from the customer's request: bouquet, boxed arrangement, or vase arrangement. Flower stem capacity rules: bouquet up to ${ARRANGEMENT_STEM_LIMITS.bouquet} flower stems, boxed arrangement up to ${ARRANGEMENT_STEM_LIMITS.boxed} flower stems, and vase arrangement up to ${ARRANGEMENT_STEM_LIMITS.vase} flower stems. Wrapping, ribbon, box, vase, accessories, and add-ons do not count as flower stems.
+          Strict inventory rules: You MUST ONLY pick flowers, vases, and wrappings from this exact list of available stock: [${availableInventory}]. 
+          Strict visual rules for the image generator: ${styleSpecificVisualRule} Ultra-realistic florist product photography, studio lighting, elegant floral design, lifelike textures, natural lighting. NO artificial-looking gloss, NO cartoonish colors.`;
+
+      const payload = {
+        prompt_text: superchargedPrompt,
+        arrangement_type: normalizeArrangementStyle(inferredStyle),
+      }
       if (selectedMaterials.flower) payload.flower_id = selectedMaterials.flower;
       if (selectedMaterials.vase) payload.vase_id = selectedMaterials.vase;
       if (selectedMaterials.wrapping) payload.wrapping_id = selectedMaterials.wrapping;
@@ -386,7 +473,10 @@ export default function DescribeArrangement({ onNavigate }) {
       if (!prev?.price_breakdown?.items) return prev
       const items = prev.price_breakdown.items.map((item, itemIdx) => {
         if (itemIdx !== idx) return item
-        const quantity = Math.max(1, Number(nextQuantity) || 1)
+        const flowerCap = isFlowerBreakdownItem(item)
+          ? getRemainingFlowerStems(prev.price_breakdown.items, idx)
+          : Infinity
+        const quantity = Math.max(1, Math.min(Number(nextQuantity) || 1, flowerCap))
         const unitPrice = Number(item.unit_price) || 0
         return {
           ...item,
@@ -422,14 +512,21 @@ export default function DescribeArrangement({ onNavigate }) {
       .map(item => `${item.quantity} ${item.product_name}`)
       .join(", ")
     const suggestionText = imageSuggestion.trim()
-    const revisedPrompt = `Customer originally requested: "${prompt.trim()}". Regenerate the floral arrangement image using this exact updated item recipe and quantities: ${editedRecipe}. ${suggestionText ? `Customer visual preferences: ${suggestionText}.` : ""} Keep the same listed materials and quantities, interpret the customer's visual preferences for style, color balance, shape, fullness, angle, and mood. Ultra-realistic professional florist portfolio photo, studio lighting, clean neutral background, no people, no readable text, no watermarks.`
+    const currentStemLimit = getArrangementStemLimit(result.price_breakdown.items)
+    const currentStyle = inferArrangementStyle(result.price_breakdown.items)
+    const currentStyleLabel = getSharedArrangementStyleLabel(currentStyle).toLowerCase()
+    const revisedPrompt = `Customer originally requested: "${prompt.trim()}". Regenerate the floral arrangement image using this exact updated item recipe and quantities: ${editedRecipe}. Arrangement style may be bouquet, boxed arrangement, or vase arrangement based on the customer's request and visual preferences. Current inferred style: ${currentStyleLabel}. Shared visual rule for this style: ${getArrangementVisualRule(currentStyle)} Flower stem capacity rule for this style: use no more than ${currentStemLimit} total flower stems. ${suggestionText ? `Customer visual preferences: ${suggestionText}.` : ""} Keep the same listed materials and quantities, interpret the customer's visual preferences for color balance, fullness, and mood without breaking the shared arrangement style rule. Ultra-realistic professional florist portfolio photo, studio lighting, clean neutral background, no people, no readable text, no watermarks.`
 
     setLoading(true)
     setError(null)
     setUnavailableItems([])
 
     try {
-      const data = await api.checkAndGenerate({ prompt_text: revisedPrompt })
+      const revisedStyle = inferArrangementStyle(result.price_breakdown.items)
+      const data = await api.checkAndGenerate({
+        prompt_text: revisedPrompt,
+        arrangement_type: normalizeArrangementStyle(revisedStyle),
+      })
 
       if (data.unavailable_items && data.unavailable_items.length > 0) {
         setUnavailableItems(data.unavailable_items)
@@ -538,6 +635,13 @@ export default function DescribeArrangement({ onNavigate }) {
       : `${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`
     return `A custom arrangement featuring ${list}.`
   })()
+  const scrollPromptSuggestions = (direction) => {
+    promptSuggestionsRef.current?.scrollBy({ left: direction * 220, behavior: "smooth" })
+  }
+  const resultBreakdownItems = result?.price_breakdown?.items || []
+  const currentFlowerStemTotal = getFlowerStemTotal(resultBreakdownItems)
+  const currentArrangementStemLimit = getArrangementStemLimit(resultBreakdownItems)
+  const currentArrangementStyleLabel = getArrangementStyleLabel(resultBreakdownItems)
 
   return (
     <>
@@ -551,7 +655,7 @@ export default function DescribeArrangement({ onNavigate }) {
             <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: "#fbbf24" }} />
           </p>
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold leading-tight mb-2" style={{ color: accentDG }}>
-            <span className="shine-text" style={{ "--shine-base": accentDG }}>Describe Your</span> <span className="shine-text" style={{ "--shine-base": accentPink }}>Dream Bouquet</span>
+            <span className="shine-text" style={{ "--shine-base": accentDG }}>Describe Your</span> <span className="shine-text" style={{ "--shine-base": accentPink }}>Dream Arrangement</span>
           </h1>
           <p className="text-sm sm:text-base max-w-xl mx-auto" style={{ color: bodyC }}>
             Tell us what you imagine, and our AI will bring it to life in seconds.
@@ -572,18 +676,81 @@ export default function DescribeArrangement({ onNavigate }) {
                 </span>
                 <h2 className="text-lg font-bold" style={{ color: headingC }}>Describe your arrangement</h2>
               </div>
-              <p className="text-sm ml-11 mb-4" style={{ color: mutedC }}>Build your bouquet with just a prompt.</p>
+              <p className="text-sm ml-11 mb-4" style={{ color: mutedC }}>Build your arrangement with just a prompt.</p>
+
+              <div className="mb-4 rounded-2xl border p-4 flex items-start gap-3"
+                style={{
+                  borderColor: isDark ? "rgba(74,222,128,0.28)" : "#bbf7d0",
+                  backgroundColor: isDark ? "rgba(74,222,128,0.07)" : "#f0fdf4",
+                }}>
+                <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+                  style={{ backgroundColor: isDark ? "rgba(74,222,128,0.14)" : "#dcfce7", color: accentG }}>
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6l4 2m5-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-sm font-bold" style={{ color: subHeadC }}>Arrangement guide</p>
+                  <p className="text-xs leading-relaxed mt-1" style={{ color: bodyC }}>
+                    Describe Arrangement can create bouquets, boxed arrangements, and vase arrangements. Stem limits vary by style: <strong>{ARRANGEMENT_STEM_LIMITS.bouquet}</strong> for bouquets, <strong>{ARRANGEMENT_STEM_LIMITS.boxed}</strong> for boxed arrangements, and <strong>{ARRANGEMENT_STEM_LIMITS.vase}</strong> for vase arrangements. Wrappers, ribbons, boxes, vases, accessories, and add-ons are separate.
+                  </p>
+                </div>
+              </div>
 
               <textarea
                 value={prompt}
                 onChange={e => setPrompt(e.target.value.slice(0, MAX))}
                 onFocus={() => setPromptFocused(true)}
                 onBlur={() => setPromptFocused(false)}
-                placeholder={typedPlaceholder || "Describe the bouquet you have in mind..."}
+                placeholder={typedPlaceholder || "Describe the arrangement you have in mind..."}
                 rows={4}
                 className="w-full px-5 py-4 text-base border rounded-2xl focus:outline-none focus:ring-1 focus:ring-green-600 focus:border-green-600 transition resize-none leading-relaxed"
                 style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
               />
+
+              <div className="mt-3">
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <p className="text-xs font-bold uppercase tracking-wider" style={{ color: mutedC }}>Need ideas?</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px]" style={{ color: mutedC }}>Tap a suggestion to start</span>
+                    <div className="flex items-center gap-1">
+                      {[-1, 1].map(direction => (
+                        <button
+                          key={direction}
+                          type="button"
+                          onClick={() => scrollPromptSuggestions(direction)}
+                          className="w-6 h-6 rounded-full border flex items-center justify-center text-xs font-bold transition hover:shadow-sm"
+                          style={{
+                            borderColor: isDark ? "rgba(249,168,212,0.28)" : "#fbcfe8",
+                            backgroundColor: isDark ? "rgba(249,168,212,0.08)" : "#fdf2f8",
+                            color: isDark ? "#f9a8d4" : "#be185d",
+                          }}
+                          aria-label={direction < 0 ? "Scroll suggestions left" : "Scroll suggestions right"}
+                        >
+                          {direction < 0 ? "<" : ">"}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <div ref={promptSuggestionsRef} className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1" style={{ scrollbarWidth: "thin" }}>
+                  {PROMPT_SUGGESTIONS.map(text => (
+                    <button
+                      key={text}
+                      type="button"
+                      onClick={() => setPrompt(text)}
+                      className="flex-shrink-0 px-3 py-2 rounded-full text-xs font-semibold border transition-all hover:shadow-sm"
+                      style={{
+                        borderColor: isDark ? "rgba(249,168,212,0.28)" : "#fbcfe8",
+                        backgroundColor: isDark ? "rgba(249,168,212,0.08)" : "#fdf2f8",
+                        color: isDark ? "#f9a8d4" : "#be185d",
+                      }}
+                    >
+                      {text}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
               {error && (
                 <div className="mt-3 flex items-start gap-2.5 px-4 py-3 rounded-xl text-sm"
@@ -728,7 +895,7 @@ export default function DescribeArrangement({ onNavigate }) {
                     </>
                   ) : (
                     <>
-                      Create my bouquet
+                      Create my arrangement
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                       </svg>
@@ -775,7 +942,7 @@ export default function DescribeArrangement({ onNavigate }) {
                     </div>
                   ))}
                 </div>
-                <p className="text-sm mt-3" style={{ color: mutedC }}>Select an alternative above, then click "Create my bouquet" again.</p>
+                <p className="text-sm mt-3" style={{ color: mutedC }}>Select an alternative above, then click "Create my arrangement" again.</p>
               </div>
             )}
 
@@ -1052,15 +1219,37 @@ export default function DescribeArrangement({ onNavigate }) {
 
                   {/* Cost breakdown */}
                   <div className="py-5">
-                    <p className="text-sm font-semibold mb-3" style={{ color: subHeadC }}>Cost breakdown</p>
+                    <div className="flex items-center justify-between gap-3 mb-3">
+                      <p className="text-sm font-semibold" style={{ color: subHeadC }}>Cost breakdown</p>
+                      <span
+                        className="text-[11px] font-bold rounded-full px-2.5 py-1 border"
+                        style={{
+                          color: currentFlowerStemTotal >= currentArrangementStemLimit ? (isDark ? "#fcd34d" : "#b45309") : accentG,
+                          borderColor: currentFlowerStemTotal >= currentArrangementStemLimit ? (isDark ? "rgba(245,158,11,0.35)" : "#fde68a") : (isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0"),
+                          backgroundColor: currentFlowerStemTotal >= currentArrangementStemLimit ? (isDark ? "rgba(245,158,11,0.12)" : "#fffbeb") : (isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4"),
+                        }}
+                      >
+                        {currentArrangementStyleLabel}: {currentFlowerStemTotal} / {currentArrangementStemLimit} flower stems
+                      </span>
+                    </div>
+                    <p className="text-xs mb-3" style={{ color: mutedC }}>
+                      This {currentArrangementStyleLabel.toLowerCase()} is limited to {currentArrangementStemLimit} flower stems. Boxes, vases, wrappers, ribbons, and other materials are not counted as stems.
+                    </p>
                     <div className="rounded-xl border overflow-hidden" style={{ borderColor: tileBdr }}>
                       <table className="w-full text-sm border-collapse">
                         <tbody>
-                          {result.price_breakdown?.items?.map((item, idx) => (
+                          {result.price_breakdown?.items?.map((item, idx) => {
+                            const isFlower = isFlowerBreakdownItem(item)
+                            const remainingForItem = getRemainingFlowerStems(result.price_breakdown?.items || [], idx)
+                            const atItemLimit = isFlower && item.quantity >= remainingForItem
+                            return (
                             <tr key={idx} className="border-b" style={{ borderColor: tableRowBdr }}>
                               <td className="px-3 py-2.5" style={{ color: bodyC }}>
                                 <div className="flex items-center justify-between gap-3">
-                                  <span className="min-w-0">{item.product_name}</span>
+                                  <div className="min-w-0">
+                                    <span className="block truncate">{item.product_name}</span>
+                                    {isFlower && <span className="text-[10px]" style={{ color: mutedC }}>Flower stem</span>}
+                                  </div>
                                   <div className="inline-flex items-center rounded-lg border overflow-hidden flex-shrink-0" style={{ borderColor: tileBdr, backgroundColor: inputBg }}>
                                     <button
                                       type="button"
@@ -1077,7 +1266,9 @@ export default function DescribeArrangement({ onNavigate }) {
                                       type="button"
                                       aria-label={`Increase ${item.product_name}`}
                                       onClick={() => updateBreakdownQuantity(idx, item.quantity + 1)}
-                                      className="w-8 h-8 flex items-center justify-center text-sm font-bold transition"
+                                      disabled={atItemLimit}
+                                      title={atItemLimit ? `${currentArrangementStyleLabel} limit is ${currentArrangementStemLimit} flower stems` : undefined}
+                                      className="w-8 h-8 flex items-center justify-center text-sm font-bold transition disabled:opacity-35 disabled:cursor-not-allowed"
                                       style={{ color: accentG }}
                                     >
                                       +
@@ -1087,7 +1278,8 @@ export default function DescribeArrangement({ onNavigate }) {
                               </td>
                               <td className="px-3 py-2.5 text-right font-medium whitespace-nowrap" style={{ color: subHeadC }}>₱{(+item.subtotal).toLocaleString()}</td>
                             </tr>
-                          ))}
+                            )
+                          })}
                           {selectedAddOns.map(id => {
                             const addon = liveAddOns.find(a => a.id === id)
                             if (!addon) return null
@@ -1113,7 +1305,7 @@ export default function DescribeArrangement({ onNavigate }) {
                       <textarea
                         value={imageSuggestion}
                         onChange={e => setImageSuggestion(e.target.value.slice(0, 260))}
-                        placeholder="e.g. Make it fuller, softer pink, more elegant, lower bouquet shape, brighter lighting..."
+                        placeholder="e.g. Make it fuller, softer pink, more elegant, boxed style, vase style, brighter lighting..."
                         rows={3}
                         className="w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-1 focus:ring-green-600 transition resize-none"
                         style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
@@ -1237,7 +1429,7 @@ export default function DescribeArrangement({ onNavigate }) {
             </svg>
           </div>
 
-          <h3 className="text-xl font-bold mb-1.5" style={{ color: accentDG }}>Creating your bouquet</h3>
+          <h3 className="text-xl font-bold mb-1.5" style={{ color: accentDG }}>Creating your arrangement</h3>
           <p className="text-sm mb-7" style={{ color: mutedC }}>Arranging every petal just for you...</p>
 
           <div className="relative w-full mb-2" style={{ paddingTop: "12px" }}>

@@ -1,11 +1,9 @@
-// ─────────────────────────────────────────────────────────────────────────────
 // Shared legal content. These objects are the DEFAULTS / FALLBACKS used by both
-// the public legal pages and the Admin → Legal CMS editor, so editing the copy
+// the public legal pages and the Admin > Legal CMS editor, so editing the copy
 // in one place keeps the admin defaults and the public fallbacks in sync.
 //
 // Once an admin saves changes, the saved version (stored in the settings blob
 // under the keys below) overrides these defaults on the public pages.
-// ─────────────────────────────────────────────────────────────────────────────
 
 export const SETTINGS_PATH = "/products/admin/settings/homepage"
 
@@ -39,13 +37,13 @@ export const DEFAULT_PRIVACY = {
   docSubtitle: SUBTITLE,
   effectiveDate: EFFECTIVE,
   lastUpdated: UPDATED,
-  notice: "At Esting's, we are committed to protecting your privacy and ensuring your personal data is handled with the highest level of security. This policy outlines our practices regarding data collection and processing in strict adherence to Republic Act No. 10173 (Data Privacy Act of 2012).",
+  notice: "At Esting's Flowers International Inc., we value the privacy and security of our customers' personal information. This policy explains how Bloomora collects, uses, stores, and shares personal data in accordance with Republic Act No. 10173, also known as the Data Privacy Act of 2012.",
   sections: [
-    { title: "1. Information Collection", content: "To facilitate our floral services, we collect the following data: User Profile — full name, valid email address, birth date, and contact number provided during registration; Logistics Data — precise delivery addresses and GPS coordinates for fulfillment; Transaction Details — items purchased, total amounts, and payment status (note: Esting's does not store full credit card numbers; these are handled by our secure payment partner)." },
-    { title: "2. Purpose of Data Processing", content: "Your data is used to provide and improve our services: Fulfillment — verifying payments through the PayMongo API and coordinating delivery via the Lalamove API; Personalisation — powering the Two-Way Customization engine and providing tailored arrangement recommendations; Support — managing inquiries and replacement requests through the Communication and Feedback Module; Analytics — generating demand forecasts and reports to optimize our floral inventory and seasonal offerings." },
-    { title: "3. Data Retention", content: "Esting's retains personal information for a period of five (5) years from the date of your last account activity or successful order completion. This period ensures compliance with Philippine commercial and tax auditing standards and facilitates historical record retrieval for returning customers. Upon expiration, all data is securely deleted or anonymised." },
-    { title: "4. Third-Party Sharing", content: "We only share information with authorized partners necessary for service delivery: PayMongo for secure digital payment processing, and Lalamove or our in-house riders for real-time tracking and delivery fulfillment." },
-    { title: "5. Your Rights", content: "Under the Data Privacy Act, you have the right to access, rectify, or request the deactivation of your account through the Account Management Module." },
+    { title: "1. Information Collection", content: "To provide our floral services, Bloomora may collect the following information: User Profile - full name, email address, birth date, and contact number provided during registration; Logistics Data - delivery address, delivery instructions, and GPS or location details needed for order fulfillment; Transaction Details - ordered items, total amount, payment status, order history, and related transaction records. Bloomora does not store full credit card details, as payment processing is handled by authorized payment partners." },
+    { title: "2. Purpose of Data Processing", content: "The collected data is used for the following purposes: Order Fulfillment - to process orders, verify payments through PayMongo, and coordinate delivery through Lalamove or in-house riders; Personalization - to support the Two-Way Customization feature and provide arrangement recommendations based on customer preferences; Customer Support - to manage inquiries, order concerns, replacement requests, and feedback through the Communication and Feedback Module; Analytics and Forecasting - to generate sales reports, demand forecasts, and inventory insights that help improve product availability and seasonal planning." },
+    { title: "3. Data Retention", content: "Bloomora retains personal information only for as long as necessary to fulfill business, legal, accounting, and operational purposes. Customer records may be kept for up to five (5) years from the user's last account activity or successful order completion, unless a longer period is required by law or for legitimate business reasons. After the retention period, personal data will be securely deleted, anonymized, or archived in accordance with applicable policies." },
+    { title: "4. Third-Party Sharing", content: "Bloomora only shares necessary information with authorized service providers involved in completing customer transactions. These may include PayMongo for secure digital payment processing and Lalamove or in-house riders for delivery fulfillment and tracking. Personal data is not sold or shared with unrelated third parties." },
+    { title: "5. Your Rights", content: "Under the Data Privacy Act of 2012, users have the right to be informed, access their personal data, request correction of inaccurate information, object to or withdraw consent where applicable, request blocking, removal, or destruction of personal data when legally justified, and file a complaint with the National Privacy Commission. Users may exercise these rights through the Account Management Module or by contacting Esting's Flowers International Inc. through the available support channels in Bloomora." },
   ],
 }
 
@@ -72,11 +70,11 @@ export const DEFAULT_COOKIE = {
   docSubtitle: SUBTITLE,
   effectiveDate: EFFECTIVE,
   lastUpdated: UPDATED,
-  notice: "Bloomora uses cookies — small text files stored on your device — to provide personalized floral services, ensure secure transactions, and analyze platform performance.",
+  notice: "Bloomora uses cookies - small text files stored on your device - to provide personalized floral services, ensure secure transactions, and analyze platform performance.",
   sections: [
-    { title: "1. Purpose", content: "Bloomora uses cookies — small text files stored on your device — to provide personalized floral services, ensure secure transactions, and analyze platform performance." },
-    { title: "2. Core Uses", content: "Authentication & Security — to recognize your account and prevent unauthorized access or malicious activity. Preferences & Customization — to remember your branch selection (Manila or Pampanga) and preserve your AI-driven Two-Way Customization inputs. Shopping Cart — to track floral arrangements and supplies as you browse, ensuring they remain saved until checkout. Operations Analytics — to collect data for the Sales Visualization Module, helping us identify seasonal trends and best-selling products." },
-    { title: "3. Third-Party Cookies", content: "We utilize specialized third-party services that may set cookies: Payments — the PayMongo API facilitates secure digital payment processing; Logistics — the Lalamove API supports real-time delivery tracking and distance-based fee calculations; Generative AI — Pollinations.ai and the Flux Generative AI Model manage data to render visual previews of your custom designs." },
+    { title: "1. Purpose", content: "Bloomora uses cookies - small text files stored on your device - to provide personalized floral services, ensure secure transactions, and analyze platform performance." },
+    { title: "2. Core Uses", content: "Authentication & Security - to recognize your account and prevent unauthorized access or malicious activity. Preferences & Customization - to remember your branch selection (Manila or Pampanga) and preserve your AI-driven Two-Way Customization inputs. Shopping Cart - to track floral arrangements and supplies as you browse, ensuring they remain saved until checkout. Operations Analytics - to collect data for the Sales Visualization Module, helping us identify seasonal trends and best-selling products." },
+    { title: "3. Third-Party Cookies", content: "We utilize specialized third-party services that may set cookies: Payments - the PayMongo API facilitates secure digital payment processing; Logistics - the Lalamove API supports real-time delivery tracking and distance-based fee calculations; Generative AI - Pollinations.ai and the Flux Generative AI Model manage data to render visual previews of your custom designs." },
     { title: "4. Management & Compliance", content: "You may disable cookies through your browser, though this will limit your ability to use personalization features or complete purchases. This policy is aligned with the Data Privacy Act of 2012 (RA 10173) of the Philippines." },
   ],
 }

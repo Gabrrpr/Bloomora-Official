@@ -125,6 +125,7 @@ export default function ChatWidget() {
 
   const bottomRef = useRef(null)
   const fileInputRef = useRef(null)
+  const quickRepliesRef = useRef(null)
   const sentMessagesRef = useRef(new Set())
   const wsRef = useRef(null)
 
@@ -356,6 +357,13 @@ export default function ChatWidget() {
   }, [user])
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }) }, [messages, typing])
   const handleKeyDown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend() } }
+  const handleQuickReply = (question) => {
+    if (!user || !sessionId || busy || sending) return
+    sendMessage(question)
+  }
+  const scrollQuickReplies = (direction) => {
+    quickRepliesRef.current?.scrollBy({ left: direction * 180, behavior: "smooth" })
+  }
 
   const { w, h } = SIZES[size]
   const canSend = (input.trim() || attachedImage || attachedQuote || attachedProduct) && user && sessionId && !busy
@@ -514,6 +522,46 @@ export default function ChatWidget() {
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" /></svg>
                     </button>
                   )}
+                </div>
+              </div>
+            )}
+
+            {user && (
+              <div className="px-3 py-2 border-t" style={{ backgroundColor: inputAreaBg, borderColor: inputBdr }}>
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Quick questions</p>
+                  <div className="flex items-center gap-1">
+                    {[-1, 1].map(direction => (
+                      <button
+                        key={direction}
+                        type="button"
+                        onClick={() => scrollQuickReplies(direction)}
+                        className="w-6 h-6 rounded-full border flex items-center justify-center text-xs font-bold transition hover:shadow-sm"
+                        style={{ borderColor: qrBdr, backgroundColor: qrBg, color: qrText }}
+                        aria-label={direction < 0 ? "Scroll questions left" : "Scroll questions right"}
+                      >
+                        {direction < 0 ? "<" : ">"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div ref={quickRepliesRef} className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: "thin" }}>
+                  {QUICK_REPLIES.map(question => (
+                    <button
+                      key={question}
+                      type="button"
+                      onClick={() => handleQuickReply(question)}
+                      disabled={!sessionId || busy || sending}
+                      className="flex-shrink-0 px-3 py-2 rounded-full text-xs font-semibold border transition-all disabled:opacity-45 disabled:cursor-not-allowed hover:shadow-sm"
+                      style={{
+                        borderColor: qrBdr,
+                        backgroundColor: qrBg,
+                        color: qrText,
+                      }}
+                    >
+                      {question}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}

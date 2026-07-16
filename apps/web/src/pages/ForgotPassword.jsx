@@ -65,11 +65,36 @@ const [otp, setOtp] = useState(["", "", "", "", "", ""])
 if (val && i < 5) document.getElementById(`fp-otp-${i + 1}`)?.focus()
   }
 
+  const handleOtpBackspace = (i, digit, event) => {
+    if (event.key !== "Backspace") return
+    event.preventDefault()
+    const next = [...otp]
+    if (digit) {
+      next[i] = ""
+      setOtp(next)
+    } else if (i > 0) {
+      next[i - 1] = ""
+      setOtp(next)
+      document.getElementById(`fp-otp-${i - 1}`)?.focus()
+    }
+  }
+
   const handleSendOtp = async () => {
     if (!email || !/\S+@\S+\.\S+/.test(email)) return setError("Enter a valid email address.")
     setLoading(true); setError("")
-    try { await sendForgotPasswordOtp(email); setStep(1) }
-    catch (err) { setError(err.message || "Failed to send OTP. Please try again.") }
+    try {
+      await sendForgotPasswordOtp(email)
+      setStep(1)
+    }
+    catch (err) {
+      const message = err.message || "Failed to send OTP. Please try again."
+      if (/verification code right now|reset code right now|SMTP|sender address rejected|not owned by user|5\.7\.1|553/i.test(message)) {
+        setError("Email delivery is not available right now, but your OTP was generated. Use the code printed in the backend terminal.")
+        setStep(1)
+      } else {
+        setError(message)
+      }
+    }
     finally { setLoading(false) }
   }
 
@@ -146,7 +171,7 @@ if (otp.join("").length !== 6) return setError("Please enter the 6-digit OTP.")
  {otp.map((digit, i) => (
                     <input key={i} id={`fp-otp-${i}`} type="text" maxLength={1} value={digit}
                       onChange={e => handleOtpChange(i, e.target.value)}
-                      onKeyDown={e => { if (e.key === "Backspace" && !digit && i > 0) document.getElementById(`fp-otp-${i - 1}`)?.focus() }}
+                      onKeyDown={e => handleOtpBackspace(i, digit, e)}
                       className="w-14 h-14 text-center text-xl font-bold border-2 border-gray-200 rounded-xl focus:outline-none focus:border-green-500 transition bg-white" />
                   ))}
                 </div>

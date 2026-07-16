@@ -4,6 +4,7 @@ import { api } from "../../services/api.js"
 import { addToCart } from "../../utils/cart.js"
 import { generateCardMessage, RELATIONSHIP_OPTIONS, OCCASION_OPTIONS, TONE_OPTIONS } from "../../utils/cardMessage.js"
 import { useTheme } from "../../context/ThemeContext"
+import { getArrangementStemLimit, getArrangementVisualRule, normalizeArrangementStyle } from "../../utils/arrangementRules.js"
 import FallbackImage from "../../components/FallbackImage.jsx" // 🚀 ADDED THIS IMPORT
 import arrangementBouquet from "../../assets/MakeItPersonal/arrangement_bouquet.webp"
 import arrangementBox from "../../assets/MakeItPersonal/arrangement_box.webp"
@@ -51,27 +52,27 @@ const ARRANGEMENTS = [
     key: "bouquet",
     label: "Bouquet",
     desc: "Hand-tied & wrapped",
-    promptText: "arranged as a beautiful hand-tied bouquet, photographed from a direct side profile view at eye level, clearly showing the full length of the wrapping from the side",
+    promptText: getArrangementVisualRule("bouquet"),
     image: arrangementBouquet,
-    maxStems: 24,
+    maxStems: getArrangementStemLimit("bouquet"),
     path: "M12 3c2.5 2 2.5 5 0 7-2.5-2-2.5-5 0-7Zm6 3c.8 2.8-.8 5.3-3.6 6.1.8-2.8 2.4-5.3 3.6-6.1ZM6 6c1.2.8 2.8 3.3 3.6 6.1C6.8 11.3 5.2 8.8 6 6Zm6 7 4 8H8l4-8Z",
   },
   {
     key: "box",
     label: "Box",
     desc: "Arranged in a gift box",
-    promptText: "arranged like a premium lidded acrylic flower gift box, similar to a transparent square cube box product photo. Use a low three-quarter top view looking across the clear lid and slightly down into the box. The selected flowers must be inside the closed clear acrylic box, visible through the transparent lid and side walls, with blooms packed below the lid/rim and short hidden stems inside the box. Add a clean satin ribbon crossing over the lid and down the front of the box. Do not make a bouquet rising out of the box, do not use wrapping paper, and do not place flowers outside, above, or around the exterior of the box",
+    promptText: getArrangementVisualRule("box"),
     image: arrangementBox,
-    maxStems: 9,
+    maxStems: getArrangementStemLimit("box"),
     path: "M3 8h18v3H3V8Zm1 3h16v9a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-9Zm8-7 3 4H9l3-4Z",
   },
   {
     key: "vase",
     label: "Vase",
     desc: "Arranged in a vase",
-    promptText: "arranged in an elegant vase, photographed from a direct side profile view at eye level, ensuring the full height and side of the vase is completely visible",
+    promptText: getArrangementVisualRule("vase"),
     image: arrangementVase,
-    maxStems: 12,
+    maxStems: getArrangementStemLimit("vase"),
     path: "M8 3h8l-1 4c2 1.5 3 4 3 7 0 4-3 7-6 7s-6-3-6-7c0-3 1-5.5 3-7L8 3Z",
   },
 ]
@@ -571,7 +572,7 @@ export default function MixAndMatch({ onNavigate }) {
     try {
       const data = await api.checkAndGenerate({
         prompt_text: promptText,
-        arrangement_type: arrangementType,
+        arrangement_type: normalizeArrangementStyle(arrangementType),
         flower_id: primaryFlower?.id || undefined,
         // The acrylic box isn't a stocked product, so never send it as a wrapping_id.
         wrapping_id: (selections.wrapping && selections.wrapping !== ACRYLIC_BOX.id) ? selections.wrapping : undefined,

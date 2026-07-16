@@ -49,6 +49,7 @@ router = APIRouter(prefix="/customization", tags=["Customization"])
 pollinations = PollinationsService()
 
 
+<<<<<<< Updated upstream
 def _merge_explicit_materials(
     payload: CustomizationRequest,
     requested_materials: list[RequestedMaterial],
@@ -71,6 +72,56 @@ def _merge_explicit_materials(
                 1,
             )
     return [*merged.values(), *unknown_items]
+=======
+def _needs_box_container_rule(arrangement_type: Optional[str]) -> bool:
+    return str(arrangement_type or "").strip().lower() in {"box", "boxed", "boxed arrangement"}
+
+
+def _infer_arrangement_type(arrangement_type: Optional[str], prompt_text: str) -> str:
+    explicit = str(arrangement_type or "").strip().lower()
+    if explicit in {"box", "boxed", "boxed arrangement"}:
+        return "box"
+    if explicit in {"vase", "vase arrangement"}:
+        return "vase"
+    if explicit in {"bouquet"}:
+        return "bouquet"
+
+    prompt = str(prompt_text or "").lower()
+    if "boxed" in prompt or " box " in f" {prompt} " or "flower gift box" in prompt:
+        return "box"
+    if "vase" in prompt:
+        return "vase"
+    return "bouquet"
+
+
+def _arrangement_visual_rule(arrangement_type: str) -> str:
+    if arrangement_type == "box":
+        return (
+            "Visual style lock: boxed arrangement. Match this exact product style: an Esting's-style transparent acrylic "
+            "preservation cube flower box, photographed like a real florist product on a clean white studio background. "
+            "The container is a clear square acrylic box with a flat transparent lid, thick clear edges, visible front wall, "
+            "visible side wall, and a red or rose-tinted base insert. Use a slight high front three-quarter product angle so "
+            "the lid surface, front wall, side wall, and lower base are all visible, but keep the cube upright and level. "
+            "It must not look like a diamond, rhombus, tilted box, hexagon, cardboard gift box, jewelry box, basket, vase, "
+            "or hand-tied bouquet. Arrange 6 to 9 bloom heads in a neat compact grid inside the box, sitting just below the "
+            "transparent lid. Show short green stems continuing downward through circular holes in an inner clear acrylic tray. "
+            "Add a small oval florist label on the front panel, but no readable text. No ribbon, no wrapping paper, no tied stems, "
+            "no flowers outside the acrylic box, and no flowers rising above the lid. "
+        )
+    if arrangement_type == "vase":
+        return (
+            "Visual style lock: vase arrangement. Show an upright vase arrangement from eye level with the full vase visible, "
+            "balanced fresh stems standing naturally inside the vase. Do not show bouquet wrapping, a flower box, or a top-down view. "
+        )
+    return (
+        "Visual style lock: bouquet arrangement. Match this product style: a full upright hand-tied bouquet centered on a clean "
+        "white studio background, photographed from a front eye-level product view with a very slight high angle so the flower "
+        "cluster is visible. Use layered folded wrapping paper flaring outward around the blooms, with a large decorative bow "
+        "tied at the front lower center. The bouquet should have a rounded/full flower head cluster at the top, visible fillers "
+        "and greenery between blooms, and the wrapped stem bundle tapering downward below the bow. Keep the whole bouquet visible "
+        "from flower tips to bottom wrap. Do not show a vase, acrylic box, basket, top-down flat lay, or loose flowers outside the wrapper. "
+    )
+>>>>>>> Stashed changes
 
 
 def _calculate_complete_recipe_price(recipe, inventory_catalog) -> PriceBreakdown:
@@ -370,10 +421,28 @@ async def check_and_generate(
     db.refresh(arrangement)
 
     # ── Step 7: Generate image via Pollinations (Using Optimized Prompt) ──
+<<<<<<< Updated upstream
+=======
+    base_optimized_prompt = ai_verdict.get("optimized_prompt") or payload.prompt_text
+    inferred_arrangement_type = _infer_arrangement_type(payload.arrangement_type, payload.prompt_text)
+    style_visual_rule = _arrangement_visual_rule(inferred_arrangement_type)
+    image_recipe_prompt = payload.prompt_text if inferred_arrangement_type == "box" else base_optimized_prompt
+    
+    final_image_prompt = (
+        f"{style_visual_rule}"
+        f"Florist recipe and customer request: {image_recipe_prompt}. "
+        f"Only show the selected florist materials. No cards, chocolates, balloons, jewelry, people, text, or watermarks."
+    )
+    
+>>>>>>> Stashed changes
     generated_url = await pollinations.generate_arrangement_image(
         db=db,
         arrangement_id=str(arrangement.id),
         optimized_prompt=final_image_prompt,
+<<<<<<< Updated upstream
+=======
+        arrangement_type=inferred_arrangement_type,
+>>>>>>> Stashed changes
     )
 
     if not generated_url:

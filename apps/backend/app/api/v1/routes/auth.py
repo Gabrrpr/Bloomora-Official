@@ -56,6 +56,44 @@ ALLOWED_FRONTEND_URLS = {
     },
 }
 
+DISPOSABLE_EMAIL_DOMAINS = {
+    "10minutemail.com",
+    "guerrillamail.com",
+    "mailinator.com",
+    "minitts.net",
+    "tempmail.com",
+    "temp-mail.org",
+    "throwawaymail.com",
+    "yopmail.com",
+    "solarnyx.com",
+}
+DISPOSABLE_EMAIL_KEYWORDS = (
+    "10minute",
+    "disposable",
+    "guerrilla",
+    "minit",
+    "throwaway",
+    "temp",
+    "yopmail",
+)
+
+TEMP_EMAIL_MESSAGE = "Temporary or disposable email addresses are not supported. Please use a personal email address you can access."
+
+def is_disposable_email(email: str) -> bool:
+    domain = email.split("@")[-1].strip().lower()
+    return domain in DISPOSABLE_EMAIL_DOMAINS or any(keyword in domain for keyword in DISPOSABLE_EMAIL_KEYWORDS)
+
+def allow_dev_otp_fallback() -> bool:
+    app_env = os.getenv("APP_ENV", os.getenv("ENVIRONMENT", "development")).strip().lower()
+    return app_env not in {"production", "prod"}
+
+
+def _safe_email_delivery_log(error: str | None) -> str:
+    text = str(error or "")
+    if "not owned by user" in text or "sender address rejected" in text or "5.7.1" in text or "553" in text:
+        return "SMTP sender is not verified or not allowed by the email provider."
+    return text or "Unknown email delivery error."
+
 def normalize_frontend_url(value: str | None) -> str:
     if not value:
         return FRONTEND_URL
@@ -212,6 +250,9 @@ def find_or_create_oauth_user(email: str, first_name: str, last_name: str, db: S
 @router.post("/send-otp")
 @limiter.limit("3/minute")
 def send_otp(request: Request, payload: SendOTPRequest, db: Session = Depends(get_db)):
+    if is_disposable_email(payload.email):
+        raise HTTPException(status_code=400, detail=TEMP_EMAIL_MESSAGE)
+
     existing = db.query(User).filter(User.email == payload.email).first()
 
     if existing and existing.is_verified:
@@ -243,7 +284,18 @@ def send_otp(request: Request, payload: SendOTPRequest, db: Session = Depends(ge
 
     sent, error = send_otp_email(payload.email, otp)
     if not sent:
-        raise HTTPException(status_code=500, detail=f"Failed to send OTP email: {error}")
+        print(f"Registration OTP email delivery failed for {payload.email}: {_safe_email_delivery_log(error)}")
+        if allow_dev_otp_fallback():
+            print(f"[DEV OTP FALLBACK] Email delivery failed, but OTP remains valid for {payload.email}: {otp}")
+            return {
+                "status": "success",
+                "message": "Verification code generated. Email delivery is unavailable in local development; use the OTP printed in the backend terminal.",
+                "delivery": "dev_fallback",
+            }
+        raise HTTPException(
+            status_code=500,
+            detail="We couldn't send the verification code right now. Please try again later or use another email address.",
+        )
 
     return {"status": "success", "message": "OTP sent to email."}
 
@@ -323,6 +375,9 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
 @router.post("/forgot-password/send-otp")
 @limiter.limit("3/minute")
 def forgot_password_send_otp(request: Request, payload: SendOTPRequest, db: Session = Depends(get_db)):
+    if is_disposable_email(payload.email):
+        raise HTTPException(status_code=400, detail=TEMP_EMAIL_MESSAGE)
+
     user = db.query(User).filter(User.email == payload.email).first()
     generic_response = {
         "status": "success",
@@ -340,7 +395,17 @@ def forgot_password_send_otp(request: Request, payload: SendOTPRequest, db: Sess
 
     sent, error = send_otp_email(payload.email, otp, first_name=user.first_name)
     if not sent:
-        raise HTTPException(status_code=500, detail=f"Failed to send OTP email: {error}")
+        print(f"Password reset OTP email delivery failed for {payload.email}: {_safe_email_delivery_log(error)}")
+        if allow_dev_otp_fallback():
+            print(f"[DEV OTP FALLBACK] Email delivery failed, but reset OTP remains valid for {payload.email}: {otp}")
+            return {
+                **generic_response,
+                "delivery": "dev_fallback",
+            }
+        raise HTTPException(
+            status_code=500,
+            detail="We couldn't send the reset code right now. Please try again later or use another email address.",
+        )
 
     return generic_response
 
