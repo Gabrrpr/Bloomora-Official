@@ -134,6 +134,12 @@ function statusToApi(status) {
   return String(status).toLowerCase().replace(/ /g, "_")
 }
 
+function formatBranchName(order) {
+  const raw = String(order?.branch || order?.branch_name || "").trim()
+  if (!raw) return "Unassigned"
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase()
+}
+
 export default function AdminOrders() {
   const { isDark } = useTheme()
 
@@ -728,7 +734,7 @@ export default function AdminOrders() {
           .op-detail thead { display: table-header-group; }
           .op-detail tr { page-break-inside: avoid; }
           .op-detail th { background: #0C573E !important; color: #fff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; border: none; padding: 7px 6px; text-align: left; font-size: 8.3px; font-weight: 700; text-transform: uppercase; line-height: 1.25; }
-          .op-detail th.c-idx { width: 6%; } .op-detail th.c-id { width: 18%; } .op-detail th.c-cust { width: 30%; } .op-detail th.c-pay { width: 13%; } .op-detail th.c-date { width: 16%; } .op-detail th.c-total { width: 17%; }
+          .op-detail th.c-idx { width: 5%; } .op-detail th.c-id { width: 17%; } .op-detail th.c-cust { width: 27%; } .op-detail th.c-branch { width: 12%; } .op-detail th.c-pay { width: 12%; } .op-detail th.c-date { width: 15%; } .op-detail th.c-total { width: 12%; }
           .op-detail td { border-bottom: 1px solid #eef1f4; padding: 6px; font-size: 9px; color: #1f2937 !important; vertical-align: top; overflow-wrap: anywhere; }
           .op-detail .num { text-align: right; }
           .op-detail .muted { color: #6b7280 !important; }
@@ -1063,11 +1069,24 @@ export default function AdminOrders() {
 
                 <div className="flex gap-4">
                   <div>
+                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: subTxt }}>Branch</p>
+                    <span
+                      className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold"
+                      style={{
+                        backgroundColor: isDark ? "rgba(74,222,128,0.10)" : "#f0fdf4",
+                        color: isDark ? "#4ade80" : DG,
+                        border: `1px solid ${isDark ? "rgba(74,222,128,0.24)" : "#bbf7d0"}`,
+                      }}
+                    >
+                      {formatBranchName(viewingOrder)}
+                    </span>
+                  </div>
+                  <div>
                     <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: subTxt }}>Payment</p>
                     <StatusBadge status={viewingOrder.payment_status || "pending"} />
                   </div>
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: subTxt }}>Status</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1" style={{ color: subTxt }}>Order Status</p>
                     <StatusBadge status={formatStatus(viewingOrder.status)} />
                   </div>
                 </div>
@@ -1631,10 +1650,10 @@ export default function AdminOrders() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full" style={{ minWidth: "700px" }}>
+          <table className="w-full" style={{ minWidth: "820px" }}>
             <thead style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
               <tr>
-                {["Order ID", "Customer", "Payment Status", "Status", "Total", "Order Date", "Action"].map(h => (
+                {["Order ID", "Customer", "Branch", "Payment Status", "Order Status", "Total", "Order Date", "Action"].map(h => (
                   <th key={h} className="px-4 py-3 text-left text-xs font-bold uppercase tracking-wider"
                     style={{ color: isDark ? "#64748b" : "#94a3b8" }}>{h}</th>
                 ))}
@@ -1642,7 +1661,7 @@ export default function AdminOrders() {
             </thead>
             <tbody style={{ borderTop: `1px solid ${isDark ? "#1e293b" : "#f1f5f9"}` }}>
               {loading ? (
-                <tr><td colSpan={7} className="px-5 py-10 text-center text-sm" style={{ color: subTxt }}>Loading orders...</td></tr>
+                <tr><td colSpan={8} className="px-5 py-10 text-center text-sm" style={{ color: subTxt }}>Loading orders...</td></tr>
               ) : paginatedOrders.length > 0 ? paginatedOrders.map((o, idx) => (
                 <tr key={o.id}
                   style={{ borderBottom: `1px solid ${isDark ? "#1e293b" : "#f8fafc"}`, backgroundColor: isDark ? (idx % 2 === 0 ? "#1a2332" : "#111827") : "white" }}
@@ -1652,6 +1671,18 @@ export default function AdminOrders() {
                   <td className="px-4 py-3">
                     <span className="font-medium block" style={{ color: isDark ? "#e2e8f0" : "#1e293b" }}>{o.customer_name || "—"}</span>
                     <span className="text-xs" style={{ color: subTxt }}>{o.customer_email || "—"}</span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold"
+                      style={{
+                        backgroundColor: isDark ? "rgba(74,222,128,0.10)" : "#f0fdf4",
+                        color: isDark ? "#4ade80" : DG,
+                        border: `1px solid ${isDark ? "rgba(74,222,128,0.24)" : "#bbf7d0"}`,
+                      }}
+                    >
+                      {formatBranchName(o)}
+                    </span>
                   </td>
                   <td className="px-4 py-3"><StatusBadge status={o.payment_status || "pending"} /></td>
                   <td className="px-4 py-3"><StatusBadge status={formatStatus(o.status)} /></td>
@@ -1686,7 +1717,7 @@ export default function AdminOrders() {
                   </td>
                 </tr>
               )) : (
-                <tr><td colSpan={7} className="px-5 py-12 text-center text-sm" style={{ color: subTxt }}>No orders match your filters.</td></tr>
+                <tr><td colSpan={8} className="px-5 py-12 text-center text-sm" style={{ color: subTxt }}>No orders match your filters.</td></tr>
               )}
             </tbody>
           </table>
@@ -1759,6 +1790,7 @@ export default function AdminOrders() {
                       <th className="c-idx">#</th>
                       <th className="c-id">Order ID</th>
                       <th className="c-cust">Customer</th>
+                      <th className="c-branch">Branch</th>
                       <th className="c-pay">Payment</th>
                       <th className="c-date">Order Date</th>
                       <th className="c-total num">Total</th>
@@ -1770,6 +1802,7 @@ export default function AdminOrders() {
                         <td className="muted">{i + 1}</td>
                         <td className="strong">{o.order_number}</td>
                         <td>{o.customer_name || "—"}{o.customer_email ? <><br /><span className="muted">{o.customer_email}</span></> : null}</td>
+                        <td className="muted">{formatBranchName(o)}</td>
                         <td>{o.payment_status || "pending"}</td>
                         <td className="muted">{o.created_at ? new Date(o.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : "—"}</td>
                         <td className="num strong">₱{(o.total_amount || 0).toLocaleString()}</td>

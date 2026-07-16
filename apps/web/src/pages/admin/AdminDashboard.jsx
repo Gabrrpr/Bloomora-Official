@@ -77,6 +77,62 @@ const REVENUE_PERIODS = [
 // ─────────────────────────────────────────────────────────────────────────────
 // DESIGN TOKEN SYSTEM
 // ─────────────────────────────────────────────────────────────────────────────
+const getRollingWeekLabels = () => {
+  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+  const labels = []
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date()
+    d.setDate(d.getDate() - i)
+    labels.push(days[d.getDay()])
+  }
+  return labels
+}
+
+const getRollingYearLabels = () => {
+  const currentYear = new Date().getFullYear()
+  return Array.from({ length: 6 }, (_, i) => String(currentYear - 5 + i))
+}
+
+const buildBranchRevenueSeries = (rows = [], periodKey = "week") => {
+  const period = REVENUE_PERIODS.find(p => p.key === periodKey) || REVENUE_PERIODS[0]
+  const labels = periodKey === "week"
+    ? getRollingWeekLabels()
+    : periodKey === "year"
+      ? getRollingYearLabels()
+      : period.labels
+
+  const manila = Array(labels.length).fill(0)
+  const pampanga = Array(labels.length).fill(0)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  ;(Array.isArray(rows) ? rows : []).forEach(row => {
+    const date = new Date(row.period)
+    if (isNaN(date.getTime())) return
+
+    let idx = -1
+    if (periodKey === "week") {
+      const rowDate = new Date(date)
+      rowDate.setHours(0, 0, 0, 0)
+      const diffDays = Math.round((today - rowDate) / (1000 * 60 * 60 * 24))
+      if (diffDays >= 0 && diffDays <= 6) idx = 6 - diffDays
+    } else if (periodKey === "month") {
+      idx = date.getMonth()
+    } else if (periodKey === "year") {
+      idx = labels.indexOf(String(date.getFullYear()))
+    }
+
+    if (idx === -1 || idx >= labels.length) return
+
+    const rowBranch = String(row.branch || "").trim().toLowerCase()
+    const revenue = Number(row.revenue) || 0
+    if (rowBranch === "pampanga") pampanga[idx] += revenue
+    else manila[idx] += revenue
+  })
+
+  return { labels, manila, pampanga }
+}
+
 function useTokens(isDark) {
   if (isDark) return {
     // Page & surfaces
@@ -403,7 +459,6 @@ function RevenueChart({ branch }) {
 
   const display = chartData || staticPeriod;
   const isLive = chartData !== null;
-
   return (
     <div className="rounded-xl p-5" style={{ backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}`, boxShadow: t.cardShadow }}>
       <div className="flex items-center justify-between mb-5 gap-3 flex-wrap">
@@ -438,6 +493,45 @@ function RevenueChart({ branch }) {
           })}
         </div>
       </div> {/* 🚀 FIXED: This closing div is no longer swallowed! */}
+
+      {false && branch === "all" && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mb-4 -mt-1">
+          {[
+            { name: "Manila", value: liveTotals.manila, color: "#2563eb", bg: isDark ? "rgba(37,99,235,0.12)" : "#eff6ff", border: isDark ? "rgba(96,165,250,0.28)" : "#bfdbfe" },
+            { name: "Pampanga", value: liveTotals.pampanga, color: "#7c3aed", bg: isDark ? "rgba(124,58,237,0.13)" : "#f5f3ff", border: isDark ? "rgba(167,139,250,0.3)" : "#ddd6fe" },
+          ].map(item => (
+            <div
+              key={item.name}
+              className="flex items-center justify-between gap-3 rounded-lg px-3 py-2"
+              style={{ backgroundColor: item.bg, border: `1px solid ${item.border}` }}
+            >
+              <div className="flex items-center gap-2 min-w-0">
+                <span className="w-2.5 h-8 rounded-full flex-shrink-0" style={{ background: item.color }} />
+                <div className="min-w-0">
+                  <p className="text-xs font-bold leading-tight" style={{ color: t.textPrimary }}>{item.name}</p>
+                  <p className="text-[10px] font-medium mt-0.5" style={{ color: t.textMuted }}>Branch sales</p>
+                </div>
+              </div>
+              <p className="text-sm sm:text-base font-extrabold tabular-nums whitespace-nowrap" style={{ color: item.color }}>
+                {isLive ? `PHP ${item.value.toLocaleString("en-PH", { maximumFractionDigits: 0 })}` : "--"}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {false && branch === "all" && (
+        <div className="flex flex-wrap items-center gap-3 mb-4 -mt-2">
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: t.textSecondary }}>
+            <span className="w-2.5 h-2.5 rounded-sm" style={{ background: "#2563eb" }} />
+            Manila {isLive ? `â‚±${liveTotals.manila.toLocaleString("en-PH", { maximumFractionDigits: 0 })}` : ""}
+          </span>
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: t.textSecondary }}>
+            <span className="w-2.5 h-2.5 rounded-sm" style={{ background: "#7c3aed" }} />
+            Pampanga {isLive ? `â‚±${liveTotals.pampanga.toLocaleString("en-PH", { maximumFractionDigits: 0 })}` : ""}
+          </span>
+        </div>
+      )}
 
       <div className="flex gap-2" style={{ height: "184px", opacity: loading ? 0.35 : 1, transition: "opacity 0.4s ease" }}>
         <div className="flex flex-col justify-between flex-shrink-0 text-right" style={{ width: "40px", paddingBottom: "24px" }}>
@@ -829,6 +923,7 @@ function DashboardPanel({ user, onNavigate }) {
   const [recentOrders, setRecentOrders] = useState([]);
   const [recentLoading, setRecentLoading] = useState(true);
   const [trending, setTrending] = useState([]);
+  const [salesByBranch, setSalesByBranch] = useState(() => buildBranchRevenueSeries([], "week"));
 
   useEffect(() => {
     const branchParam = branch === "all" ? "All Branches" : branch;
@@ -863,7 +958,14 @@ function DashboardPanel({ user, onNavigate }) {
         setTrending([])
       });
 
-    Promise.allSettled([pSummary, pRecent, pLow, pTrending])
+    const pRevenue = api.get(`/dashboard/revenue?period=week&branch=${encodeURIComponent(branchParam)}`)
+      .then(data => setSalesByBranch(buildBranchRevenueSeries(data, "week")))
+      .catch(err => {
+        console.error("Sales by Branch Fetch Error:", err)
+        setSalesByBranch(buildBranchRevenueSeries([], "week"))
+      });
+
+    Promise.allSettled([pSummary, pRecent, pLow, pTrending, pRevenue])
       .finally(() => setInitialLoading(false));
 
   }, [branch]);
@@ -875,10 +977,15 @@ function DashboardPanel({ user, onNavigate }) {
   }, [initialLoading]);
 
   const branchLabel = branch === "all" ? "All Branches" : branch.charAt(0).toUpperCase() + branch.slice(1);
+  const salesMax = Math.max(...salesByBranch.manila, ...salesByBranch.pampanga, 1)
+  const manilaSalesTotal = salesByBranch.manila.reduce((sum, value) => sum + value, 0)
+  const pampangaSalesTotal = salesByBranch.pampanga.reduce((sum, value) => sum + value, 0)
+  const totalBranchSales = manilaSalesTotal + pampangaSalesTotal
 
   const handlePrint = () => window.print()
   const printDate   = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
   const printTime   = new Date().toLocaleTimeString("en-PH", { hour: "2-digit", minute: "2-digit" })
+  const csvDate     = new Date().toISOString().slice(0, 10)
 
   const outCount     = lowStock.filter(i => (parseInt(i.stock ?? 0) || 0) <= 0).length
   const lowOnlyCount = Math.max(0, lowStock.length - outCount)
@@ -890,9 +997,129 @@ function DashboardPanel({ user, onNavigate }) {
 
   const printScope = [
     `Branch: ${branchLabel}`,
-    "Daily operations snapshot",
+    "Sales and demand analytics",
     `${lowStock.length} low-stock item${lowStock.length === 1 ? "" : "s"}`,
   ].join("   ·   ")
+
+  const csvCell = value => {
+    const safe = value === null || value === undefined ? "" : String(value)
+    return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
+  }
+
+  const handleCsvExport = () => {
+    const stockByProductId = new Map(lowStock.map(item => [String(item.id), item]))
+    const stockByProductName = new Map(lowStock.map(item => [String(item.name || "").toLowerCase(), item]))
+    const headers = [
+      "Section",
+      "Branch",
+      "Metric or Item",
+      "Category",
+      "Units Sold Last 30 Days",
+      "Average Daily Demand",
+      "Forecast Next 7 Days",
+      "Current Stock",
+      "Reorder Point",
+      "Suggested Action",
+      "Value",
+      "Notes",
+    ]
+
+    const rows = [
+      ["Sales Summary", branchLabel, "Total Revenue Today", "", "", "", "", "", "", "Review today's sales performance", revenueToday.toFixed(2), "Total revenue shown on the dashboard"],
+      ["Sales Summary", branchLabel, "Orders Today", "", "", "", "", "", "", "Monitor daily order volume", ordersToday, "Number of orders placed today"],
+      ["Sales Summary", branchLabel, "Pending Orders", "", "", "", "", "", "", "Follow up pending orders", pendingOrders, "Orders that still require attention"],
+      ["Sales Summary", branchLabel, "Low Stock Items", "", "", "", "", "", "", "Prepare restocking plan", lowStockCount, "Items at or below reorder threshold"],
+    ]
+
+    salesByBranch.labels.forEach((label, index) => {
+      rows.push([
+        "Sales by Branch",
+        branchLabel,
+        `${label} Manila Sales`,
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Compare branch sales contribution",
+        Number(salesByBranch.manila[index] || 0).toFixed(2),
+        "Revenue from Manila branch for this chart period",
+      ])
+      rows.push([
+        "Sales by Branch",
+        branchLabel,
+        `${label} Pampanga Sales`,
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "Compare branch sales contribution",
+        Number(salesByBranch.pampanga[index] || 0).toFixed(2),
+        "Revenue from Pampanga branch for this chart period",
+      ])
+    })
+
+    trending.slice(0, 10).forEach((item, index) => {
+      const matchedStock = stockByProductId.get(String(item.id)) || stockByProductName.get(String(item.name || "").toLowerCase())
+      const stock = matchedStock ? Number(matchedStock.stock ?? 0) : ""
+      const reorderPoint = matchedStock ? Number(matchedStock.reorder_point ?? 0) : ""
+      const forecast = Number(item.forecast_next_7_days ?? 0)
+      const sold = Number(item.sold ?? 0)
+      const avg = Number(item.avg_daily_demand ?? 0)
+      const action = matchedStock
+        ? `Stock up soon; forecast says about ${forecast} unit(s) may sell in the next 7 days and current stock is ${stock}.`
+        : `Trending product; prepare inventory for about ${forecast} possible sale(s) in the next 7 days.`
+
+      rows.push([
+        "Demand Forecast",
+        branchLabel,
+        `${index + 1}. ${item.name}`,
+        matchedStock?.category || "",
+        sold,
+        avg.toFixed(2),
+        forecast,
+        stock,
+        reorderPoint,
+        action,
+        "",
+        `Based on Simple Moving Average: (${sold} sold / ${item.period_days || 30} days) x 7`,
+      ])
+    })
+
+    printLowStock.forEach((item, index) => {
+      const stock = Number(item.stock ?? 0)
+      const reorderPoint = Number(item.reorder_point ?? 0)
+      const status = stock <= 0 ? "Out of stock" : "Low stock"
+      rows.push([
+        "Restock Preparation",
+        branchLabel,
+        `${index + 1}. ${item.name}`,
+        item.category || "",
+        "",
+        "",
+        "",
+        stock,
+        reorderPoint,
+        stock <= 0 ? "Restock immediately" : "Restock before stock reaches zero",
+        "",
+        `${status}; included so staff know which items should be restocked to prepare for sales demand.`,
+      ])
+    })
+
+    const csv = [headers, ...rows].map(row => row.map(csvCell).join(",")).join("\r\n")
+    const blob = new Blob([`\ufeff${csv}`], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `dashboard_sales_demand_${branch}_${csvDate}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
 
   if (initialLoading) {
     return (
@@ -952,7 +1179,7 @@ function DashboardPanel({ user, onNavigate }) {
           .print-doc-title { display: flex !important; flex-direction: column; align-items: center; margin: 16px 0 2px; }
           .print-doc-title .t {
             margin: 0; font-size: 15px; font-weight: 800;
-            letter-spacing: 0.3em; text-transform: uppercase; color: #0C573E !important;
+            letter-spacing: 0.08em; text-transform: uppercase; color: #0C573E !important;
           }
           .print-doc-title .rule {
             width: 54px; height: 3px; border-radius: 9999px; margin: 7px 0 6px;
@@ -975,6 +1202,35 @@ function DashboardPanel({ user, onNavigate }) {
           .print-summary-card .value.amber { color: #d97706 !important; }
           .print-summary-card .value.red   { color: #dc2626 !important; }
           .print-summary-card .cap { margin: 3px 0 0; font-size: 8px; color: #9ca3af !important; }
+          .print-sales-chart {
+            margin: 12px 0 0; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 12px 11px;
+            background: #ffffff !important; break-inside: avoid; page-break-inside: avoid;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-sales-chart .top {
+            display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; margin-bottom: 9px;
+          }
+          .print-sales-chart .title { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #0C573E !important; }
+          .print-sales-chart .sub { margin: 2px 0 0; font-size: 8.5px; color: #9ca3af !important; }
+          .print-sales-chart .totals { display: flex; gap: 12px; align-items: center; justify-content: flex-end; flex-wrap: wrap; }
+          .print-sales-chart .legend-item { display: flex; align-items: center; gap: 5px; font-size: 8.5px; font-weight: 700; color: #374151 !important; white-space: nowrap; }
+          .print-sales-chart .swatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+          .print-sales-chart .swatch.manila { background: #2563eb !important; }
+          .print-sales-chart .swatch.pampanga { background: #7c3aed !important; }
+          .print-chart-area { display: grid; grid-template-columns: 36px 1fr; gap: 7px; align-items: stretch; }
+          .print-chart-axis { display: flex; flex-direction: column; justify-content: space-between; padding-bottom: 17px; text-align: right; font-size: 8px; color: #9ca3af !important; }
+          .print-chart-plot {
+            min-height: 126px; display: flex; align-items: stretch; gap: 7px; padding: 4px 5px 0;
+            border-left: 1px solid #dbe3df; border-bottom: 1px solid #dbe3df;
+            background: repeating-linear-gradient(to top, transparent 0, transparent 30px, #edf2f7 31px) !important;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+          }
+          .print-chart-group { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; }
+          .print-chart-bars { height: 104px; display: flex; align-items: flex-end; gap: 3px; }
+          .print-chart-bar { width: 10px; min-height: 2px; border-radius: 3px 3px 0 0; display: block; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .print-chart-bar.manila { background: #2563eb !important; }
+          .print-chart-bar.pampanga { background: #7c3aed !important; }
+          .print-chart-label { font-size: 8px; color: #6b7280 !important; line-height: 1; }
           .print-health {
             margin: 10px 0 0; border: 1px solid #e5e7eb; border-radius: 9px; padding: 10px 12px 11px;
             background: #ffffff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact;
@@ -994,7 +1250,7 @@ function DashboardPanel({ user, onNavigate }) {
           .print-health .dot { width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0; }
           .print-detail { display: block !important; margin-top: 14px; }
           .print-section-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0 0 7px; padding: 0 2px; }
-          .print-section-title { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.14em; text-transform: uppercase; color: #0C573E !important; }
+          .print-section-title { margin: 0; font-size: 10.5px; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase; color: #0C573E !important; }
           .print-section-sub { margin: 0; font-size: 8.5px; color: #9ca3af !important; }
           .print-detail .twrap { border: 1px solid #dbe3df; border-radius: 10px; overflow: hidden; }
           .print-detail table { width: 100%; max-width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -1007,19 +1263,23 @@ function DashboardPanel({ user, onNavigate }) {
             font-size: 8.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.01em; line-height: 1.25;
           }
           .print-detail th.col-idx    { width: 5%; }
-          .print-detail th.col-name   { width: 37%; }
-          .print-detail th.col-cat    { width: 22%; }
-          .print-detail th.col-reo    { width: 12%; }
-          .print-detail th.col-stock  { width: 12%; }
-          .print-detail th.col-status { width: 12%; }
+          .print-detail th.col-name   { width: 28%; }
+          .print-detail th.col-cat    { width: 16%; }
+          .print-detail th.col-reo    { width: 10%; }
+          .print-detail th.col-stock  { width: 10%; }
+          .print-detail th.col-status { width: 13%; }
+          .print-detail th.col-action { width: 18%; }
           .print-detail th.ro-id     { width: 16%; }
           .print-detail th.ro-cust   { width: 30%; }
           .print-detail th.ro-branch { width: 13%; }
           .print-detail th.ro-status { width: 19%; }
           .print-detail th.ro-total  { width: 17%; }
-          .print-detail th.tr-rank { width: 12%; }
-          .print-detail th.tr-name { width: 68%; }
-          .print-detail th.tr-sold { width: 20%; }
+          .print-detail th.tr-rank { width: 7%; }
+          .print-detail th.tr-name { width: 29%; }
+          .print-detail th.tr-sold { width: 11%; }
+          .print-detail th.tr-avg { width: 13%; }
+          .print-detail th.tr-next { width: 12%; }
+          .print-detail th.tr-action { width: 28%; }
           .print-detail .mono { font-family: "Courier New", Courier, monospace; font-size: 8.5px; }
           .print-detail .cap { text-transform: capitalize; }
           .print-detail td {
@@ -1076,6 +1336,14 @@ function DashboardPanel({ user, onNavigate }) {
               <option value="manila">Manila Branch</option>
               <option value="pampanga">Pampanga Branch</option>
             </select>
+            <button onClick={handleCsvExport} title="Export sales, demand forecast, and restock analytics as CSV"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all shadow-sm"
+              style={{ backgroundColor: t.surfaceBg, color: t.textPrimary, border: `1px solid ${t.cardBorder}` }}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-6m4 6V7m4 10v-4M5 19h14M5 5h14" />
+              </svg>
+              Export CSV
+            </button>
             <button onClick={handlePrint} title="Print or save as PDF"
               className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white transition-all shadow-sm"
               style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
@@ -1142,32 +1410,73 @@ function DashboardPanel({ user, onNavigate }) {
         </div>
 
         <div className="print-only print-doc-title">
-          <p className="t">Dashboard Report</p>
+          <p className="t">Sales and Demand Analytics Report</p>
           <span className="rule" />
           <p className="scope">{printScope}</p>
         </div>
 
         <div className="print-only print-summary">
           <div className="print-summary-card c-value">
-            <p className="label">Total Revenue Today</p>
+            <p className="label">Sales Revenue Today</p>
             <p className="value green">₱{revenueToday.toLocaleString("en-PH", { minimumFractionDigits: 2 })}</p>
             <p className="cap">{branchLabel}</p>
           </div>
           <div className="print-summary-card c-total">
-            <p className="label">Orders Today</p>
+            <p className="label">Sales Orders Today</p>
             <p className="value">{ordersToday}</p>
             <p className="cap">Placed today · {branchLabel}</p>
           </div>
           <div className="print-summary-card c-low">
-            <p className="label">Pending Orders</p>
+            <p className="label">Pending Sales Orders</p>
             <p className="value amber">{pendingOrders}</p>
             <p className="cap">Requires attention</p>
           </div>
           <div className="print-summary-card c-out">
-            <p className="label">Low Stock Items</p>
+            <p className="label">Items Needing Restock</p>
             <p className="value red">{lowStockCount}</p>
             <p className="cap">Company-wide · at or below reorder point</p>
           </div>
+        </div>
+
+        <div className="print-only print-sales-chart">
+          <div className="top">
+            <div>
+              <p className="title">Sales by Branch</p>
+              <p className="sub">Last 7 days - Manila vs Pampanga - {branchLabel}</p>
+            </div>
+            <div className="totals">
+              <span className="legend-item"><span className="swatch manila" />Manila PHP {manilaSalesTotal.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              <span className="legend-item"><span className="swatch pampanga" />Pampanga PHP {pampangaSalesTotal.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+            </div>
+          </div>
+          <div className="print-chart-area">
+            <div className="print-chart-axis">
+              <span>PHP {salesMax.toLocaleString("en-PH", { maximumFractionDigits: 0 })}</span>
+              <span>PHP {Math.round(salesMax / 2).toLocaleString("en-PH")}</span>
+              <span>PHP 0</span>
+            </div>
+            <div className="print-chart-plot">
+              {salesByBranch.labels.map((label, index) => {
+                const manilaValue = Number(salesByBranch.manila[index] || 0)
+                const pampangaValue = Number(salesByBranch.pampanga[index] || 0)
+                const manilaHeight = manilaValue > 0 ? Math.max(3, Math.round((manilaValue / salesMax) * 100)) : 0
+                const pampangaHeight = pampangaValue > 0 ? Math.max(3, Math.round((pampangaValue / salesMax) * 100)) : 0
+
+                return (
+                  <div className="print-chart-group" key={`print-sales-${label}-${index}`}>
+                    <div className="print-chart-bars">
+                      <span className="print-chart-bar manila" style={{ height: `${manilaHeight}%` }} />
+                      <span className="print-chart-bar pampanga" style={{ height: `${pampangaHeight}%` }} />
+                    </div>
+                    <span className="print-chart-label">{label}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+          <p className="print-section-sub" style={{ margin: "7px 2px 0" }}>
+            Total sales in chart period: PHP {totalBranchSales.toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </p>
         </div>
 
         {lowStock.length > 0 && (
@@ -1189,7 +1498,7 @@ function DashboardPanel({ user, onNavigate }) {
 
         <div className="print-only print-detail">
           <div className="print-section-head">
-            <p className="print-section-title">Low Stock Detail</p>
+            <p className="print-section-title">Restock Preparation</p>
             <p className="print-section-sub">Company-wide · sorted by urgency, most depleted first</p>
           </div>
           <div className="twrap">
@@ -1202,11 +1511,12 @@ function DashboardPanel({ user, onNavigate }) {
                   <th className="col-reo num">Reorder Pt</th>
                   <th className="col-stock num">Current Stock</th>
                   <th className="col-status center">Status</th>
+                  <th className="col-action">Suggested Action</th>
                 </tr>
               </thead>
               <tbody>
                 {printLowStock.length === 0 ? (
-                  <tr><td colSpan={6} style={{ textAlign: "center", padding: "18px 8px" }}>No low-stock items. All products are above their reorder points.</td></tr>
+                  <tr><td colSpan={7} style={{ textAlign: "center", padding: "18px 8px" }}>No low-stock items. All products are above their reorder points.</td></tr>
                 ) : printLowStock.map((item, i) => {
                   const isOut = (parseInt(item.stock ?? 0) || 0) <= 0
                   return (
@@ -1217,6 +1527,7 @@ function DashboardPanel({ user, onNavigate }) {
                       <td className="num nowrap muted">{item.reorder_point ?? "—"}</td>
                       <td className="num nowrap"><span className={`stk ${isOut ? "out" : "low"}`}>{item.stock ?? 0}</span></td>
                       <td className="center"><span className={`print-pill ${isOut ? "out" : "low"}`}>{isOut ? "Out of Stock" : "Low Stock"}</span></td>
+                      <td className="muted">{isOut ? "Restock immediately" : "Restock before stock reaches zero"}</td>
                     </tr>
                   )
                 })}
@@ -1225,7 +1536,7 @@ function DashboardPanel({ user, onNavigate }) {
           </div>
         </div>
 
-        {recentOrders.length > 0 && (
+        {false && recentOrders.length > 0 && (
           <div className="print-only print-detail" style={{ marginTop: "14px" }}>
             <div className="print-section-head">
               <p className="print-section-title">Recent Orders</p>
@@ -1266,6 +1577,9 @@ function DashboardPanel({ user, onNavigate }) {
               <p className="print-section-title">Demand Forecast</p>
               <p className="print-section-sub">Top sellers by units sold · {branchLabel}</p>
             </div>
+            <p className="print-section-sub" style={{ margin: "0 2px 7px" }}>
+              Formula used: Simple Moving Average = (units sold in the last 30 days / 30) x 7 days.
+            </p>
             <div className="twrap">
               <table>
                 <thead>
@@ -1273,7 +1587,9 @@ function DashboardPanel({ user, onNavigate }) {
                     <th className="tr-rank num">Rank</th>
                     <th className="tr-name">Product</th>
                     <th className="tr-sold num">30d Sold</th>
-                    <th className="tr-sold num">Next 7d</th>
+                    <th className="tr-avg num">Avg/Day</th>
+                    <th className="tr-next num">Next 7d</th>
+                    <th className="tr-action">Stock-Up Recommendation</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1282,7 +1598,9 @@ function DashboardPanel({ user, onNavigate }) {
                       <td className="num nowrap muted">{i + 1}</td>
                       <td><span className="item-name">{item.name}</span></td>
                       <td className="num nowrap">{item.sold ?? 0}</td>
+                      <td className="num nowrap">{Number(item.avg_daily_demand || 0).toFixed(2)}</td>
                       <td className="num nowrap">{item.forecast_next_7_days ?? 0}</td>
+                      <td className="muted">Prepare about {item.forecast_next_7_days ?? 0} unit{Number(item.forecast_next_7_days ?? 0) === 1 ? "" : "s"} for the next 7 days.</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1293,7 +1611,7 @@ function DashboardPanel({ user, onNavigate }) {
 
         <div className="print-only print-footer">
           <p className="note">
-            <strong>Esting's Flower International Inc.</strong> Confidential. This report is generated for internal use only and reflects live dashboard figures as of the date and time indicated above. The low-stock section is company-wide and is not affected by the branch selector.
+            <strong>Esting's Flower International Inc.</strong> Confidential. This report is generated for internal sales and inventory planning. Demand forecast values use recent paid sales to estimate possible demand for the next 7 days, while the restock section identifies items staff should prepare or replenish.
           </p>
           <div className="print-signs">
             <div className="print-sign">

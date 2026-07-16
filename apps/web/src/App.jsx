@@ -34,6 +34,7 @@ import AIGalleryPage from "./pages/customer/AIGalleryPage";
 import ChatWidget from "./components/ChatWidget";
 import CookieConsent from "./components/CookieConsent";
 import AdPopup from "./components/AdPopup";
+import TestingDisclaimerBanner, { TESTING_DISCLAIMER_SESSION_KEY } from "./components/TestingDisclaimerBanner";
 import WorldClock from "./pages/customer/WorldClock";
 import WriteReviewPage from "./pages/customer/WriteReviewPage";
 import Profile from "./pages/customer/Profile";
@@ -79,6 +80,9 @@ function AppContent() {
   const [activeAdId, setActiveAdId] = useState("1");
   const [activeAdvertisement, setActiveAdvertisement] = useState(null);
   const [authTransition, setAuthTransition] = useState(null);
+  const [showTestingDisclaimer, setShowTestingDisclaimer] = useState(() =>
+    !sessionStorage.getItem(TESTING_DISCLAIMER_SESSION_KEY)
+  );
   const pageRef = useRef(page);
 
   useEffect(() => {
@@ -110,6 +114,11 @@ function AppContent() {
   const handleCloseAd = () => {
     sessionStorage.setItem("bloomora_ad_seen", "1")
     setShowAdPopup(false)
+  }
+
+  const handleAcceptTestingDisclaimer = () => {
+    sessionStorage.setItem(TESTING_DISCLAIMER_SESSION_KEY, "1")
+    setShowTestingDisclaimer(false)
   }
 
   useEffect(() => {
@@ -308,7 +317,10 @@ function AppContent() {
         </div>
       )}
       {renderContent()}
-      {!AUTH_PAGES.includes(page) && page !== "admin" && !isPreview && (
+      {!AUTH_PAGES.includes(page) && page !== "admin" && !isPreview && showTestingDisclaimer && (
+        <TestingDisclaimerBanner modal onAccept={handleAcceptTestingDisclaimer} />
+      )}
+      {!AUTH_PAGES.includes(page) && page !== "admin" && !isPreview && !showTestingDisclaimer && (
         <>
           {showCookieConsent && <CookieConsent onAccept={handleAcceptCookies} />}
           {showAdPopup && <AdPopup advertisement={activeAdvertisement} adId={activeAdId} onClose={handleCloseAd} />}

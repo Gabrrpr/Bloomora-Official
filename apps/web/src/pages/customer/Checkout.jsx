@@ -90,12 +90,11 @@ export default function Checkout({ onNavigate }) {
   const { user } = useAuth()
   const [cartItems, setCartItems] = useState([])
   const deliveryTime = "Anytime"
-  const [paymentMethod, setPaymentMethod] = useState("paymongo");
+  const [paymentMethod] = useState("bank_transfer");
   const [fulfillmentMethod, setFulfillmentMethod] = useState("delivery");
   const [deliverySettings, setDeliverySettings] = useState({ delivery_fee: 100, minimum_order: 0, same_day_cutoff: "14:00" });
   const [shippingMethods, setShippingMethods] = useState([]);
   const [selectedShippingMethodId, setSelectedShippingMethodId] = useState(null);
-  const [referenceNumber, setReferenceNumber] = useState("")
   const [voucher, setVoucher] = useState("")
   const [appliedVoucher, setAppliedVoucher] = useState(null)
   const [voucherMsg, setVoucherMsg] = useState(null)
@@ -500,7 +499,7 @@ export default function Checkout({ onNavigate }) {
   const buildOrderData = (orderIds) => ({
     orderIds,
     payment_method: paymentMethod,
-    payment_status: paymentMethod === "paymongo" ? "pending" : "pending",
+    payment_status: "pending",
     items: cartItems,
     subtotal,
     shipping,
@@ -560,7 +559,7 @@ export default function Checkout({ onNavigate }) {
         delivery_notes: buildDeliveryNotes(),
         scheduled_at: deliveryDate.toISOString(),
         payment_method: paymentMethod,
-        payment_reference: referenceNumber.trim(),
+        payment_reference: "TEST-ORDER-NO-PAYMENT",
         fulfillment_method: fulfillmentMethod,
         shipping_method_id: fulfillmentMethod === "delivery" ? selectedShippingMethod?.id : null,
         shipping_method_code: fulfillmentMethod === "delivery" ? selectedShippingMethod?.code : null,
@@ -580,40 +579,10 @@ export default function Checkout({ onNavigate }) {
       localStorage.setItem("bloomora_last_order", JSON.stringify(buildOrderData(orderIds)));
       await clearCart();
 
-      // 2. Fetch PayMongo link directly if selected
-      if (paymentMethod === "paymongo" && orderIds.length > 0) {
-        const token = localStorage.getItem("access_token");
-        const pmReq = await fetch(`${API_BASE}/payments/paymongo/checkout`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            order_ids: orderIds,
-            success_url: `${window.location.origin}/confirmation?payment=success&order_id=${encodeURIComponent(orderIds[0])}`,
-            cancel_url: `${window.location.origin}/checkout?payment=cancelled`
-          })
-        });
-
-        const pmData = await pmReq.json();
-
-        if (!pmReq.ok) {
-           const errorMsg = typeof pmData.detail === 'string' ? pmData.detail : JSON.stringify(pmData.detail) || "Unknown backend error.";
-           throw new Error(`PayMongo Error: ${errorMsg}`);
-        }
-
-        if (pmData.checkout_url) {
-          window.location.href = pmData.checkout_url;
-          return; 
-        } else {
-          throw new Error("PayMongo succeeded but did not return a checkout URL.");
-        }
-      }
-
-      // 3. Fallback for manual transfer or fallback URL
+      // Demo checkout never redirects to a payment provider.
       if (res.checkout_url) {
-        window.location.href = res.checkout_url;
+        console.warn("Ignoring checkout URL in testing mode:", res.checkout_url);
+        onNavigate("confirmation");
       } else {
         onNavigate("confirmation");
       }
@@ -661,10 +630,6 @@ export default function Checkout({ onNavigate }) {
     setError(""); 
     if (!user) {
       onNavigate("login");
-      return;
-    }
-    if (paymentMethod === "qrph" && !referenceNumber.trim()) {
-      setError("Please enter your Transaction Reference Number (TRN) to verify your manual payment.");
       return;
     }
     if (cartItems.length === 0) {
@@ -1125,53 +1090,18 @@ export default function Checkout({ onNavigate }) {
                 <span className="w-7 h-7 rounded-lg bg-[#F0F7F1] flex items-center justify-center flex-shrink-0">
                   <svg className="w-4 h-4 text-[#2E8B34]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
                 </span>
-                <h2 className="text-sm font-bold text-gray-800">Select payment method</h2>
+                <h2 className="text-sm font-bold text-gray-800">Payment notice</h2>
               </div>
               
-              <div className="space-y-3">
-                <div 
-                  onClick={() => { setPaymentMethod("paymongo"); setReferenceNumber(""); }} 
-                  className={`border-2 rounded-lg p-3 flex items-center gap-3 cursor-pointer transition-colors ${paymentMethod === "paymongo" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200"}`}
-                >
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${paymentMethod === "paymongo" ? "border-[#2E8B34]" : "border-gray-300"}`}>
-                    {paymentMethod === "paymongo" && <div className="w-2 h-2 rounded-full bg-[#2E8B34]" />}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs font-semibold text-gray-800">Online Payment</p>
-                    <p className="text-[10px] text-gray-500">GCash, Maya, or Card (Auto-Verified via PayMongo)</p>
-                  </div>
-                </div>
-
-                <div 
-                  onClick={() => setPaymentMethod("qrph")} 
-                  className={`border-2 rounded-lg p-3 flex items-center gap-3 cursor-pointer transition-colors ${paymentMethod === "qrph" ? "border-[#2E8B34] bg-[#F0F7F1]" : "border-gray-200"}`}
-                >
-                  <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${paymentMethod === "qrph" ? "border-[#2E8B34]" : "border-gray-300"}`}>
-                    {paymentMethod === "qrph" && <div className="w-2 h-2 rounded-full bg-[#2E8B34]" />}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-xs font-semibold text-gray-800">Manual Transfer (QRPh / Bank)</p>
-                    <p className="text-[10px] text-gray-500">Scan our QR and enter your Reference Number below</p>
-                  </div>
-                </div>
+              <div className="rounded-xl border border-orange-200 bg-orange-50 p-3.5">
+                <p className="text-xs font-bold text-orange-900">Demo checkout only</p>
+                <p className="text-[11px] text-orange-800 leading-relaxed mt-1">
+                  Do not send real money. Online payment, QRPh, bank transfer, GCash, Maya, and card payments are disabled for this testing website.
+                </p>
+                <p className="text-[11px] text-orange-800 leading-relaxed mt-2">
+                  Orders submitted here are test records only and use the reference <strong>TEST-ORDER-NO-PAYMENT</strong>.
+                </p>
               </div>
-
-              {paymentMethod === "qrph" && (
-                <div className="mt-3 p-3.5 bg-gray-50 border border-gray-200 rounded-lg">
-                  <label className="block text-xs font-bold text-gray-700 mb-1.5 uppercase tracking-wide">
-                    Transaction Reference Number (TRN) <span className="text-red-500">*</span>
-                  </label>
-                  <p className="text-[10px] text-gray-500 mb-2.5 leading-relaxed">
-                    Please transfer the exact amount using our QR code. After paying, input the 13-digit Reference Number from your receipt.
-                  </p>
-                  <input
-                    value={referenceNumber}
-                    onChange={e => { setReferenceNumber(e.target.value); setError(""); }}
-                    placeholder="e.g. 0001234567890"
-                    className="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-md outline-none focus:border-[#2E8B34] focus:ring-1 focus:ring-[#2E8B34] transition-all"
-                  />
-                </div>
-              )}
 
               {/* Voucher */}
               <div className="mt-4">
@@ -1268,13 +1198,13 @@ export default function Checkout({ onNavigate }) {
                 ) : (
                   <>
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                    Place Order
+                    Place Test Order
                   </>
                 )}
               </button>
               <p className="flex items-center justify-center gap-1.5 text-[11px] text-gray-400 mt-3">
                 <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                Secure checkout · your payment details are encrypted
+                Test checkout only - no real payment will be collected
               </p>
             </div>
           </div>
