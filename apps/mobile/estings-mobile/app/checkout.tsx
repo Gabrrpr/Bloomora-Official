@@ -90,7 +90,7 @@ const timeSlots: TimeSlot[] = [
   { enabled: false, id: 'morning', label: '9:00 AM – 12:00 PM' },
   { enabled: false, id: 'afternoon', label: '1:00 PM – 6:00 PM' },
 ];
-const ncrAddressMarkers = [
+/* const ncrAddressMarkers = [
   'metro manila',
   'national capital region',
   ' ncr',
@@ -113,7 +113,7 @@ const ncrAddressMarkers = [
   'san juan',
   'taguig',
   'valenzuela',
-];
+]; */
 const countryCodes: CountryCode[] = [
   { code: '+63', flag: '🇵🇭', name: 'Philippines' },
   { code: '+1', flag: '🇺🇸', name: 'United States / Canada' },
@@ -183,46 +183,6 @@ function formatPhoneForDisplay(phone: string, countryCode: string) {
   return digits.replace(/(\d{3})(?=\d)/g, '$1 ').trim();
 }
 
-function getSupportedDeliveryArea(address: string) {
-  const normalizedAddress = address.toLowerCase();
-  if (ncrAddressMarkers.some((marker) => normalizedAddress.includes(marker))) {
-    return 'Metro Manila';
-  }
-
-  if (
-    normalizedAddress.includes('pampanga') ||
-    normalizedAddress.includes('angeles') ||
-    normalizedAddress.includes('mabalacat') ||
-    normalizedAddress.includes('san fernando')
-  ) {
-    return 'Pampanga';
-  }
-
-  return null;
-}
-
-function getDeliveryProviderForArea(area: string | null): DeliveryProvider | null {
-  if (area === 'Metro Manila') return 'lalamove';
-  if (area === 'Pampanga') return 'standard';
-  return null;
-}
-
-function getDeliveryProvinceLabel(address: string) {
-  const normalizedAddress = address.toLowerCase();
-
-  for (const region of getPhilippineRegions()) {
-    const province = getPhilippineProvinces(region.code).find((item) =>
-      normalizedAddress.includes(item.name.toLowerCase())
-    );
-
-    if (province) {
-      return province.code === '-NO PROVINCE-' ? 'Metro Manila' : province.name;
-    }
-  }
-
-  const parts = address.split(',').map((part) => part.trim()).filter(Boolean);
-  return parts.length >= 2 ? parts[parts.length - 2] : 'this province';
-}
 function toCanonicalPhone(phone: string, countryCode: string) {
   return `${countryCode}${normalizeLocalPhone(phone, countryCode)}`;
 }
