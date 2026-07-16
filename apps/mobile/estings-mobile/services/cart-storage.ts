@@ -1,4 +1,4 @@
-import type { CartItem, Product } from '@/constants/shop';
+import type { AiArrangementCartInput, CartItem, Product } from '@/constants/shop';
 import { getAuthSession } from '@/services/auth-session';
 import {
   addGuestCartItem,
@@ -15,15 +15,61 @@ type CartReadOptions = {
 
 let signedInCartCache: { items: CartItem[]; userId: string } | null = null;
 
-function isLocalOnlyItem(item: CartItem) {
+function isAiArrangementProduct(product: Product) {
   return (
-    item.product.id.startsWith('ai-arr-') ||
-    item.product.productType?.toLowerCase() === 'ai arrangement'
+    product.id.startsWith('ai-arr-') ||
+    product.productType?.toLowerCase() === 'ai arrangement' ||
+    product.productType?.toLowerCase() === 'custom arrangement'
   );
 }
 
+function isLegacyLocalOnlyItem(item: CartItem) {
+  return item.id.startsWith('guest-cart-') && isAiArrangementProduct(item.product);
+}
+
 function isCartableItem(item: CartItem) {
-  return isLocalOnlyItem(item) || item.product.isVisible !== false;
+  return isLegacyLocalOnlyItem(item) || item.product.isVisible !== false;
+}
+
+function mergeRemoteAndLegacyItems(remoteItems: CartItem[], legacyItems: CartItem[]) {
+  const remoteProductIds = new Set(remoteItems.map((item) => item.product.id));
+  return [
+    ...remoteItems,
+    ...legacyItems.filter((item) => !remoteProductIds.has(item.product.id)),
+  ];
+}
+
+async function getLegacyGeneratedItems() {
+  return (await getGuestCartItems()).filter(isLegacyLocalOnlyItem);
+}
+
+function createAiArrangementCartItem(input: AiArrangementCartInput): CartItem {
+  const productId = input.arrangementId || `ai-arr-${Date.now()}`;
+  return {
+    addOns: input.addOns,
+    arrangementDetails: {
+      ...input.arrangementDetails,
+      arrangementId: input.arrangementDetails.arrangementId || input.arrangementId,
+    },
+    cardMessage: input.cardMessage?.trim() || undefined,
+    id: `pending-ai-cart-${productId}`,
+    product: {
+      categoryId: 'cat-ai-arrangement',
+      categoryName: 'Custom AI Arrangement',
+      description: input.description,
+      id: productId,
+      imageUrl: input.imageUrl,
+      isActive: true,
+      isVisible: true,
+      name: input.name,
+      priceCents: input.priceCents,
+      productGroup: 'Custom AI Arrangement',
+      productType: 'AI Arrangement',
+      stock: 1,
+      tag: 'AI Generated',
+    },
+    quantity: 1,
+  };
 }
 
 export function clearCartItemsCache() {
@@ -42,14 +88,22 @@ export async function getCartItems(options: CartReadOptions = {}) {
   }
 
   const guestItems = await getGuestCartItems();
-  const localOnlyItems = guestItems.filter(isLocalOnlyItem);
+  const localOnlyItems = guestItems.filter(isLegacyLocalOnlyItem);
   if (guestItems.length) {
-    const syncedItems = await userCartApi.sync(
-      guestItems.filter((item) => !isLocalOnlyItem(item) && isCartableItem(item)),
+    let syncedItems = await userCartApi.sync(
+      guestItems.filter((item) => !isLegacyLocalOnlyItem(item) && isCartableItem(item)),
       session,
     );
-    await setGuestCartItems(localOnlyItems);
-    const items = [...syncedItems, ...localOnlyItems];
+    try {
+      for (const localItem of localOnlyItems) {
+        syncedItems = await userCartApi.upsertCustom(localItem, session);
+      }
+      await setGuestCartItems([]);
+    } catch (error) {
+      await setGuestCartItems(localOnlyItems);
+      console.warn('Generated cart items remain on this device because cloud sync failed.', error);
+    }
+    const items = mergeRemoteAndLegacyItems(syncedItems, await getLegacyGeneratedItems());
     signedInCartCache = { items, userId };
     return items;
   }
@@ -66,7 +120,8 @@ export async function addCartItem(product: Product, quantity = 1, cardMessage?: 
 
   const session = await getAuthSession();
   if (session) {
-    const items = await userCartApi.add(product, quantity, session, cardMessage);
+    const remoteItems = await userCartApi.add(product, quantity, session, cardMessage);
+    const items = mergeRemoteAndLegacyItems(remoteItems, await getLegacyGeneratedItems());
     signedInCartCache = { items, userId: session.user.id };
     return items;
   }
@@ -76,7 +131,7 @@ export async function addCartItem(product: Product, quantity = 1, cardMessage?: 
 export async function updateCartItemQuantity(productId: string, quantity: number) {
   const session = await getAuthSession();
   const guestItems = await getGuestCartItems();
-  if (guestItems.some((item) => item.product.id === productId && isLocalOnlyItem(item))) {
+  if (guestItems.some((item) => item.product.id === productId && isLegacyLocalOnlyItem(item))) {
     const localItems = await updateGuestCartItemQuantity(productId, quantity);
     if (!session) return localItems;
     const items = [...(await userCartApi.get(session)), ...localItems];
@@ -84,7 +139,8 @@ export async function updateCartItemQuantity(productId: string, quantity: number
     return items;
   }
   if (!session) return updateGuestCartItemQuantity(productId, quantity);
-  const items = await userCartApi.update(productId, quantity, session);
+  const remoteItems = await userCartApi.update(productId, quantity, session);
+  const items = mergeRemoteAndLegacyItems(remoteItems, guestItems.filter(isLegacyLocalOnlyItem));
   signedInCartCache = { items, userId: session.user.id };
   return items;
 }
@@ -92,7 +148,7 @@ export async function updateCartItemQuantity(productId: string, quantity: number
 export async function removeCartItem(productId: string) {
   const session = await getAuthSession();
   const guestItems = await getGuestCartItems();
-  if (guestItems.some((item) => item.product.id === productId && isLocalOnlyItem(item))) {
+  if (guestItems.some((item) => item.product.id === productId && isLegacyLocalOnlyItem(item))) {
     const localItems = await removeGuestCartItem(productId);
     if (!session) return localItems;
     const items = [...(await userCartApi.get(session)), ...localItems];
@@ -100,7 +156,8 @@ export async function removeCartItem(productId: string) {
     return items;
   }
   if (!session) return removeGuestCartItem(productId);
-  const items = await userCartApi.remove(productId, session);
+  const remoteItems = await userCartApi.remove(productId, session);
+  const items = mergeRemoteAndLegacyItems(remoteItems, guestItems.filter(isLegacyLocalOnlyItem));
   signedInCartCache = { items, userId: session.user.id };
   return items;
 }
@@ -111,9 +168,9 @@ export async function setCartItems(items: CartItem[]) {
     return setGuestCartItems(items);
   }
 
-  const localOnlyItems = items.filter(isLocalOnlyItem);
+  const localOnlyItems = items.filter(isLegacyLocalOnlyItem);
   await setGuestCartItems(localOnlyItems);
-  const databaseItems = items.filter((item) => !isLocalOnlyItem(item) && isCartableItem(item));
+  const databaseItems = items.filter((item) => !isLegacyLocalOnlyItem(item) && isCartableItem(item));
   const current = await userCartApi.get(session);
   const nextIds = new Set(databaseItems.map((item) => item.product.id));
   const removed = current.filter((item) => !nextIds.has(item.product.id));
@@ -126,4 +183,16 @@ export async function setCartItems(items: CartItem[]) {
   const nextItems = [...(await userCartApi.get(session)), ...localOnlyItems];
   signedInCartCache = { items: nextItems, userId: session.user.id };
   return nextItems;
+}
+
+export async function addAiArrangementToCart(input: AiArrangementCartInput) {
+  const session = await getAuthSession();
+  if (!session) {
+    throw new Error('Please sign in to add this arrangement to your cart.');
+  }
+
+  const remoteItems = await userCartApi.upsertCustom(createAiArrangementCartItem(input), session);
+  const items = mergeRemoteAndLegacyItems(remoteItems, await getLegacyGeneratedItems());
+  signedInCartCache = { items, userId: session.user.id };
+  return items;
 }

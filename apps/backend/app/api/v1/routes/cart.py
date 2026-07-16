@@ -303,6 +303,22 @@ def add_web_cart_item(
     return {"items": [_serialize(item) for item in _user_cart(db, current_user.id)]}
 
 
+@router.put("/web/items", response_model=dict)
+def upsert_web_cart_item(
+    payload: WebCartItemPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Stores one snapshot cart item with an exact quantity.
+
+    Generated arrangements use this idempotent path so reopening or retrying the
+    mobile request cannot accidentally increase their quantity.
+    """
+    _upsert_web_item(db, current_user.id, dict(payload.item))
+    db.commit()
+    return {"items": [_serialize(item) for item in _user_cart(db, current_user.id)]}
+
+
 @router.put("/web", response_model=dict)
 def replace_web_cart(
     payload: WebCartReplacePayload,

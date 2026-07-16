@@ -1,4 +1,5 @@
 import * as MediaLibrary from 'expo-media-library';
+import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { Check, Clock3, Download, ReceiptText, RefreshCw } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -27,6 +28,8 @@ import {
   type PayMongoConfirmationResult,
   type PayMongoReceipt,
 } from '@/services/paymongo-confirmation';
+
+const estingsCorporateLogo = require('../../assets/images/estings-logo.svg');
 
 type ConfirmationState = 'checking' | 'confirmed' | 'missing' | 'pending' | 'unavailable';
 
@@ -243,18 +246,6 @@ export default function PaymentSuccessScreen() {
                 }],
               },
             ]}>
-            <View style={styles.receiptIntroduction}>
-              <View style={styles.receiptIntroductionIcon}>
-                <ReceiptText color={theme.colors.primary} size={18} strokeWidth={2.2} />
-              </View>
-              <View style={styles.receiptIntroductionCopy}>
-                <Text style={styles.receiptIntroductionTitle}>Your receipt is ready</Text>
-                <Text style={styles.receiptIntroductionBody}>
-                  Save the white receipt as an image or take a screenshot.
-                </Text>
-              </View>
-            </View>
-
             <View style={styles.receiptShadow}>
               <ReceiptDocument
                 confirmationReceipt={confirmation.receipt}
@@ -337,9 +328,12 @@ function ReceiptDocument({
     <View collapsable={false} ref={receiptRef} style={styles.receipt}>
       <View style={styles.receiptTopRule} />
       <View style={styles.receiptBrandRow}>
-        <View>
-          <Text style={styles.receiptBrand}>ESTING&apos;S</Text>
-          <Text style={styles.receiptBrandSubline}>FLOWER SHOP</Text>
+        <View style={styles.receiptBrandIdentity}>
+          <Image contentFit="contain" source={estingsCorporateLogo} style={styles.receiptLogo} />
+          <View style={styles.receiptCompanyCopy}>
+            <Text style={styles.receiptCompanyName}>Esting&apos;s Flowers</Text>
+            <Text style={styles.receiptCompanyLegalName}>International Inc.</Text>
+          </View>
         </View>
         <View style={styles.paidBadge}>
           <Text style={styles.paidBadgeText}>PAID</Text>
@@ -404,18 +398,6 @@ function ReceiptDocument({
         <ReceiptTotalRow isTotal label="Order total" value={formatReceiptCurrency(order.totalAmount)} />
       </View>
 
-      {(confirmationReceipt.checkoutSessionId
-        || (orderNumbers.length === 1 && confirmationReceipt.transactionId)) ? (
-        <View style={styles.referenceBlock}>
-          {confirmationReceipt.checkoutSessionId ? (
-            <ReceiptReference label="PayMongo session ID" value={confirmationReceipt.checkoutSessionId} />
-          ) : null}
-          {orderNumbers.length === 1 && confirmationReceipt.transactionId ? (
-            <ReceiptReference label="Esting's transaction ID" value={confirmationReceipt.transactionId} />
-          ) : null}
-        </View>
-      ) : null}
-
       <View style={styles.receiptFooter}>
         <Text style={styles.receiptFooterTitle}>Thank you for choosing Esting&apos;s.</Text>
         <Text style={styles.receiptFooterText}>
@@ -449,15 +431,6 @@ function ReceiptTotalRow({
     <View style={styles.totalRow}>
       <Text style={[styles.totalLabel, isTotal && styles.grandTotalLabel]}>{label}</Text>
       <Text style={[styles.totalValue, isTotal && styles.grandTotalValue]}>{value}</Text>
-    </View>
-  );
-}
-
-function ReceiptReference({ label, value }: { label: string; value: string }) {
-  return (
-    <View style={styles.referenceRow}>
-      <Text style={styles.referenceLabel}>{label}</Text>
-      <Text selectable style={styles.referenceValue}>{value}</Text>
     </View>
   );
 }
@@ -707,37 +680,6 @@ const styles = StyleSheet.create({
     maxWidth: 560,
     width: '100%',
   },
-  receiptIntroduction: {
-    alignItems: 'center',
-    alignSelf: 'stretch',
-    flexDirection: 'row',
-    gap: theme.spacing.md,
-    marginBottom: theme.spacing.md,
-  },
-  receiptIntroductionIcon: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.greenSoft,
-    borderRadius: theme.radius.pill,
-    height: 38,
-    justifyContent: 'center',
-    width: 38,
-  },
-  receiptIntroductionCopy: {
-    flex: 1,
-  },
-  receiptIntroductionTitle: {
-    color: theme.colors.text,
-    fontFamily: Fonts.sansBold,
-    fontSize: 14,
-    lineHeight: 19,
-  },
-  receiptIntroductionBody: {
-    color: theme.colors.textMuted,
-    fontFamily: Fonts.sans,
-    fontSize: 12,
-    lineHeight: 17,
-    marginTop: 2,
-  },
   receiptShadow: {
     alignSelf: 'stretch',
     backgroundColor: theme.colors.white,
@@ -767,23 +709,24 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.lg,
   },
   receiptBrandRow: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
-  receiptBrand: {
+  receiptBrandIdentity: { alignItems: 'center', flex: 1, flexDirection: 'row', gap: 9, paddingRight: 10 },
+  receiptLogo: { borderRadius: 999, height: 46, width: 46 },
+  receiptCompanyCopy: { flex: 1 },
+  receiptCompanyName: {
     color: theme.colors.primaryDark,
-    fontFamily: Fonts.sansExtraBold,
-    fontSize: 16,
-    letterSpacing: 1.1,
-    lineHeight: 20,
-  },
-  receiptBrandSubline: {
-    color: theme.colors.textMuted,
     fontFamily: Fonts.sansBold,
-    fontSize: 8,
-    letterSpacing: 2.2,
-    lineHeight: 12,
+    fontSize: 13,
+    lineHeight: 17,
+  },
+  receiptCompanyLegalName: {
+    color: theme.colors.textMuted,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 9,
+    lineHeight: 13,
   },
   paidBadge: {
     backgroundColor: '#E0F4E2',
@@ -934,28 +877,6 @@ const styles = StyleSheet.create({
     fontFamily: Fonts.sansExtraBold,
     fontSize: 17,
     lineHeight: 21,
-  },
-  referenceBlock: {
-    backgroundColor: '#F7F9F7',
-    borderRadius: theme.radius.sm,
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.lg,
-    padding: theme.spacing.md,
-  },
-  referenceRow: {
-    gap: 2,
-  },
-  referenceLabel: {
-    color: '#7B847D',
-    fontFamily: Fonts.sansMedium,
-    fontSize: 9,
-    lineHeight: 13,
-  },
-  referenceValue: {
-    color: theme.colors.text,
-    fontFamily: Fonts.mono,
-    fontSize: 8,
-    lineHeight: 12,
   },
   receiptFooter: {
     alignItems: 'center',

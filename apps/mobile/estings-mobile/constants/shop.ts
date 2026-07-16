@@ -39,11 +39,41 @@ export type Category = {
 };
 
 export type CartItem = {
+  arrangementDetails?: CartArrangementDetails;
   cardMessage?: string;
   addOns?: Product[];
   id: string;
   product: Product;
   quantity: number;
+};
+
+export type CartArrangementRecipeItem = {
+  imageUrl?: string;
+  materialType: string;
+  productId?: string;
+  productName: string;
+  quantity: number;
+  subtotalCents: number;
+  unitPriceCents: number;
+};
+
+export type CartArrangementDetails = {
+  arrangementId?: string;
+  basePriceCents: number;
+  prompt?: string;
+  recipeItems: CartArrangementRecipeItem[];
+  source: 'describe' | 'mix-and-match';
+};
+
+export type AiArrangementCartInput = {
+  addOns?: Product[];
+  arrangementDetails: CartArrangementDetails;
+  arrangementId?: string;
+  cardMessage?: string;
+  description: string;
+  imageUrl?: string;
+  name: string;
+  priceCents: number;
 };
 
 export type Order = {

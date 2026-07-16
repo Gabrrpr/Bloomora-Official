@@ -79,6 +79,26 @@ export function toCanonicalPhone(phone: string, countryCode: string) {
   return `${countryCode}${normalizeLocalPhone(phone, countryCode)}`;
 }
 
+const LOCAL_PHONE_LENGTHS: Partial<Record<CountryCode['code'], readonly [number, number]>> = {
+  '+1': [10, 10], '+44': [10, 10], '+60': [9, 10], '+61': [9, 9], '+62': [9, 12],
+  '+63': [10, 10], '+64': [8, 10], '+65': [8, 8], '+81': [9, 10], '+971': [9, 9],
+};
+
+export function getPhoneValidationMessage(phone: string, country: CountryCode) {
+  const localNumber = normalizeLocalPhone(phone, country.code);
+  const [minimumLength, maximumLength] = LOCAL_PHONE_LENGTHS[country.code] ?? [6, 15];
+
+  if (localNumber.length < minimumLength || localNumber.length > maximumLength) {
+    return country.code === '+63'
+      ? 'Enter a 10-digit Philippine mobile number, for example 917 123 4567.'
+      : `Enter a valid ${country.name} phone number.`;
+  }
+  if (country.code === '+63' && !localNumber.startsWith('9')) {
+    return 'Philippine mobile numbers must start with 9.';
+  }
+  return null;
+}
+
 export function splitRecipientName(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
 
@@ -116,6 +136,19 @@ export function ShippingAddressModal(props: ShippingAddressModalProps) {
   const [addressDetails, setAddressDetails] = useState(props.addressDetails ?? '');
   const [isDefaultAddress, setIsDefaultAddress] = useState(props.isDefaultAddress);
   const [isSaving, setIsSaving] = useState(false);
+  const phoneValidationMessage = getPhoneValidationMessage(props.phone, props.country);
+  const phoneErrorToShow = props.phone.trim() ? phoneValidationMessage : null;
+  const hasVerifiedPin = Boolean(
+    verifiedAddress
+    && verifiedAddress.is_serviceable
+    && (verificationToken || props.initialAddress),
+  );
+  const isFormComplete = Boolean(
+    props.firstName.trim()
+    && props.lastName.trim()
+    && !phoneValidationMessage
+    && hasVerifiedPin,
+  );
 
   useEffect(() => {
     if (!props.visible) {
@@ -129,8 +162,13 @@ export function ShippingAddressModal(props: ShippingAddressModalProps) {
   }, [props.addressDetails, props.initialAddress, props.isDefaultAddress, props.visible]);
 
   async function saveAddress() {
-    if (!props.firstName.trim() || !props.phone.trim()) {
-      Alert.alert('Complete recipient details', 'First name and phone number are required.');
+    if (!props.firstName.trim() || !props.lastName.trim()) {
+      Alert.alert('Complete recipient details', 'First name and last name are required.');
+      return;
+    }
+
+    if (phoneValidationMessage) {
+      Alert.alert('Enter a valid phone number', phoneValidationMessage);
       return;
     }
 
@@ -201,6 +239,7 @@ export function ShippingAddressModal(props: ShippingAddressModalProps) {
           <AddressField label="Phone Number">
             <PhoneNumberField
               country={props.country}
+              errorMessage={phoneErrorToShow}
               onCountryChange={props.onCountryChange}
               onPhoneChange={props.onPhoneChange}
               phone={props.phone}
@@ -276,11 +315,11 @@ export function ShippingAddressModal(props: ShippingAddressModalProps) {
         </ScrollView>
         <View style={styles.addressFooter}>
           <Pressable
-            disabled={isSaving || !verifiedAddress}
+            disabled={isSaving || !isFormComplete}
             onPress={() => void saveAddress()}
             style={({ pressed }) => [
               styles.addressSaveButton,
-              (isSaving || !verifiedAddress) && styles.disabled,
+              (isSaving || !isFormComplete) && styles.disabled,
               pressed && styles.controlPressed,
             ]}>
             <Text style={styles.addressSaveButtonText}>
@@ -313,11 +352,13 @@ function getFriendlyAddressError(error: unknown) {
 
 function PhoneNumberField({
   country,
+  errorMessage,
   onCountryChange,
   onPhoneChange,
   phone,
 }: {
   country: CountryCode;
+  errorMessage: string | null;
   onCountryChange: (country: CountryCode) => void;
   onPhoneChange: (value: string) => void;
   phone: string;
@@ -326,7 +367,7 @@ function PhoneNumberField({
 
   return (
     <>
-      <View style={styles.phoneField}>
+      <View style={[styles.phoneField, errorMessage && styles.phoneFieldInvalid]}>
         <Pressable
           accessibilityLabel="Select country code"
           onPress={() => setIsCountryOpen(true)}
@@ -337,15 +378,17 @@ function PhoneNumberField({
         </Pressable>
         <View style={styles.phoneDivider} />
         <TextInput
+          accessibilityHint={errorMessage ?? `Use the local format for ${country.name}`}
           keyboardType="phone-pad"
           maxLength={country.code === '+63' ? 12 : 20}
           onChangeText={(value) => onPhoneChange(normalizeLocalPhone(value, country.code))}
           placeholder="917 123 4567"
           placeholderTextColor="#AAAAAA"
-          style={styles.phoneInput}
+          style={[styles.phoneInput, errorMessage && styles.phoneInputInvalid]}
           value={formatPhoneForDisplay(phone, country.code)}
         />
       </View>
+      {errorMessage ? <Text accessibilityRole="alert" style={styles.phoneError}>{errorMessage}</Text> : null}
       <Modal animationType="slide" onRequestClose={() => setIsCountryOpen(false)} transparent visible={isCountryOpen}>
         <View style={styles.modalOverlay}>
           <View style={styles.countrySheet}>
@@ -466,11 +509,14 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingHorizontal: 12,
   },
+  phoneFieldInvalid: { borderColor: theme.colors.danger },
   countrySelector: { alignItems: 'center', flexDirection: 'row', gap: 5, minHeight: 46 },
   countryFlag: { color: '#555555', fontFamily: Fonts.sansSemiBold, fontSize: 12, minWidth: 22 },
   countryCode: { color: '#555555', fontFamily: Fonts.sansMedium, fontSize: 13, marginLeft: 6 },
   phoneDivider: { backgroundColor: '#D7D7D7', height: 22, marginHorizontal: 10, width: StyleSheet.hairlineWidth },
   phoneInput: { color: '#444444', flex: 1, fontFamily: Fonts.sans, fontSize: 14, minHeight: 46, paddingVertical: 0 },
+  phoneInputInvalid: { color: theme.colors.danger },
+  phoneError: { color: theme.colors.danger, fontFamily: Fonts.sans, fontSize: 11, lineHeight: 16, marginTop: 5 },
   modalOverlay: { backgroundColor: 'rgba(18, 24, 20, 0.4)', flex: 1, justifyContent: 'flex-end' },
   countrySheet: {
     backgroundColor: theme.colors.white,

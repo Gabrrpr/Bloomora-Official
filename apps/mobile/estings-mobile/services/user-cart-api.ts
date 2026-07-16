@@ -1,4 +1,4 @@
-import type { CartItem, Product } from '@/constants/shop';
+import type { CartArrangementDetails, CartItem, Product } from '@/constants/shop';
 import { ApiError, apiFetch } from '@/services/api-client';
 import type { AuthSession } from '@/services/auth-session';
 import { notifyCartUpdated } from '@/services/guest-cart';
@@ -25,13 +25,18 @@ type BackendCartItem = {
   product_id: string | null;
   quantity: number;
   web_item?: {
+    add_ons?: Record<string, unknown>[];
+    arrangement_details?: CartArrangementDetails;
     card_message?: string;
+    category_name?: string;
     desc?: string;
     group?: string;
     id?: string;
     img?: string;
     name?: string;
     price?: number;
+    product_type?: string;
+    tag?: string;
   };
 };
 
@@ -74,6 +79,51 @@ function mapProduct(product: BackendProduct): Product {
   };
 }
 
+function mapSnapshotProduct(snapshot: Record<string, unknown>): Product {
+  const category = String(snapshot.category_name || snapshot.group || snapshot.tag || 'Add-on');
+  const rawPrice = Number(snapshot.price || 0);
+
+  return {
+    categoryId: `cat-${category.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`,
+    categoryName: category,
+    description: typeof snapshot.desc === 'string' ? snapshot.desc : undefined,
+    id: String(snapshot.id || ''),
+    imageUrl: typeof snapshot.img === 'string' ? snapshot.img : undefined,
+    isActive: true,
+    isVisible: true,
+    name: String(snapshot.name || 'Add-on'),
+    priceCents: Math.round(rawPrice * 100),
+    productGroup: typeof snapshot.group === 'string' ? snapshot.group : category,
+    productType: typeof snapshot.product_type === 'string' ? snapshot.product_type : undefined,
+    stock: 99,
+    tag: typeof snapshot.tag === 'string' ? snapshot.tag : category,
+  };
+}
+
+function productSnapshot(product: Product) {
+  return {
+    category_name: product.categoryName,
+    desc: product.description,
+    group: product.productGroup ?? product.categoryName ?? product.tag,
+    id: product.id,
+    img: product.imageUrl,
+    name: product.name,
+    price: product.priceCents / 100,
+    product_type: product.productType,
+    tag: product.tag,
+  };
+}
+
+function customCartSnapshot(item: CartItem) {
+  return {
+    ...productSnapshot(item.product),
+    add_ons: item.addOns?.map(productSnapshot),
+    arrangement_details: item.arrangementDetails,
+    card_message: item.cardMessage,
+    qty: 1,
+  };
+}
+
 function mapCartItems(response: CartResponse): CartItem[] {
   return response.items.map((item) => {
     if (item.product) {
@@ -87,6 +137,8 @@ function mapCartItems(response: CartResponse): CartItem[] {
     const snapshot = item.web_item ?? {};
     const category = snapshot.group || 'Custom Arrangement';
     return {
+      addOns: snapshot.add_ons?.map(mapSnapshotProduct),
+      arrangementDetails: snapshot.arrangement_details,
       cardMessage: snapshot.card_message,
       id: item.id,
       product: {
@@ -99,7 +151,7 @@ function mapCartItems(response: CartResponse): CartItem[] {
         name: snapshot.name || 'Custom Arrangement',
         priceCents: Math.round(Number(snapshot.price || 0) * 100),
         productGroup: category,
-        productType: 'Custom Arrangement',
+        productType: snapshot.product_type || 'AI Arrangement',
         stock: 99,
         tag: category,
       },
@@ -134,6 +186,13 @@ export const userCartApi = {
       token: session.accessToken,
     });
     return mapCartItems(response);
+  },
+
+  async upsertCustom(item: CartItem, session: AuthSession) {
+    return mutateCart('/cart/web/items', session, {
+      body: JSON.stringify({ item: customCartSnapshot(item) }),
+      method: 'PUT',
+    });
   },
 
   async remove(productId: string, session: AuthSession) {

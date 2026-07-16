@@ -95,12 +95,19 @@ export async function createOrdersFromCart({
       delivery_provider: deliveryProvider,
       fulfillment_method: fulfillmentMethod,
       is_anonymous: isAnonymous,
-      items: items.map((item) => ({
-        group: item.product.productGroup ?? item.product.categoryName ?? item.product.tag,
-        id: item.product.id,
-        qty: item.quantity,
-        card_message: item.cardMessage,
-      })),
+      items: items.flatMap((item) => [
+        {
+          group: item.product.productGroup ?? item.product.categoryName ?? item.product.tag,
+          id: item.product.id,
+          qty: item.quantity,
+          card_message: item.cardMessage,
+        },
+        ...(item.addOns ?? []).map((addOn) => ({
+          group: addOn.productGroup ?? addOn.categoryName ?? addOn.tag,
+          id: addOn.id,
+          qty: 1,
+        })),
+      ]),
       payment_method: 'ewallet',
       recipient_first_name: recipient?.firstName,
       recipient_last_name: recipient?.lastName,

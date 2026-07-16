@@ -1,6 +1,7 @@
+import * as Location from 'expo-location';
 import { Platform } from 'react-native';
 
-import { assertNetworkConnection } from '@/services/api-client';
+import { apiFetch, assertNetworkConnection } from '@/services/api-client';
 
 export type ServiceZone = 'ncr' | 'pampanga' | 'unsupported';
 export type RequiredBranch = 'Manila' | 'Pampanga' | null;
@@ -90,6 +91,8 @@ const CACHE_TTL_MS = 30 * 60 * 1000;
 const CACHE_MAX_ENTRIES = 200;
 const REQUEST_INTERVAL_MS = 1_050;
 const REQUEST_TIMEOUT_MS = 15_000;
+const PROXY_REQUEST_TIMEOUT_MS = 20_000;
+const NATIVE_GEOCODER_TIMEOUT_MS = 8_000;
 
 const reverseCache = new Map<string, { expiresAt: number; value: AddressVerification }>();
 let requestQueue: Promise<void> = Promise.resolve();
@@ -118,8 +121,13 @@ export async function reverseGeocodeLocation(
     throwIfAborted(signal);
     await assertNetworkConnection();
 
-    const response = await fetchReverseGeocode(latitude, longitude, signal);
-    const value = normalizeNominatimResult(response, latitude, longitude);
+    const value = Platform.OS === 'web'
+      ? normalizeNominatimResult(
+        await fetchNominatimReverseGeocode(latitude, longitude, signal),
+        latitude,
+        longitude,
+      )
+      : await fetchNativeAddressVerification(latitude, longitude, signal);
     cacheResult(cacheKey, value);
     return value;
   }, signal);
@@ -137,7 +145,92 @@ export function getAddressZoneLabel(address: Pick<VerifiedAddress, 'service_zone
   return 'Outside Esting\'s delivery area';
 }
 
-async function fetchReverseGeocode(
+async function fetchNativeAddressVerification(
+  latitude: number,
+  longitude: number,
+  signal?: AbortSignal,
+): Promise<AddressVerification> {
+  const deviceAddress = await tryDeviceReverseGeocode(latitude, longitude, signal);
+
+  if (deviceAddress) {
+    try {
+      return normalizeDeviceGeocodeResult(deviceAddress, latitude, longitude);
+    } catch {
+      // Device geocoders sometimes omit Philippine barangay/city fields. The
+      // server proxy gives Nominatim a chance to return the complete address.
+    }
+  }
+
+  const response = await fetchProxiedReverseGeocode(latitude, longitude, signal);
+  return normalizeNominatimResult(response, latitude, longitude);
+}
+
+async function tryDeviceReverseGeocode(
+  latitude: number,
+  longitude: number,
+  signal?: AbortSignal,
+): Promise<Location.LocationGeocodedAddress | null> {
+  try {
+    if (Platform.OS === 'android') {
+      const permission = await Location.getForegroundPermissionsAsync();
+      if (permission.status !== Location.PermissionStatus.GRANTED) {
+        return null;
+      }
+    }
+
+    throwIfAborted(signal);
+    const results = await withTimeout(
+      Location.reverseGeocodeAsync({ latitude, longitude }),
+      NATIVE_GEOCODER_TIMEOUT_MS,
+    );
+    throwIfAborted(signal);
+    return results[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchProxiedReverseGeocode(
+  latitude: number,
+  longitude: number,
+  parentSignal?: AbortSignal,
+): Promise<NominatimReverseResponse> {
+  const params = new URLSearchParams({ lat: String(latitude), lng: String(longitude) });
+  const controller = new AbortController();
+  let didTimeOut = false;
+  const abortFromParent = () => controller.abort();
+  const timeout = setTimeout(() => {
+    didTimeOut = true;
+    controller.abort();
+  }, PROXY_REQUEST_TIMEOUT_MS);
+
+  parentSignal?.addEventListener('abort', abortFromParent, { once: true });
+
+  try {
+    return await apiFetch<NominatimReverseResponse>(`/addresses/reverse-geocode?${params.toString()}`, {
+      signal: controller.signal,
+    });
+  } catch (error) {
+    if (parentSignal?.aborted) {
+      throw createAbortError();
+    }
+
+    if (didTimeOut) {
+      throw new Error('Address verification timed out. Check your connection and try again.');
+    }
+
+    throw new Error(
+      error instanceof Error && error.message.includes('404')
+        ? 'Address verification is not available on the configured API. Update the backend and try again.'
+        : 'Address verification is temporarily unavailable. Check your connection and try again.',
+    );
+  } finally {
+    clearTimeout(timeout);
+    parentSignal?.removeEventListener('abort', abortFromParent);
+  }
+}
+
+async function fetchNominatimReverseGeocode(
   latitude: number,
   longitude: number,
   parentSignal?: AbortSignal,
@@ -194,6 +287,78 @@ async function fetchReverseGeocode(
     clearTimeout(timeout);
     parentSignal?.removeEventListener('abort', abortFromParent);
   }
+}
+
+function normalizeDeviceGeocodeResult(
+  result: Location.LocationGeocodedAddress,
+  pinnedLatitude: number,
+  pinnedLongitude: number,
+): AddressVerification {
+  const countryCode = cleanString(result.isoCountryCode).toLowerCase();
+  const countryName = normalizeName(result.country);
+
+  if (countryCode !== 'ph' && countryName !== 'philippines') {
+    throw new Error('Choose a delivery pin within the Philippines.');
+  }
+
+  const administrativeAddress: NominatimAddress = {
+    city: result.city ?? undefined,
+    city_district: result.district ?? undefined,
+    country: result.country ?? undefined,
+    country_code: result.isoCountryCode ?? undefined,
+    postcode: result.postalCode ?? undefined,
+    region: result.region ?? undefined,
+    state: result.region ?? undefined,
+    state_district: result.subregion ?? undefined,
+  };
+  const serviceZone = classifyServiceZone(administrativeAddress);
+  const streetName = cleanString(result.street);
+  const placeName = cleanString(result.name);
+  const street = [cleanString(result.streetNumber), streetName || placeName].filter(Boolean).join(' ').trim();
+  const city = firstString(result.city, result.district);
+  const barangay = firstString(result.district, result.subregion);
+  const province = serviceZone === 'ncr'
+    ? 'Metro Manila'
+    : serviceZone === 'pampanga'
+      ? 'Pampanga'
+      : firstString(result.subregion, result.region);
+
+  if (!street || !city || !province) {
+    throw new Error(
+      'The device map provider does not have a complete street, city, and province for this pin. Move the pin to the exact building or entrance.',
+    );
+  }
+
+  const isServiceable = serviceZone !== 'unsupported';
+  const formattedAddress = [street, barangay, city, province, cleanString(result.postalCode), 'Philippines']
+    .filter(Boolean)
+    .filter((part, index, parts) => parts.indexOf(part) === index)
+    .join(', ');
+  const address: VerifiedAddress = {
+    barangay: barangay || null,
+    city,
+    country_code: 'ph',
+    delivery_provider: serviceZone === 'ncr' ? 'lalamove' : serviceZone === 'pampanga' ? 'standard' : null,
+    formatted_address: formattedAddress,
+    geocode_place_id: null,
+    geocode_precision: 'reverse_device_address',
+    geocode_provider: Platform.OS === 'android' ? 'android-geocoder' : 'ios-geocoder',
+    is_serviceable: isServiceable,
+    latitude: pinnedLatitude,
+    longitude: pinnedLongitude,
+    province,
+    region: cleanString(result.region) || null,
+    required_branch: serviceZone === 'ncr' ? 'Manila' : serviceZone === 'pampanga' ? 'Pampanga' : null,
+    service_zone: serviceZone,
+    street,
+    zip_code: cleanString(result.postalCode) || null,
+  };
+
+  return {
+    address,
+    attribution: 'Address data provided by your device map service',
+    verificationToken: `local:device:${pinnedLatitude.toFixed(6)},${pinnedLongitude.toFixed(6)}`,
+  };
 }
 
 function normalizeNominatimResult(
@@ -429,5 +594,22 @@ function abortableDelay(durationMs: number, signal?: AbortSignal) {
     };
 
     signal?.addEventListener('abort', handleAbort, { once: true });
+  });
+}
+
+function withTimeout<T>(promise: Promise<T>, durationMs: number) {
+  return new Promise<T>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error('Operation timed out.')), durationMs);
+
+    promise.then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
   });
 }

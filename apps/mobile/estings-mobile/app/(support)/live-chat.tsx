@@ -17,7 +17,6 @@ import {
   Package,
   Paperclip,
   ReceiptText,
-  RefreshCcw,
   Reply,
   Send,
   ShieldCheck,
@@ -25,7 +24,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react-native';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Animated,
@@ -57,6 +56,11 @@ import {
   type BackendChatMessage,
 } from '@/services/chat-api';
 import { getAuthSession, type AuthSession } from '@/services/auth-session';
+import {
+  fallbackFaqs,
+  getFaqCategories,
+  type FaqCategory,
+} from '@/services/help-content-api';
 import { showLocalChatNotification } from '@/utils/push-notifications';
 
 const supportAvatarImage = require('../../assets/images/estings-logo.svg');
@@ -75,6 +79,11 @@ type AttachmentKind = 'image' | 'file';
 type EmptySheetType = 'products' | 'orders' | 'cart';
 type FloatingMenuType = 'attachments' | 'chat-options';
 type MessageGroupPosition = 'single' | 'first' | 'middle' | 'last';
+type FaqTopicId = 'ordering-delivery' | 'products-customization' | 'payments-cancellations';
+type SuggestedQuestion = {
+  id: string;
+  label: string;
+};
 
 type ChatAttachment = {
   id: string;
@@ -119,21 +128,22 @@ const initialMessages: ChatMessage[] = [
   },
 ];
 
-const quickReplySets = [
-  [
-    'How do I choose flowers for an occasion?',
-    'What is the current status of my order?',
-    'Can I customize a bouquet?',
-    'How do I schedule same-day delivery?',
-    'Other FAQs',
-  ],
-  [
-    'Do you deliver same day?',
-    'Can I change my delivery address?',
-    'What flowers are available today?',
-    'How do I care for my bouquet?',
-    'Contact a support agent',
-  ],
+const faqTopics: { id: FaqTopicId; label: string; terms: string[] }[] = [
+  {
+    id: 'ordering-delivery',
+    label: 'Ordering & Delivery',
+    terms: ['order', 'delivery', 'shipping', 'track', 'address', 'same day', 'pickup'],
+  },
+  {
+    id: 'products-customization',
+    label: 'Products & Customization',
+    terms: ['product', 'flower', 'bouquet', 'arrangement', 'custom', 'bulk', 'fresh'],
+  },
+  {
+    id: 'payments-cancellations',
+    label: 'Payments & Cancellations',
+    terms: ['payment', 'pay', 'card', 'gcash', 'maya', 'cod', 'cancel', 'refund'],
+  },
 ];
 
 const attachmentOptions: AttachmentOption[] = [
@@ -182,8 +192,8 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
   const [chatSessionId, setChatSessionId] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [supportStatus, setSupportStatus] = useState<SupportStatus>('Connecting');
-  const [showQuickReplies, setShowQuickReplies] = useState(true);
-  const [quickReplySetIndex, setQuickReplySetIndex] = useState(0);
+  const [faqCategories, setFaqCategories] = useState<FaqCategory[]>(fallbackFaqs);
+  const [selectedFaqTopicId, setSelectedFaqTopicId] = useState<FaqTopicId | null>(null);
   const [activeFloatingMenu, setActiveFloatingMenu] = useState<FloatingMenuType | null>(null);
   const [composerHeight, setComposerHeight] = useState(64);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
@@ -196,7 +206,10 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
   const [visibleDetailsMessageId, setVisibleDetailsMessageId] = useState<string | null>(null);
   const [validationMessage, setValidationMessage] = useState('');
   const sentProductReferenceKey = useRef<string | null>(null);
-  const closeChat = onRequestClose ?? (() => router.back());
+  const closeChat = useCallback(() => {
+    if (onRequestClose) onRequestClose();
+    else router.back();
+  }, [onRequestClose]);
 
   const isSignedIn = Boolean(session);
   const productReferenceMessage = useMemo(() => {
@@ -235,7 +248,17 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
   const canScrollInput = inputHeight >= inputMaxHeight;
   const isActive = supportStatus === 'Active';
   const emptySheet = emptySheetType ? emptySheetContent[emptySheetType] : null;
-  const quickReplies = quickReplySets[quickReplySetIndex];
+  const selectedFaqTopic = faqTopics.find((topic) => topic.id === selectedFaqTopicId) ?? null;
+  const suggestedQuestions = useMemo<SuggestedQuestion[]>(() => {
+    if (!selectedFaqTopic) {
+      return faqTopics.map((topic) => ({ id: topic.id, label: topic.label }));
+    }
+
+    return getFaqQuestionsForTopic(selectedFaqTopic, faqCategories).map((item) => ({
+      id: item.id,
+      label: item.q,
+    }));
+  }, [faqCategories, selectedFaqTopic]);
   const latestCustomerMessageId = useMemo(() => getLatestCustomerMessageId(messages), [messages]);
   const headerTopPadding = insets.top > 0 ? insets.top + 2 : theme.spacing.lg;
   const bottomSystemInset = Math.max(insets.bottom, theme.spacing.sm);
@@ -248,6 +271,22 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
   }, [messages.length]);
 
   useEffect(() => {
+    let active = true;
+
+    void getFaqCategories()
+      .then((categories) => {
+        if (active) setFaqCategories(categories);
+      })
+      .catch(() => {
+        // Keep the bundled FAQ content available when Help Center cannot be reached.
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     let isMounted = true;
     let historyPollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -257,7 +296,6 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
       }
 
       setMessages((currentMessages) => mergeBackendMessages(currentMessages, history));
-      setShowQuickReplies(history.length === 0);
     };
 
     getAuthSession()
@@ -629,6 +667,7 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
 
     setIsSending(true);
     setValidationMessage('');
+    let pendingMessageId: string | null = null;
 
     try {
       const firstImageAttachment = pendingAttachments.find((attachment) => attachment.kind === 'image' && attachment.uri);
@@ -642,6 +681,18 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
             session,
           })
         : null;
+      pendingMessageId = createId('pending-customer');
+      const optimisticMessage: ChatMessage = {
+        attachments: pendingAttachments.length ? pendingAttachments : undefined,
+        createdAt: new Date().toISOString(),
+        id: pendingMessageId,
+        sender: 'customer',
+        text: trimmedText,
+      };
+
+      // Add the customer's message before the request so a fast automated WebSocket reply
+      // can never appear above the question that triggered it.
+      setMessages((currentMessages) => [...currentMessages, optimisticMessage]);
       const savedMessage = await sendChatMessage({
         imageUrl: uploadedImage?.image_url,
         session,
@@ -650,30 +701,45 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
       });
 
       setMessages((currentMessages) => {
-        if (currentMessages.some((message) => message.id === savedMessage.id)) {
-          return currentMessages;
+        const savedChatMessage = mapBackendChatMessage(savedMessage);
+        const hasSavedMessage = currentMessages.some((message) => message.id === savedMessage.id);
+
+        if (hasSavedMessage) {
+          return currentMessages.filter((message) => message.id !== pendingMessageId);
         }
 
-        return [...currentMessages, mapBackendChatMessage(savedMessage)];
+        return currentMessages.map((message) =>
+          message.id === pendingMessageId ? savedChatMessage : message,
+        );
       });
-      setShowQuickReplies(false);
       setInput('');
       setInputHeight(36);
       setPendingAttachments([]);
       void playChatPop();
     } catch (error) {
+      if (pendingMessageId) {
+        setMessages((currentMessages) =>
+          currentMessages.filter((message) => message.id !== pendingMessageId),
+        );
+      }
       setValidationMessage(error instanceof Error ? error.message : 'Message could not be sent.');
     } finally {
       setIsSending(false);
     }
   }
 
-  function handleQuickReply(reply: string) {
-    void sendMessage(reply);
+  function handleSuggestedQuestion(question: SuggestedQuestion) {
+    if (!selectedFaqTopicId && isFaqTopicId(question.id)) {
+      setSelectedFaqTopicId(question.id);
+      return;
+    }
+
+    setSelectedFaqTopicId(null);
+    void sendMessage(question.label);
   }
 
-  function handleChangeQuestions() {
-    setQuickReplySetIndex((currentIndex) => (currentIndex + 1) % quickReplySets.length);
+  function handleBackToFaqTopics() {
+    setSelectedFaqTopicId(null);
   }
 
   async function handleAttachmentOption(option: AttachmentOption) {
@@ -866,16 +932,15 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
                 }
                 onLongPress={() => setDeleteTargetMessage(message)}
               />
-              {showQuickReplies && message.id === 'support-welcome' ? (
-                <SuggestedQuestionsCard
-                  questions={quickReplies}
-                  onChangeQuestions={handleChangeQuestions}
-                  onQuestionPress={handleQuickReply}
-                />
-              ) : null}
             </View>
           );
         })}
+        <SuggestedQuestionsCard
+          onBack={selectedFaqTopic ? handleBackToFaqTopics : undefined}
+          onQuestionPress={handleSuggestedQuestion}
+          questions={suggestedQuestions}
+          title={selectedFaqTopic ? selectedFaqTopic.label : 'Choose an inquiry'}
+        />
       </ScrollView>
 
       {activeFloatingMenu && isSignedIn ? (
@@ -1345,36 +1410,63 @@ function FloatingMenu({
 }
 
 function SuggestedQuestionsCard({
-  onChangeQuestions,
+  onBack,
   onQuestionPress,
   questions,
+  title,
 }: {
-  onChangeQuestions: () => void;
-  onQuestionPress: (question: string) => void;
-  questions: string[];
+  onBack?: () => void;
+  onQuestionPress: (question: SuggestedQuestion) => void;
+  questions: SuggestedQuestion[];
+  title: string;
 }) {
   return (
     <View style={styles.suggestedUnit}>
       <View style={styles.supportAvatarSpacer} />
       <View style={styles.suggestedCard}>
-        <Text style={styles.suggestedTitle}>You may want to ask:</Text>
+        <Text style={styles.suggestedTitle}>{title}</Text>
         <View style={styles.suggestedDivider} />
         {questions.map((question, index) => (
-          <View key={question}>
+          <View key={question.id}>
             {index > 0 ? <View style={styles.suggestedDivider} /> : null}
             <Pressable style={styles.suggestedQuestion} onPress={() => onQuestionPress(question)}>
-              <Text style={styles.suggestedQuestionText}>{question}</Text>
+              <Text style={styles.suggestedQuestionText}>{question.label}</Text>
             </Pressable>
           </View>
         ))}
-        <View style={styles.suggestedDivider} />
-        <Pressable style={styles.changeQuestionsButton} onPress={onChangeQuestions}>
-          <RefreshCcw size={theme.icon.sm} color={theme.colors.textMuted} />
-          <Text style={styles.changeQuestionsText}>Change Questions</Text>
-        </Pressable>
+        {onBack ? (
+          <>
+            <View style={styles.suggestedDivider} />
+            <Pressable style={styles.changeQuestionsButton} onPress={onBack}>
+              <ChevronLeft size={theme.icon.sm} color={theme.colors.textMuted} />
+              <Text style={styles.changeQuestionsText}>All inquiries</Text>
+            </Pressable>
+          </>
+        ) : null}
       </View>
     </View>
   );
+}
+
+function isFaqTopicId(value: string): value is FaqTopicId {
+  return faqTopics.some((topic) => topic.id === value);
+}
+
+function getFaqQuestionsForTopic(
+  topic: { terms: string[] },
+  categories: FaqCategory[],
+) {
+  const containsTopicTerm = (value: string) => {
+    const normalized = value.toLowerCase();
+    return topic.terms.some((term) => normalized.includes(term));
+  };
+  const categoryMatches = categories.filter((category) => containsTopicTerm(category.category));
+  const candidateItems = (categoryMatches.length ? categoryMatches : categories).flatMap(
+    (category) => category.items,
+  );
+  const matchingItems = candidateItems.filter((item) => containsTopicTerm(`${item.q} ${item.a}`));
+
+  return (matchingItems.length ? matchingItems : candidateItems).filter((item) => item.q && item.a);
 }
 
 function HeaderGradient() {

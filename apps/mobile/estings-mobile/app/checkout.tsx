@@ -10,6 +10,8 @@ import {
   Plus,
   ShoppingBag,
   Store,
+  TriangleAlert,
+  Truck,
 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import {
@@ -56,7 +58,7 @@ import {
 } from '@/services/commerce-api';
 import { findPhilippineLocationPath } from '@/utils/philippine-locations';
 
-type FulfillmentMethod = 'standard' | 'lalamove' | 'pickup';
+type FulfillmentMethod = 'delivery' | 'lalamove' | 'pickup';
 type OrderRecipient = 'myself' | 'someone';
 type TimeSlot = {
   enabled: boolean;
@@ -75,7 +77,13 @@ type CheckoutValidationErrors = {
   time?: string;
 };
 const lalamoveLogo = require('@/assets/images/payment/lalamove.png');
-const estingsDeliveryLogo = require('@/assets/images/payment/estings-delivery.png');
+const fallbackShippingMethods: ShippingMethod[] = [
+  { id: 'move_it', code: 'move_it', courier_name: 'Move It', delivery_type: 'Same-day motorcycle', description: 'Best for compact bouquets within Metro Manila.', service_area: 'manila', base_rate: 250, sort_order: 10, is_active: true, supports_live_booking: false },
+  { id: 'lalamove', code: 'lalamove', courier_name: 'Lalamove', delivery_type: 'Same-day MPV / motorcycle', description: 'Recommended for fragile or larger arrangements in Metro Manila.', service_area: 'manila', base_rate: 250, sort_order: 20, is_active: true, supports_live_booking: true },
+  { id: 'grabexpress', code: 'grabexpress', courier_name: 'GrabExpress', delivery_type: 'Same-day delivery', description: 'Fast same-day Metro Manila delivery.', service_area: 'manila', base_rate: 250, sort_order: 30, is_active: true, supports_live_booking: false },
+  { id: 'lbc', code: 'lbc', courier_name: 'LBC Express', delivery_type: 'Standard 1-3 days', description: 'Standard delivery for supported provincial addresses.', service_area: 'nationwide', base_rate: 250, sort_order: 40, is_active: true, supports_live_booking: false },
+  { id: 'jt_express', code: 'jt_express', courier_name: 'J&T Express', delivery_type: 'Standard 1-3 days', description: 'Budget-friendly standard courier option.', service_area: 'nationwide', base_rate: 250, sort_order: 50, is_active: true, supports_live_booking: false },
+];
 
 const timeSlots: TimeSlot[] = [
   { enabled: true, id: 'anytime', label: 'Anytime of the day' },
@@ -341,7 +349,8 @@ export default function CheckoutScreen() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isPaying, setIsPaying] = useState(false);
-  const [fulfillmentMethod, setFulfillmentMethod] = useState<FulfillmentMethod>('standard');
+  const [fulfillmentMethod, setFulfillmentMethod] = useState<FulfillmentMethod>('delivery');
+  const [selectedShippingMethodCode, setSelectedShippingMethodCode] = useState('lbc');
   const [storeBranch, setCheckoutStoreBranch] = useState<StoreBranch>(
     params.branch === 'pampanga' ? 'pampanga' : 'manila',
   );
@@ -389,14 +398,18 @@ export default function CheckoutScreen() {
 
   const summary = useMemo(() => {
     const subtotalCents = items.reduce((total, item) => total + item.product.priceCents * item.quantity, 0);
-    const provider = getDeliveryProviderForArea(getSupportedDeliveryArea(deliveryAddress)) ?? deliveryProvider;
-    const providerCode = provider === 'standard' ? 'lbc' : provider;
-    const shippingMethod = shippingMethods.find((method) => method.code === providerCode);
+    const shippingMethod = shippingMethods.find((method) => method.code === selectedShippingMethodCode)
+      ?? fallbackShippingMethods.find((method) => method.code === selectedShippingMethodCode);
     const deliveryFee = shippingMethod?.base_rate ?? deliverySettings.delivery_fee;
     const feeCents = fulfillmentMethod === 'delivery' ? Math.round(deliveryFee * 100) : 0;
     const discountCents = Math.round((appliedVoucher?.discount ?? 0) * 100);
     return { discountCents, feeCents, subtotalCents, totalCents: Math.max(0, subtotalCents + feeCents - discountCents) };
-  }, [appliedVoucher?.discount, deliveryAddress, deliveryProvider, deliverySettings.delivery_fee, fulfillmentMethod, items, shippingMethods]);
+  }, [appliedVoucher?.discount, deliverySettings.delivery_fee, fulfillmentMethod, items, selectedShippingMethodCode, shippingMethods]);
+  const verifiedDeliveryAddress: VerifiedAddress | null = oneTimeAddress?.verifiedAddress
+    ?? (accountAddress?.is_verified ? accountAddress : null);
+  /* Legacy address-summary state from the pre-courier-selection checkout.
+     It is retained only during this rebase resolution and is not used by the current UI.
+  
   const addressLines = useMemo(() => {
     const parts = deliveryAddress.split(',').map((part) => part.trim()).filter(Boolean);
     const fullName = [recipientFirstName, recipientLastName].filter(Boolean).join(' ');
@@ -430,6 +443,7 @@ export default function CheckoutScreen() {
     if (!activeDeliveryProvider || activeDeliveryProvider === deliveryProvider) return;
     setDeliveryProvider(activeDeliveryProvider);
   }, [activeDeliveryProvider, deliveryProvider]);
+*/
 
   useEffect(() => {
     let active = true;
@@ -451,7 +465,15 @@ export default function CheckoutScreen() {
         setSession(nextSession);
         setCheckoutStoreBranch(params.branch === 'pampanga' || params.branch === 'manila' ? params.branch : savedStoreBranch);
         if (checkoutSettings?.delivery) setDeliverySettings(checkoutSettings.delivery);
-        setShippingMethods(Array.isArray(checkoutSettings?.shipping_methods) ? checkoutSettings.shipping_methods : []);
+        const availableShippingMethods = Array.isArray(checkoutSettings?.shipping_methods)
+          ? checkoutSettings.shipping_methods
+          : [];
+        setShippingMethods(availableShippingMethods);
+        setSelectedShippingMethodCode((current) =>
+          availableShippingMethods.some((method) => method.code === current)
+            ? current
+            : (availableShippingMethods[0]?.code ?? current),
+        );
         let savedAddress: AccountAddress | null = null;
 
         if (nextSession?.accessToken) {
@@ -670,8 +692,7 @@ export default function CheckoutScreen() {
       }
 
       const selectedSlot = timeSlots.find((slot) => slot.id === selectedTime);
-      const checkoutDeliveryProvider = fulfillmentMethod === 'pickup' ? null : fulfillmentMethod;
-      const orderFulfillmentMethod = fulfillmentMethod === 'standard' ? 'delivery' : fulfillmentMethod;
+      const checkoutDeliveryProvider = fulfillmentMethod === 'pickup' ? null : selectedShippingMethodCode;
       const branchLabel = storeBranch === 'manila' ? 'Manila' : 'Pampanga';
       const branchNote = `Prepared by the ${branchLabel} branch.`;
       const created = await createOrdersFromCart({
@@ -682,7 +703,7 @@ export default function CheckoutScreen() {
         deliveryLocation: fulfillmentMethod !== 'pickup' ? verifiedDeliveryAddress ?? undefined : undefined,
         deliveryNotes: [branchNote, specialInstructions.trim()].filter(Boolean).join(' '),
         deliveryProvider: checkoutDeliveryProvider ?? undefined,
-        fulfillmentMethod: orderFulfillmentMethod,
+        fulfillmentMethod,
         isAnonymous: sendAnonymously,
         items,
         recipient: {
@@ -740,6 +761,18 @@ export default function CheckoutScreen() {
             </Text>
             <Text style={styles.branchNoticeText}>
               Your items are selected from and prepared by this branch.
+            </Text>
+          </View>
+        </View>
+
+        <View accessibilityRole="alert" style={styles.testPaymentNotice}>
+          <View style={styles.testPaymentIcon}>
+            <TriangleAlert color="#8A5A00" size={20} strokeWidth={2.2} />
+          </View>
+          <View style={styles.testPaymentCopy}>
+            <Text style={styles.testPaymentTitle}>Test checkout only</Text>
+            <Text style={styles.testPaymentText}>
+              Do not scan or pay the generated QR Ph code using a real banking or e-wallet app. On the PayMongo test page, use Simulate payment instead.
             </Text>
           </View>
         </View>
@@ -852,36 +885,30 @@ export default function CheckoutScreen() {
           )}
         </Section>
 
-        <Section title="2. Choose a delivery option">
-          <Text style={styles.sectionHint}>Select the option that works best for this order.</Text>
+        <Section title="2. Choose a fulfillment method">
+          <Text style={styles.sectionHint}>Select the courier or pickup option that works best for this order.</Text>
           <View style={styles.deliveryOptions}>
-            <DeliveryProviderOption
-              active={fulfillmentMethod === 'standard'}
-              image={estingsDeliveryLogo}
-              label="Standard delivery"
-              note="Scheduled and coordinated by our branch team"
-              onPress={() => {
-                animateCheckoutLayout();
-                setFulfillmentMethod('standard');
-                clearValidationError('address');
-              }}
-            />
-            <DeliveryProviderOption
-              active={fulfillmentMethod === 'lalamove'}
-              image={lalamoveLogo}
-              label="Lalamove"
-              note="On-demand courier delivery"
-              onPress={() => {
-                animateCheckoutLayout();
-                setFulfillmentMethod('lalamove');
-                clearValidationError('address');
-              }}
-            />
+            {(shippingMethods.length ? shippingMethods : fallbackShippingMethods).map((method) => (
+              <DeliveryProviderOption
+                active={fulfillmentMethod !== 'pickup' && selectedShippingMethodCode === method.code}
+                image={method.code === 'lalamove' ? lalamoveLogo : undefined}
+                key={method.id}
+                label={method.courier_name}
+                note={`${method.delivery_type}${method.description ? `\n${method.description}` : ''}`}
+                price={formatPhp(Math.round(method.base_rate * 100))}
+                onPress={() => {
+                  animateCheckoutLayout();
+                  setFulfillmentMethod(method.code === 'lalamove' ? 'lalamove' : 'delivery');
+                  setSelectedShippingMethodCode(method.code);
+                  clearValidationError('address');
+                }}
+              />
+            ))}
             <DeliveryProviderOption
               active={fulfillmentMethod === 'pickup'}
               icon={<Store color={fulfillmentMethod === 'pickup' ? theme.colors.primary : theme.colors.textMuted} size={24} />}
-              label="Store pickup"
-              note={`Collect from our ${storeBranch === 'manila' ? 'Manila' : 'Pampanga'} branch`}
+              label="Pickup"
+              note={`Collect from ${storeBranch === 'manila' ? 'Manila' : 'Pampanga'} Branch\nMon-Sat, 9:00 AM-9:00 PM`}
               onPress={() => {
                 animateCheckoutLayout();
                 setFulfillmentMethod('pickup');
@@ -1106,6 +1133,7 @@ function DeliveryProviderOption({
   label,
   note,
   onPress,
+  price,
 }: {
   active: boolean;
   icon?: ReactNode;
@@ -1113,6 +1141,7 @@ function DeliveryProviderOption({
   label: string;
   note: string;
   onPress: () => void;
+  price?: string;
 }) {
   return (
     <Pressable
@@ -1120,16 +1149,19 @@ function DeliveryProviderOption({
       accessibilityState={{ checked: active }}
       onPress={onPress}
       style={({ pressed }) => [styles.providerCard, active && styles.providerCardActive, pressed && styles.controlPressed]}>
+      <View style={[styles.providerRadio, active && styles.providerRadioActive]}>
+        {active ? <View style={styles.providerRadioDot} /> : null}
+      </View>
       <View style={[styles.providerIconFrame, active && styles.providerIconFrameActive]}>
         {image ? (
           <Image contentFit="contain" source={image} style={styles.providerLogo} />
-        ) : icon}
+        ) : (icon ?? <Truck color={theme.colors.textMuted} size={22} />)}
       </View>
       <View style={styles.providerCopy}>
         <Text style={[styles.providerLabel, active && styles.providerLabelActive]}>{label}</Text>
         <Text style={[styles.providerNote, active && styles.providerNoteActive]}>{note}</Text>
       </View>
-      {active ? <Check color={theme.colors.white} size={17} strokeWidth={2.7} /> : null}
+      {price ? <Text style={styles.providerPrice}>{price}</Text> : null}
     </Pressable>
   );
 }
@@ -1312,6 +1344,11 @@ const styles = StyleSheet.create({
   branchNoticeCopy: { flex: 1, gap: 3 },
   branchNoticeTitle: { color: theme.colors.primaryDark, fontFamily: Fonts.sansSemiBold, fontSize: 14, lineHeight: 19 },
   branchNoticeText: { color: '#55705A', fontFamily: Fonts.sans, fontSize: 12, lineHeight: 17 },
+  testPaymentNotice: { alignItems: 'flex-start', backgroundColor: '#FFF8E8', borderColor: '#E9CC8B', borderRadius: theme.radius.md, borderWidth: 1, flexDirection: 'row', gap: 11, padding: 14 },
+  testPaymentIcon: { alignItems: 'center', backgroundColor: '#FFF0C7', borderRadius: 999, height: 36, justifyContent: 'center', width: 36 },
+  testPaymentCopy: { flex: 1, gap: 4 },
+  testPaymentTitle: { color: '#6D4700', fontFamily: Fonts.sansBold, fontSize: 13, lineHeight: 18 },
+  testPaymentText: { color: '#775D2B', fontFamily: Fonts.sans, fontSize: 11, lineHeight: 17 },
   validationBanner: { backgroundColor: '#FFF1F0', borderColor: '#E9A29C', borderRadius: theme.radius.sm, borderWidth: 1, gap: 4, padding: 12 },
   validationTitle: { color: theme.colors.danger, fontFamily: Fonts.sansSemiBold, fontSize: 13 },
   validationMessage: { color: '#8A3029', fontFamily: Fonts.sans, fontSize: 12, lineHeight: 17 },
@@ -1327,16 +1364,20 @@ const styles = StyleSheet.create({
   segmentOptionActive: { backgroundColor: '#2E9638', borderColor: '#2E9638' },
   segmentLabel: { color: '#444444', fontFamily: Fonts.sans, fontSize: 14 },
   segmentLabelActive: { color: theme.colors.white },
-  providerCard: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#C5C5C5', borderRadius: theme.radius.sm, borderWidth: 1, flexDirection: 'row', gap: 10, minHeight: 62, paddingHorizontal: 12, paddingVertical: 10 },
-  providerCardActive: { backgroundColor: '#2E9638', borderColor: '#2E9638' },
-  providerIconFrame: { alignItems: 'center', backgroundColor: '#F8F8F8', borderRadius: theme.radius.sm, height: 40, justifyContent: 'center', overflow: 'hidden', width: 86 },
+  providerCard: { alignItems: 'flex-start', backgroundColor: '#FFFFFF', borderColor: '#C5C5C5', borderRadius: theme.radius.sm, borderWidth: 1, flexDirection: 'row', gap: 9, minHeight: 78, paddingHorizontal: 12, paddingVertical: 11 },
+  providerCardActive: { backgroundColor: theme.colors.greenSoft, borderColor: theme.colors.primary, borderWidth: 1.5 },
+  providerRadio: { alignItems: 'center', borderColor: '#A9B0AB', borderRadius: theme.radius.pill, borderWidth: 1.5, height: 20, justifyContent: 'center', marginTop: 2, width: 20 },
+  providerRadioActive: { borderColor: theme.colors.primary },
+  providerRadioDot: { backgroundColor: theme.colors.primary, borderRadius: theme.radius.pill, height: 10, width: 10 },
+  providerIconFrame: { alignItems: 'center', backgroundColor: '#F8F8F8', borderRadius: theme.radius.sm, height: 36, justifyContent: 'center', marginTop: -1, overflow: 'hidden', width: 42 },
   providerIconFrameActive: { backgroundColor: '#FFFFFF' },
-  providerLogo: { height: 30, width: 78 },
+  providerLogo: { height: 28, width: 36 },
   providerCopy: { flex: 1 },
   providerLabel: { color: '#444444', fontFamily: Fonts.sansMedium, fontSize: 14 },
-  providerLabelActive: { color: theme.colors.white },
-  providerNote: { color: '#777777', fontFamily: Fonts.sans, fontSize: 11, marginTop: 2 },
-  providerNoteActive: { color: 'rgba(255, 255, 255, 0.82)' },
+  providerLabelActive: { color: theme.colors.primary },
+  providerNote: { color: '#777777', fontFamily: Fonts.sans, fontSize: 11, lineHeight: 16, marginTop: 2 },
+  providerNoteActive: { color: '#67756A' },
+  providerPrice: { color: '#444444', fontFamily: Fonts.sansSemiBold, fontSize: 12, marginTop: 2 },
   providerHintBox: { backgroundColor: '#FFFFFF', borderColor: '#C5C5C5', borderRadius: theme.radius.sm, borderWidth: 1, padding: 12 },
   section: { backgroundColor: theme.colors.white, borderColor: '#E0E5E1', borderRadius: theme.radius.md, borderWidth: 1, gap: 10, padding: 14 },
   separatedSection: { marginTop: 10, paddingBottom: 10 },

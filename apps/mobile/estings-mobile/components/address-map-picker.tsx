@@ -38,7 +38,7 @@ export function AddressMapPicker({ initialAddress, onSelectionChange }: AddressM
   const [message, setMessage] = useState(
     initialPin ? 'Saved verified pin. Tap or drag to change it.' : 'Tap the map to pin the exact delivery location.',
   );
-  const [attribution, setAttribution] = useState('Address data © OpenStreetMap contributors');
+  const [attribution, setAttribution] = useState('Address details appear after the pin is verified');
   const [isResolvingAddress, setIsResolvingAddress] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -73,7 +73,7 @@ export function AddressMapPicker({ initialAddress, onSelectionChange }: AddressM
       longitude: location.longitude,
     }));
     setIsResolvingAddress(true);
-    setMessage('Verifying this pin with OpenStreetMap...');
+    setMessage('Finding the address for this pin...');
     onSelectionChange(null);
 
     try {
@@ -87,7 +87,7 @@ export function AddressMapPicker({ initialAddress, onSelectionChange }: AddressM
         return;
       }
 
-      setAttribution(verification.attribution || 'Address data © OpenStreetMap contributors');
+      setAttribution(verification.attribution || 'Address details verified from the selected pin');
 
       if (!verification.address.is_serviceable || verification.address.service_zone === 'unsupported') {
         setMessage("Esting's currently delivers only within NCR and Pampanga. Choose another pin.");
@@ -155,8 +155,9 @@ export function AddressMapPicker({ initialAddress, onSelectionChange }: AddressM
     void verifyPinnedLocation(event.nativeEvent.coordinate);
   }
 
-  const map = (style: object) => (
+  const map = (style: object, mapKey: string) => (
     <MapCanvas
+      key={mapKey}
       mapRegion={mapRegion}
       pinnedLocation={pinnedLocation}
       style={style}
@@ -169,7 +170,7 @@ export function AddressMapPicker({ initialAddress, onSelectionChange }: AddressM
   return (
     <>
       <View style={styles.mapPicker}>
-        {map(styles.map)}
+        {isFullscreen ? <View style={styles.mapPlaceholder} /> : map(styles.map, 'embedded-map')}
         <MapStatus
           attribution={attribution}
           isLocating={isLocating}
@@ -180,7 +181,11 @@ export function AddressMapPicker({ initialAddress, onSelectionChange }: AddressM
         />
       </View>
 
-      <Modal animationType="slide" visible={isFullscreen} onRequestClose={() => setIsFullscreen(false)}>
+      <Modal
+        animationType="slide"
+        presentationStyle="fullScreen"
+        visible={isFullscreen}
+        onRequestClose={() => setIsFullscreen(false)}>
         <View style={styles.fullscreen}>
           <View style={[styles.fullscreenHeader, { paddingTop: insets.top + theme.spacing.md }]}>
             <View style={styles.fullscreenTitleRow}>
@@ -195,7 +200,7 @@ export function AddressMapPicker({ initialAddress, onSelectionChange }: AddressM
               <X size={theme.icon.md} color={theme.colors.text} strokeWidth={2.1} />
             </Pressable>
           </View>
-          {map(styles.fullscreenMap)}
+          {map(styles.fullscreenMap, 'fullscreen-map')}
           <View style={[styles.fullscreenFooter, { paddingBottom: insets.bottom + theme.spacing.md }]}>
             <Text style={styles.mapHintText}>{message}</Text>
             <Text style={styles.attributionText}>{attribution}</Text>
@@ -288,8 +293,13 @@ function MapCanvas({
 }) {
   return (
     <MapView
+      pitchEnabled
       region={mapRegion}
+      rotateEnabled
+      scrollEnabled
       style={style}
+      toolbarEnabled={false}
+      zoomEnabled
       onPress={onMapPress}
       onRegionChangeComplete={onRegionChangeComplete}>
       {pinnedLocation ? (
@@ -329,6 +339,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   map: { height: 250, width: '100%' },
+  mapPlaceholder: { backgroundColor: theme.colors.surfaceAlt, height: 250, width: '100%' },
   mapStatus: { backgroundColor: theme.colors.surfaceAlt, gap: 7, padding: theme.spacing.md },
   mapHintRow: { alignItems: 'flex-start', flexDirection: 'row', gap: theme.spacing.sm },
   mapHintText: {

@@ -1,11 +1,18 @@
 import { router } from 'expo-router';
 import { ArrowLeft } from 'lucide-react-native';
+import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts, theme } from '@/constants/theme';
 
-export function AppPageHeader({ title, onBack }: { title: string; onBack?: () => void }) {
+type AppPageHeaderProps = {
+  onBack?: () => void;
+  rightAction?: ReactNode;
+  title: string;
+};
+
+export function AppPageHeader({ title, onBack, rightAction }: AppPageHeaderProps) {
   const insets = useSafeAreaInsets();
 
   return (
@@ -20,7 +27,7 @@ export function AppPageHeader({ title, onBack }: { title: string; onBack?: () =>
           <ArrowLeft color={theme.colors.text} size={22} strokeWidth={2.4} />
         </Pressable>
         <Text numberOfLines={1} style={styles.title}>{title}</Text>
-        <View style={styles.balance} />
+        <View style={styles.rightAction}>{rightAction}</View>
       </View>
     </View>
   );
@@ -54,6 +61,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.sm,
     textAlign: 'center',
   },
-  balance: { width: 44 },
+  rightAction: { alignItems: 'center', height: 44, justifyContent: 'center', width: 44 },
   pressed: { opacity: 0.55 },
 });

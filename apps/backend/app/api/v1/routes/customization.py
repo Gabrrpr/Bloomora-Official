@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_
 from typing import List, Optional
 from pydantic import BaseModel
 from google.genai import types
@@ -8,18 +7,37 @@ import uuid
 
 from app.core.dependencies import get_db, get_current_user
 from app.models import User, Arrangement
-from app.models.product import Product
 from app.models.arrangement import Flower, Vase, Wrapping, Accessory
 from app.models.ai_usage_log import DAILY_AI_LIMIT
 from app.schemas.customization import (
     CustomizationRequest,
     CustomizationResponse,
+    CustomizationRulesResponse,
+    QuantityValidation,
     UnavailableItem,
     PriceBreakdownItem,
     PriceBreakdown,
 )
 from app.services.pollinations_service import PollinationsService
-from app.services.gemini_service import validate_and_optimize_prompt
+from app.services.gemini_service import PromptExtractionError, validate_and_optimize_prompt
+from app.services.customization_rules import (
+    QuantityAdjustment,
+    RequestedMaterial,
+    build_complete_image_prompt,
+    build_default_recipe_suggestion,
+    build_presentation_recovery,
+    build_quantity_adjustment,
+    extract_prompt_requested_materials,
+    get_material_type_label,
+    has_specific_material_request,
+    is_probably_floral_request,
+    normalize_arrangement_type,
+    normalize_requested_materials,
+    public_arrangement_rules,
+    recipe_has_flowers,
+    resolve_complete_recipe,
+)
+from app.services.customization_inventory import load_customization_inventory
 from app.services.inventory_service import check_material_availability, get_alternatives
 from app.services.ai_usage_service import (
     has_reached_daily_limit,
@@ -31,91 +49,85 @@ router = APIRouter(prefix="/customization", tags=["Customization"])
 pollinations = PollinationsService()
 
 
-def _needs_box_container_rule(arrangement_type: Optional[str]) -> bool:
-    return str(arrangement_type or "").strip().lower() == "box"
+def _merge_explicit_materials(
+    payload: CustomizationRequest,
+    requested_materials: list[RequestedMaterial],
+    inventory_catalog,
+) -> list[RequestedMaterial]:
+    inventory_by_id = {item.product_id: item for item in inventory_catalog}
+    merged = {item.product_id: item for item in requested_materials if item.product_id}
+    unknown_items = [item for item in requested_materials if not item.product_id]
+    for material_id in (
+        payload.flower_id,
+        payload.vase_id,
+        payload.wrapping_id,
+        payload.accessory_id,
+    ):
+        material = inventory_by_id.get(str(material_id)) if material_id else None
+        if material and material.product_id not in merged:
+            merged[material.product_id] = RequestedMaterial(
+                material.product_id,
+                material.product_name,
+                1,
+            )
+    return [*merged.values(), *unknown_items]
 
 
-def calculate_price_breakdown(
-    flower: Optional[Flower],
-    vase: Optional[Vase],
-    wrapping: Optional[Wrapping],
-    accessory: Optional[Accessory],
-    wrapping_product: Optional[Product] = None,
-    accessory_product: Optional[Product] = None,
-) -> PriceBreakdown:
-    """
-    Builds an itemized price breakdown from the explicitly selected materials.
-    Falls back to Product records when Wrapping/Accessory sub-table rows are missing.
-    """
-    items: List[PriceBreakdownItem] = []
-
-    if flower:
-        subtotal = float(flower.unit_price) * flower.quantity
+def _calculate_complete_recipe_price(recipe, inventory_catalog) -> PriceBreakdown:
+    inventory_by_id = {item.product_id: item for item in inventory_catalog}
+    items: list[PriceBreakdownItem] = []
+    for requested in recipe:
+        material = inventory_by_id.get(requested.product_id or "")
+        if not material:
+            continue
+        subtotal = material.unit_price * requested.quantity
         items.append(PriceBreakdownItem(
-            material_type="Flower",
-            product_id=str(flower.product_id),
-            product_name=f"{flower.color} {flower.style}" if flower.color and flower.style else "Flower",
-            unit_price=float(flower.unit_price),
-            quantity=flower.quantity,
+            material_type=get_material_type_label(material.material_type),
+            product_id=material.product_id,
+            product_name=material.product_name,
+            image_url=material.image_url,
+            unit_price=material.unit_price,
+            quantity=requested.quantity,
             subtotal=subtotal,
         ))
+    return PriceBreakdown(items=items, total_price=sum(item.subtotal for item in items))
 
-    if vase:
-        subtotal = float(vase.unit_price) * vase.quantity
-        items.append(PriceBreakdownItem(
-            material_type="Vase",
-            product_id=str(vase.product_id),
-            product_name=f"{vase.style} {vase.material} Vase" if vase.style and vase.material else "Vase",
-            unit_price=float(vase.unit_price),
-            quantity=vase.quantity,
-            subtotal=subtotal,
-        ))
 
-    if wrapping:
-        subtotal = float(wrapping.unit_price) * wrapping.quantity
-        items.append(PriceBreakdownItem(
-            material_type="Wrapping",
-            product_id=str(wrapping.product_id),
-            product_name=f"{wrapping.color} {wrapping.style} Wrapping" if wrapping.color and wrapping.style else "Wrapping",
-            unit_price=float(wrapping.unit_price),
-            quantity=wrapping.quantity,
-            subtotal=subtotal,
-        ))
-    elif wrapping_product:
-        subtotal = float(wrapping_product.price)
-        items.append(PriceBreakdownItem(
-            material_type="Wrapping",
-            product_id=str(wrapping_product.id),
-            product_name=wrapping_product.name,
-            unit_price=float(wrapping_product.price),
-            quantity=1,
-            subtotal=subtotal,
-        ))
+def _recipe_product_id(recipe, inventory_catalog, material_type: str) -> Optional[uuid.UUID]:
+    inventory_by_id = {item.product_id: item for item in inventory_catalog}
+    match = next(
+        (
+            item.product_id
+            for item in recipe
+            if item.product_id
+            and inventory_by_id.get(item.product_id)
+            and inventory_by_id[item.product_id].material_type == material_type
+        ),
+        None,
+    )
+    return uuid.UUID(match) if match else None
 
-    if accessory:
-        subtotal = float(accessory.unit_price) * accessory.quantity
-        items.append(PriceBreakdownItem(
-            material_type="Accessory",
-            product_id=str(accessory.product_id),
-            product_name=accessory.name if accessory.name else "Accessory",
-            unit_price=float(accessory.unit_price),
-            quantity=accessory.quantity,
-            subtotal=subtotal,
-        ))
-    elif accessory_product:
-        subtotal = float(accessory_product.price)
-        items.append(PriceBreakdownItem(
-            material_type="Accessory",
-            product_id=str(accessory_product.id),
-            product_name=accessory_product.name,
-            unit_price=float(accessory_product.price),
-            quantity=1,
-            subtotal=subtotal,
-        ))
 
-    total_price = sum(item.subtotal for item in items)
-
-    return PriceBreakdown(items=items, total_price=total_price)
+def _quantity_adjustment_response(
+    adjustment: QuantityAdjustment,
+    remaining: int,
+) -> CustomizationResponse:
+    label = "flower box" if adjustment.arrangement_type == "box" else adjustment.arrangement_type
+    if not adjustment.suggested_prompt:
+        message = "No complete stocked arrangement is available right now. Please continue in Mix and Match."
+    elif adjustment.requested_total == 0:
+        message = "Here is a complete stocked recipe for your arrangement."
+    elif adjustment.code == "material_unavailable":
+        message = "Some requested materials are unavailable, so we prepared a stocked alternative."
+    else:
+        message = f"This {label} needs smaller quantities. Review the suggested recipe."
+    return CustomizationResponse(
+        success=False,
+        message=message,
+        generated_image_url=None,
+        remaining_generations=remaining,
+        validation=QuantityValidation(**adjustment.__dict__),
+    )
 
 
 @router.get("/ai-usage", tags=["Customization"])
@@ -132,6 +144,11 @@ def get_ai_usage(
     }
 
 
+@router.get("/rules", response_model=CustomizationRulesResponse)
+def get_customization_rules():
+    return CustomizationRulesResponse(arrangement_limits=public_arrangement_rules())
+
+
 @router.post("/check-and-generate", response_model=CustomizationResponse)
 async def check_and_generate(
     payload: CustomizationRequest,
@@ -139,7 +156,8 @@ async def check_and_generate(
     current_user: User = Depends(get_current_user),
 ):
     # ── Step 1: Check daily AI usage limit ───────────────────────────────
-    if has_reached_daily_limit(db, current_user.id):
+    # Reviewing uses Gemini extraction but does not consume an image-generation credit.
+    if not payload.review_only and has_reached_daily_limit(db, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=f"You have reached your daily limit of {DAILY_AI_LIMIT} AI generations. Please try again tomorrow."
@@ -185,67 +203,158 @@ async def check_and_generate(
         )
 
     # ── Step 4: Gemini Intelligent Prompt Validation ──────────────────────
-    material_keywords = [
-        "flower", "flowers", "vase", "wrapping", "wrapper", "ribbon",
-        "accessory", "accessories", "add-on", "addon", "filler", "stem",
-        "box", "container", "foam", "material", "raw",
+    inventory_catalog = load_customization_inventory(db)
+    inventory_for_extraction = [
+        {
+            "product_id": item.product_id,
+            "name": item.product_name,
+            "category": item.category,
+            "available_quantity": item.safe_quantity,
+        }
+        for item in inventory_catalog
     ]
-    arrangement_keywords = ["arrangement", "bouquet", "floral design", "gift set"]
-    material_text = func.lower(func.concat(
-        func.coalesce(Product.category, ""), " ",
-        func.coalesce(Product.product_type, ""), " ",
-        func.coalesce(Product.product_group, ""), " ",
-        func.coalesce(Product.name, ""),
-    ))
-    material_match = or_(
-        Product.is_customization_material == True,
-        *[material_text.ilike(f"%{keyword}%") for keyword in material_keywords],
-    )
-    arrangement_match = or_(
-        *[material_text.ilike(f"%{keyword}%") for keyword in arrangement_keywords],
-    )
-    db_products = (
-        db.query(Product.name)
-        .filter(Product.is_available == True, Product.status != "inactive")
-        .filter(material_match)
-        .filter(~arrangement_match)
-        .all()
-    )
-    inventory_names = [p[0] for p in db_products]
-    
-    if not inventory_names:
-        inventory_names = ["Red Roses", "White Tulips", "Sunflowers", "Pink Carnations"]
+    try:
+        ai_verdict = validate_and_optimize_prompt(payload.prompt_text, inventory_for_extraction)
+    except PromptExtractionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
 
-    ai_verdict = validate_and_optimize_prompt(payload.prompt_text, inventory_names)
+    arrangement_type = normalize_arrangement_type(
+        payload.arrangement_type or ai_verdict.get("arrangement_type"),
+        payload.prompt_text,
+    )
+    requested_materials = normalize_requested_materials(
+        ai_verdict.get("used_items", []),
+        inventory_catalog,
+    )
+    prompt_requested_materials = extract_prompt_requested_materials(
+        payload.prompt_text,
+        inventory_catalog,
+    )
+    if not requested_materials:
+        requested_materials = prompt_requested_materials
+    requested_materials = _merge_explicit_materials(
+        payload,
+        requested_materials,
+        inventory_catalog,
+    )
+    has_explicit_selection = any((
+        payload.flower_id,
+        payload.vase_id,
+        payload.wrapping_id,
+        payload.accessory_id,
+    ))
+    is_specific_request = has_explicit_selection or has_specific_material_request(
+        payload.prompt_text,
+        inventory_catalog,
+    )
+
+    if not is_specific_request and (
+        ai_verdict.get("is_possible") or is_probably_floral_request(payload.prompt_text)
+    ):
+        recovery = build_default_recipe_suggestion(
+            arrangement_type,
+            inventory_catalog,
+            ai_verdict.get("feedback"),
+        )
+        remaining = get_remaining_generations(db, current_user.id)
+        return _quantity_adjustment_response(recovery, remaining)
+
+    if requested_materials:
+        quantity_adjustment = build_quantity_adjustment(
+            arrangement_type,
+            requested_materials,
+            inventory_catalog,
+        )
+        if quantity_adjustment:
+            remaining = get_remaining_generations(db, current_user.id)
+            return _quantity_adjustment_response(quantity_adjustment, remaining)
+
+    if not requested_materials and (
+        ai_verdict.get("is_possible") or is_probably_floral_request(payload.prompt_text)
+    ):
+        recovery = build_default_recipe_suggestion(
+            arrangement_type,
+            inventory_catalog,
+            ai_verdict.get("feedback"),
+        )
+        remaining = get_remaining_generations(db, current_user.id)
+        return _quantity_adjustment_response(recovery, remaining)
 
     if not ai_verdict.get("is_possible"):
         remaining = get_remaining_generations(db, current_user.id)
         return CustomizationResponse(
             success=False,
-            message=ai_verdict.get("feedback") or "We cannot fulfill this exact arrangement with our current stock.",
+            message=ai_verdict.get("feedback") or "We cannot fulfill this arrangement with our current stock.",
             generated_image_url=None,
-            unavailable_items=[],
             remaining_generations=remaining,
         )
 
     # ── Step 5: Look up material records using product IDs ────────────────
-    wrapping_product = None
-    accessory_product = None
-    wrapping = None
-    accessory = None
+    # Re-read stock immediately before resolving the complete recipe.
+    refreshed_inventory = load_customization_inventory(db)
+    refreshed_adjustment = build_quantity_adjustment(
+        arrangement_type,
+        requested_materials,
+        refreshed_inventory,
+    )
+    if refreshed_adjustment:
+        remaining = get_remaining_generations(db, current_user.id)
+        return _quantity_adjustment_response(refreshed_adjustment, remaining)
 
-    if payload.wrapping_id:
-        wrapping = db.query(Wrapping).filter(Wrapping.product_id == payload.wrapping_id).first()
-        if not wrapping:
-            wrapping_product = db.query(Product).filter(Product.id == payload.wrapping_id).first()
+    complete_recipe, missing_presentation = resolve_complete_recipe(
+        arrangement_type,
+        requested_materials,
+        refreshed_inventory,
+        include_finishing_suggestions=False,
+    )
+    if not recipe_has_flowers(complete_recipe, refreshed_inventory):
+        recovery = build_default_recipe_suggestion(
+            arrangement_type,
+            refreshed_inventory,
+            "A complete arrangement needs at least one safely available flower.",
+        )
+        remaining = get_remaining_generations(db, current_user.id)
+        return _quantity_adjustment_response(recovery, remaining)
+    if missing_presentation:
+        recovery = build_presentation_recovery(
+            arrangement_type,
+            complete_recipe,
+            refreshed_inventory,
+            missing_presentation,
+        )
+        remaining = get_remaining_generations(db, current_user.id)
+        return _quantity_adjustment_response(recovery, remaining)
 
-    if payload.accessory_id:
-        accessory = db.query(Accessory).filter(Accessory.product_id == payload.accessory_id).first()
-        if not accessory:
-            accessory_product = db.query(Product).filter(Product.id == payload.accessory_id).first()
+    price_breakdown = _calculate_complete_recipe_price(complete_recipe, refreshed_inventory)
+    final_image_prompt = build_complete_image_prompt(
+        arrangement_type,
+        complete_recipe,
+        refreshed_inventory,
+        ai_verdict.get("design_notes") or "",
+    )
 
-    flower    = db.query(Flower).filter(Flower.product_id == payload.flower_id).first() if payload.flower_id else None
-    vase      = db.query(Vase).filter(Vase.product_id == payload.vase_id).first() if payload.vase_id else None
+    if payload.review_only:
+        remaining = get_remaining_generations(db, current_user.id)
+        return CustomizationResponse(
+            success=True,
+            message="Review this complete recipe and price before generating an image.",
+            arrangement_type=arrangement_type,
+            generated_image_url=None,
+            remaining_generations=remaining,
+            price_breakdown=price_breakdown,
+        )
+
+    flower_product_id = _recipe_product_id(complete_recipe, refreshed_inventory, "flower")
+    vase_product_id = _recipe_product_id(complete_recipe, refreshed_inventory, "vase")
+    wrapping_product_id = _recipe_product_id(complete_recipe, refreshed_inventory, "wrapping")
+    accessory_product_id = _recipe_product_id(complete_recipe, refreshed_inventory, "accessory")
+    flower = db.query(Flower).filter(Flower.product_id == flower_product_id).first() if flower_product_id else None
+    vase = db.query(Vase).filter(Vase.product_id == vase_product_id).first() if vase_product_id else None
+    wrapping = db.query(Wrapping).filter(Wrapping.product_id == wrapping_product_id).first() if wrapping_product_id else None
+    accessory = db.query(Accessory).filter(Accessory.product_id == accessory_product_id).first() if accessory_product_id else None
 
     # ── Step 6: Save arrangement ──────────────────────────────────────────
     arrangement = Arrangement(
@@ -261,27 +370,10 @@ async def check_and_generate(
     db.refresh(arrangement)
 
     # ── Step 7: Generate image via Pollinations (Using Optimized Prompt) ──
-    base_optimized_prompt = ai_verdict.get("optimized_prompt") or payload.prompt_text
-    box_container_rule = ""
-    if _needs_box_container_rule(payload.arrangement_type):
-        box_container_rule = (
-            "Reference style: premium lidded transparent square acrylic flower gift box. "
-            "Low three-quarter top product view across the clear lid and front wall. "
-            "Flowers are inside the closed box, visible through lid and walls, packed below the rim with short hidden stems. "
-            "Satin ribbon crosses over lid and down the front; no readable text. "
-            "No bouquet rising out, no wrapper, no tied stems, no flowers outside the box. "
-        )
-    
-    final_image_prompt = (
-        f"{base_optimized_prompt}. "
-        f"{box_container_rule}"
-        f"Only show the selected florist materials. No cards, chocolates, balloons, jewelry, people, text, or watermarks."
-    )
-    
     generated_url = await pollinations.generate_arrangement_image(
         db=db,
         arrangement_id=str(arrangement.id),
-        optimized_prompt=final_image_prompt # Pass our locked down prompt
+        optimized_prompt=final_image_prompt,
     )
 
     if not generated_url:
@@ -291,55 +383,6 @@ async def check_and_generate(
         )
 
     # ── Step 8: Calculate price breakdown (Merged!) ───────────────────────
-    # 8a. Calculate the base items the user selected via dropdowns
-    price_breakdown = calculate_price_breakdown(
-        flower, vase, wrapping, accessory,
-        wrapping_product=wrapping_product,
-        accessory_product=accessory_product,
-    )
-    
-    # 8b. Add items that Gemini intelligently extracted from their text prompt
-    used_item_objects = ai_verdict.get("used_items", []) # Now a list of dicts: [{'name': '...', 'quantity': int}]
-    
-    if used_item_objects:
-        # 1. Extract the raw string names so SQLAlchemy can search for them
-        extracted_names = [
-            item['name'] for item in used_item_objects 
-            if isinstance(item, dict) and 'name' in item
-        ]
-        
-        # 2. Fetch the products from the DB
-        ai_selected_products = db.query(Product).filter(Product.name.in_(extracted_names)).all()
-        
-        # 3. Create a dictionary map for easy quantity lookup
-        ai_quantities_map = { 
-            item['name']: int(item.get('quantity', 1)) 
-            for item in used_item_objects 
-            if isinstance(item, dict) and 'name' in item 
-        }
-
-        # 4. Get list of IDs already in the breakdown so we don't double charge!
-        existing_ids = [item.product_id for item in price_breakdown.items]
-        
-        for prod in ai_selected_products:
-            if str(prod.id) not in existing_ids:
-                # Get the quantity from our map, fallback to 1 just in case
-                ai_quantity = ai_quantities_map.get(prod.name, 1)
-                
-                # Assuming your Product model has a 'price' column (or 'unit_price' fallback)
-                item_price = float(getattr(prod, 'price', getattr(prod, 'unit_price', 0.0)))
-                subtotal_price = item_price * ai_quantity
-                
-                price_breakdown.items.append(PriceBreakdownItem(
-                    material_type="Custom Request (AI)",
-                    product_id=str(prod.id),
-                    product_name=prod.name,
-                    unit_price=item_price,
-                    quantity=ai_quantity,
-                    subtotal=subtotal_price
-                ))
-                price_breakdown.total_price += subtotal_price
-
     # Update arrangement with final estimated price
     arrangement.estimated_price = price_breakdown.total_price
     arrangement.generated_image_url = generated_url
@@ -349,6 +392,7 @@ async def check_and_generate(
                 "material_type": item.material_type,
                 "product_id": item.product_id,
                 "product_name": item.product_name,
+                "image_url": item.image_url,
                 "unit_price": item.unit_price,
                 "quantity": item.quantity,
                 "subtotal": item.subtotal,
@@ -377,7 +421,7 @@ async def check_and_generate(
         arrangement_id=str(arrangement.id),
         unavailable_items=[],
         remaining_generations=remaining,
-        price_breakdown=price_breakdown if price_breakdown is not None else PriceBreakdown(items=[], total_price=0.0),
+        price_breakdown=price_breakdown,
     )
 class CardRequest(BaseModel):
     relationship: str

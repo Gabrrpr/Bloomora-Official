@@ -159,45 +159,4 @@ export async function removeGuestCartItem(productId: string) {
   await writeGuestCart(nextItems);
   return nextItems;
 }
-
-export type AiArrangementCartInput = {
-  addOns?: Product[];
-  arrangementId?: string;
-  cardMessage?: string;
-  description: string;
-  imageUrl?: string;
-  name: string;
-  priceCents: number;
-};
-
-export async function addAiArrangementToCart(input: AiArrangementCartInput) {
-  const productId = input.arrangementId || `ai-arr-${Date.now()}`;
-
-  const syntheticProduct: Product = {
-    categoryId: 'cat-ai-arrangement',
-    categoryName: 'Custom AI Arrangement',
-    description: input.description,
-    id: productId,
-    imageUrl: input.imageUrl,
-    isActive: true,
-    isVisible: true,
-    name: input.name,
-    priceCents: input.priceCents,
-    productType: 'Ai Arrangement',
-    stock: 1,
-    tag: 'AI Generated',
-  };
-
-  const items = await getGuestCartItems();
-  const nextItems = [
-    ...items,
-    {
-      ...createCartItem(syntheticProduct, 1),
-      addOns: input.addOns,
-      cardMessage: input.cardMessage?.trim() || undefined,
-    },
-  ];
-
-  await writeGuestCart(nextItems);
-  return nextItems;
-}
+// Signed-in generated arrangements are persisted through cart-storage.

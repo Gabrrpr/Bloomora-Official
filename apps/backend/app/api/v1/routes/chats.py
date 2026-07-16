@@ -14,6 +14,7 @@ from app.core.connection_manager import manager
 from app.core.security import decode_token
 from app.models import User, RoleEnum, Chat, Order
 from app.schemas.chat_schemas import MessageCreate, MessageOut, ConversationList, ConversationOut
+from app.services.support_automation import AutomatedSupportReply, get_automated_support_reply
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
 
@@ -41,6 +42,54 @@ def serialize_chat(msg: Chat) -> dict:
         # 🚀 ADDED CONTEXT SUPPORT
         "context_id": getattr(msg, "context_id", None),
     }
+
+
+def _load_help_settings(db: Session):
+    try:
+        row = db.execute(
+            text("SELECT setting_value FROM store_settings WHERE setting_key = 'homepage_layout'")
+        ).fetchone()
+        return row[0] if row and row[0] else {}
+    except Exception as exc:
+        print(f"Support help content lookup error: {exc}")
+        db.rollback()
+        return {}
+
+
+def _persist_automated_reply(
+    db: Session,
+    user_id,
+    reply: AutomatedSupportReply,
+) -> Chat:
+    automated_message = Chat(
+        user_id=user_id,
+        message=reply.message,
+        sender="staff",
+        image_url=None,
+        is_read=0,
+        context_id=f"support-automation:{reply.topic}",
+    )
+    db.add(automated_message)
+    db.commit()
+    db.refresh(automated_message)
+    return automated_message
+
+
+async def _broadcast_automated_reply(user_id, automated_message: Chat):
+    payload = {
+        "id": str(automated_message.id),
+        "customer_id": str(user_id),
+        "user_id": str(user_id),
+        "message": automated_message.message,
+        "image_url": automated_message.image_url,
+        "sender": "staff",
+        "created_at": automated_message.created_at.isoformat(),
+        "is_read": automated_message.is_read,
+        "context_id": automated_message.context_id,
+        "is_auto_reply": True,
+    }
+    await manager.send_to_user(str(user_id), payload)
+    await manager.broadcast_to_staff(payload)
 
 
 @router.post("/sessions")
@@ -181,38 +230,32 @@ async def create_message(
         except Exception as e:
             print(f"❌ Notification Insert Error: {e}")
             db.rollback()
-        if existing_count == 0:
+        automated_reply = get_automated_support_reply(
+            new_message.message,
+            _load_help_settings(db),
+        )
+        if not automated_reply and existing_count == 0:
+            automated_reply = AutomatedSupportReply(
+                message=AUTO_REPLY_MESSAGE,
+                topic="welcome",
+            )
+
+        if automated_reply:
             try:
-                auto_reply = Chat(
-                    user_id=verified_user_id,
-                    message=AUTO_REPLY_MESSAGE,
-                    sender="staff",
-                    image_url=None,
-                    is_read=0,
-                    context_id=None,
+                persisted_reply = _persist_automated_reply(
+                    db,
+                    verified_user_id,
+                    automated_reply,
                 )
-                db.add(auto_reply)
-                db.commit()
-                db.refresh(auto_reply)
-
-                auto_payload = {
-                    "id": str(auto_reply.id),
-                    "customer_id": str(verified_user_id),
-                    "user_id": str(verified_user_id),
-                    "message": auto_reply.message,
-                    "image_url": auto_reply.image_url,
-                    "sender": "staff",
-                    "created_at": auto_reply.created_at.isoformat(),
-                    "is_read": auto_reply.is_read,
-                    "context_id": auto_reply.context_id,
-                    "is_auto_reply": True,
-                }
-
-                await manager.send_to_user(str(verified_user_id), auto_payload)
-                await manager.broadcast_to_staff(auto_payload)
             except Exception as e:
-                print(f"Auto Reply Error: {e}")
+                print(f"Automated support persistence error: {e}")
                 db.rollback()
+            else:
+                try:
+                    await _broadcast_automated_reply(verified_user_id, persisted_reply)
+                except Exception as e:
+                    # The reply is already safely stored; polling/history can still deliver it.
+                    print(f"Automated support broadcast error: {e}")
     else:
         try:
             await manager.send_to_user(str(verified_user_id), payload)

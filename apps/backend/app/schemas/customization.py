@@ -1,5 +1,5 @@
-from pydantic import BaseModel
-from typing import List, Optional
+from pydantic import BaseModel, Field
+from typing import Dict, List, Optional
 from uuid import UUID
 
 
@@ -10,6 +10,7 @@ class CustomizationRequest(BaseModel):
     wrapping_id: Optional[UUID] = None
     accessory_id: Optional[UUID] = None
     arrangement_type: Optional[str] = None
+    review_only: bool = False
 
 
 class AlternativeItem(BaseModel):
@@ -29,10 +30,48 @@ class UnavailableItem(BaseModel):
     alternatives: List[AlternativeItem]
 
 
+class ArrangementLimit(BaseModel):
+    label: str
+    max_stems: int
+
+
+class CustomizationRulesResponse(BaseModel):
+    arrangement_limits: Dict[str, ArrangementLimit]
+
+
+class ValidationRequestedItem(BaseModel):
+    product_id: Optional[str] = None
+    product_name: str
+    requested_quantity: int
+    available_quantity: int
+    material_type: Optional[str] = None
+
+
+class ValidationSuggestedItem(BaseModel):
+    product_id: Optional[str] = None
+    product_name: str
+    quantity: int
+    available_quantity: Optional[int] = None
+    material_type: str = "flower"
+    required: bool = False
+
+
+class QuantityValidation(BaseModel):
+    code: str
+    arrangement_type: str
+    max_stems: int
+    requested_total: int
+    requested_items: List[ValidationRequestedItem]
+    suggested_items: List[ValidationSuggestedItem]
+    suggested_prompt: str
+    adjustment_reasons: List[str]
+
+
 class PriceBreakdownItem(BaseModel):
     material_type: str
     product_id: Optional[str] = None
     product_name: str
+    image_url: Optional[str] = None
     unit_price: float
     quantity: int
     subtotal: float
@@ -48,7 +87,9 @@ class CustomizationResponse(BaseModel):
     message: str
     generated_image_url: Optional[str] = None
     arrangement_id: Optional[str] = None
-    # Ensure this field is here!
-    price_breakdown: Optional[PriceBreakdown] = None 
+    arrangement_type: Optional[str] = None
+    price_breakdown: Optional[PriceBreakdown] = None
     remaining_generations: int = 5
+    unavailable_items: List[UnavailableItem] = Field(default_factory=list)
+    validation: Optional[QuantityValidation] = None
 

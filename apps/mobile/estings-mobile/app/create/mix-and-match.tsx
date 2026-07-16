@@ -1,21 +1,18 @@
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { ArrowLeft, ArrowRight, Check, LoaderCircle, Minus, PackageOpen, Plus, RotateCcw, Search, ShoppingCart, Shuffle, Sparkles, X } from 'lucide-react-native';
+import { ArrowRight, Check, LoaderCircle, Minus, PackageOpen, Plus, RotateCcw, Search, ShoppingCart, Shuffle, Sparkles, X } from 'lucide-react-native';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   type ImageSourcePropType,
   Modal,
-  NativeScrollEvent,
-  NativeSyntheticEvent,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
-  useWindowDimensions,
 } from 'react-native';
 import Animated, {
   Easing,
@@ -26,8 +23,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { AppBrandHeader, getAppBrandHeaderLayout } from '@/components/app-brand-header';
-import { FloatingProductSearch } from '@/components/floating-product-search';
+import { AppPageHeader } from '@/components/app-page-header';
 import { GreetingCardComposer } from '@/components/greeting-card-composer';
 import { ProductAddOnSelector } from '@/components/product-add-on-selector';
 import { formatPhp, type Product } from '@/constants/shop';
@@ -43,7 +39,7 @@ import {
   type CustomizationProduct,
   type GenerationResult,
 } from '@/services/customization-api';
-import { addAiArrangementToCart } from '@/services/guest-cart';
+import { addAiArrangementToCart } from '@/services/cart-storage';
 import { shopApi } from '@/services/shop-api';
 
 const imageNotFound = require('@/assets/images/default-img/ImageNotFound.webp');
@@ -52,6 +48,7 @@ const arrangementBox = require('@/assets/images/make-it-personal/arrangement_box
 const arrangementVase = require('@/assets/images/make-it-personal/arrangement_vase.webp');
 const pollinationsCredit = require('@/assets/images/make-it-personal/pollinations-ai.png');
 const generationProblemMessage = 'There is a problem generating this arrangement. Please try again.';
+const SCREEN_SIDE = 20;
 
 function formatGenerationError(message?: string | null, fallback = generationProblemMessage) {
   const trimmedMessage = message?.trim();
@@ -123,12 +120,8 @@ const SEARCH_THRESHOLDS: Record<'container' | 'filler' | 'standard', number> = {
 
 export default function MixAndMatchScreen() {
   const insets = useSafeAreaInsets();
-  const { height, width } = useWindowDimensions();
   const scrollRef = useRef<ScrollView>(null);
-  const headerLayout = getAppBrandHeaderLayout(width, height, insets.top);
-  const side = Math.min(Math.max(width * 0.062, 20), 30);
 
-  const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [products, setProducts] = useState<CustomizationProduct[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -146,7 +139,6 @@ export default function MixAndMatchScreen() {
   const [isLoadingAddOns, setIsLoadingAddOns] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(false);
   const [selectedAddOnIds, setSelectedAddOnIds] = useState<ReadonlySet<string>>(() => new Set());
-  const [isHeaderSolid, setIsHeaderSolid] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedArrangement, setSelectedArrangement] = useState<ArrangementType>('bouquet');
   const [flowerQuantities, setFlowerQuantities] = useState<Record<string, number>>({});
@@ -240,11 +232,6 @@ export default function MixAndMatchScreen() {
   const visibleFlowerProducts = useMemo(() => filterProductsForSearch(flowerProducts, searchQuery), [flowerProducts, searchQuery]);
   const visibleFillerProducts = useMemo(() => filterProductsForSearch(fillerProducts, searchQuery), [fillerProducts, searchQuery]);
   const visibleStepProducts = useMemo(() => filterProductsForSearch(stepProducts, searchQuery), [searchQuery, stepProducts]);
-
-  const handleScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const shouldShowSolidHeader = event.nativeEvent.contentOffset.y > 12;
-    setIsHeaderSolid((current) => (current === shouldShowSolidHeader ? current : shouldShowSolidHeader));
-  };
 
   useEffect(() => {
     let isActive = true;
@@ -479,7 +466,8 @@ export default function MixAndMatchScreen() {
   }
 
   async function handleAddToCart() {
-    if (!result || addingToCart) {
+    const confirmedContainer = selectedContainer;
+    if (!result || addingToCart || !confirmedContainer) {
       return;
     }
 
@@ -498,6 +486,27 @@ export default function MixAndMatchScreen() {
 
       await addAiArrangementToCart({
         addOns: selectedAddOns,
+        arrangementDetails: {
+          arrangementId: result.arrangement_id,
+          basePriceCents: Math.round(totalPricePesos * 100),
+          prompt: buildPrompt({
+            accessory: selectedAccessory,
+            arrangement: selectedArrangementOption,
+            container: confirmedContainer,
+            fillers: selectedFillers,
+            flowers: selectedFlowers,
+          }),
+          recipeItems: result.price_breakdown?.items?.map((item) => ({
+            imageUrl: item.image_url ?? undefined,
+            materialType: item.material_type,
+            productId: item.product_id,
+            productName: item.product_name,
+            quantity: item.quantity,
+            subtotalCents: Math.round(item.subtotal * 100),
+            unitPriceCents: Math.round(item.unit_price * 100),
+          })) ?? [],
+          source: 'mix-and-match',
+        },
         arrangementId: result.arrangement_id,
         cardMessage,
         description: `${selectedArrangementOption.label}. Contains: ${breakdownNames}.`,
@@ -578,12 +587,7 @@ export default function MixAndMatchScreen() {
 
   return (
     <View style={styles.screen}>
-      <AppBrandHeader
-        absolute
-        onSearchPress={() => setIsSearchOpen(true)}
-        showSearchAction
-        style={isHeaderSolid && styles.floatingHeaderSolid}
-      />
+      <AppPageHeader title="Mix and Match" />
 
       <ScrollView
         ref={scrollRef}
@@ -592,19 +596,12 @@ export default function MixAndMatchScreen() {
           styles.content,
           {
             paddingBottom: insets.bottom + (showResult ? 108 : 156),
-            paddingHorizontal: side,
-            paddingTop: headerLayout.top + headerLayout.height + 24,
+            paddingHorizontal: SCREEN_SIDE,
+            paddingTop: 24,
           },
         ]}
         contentInsetAdjustmentBehavior="never"
-        onScroll={handleScroll}
-        scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}>
-        <Pressable accessibilityLabel="Back to Create" accessibilityRole="button" onPress={() => router.back()} style={styles.backLink}>
-          <ArrowLeft color="#6A706B" size={18} strokeWidth={2.4} />
-          <Text style={styles.backLinkText}>Back to Create</Text>
-        </Pressable>
-
         {showResult && result ? (
           <ResultView
             addOns={addOns}
@@ -827,7 +824,7 @@ export default function MixAndMatchScreen() {
       </ScrollView>
 
       {!showResult ? (
-        <View style={[styles.floatingStepFooter, { paddingBottom: insets.bottom + 12, paddingHorizontal: side }]}>
+        <View style={[styles.floatingStepFooter, { paddingBottom: insets.bottom + 12, paddingHorizontal: SCREEN_SIDE }]}>
           {stepFooter}
         </View>
       ) : null}
@@ -845,7 +842,6 @@ export default function MixAndMatchScreen() {
         remainingStems={selectedArrangementOption.maxStems - (selectedStemCount - (flowerSheetProduct ? flowerQuantities[flowerSheetProduct.id] ?? 0 : 0))}
       />
       {isGenerating ? <GenerationOverlay fact={FLOWER_FACTS[factIdx]} progress={progress} /> : null}
-      <FloatingProductSearch onClose={() => setIsSearchOpen(false)} visible={isSearchOpen} />
     </View>
   );
 }
@@ -1247,8 +1243,17 @@ function ResultView({
             {result.price_breakdown?.items?.map((item) => (
               <View key={`${item.product_id}-${item.product_name}`} style={styles.breakdownRow}>
                 <View style={styles.breakdownLabelGroup}>
-                  <Text numberOfLines={1} style={styles.breakdownLabel}>{item.product_name}</Text>
-                  {item.quantity > 1 ? <Text style={styles.breakdownQty}>x {item.quantity}</Text> : null}
+                  {item.image_url ? (
+                    <Image contentFit="cover" source={{ uri: item.image_url }} style={styles.breakdownImage} />
+                  ) : (
+                    <View style={styles.breakdownImageFallback}>
+                      <PackageOpen color={theme.colors.primary} size={17} strokeWidth={1.9} />
+                    </View>
+                  )}
+                  <View style={styles.breakdownItemCopy}>
+                    <Text numberOfLines={1} style={styles.breakdownLabel}>{item.product_name}</Text>
+                    <Text style={styles.breakdownMeta}>{item.material_type} · {item.quantity} used</Text>
+                  </View>
                 </View>
                 <Text style={styles.breakdownValue}>{formatPhp(Math.round(item.subtotal * 100))}</Text>
               </View>
@@ -1445,25 +1450,6 @@ const styles = StyleSheet.create({
   },
   content: {
     gap: theme.spacing.lg,
-  },
-  floatingHeaderSolid: {
-    backgroundColor: 'rgba(255, 255, 255, 0.96)',
-    borderBottomColor: softOutline,
-    borderBottomWidth: 1,
-    boxShadow: '0 10px 26px rgba(31, 42, 36, 0.08)',
-  },
-  backLink: {
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    flexDirection: 'row',
-    gap: 7,
-    minHeight: 44,
-    paddingRight: theme.spacing.md,
-  },
-  backLinkText: {
-    color: '#6A706B',
-    fontFamily: Fonts.sansSemiBold,
-    fontSize: 14,
   },
   heroBlock: {
     alignItems: 'center',
@@ -2349,6 +2335,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
   },
+  breakdownImage: { backgroundColor: '#F3F5F3', borderRadius: 9, height: 44, width: 44 },
+  breakdownImageFallback: { alignItems: 'center', backgroundColor: theme.colors.greenSoft, borderRadius: 9, height: 44, justifyContent: 'center', width: 44 },
+  breakdownItemCopy: { flex: 1, gap: 3 },
+  breakdownMeta: { color: theme.colors.textMuted, fontFamily: Fonts.sans, fontSize: 10, textTransform: 'capitalize' },
   breakdownLabel: {
     color: '#64748B',
     flexShrink: 1,

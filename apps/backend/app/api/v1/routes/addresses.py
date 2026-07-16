@@ -1,12 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
+import requests
 import uuid
 
 from app.core.dependencies import get_db, get_current_user
 from app.models import User, Address
 from pydantic import BaseModel
-from app.services.geocoding_service import geocode_address
+from app.core.limiter import limiter
+from app.services.geocoding_service import geocode_address, reverse_geocode
 
 router = APIRouter(prefix="/addresses", tags=["Addresses"])
 
@@ -145,6 +147,22 @@ def geocode(
     del db, current_user
     results = geocode_address(q)
     return {"results": results}
+
+
+@router.get("/reverse-geocode", response_model=dict)
+@limiter.limit("30/minute")
+def reverse_geocode_pin(
+    request: Request,
+    lat: float = Query(ge=4.2, le=21.5),
+    lng: float = Query(ge=116, le=127),
+):
+    del request
+    try:
+        return reverse_geocode(lat, lng)
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail="Address provider is temporarily unavailable.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.delete("/{address_id}", response_model=dict)
