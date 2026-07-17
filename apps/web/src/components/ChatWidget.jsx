@@ -3,13 +3,19 @@ import { useAuth } from '../context/AuthContext.jsx'
 import { useTheme } from '../context/ThemeContext.jsx'
 import { api } from '../services/api.js'
 import { chatWsUrl } from '../config/api.js'
+import { FAQ_UPDATED_EVENT, loadFaqCategories } from '../utils/faqContent.js'
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
 
 import estingsLogo from '../assets/EstingsLogo.svg'
 
-const QUICK_REPLIES = ["What flowers do you offer?", "How does delivery work?", "Can I customize a bouquet?", "What are your store hours?", "Do you deliver same day?"]
+const FALLBACK_QUICK_REPLIES = ["What flowers do you offer?", "How does delivery work?", "Can I customize a bouquet?", "What are your store hours?", "Do you deliver same day?"]
+const FALLBACK_FAQ_CATEGORIES = [{
+  id: "fallback-popular",
+  category: "Popular questions",
+  items: FALLBACK_QUICK_REPLIES.map((q, index) => ({ id: `fallback-${index}`, q, a: "" })),
+}]
 
 // Rotating reassurance messages shown while an image is uploading/sending.
 const SENDING_MESSAGES = [
@@ -26,18 +32,10 @@ const CHAT_SESSION_KEY = 'bloomora_chat_session'
 
 // 🚀 UPGRADED: Bulletproof Context Bubble
 function ProductContextPreview({ contextId, products, isDark }) {
-  if (!contextId) return null; // Only hide if there is literally no ID attached
+  if (!contextId || String(contextId).startsWith("support-automation:")) return null;
   
   const product = (products || []).find(p => String(p.id) === String(contextId));
-  
-  if (!product) {
-    return (
-      <div className="flex items-center gap-2.5 p-2 mb-1.5 rounded-lg border w-fit opacity-70" style={{ background: isDark ? "rgba(74,222,128,0.05)" : "#f9fafb", borderColor: isDark ? "rgba(74,222,128,0.2)" : "#e5e7eb" }}>
-        <div className="w-8 h-8 rounded bg-gray-200 animate-pulse dark:bg-gray-700" />
-        <p className="text-xs font-bold text-gray-500 m-0 pr-2 dark:text-gray-400">Loading product...</p>
-      </div>
-    );
-  }
+  if (!product) return null;
 
   return (
     <a href={`/product/${product.id}`} target="_blank" rel="noopener noreferrer"
@@ -101,6 +99,22 @@ export default function ChatWidget() {
   const [attaching, setAttaching] = useState(false)        // brief decode while a freshly-picked photo loads
   const [sendingMsgIdx, setSendingMsgIdx] = useState(0)
   const [allProducts, setAllProducts] = useState([])
+  const [faqCategories, setFaqCategories] = useState(FALLBACK_FAQ_CATEGORIES)
+  const [selectedFaqCategoryId, setSelectedFaqCategoryId] = useState(null)
+
+  const refreshFaqQuickReplies = useCallback(async () => {
+    try {
+      const categories = await loadFaqCategories(api)
+      if (categories !== null) {
+        setFaqCategories(categories)
+        setSelectedFaqCategoryId(currentId =>
+          currentId && categories.some(category => category.id === currentId) ? currentId : null
+        )
+      }
+    } catch (error) {
+      console.error("Failed to refresh chat FAQ questions", error)
+    }
+  }, [])
 
   // True while an image is uploading or the message is being sent.
   const busy = uploadingImg || sending
@@ -151,6 +165,36 @@ export default function ChatWidget() {
       setAllProducts(items);
     }).catch(console.error);
   }, []);
+
+  useEffect(() => {
+    refreshFaqQuickReplies()
+    const interval = window.setInterval(refreshFaqQuickReplies, 60_000)
+    const onFocus = () => refreshFaqQuickReplies()
+    const onFaqUpdated = event => {
+      const categories = event?.detail?.faqs
+      if (Array.isArray(categories)) {
+        setFaqCategories(categories)
+        setSelectedFaqCategoryId(currentId =>
+          currentId && categories.some(category => category.id === currentId) ? currentId : null
+        )
+      }
+      else refreshFaqQuickReplies()
+    }
+    window.addEventListener("focus", onFocus)
+    window.addEventListener(FAQ_UPDATED_EVENT, onFaqUpdated)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener("focus", onFocus)
+      window.removeEventListener(FAQ_UPDATED_EVENT, onFaqUpdated)
+    }
+  }, [refreshFaqQuickReplies])
+
+  useEffect(() => {
+    if (open) {
+      setSelectedFaqCategoryId(null)
+      refreshFaqQuickReplies()
+    }
+  }, [open, refreshFaqQuickReplies])
 
   // 🚀 SESSION SURVIVAL: Save to storage whenever it updates
   useEffect(() => {
@@ -365,6 +409,11 @@ export default function ChatWidget() {
     quickRepliesRef.current?.scrollBy({ left: direction * 180, behavior: "smooth" })
   }
 
+  const selectedFaqCategory = faqCategories.find(category => category.id === selectedFaqCategoryId) || null
+  const quickReplyOptions = selectedFaqCategory
+    ? (selectedFaqCategory.items || []).map(item => ({ id: item.id, label: item.q, type: "question" }))
+    : faqCategories.map(category => ({ id: category.id, label: category.category, type: "category" }))
+
   const { w, h } = SIZES[size]
   const canSend = (input.trim() || attachedImage || attachedQuote || attachedProduct) && user && sessionId && !busy
 
@@ -526,11 +575,26 @@ export default function ChatWidget() {
               </div>
             )}
 
-            {user && (
+            {user && faqCategories.length > 0 && (
               <div className="px-3 py-2 border-t" style={{ backgroundColor: inputAreaBg, borderColor: inputBdr }}>
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>Quick questions</p>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {selectedFaqCategory && (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedFaqCategoryId(null)}
+                        className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider border-none bg-transparent p-0 cursor-pointer"
+                        style={{ color: isDark ? "#4ade80" : G }}
+                        aria-label="Back to FAQ categories"
+                      >
+                        <span aria-hidden="true">‹</span> Categories
+                      </button>
+                    )}
+                    <p className="text-[10px] font-bold uppercase tracking-wider truncate" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>
+                      {selectedFaqCategory ? selectedFaqCategory.category : "FAQ categories"}
+                    </p>
+                  </div>
+                  {quickReplyOptions.length > 1 && <div className="flex items-center gap-1">
                     {[-1, 1].map(direction => (
                       <button
                         key={direction}
@@ -538,20 +602,27 @@ export default function ChatWidget() {
                         onClick={() => scrollQuickReplies(direction)}
                         className="w-6 h-6 rounded-full border flex items-center justify-center text-xs font-bold transition hover:shadow-sm"
                         style={{ borderColor: qrBdr, backgroundColor: qrBg, color: qrText }}
-                        aria-label={direction < 0 ? "Scroll questions left" : "Scroll questions right"}
+                        aria-label={direction < 0 ? "Scroll options left" : "Scroll options right"}
                       >
                         {direction < 0 ? "<" : ">"}
                       </button>
                     ))}
-                  </div>
+                  </div>}
                 </div>
                 <div ref={quickRepliesRef} className="flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: "thin" }}>
-                  {QUICK_REPLIES.map(question => (
+                  {selectedFaqCategory && quickReplyOptions.length === 0 && (
+                    <p className="text-xs py-1" style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>
+                      No questions have been added to this category yet.
+                    </p>
+                  )}
+                  {quickReplyOptions.map(option => (
                     <button
-                      key={question}
+                      key={`${option.type}-${option.id}`}
                       type="button"
-                      onClick={() => handleQuickReply(question)}
-                      disabled={!sessionId || busy || sending}
+                      onClick={() => option.type === "category"
+                        ? setSelectedFaqCategoryId(option.id)
+                        : handleQuickReply(option.label)}
+                      disabled={option.type === "question" && (!sessionId || busy || sending)}
                       className="flex-shrink-0 px-3 py-2 rounded-full text-xs font-semibold border transition-all disabled:opacity-45 disabled:cursor-not-allowed hover:shadow-sm"
                       style={{
                         borderColor: qrBdr,
@@ -559,7 +630,7 @@ export default function ChatWidget() {
                         color: qrText,
                       }}
                     >
-                      {question}
+                      {option.label}{option.type === "category" ? " ›" : ""}
                     </button>
                   ))}
                 </div>

@@ -123,8 +123,8 @@ export async function getHelpDocument(slug: 'terms' | 'privacy' | 'ordering') {
 }
 
 export async function getFaqCategories() {
-  const settings = await getHelpSettings();
-  return normalizeFaqs(settings[FAQ_KEY], fallbackFaqs);
+  const categories = await apiFetch<FaqCategory[]>('/faqs');
+  return normalizeFaqs(categories, fallbackFaqs);
 }
 
 function normalizeDocument(value: unknown, fallback: HelpDocument): HelpDocument {

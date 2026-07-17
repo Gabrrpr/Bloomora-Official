@@ -62,6 +62,23 @@ class SupportAutomationTests(unittest.TestCase):
             "Sunday funeral deliveries require confirmation from the selected branch.",
         )
 
+    def test_exact_short_cms_question_receives_its_configured_answer(self):
+        settings = {
+            "__faq__": [{
+                "category": "Testing",
+                "items": [
+                    {"q": "Tester", "a": "Uppercase test answer."},
+                    {"q": "tester", "a": "Lowercase test answer."},
+                ],
+            }],
+        }
+
+        uppercase_reply = get_automated_support_reply("Tester", settings)
+        lowercase_reply = get_automated_support_reply("tester", settings)
+
+        self.assertEqual(uppercase_reply.message, "Uppercase test answer.")
+        self.assertEqual(lowercase_reply.message, "Lowercase test answer.")
+
     def test_human_support_request_is_not_automated(self):
         self.assertIsNone(get_automated_support_reply("Please let me talk to a human agent"))
 

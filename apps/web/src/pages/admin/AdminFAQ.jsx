@@ -2,26 +2,12 @@ import { useState, useEffect, useRef, useMemo } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import SaveToast from "../../components/SaveToast"
 import { api } from "../../services/api"
+import { FAQ_ADMIN_PATH, FAQ_UPDATED_EVENT, loadFaqCategories } from "../../utils/faqContent"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
 
 const STORAGE_KEY = "bloomora:admin:faq"
-const SETTINGS_PATH = "/products/admin/settings/homepage"
-const FAQ_KEY = "__faq__"
-
-function normalizeSettingsBlob(settings) {
-  if (typeof settings === "string") {
-    try {
-      const parsed = JSON.parse(settings)
-      return parsed && typeof parsed === "object" ? parsed : {}
-    } catch {
-      return {}
-    }
-  }
-  return settings && typeof settings === "object" ? settings : {}
-}
-
 // ─── Default seed (matches HomeFAQ.jsx exactly) ──────────────────────────────
 const DEFAULT_FAQS = [
   {
@@ -290,19 +276,15 @@ export default function AdminFAQ() {
   const [dirty, setDirty]             = useState(false)
   const [saved, setSaved]             = useState(false)
   const [editingCatName, setEditingCatName] = useState(false)
-  const [settingsBlob, setSettingsBlob] = useState({})
   // Drives the one-time entrance animation; removed after it plays so it never replays.
   const [entered, setEntered] = useState(false)
 
-  // Load saved FAQs from the shared settings blob, falling back to legacy local storage.
+  // Load saved FAQs from the shared FAQ API, falling back to legacy local storage.
   useEffect(() => {
     let cancelled = false
-    api.get(SETTINGS_PATH)
-      .then((settings) => {
+    loadFaqCategories(api)
+      .then((savedFaqs) => {
         if (cancelled) return
-        const nextSettings = normalizeSettingsBlob(settings)
-        setSettingsBlob(nextSettings)
-        const savedFaqs = nextSettings[FAQ_KEY]
         if (Array.isArray(savedFaqs) && savedFaqs.length > 0) {
           setFaqs(savedFaqs)
           return
@@ -415,10 +397,10 @@ export default function AdminFAQ() {
 
   const handleSave = async () => {
     try {
-      const nextSettings = { ...settingsBlob, [FAQ_KEY]: faqs }
-      await api.post(SETTINGS_PATH, nextSettings)
-      setSettingsBlob(nextSettings)
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(faqs))
+      const savedFaqs = await api.put(FAQ_ADMIN_PATH, faqs)
+      setFaqs(savedFaqs)
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(savedFaqs))
+      window.dispatchEvent(new CustomEvent(FAQ_UPDATED_EVENT, { detail: { faqs: savedFaqs } }))
       setDirty(false)
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)

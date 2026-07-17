@@ -9,6 +9,7 @@ import lalamoveLogo from "../../assets/shipping/Lalamove-Logo.webp"
 import grabExpressLogo from "../../assets/shipping/grabexpress.webp"
 import lbcLogo from "../../assets/shipping/493-4939965_lbc-express-logo-png-removebg-preview.webp"
 import jtExpressLogo from "../../assets/shipping/JT-Express-Logo.webp"
+import OrderingFulfillmentModal from "../../components/OrderingFulfillmentModal.jsx"
 
 const G = "#2E8B34"
 const DG = "#0C573E"
@@ -117,6 +118,7 @@ export default function Checkout({ onNavigate }) {
 
   const [showManualModal, setShowManualModal] = useState(false)
   const [mapFullscreenOpen, setMapFullscreenOpen] = useState(false)
+  const [orderingPolicyOpen, setOrderingPolicyOpen] = useState(false)
   const [saveAddressToBook, setSaveAddressToBook] = useState(false)
   const [manualForm, setManualForm] = useState({
     recipient_name: "",
@@ -1202,6 +1204,16 @@ export default function Checkout({ onNavigate }) {
                   </>
                 )}
               </button>
+              <p className="mt-3 text-center text-[11px] leading-relaxed text-gray-500">
+                By continuing to PayMongo, you acknowledge our{" "}
+                <button
+                  type="button"
+                  onClick={() => setOrderingPolicyOpen(true)}
+                  className="font-semibold text-[#2E8B34] underline underline-offset-2 hover:text-[#0C573E]"
+                >
+                  Ordering &amp; Fulfillment Policy
+                </button>.
+              </p>
               <p className="flex items-center justify-center gap-1.5 text-[11px] text-gray-400 mt-3">
                 <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                 Secure payment powered by PayMongo
@@ -1384,6 +1396,10 @@ export default function Checkout({ onNavigate }) {
           </div>
         </div>
       )}
+      <OrderingFulfillmentModal
+        open={orderingPolicyOpen}
+        onClose={() => setOrderingPolicyOpen(false)}
+      />
     </div>
   )
 }

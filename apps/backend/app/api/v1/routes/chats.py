@@ -8,6 +8,7 @@ from app.core.config import settings
 from supabase import create_client, Client
 import os
 import shutil
+import json
 
 from app.core.dependencies import get_db, get_current_user
 from app.core.connection_manager import manager
@@ -15,6 +16,7 @@ from app.core.security import decode_token
 from app.models import User, RoleEnum, Chat, Order
 from app.schemas.chat_schemas import MessageCreate, MessageOut, ConversationList, ConversationOut
 from app.services.support_automation import AutomatedSupportReply, get_automated_support_reply
+from app.services.faq_content import load_faq_categories
 
 router = APIRouter(prefix="/chats", tags=["Chats"])
 
@@ -82,7 +84,15 @@ def _load_help_settings(db: Session):
         row = db.execute(
             text("SELECT setting_value FROM store_settings WHERE setting_key = 'homepage_layout'")
         ).fetchone()
-        return row[0] if row and row[0] else {}
+        raw = row[0] if row and row[0] else {}
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except (TypeError, ValueError):
+                raw = {}
+        help_settings = raw if isinstance(raw, dict) else {}
+        help_settings["__faq__"] = load_faq_categories(db)
+        return help_settings
     except Exception as exc:
         print(f"Support help content lookup error: {exc}")
         db.rollback()

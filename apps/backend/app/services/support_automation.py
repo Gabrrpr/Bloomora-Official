@@ -118,12 +118,24 @@ def _match_help_center_content(message: str, help_settings: Any) -> AutomatedSup
     if not settings:
         return None
 
+    articles = list(_iter_help_articles(settings))
+    normalized_message = " ".join(message.split())
+
+    # Quick-question buttons send the CMS question verbatim. Match that first so
+    # even short questions such as "Delivery?" receive their configured answer.
+    for topic, question, answer in articles:
+        if normalized_message == " ".join(question.split()):
+            return AutomatedSupportReply(message=answer, topic=topic)
+    for topic, question, answer in articles:
+        if normalized_message.casefold() == " ".join(question.split()).casefold():
+            return AutomatedSupportReply(message=answer, topic=topic)
+
     query_tokens = _meaningful_tokens(message)
     if len(query_tokens) < 2:
         return None
 
     best: tuple[int, str, str] | None = None
-    for topic, question, answer in _iter_help_articles(settings):
+    for topic, question, answer in articles:
         article_tokens = _meaningful_tokens(question)
         overlap = len(query_tokens & article_tokens)
         if overlap < 2:

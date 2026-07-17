@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react"
 import { useTheme } from "../context/ThemeContext"
+import { api } from "../services/api"
+import { FAQ_UPDATED_EVENT, loadFaqCategories } from "../utils/faqContent"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -137,6 +139,37 @@ export default function HomeFAQ({ onNavigate }) {
   const [visible, setVisible]     = useState(false)
   const [activeTab, setActiveTab] = useState(0)
   const [openIdx, setOpenIdx]     = useState(0)
+  const [faqs, setFaqs]           = useState(FAQS)
+
+  useEffect(() => {
+    const refreshFaqs = async () => {
+      try {
+        const categories = await loadFaqCategories(api)
+        if (categories !== null) setFaqs(categories)
+      } catch (error) {
+        console.error("Failed to refresh homepage FAQs", error)
+      }
+    }
+    refreshFaqs()
+    const interval = window.setInterval(refreshFaqs, 60_000)
+    const onFocus = () => refreshFaqs()
+    const onFaqUpdated = event => {
+      const categories = event?.detail?.faqs
+      if (Array.isArray(categories)) setFaqs(categories)
+      else refreshFaqs()
+    }
+    window.addEventListener("focus", onFocus)
+    window.addEventListener(FAQ_UPDATED_EVENT, onFaqUpdated)
+    return () => {
+      window.clearInterval(interval)
+      window.removeEventListener("focus", onFocus)
+      window.removeEventListener(FAQ_UPDATED_EVENT, onFaqUpdated)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab >= faqs.length) setActiveTab(0)
+  }, [activeTab, faqs.length])
 
   useEffect(() => {
     const obs = new IntersectionObserver(
@@ -184,7 +217,7 @@ export default function HomeFAQ({ onNavigate }) {
   const ctaBtnGlow   = "0 6px 18px rgba(0,0,0,0.18)"
   const ctaBtnIconBg = "rgba(46,139,52,0.14)"
 
-  const active = FAQS[activeTab]
+  const active = faqs[activeTab] || faqs[0] || { category: "FAQ", items: [] }
 
   return (
     <section className="py-[clamp(56px,7vw,96px)] border-b" style={{ backgroundColor:sectionBg, borderColor:sectionBdr }}>
@@ -205,7 +238,7 @@ export default function HomeFAQ({ onNavigate }) {
         <div className="flex justify-center mb-10">
           <div className="grid grid-cols-2 sm:inline-flex w-full max-w-[320px] sm:w-auto sm:max-w-none gap-1 p-1 rounded-2xl sm:rounded-full justify-center"
             style={{ backgroundColor:tabTrayBg, border:`1px solid ${tabTrayBdr}` }}>
-            {FAQS.map((c, i) => {
+            {faqs.map((c, i) => {
               const isActive = i === activeTab
               return (
                 <button key={c.category} onClick={() => setActiveTab(i)}
