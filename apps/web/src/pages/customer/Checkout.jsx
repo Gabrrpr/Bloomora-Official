@@ -27,6 +27,11 @@ const PICKUP_BRANCHES = {
   },
 }
 
+const DEFAULT_DELIVERY_PINS = {
+  Manila: { lat: 14.5995, lng: 120.9842, label: "Search for a Metro Manila delivery address" },
+  Pampanga: { lat: 15.0343, lng: 120.6844, label: "Search for a Pampanga delivery address" },
+}
+
 const SHIPPING_METHOD_LOGOS = {
   move_it: moveItLogo,
   lalamove: lalamoveLogo,
@@ -135,6 +140,10 @@ export default function Checkout({ onNavigate }) {
   const [deliveryPin, setDeliveryPin] = useState(null)
   const [geocoding, setGeocoding] = useState(false)
   const [geocodeError, setGeocodeError] = useState("")
+  const [addressSearch, setAddressSearch] = useState("")
+  const [addressSearchResults, setAddressSearchResults] = useState([])
+  const [addressSearching, setAddressSearching] = useState(false)
+  const [addressSearchError, setAddressSearchError] = useState("")
 
   useEffect(() => {
     api.getCheckoutSettings()
@@ -397,6 +406,7 @@ export default function Checkout({ onNavigate }) {
       }
     : null
   const activeDeliveryPin = deliveryPin || savedAddressPin
+  const mapPreviewPin = activeDeliveryPin || DEFAULT_DELIVERY_PINS[selectedStoreBranch] || DEFAULT_DELIVERY_PINS.Manila
 
   const addressBranch = (fulfillmentMethod === "pickup")
     ? pickupBranchName
@@ -446,7 +456,7 @@ export default function Checkout({ onNavigate }) {
         precision: match.type || "geocoded",
       }
       setDeliveryPin(nextPin)
-      if (recipientType === "someone_else") {
+      if (recipientType !== "myself") {
         setManualForm(current => ({
           ...current,
           latitude: nextPin.lat,
@@ -460,6 +470,135 @@ export default function Checkout({ onNavigate }) {
       setGeocoding(false)
     }
   }
+
+  const searchOpenStreetMapAddress = async () => {
+    const query = addressSearch.trim()
+    if (query.length < 5) {
+      setAddressSearchError("Enter at least 5 characters to search for an address.")
+      setAddressSearchResults([])
+      return
+    }
+    setAddressSearching(true)
+    setAddressSearchError("")
+    try {
+      const response = await api.geocodeAddress(query)
+      const results = Array.isArray(response?.results) ? response.results : []
+      setAddressSearchResults(results)
+      if (results.length === 0) {
+        setAddressSearchError("No OpenStreetMap addresses matched your search. Add a street, barangay, or city and try again.")
+      }
+    } catch (error) {
+      setAddressSearchResults([])
+      setAddressSearchError(error.message || "OpenStreetMap address search is temporarily unavailable.")
+    } finally {
+      setAddressSearching(false)
+    }
+  }
+
+  const selectOpenStreetMapAddress = (result, { populateForm = true } = {}) => {
+    const address = result?.address || {}
+    const streetName = address.road || address.pedestrian || address.footway || address.path || ""
+    const street = [address.house_number, streetName].filter(Boolean).join(" ")
+      || address.building
+      || address.amenity
+      || String(result?.label || "").split(",")[0].trim()
+    const barangay = address.suburb
+      || address.quarter
+      || address.neighbourhood
+      || address.village
+      || address.city_district
+      || ""
+    const city = address.city
+      || address.town
+      || address.municipality
+      || address.city_district
+      || address.county
+      || ""
+    const province = address.state || address.province || address.region || ""
+    const latitude = Number(result?.lat)
+    const longitude = Number(result?.lng)
+
+    if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+      setDeliveryPin({
+        lat: latitude,
+        lng: longitude,
+        label: result?.label || addressSearch,
+        precision: result?.type || "openstreetmap_search",
+      })
+      setGeocodeError("")
+    }
+
+    if (populateForm) {
+      setManualForm(current => ({
+        ...current,
+        street,
+        barangay,
+        city,
+        province,
+        zip: address.postcode || "",
+        latitude: Number.isFinite(latitude) ? latitude : null,
+        longitude: Number.isFinite(longitude) ? longitude : null,
+        geocode_precision: result?.type || "openstreetmap_search",
+      }))
+    }
+    setAddressSearch(result?.label || addressSearch)
+    setAddressSearchResults([])
+    setAddressSearchError("")
+  }
+
+  const renderDeliveryPinSearch = () => (
+    <div className="absolute left-3 right-3 top-3 z-10">
+      <div className="rounded-xl border border-gray-200 bg-white/95 p-2 shadow-lg backdrop-blur-sm">
+        <div className="flex gap-2">
+          <div className="relative flex-1 min-w-0">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" /></svg>
+            <input
+              type="search"
+              value={addressSearch}
+              onChange={event => {
+                setAddressSearch(event.target.value)
+                setAddressSearchResults([])
+                setAddressSearchError("")
+              }}
+              onKeyDown={event => {
+                if (event.key === "Enter") {
+                  event.preventDefault()
+                  searchOpenStreetMapAddress()
+                }
+              }}
+              placeholder="Search delivery address"
+              aria-label="Search delivery address on map"
+              className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm focus:border-[#2E8B34] focus:outline-none focus:ring-1 focus:ring-[#2E8B34]"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={searchOpenStreetMapAddress}
+            disabled={addressSearching}
+            className="rounded-lg bg-[#2E8B34] px-3.5 py-2.5 text-xs font-bold text-white hover:bg-[#26772c] disabled:opacity-60"
+          >
+            {addressSearching ? "Searching..." : "Search"}
+          </button>
+        </div>
+        {addressSearchError && <p className="px-1 pt-2 text-xs text-red-500">{addressSearchError}</p>}
+        {addressSearchResults.length > 0 && (
+          <div className="mt-2 max-h-40 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200 bg-white">
+            {addressSearchResults.map((result, index) => (
+              <button
+                key={`${result.lat}-${result.lng}-${index}`}
+                type="button"
+                onClick={() => selectOpenStreetMapAddress(result, { populateForm: false })}
+                className="flex w-full items-start gap-2.5 px-3 py-2.5 text-left transition hover:bg-[#F0F7F1]"
+              >
+                <svg className="mt-0.5 h-4 w-4 flex-shrink-0 text-[#2E8B34]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 21s6-5.686 6-11a6 6 0 1 0-12 0c0 5.314 6 11 6 11Z" /><circle cx="12" cy="10" r="2" /></svg>
+                <span className="text-xs leading-relaxed text-gray-700">{result.label}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
 
   const useCurrentLocation = () => {
     if (!navigator.geolocation) {
@@ -477,7 +616,7 @@ export default function Checkout({ onNavigate }) {
           precision: `gps_${Math.round(position.coords.accuracy || 0)}m`,
         }
         setDeliveryPin(nextPin)
-        if (recipientType === "someone_else") {
+        if (recipientType !== "myself") {
           setManualForm(current => ({
             ...current,
             latitude: nextPin.lat,
@@ -520,7 +659,7 @@ export default function Checkout({ onNavigate }) {
     setError("");
 
     try {
-      if (saveAddressToBook && recipientType === "someone_else" && manualForm.recipient_name && manualForm.phone && manualForm.street) {
+      if (saveAddressToBook && recipientType !== "myself" && manualForm.recipient_name && manualForm.phone && manualForm.street) {
         try {
           await api.createAddress({
             label: `To: ${manualForm.recipient_name}`,
@@ -752,7 +891,7 @@ export default function Checkout({ onNavigate }) {
               <div className="flex gap-2 mb-4 p-1 bg-gray-100 rounded-lg">
                 <button
                   onClick={() => setRecipientType("myself")}
-                  className={`flex-1 py-2 text-xs font-semibold rounded-md transition ${recipientType === "myself" ? "bg-white text-[#2E8B34] shadow-sm" : "bg-transparent text-gray-500"}`}
+                  className={`flex-1 py-2 text-xs font-semibold rounded-md transition ${recipientType !== "someone_else" ? "bg-white text-[#2E8B34] shadow-sm" : "bg-transparent text-gray-500"}`}
                 >
                   For Myself
                 </button>
@@ -771,17 +910,20 @@ export default function Checkout({ onNavigate }) {
                   ) : addresses.length === 0 ? (
                     <div className="text-center py-4">
                       <p className="text-sm text-gray-500 mb-2">No saved addresses yet</p>
-                      <button
-                        onClick={() => {
-                          if (!user) {
-                            onNavigate("login"); 
-                          } else {
-                            onNavigate("profile");
-                          }
-                        }}
-                        className="w-full py-2 text-xs font-semibold text-gray-500 border border-dashed border-gray-300 rounded-lg hover:bg-gray-50 transition"
-                      >
-                        + Manage Addresses
+                       <button
+                         onClick={() => {
+                           if (!user) return onNavigate("login")
+                           setManualForm(current => ({
+                             ...current,
+                             recipient_name: current.recipient_name || fullName,
+                             phone: current.phone || customer?.phone_number || user?.phoneNumber || "",
+                           }))
+                           setRecipientType("manual_self")
+                           setShowManualModal(true)
+                         }}
+                         className="w-full py-2 text-xs font-semibold text-gray-500 border border-dashed border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                       >
+                         + Enter a Delivery Address
                       </button>
                     </div>
                   ) : (
@@ -814,10 +956,18 @@ export default function Checkout({ onNavigate }) {
                         </div>
                       ))}
                       <button
-                        onClick={() => onNavigate("profile")}
+                        onClick={() => {
+                          setManualForm(current => ({
+                            ...current,
+                            recipient_name: current.recipient_name || fullName,
+                            phone: current.phone || customer?.phone_number || user?.phoneNumber || "",
+                          }))
+                          setRecipientType("manual_self")
+                          setShowManualModal(true)
+                        }}
                         className="w-full py-2 text-xs font-semibold text-gray-500 border border-dashed border-gray-300 rounded-lg hover:bg-gray-50 transition"
                       >
-                        + Manage Addresses
+                        + Use a New Address
                       </button>
                     </div>
                   )}
@@ -847,7 +997,7 @@ export default function Checkout({ onNavigate }) {
                       onClick={() => setShowManualModal(true)}
                       className="w-full py-3 text-sm font-semibold border-2 border-dashed border-gray-300 rounded-lg hover:border-[#2E8B34] hover:bg-[#F0F7F1] transition text-gray-500"
                     >
-                      + Enter Recipient Details
+                      {recipientType === "manual_self" ? "+ Enter Delivery Address" : "+ Enter Recipient Details"}
                     </button>
                   )}
                 </div>
@@ -871,23 +1021,22 @@ export default function Checkout({ onNavigate }) {
                   </span>
                 </div>
 
-                {activeDeliveryPin && (
-                  <div className="relative rounded-xl overflow-hidden border border-gray-100 bg-gray-50 mb-3 h-48">
-                    <iframe
-                      title="Delivery pin map"
-                      src={makeMapUrl(activeDeliveryPin)}
-                      className="w-full h-full border-0"
-                      loading="lazy"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setMapFullscreenOpen(true)}
-                      className="absolute right-2 top-2 px-2.5 py-1.5 text-[11px] font-bold rounded-md bg-white/95 text-gray-700 border border-gray-200 shadow-sm hover:bg-[#F0F7F1] hover:text-[#2E8B34]"
-                    >
-                      Full screen
-                    </button>
-                  </div>
-                )}
+                <div className="relative rounded-xl border border-gray-100 bg-gray-50 mb-3 h-72">
+                  <iframe
+                    title="Delivery pin map"
+                    src={makeMapUrl(mapPreviewPin)}
+                    className="w-full h-full border-0 rounded-xl"
+                    loading="lazy"
+                  />
+                  {renderDeliveryPinSearch()}
+                  <button
+                    type="button"
+                    onClick={() => setMapFullscreenOpen(true)}
+                    className="absolute right-2 bottom-2 z-10 px-2.5 py-1.5 text-[11px] font-bold rounded-md bg-white/95 text-gray-700 border border-gray-200 shadow-sm hover:bg-[#F0F7F1] hover:text-[#2E8B34]"
+                  >
+                    Full screen
+                  </button>
+                </div>
 
                 <div className="flex flex-col sm:flex-row gap-2">
                   <button
@@ -1224,33 +1373,21 @@ export default function Checkout({ onNavigate }) {
       </div>
 
       {/* Map Preview Modal */}
-      {mapFullscreenOpen && activeDeliveryPin && (
+      {mapFullscreenOpen && (
         <div
-          className="fixed inset-0 z-[60] bg-black/75 p-3 sm:p-5 flex items-center justify-center overflow-hidden"
+          className="fixed inset-0 z-[60] overflow-y-auto bg-black/75"
           onClick={() => setMapFullscreenOpen(false)}
         >
-          <button
-            type="button"
-            onClick={() => setMapFullscreenOpen(false)}
-            className="fixed left-1/2 top-3 sm:top-5 -translate-x-1/2 h-11 px-4 rounded-full bg-white text-gray-800 border border-gray-200 shadow-xl hover:bg-gray-50 flex items-center justify-center gap-2 text-sm font-bold"
-            style={{ zIndex: 70 }}
-            aria-label="Close full screen map"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.2} d="M6 18 18 6M6 6l12 12" />
-            </svg>
-            Close map
-          </button>
-
-          <div
-            className="bg-white rounded-xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col"
-            style={{ height: "min(78dvh, 720px)", maxHeight: "calc(100dvh - 4.5rem)", marginTop: "2.75rem" }}
-            onClick={event => event.stopPropagation()}
-          >
+          <div className="flex min-h-full w-full items-center justify-center px-3 py-12 sm:px-5 sm:py-16">
+            <div
+              className="bg-white rounded-xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col"
+              style={{ height: "min(720px, calc(100dvh - 6rem))", maxHeight: "calc(100dvh - 6rem)" }}
+              onClick={event => event.stopPropagation()}
+            >
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <h3 className="text-sm font-bold text-gray-800">Delivery pin</h3>
-                <p className="text-xs text-gray-500 truncate">{activeDeliveryPin.label}</p>
+                <p className="text-xs text-gray-500 truncate">{activeDeliveryPin?.label || "Search for the exact delivery location"}</p>
               </div>
               <button
                 type="button"
@@ -1260,14 +1397,17 @@ export default function Checkout({ onNavigate }) {
                 Close
               </button>
             </div>
-            <iframe
-              title="Delivery pin full screen map"
-              src={makeMapUrl(activeDeliveryPin)}
-              className="w-full flex-1 border-0"
-              loading="lazy"
-            />
+            <div className="relative flex-1 min-h-0">
+              <iframe
+                title="Delivery pin full screen map"
+                src={makeMapUrl(mapPreviewPin)}
+                className="absolute inset-0 w-full h-full border-0"
+                loading="lazy"
+              />
+              {renderDeliveryPinSearch()}
+            </div>
             <div className="px-4 py-2 border-t border-gray-100 text-[11px] text-gray-500 flex items-center justify-between gap-3">
-              <span>Coordinates: {Number(activeDeliveryPin.lat).toFixed(6)}, {Number(activeDeliveryPin.lng).toFixed(6)}</span>
+              <span>{activeDeliveryPin ? `Coordinates: ${Number(activeDeliveryPin.lat).toFixed(6)}, ${Number(activeDeliveryPin.lng).toFixed(6)}` : "Search and select an address to set the delivery pin."}</span>
               <button
                 type="button"
                 onClick={() => setMapFullscreenOpen(false)}
@@ -1276,6 +1416,7 @@ export default function Checkout({ onNavigate }) {
                 Close map
               </button>
             </div>
+            </div>
           </div>
         </div>
       )}
@@ -1283,9 +1424,74 @@ export default function Checkout({ onNavigate }) {
       {showManualModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-xl w-full max-w-md p-5 sm:p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold text-gray-800 mb-1">Recipient Details</h3>
-            <p className="text-sm text-gray-400 mb-4">Enter the delivery details for the recipient.</p>
+            <h3 className="text-lg font-semibold text-gray-800 mb-1">{recipientType === "manual_self" ? "Delivery Address" : "Recipient Details"}</h3>
+            <p className="text-sm text-gray-400 mb-4">Search for the location, confirm its map pin, and complete any missing details.</p>
             <form onSubmit={(e) => { e.preventDefault(); setShowManualModal(false); }} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1.5">Search delivery address</label>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m21 21-4.35-4.35m1.35-5.65a7 7 0 1 1-14 0 7 7 0 0 1 14 0Z" /></svg>
+                    <input
+                      type="search"
+                      value={addressSearch}
+                      onChange={event => {
+                        setAddressSearch(event.target.value)
+                        setAddressSearchResults([])
+                        setAddressSearchError("")
+                      }}
+                      onKeyDown={event => {
+                        if (event.key === "Enter") {
+                          event.preventDefault()
+                          searchOpenStreetMapAddress()
+                        }
+                      }}
+                      placeholder="Search street, building, barangay, or city"
+                      className="w-full pl-9 pr-3.5 py-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#2E8B34] focus:border-[#2E8B34]"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={searchOpenStreetMapAddress}
+                    disabled={addressSearching}
+                    className="px-4 py-2.5 rounded-lg bg-[#2E8B34] text-white text-xs font-bold hover:bg-[#26772c] disabled:opacity-60"
+                  >
+                    {addressSearching ? "Searching..." : "Search"}
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-400 mt-1.5">Address data © OpenStreetMap contributors</p>
+                {addressSearchError && <p className="text-xs text-red-500 mt-2">{addressSearchError}</p>}
+                {addressSearchResults.length > 0 && (
+                  <div className="mt-2 rounded-lg border border-gray-200 divide-y divide-gray-100 overflow-hidden max-h-52 overflow-y-auto">
+                    {addressSearchResults.map((result, index) => (
+                      <button
+                        key={`${result.lat}-${result.lng}-${index}`}
+                        type="button"
+                        onClick={() => selectOpenStreetMapAddress(result)}
+                        className="w-full flex items-start gap-2.5 px-3 py-2.5 text-left bg-white hover:bg-[#F0F7F1] transition"
+                      >
+                        <svg className="w-4 h-4 mt-0.5 flex-shrink-0 text-[#2E8B34]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 21s6-5.686 6-11a6 6 0 1 0-12 0c0 5.314 6 11 6 11Z" /><circle cx="12" cy="10" r="2" /></svg>
+                        <span className="text-xs leading-relaxed text-gray-700">{result.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {manualForm.latitude && manualForm.longitude && (
+                  <>
+                    <div className="mt-2 flex items-center gap-2 rounded-lg bg-[#F0F7F1] px-3 py-2 text-xs font-semibold text-[#2E8B34]">
+                      <span className="w-2 h-2 rounded-full bg-[#2E8B34]" />
+                      Address and map pin fetched from OpenStreetMap
+                    </div>
+                    <div className="mt-2 h-44 rounded-lg overflow-hidden border border-gray-200 bg-gray-50">
+                      <iframe
+                        title="Searched delivery location"
+                        src={makeMapUrl({ lat: manualForm.latitude, lng: manualForm.longitude })}
+                        className="w-full h-full border-0"
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
               <div>
                 <label className="block text-xs font-medium text-gray-500 mb-1.5">Recipient Name *</label>
                 <input

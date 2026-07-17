@@ -59,18 +59,22 @@ export default function OrderingFulfillmentModal({ open, onClose }) {
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[80] flex items-center justify-center bg-black/55 p-3 sm:p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[80] overflow-y-auto bg-black/55 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-labelledby="ordering-policy-modal-title"
       onClick={event => { if (event.target === event.currentTarget) onClose?.() }}
     >
       <div
-        ref={dialogRef}
-        tabIndex={-1}
-        className="flex min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl outline-none"
-        style={{ height: "min(760px, calc(100dvh - 24px))", maxHeight: "calc(100dvh - 24px)" }}
+        className="flex min-h-full w-full items-center justify-center p-4 sm:p-6"
+        onClick={event => { if (event.target === event.currentTarget) onClose?.() }}
       >
+        <div
+          ref={dialogRef}
+          tabIndex={-1}
+          className="flex min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl outline-none"
+          style={{ height: "min(760px, calc(100dvh - 32px))", maxHeight: "calc(100dvh - 32px)" }}
+        >
         <div className="flex flex-shrink-0 items-start justify-between gap-4 border-b border-gray-100 bg-gradient-to-br from-green-50 to-white px-5 py-4 sm:px-6 sm:py-5">
           <div className="flex min-w-0 items-start gap-3">
             <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl bg-green-100">
@@ -101,6 +105,7 @@ export default function OrderingFulfillmentModal({ open, onClose }) {
 
         <div className="flex flex-shrink-0 justify-end border-t border-gray-100 bg-gray-50 px-5 py-3 sm:px-6 sm:py-4">
           <button type="button" onClick={onClose} className="rounded-xl bg-green-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-green-800">Close</button>
+        </div>
         </div>
       </div>
     </div>,
