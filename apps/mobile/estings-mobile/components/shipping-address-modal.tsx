@@ -135,6 +135,7 @@ export function ShippingAddressModal(props: ShippingAddressModalProps) {
   const [verificationToken, setVerificationToken] = useState<string | null>(null);
   const [addressDetails, setAddressDetails] = useState(props.addressDetails ?? '');
   const [isDefaultAddress, setIsDefaultAddress] = useState(props.isDefaultAddress);
+  const [isMapInteracting, setIsMapInteracting] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const phoneValidationMessage = getPhoneValidationMessage(props.phone, props.country);
   const phoneErrorToShow = props.phone.trim() ? phoneValidationMessage : null;
@@ -159,6 +160,7 @@ export function ShippingAddressModal(props: ShippingAddressModalProps) {
     setVerificationToken(null);
     setAddressDetails(props.addressDetails ?? '');
     setIsDefaultAddress(props.isDefaultAddress);
+    setIsMapInteracting(false);
   }, [props.addressDetails, props.initialAddress, props.isDefaultAddress, props.visible]);
 
   async function saveAddress() {
@@ -223,6 +225,7 @@ export function ShippingAddressModal(props: ShippingAddressModalProps) {
         <ScrollView
           contentContainerStyle={styles.addressForm}
           keyboardShouldPersistTaps="handled"
+          scrollEnabled={!isMapInteracting}
           showsVerticalScrollIndicator={false}>
           {props.showLabel ? (
             <AddressField label="Label">
@@ -268,8 +271,8 @@ export function ShippingAddressModal(props: ShippingAddressModalProps) {
           <View style={styles.sectionHeading}>
             <MapPinned color={theme.colors.primary} size={19} />
             <View style={styles.sectionHeadingCopy}>
-              <Text style={styles.sectionTitle}>Pin the delivery location</Text>
-              <Text style={styles.sectionHint}>The verified map result is the saved address.</Text>
+              <Text style={styles.sectionTitle}>Choose the delivery location</Text>
+              <Text style={styles.sectionHint}>Search for the address, then confirm or adjust its exact pin.</Text>
             </View>
           </View>
 
@@ -284,6 +287,7 @@ export function ShippingAddressModal(props: ShippingAddressModalProps) {
 
           <AddressMapPicker
             initialAddress={props.initialAddress}
+            onMapInteractionChange={setIsMapInteracting}
             onSelectionChange={(selection) => {
               setVerifiedAddress(selection?.address ?? null);
               setVerificationToken(selection?.verificationToken ?? null);

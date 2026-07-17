@@ -139,14 +139,18 @@ def update_address(
 
 
 @router.get("/geocode", response_model=dict)
+@limiter.limit("10/minute")
 def geocode(
-    q: str,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    request: Request,
+    q: str = Query(min_length=5, max_length=160),
 ):
-    del db, current_user
-    results = geocode_address(q)
-    return {"results": results}
+    del request
+    try:
+        return {"results": geocode_address(q)}
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail="Address search is temporarily unavailable.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.get("/reverse-geocode", response_model=dict)

@@ -19,6 +19,7 @@
     },
     "apk": {
       "channel": "apk",
+      "environment": "production",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.estings.shop/api/v1",
         "EXPO_PUBLIC_WEB_URL": "https://blueviolet-otter-621683.hostingersite.com"

@@ -3,16 +3,19 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import 'leaflet/dist/leaflet.css';
 
+import { AddressLocationSearch } from '@/components/address-location-search';
 import { Fonts, theme } from '@/constants/theme';
 import {
   getAddressZoneLabel,
   reverseGeocodeLocation,
+  type AddressSearchResult,
   type AddressVerification,
   type VerifiedAddress,
 } from '@/services/location-api';
 
 export type AddressMapPickerProps = {
   initialAddress?: VerifiedAddress | null;
+  onMapInteractionChange?: (isInteracting: boolean) => void;
   onSelectionChange: (selection: AddressVerification | null) => void;
 };
 
@@ -177,8 +180,16 @@ export function AddressMapPicker({ initialAddress, onSelectionChange }: AddressM
     );
   }
 
+  function handleSearchResult(result: AddressSearchResult) {
+    void verifyLocation(result.latitude, result.longitude);
+  }
+
   return (
     <View style={styles.mapPicker}>
+      <AddressLocationSearch
+        disabled={isLocating || isResolving}
+        onResultSelect={handleSearchResult}
+      />
       <div ref={mapElement} aria-label="Delivery address map" style={mapElementStyle} />
       <View style={styles.mapStatus}>
         <View style={styles.messageRow}>

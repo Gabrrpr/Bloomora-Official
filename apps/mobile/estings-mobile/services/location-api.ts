@@ -34,6 +34,14 @@ export type AddressVerification = {
   verificationToken: string;
 };
 
+export type AddressSearchResult = {
+  id: string;
+  label: string;
+  latitude: number;
+  longitude: number;
+  type: string | null;
+};
+
 type NominatimAddress = Record<string, unknown> & {
   amenity?: string;
   building?: string;
@@ -82,6 +90,15 @@ type NominatimReverseResponse = {
   type?: string;
 };
 
+type AddressSearchResponse = {
+  results?: Array<{
+    label?: unknown;
+    lat?: unknown;
+    lng?: unknown;
+    type?: unknown;
+  }>;
+};
+
 const NOMINATIM_BASE_URL = (
   process.env.EXPO_PUBLIC_NOMINATIM_BASE_URL ?? 'https://nominatim.openstreetmap.org'
 ).replace(/\/$/, '');
@@ -93,10 +110,65 @@ const REQUEST_INTERVAL_MS = 1_050;
 const REQUEST_TIMEOUT_MS = 15_000;
 const PROXY_REQUEST_TIMEOUT_MS = 20_000;
 const NATIVE_GEOCODER_TIMEOUT_MS = 8_000;
+const SEARCH_CACHE_TTL_MS = 15 * 60 * 1000;
 
 const reverseCache = new Map<string, { expiresAt: number; value: AddressVerification }>();
+const searchCache = new Map<string, { expiresAt: number; value: AddressSearchResult[] }>();
 let requestQueue: Promise<void> = Promise.resolve();
 let nextRequestAt = 0;
+
+export async function searchAddressLocations(
+  query: string,
+  signal?: AbortSignal,
+): Promise<AddressSearchResult[]> {
+  const normalizedQuery = query.trim().replace(/\s+/g, ' ');
+
+  if (normalizedQuery.length < 5) {
+    throw new Error('Enter at least 5 characters to search for an address.');
+  }
+
+  throwIfAborted(signal);
+  const cacheKey = normalizedQuery.toLocaleLowerCase();
+  const cached = searchCache.get(cacheKey);
+
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
+
+  if (cached) {
+    searchCache.delete(cacheKey);
+  }
+
+  const response = await apiFetch<AddressSearchResponse>(
+    `/addresses/geocode?q=${encodeURIComponent(normalizedQuery)}`,
+    { signal },
+  );
+  throwIfAborted(signal);
+
+  const results = (response.results ?? []).flatMap((result, index) => {
+    const label = cleanString(result.label);
+    const latitude = Number(result.lat);
+    const longitude = Number(result.lng);
+
+    if (!label || !isCoordinateInPhilippines(latitude, longitude)) {
+      return [];
+    }
+
+    return [{
+      id: `${latitude.toFixed(6)},${longitude.toFixed(6)}:${index}`,
+      label,
+      latitude,
+      longitude,
+      type: cleanString(result.type) || null,
+    }];
+  });
+
+  searchCache.set(cacheKey, {
+    expiresAt: Date.now() + SEARCH_CACHE_TTL_MS,
+    value: results,
+  });
+  return results;
+}
 
 export async function reverseGeocodeLocation(
   latitude: number,
@@ -541,6 +613,17 @@ function assertValidCoordinates(latitude: number, longitude: number) {
   if (latitude < 4.2 || latitude > 21.5 || longitude < 116 || longitude > 127) {
     throw new Error('Choose a delivery pin within the Philippines.');
   }
+}
+
+function isCoordinateInPhilippines(latitude: number, longitude: number) {
+  return (
+    Number.isFinite(latitude)
+    && Number.isFinite(longitude)
+    && latitude >= 4.2
+    && latitude <= 21.5
+    && longitude >= 116
+    && longitude <= 127
+  );
 }
 
 function cleanString(value: unknown) {
