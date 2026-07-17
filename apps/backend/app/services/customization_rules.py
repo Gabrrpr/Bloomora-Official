@@ -312,8 +312,6 @@ def resolve_complete_recipe(
             quantity=1,
         )
 
-    # Explicitly requested optional material types may be substituted, but are
-    # never introduced for a specific prompt that did not ask for them.
     for optional_type in ("filler", "accessory"):
         if optional_type not in requested_material_types:
             continue
@@ -394,17 +392,6 @@ def build_complete_image_prompt(
     exact_materials = _join_human_readable(
         [f"{item.quantity} {item.product_name}" for item in recipe_items]
     )
-    required_flowers = _join_human_readable(
-        [
-            f"{item.quantity} {item.product_name}"
-            for item in grouped.get("flower", [])
-        ]
-    )
-    flower_rule = (
-        f"Mandatory visible flower varieties: {required_flowers}. Every listed flower variety must be present, prominent, and "
-        "clearly recognizable by its real petal shape, bloom structure, and natural proportions. Keep approximately the listed "
-        "count of each variety. Do not substitute, omit, merge, recolor beyond recognition, or invent flower varieties. "
-    ) if required_flowers else ""
     presentation_names = ", ".join(
         item.product_name
         for item in grouped.get(REQUIRED_PRESENTATION_TYPES[arrangement_type], [])
@@ -412,10 +399,7 @@ def build_complete_image_prompt(
     if arrangement_type == "bouquet":
         presentation_rule = (
             f"Show a finished hand-tied bouquet visibly wrapped with {presentation_names}; "
-            "the stems must be enclosed and secured, never shown as loose flowers. Render the selected wrapping as a real physical "
-            "material with overlapping layers, believable thickness, natural folds and creases, irregular edges, compression around "
-            "the stem bundle, and soft contact shadows between layers. Match the selected material's real surface properties. "
-            "Do not render flat wrapping, a rigid cone, floating sheets, impossible folds, or a smooth plastic-looking CGI shell."
+            "the stems must be enclosed and secured, never shown as loose flowers."
         )
     elif arrangement_type == "vase":
         presentation_rule = (
@@ -433,7 +417,7 @@ def build_complete_image_prompt(
     return (
         "Ultra-realistic front-facing product photo of one complete retail florist arrangement. "
         f"Use exactly these florist materials: {exact_materials}. "
-        f"{flower_rule}{presentation_rule} {design_rule}"
+        f"{presentation_rule} {design_rule}"
         "Clean studio lighting, natural textures, no top-down view. "
         "Do not add or omit products. No cards, chocolates, balloons, jewelry, people, readable text, or watermarks."
     )
