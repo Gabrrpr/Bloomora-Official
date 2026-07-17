@@ -9,7 +9,6 @@ import FallbackImage from "../../components/FallbackImage.jsx" // 🚀 ADDED THI
 import arrangementBouquet from "../../assets/MakeItPersonal/arrangement_bouquet.webp"
 import arrangementBox from "../../assets/MakeItPersonal/arrangement_box.webp"
 import arrangementVase from "../../assets/MakeItPersonal/arrangement_vase.webp"
-import acrylicContainer from "../../assets/MakeItPersonal/AcrylicContainer.webp"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
@@ -80,15 +79,6 @@ const ARRANGEMENTS = [
 // The only container offered for the Box arrangement — a clear acrylic box.
 // It's a presentation choice (not a stocked product), so it isn't sent as a
 // wrapping_id; it just drives the AI prompt and the step's completion state.
-const ACRYLIC_BOX = {
-  id: "acrylic-box",
-  name: "Clear Acrylic Box",
-  image_url: acrylicContainer,
-  price: 0,
-  stock: 999,
-  stock_status: "in_stock",
-}
-
 // Fun facts cycled through while the AI generates the arrangement.
 const FLOWER_FACTS = [
   "Roses can live for over a week with fresh water and a clean stem cut.",
@@ -413,6 +403,15 @@ export default function MixAndMatch({ onNavigate }) {
   const getByCategory = (catTarget) => products.filter(p => {
     const c = getCat(p);
     const target = catTarget.toLowerCase().trim();
+    const searchable = [c, p.product_type, p.product_group, p.name]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    if (target === "box") {
+      return c === "box" || c === "boxes" ||
+        ["flower box", "gift box", "acrylic box", "category box"].some(term => searchable.includes(term));
+    }
 
     // For the accessory step, also match ribbons
     if (target === "accessory") {
@@ -424,7 +423,6 @@ export default function MixAndMatch({ onNavigate }) {
   });
 
   const selProd = (cat) => {
-    if (selections[cat] === ACRYLIC_BOX.id) return ACRYLIC_BOX
     return products.find(p => p.id === selections[cat])
   };
 
@@ -512,12 +510,11 @@ export default function MixAndMatch({ onNavigate }) {
   const canProceed = () => {
     if (step === 0) return !!arrangementType;
     if (step === 1) return selectedFlowers.length > 0;
-    // Box always offers the acrylic container; for others, allow skipping when none exist.
     if (step === 2) {
-      if (arrangementType === "box") return selections.wrapping === ACRYLIC_BOX.id;
+      if (arrangementType === "box") return !!selections.wrapping;
       return !!selections.wrapping || getByCategory(container.cat).length === 0;
     }
-    if (step === 3) return !!selections.ribbon;
+    if (step === 3) return true;
     return false;
   }
 
@@ -560,9 +557,9 @@ export default function MixAndMatch({ onNavigate }) {
     if (arrangement) parts.push(arrangement.promptText)
     if (fillers.length) parts.push(`accented with ${fillers.map(p => p.name).join(", ")}`)
     if (wrapping) {
-      // The box's acrylic container is already described by the arrangement prompt.
       if (arrangementType === "vase") parts.push(`arranged in a ${wrapping.attrs?.color || ""} ${wrapping.name}`.replace(/\s+/g, " ").trim())
       else if (arrangementType === "bouquet") parts.push(`wrapped with ${wrapping.attrs?.color || ""} ${wrapping.attrs?.style || ""} paper`.replace(/\s+/g, " ").trim())
+      else if (arrangementType === "box") parts.push(`arranged inside the selected ${wrapping.name}`)
     }
     if (accessory) parts.push(`finished with ${accessory.attrs?.name || accessory.name}`)
 
@@ -579,8 +576,9 @@ export default function MixAndMatch({ onNavigate }) {
         prompt_text: promptText,
         arrangement_type: normalizeArrangementStyle(arrangementType),
         flower_id: primaryFlower?.id || undefined,
-        // The acrylic box isn't a stocked product, so never send it as a wrapping_id.
-        wrapping_id: (selections.wrapping && selections.wrapping !== ACRYLIC_BOX.id) ? selections.wrapping : undefined,
+        // This carries the selected presentation product. The backend classifies
+        // the inventory record as wrapping, vase, or box.
+        wrapping_id: selections.wrapping || undefined,
         accessory_id: selections.ribbon || undefined,
       })
       if (data.validation) {
@@ -613,8 +611,32 @@ export default function MixAndMatch({ onNavigate }) {
       setRecipeReview(null)
       return
     }
-    const m = { wrapping_id: "wrapping", accessory_id: "accessory" }
+    const m = { wrapping_id: "wrapping", accessory_id: "ribbon" }
     if (m[field]) { setSelections(p => ({ ...p, [m[field]]: id })); setUnavailableItems([]); setRecipeReview(null) }
+  }
+
+  const applySuggestedRecipe = () => {
+    if (!recipeReview?.suggested_items?.length) return
+
+    const nextFlowerQty = {}
+    const nextFillerIds = []
+    const nextSelections = { wrapping: null, ribbon: null }
+
+    recipeReview.suggested_items.forEach(item => {
+      if (!item.product_id) return
+      if (item.material_type === "flower") nextFlowerQty[item.product_id] = item.quantity
+      else if (item.material_type === "filler") nextFillerIds.push(item.product_id)
+      else if (["wrapping", "vase", "box"].includes(item.material_type)) nextSelections.wrapping = item.product_id
+      else if (item.material_type === "accessory") nextSelections.ribbon = item.product_id
+    })
+
+    setArrangementType(recipeReview.arrangement_type || arrangementType)
+    setFlowerQty(nextFlowerQty)
+    setFillerIds(nextFillerIds)
+    setSelections(nextSelections)
+    setRecipeReview(null)
+    setError("")
+    setStep(3)
   }
 
   // Compose the To / message / From lines into a single greeting string for the cart.
@@ -1123,8 +1145,16 @@ export default function MixAndMatch({ onNavigate }) {
               ))}
             </div>
             <p className="text-xs mt-3" style={{ color: mutedC }}>
-              Use this as the guide for reducing stems or swapping unavailable materials, then generate again.
+              Apply this stocked recipe, review the selections, then generate again.
             </p>
+            <button
+              type="button"
+              onClick={applySuggestedRecipe}
+              className="mt-4 px-4 py-2.5 rounded-xl text-sm font-bold text-white transition hover:brightness-105"
+              style={{ backgroundColor: accentG }}
+            >
+              Apply suggested recipe
+            </button>
           </div>
         )}
 
@@ -1299,10 +1329,7 @@ export default function MixAndMatch({ onNavigate }) {
                 const selKey = step === 2 ? "wrapping" : "ribbon"
                 const filterCat = step === 2 ? container.cat : "ribbon"
                 const emptyLabel = step === 2 ? container.plural : "ribbons"
-                // Box arrangement offers a single clear acrylic box (not a stocked product).
-                const list = (step === 2 && arrangementType === "box")
-                  ? [ACRYLIC_BOX]
-                  : getByCategory(filterCat)
+                const list = getByCategory(filterCat)
                 return list.length === 0 ? (
                   <div className="text-center py-10">
                     <p className="text-sm" style={{ color: mutedC }}>No {emptyLabel} available right now.</p>

@@ -5,10 +5,22 @@ from unittest.mock import patch
 
 from fastapi import HTTPException
 
-from app.api.v1.routes.orders import _resolve_checkout_branch, serialize_order
+from app.api.v1.routes.orders import (
+    _paymongo_payment_method_types,
+    _resolve_checkout_branch,
+    serialize_order,
+)
 
 
 class CheckoutOrderHelperTests(unittest.TestCase):
+    def test_customer_ewallet_checkout_enables_all_default_paymongo_methods(self):
+        self.assertIsNone(_paymongo_payment_method_types("ewallet"))
+
+    def test_explicit_payment_method_is_restricted_to_that_paymongo_method(self):
+        self.assertEqual(_paymongo_payment_method_types("gcash"), ["gcash"])
+        self.assertEqual(_paymongo_payment_method_types("card"), ["card"])
+        self.assertEqual(_paymongo_payment_method_types("qrph"), ["qrph"])
+
     def test_selected_branch_is_kept_for_standard_delivery(self):
         branch = _resolve_checkout_branch(
             {"branch_name": "manila"},

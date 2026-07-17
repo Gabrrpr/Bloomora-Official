@@ -90,7 +90,7 @@ export default function Checkout({ onNavigate }) {
   const { user } = useAuth()
   const [cartItems, setCartItems] = useState([])
   const deliveryTime = "Anytime"
-  const [paymentMethod] = useState("bank_transfer");
+  const paymentMethod = "ewallet";
   const [fulfillmentMethod, setFulfillmentMethod] = useState("delivery");
   const [deliverySettings, setDeliverySettings] = useState({ delivery_fee: 100, minimum_order: 0, same_day_cutoff: "14:00" });
   const [shippingMethods, setShippingMethods] = useState([]);
@@ -559,7 +559,9 @@ export default function Checkout({ onNavigate }) {
         delivery_notes: buildDeliveryNotes(),
         scheduled_at: deliveryDate.toISOString(),
         payment_method: paymentMethod,
-        payment_reference: "TEST-ORDER-NO-PAYMENT",
+        payment_reference: null,
+        paymongo_success_url: `${window.location.origin}/confirmation?payment=success`,
+        paymongo_cancel_url: `${window.location.origin}/checkout?payment=cancelled`,
         fulfillment_method: fulfillmentMethod,
         shipping_method_id: fulfillmentMethod === "delivery" ? selectedShippingMethod?.id : null,
         shipping_method_code: fulfillmentMethod === "delivery" ? selectedShippingMethod?.code : null,
@@ -579,13 +581,11 @@ export default function Checkout({ onNavigate }) {
       localStorage.setItem("bloomora_last_order", JSON.stringify(buildOrderData(orderIds)));
       await clearCart();
 
-      // Demo checkout never redirects to a payment provider.
       if (res.checkout_url) {
-        console.warn("Ignoring checkout URL in testing mode:", res.checkout_url);
-        onNavigate("confirmation");
-      } else {
-        onNavigate("confirmation");
+        window.location.assign(res.checkout_url);
+        return;
       }
+      throw new Error("PayMongo did not return a checkout link. Please try again.");
 
     } catch (e) {
       console.error("Checkout Crash:", e);
@@ -1094,12 +1094,12 @@ export default function Checkout({ onNavigate }) {
               </div>
               
               <div className="rounded-xl border border-orange-200 bg-orange-50 p-3.5">
-                <p className="text-xs font-bold text-orange-900">Demo checkout only</p>
-                <p className="text-[11px] text-orange-800 leading-relaxed mt-1">
-                  Do not send real money. Online payment, QRPh, bank transfer, GCash, Maya, and card payments are disabled for this testing website.
-                </p>
-                <p className="text-[11px] text-orange-800 leading-relaxed mt-2">
-                  Orders submitted here are test records only and use the reference <strong>TEST-ORDER-NO-PAYMENT</strong>.
+                  <p className="text-xs font-bold text-orange-900">Secure online payment</p>
+                  <p className="text-[11px] text-orange-800 leading-relaxed mt-1">
+                    After placing your order, you will continue to PayMongo to choose GCash, QRPh, or a debit or credit card.
+                  </p>
+                  <p className="text-[11px] text-orange-800 leading-relaxed mt-2">
+                    Your order remains pending until PayMongo confirms the payment.
                 </p>
               </div>
 
@@ -1198,13 +1198,13 @@ export default function Checkout({ onNavigate }) {
                 ) : (
                   <>
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                    Place Test Order
+                    Continue to PayMongo
                   </>
                 )}
               </button>
               <p className="flex items-center justify-center gap-1.5 text-[11px] text-gray-400 mt-3">
                 <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-                Test checkout only - no real payment will be collected
+                Secure payment powered by PayMongo
               </p>
             </div>
           </div>

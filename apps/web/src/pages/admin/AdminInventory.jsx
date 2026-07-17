@@ -551,9 +551,8 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
         fd.append("stock_pampanga", newPampanga);
         fd.append("stock", totalGlobalStock);
         
-        if (totalCost > 0 && received > 0) {
-          fd.append("cost_per_unit", (totalCost / received).toFixed(2));
-        }
+        // Restocking an existing product must never change its established
+        // base cost. Total paid is retained only in the stock receipt log.
         await api.put(`/products/admin/${id}`, fd);
 
         await api.post(`/products/admin/stock-logs`, {
@@ -720,7 +719,7 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
               <div className="hidden sm:grid grid-cols-[minmax(220px,1fr)_96px_118px_140px_92px_34px] items-center gap-3 px-4 py-3 text-[10px] font-bold uppercase tracking-wider" style={{ backgroundColor: isDark ? "#0f172a" : "#eef4ef", color: c.sub, borderBottom: `1px solid ${c.bdr}` }}>
                 <div className="flex-1 min-w-0">Product Details</div>
                 <div className="w-24 text-center">Qty Received</div>
-                <div className="w-28 text-center">Total Paid (₱)</div>
+                <div className="w-28 text-center">Total Paid (Log Only)</div>
                 <div className="w-32 text-center">Date</div>
                 <div className="w-24 text-right">New Stock</div>
                 <div className="w-8"></div>
@@ -743,6 +742,7 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                         <div className="min-w-0">
                           <p className="text-sm font-bold truncate" style={{ color: c.cell }}>{item.name}</p>
                           <p className="text-[11px] font-medium mt-0.5" style={{ color: c.sub }}>Current {branch}: <span className="font-bold">{currentBranchStock}</span> {item.unit_type || "pc"}</p>
+                          <p className="text-[10px] mt-0.5" style={{ color: c.sub }}>Base cost remains ₱{Number(item.cost_per_unit || 0).toFixed(2)} per unit</p>
                         </div>
                         {/* Mobile Delete Button */}
                         <button onClick={() => removeLine(id)} className="sm:hidden p-1.5 rounded-md text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30">
@@ -760,7 +760,7 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
                         </div>
 
                         <div>
-                          <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1 text-slate-500">Total Paid</label>
+                          <label className="sm:hidden text-[10px] font-bold uppercase tracking-wider block mb-1 text-slate-500">Total Paid (Log Only)</label>
                           <input type="number" min="0" step="0.01" value={lines[id].cost} onChange={e => setCost(id, e.target.value)} placeholder="0.00"
                             className="w-full px-2.5 py-2.5 text-sm border rounded-md text-center outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500" 
                             style={{ borderColor: c.inputBdr, backgroundColor: c.inputBg, color: c.inputTxt }} />

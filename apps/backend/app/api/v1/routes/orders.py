@@ -22,6 +22,15 @@ from app.api.v1.routes.commerce import get_delivery_settings, validate_voucher
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
+
+def _paymongo_payment_method_types(payment_method: str) -> list[str] | None:
+    return {
+        "gcash": ["gcash"],
+        "card": ["card"],
+        "qrph": ["qrph"],
+        "paymaya": ["paymaya"],
+    }.get(payment_method)
+
 # ZoneInfo can crash on some environments if tzdata isn't installed.
 # This must NOT break importing the router.
 try:
@@ -1190,12 +1199,12 @@ async def create_order(
         db.add(transaction)
         db.flush()
 
-        if payment_method == "gcash":
+        if is_online:
             reference_number = f"PMO-{secrets.token_hex(6).upper()}"
             checkout = await create_checkout_session(
                 cancel_url=payload.get("paymongo_cancel_url") or payload.get("cancel_url"),
                 line_items=[{
-                    "name": f"Bloomora POS Order ORD-{order.id.hex[:8].upper()}",
+                    "name": f"Bloomora Order ORD-{order.id.hex[:8].upper()}",
                     "amount": to_paymongo_amount(Decimal(order.total_amount)),
                     "currency": "PHP",
                     "quantity": 1,
@@ -1204,11 +1213,11 @@ async def create_order(
                 metadata={
                     "order_ids": str(order.id),
                     "user_id": str(current_user.id),
-                    "source": "admin_walk_in_pos",
+                    "source": "admin_walk_in_pos" if payload.get("customer_name") else "customer_checkout",
                     "branch": raw_branch,
                     "payment_method": "gcash",
                 },
-                payment_method_types=["gcash"],
+                payment_method_types=_paymongo_payment_method_types(payment_method),
                 success_url=payload.get("paymongo_success_url") or payload.get("success_url"),
             )
             checkout_data = checkout.get("data", {})

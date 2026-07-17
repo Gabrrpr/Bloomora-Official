@@ -1,9 +1,14 @@
 import asyncio
 import unittest
+import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
-from app.api.v1.routes.customization import _calculate_complete_recipe_price, check_and_generate
+from app.api.v1.routes.customization import (
+    _calculate_complete_recipe_price,
+    _merge_explicit_materials,
+    check_and_generate,
+)
 from app.schemas.customization import CustomizationRequest
 from app.services.customization_rules import InventoryMaterial, RequestedMaterial, build_complete_image_prompt
 
@@ -21,6 +26,29 @@ class WriteTrackingSession:
 
 
 class CustomizationQuantityRouteTests(unittest.TestCase):
+    def test_selected_stocked_box_is_merged_from_the_container_id(self):
+        flower_id = str(uuid.uuid4())
+        box_id = str(uuid.uuid4())
+        inventory = [
+            InventoryMaterial(flower_id, "Roses", "flower", "fresh flower", 20),
+            InventoryMaterial(box_id, "Clear Acrylic Flower Box", "box", "acrylic box", 10),
+        ]
+
+        merged = _merge_explicit_materials(
+            CustomizationRequest(
+                prompt_text="A boxed arrangement",
+                wrapping_id=box_id,
+                arrangement_type="box",
+            ),
+            [RequestedMaterial(flower_id, "Roses", 6)],
+            inventory,
+        )
+
+        self.assertEqual(
+            {item.product_name: item.quantity for item in merged},
+            {"Roses": 6, "Clear Acrylic Flower Box": 1},
+        )
+
     def test_price_breakdown_and_image_prompt_share_the_complete_recipe(self):
         inventory = [
             InventoryMaterial("rose", "Roses", "flower", "fresh flower", 30, 100, "https://example.com/rose.jpg"),
