@@ -8,7 +8,8 @@ from uuid import UUID
 from app.core.dependencies import get_db, get_current_user
 from app.models import RoleEnum
 from app.models.campaigns import Campaign
-from app.models.product import Product
+from app.models.product import Product, ProductStatusEnum
+from app.services.customization_inventory import is_customization_material_product
 
 from app.schemas.campaigns import (
     CampaignCreateRequest,
@@ -33,9 +34,9 @@ def require_admin_or_staff(current_user):
 def _validate_discount(discount_type: Optional[str], discount_value: Optional[float]) -> tuple[Optional[str], Optional[float]]:
     if not discount_type or not discount_value:
         return None, None
-    if discount_type not in {"percent", "fixed"}:
-        raise HTTPException(status_code=400, detail="Campaign discount type must be percent or fixed.")
-    if discount_type == "percent" and discount_value > 100:
+    if discount_type not in {"percent", "fixed", "bundle_percent"}:
+        raise HTTPException(status_code=400, detail="Campaign discount type must be percent, fixed, or bundle_percent.")
+    if discount_type in {"percent", "bundle_percent"} and discount_value > 100:
         raise HTTPException(status_code=400, detail="Campaign percent discount cannot exceed 100.")
     return discount_type, discount_value
 
@@ -50,6 +51,8 @@ def serialize_campaign(campaign: Campaign) -> dict:
         "is_active": campaign.is_active,
         "discount_type": campaign.discount_type,
         "discount_value": float(campaign.discount_value) if campaign.discount_value is not None else None,
+        "minimum_quantity": campaign.minimum_quantity,
+        "eligible_category": campaign.eligible_category,
         "product_ids": [p.id for p in campaign.products or []],
     }
 
@@ -78,6 +81,8 @@ def create_campaign(
         raise HTTPException(status_code=409, detail="campaign_key already exists")
 
     discount_type, discount_value = _validate_discount(payload.discount_type, payload.discount_value)
+    if discount_type == "bundle_percent" and (not payload.minimum_quantity or not payload.eligible_category):
+        raise HTTPException(status_code=400, detail="Bundle campaigns require a minimum quantity and eligible category.")
 
     campaign = Campaign(
         name=payload.name,
@@ -87,6 +92,8 @@ def create_campaign(
         is_active=payload.is_active,
         discount_type=discount_type,
         discount_value=discount_value,
+        minimum_quantity=payload.minimum_quantity if discount_type == "bundle_percent" else None,
+        eligible_category=payload.eligible_category.strip().lower() if discount_type == "bundle_percent" and payload.eligible_category else None,
     )
     db.add(campaign)
     db.commit()
@@ -113,13 +120,22 @@ def update_campaign(
             raise HTTPException(status_code=409, detail="campaign_key already exists")
         campaign.campaign_key = payload.campaign_key
 
-    for field in ["name", "start_at", "end_at", "is_active"]:
+    for field in ["name", "start_at", "end_at", "is_active", "minimum_quantity"]:
         val = getattr(payload, field)
         if val is not None:
             setattr(campaign, field, val)
     fields_set = getattr(payload, "model_fields_set", getattr(payload, "__fields_set__", set()))
     if "discount_type" in fields_set or "discount_value" in fields_set:
         campaign.discount_type, campaign.discount_value = _validate_discount(payload.discount_type, payload.discount_value)
+        if campaign.discount_type != "bundle_percent":
+            campaign.minimum_quantity = None
+            campaign.eligible_category = None
+    if "eligible_category" in fields_set:
+        campaign.eligible_category = payload.eligible_category.strip().lower() if payload.eligible_category else None
+    if campaign.discount_type == "bundle_percent" and (
+        not campaign.minimum_quantity or (not campaign.eligible_category and not campaign.products)
+    ):
+        raise HTTPException(status_code=400, detail="Bundle campaigns require a minimum quantity and eligible category.")
 
     db.commit()
     db.refresh(campaign)
@@ -157,11 +173,36 @@ def set_campaign_products(
         raise HTTPException(status_code=404, detail="Campaign not found")
 
     # 👈 Access product_ids through payload
-    products = db.query(Product).filter(Product.id.in_(payload.product_ids)).all() if payload.product_ids else []
+    products = (
+        db.query(Product)
+        .filter(
+            Product.id.in_(payload.product_ids),
+            Product.is_visible.is_(True),
+            Product.status == ProductStatusEnum.active,
+            Product.is_customization_material.is_(False),
+        )
+        .all()
+        if payload.product_ids
+        else []
+    )
+    products = [product for product in products if not is_customization_material_product(product)]
+    if len(products) != len(set(payload.product_ids)):
+        raise HTTPException(
+            status_code=400,
+            detail="Promotions can only include active customer-visible products, not raw materials.",
+        )
     campaign.products = products
     fields_set = getattr(payload, "model_fields_set", getattr(payload, "__fields_set__", set()))
     if "discount_type" in fields_set or "discount_value" in fields_set:
         campaign.discount_type, campaign.discount_value = _validate_discount(payload.discount_type, payload.discount_value)
+    if "minimum_quantity" in fields_set:
+        campaign.minimum_quantity = payload.minimum_quantity
+    if "eligible_category" in fields_set:
+        campaign.eligible_category = payload.eligible_category.strip().lower() if payload.eligible_category else None
+    if campaign.discount_type == "bundle_percent" and (
+        not campaign.minimum_quantity or (not campaign.eligible_category and not campaign.products)
+    ):
+        raise HTTPException(status_code=400, detail="Bundle campaigns require a minimum quantity and eligible category.")
     db.commit()
     db.refresh(campaign)
 

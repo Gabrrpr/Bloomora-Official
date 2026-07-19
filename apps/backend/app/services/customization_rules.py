@@ -408,8 +408,12 @@ def build_complete_image_prompt(
         )
     else:
         presentation_rule = (
-            f"Show the flowers arranged inside the selected flower box, {presentation_names}, below the rim; "
-            "never show a hand-tied bouquet, loose flowers, or flowers outside the box."
+            f"Show the flowers inside the selected transparent acrylic flower display case, {presentation_names}. "
+            "Use a two-level construction: exact recipe-listed bloom heads in a compact grid under the shallow clear upper cover, "
+            "with short stems passing through individual holes in a transparent mid-height support plate and visibly continuing "
+            "into the lower compartment above a deep rose-red base. Show the complete upright rectangular case from a slightly "
+            "elevated front three-quarter angle; never show a hand-tied bouquet, cardboard gift box, loose flowers, extra blooms, "
+            "or flowers outside the case."
         )
 
     clean_notes = " ".join(str(design_notes or "").split()).strip(" .")

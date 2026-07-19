@@ -106,6 +106,11 @@ export const api = {
       throw new Error(errorMsg);
     }
 
+    // DELETE endpoints commonly succeed with 204 No Content. Trying to parse
+    // that empty response as JSON throws, which makes a successful deletion
+    // look like a failure and leaves stale records visible in the UI.
+    if (response.status === 204) return null;
+
     return response.json();
   },
 
@@ -241,6 +246,10 @@ export const api = {
     return api.post('/orders/', data);
   },
 
+  async quoteOrder(items, branch) {
+    return api.post('/orders/quote', { items, branch });
+  },
+
   async confirmPayment(orderId) {
     return api.post(`/orders/${orderId}/pay`, {});
   },
@@ -257,14 +266,15 @@ export const api = {
     return api.get(`/orders/my?${params.toString()}`);
   },
 
-  async getAdminOrders({ status, search, branch, date_range, limit = 25, offset = 0 } = {}) {
+  async getAdminOrders({ status, search, branch, date_range, limit = 25, offset = 0, paginated = false } = {}) {
     const params = new URLSearchParams();
     if (status && status !== 'All') params.append('status', status.toLowerCase().replace(/ /g, '_'));
     if (search) params.append('search', search);
     if (branch && branch !== 'All Branches') params.append('branch', branch.toLowerCase());
-    if (date_range && date_range !== 'All Time') params.append('date_range', date_range.toLowerCase().replace(/ /g, '_'));
+    if (date_range) params.append('date_range', date_range.toLowerCase().replace(/ /g, '_'));
     params.append('limit', String(limit));
     params.append('offset', String(offset));
+    if (paginated) params.append('paginated', 'true');
     return api.get(`/orders/?${params.toString()}`);
   },
 
@@ -285,6 +295,14 @@ export const api = {
     if (paginated) params.append('paginated', 'true');
     const query = params.toString();
     return api.get(`/products/${query ? `?${query}` : ''}`);
+  },
+
+  async getAddOnProducts(branch) {
+    const params = new URLSearchParams();
+    if (branch) params.append('branch', branch);
+    params.append('_', String(Date.now()));
+    const query = params.toString();
+    return api.get(`/products/add-ons${query ? `?${query}` : ''}`);
   },
 
   async getCustomizationProducts() {

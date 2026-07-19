@@ -58,6 +58,10 @@ class Product(Base):
     
     tags = Column(JSONB, default=[])
     original_price = Column(Numeric(10, 2), nullable=True)
+    # Branch-specific flash-sale percentages, e.g. {"manila": 15}.
+    # The regular product price stays unchanged so one branch's sale cannot
+    # accidentally change the price shown or charged by another branch.
+    flash_sale_discounts = Column(JSONB, default=dict, nullable=False)
     
 
 class Inventory(Base):

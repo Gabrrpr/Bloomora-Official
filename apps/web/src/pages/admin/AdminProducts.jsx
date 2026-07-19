@@ -21,9 +21,41 @@ const OCCASIONS_LIST = [
   "New Baby", "Sympathy", "Thank You", "Valentine's Day", "Wedding"
 ]
 
-const recipeStockStatus = (item, products = []) => {
+const materialStockForBranches = (material, branches = []) => {
+  if (!material) return 0
+  const selected = branches.map(branch => String(branch || "").trim().toLowerCase())
+  if (selected.length === 1 && selected[0] === "manila") {
+    return Number(material.stock_manila ?? material.stock ?? 0)
+  }
+  if (selected.length === 1 && selected[0] === "pampanga") {
+    return Number(material.stock_pampanga ?? material.stock ?? 0)
+  }
+  if (selected.includes("manila") && selected.includes("pampanga")) {
+    return Number(material.stock_manila ?? 0) + Number(material.stock_pampanga ?? 0)
+  }
+  return Number(material.stock ?? 0)
+}
+
+const recipeBuildableStockForBranches = (composition = [], products = [], branches = []) => {
+  if (!composition.length) return 0
+  const selected = branches.map(branch => String(branch || "").trim().toLowerCase())
+  if (selected.includes("manila") && selected.includes("pampanga")) {
+    return recipeBuildableStockForBranches(composition, products, ["Manila"])
+      + recipeBuildableStockForBranches(composition, products, ["Pampanga"])
+  }
+
+  return composition.reduce((maximum, item) => {
+    const material = products.find(product => product.id === item.product_id)
+    const required = Number(item.quantity || 0)
+    if (!material || required <= 0) return 0
+    const possible = Math.floor(materialStockForBranches(material, branches) / required)
+    return Math.min(maximum, possible)
+  }, Infinity) || 0
+}
+
+const recipeStockStatus = (item, products = [], branches = []) => {
   const material = products.find(p => p.id === item.product_id)
-  const stock = Number(material?.stock ?? 0)
+  const stock = materialStockForBranches(material, branches)
   const reorderPoint = Number(material?.reorder_point ?? 10)
   const required = Number(item.quantity || 0)
   const remainingAfterUse = stock - required
@@ -435,16 +467,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
 
   let maxFeasibleStock = null;
   if (form.composition.length > 0) {
-    maxFeasibleStock = Infinity;
-    form.composition.forEach(item => {
-      const invProduct = products.find(p => p.id === item.product_id);
-      const availableStock = invProduct ? invProduct.stock : 0;
-      const possibleArrangements = Math.floor(availableStock / item.quantity);
-      if (possibleArrangements < maxFeasibleStock) {
-        maxFeasibleStock = possibleArrangements;
-      }
-    });
-    if (maxFeasibleStock === Infinity) maxFeasibleStock = 0;
+    maxFeasibleStock = recipeBuildableStockForBranches(form.composition, products, form.branches);
   }
 
   const validate = () => {
@@ -629,8 +652,9 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
   const selectedMaterial = products.find(p => p.id === compSelection);
 
   const MaterialDropdownRow = ({ p }) => {
-    const isOut = p.stock === 0;
-    const isLow = p.stock > 0 && p.stock <= 5;
+    const branchStock = materialStockForBranches(p, form.branches);
+    const isOut = branchStock === 0;
+    const isLow = branchStock > 0 && branchStock <= 5;
     return (
       <div 
         onClick={() => {
@@ -647,7 +671,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold truncate" style={{ color: d.cellC }}>{p.name}</p>
           <p className="text-[10px] uppercase font-bold mt-0.5 truncate" style={{ color: isOut ? "#ef4444" : isLow ? "#d97706" : "#16a34a" }}>
-            {isOut ? "Out of Stock" : isLow ? `Low Stock (${p.stock})` : `${p.stock} Available`}
+            {isOut ? "Out of Stock" : isLow ? `Low Stock (${branchStock})` : `${branchStock} Available`}
           </p>
         </div>
       </div>
@@ -1067,7 +1091,7 @@ function AddProductModal({ onClose, onSave, categories, products = [] }) {
             {form.composition.length > 0 && (
               <div className="space-y-2 mt-4 pt-4" style={{ borderTop: `1px solid ${d.divider}` }}>
                 {form.composition.map((item) => {
-                  const stockState = recipeStockStatus(item, products)
+                  const stockState = recipeStockStatus(item, products, form.branches)
                   const badgeStyle = recipeStockBadgeStyle(stockState.level, d.isDark)
                   return (
                   <div key={item.product_id} className="flex items-center justify-between p-2 rounded-lg border" style={{ backgroundColor: d.cardBg, borderColor: stockState.level === "ok" ? d.cardBdr : badgeStyle.borderColor }}>
@@ -1265,16 +1289,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
 
   let maxFeasibleStock = null;
   if (form.composition.length > 0) {
-    maxFeasibleStock = Infinity;
-    form.composition.forEach(item => {
-      const invProduct = products.find(p => p.id === item.product_id);
-      const availableStock = invProduct ? invProduct.stock : 0;
-      const possibleArrangements = Math.floor(availableStock / item.quantity);
-      if (possibleArrangements < maxFeasibleStock) {
-        maxFeasibleStock = possibleArrangements;
-      }
-    });
-    if (maxFeasibleStock === Infinity) maxFeasibleStock = 0;
+    maxFeasibleStock = recipeBuildableStockForBranches(form.composition, products, form.branches);
   }
 
   const validate = () => {
@@ -1454,8 +1469,9 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
   const selectedMaterial = products.find(p => p.id === compSelection);
 
   const MaterialDropdownRow = ({ p }) => {
-    const isOut = p.stock === 0;
-    const isLow = p.stock > 0 && p.stock <= 5;
+    const branchStock = materialStockForBranches(p, form.branches);
+    const isOut = branchStock === 0;
+    const isLow = branchStock > 0 && branchStock <= 5;
     return (
       <div 
         onClick={() => {
@@ -1472,7 +1488,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold truncate" style={{ color: d.cellC }}>{p.name}</p>
           <p className="text-[10px] uppercase font-bold mt-0.5 truncate" style={{ color: isOut ? "#ef4444" : isLow ? "#d97706" : "#16a34a" }}>
-            {isOut ? "Out of Stock" : isLow ? `Low Stock (${p.stock})` : `${p.stock} Available`}
+            {isOut ? "Out of Stock" : isLow ? `Low Stock (${branchStock})` : `${branchStock} Available`}
           </p>
         </div>
       </div>
@@ -1891,7 +1907,7 @@ function EditProductModal({ product, onClose, onSave, categories, products = [] 
             {form.composition.length > 0 && (
               <div className="space-y-2 mt-4 pt-4" style={{ borderTop: `1px solid ${d.divider}` }}>
                 {form.composition.map((item) => {
-                  const stockState = recipeStockStatus(item, products)
+                  const stockState = recipeStockStatus(item, products, form.branches)
                   const badgeStyle = recipeStockBadgeStyle(stockState.level, d.isDark)
                   return (
                   <div key={item.product_id} className="flex items-center justify-between p-2 rounded-lg border" style={{ backgroundColor: d.cardBg, borderColor: stockState.level === "ok" ? d.cardBdr : badgeStyle.borderColor }}>

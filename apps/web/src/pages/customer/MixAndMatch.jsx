@@ -570,6 +570,15 @@ export default function MixAndMatch({ onNavigate }) {
       (best, p) => (best && (flowerQty[best.id] || 0) >= (flowerQty[p.id] || 0) ? best : p),
       null
     )
+    const selectedItems = [
+      ...selectedFlowers.map(product => ({
+        product_id: product.id,
+        quantity: Number(flowerQty[product.id] || 1),
+      })),
+      ...fillers.map(product => ({ product_id: product.id, quantity: 1 })),
+      ...(wrapping ? [{ product_id: wrapping.id, quantity: 1 }] : []),
+      ...(accessory ? [{ product_id: accessory.id, quantity: 1 }] : []),
+    ]
 
     try {
       const data = await api.checkAndGenerate({
@@ -580,6 +589,9 @@ export default function MixAndMatch({ onNavigate }) {
         // the inventory record as wrapping, vase, or box.
         wrapping_id: selections.wrapping || undefined,
         accessory_id: selections.ribbon || undefined,
+        // Unlike a prose prompt, this structured recipe cannot accidentally
+        // count the box's visual "6 to 9 blooms" instruction as extra stems.
+        selected_items: selectedItems,
       })
       if (data.validation) {
         setRecipeReview({ ...data.validation, message: data.message })
@@ -589,6 +601,24 @@ export default function MixAndMatch({ onNavigate }) {
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
       } else if (data.success) {
         setProgress(100)
+        const generatedItems = data.price_breakdown?.items || []
+        if (generatedItems.length) {
+          const nextFlowerQty = {}
+          const nextFillerIds = []
+          const nextSelections = { wrapping: null, ribbon: null }
+          generatedItems.forEach(item => {
+            if (!item.product_id) return
+            const materialType = String(item.material_type || "").trim().toLowerCase()
+            if (materialType === "flower") nextFlowerQty[item.product_id] = Number(item.quantity || 1)
+            else if (materialType === "filler") nextFillerIds.push(item.product_id)
+            else if (["wrapping", "vase", "box"].includes(materialType)) nextSelections.wrapping = item.product_id
+            else if (materialType === "accessory") nextSelections.ribbon = item.product_id
+          })
+          if (Object.keys(nextFlowerQty).length) setFlowerQty(nextFlowerQty)
+          setFillerIds(nextFillerIds)
+          setSelections(nextSelections)
+        }
+        if (data.arrangement_type) setArrangementType(data.arrangement_type)
         setResult(data)
         setCustomName(data.price_breakdown?.items?.[0]?.product_name || "Custom Arrangement")
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
@@ -613,6 +643,21 @@ export default function MixAndMatch({ onNavigate }) {
     }
     const m = { wrapping_id: "wrapping", accessory_id: "ribbon" }
     if (m[field]) { setSelections(p => ({ ...p, [m[field]]: id })); setUnavailableItems([]); setRecipeReview(null) }
+  }
+
+  const editGeneratedSelections = () => {
+    setCompleted(false)
+    setStep(1)
+    setError("")
+    setUnavailableItems([])
+    setRecipeReview(null)
+  }
+
+  const regenerateCurrentDesign = () => {
+    if (generating || aiUsage?.remaining === 0) return
+    setCompleted(false)
+    setStep(3)
+    void handleGenerate()
   }
 
   const applySuggestedRecipe = () => {
@@ -780,21 +825,35 @@ export default function MixAndMatch({ onNavigate }) {
                   </div>
                   <p className="text-sm leading-relaxed mb-5" style={{ color: bodyC }}>{arrangementDesc}</p>
 
-                  {/* Materials Used */}
+                  {/* Current selected materials used by the generated image */}
                   {result.price_breakdown?.items?.length > 0 && (
                     <div className="mb-5">
-                      <p className="text-sm font-semibold mb-2.5" style={{ color: subHeadC }}>Materials Used</p>
-                      <div className="flex flex-wrap gap-2 rounded-xl border p-3.5" style={{ borderColor: tileBdr }}>
+                      <div className="flex items-center justify-between gap-3 mb-2.5">
+                        <div>
+                          <p className="text-sm font-semibold" style={{ color: subHeadC }}>Current item selections</p>
+                          <p className="text-xs mt-0.5" style={{ color: mutedC }}>These are the items used for this generated image.</p>
+                        </div>
+                        <button type="button" onClick={editGeneratedSelections}
+                          className="px-3 py-1.5 rounded-lg border text-xs font-bold transition hover:brightness-105"
+                          style={{ borderColor: accentG, color: accentG, backgroundColor: isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4" }}>
+                          Modify items
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 rounded-xl border p-3.5" style={{ borderColor: tileBdr }}>
                         {result.price_breakdown.items.map((item, idx) => (
-                          <span
-                            key={idx}
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm"
+                          <div
+                            key={`${item.product_id || item.product_name}-${idx}`}
+                            className="flex items-center gap-2.5 p-2 rounded-xl border min-w-0"
                             style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}
                           >
-                            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: accentG }} />
-                            <span className="font-medium" style={{ color: subHeadC }}>{item.material_type}:</span>
-                            <span style={{ color: bodyC }}>{item.product_name}</span>
-                          </span>
+                            <FallbackImage src={item.image_url || PLACEHOLDER_IMAGE} alt={item.product_name}
+                              fallbackSrc={PLACEHOLDER_IMAGE} className="w-10 h-10 rounded-lg object-cover flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-semibold truncate" style={{ color: subHeadC }}>{item.product_name}</p>
+                              <p className="text-[11px] capitalize" style={{ color: mutedC }}>{item.material_type}</p>
+                            </div>
+                            <span className="text-xs font-bold whitespace-nowrap" style={{ color: accentG }}>x{item.quantity || 1}</span>
+                          </div>
                         ))}
                       </div>
                     </div>
@@ -981,18 +1040,29 @@ export default function MixAndMatch({ onNavigate }) {
                   </div>
                   </div>
 
-                  <button
-                    onClick={addToBag}
-                    className="mt-4 w-full py-2.5 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors flex-shrink-0"
-                    style={{ backgroundColor: accentG, color: isDark ? "#08120c" : "#ffffff" }}
-                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = accentDG)}
-                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = accentG)}
-                  >
+                  <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 flex-shrink-0">
+                    <button type="button" onClick={regenerateCurrentDesign}
+                      disabled={generating || aiUsage?.remaining === 0}
+                      className="w-full py-2.5 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 border transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{ borderColor: accentG, color: accentG, backgroundColor: isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4" }}>
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M4 4v6h6M20 20v-6h-6M5.5 15a7 7 0 0011.7 2.5L20 14M4 10l2.8-3.5A7 7 0 0118.5 9" />
+                      </svg>
+                      Regenerate image
+                    </button>
+                    <button
+                      onClick={addToBag}
+                      className="w-full py-2.5 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 transition-colors"
+                      style={{ backgroundColor: accentG, color: isDark ? "#08120c" : "#ffffff" }}
+                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = accentDG)}
+                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = accentG)}
+                    >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
                     </svg>
-                    Add to shopping bag
-                  </button>
+                      Add to shopping bag
+                    </button>
+                  </div>
                 </div>
               </div>
 

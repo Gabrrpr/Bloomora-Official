@@ -322,7 +322,16 @@ function SidebarContent({
 
   const groupedHierarchy = { floral: {}, 'non-floral': {} };
   
-  const HIDDEN_CATS = ["add-on", "addon", "wrapping", "ribbon", "filler"];
+  const HIDDEN_CATS = [
+    "add-on",
+    "addon",
+    "accessory",
+    "pot fillers",
+    "pot filler",
+    "wrapping",
+    "ribbon",
+    "filler",
+  ];
   if (categoryHierarchy.length > 0) {
     categoryHierarchy.forEach(groupData => {
       const group = normalizeCat(groupData.title || "uncategorized");

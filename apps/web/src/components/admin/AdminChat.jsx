@@ -79,6 +79,23 @@ const QUICK_REPLIES = [
 // 🚀 UPGRADED: Product Context UI Bubble
 function ProductContextPreview({ contextId, products, onPreview }) {
   if (!contextId) return null;
+  const contextValue = String(contextId);
+
+  if (contextValue.startsWith("support-automation:")) {
+    const rawTopic = contextValue.slice("support-automation:".length) || "support";
+    const topic = rawTopic.replace(/[_-]+/g, " ").replace(/\b\w/g, letter => letter.toUpperCase());
+    return (
+      <div className="flex items-center gap-2 px-3 py-1.5 mb-1.5 w-fit rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800/60 dark:bg-blue-900/20">
+        <svg className="w-3.5 h-3.5 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5m4.75-11.396c.251-.023.501-.04.75-.054m-.75.054a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19 14.5M14.25 3.104c-.251-.023-.501-.04-.75-.054M5 14.5l-1.231 1.231c-.63.63-.184 1.707.707 1.707h15.048c.89 0 1.337-1.077.707-1.707L19 14.5M5 14.5h14" />
+        </svg>
+        <span className="text-[10px] font-bold uppercase tracking-wide text-blue-700 dark:text-blue-300">
+          Automatic reply · {topic}
+        </span>
+      </div>
+    );
+  }
+
   const product = (products || []).find(p => String(p.id) === String(contextId));
 
   if (!product) {
@@ -393,7 +410,8 @@ export default function AdminChat() {
         text: msg.message, 
         image: msg.image_url, 
         time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : '',
-        context_id: msg.context_id // 🚀 ADDED mapping
+        context_id: msg.context_id, // 🚀 ADDED mapping
+        is_auto_reply: Boolean(msg.is_auto_reply || String(msg.context_id || "").startsWith("support-automation:"))
       }))
       setMessages(msgs)
     } finally { setLoadingMsgs(false) }
@@ -464,13 +482,15 @@ export default function AdminChat() {
       const incomingId = String(data.customer_id || data.user_id || data.sender_id);
       
       if (activeIdRef.current && incomingId === String(activeIdRef.current)) {
+        const isAutomatedReply = Boolean(data.is_auto_reply || String(data.context_id || "").startsWith("support-automation:"));
         setMessages(prev => [...prev, {
             id: data.id,
-            sender: 'customer',
+            sender: data.sender === 'staff' ? 'staff' : 'customer',
             text: data.message || data.text,
             image: data.image_url,
             time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            context_id: data.context_id // 🚀 ADDED mapping
+            context_id: data.context_id, // 🚀 ADDED mapping
+            is_auto_reply: isAutomatedReply
         }]);
       }
       loadConversations();

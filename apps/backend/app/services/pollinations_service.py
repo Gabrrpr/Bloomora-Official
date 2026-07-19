@@ -10,6 +10,10 @@ from app.core.config import settings
 from app.models.arrangement import Arrangement
 
 
+class PollinationsGenerationError(RuntimeError):
+    """A provider failure that is safe and useful to display to customers."""
+
+
 class PollinationsService:
     def __init__(self):
         self.base_url = "https://gen.pollinations.ai/image/"
@@ -25,15 +29,15 @@ class PollinationsService:
 
         if style == "box":
             style_prompt = (
-                "Real florist product photo of an Esting's-style transparent acrylic preservation cube flower box, "
-                "clear square acrylic container with flat transparent lid, thick clear edges, visible front wall, "
-                "visible side wall, red or rose-tinted base insert, slight high front three-quarter angle, upright "
-                "level cube, clean white studio background. Six to nine bloom heads arranged in a neat compact grid "
-                "inside the box just below the lid, short green stems visible downward through circular holes in an "
-                "inner clear acrylic tray, small oval florist label on the front with no readable text. Not a diamond, "
-                "not tilted, not rotated, not hexagonal, not a cardboard gift box, not a jewelry box, not a basket, "
-                "not a vase, not a hand-tied bouquet, no ribbon, no wrapping paper, no flowers outside the box, "
-                "no flowers rising above the lid, no people, no watermarks"
+                "Real premium florist product photo of a transparent acrylic flower display case with a square footprint, "
+                "straight upright clear walls, shallow clear upper cover enclosing the bloom heads, transparent horizontal "
+                "support plate at mid-height, and flat deep rose-red base. Exactly the recipe-listed bloom count forms a compact "
+                "even grid in the upper half. Every short green stem passes through a separate round hole in the support plate and "
+                "is visible in the empty lower half. Slightly elevated front three-quarter camera view shows the top, front, one "
+                "side, support tray, stems, and base at once; entire case centered on a clean white studio background. Straight "
+                "parallel rectangular edges, physically connected acrylic panels, subtle realistic reflections, small blank oval "
+                "label low on front. Not cardboard, not a vase, not a basket, not a terrarium, not a jewelry box, not a hand-tied "
+                "bouquet, not tilted, not diamond-shaped, not solid glass. No ribbon, wrapping, extra flowers, readable text, people, or watermarks"
             )
             return [polished_prompt, f"{optimized_prompt}. {style_prompt}"]
         elif style == "vase":
@@ -55,13 +59,18 @@ class PollinationsService:
 
     def _pollinations_urls(self, encoded_prompt: str, clean_key: str, seed: int):
         query = f"width=768&height=768&model={self.model}&nologo=true&seed={seed}"
+        urls = []
         if clean_key:
-            query = f"{query}&key={clean_key}"
+            keyed_query = f"{query}&key={clean_key}"
+            urls.extend([
+                f"{self.base_url}{encoded_prompt}?{keyed_query}",
+                f"{self.fallback_base_url}{encoded_prompt}?{keyed_query}",
+            ])
 
-        return [
-            f"{self.base_url}{encoded_prompt}?{query}",
-            f"{self.fallback_base_url}{encoded_prompt}?{query}",
-        ]
+        # Pollinations also exposes a public endpoint. This keeps previews
+        # available when a configured key temporarily runs out of pollen.
+        urls.append(f"{self.fallback_base_url}{encoded_prompt}?{query}")
+        return urls
 
     def _create_demo_preview(self, optimized_prompt: str, arrangement_type: str) -> bytes:
         style = str(arrangement_type or "bouquet").strip().lower()
@@ -138,6 +147,7 @@ class PollinationsService:
         prompt_variants = self._build_prompt_variants(optimized_prompt, arrangement_type)
         clean_key = settings.POLLINATIONS_API_KEY.strip()
         image_bytes = None
+        budget_exhausted = False
         generation_seed = secrets.randbelow(2_000_000_000)
 
         async with httpx.AsyncClient(follow_redirects=True) as client:
@@ -164,6 +174,9 @@ class PollinationsService:
                     except httpx.HTTPStatusError as e:
                         body = e.response.text[:300] if e.response is not None else ""
                         status_code = e.response.status_code if e.response is not None else "unknown"
+                        normalized_body = body.lower()
+                        if "budget too low" in normalized_body or "payment_required" in normalized_body:
+                            budget_exhausted = True
                         print(f"Pollinations HTTP error on attempt {attempt}.{url_index}: status={status_code}, body={body}")
                     except httpx.RequestError as e:
                         print(f"Pollinations request error on attempt {attempt}.{url_index}: {type(e).__name__}: {repr(e)}")
@@ -175,6 +188,11 @@ class PollinationsService:
 
         if not image_bytes:
             print("Pollinations timed out or failed on all attempts. No generic preview will be substituted.")
+            if budget_exhausted:
+                raise PollinationsGenerationError(
+                    "The AI image service has temporarily run out of generation credit. "
+                    "Your selected items are still saved on this page; please try again later."
+                )
             return None
 
         try:
@@ -182,7 +200,6 @@ class PollinationsService:
         except Exception as e:
             print(f"Generated image could not be opened: {e}.")
             return None
-
         try:
             current_dir = Path(__file__).resolve().parent
             apps_dir = current_dir.parent.parent.parent

@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react"
 import { api } from "../../services/api.js"
 import { getCart, clearCart } from "../../utils/cart.js"
 import { useAuth } from "../../context/AuthContext"
+import { useBranch } from "../../context/BranchContext"
 import { computeDiscount } from "../../utils/vouchers.js"
 import { API_BASE } from "../../config/api.js"
 import moveItLogo from "../../assets/shipping/Move-It-Logo_Red-Dirty.webp"
@@ -10,6 +11,7 @@ import grabExpressLogo from "../../assets/shipping/grabexpress.webp"
 import lbcLogo from "../../assets/shipping/493-4939965_lbc-express-logo-png-removebg-preview.webp"
 import jtExpressLogo from "../../assets/shipping/JT-Express-Logo.webp"
 import OrderingFulfillmentModal from "../../components/OrderingFulfillmentModal.jsx"
+import { getTopNavigationInset } from "../../utils/modalViewport.js"
 
 const G = "#2E8B34"
 const DG = "#0C573E"
@@ -92,8 +94,19 @@ function ShippingLogo({ method }) {
   )
 }
 
+const getItemAddOns = item => {
+  const addOns = item?.addOns || item?.add_ons || item?.addons || []
+  return Array.isArray(addOns) ? addOns.filter(Boolean) : []
+}
+
+const formatPesoAmount = value => Number(value || 0).toLocaleString("en-PH", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+})
+
 export default function Checkout({ onNavigate }) {
   const { user } = useAuth()
+  const { branch: activeBranch } = useBranch()
   const [cartItems, setCartItems] = useState([])
   const deliveryTime = "Anytime"
   const paymentMethod = "ewallet";
@@ -104,8 +117,11 @@ export default function Checkout({ onNavigate }) {
   const [voucher, setVoucher] = useState("")
   const [appliedVoucher, setAppliedVoucher] = useState(null)
   const [voucherMsg, setVoucherMsg] = useState(null)
+  const [bundleQuote, setBundleQuote] = useState(null)
   const [placing, setPlacing] = useState(false)
   const [error, setError] = useState("")
+  const rawStoreBranch = activeBranch || "Manila"
+  const selectedStoreBranch = rawStoreBranch.charAt(0).toUpperCase() + rawStoreBranch.slice(1).toLowerCase()
 
   const [deliveryMode, setDeliveryMode] = useState("tomorrow")
   const [deliveryDate, setDeliveryDate] = useState(() => {
@@ -124,6 +140,10 @@ export default function Checkout({ onNavigate }) {
   const [showManualModal, setShowManualModal] = useState(false)
   const [mapFullscreenOpen, setMapFullscreenOpen] = useState(false)
   const [orderingPolicyOpen, setOrderingPolicyOpen] = useState(false)
+  const [modalViewportHeight, setModalViewportHeight] = useState(() => (
+    typeof window === "undefined" ? 800 : window.visualViewport?.height || window.innerHeight
+  ))
+  const [modalTopInset, setModalTopInset] = useState(() => getTopNavigationInset())
   const [saveAddressToBook, setSaveAddressToBook] = useState(false)
   const [manualForm, setManualForm] = useState({
     recipient_name: "",
@@ -216,6 +236,23 @@ export default function Checkout({ onNavigate }) {
   }, [mapFullscreenOpen])
 
   useEffect(() => {
+    if (!mapFullscreenOpen) return
+    const updateViewportMetrics = () => {
+      setModalViewportHeight(window.visualViewport?.height || window.innerHeight)
+      setModalTopInset(getTopNavigationInset())
+    }
+    updateViewportMetrics()
+    const frame = window.requestAnimationFrame(updateViewportMetrics)
+    window.addEventListener("resize", updateViewportMetrics)
+    window.visualViewport?.addEventListener("resize", updateViewportMetrics)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener("resize", updateViewportMetrics)
+      window.visualViewport?.removeEventListener("resize", updateViewportMetrics)
+    }
+  }, [mapFullscreenOpen])
+
+  useEffect(() => {
     async function loadAddresses() {
       const token = localStorage.getItem("access_token")
       if (!token) {
@@ -241,7 +278,45 @@ export default function Checkout({ onNavigate }) {
     loadAddresses()
   }, [])
 
-  const subtotal = cartItems.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0)
+  const subtotal = cartItems.reduce((s, i) => s + Number(i.totalPrice ?? i.price ?? 0) * (i.qty || 1), 0)
+  const quoteItems = cartItems.map(item => ({
+    id: item.id,
+    qty: item.qty || 1,
+    add_ons: item.addOns || item.add_ons || item.addons || [],
+  }))
+  const quoteSignature = JSON.stringify(quoteItems)
+  const addOnSummary = Object.values(cartItems.reduce((summary, item) => {
+    getItemAddOns(item).forEach((addOn, index) => {
+      const key = String(addOn.id || addOn.name || index)
+      const quantity = Math.max(1, Number(addOn.qty || addOn.quantity || 1)) * Math.max(1, Number(item.qty || 1))
+      if (!summary[key]) {
+        summary[key] = {
+          id: key,
+          name: addOn.name || "Add-on",
+          quantity: 0,
+          total: 0,
+        }
+      }
+      summary[key].quantity += quantity
+      summary[key].total += Number(addOn.price || 0) * quantity
+    })
+    return summary
+  }, {}))
+  const addOnSubtotal = addOnSummary.reduce((sum, addOn) => sum + addOn.total, 0)
+  const productSubtotal = Math.max(0, subtotal - addOnSubtotal)
+
+  useEffect(() => {
+    let active = true
+    if (!cartItems.length) {
+      setBundleQuote(null)
+      return () => { active = false }
+    }
+    api.quoteOrder(quoteItems, selectedStoreBranch)
+      .then(quote => { if (active) setBundleQuote(quote) })
+      .catch(() => { if (active) setBundleQuote(null) })
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quoteSignature, selectedStoreBranch])
 
   const applyVoucher = async () => {
     if (!cartItems.length) return setVoucherMsg({ type: "error", text: "Add products before applying a voucher." })
@@ -291,9 +366,6 @@ export default function Checkout({ onNavigate }) {
     : user
     ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
     : "Guest"
-
-  const rawStoreBranch = localStorage.getItem("bloomora_active_branch") || "Manila";
-  const selectedStoreBranch = rawStoreBranch.charAt(0).toUpperCase() + rawStoreBranch.slice(1).toLowerCase();
 
   const selectedAddress = addresses.find(a => a.id === selectedAddressId)
 
@@ -352,7 +424,9 @@ export default function Checkout({ onNavigate }) {
   const shipping = cartItems.length > 0 && fulfillmentMethod === "delivery"
     ? Number(selectedShippingMethod?.base_rate ?? deliverySettings.delivery_fee ?? 0)
     : 0
-  const discount = computeDiscount(appliedVoucher, subtotal)
+  const voucherDiscount = computeDiscount(appliedVoucher, subtotal)
+  const bundleDiscount = Number(bundleQuote?.bundle_discount || 0)
+  const discount = voucherDiscount + bundleDiscount
   const total = Math.max(0, subtotal + shipping - discount)
 
   useEffect(() => {
@@ -695,6 +769,10 @@ export default function Checkout({ onNavigate }) {
           card_message: i.massCardContext
             ? `Mass card context: ${i.massCardContext}`
             : (i.cardMessage || i.card_message || null),
+          add_ons: (i.addOns || i.add_ons || i.addons || []).map(addOn => ({
+            id: addOn.id,
+            qty: addOn.qty || 1,
+          })),
         })),
         delivery_address: deliveryDetails.address,
         delivery_notes: buildDeliveryNotes(),
@@ -1136,9 +1214,29 @@ export default function Checkout({ onNavigate }) {
                     <p className="text-sm font-semibold text-gray-800 mb-0.5">{item.name}</p>
                     <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">{item.desc}</p>
                     <p className="text-xs text-gray-500 mt-1">Qty: {item.qty || 1}</p>
+                    {getItemAddOns(item).length > 0 && (
+                      <div className="mt-2 rounded-lg border border-green-100 bg-green-50 px-2.5 py-2 space-y-1">
+                        <p className="text-[10px] font-bold uppercase tracking-wide text-green-800">Selected add-ons</p>
+                        {getItemAddOns(item).map((addOn, index) => {
+                          const perProductQty = Math.max(1, Number(addOn.qty || addOn.quantity || 1))
+                          const totalAddOnQty = perProductQty * Math.max(1, Number(item.qty || 1))
+                          const totalAddOnPrice = Number(addOn.price || 0) * totalAddOnQty
+                          return (
+                            <div key={addOn.id || `${addOn.name}-${index}`} className="flex items-center justify-between gap-3 text-[11px]">
+                              <span className="min-w-0 truncate text-gray-700">
+                                {addOn.name || "Add-on"} <span className="text-gray-400">× {totalAddOnQty}</span>
+                              </span>
+                              <span className="flex-shrink-0 font-semibold text-[#2E8B34]">
+                                +₱{totalAddOnPrice.toLocaleString()}
+                              </span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                   <div className="flex items-start gap-2 flex-shrink-0">
-                    <span className="text-sm font-semibold text-gray-800">₱{((item.price || 0) * (item.qty || 1)).toLocaleString()}</span>
+                    <span className="text-sm font-semibold text-gray-800">₱{(Number(item.totalPrice ?? item.price ?? 0) * (item.qty || 1)).toLocaleString()}</span>
                   </div>
                 </div>
               ))}
@@ -1262,7 +1360,7 @@ export default function Checkout({ onNavigate }) {
                     <div className="min-w-0">
                       <p className="text-xs font-bold text-[#2E8B34] truncate">{appliedVoucher.code}</p>
                       <p className="text-[11px] text-gray-500">
-                        {appliedVoucher.type === "percent" ? `${appliedVoucher.value}% off` : `₱${appliedVoucher.value} off`} · −₱{discount.toLocaleString()}
+                        {appliedVoucher.type === "percent" ? `${appliedVoucher.value}% off` : `₱${appliedVoucher.value} off`} · −₱{voucherDiscount.toLocaleString()}
                       </p>
                     </div>
                     <button onClick={removeVoucher} className="text-xs font-semibold text-gray-500 hover:text-red-500 flex-shrink-0">REMOVE</button>
@@ -1313,12 +1411,34 @@ export default function Checkout({ onNavigate }) {
             <div className="bg-white border border-gray-100 rounded-2xl p-4 sm:p-5 shadow-sm">
               <h2 className="text-sm font-bold text-gray-800 mb-4">Order Summary</h2>
               <div className="space-y-2.5 text-sm mb-4">
-                <div className="flex justify-between text-gray-500"><span>Subtotal ({cartItems.length} item{cartItems.length !== 1 ? "s" : ""})</span><span className="font-medium text-gray-700">₱{subtotal.toLocaleString()}.00</span></div>
+                <div className="flex justify-between text-gray-500"><span>Products ({cartItems.length} item{cartItems.length !== 1 ? "s" : ""})</span><span className="font-medium text-gray-700">₱{formatPesoAmount(productSubtotal)}</span></div>
+                {addOnSummary.length > 0 && (
+                  <div className="rounded-lg border border-green-100 bg-green-50/70 px-3 py-2.5">
+                    <div className="mb-2 flex items-center justify-between text-[#2E8B34]">
+                      <span className="text-xs font-bold uppercase tracking-wide">Add-ons</span>
+                      <span className="font-semibold">₱{formatPesoAmount(addOnSubtotal)}</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {addOnSummary.map(addOn => (
+                        <div key={addOn.id} className="flex items-center justify-between gap-3 text-xs text-gray-600">
+                          <span className="min-w-0 truncate">{addOn.name} <span className="text-gray-400">× {addOn.quantity}</span></span>
+                          <span className="flex-shrink-0 font-medium text-gray-700">₱{formatPesoAmount(addOn.total)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="flex justify-between text-gray-500"><span>Shipping Fee</span><span className="font-medium text-gray-700">₱{shipping}.00</span></div>
-                {discount > 0 && (
+                {bundleDiscount > 0 && (
+                  <div className="flex justify-between text-[#2E8B34]">
+                    <span>Bundle discount ({Number(bundleQuote?.bundle_campaign?.discount_percent || 0)}% off)</span>
+                    <span className="font-medium">−₱{bundleDiscount.toLocaleString()}.00</span>
+                  </div>
+                )}
+                {voucherDiscount > 0 && (
                   <div className="flex justify-between text-[#2E8B34]">
                     <span>Voucher{appliedVoucher ? ` (${appliedVoucher.code})` : ""}</span>
-                    <span className="font-medium">−₱{discount.toLocaleString()}.00</span>
+                    <span className="font-medium">−₱{voucherDiscount.toLocaleString()}.00</span>
                   </div>
                 )}
                 <div className="h-px bg-gray-100" />
@@ -1375,13 +1495,13 @@ export default function Checkout({ onNavigate }) {
       {/* Map Preview Modal */}
       {mapFullscreenOpen && (
         <div
-          className="fixed inset-0 z-[60] overflow-y-auto bg-black/75"
+          className="fixed inset-0 z-[60] flex items-center justify-center overflow-hidden bg-black/75 px-2 py-4 sm:px-4"
+          style={{ top: modalTopInset }}
           onClick={() => setMapFullscreenOpen(false)}
         >
-          <div className="flex min-h-full w-full items-center justify-center px-3 py-12 sm:px-5 sm:py-16">
             <div
               className="bg-white rounded-xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col"
-              style={{ height: "min(720px, calc(100dvh - 6rem))", maxHeight: "calc(100dvh - 6rem)" }}
+              style={{ height: Math.max(96, Math.min(720, modalViewportHeight - modalTopInset - 32)) }}
               onClick={event => event.stopPropagation()}
             >
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-3">
@@ -1418,7 +1538,6 @@ export default function Checkout({ onNavigate }) {
             </div>
             </div>
           </div>
-        </div>
       )}
 
       {showManualModal && (

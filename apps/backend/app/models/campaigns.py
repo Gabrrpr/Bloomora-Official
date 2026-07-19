@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Table, Text, Numeric
+from sqlalchemy import Column, String, DateTime, Boolean, ForeignKey, Table, Text, Numeric, Integer
 from sqlalchemy.orm import relationship
 from app.models.base import Base
 import uuid
@@ -37,6 +37,8 @@ class Campaign(Base):
     linked_product_id = Column(UUID(as_uuid=True), ForeignKey("products.id", ondelete="SET NULL"), nullable=True)
     discount_type = Column(String(20), nullable=True)
     discount_value = Column(Numeric(10, 2), nullable=True)
+    minimum_quantity = Column(Integer, nullable=True)
+    eligible_category = Column(String(100), nullable=True)
 
     # Relationship to get all products in this campaign
     products = relationship("Product", secondary=product_campaigns, back_populates="campaigns")

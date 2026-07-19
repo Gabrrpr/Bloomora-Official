@@ -32,10 +32,10 @@ export function getArrangementVisualRule(style) {
 
   if (normalized === "box") {
     return (
-      "Use an Esting's-style transparent acrylic preservation cube flower box, matching a real florist product photo: a clear square acrylic box with a flat transparent lid, thick clear edges, visible front wall, visible right/left side wall, and a red or rose-tinted base insert. " +
-      "Use a slight high front three-quarter angle so the lid surface, front wall, side wall, and lower base are all visible, but keep the cube upright and level, not diamond-shaped, not rotated, not tilted, not hexagonal, and not a cardboard gift box. " +
-      "The selected flowers must be inside the clear acrylic box in a neat compact grid, like 6 to 9 bloom heads sitting just below the lid. Show short green stems continuing downward through circular holes in an inner clear acrylic tray. " +
-      "Add a small oval florist label on the front panel with no readable text. Do not add ribbon, wrapping paper, hand-tied stems, vase, basket, bouquet shape, flowers outside the acrylic box, or flowers rising above the lid."
+      "Use a premium transparent acrylic florist display box matching this physical construction: a straight, upright square-footprint case with clear vertical walls, a shallow transparent upper cover around the flower heads, a clear horizontal support plate at mid-height, and a flat deep rose-red base. " +
+      "Place exactly the customer's selected number of bloom heads in a compact, evenly spaced grid in the upper half. The flower heads should nearly fill the upper compartment while remaining below the clear cover. Show each short green stem passing downward through its own round hole in the clear support plate and visibly continuing into the empty lower compartment. " +
+      "Photograph the whole box from a slightly elevated front three-quarter angle so the top cover, front wall, one side wall, support plate, stems, and red base are simultaneously visible. Keep all edges straight, parallel, upright, and rectangular. Add a small blank oval florist label centered low on the front wall. " +
+      "This is a rigid acrylic flower display case, not a cardboard gift box, vase, basket, terrarium, jewelry box, hand-tied bouquet, tilted diamond, or solid glass block. Do not add ribbon, wrapping paper, extra flowers, readable text, flowers outside the case, or flowers above the cover."
     )
   }
 

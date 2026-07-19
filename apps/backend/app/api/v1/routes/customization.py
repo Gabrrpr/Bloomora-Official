@@ -19,7 +19,7 @@ from app.schemas.customization import (
     PriceBreakdownItem,
     PriceBreakdown,
 )
-from app.services.pollinations_service import PollinationsService
+from app.services.pollinations_service import PollinationsGenerationError, PollinationsService
 from app.services.gemini_service import PromptExtractionError, validate_and_optimize_prompt
 from app.services.customization_rules import (
     QuantityAdjustment,
@@ -89,6 +89,31 @@ def _merge_prompt_requested_materials(
     return list(merged.values())
 
 
+def _requested_materials_from_selection(
+    payload: CustomizationRequest,
+    inventory_catalog,
+) -> list[RequestedMaterial]:
+    """Build the exact Mix & Match recipe without interpreting prompt prose."""
+    inventory_by_id = {item.product_id: item for item in inventory_catalog}
+    quantities: dict[str, int] = {}
+    for selected in payload.selected_items:
+        product_id = str(selected.product_id)
+        quantities[product_id] = quantities.get(product_id, 0) + int(selected.quantity)
+
+    return [
+        RequestedMaterial(
+            product_id=product_id,
+            product_name=(
+                inventory_by_id[product_id].product_name
+                if product_id in inventory_by_id
+                else "Selected item"
+            ),
+            quantity=quantity,
+        )
+        for product_id, quantity in quantities.items()
+    ]
+
+
 def _needs_box_container_rule(arrangement_type: Optional[str]) -> bool:
     return str(arrangement_type or "").strip().lower() in {"box", "boxed", "boxed arrangement"}
 
@@ -113,16 +138,15 @@ def _infer_arrangement_type(arrangement_type: Optional[str], prompt_text: str) -
 def _arrangement_visual_rule(arrangement_type: str) -> str:
     if arrangement_type == "box":
         return (
-            "Visual style lock: boxed arrangement. Match this exact product style: an Esting's-style transparent acrylic "
-            "preservation cube flower box, photographed like a real florist product on a clean white studio background. "
-            "The container is a clear square acrylic box with a flat transparent lid, thick clear edges, visible front wall, "
-            "visible side wall, and a red or rose-tinted base insert. Use a slight high front three-quarter product angle so "
-            "the lid surface, front wall, side wall, and lower base are all visible, but keep the cube upright and level. "
-            "It must not look like a diamond, rhombus, tilted box, hexagon, cardboard gift box, jewelry box, basket, vase, "
-            "or hand-tied bouquet. Arrange 6 to 9 bloom heads in a neat compact grid inside the box, sitting just below the "
-            "transparent lid. Show short green stems continuing downward through circular holes in an inner clear acrylic tray. "
-            "Add a small oval florist label on the front panel, but no readable text. No ribbon, no wrapping paper, no tied stems, "
-            "no flowers outside the acrylic box, and no flowers rising above the lid. "
+            "Visual style lock: boxed arrangement. Render a premium transparent acrylic florist display case with a square "
+            "footprint, straight upright clear walls, a shallow clear upper cover around the bloom heads, a transparent horizontal "
+            "support plate at mid-height, and a flat deep rose-red base. Place exactly the recipe-listed number of bloom heads in a "
+            "compact evenly spaced grid in the upper half, nearly filling that compartment but remaining below the cover. Each short "
+            "green stem must pass through its own circular hole in the support plate and remain visible in the empty lower compartment. "
+            "Use a slightly elevated front three-quarter product angle showing the top, front, one side, support plate, stems, and base. "
+            "Keep all box edges straight, parallel, level, rectangular, and physically connected. Add only a small blank oval label low "
+            "on the front. This is not a cardboard gift box, vase, basket, terrarium, jewelry box, hand-tied bouquet, tilted diamond, "
+            "or solid glass block. No ribbon, wrapping paper, extra flowers, readable text, flowers outside the case, or blooms above the cover. "
         )
     if arrangement_type == "vase":
         return (
@@ -348,24 +372,29 @@ async def check_and_generate(
         payload.arrangement_type or ai_verdict.get("arrangement_type"),
         payload.prompt_text,
     )
-    requested_materials = normalize_requested_materials(
-        ai_verdict.get("used_items", []),
-        inventory_catalog,
-    )
-    prompt_requested_materials = extract_prompt_requested_materials(
-        payload.prompt_text,
-        inventory_catalog,
-    )
-    requested_materials = _merge_prompt_requested_materials(
-        requested_materials,
-        prompt_requested_materials,
-    )
-    requested_materials = _merge_explicit_materials(
-        payload,
-        requested_materials,
-        inventory_catalog,
-    )
-    has_explicit_selection = any((
+    if payload.selected_items:
+        # Mix & Match already knows every selected product and quantity. Never
+        # let Gemini or visual prompt wording alter that exact recipe.
+        requested_materials = _requested_materials_from_selection(payload, inventory_catalog)
+    else:
+        requested_materials = normalize_requested_materials(
+            ai_verdict.get("used_items", []),
+            inventory_catalog,
+        )
+        prompt_requested_materials = extract_prompt_requested_materials(
+            payload.prompt_text,
+            inventory_catalog,
+        )
+        requested_materials = _merge_prompt_requested_materials(
+            requested_materials,
+            prompt_requested_materials,
+        )
+        requested_materials = _merge_explicit_materials(
+            payload,
+            requested_materials,
+            inventory_catalog,
+        )
+    has_explicit_selection = bool(payload.selected_items) or any((
         payload.flower_id,
         payload.vase_id,
         payload.wrapping_id,
@@ -526,14 +555,24 @@ async def check_and_generate(
     # truncate the customer's requested materials.
     final_image_prompt = f"{final_image_prompt} {style_visual_rule}"
     
-    generated_url = await pollinations.generate_arrangement_image(
-        db=db,
-        arrangement_id=str(arrangement.id),
-        optimized_prompt=final_image_prompt,
-        arrangement_type=arrangement_type,
-    )
+    try:
+        generated_url = await pollinations.generate_arrangement_image(
+            db=db,
+            arrangement_id=str(arrangement.id),
+            optimized_prompt=final_image_prompt,
+            arrangement_type=arrangement_type,
+        )
+    except PollinationsGenerationError as exc:
+        db.delete(arrangement)
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
 
     if not generated_url:
+        db.delete(arrangement)
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Image generation failed. Please try again."
@@ -574,6 +613,7 @@ async def check_and_generate(
     return CustomizationResponse(
         success=True,
         message=f"Your arrangement has been generated! You have {remaining} AI generation(s) left today.",
+        arrangement_type=arrangement_type,
         generated_image_url=generated_url,
         arrangement_id=str(arrangement.id),
         unavailable_items=[],

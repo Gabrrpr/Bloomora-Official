@@ -2,7 +2,7 @@ import unittest
 import uuid
 from datetime import datetime, timezone
 
-from app.api.v1.routes.chats import _persist_automated_reply
+from app.api.v1.routes.chats import _persist_automated_reply, serialize_chat
 from app.services.support_automation import AutomatedSupportReply, get_automated_support_reply
 
 
@@ -95,6 +95,7 @@ class SupportAutomationTests(unittest.TestCase):
         self.assertEqual(saved.message, reply.message)
         self.assertEqual(saved.context_id, "support-automation:tracking")
         self.assertEqual(saved.sender, "staff")
+        self.assertTrue(serialize_chat(saved)["is_auto_reply"])
 
 
 if __name__ == "__main__":

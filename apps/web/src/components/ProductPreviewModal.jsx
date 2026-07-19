@@ -574,327 +574,6 @@ function CardStep({ delivLabel, dest, onClose, onNavigate, isMobile, cartItemKey
   )
 }
 
-/* ── Quote line row ── */
-function QuoteLineRow({ label, unit, qty, txt, subTxt, addon, formatPrice }) {
-  return (
-    <div className="flex justify-between items-start mb-1.5">
-      <div className="flex-1 min-w-0 pr-2">
-        <span className="text-xs font-medium" style={{ color: txt }}>{addon ? `+ ${label}` : label}</span>
-        <span className="text-[10px] block" style={{ color: subTxt }}>
-          {formatPrice(unit)} × {qty.toLocaleString()}
-        </span>
-      </div>
-      <span className="text-xs font-semibold whitespace-nowrap" style={{ color: txt }}>
-        {formatPrice(unit * qty)}
-      </span>
-    </div>
-  )
-}
-
-/* ── Quote Step ── */
-function QuoteStep({ product, color, sizeLabel, addOnObjects, addOnTotal, isDark, onBack, onClose, onOpenChat, isMobile, formatPrice }) {
-  const productImage = product.image || product.image_url || ""; 
-  const [phase,  setPhase]  = useState("input")
-  const [qtyStr, setQtyStr] = useState("")
-  const [err,    setErr]    = useState("")
-  const [copied, setCopied] = useState(false)
-  const [meta,   setMeta]   = useState({ qty: 0, ref: "", date: "" })
-
-  const unitPrice = product.price + addOnTotal
-  const QUICK = [10, 25, 50, 100]
-
-  const panelBg = isDark ? "#0f172a" : "#f3f4f6"
-  const docBg   = isDark ? "#1e293b" : "white"
-  const subBg   = isDark ? "#0f172a" : "#f9fafb"
-  const txt     = isDark ? "#f8fafc" : "#111827"
-  const subTxt  = isDark ? "#cbd5e1" : "#6b7280"
-  const faint   = isDark ? "#94a3b8" : "#9ca3af"
-  const bdr     = isDark ? "#475569" : "#e5e7eb"
-  const lineBdr = isDark ? "#334155" : "#f3f4f6"
-  const accent  = isDark ? "#4ade80" : G
-
-  const generate = () => {
-    const n = parseInt(qtyStr, 10)
-    if (!n || n < 1) { setErr("Please enter how many you'd like to order."); return }
-    const ref  = `BLM-${product.id}-${Date.now().toString().slice(-6)}`
-    const date = new Date().toLocaleDateString("en-PH", { year: "numeric", month: "long", day: "numeric" })
-    setMeta({ qty: n, ref, date })
-    setErr("")
-    setPhase("loading")
-  }
-
-  useEffect(() => {
-    if (phase !== "loading") return
-    const t = setTimeout(() => setPhase("report"), 1600)
-    return () => clearTimeout(t)
-  }, [phase])
-
-  const grand = unitPrice * meta.qty
-  const quoteSummary = `${product.name} · ${meta.qty.toLocaleString()} pcs · ${formatPrice(grand)}`
-
-  const buildReportText = () => {
-    const L = []
-    L.push("BULK ORDER QUOTATION")
-    L.push("Esting's Flower International Inc.")
-    L.push(`Ref ${meta.ref}  ·  ${meta.date}`)
-    L.push("")
-    L.push(`Item: ${product.name}`)
-    if (color?.name) L.push(`Color: ${color.name}`)
-    if (sizeLabel)   L.push(`Variant: ${sizeLabel}`)
-    L.push(`Quantity: ${meta.qty}`)
-    L.push("")
-    L.push(`Base: ${formatPrice(product.price)} x ${meta.qty} = ${formatPrice(product.price * meta.qty)}`)
-    addOnObjects.forEach(a =>
-      L.push(`Add-on (${a.name}): ${formatPrice(a.price)} x ${meta.qty} = ${formatPrice(a.price * meta.qty)}`)
-    )
-    L.push("")
-    L.push(`Per-unit total: ${formatPrice(unitPrice)}`)
-    L.push(`GRAND TOTAL: ${formatPrice(grand)}`)
-    L.push("")
-    L.push("This is a standard-rate estimate. Is a bulk discount available for this quantity?")
-    return L.join("\n")
-  }
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(buildReportText())
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch { /* clipboard unavailable */ }
-  }
-
-  const download = () => {
-    try {
-      const blob = new Blob([buildReportText()], { type: "text/plain;charset=utf-8" })
-      const url  = URL.createObjectURL(blob)
-      const a    = document.createElement("a")
-      a.href = url
-      a.download = `Quotation-${meta.ref}.txt`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
-    } catch { /* download unavailable */ }
-  }
-
-  return (
-    <div className={`pm-quote-form w-full h-full flex overflow-hidden ${isMobile ? "flex-col" : "flex-row"}`}>
-      {!isMobile && (
-        <div className="pm-quote-img flex-shrink-0 overflow-hidden flex items-center justify-center p-6"
-          style={{ width: "50%", background: isDark ? "#0f172a" : "#f3f4f6" }}>
-          <img src={productImage} alt={product.name} className="max-w-full max-h-full object-contain"
-            onError={e => { e.target.style.display="none" }}/>
-        </div>
-      )}
-
-      <div className={`pm-quote-right flex flex-col ${isMobile ? "overflow-y-auto" : "overflow-y-auto"}`}
-        style={{ width: isMobile ? "100%" : "50%", flex: isMobile ? "1 1 auto" : undefined, minHeight: 0, background: panelBg }}>
-        <div className={`flex flex-col rounded-2xl overflow-hidden ${isMobile ? "m-2" : "m-4 my-auto"}`}
-          style={{ background: docBg, boxShadow: "0 2px 16px rgba(0,0,0,0.08)" }}>
-
-          {phase === "input" ? (
-            <div className={`pm-scroll px-6 py-6 flex flex-col ${isMobile ? "" : "overflow-y-auto"}`}>
-              <button onClick={onBack}
-                className="flex items-center gap-1.5 text-sm cursor-pointer bg-transparent border-none mb-4 p-0"
-                style={{ color: faint }}>
-                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7"/></svg>
-                Back to product
-              </button>
-
-              <div className="flex items-center gap-3 mb-5">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
-                  <svg width="17" height="17" fill="none" stroke="white" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                </div>
-                <div>
-                  <p className="text-base font-bold m-0" style={{ color: txt }}>Bulk Order Quotation</p>
-                  <p className="text-xs m-0" style={{ color: faint }}>Get an instant estimate for a large order</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 p-3 rounded-xl mb-5"
-                style={{ background: subBg, border: `1px solid ${bdr}` }}>
-                <div className="w-12 h-12 rounded-lg overflow-hidden flex-shrink-0" style={{ border: `1px solid ${bdr}` }}>
-                  <img src={productImage} alt={product.name} className="w-full h-full object-cover"
-                    onError={e => { e.target.style.display="none" }}/>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate m-0" style={{ color: txt }}>{product.name}</p>
-                  <p className="text-xs m-0" style={{ color: subTxt }}>
-                    {[color?.name, sizeLabel].filter(Boolean).join(" · ") || "Standard"}
-                  </p>
-                  <p className="text-xs font-semibold mt-0.5 m-0" style={{ color: accent }}>
-                    {formatPrice(unitPrice)} per unit{addOnTotal > 0 ? " (incl. add-ons)" : ""}
-                  </p>
-                </div>
-              </div>
-
-              <label className="block text-xs font-semibold uppercase tracking-widest mb-2"
-                style={{ color: err ? "#ef4444" : subTxt }}>
-                How many would you like to order? <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="number" min="1" inputMode="numeric" placeholder="e.g. 10"
-                value={qtyStr}
-                onChange={e => { setQtyStr(e.target.value.replace(/[^0-9]/g, "")); setErr("") }}
-                onKeyDown={e => { if (e.key === "Enter") generate() }}
-                className="w-full rounded-lg px-3 py-2.5 text-sm outline-none mb-3"
-                style={{
-                  border: `1.5px solid ${err ? "#fca5a5" : bdr}`,
-                  background: isDark ? "#0f172a" : "white",
-                  color: txt
-                }}
-                onFocus={e => e.target.style.borderColor = err ? "#ef4444" : accent}
-                onBlur={e  => e.target.style.borderColor = err ? "#fca5a5" : bdr}/>
-
-              <div className="flex gap-2 flex-wrap">
-                {QUICK.map(n => (
-                  <button key={n} onClick={() => { setQtyStr(String(n)); setErr("") }}
-                    className="px-3.5 py-1.5 rounded-full text-xs cursor-pointer transition-all"
-                    style={{
-                      fontWeight: qtyStr === String(n) ? 600 : 400,
-                      border: `1px solid ${qtyStr === String(n) ? accent : bdr}`,
-                      background: qtyStr === String(n) ? (isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4") : "transparent",
-                      color: qtyStr === String(n) ? accent : subTxt
-                    }}>
-                    {n} pcs
-                  </button>
-                ))}
-              </div>
-
-              {err && <p className="text-xs text-red-500 mt-2">{err}</p>}
-
-              <button onClick={generate}
-                className={`w-full py-3.5 rounded-xl text-sm font-semibold text-white border-none cursor-pointer flex items-center justify-center gap-2 ${isMobile ? "mt-6" : "mt-4"}`}
-                style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
-                <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                Generate Quotation
-              </button>
-            </div>
-          ) : phase === "loading" ? (
-            <div className="px-6 py-16 flex flex-col items-center justify-center text-center" style={{ minHeight: 280 }}>
-              <div style={{ animation: "qPulse 1.4s ease-in-out infinite" }}>
-                <svg viewBox="0 0 64 64" className="w-20 h-20" style={{ animation: "qSpin 3.2s linear infinite", transformOrigin: "center" }}>
-                  {[0, 72, 144, 216, 288].map(a => (
-                    <ellipse key={a} cx="32" cy="17" rx="8.5" ry="13" fill={accent} opacity="0.85"
-                      transform={`rotate(${a} 32 32)`}/>
-                  ))}
-                  <circle cx="32" cy="32" r="7.5" fill={isDark ? "#fde047" : "#facc15"}/>
-                </svg>
-              </div>
-              <p className="text-base font-semibold mt-6 mb-1" style={{ color: txt }}>Preparing your quotation…</p>
-              <p className="text-xs" style={{ color: faint }}>Crunching the numbers for {qtyStr} pcs</p>
-              <style>{`
-                @keyframes qSpin{to{transform:rotate(360deg)}}
-                @keyframes qPulse{0%,100%{transform:scale(0.92)}50%{transform:scale(1.08)}}
-                @keyframes qFade{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
-                .q-report>*{animation:qFade 0.55s cubic-bezier(0.22,0.61,0.36,1) both}
-                .q-report>*:nth-child(1){animation-delay:.05s}
-                .q-report>*:nth-child(2){animation-delay:.22s}
-                .q-report>*:nth-child(3){animation-delay:.42s}
-                .q-report>*:nth-child(4){animation-delay:.6s}
-                @media(prefers-reduced-motion:reduce){.q-report>*{animation:none}}
-              `}</style>
-            </div>
-          ) : (
-            <div className="pm-scroll px-6 py-6 q-report">
-              <button onClick={() => setPhase("input")}
-                className="flex items-center gap-1.5 text-sm cursor-pointer bg-transparent border-none mb-4 p-0"
-                style={{ color: faint }}>
-                <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7"/></svg>
-                Change quantity
-              </button>
-
-              <div className="rounded-xl overflow-hidden mb-4" style={{ border: `1px solid ${bdr}` }}>
-                <div className="px-4 py-3" style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
-                  <p className="text-[10px] font-bold uppercase tracking-widest text-white m-0" style={{ opacity: 0.85 }}>Bulk Order Quotation</p>
-                  <p className="text-sm font-bold text-white m-0">Esting's Flower International Inc.</p>
-                  <p className="text-[10px] text-white m-0 mt-0.5" style={{ opacity: 0.8 }}>Ref {meta.ref} · {meta.date}</p>
-                </div>
-
-                <div className="px-4 py-3" style={{ background: subBg, borderBottom: `1px solid ${lineBdr}` }}>
-                  <div className="flex justify-between mb-1 gap-3">
-                    <span className="text-xs flex-shrink-0" style={{ color: subTxt }}>Item</span>
-                    <span className="text-xs font-semibold text-right" style={{ color: txt }}>{product.name}</span>
-                  </div>
-                  {color?.name && (
-                    <div className="flex justify-between mb-1">
-                      <span className="text-xs" style={{ color: subTxt }}>Color</span>
-                      <span className="text-xs font-medium" style={{ color: txt }}>{color.name}</span>
-                    </div>
-                  )}
-                  {sizeLabel && (
-                    <div className="flex justify-between mb-1">
-                      <span className="text-xs" style={{ color: subTxt }}>Variant</span>
-                      <span className="text-xs font-medium" style={{ color: txt }}>{sizeLabel}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between">
-                    <span className="text-xs" style={{ color: subTxt }}>Quantity</span>
-                    <span className="text-xs font-semibold" style={{ color: accent }}>{meta.qty.toLocaleString()} pcs</span>
-                  </div>
-                </div>
-
-                <div className="px-4 py-3" style={{ background: docBg }}>
-                  <QuoteLineRow label={product.name} unit={product.price} qty={meta.qty} txt={txt} subTxt={subTxt} formatPrice={formatPrice}/>
-                  {addOnObjects.map(a => (
-                    <QuoteLineRow key={a.id} label={a.name} unit={a.price} qty={meta.qty} txt={txt} subTxt={subTxt} addon formatPrice={formatPrice}/>
-                  ))}
-                  <div className="flex justify-between pt-2 mt-1" style={{ borderTop: `1px dashed ${bdr}` }}>
-                    <span className="text-xs" style={{ color: subTxt }}>Per-unit total</span>
-                    <span className="text-xs font-semibold" style={{ color: txt }}>{formatPrice(unitPrice)}</span>
-                  </div>
-                </div>
-
-                <div className="px-4 py-3 flex items-center justify-between"
-                  style={{ background: isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4", borderTop: `1px solid ${lineBdr}` }}>
-                  <span className="text-sm font-semibold" style={{ color: txt }}>Grand Total</span>
-                  <span className="text-2xl font-bold tracking-tight" style={{ color: accent }}>{formatPrice(grand)}</span>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-2 p-3 rounded-xl mb-4"
-                style={{ background: isDark ? "rgba(245,158,11,0.13)" : "#fffbeb", border: `1px solid ${isDark ? "rgba(245,158,11,0.35)" : "#fde68a"}` }}>
-                <svg width="14" height="14" fill="none" stroke={isDark ? "#fbbf24" : "#d97706"} strokeWidth={2} viewBox="0 0 24 24" className="flex-shrink-0 mt-0.5"><path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                <p className="text-xs leading-relaxed m-0" style={{ color: isDark ? "#fde68a" : "#92400e" }}>
-                  This is a standard-rate estimate. Bulk discounts aren't applied automatically. Message us to discuss a better rate for this quantity.
-                </p>
-              </div>
-
-              <div className="flex flex-col gap-2.5">
-                <div className="flex gap-2.5">
-                  <button onClick={copy}
-                    className="flex-1 py-3 rounded-xl text-sm font-semibold cursor-pointer flex items-center justify-center gap-2 transition-all"
-                    style={{ border: `1.5px solid ${bdr}`, background: "transparent", color: copied ? accent : subTxt }}>
-                    {copied ? (
-                      <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>Copied</>
-                    ) : (
-                      <><svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>Copy</>
-                    )}
-                  </button>
-                  <button onClick={download}
-                    className="flex-1 py-3 rounded-xl text-sm font-semibold cursor-pointer flex items-center justify-center gap-2 transition-all"
-                    style={{ border: `1.5px solid ${bdr}`, background: "transparent", color: subTxt }}>
-                    <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
-                    Download
-                  </button>
-                </div>
-                <button onClick={() => onOpenChat({ text: buildReportText(), summary: quoteSummary })}
-                  className="w-full py-3 rounded-xl text-sm font-semibold text-white cursor-pointer flex items-center justify-center gap-2 border-none"
-                  style={{ background: `linear-gradient(135deg,${DG},${G})` }}>
-                  <svg width="15" height="15" fill="none" stroke="currentColor" strokeWidth={1.8} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.3-3.9A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
-                  Discuss on chat
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-/* ── Image Zoom ── */
 function ImgZoom({ product, isDark }) {
   const [pos,    setPos]    = useState(null)
   const [active, setActive] = useState(false)
@@ -1064,11 +743,9 @@ function ColorSection({ colors, color, errors, setColor, setErrors, isDark }) {
   )
 }
 
-function QtySection({ qty, errors, setQty, setErrors, isDark, onBulk }) {
+function QtySection({ qty, errors, setQty, setErrors, isDark }) {
   const G = "#2E8B34";
   const MAX_QTY = 99; // Prevents customers from accidentally ordering 10,000 items
-  const BULK_HINT = 10; // Suggest a bulk quotation at/above this quantity
-  const showBulkHint = Number(qty) >= BULK_HINT;
 
   const handleDecrement = () => {
     if (qty > 1) {
@@ -1157,45 +834,16 @@ function QtySection({ qty, errors, setQty, setErrors, isDark, onBulk }) {
         </button>
       </div>
 
-      {showBulkHint && (
-        <div className="flex items-center gap-3 mt-3 p-3 rounded-xl"
-          style={{
-            background: isDark ? "rgba(236,72,153,0.12)" : "#fdf2f8",
-            border: `1px solid ${isDark ? "rgba(236,72,153,0.3)" : "#fbcfe8"}`
-          }}>
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0"
-            style={{ background: isDark ? "rgba(236,72,153,0.18)" : "#fce7f3" }}>
-            <svg width="17" height="17" fill="none" stroke={isDark ? "#f9a8d4" : "#db2777"} strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-xs font-semibold leading-snug m-0" style={{ color: isDark ? "#fbcfe8" : "#9d174d" }}>
-              Buying {qty}+ pieces?
-            </p>
-            <p className="text-[11px] leading-snug m-0 mt-0.5" style={{ color: isDark ? "#f9a8d4" : "#be185d" }}>
-              Get a bulk quotation for better rates.
-            </p>
-          </div>
-          {onBulk && (
-            <button onClick={onBulk}
-              className="flex-shrink-0 text-xs font-bold text-white px-3 py-2 rounded-lg cursor-pointer border-none transition-opacity hover:opacity-90 whitespace-nowrap"
-              style={{ background: "linear-gradient(135deg,#ec4899,#db2777)" }}>
-              Get quote
-            </button>
-          )}
-        </div>
-      )}
     </div>
   )
 }
 
-function AddOnsSection({ loadingAddOns, liveAddOns, visibleAddons, addOns, toggleAddOn, showAllAddons, setShowAllAddons, isDark, formatPrice }) {
+function AddOnsSection({ loadingAddOns, liveAddOns, visibleAddons, addOns, toggleAddOn, showAllAddons, setShowAllAddons, addOnBranch, isDark, formatPrice }) {
   return (
     <div>
       <p className="text-xs font-semibold uppercase tracking-widest mb-3"
         style={{ color: isDark ? "#94a3b8" : "#6b7280" }}>
-        Add-ons <span className="normal-case tracking-normal font-normal" style={{ color: isDark ? "#4b5563" : "#9ca3af" }}>(optional)</span>
+        Add-ons <span className="normal-case tracking-normal font-normal" style={{ color: isDark ? "#4b5563" : "#9ca3af" }}>(optional · {addOnBranch} stock)</span>
       </p>
 
       {loadingAddOns ? (
@@ -1238,7 +886,7 @@ function AddOnsSection({ loadingAddOns, liveAddOns, visibleAddons, addOns, toggl
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold truncate m-0" style={{ color: isDark ? "#e2e8f0" : "#111827" }}>{a.name}</p>
                   <p className="text-[10px] mt-0.5 m-0" style={{ color: isUnavailable ? "#ef4444" : isDark ? "#64748b" : "#9ca3af" }}>
-                    {isUnavailable ? "Unavailable" : `${a.stock} available`}
+                    {isUnavailable ? `${addOnBranch}: unavailable` : `${addOnBranch}: ${a.stock} available`}
                   </p>
                   <p className="text-xs font-semibold mt-0.5 m-0"
                     style={{ color: isUnavailable ? (isDark ? "#64748b" : "#9ca3af") : (isDark ? "#4ade80" : G) }}>
@@ -1522,6 +1170,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   
   // 🚀 THE FIX: Calling useBranch to ensure the filter works!
   const { branch } = useBranch() 
+  const addOnBranch = String(branch || "Manila").trim().toLowerCase() === "pampanga" ? "Pampanga" : "Manila"
 
   const modalBg = isDark ? "#1e293b" : "white"
   const rightBg = isDark ? "#0f172a" : "#f3f4f6"
@@ -1570,20 +1219,20 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
   useEffect(() => {
     const fetchAddOns = async () => {
       try {
-        const allProducts = await api.getProducts()
-        const dbAddOns = allProducts.filter(p =>
-          p.category?.toLowerCase() === "add-on" ||
-          p.category?.toLowerCase() === "addon"
-        )
+        setLoadingAddOns(true)
+        const response = await api.getAddOnProducts(addOnBranch)
+        const dbAddOns = Array.isArray(response) ? response : response?.items || []
         setLiveAddOns(dbAddOns)
+        setAddOns(selected => selected.filter(id => dbAddOns.some(addOn => addOn.id === id && addOn.stock > 0 && addOn.is_available !== false)))
       } catch (err) {
         console.error("Failed to load live add-ons:", err)
+        setLiveAddOns([])
       } finally {
         setLoadingAddOns(false)
       }
     }
     fetchAddOns()
-  }, [])
+  }, [addOnBranch])
 
   const visibleAddons = showAllAddons ? liveAddOns : liveAddOns.slice(0, INITIAL_ADDON_COUNT)
   const selectedMassCardAddOns = addOns
@@ -1687,7 +1336,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
       id:           product.id,
       group:        cartItemKey.group,
       name:         product.name,
-      price:        product.price,
+      price:        total,
       qty:          parseInt(qty) || 1,
       img:          product.image || product.image_url,
       desc:         product.category,
@@ -1713,15 +1362,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
     setStep("card")
   }
 
-  const isCard  = step === "card"
-  const isQuote = step === "quote"
-
-  const quoteAddOnObjects = addOns
-    .map(id => liveAddOns.find(a => a.id === id))
-    .filter(Boolean)
-    .map(a => ({ id: a.id, name: a.name, price: a.price }))
-
-  const openChatWithQuote   = (quote)   => window.dispatchEvent(new CustomEvent("bloomora:open-chat", { detail: { quote } }))
+  const isCard = step === "card"
   const openChatWithProduct = () => {
   window.dispatchEvent(new CustomEvent("bloomora:open-chat", { 
     detail: { 
@@ -1737,8 +1378,8 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
 
   /* Shared prop bundles */
   const colorProps    = { colors, color, errors, setColor, setErrors, isDark }
-  const qtyProps      = { qty, errors, setQty, setErrors, isDark, onBulk: () => setStep("quote") }
-  const addOnProps    = { loadingAddOns, liveAddOns, visibleAddons, addOns, toggleAddOn, showAllAddons, setShowAllAddons, isDark, formatPrice }
+  const qtyProps      = { qty, errors, setQty, setErrors, isDark }
+  const addOnProps    = { loadingAddOns, liveAddOns, visibleAddons, addOns, toggleAddOn, showAllAddons, setShowAllAddons, addOnBranch, isDark, formatPrice }
   const deliveryProps = { delivType, customDate, showCal, todayOk, errors, setDelivType, setShowCal, setCustDate, setErrors, isDark }
 
   /* ── Stars ── */
@@ -1752,15 +1393,9 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
     </>
   )
 
-  /* ── Action pills ── */
+  /* ── Customer support action ── */
   const ActionPills = ({ compact }) => (
     <div className="flex items-center gap-2 flex-shrink-0">
-      <button onClick={() => setStep("quote")}
-        className="flex items-center gap-1.5 rounded-full font-bold text-white transition-all cursor-pointer border-none"
-        style={{ padding: compact ? "8px 12px" : "6px 14px", fontSize: compact ? 13 : 12, background: "linear-gradient(135deg,#ec4899,#db2777)", boxShadow: "0 1px 3px rgba(0,0,0,0.12)" }}>
-        <svg width="13" height="13" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-        Quote
-      </button>
       <button onClick={openChatWithProduct}
         className="flex items-center gap-1.5 rounded-full font-bold text-white transition-all cursor-pointer border-none"
         style={{ padding: compact ? "8px 12px" : "6px 14px", fontSize: compact ? 13 : 12, background: "linear-gradient(135deg,#f59e0b,#d97706)", boxShadow: "0 1px 3px rgba(0,0,0,0.12)" }}>
@@ -1968,8 +1603,8 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
      ══════════════════════════════════════════════ */
   if (isMobile) {
     const pageBg = isDark ? "#0f172a" : "#ffffff"
-    const goBack = () => { if (isCard || isQuote) { setStep("product") } else { close() } }
-    const backLabel = (isCard || isQuote) ? "Back" : "Back to shop"
+    const goBack = () => { if (isCard) { setStep("product") } else { close() } }
+    const backLabel = isCard ? "Back" : "Back to shop"
 
     return (
       <div className="fixed left-0 right-0 bottom-0 z-[40] flex flex-col"
@@ -1981,7 +1616,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
           transition: "opacity 0.22s, transform 0.26s cubic-bezier(0.34,1.1,0.64,1)"
         }}>
 
-        {(isCard || isQuote) && (
+        {isCard && (
           <div className="flex-shrink-0 flex items-center gap-2 px-3 z-20"
             style={{
               height: 52,
@@ -2011,14 +1646,6 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
         {isCard ? (
           <div className="pm-step-anim flex-1 min-h-0 overflow-hidden">
             <CardStep delivLabel={delivLabel} dest={dest} onClose={close} onNavigate={onNavigate} isMobile cartItemKey={cartItemKey}/>
-          </div>
-        ) : isQuote ? (
-          <div className="pm-step-anim flex-1 min-h-0 overflow-hidden">
-            <QuoteStep
-              product={product} color={color} sizeLabel={qty}
-              addOnObjects={quoteAddOnObjects} addOnTotal={addOnTotal}
-              isDark={isDark} onBack={() => setStep("product")} onClose={close}
-              onOpenChat={openChatWithQuote} isMobile formatPrice={formatPrice}/>
           </div>
         ) : (
           <div className="flex-1 min-h-0 flex flex-col">
@@ -2132,17 +1759,7 @@ export default function ProductPreviewModal({ product, products = [], onClose, o
             </div>
           )}
 
-          {isQuote && (
-            <div className="pm-step-anim w-full h-full overflow-hidden">
-              <QuoteStep
-                product={product} color={color} sizeLabel={qty}
-                addOnObjects={quoteAddOnObjects} addOnTotal={addOnTotal}
-                isDark={isDark} onBack={() => setStep("product")} onClose={close}
-                onOpenChat={openChatWithQuote} formatPrice={formatPrice}/>
-            </div>
-          )}
-
-          {!isCard && !isQuote && (
+          {!isCard && (
             <div className="flex flex-row w-full h-full">
 
               <ImgZoom product={product} isDark={isDark}/>

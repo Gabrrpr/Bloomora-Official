@@ -75,10 +75,10 @@ export default function Home({ onNavigate, isCustomizationEnabled }) {
   const [flashSales, setFlashSales] = useState([])
 
   useEffect(() => {
-    api.get("/products/flash-sales")
+    api.get(`/products/flash-sales?branch=${encodeURIComponent(branch)}`)
       .then(data => setFlashSales(data))
       .catch(err => console.error("Error loading flash sales", err))
-  }, [])
+  }, [branch])
 
   const branchFlashSales = flashSales.filter(product =>
     product.branches?.includes(branch)

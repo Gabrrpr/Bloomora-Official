@@ -13,11 +13,12 @@ import secrets
 
 # 🚀 INJECTED SECURE DEPENDENCIES
 from app.core.dependencies import get_db, get_current_user, require_staff
-from app.models import User, RoleEnum, Order, OrderItem, StockReservation, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory, ProductRecipe, ShippingMethod, Delivery
+from app.models import User, RoleEnum, Order, OrderItem, StockReservation, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, ProductStatusEnum, Inventory, ProductRecipe, ShippingMethod, Delivery, Campaign
 from app.utils.lalamove import book_lalamove_delivery
 
 # We use your dedicated PayMongo service instead of raw requests!
 from app.services.paymongo_service import PayMongoError, create_checkout_session, to_paymongo_amount
+from app.services.product_pricing import product_price_for_branch
 from app.api.v1.routes.commerce import get_delivery_settings, validate_voucher
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
@@ -218,6 +219,91 @@ def _raw_list_orders(
         params,
     ).all()
     return [_minimal_order_payload(row) for row in rows]
+
+
+def _raw_order_count(
+    db: Session,
+    *,
+    status: Optional[str],
+    search: Optional[str],
+    branch: Optional[str],
+    date_range: Optional[str],
+) -> int:
+    clauses = []
+    params = {}
+    if status:
+        clauses.append("LOWER(CAST(o.status AS TEXT)) = :status")
+        params["status"] = status.lower()
+    if branch:
+        clauses.append("LOWER(COALESCE(o.branch_name, '')) = :branch")
+        params["branch"] = branch.lower()
+    created_after = _date_range_start(date_range)
+    if created_after:
+        clauses.append("o.created_at >= :created_after")
+        params["created_after"] = created_after
+    if search:
+        clauses.append(
+            "("
+            "LOWER(CAST(o.id AS TEXT)) LIKE :search OR "
+            "LOWER(COALESCE(u.first_name, '')) LIKE :search OR "
+            "LOWER(COALESCE(u.last_name, '')) LIKE :search OR "
+            "LOWER(COALESCE(u.email, '')) LIKE :search"
+            ")"
+        )
+        params["search"] = f"%{search.lower()}%"
+
+    where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    total = db.execute(
+        text(f"""
+            SELECT COUNT(DISTINCT o.id)
+            FROM orders o
+            LEFT JOIN users u ON u.id = o.user_id
+            {where_sql}
+        """),
+        params,
+    ).scalar()
+    return int(total or 0)
+
+
+def _raw_order_status_counts(
+    db: Session,
+    *,
+    search: Optional[str],
+    branch: Optional[str],
+    date_range: Optional[str],
+) -> dict[str, int]:
+    clauses = []
+    params = {}
+    if branch:
+        clauses.append("LOWER(COALESCE(o.branch_name, '')) = :branch")
+        params["branch"] = branch.lower()
+    created_after = _date_range_start(date_range)
+    if created_after:
+        clauses.append("o.created_at >= :created_after")
+        params["created_after"] = created_after
+    if search:
+        clauses.append(
+            "("
+            "LOWER(CAST(o.id AS TEXT)) LIKE :search OR "
+            "LOWER(COALESCE(u.first_name, '')) LIKE :search OR "
+            "LOWER(COALESCE(u.last_name, '')) LIKE :search OR "
+            "LOWER(COALESCE(u.email, '')) LIKE :search"
+            ")"
+        )
+        params["search"] = f"%{search.lower()}%"
+
+    where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    rows = db.execute(
+        text(f"""
+            SELECT LOWER(CAST(o.status AS TEXT)) AS status, COUNT(DISTINCT o.id) AS total
+            FROM orders o
+            LEFT JOIN users u ON u.id = o.user_id
+            {where_sql}
+            GROUP BY LOWER(CAST(o.status AS TEXT))
+        """),
+        params,
+    ).all()
+    return {str(row.status): int(row.total or 0) for row in rows}
 
 def _date_range_start(date_range: Optional[str]) -> Optional[datetime]:
     if not date_range:
@@ -812,6 +898,56 @@ def _product_supports_branch(product: Product, branch: str) -> bool:
     normalized = {str(value).strip().lower() for value in branches}
     return branch.lower() in normalized or "all" in normalized
 
+
+def _is_customer_add_on(product: Product) -> bool:
+    category = str(getattr(product, "category", "") or "").strip().lower()
+    return category in {"add-on", "addon"}
+
+
+def _requested_add_on_quantities(incoming: dict, parent_quantity: int) -> dict[uuid.UUID, int]:
+    """Aggregate selected add-ons; each add-on quantity applies per parent item."""
+    raw_add_ons = incoming.get("add_ons") or incoming.get("addOns") or incoming.get("addons") or []
+    if not isinstance(raw_add_ons, list):
+        raise HTTPException(status_code=400, detail="Add-ons must be provided as a list.")
+
+    quantities: dict[uuid.UUID, int] = {}
+    for raw_add_on in raw_add_ons:
+        if not isinstance(raw_add_on, dict):
+            raise HTTPException(status_code=400, detail="Invalid add-on selection.")
+        try:
+            add_on_id = uuid.UUID(str(raw_add_on.get("id") or raw_add_on.get("product_id")))
+            per_item_quantity = int(raw_add_on.get("qty") or raw_add_on.get("quantity") or 1)
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail="Invalid add-on selection.")
+        if per_item_quantity < 1 or per_item_quantity > 99:
+            raise HTTPException(status_code=400, detail="Add-on quantity must be between 1 and 99.")
+        quantities[add_on_id] = quantities.get(add_on_id, 0) + (per_item_quantity * parent_quantity)
+    return quantities
+
+
+def _load_customer_add_on(db: Session, add_on_id: uuid.UUID, branch: str) -> tuple[Product, Inventory, Decimal]:
+    product = db.query(Product).filter(Product.id == add_on_id).first()
+    inventory = (
+        db.query(Inventory)
+        .filter(Inventory.product_id == add_on_id)
+        .with_for_update()
+        .first()
+    )
+    status = getattr(product, "status", None) if product else None
+    status_value = status.value if hasattr(status, "value") else str(status or "")
+    if (
+        not product
+        or not product.is_visible
+        or status_value == ProductStatusEnum.inactive.value
+        or not _is_customer_add_on(product)
+    ):
+        raise HTTPException(status_code=404, detail="Selected add-on is unavailable.")
+    if not _product_supports_branch(product, branch):
+        raise HTTPException(status_code=400, detail=f"{product.name} is not available in the {branch} branch.")
+    if not inventory:
+        raise HTTPException(status_code=404, detail=f"{product.name} is unavailable.")
+    return product, inventory, product_price_for_branch(product, branch)
+
 def _branch_stock_attr(branch: str) -> str | None:
     normalized = str(branch or "").strip().lower()
     if normalized == "manila":
@@ -851,26 +987,226 @@ def _required_stock_units(quantity) -> int:
     value = Decimal(str(quantity or 0))
     return int(value.to_integral_value(rounding=ROUND_CEILING))
 
-def _deduct_product_recipe_materials(db: Session, product: Product, order_quantity: int, branch: str) -> bool:
-    rows = db.query(ProductRecipe).filter(ProductRecipe.parent_product_id == product.id).all()
-    if not rows:
+def _deduct_material_requirements(
+    db: Session,
+    requirements: list[tuple[object, int, str]],
+    branch: str,
+) -> bool:
+    aggregated: dict[object, dict[str, object]] = {}
+    for product_id, required, name in requirements:
+        if not product_id or required <= 0:
+            continue
+        bucket = aggregated.setdefault(product_id, {"required": 0, "name": name})
+        bucket["required"] = int(bucket["required"]) + required
+
+    if not aggregated:
         return False
 
-    required_materials = []
-    for row in rows:
-        required = _required_stock_units(Decimal(str(row.quantity_required or 0)) * Decimal(str(order_quantity or 1)))
-        inventory = db.query(Inventory).filter(Inventory.product_id == row.component_product_id).with_for_update().first()
-        component_name = row.component_product.name if row.component_product else "Recipe material"
+    locked_materials = []
+    for product_id, requirement in aggregated.items():
+        inventory = (
+            db.query(Inventory)
+            .filter(Inventory.product_id == product_id)
+            .with_for_update()
+            .first()
+        )
+        required = int(requirement["required"])
         if not inventory or _inventory_stock_for_branch(inventory, branch) < required:
-            raise HTTPException(status_code=400, detail=f"Insufficient stock for {component_name}.")
-        required_materials.append((inventory, required))
+            raise HTTPException(
+                status_code=400,
+                detail=f"Insufficient stock for {requirement['name']}.",
+            )
+        locked_materials.append((inventory, required))
 
-    for inventory, required in required_materials:
+    for inventory, required in locked_materials:
         _deduct_inventory_stock(inventory, required, branch)
         if int(inventory.current_stock or 0) <= 0 and inventory.product:
             inventory.product.is_available = False
 
     return True
+
+def _deduct_product_recipe_materials(db: Session, product: Product, order_quantity: int, branch: str) -> bool:
+    rows = db.query(ProductRecipe).filter(ProductRecipe.parent_product_id == product.id).all()
+    requirements = [
+        (
+            row.component_product_id,
+            _required_stock_units(Decimal(str(row.quantity_required or 0)) * Decimal(str(order_quantity or 1))),
+            row.component_product.name if row.component_product else "Recipe material",
+        )
+        for row in rows
+    ]
+
+    if not requirements:
+        composition = getattr(product, "composition", None) or []
+        if isinstance(composition, list):
+            for item in composition:
+                if not isinstance(item, dict):
+                    continue
+                component_id = item.get("product_id") or item.get("id")
+                if not component_id:
+                    continue
+                try:
+                    component_id = uuid.UUID(str(component_id))
+                except (TypeError, ValueError):
+                    continue
+                recipe_quantity = item.get("quantity") or item.get("qty") or 1
+                requirements.append((
+                    component_id,
+                    _required_stock_units(Decimal(str(recipe_quantity)) * Decimal(str(order_quantity or 1))),
+                    item.get("name") or item.get("product_name") or "Recipe material",
+                ))
+
+    return _deduct_material_requirements(db, requirements, branch)
+
+def _deduct_custom_arrangement_materials(
+    db: Session,
+    arrangement: Arrangement,
+    order_quantity: int,
+    branch: str,
+) -> bool:
+    requirements = []
+    for material in _custom_arrangement_materials(arrangement, db, branch):
+        product_id = material.get("product_id")
+        if not product_id:
+            continue
+        try:
+            product_id = uuid.UUID(str(product_id))
+        except (TypeError, ValueError):
+            continue
+        requirements.append((
+            product_id,
+            _required_stock_units(
+                Decimal(str(material.get("quantity") or 1)) * Decimal(str(order_quantity or 1))
+            ),
+            material.get("name") or "Arrangement material",
+        ))
+    return _deduct_material_requirements(db, requirements, branch)
+
+def _calculate_bundle_discount(
+    campaigns: list[Campaign],
+    prepared_items: list[tuple],
+    subtotal: Decimal,
+) -> tuple[Optional[Campaign], Decimal]:
+    best_campaign = None
+    best_discount = Decimal("0.00")
+    for campaign in campaigns:
+        minimum_quantity = int(getattr(campaign, "minimum_quantity", 0) or 0)
+        percentage = Decimal(str(getattr(campaign, "discount_value", 0) or 0))
+        eligible_category = str(getattr(campaign, "eligible_category", "") or "").strip().lower()
+        eligible_ids = {str(product.id) for product in (getattr(campaign, "products", None) or [])}
+        if minimum_quantity < 1 or percentage <= 0 or (not eligible_category and not eligible_ids):
+            continue
+
+        eligible_quantity = sum(
+            int(quantity or 0)
+            for item_type, entity, quantity, *_rest in prepared_items
+            if item_type == "product" and (
+                (
+                    eligible_category
+                    and str(getattr(entity, "category", "") or "").strip().lower() == eligible_category
+                )
+                or (not eligible_category and str(entity.id) in eligible_ids)
+            )
+        )
+        if eligible_quantity < minimum_quantity:
+            continue
+
+        discount = (subtotal * percentage / Decimal("100")).quantize(Decimal("0.01"))
+        if discount > best_discount:
+            best_campaign = campaign
+            best_discount = discount
+
+    return best_campaign, min(subtotal, best_discount)
+
+def _active_bundle_discount(
+    db: Session,
+    prepared_items: list[tuple],
+    subtotal: Decimal,
+) -> tuple[Optional[Campaign], Decimal]:
+    now = datetime.now(timezone.utc)
+    campaigns = (
+        db.query(Campaign)
+        .filter(
+            Campaign.is_active.is_(True),
+            Campaign.discount_type == "bundle_percent",
+            Campaign.start_at <= now,
+            or_(Campaign.end_at.is_(None), Campaign.end_at >= now),
+        )
+        .all()
+    )
+    return _calculate_bundle_discount(campaigns, prepared_items, subtotal)
+
+
+@router.post("/quote", response_model=dict)
+def quote_order(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+):
+    """Return the server-calculated bundle discount before an order is placed."""
+    raw_items = payload.get("items") or []
+    quote_branch = payload.get("branch_name") or payload.get("branch")
+    requested_items = []
+    product_ids = []
+    for item in raw_items:
+        if not isinstance(item, dict):
+            continue
+        try:
+            product_id = uuid.UUID(str(item.get("id") or item.get("product_id")))
+        except (TypeError, ValueError):
+            continue
+        try:
+            quantity = max(1, int(item.get("qty") or item.get("quantity") or 1))
+        except (TypeError, ValueError):
+            quantity = 1
+        requested_items.append((item, product_id, quantity))
+        product_ids.append(product_id)
+
+        try:
+            product_ids.extend(_requested_add_on_quantities(item, quantity).keys())
+        except HTTPException:
+            continue
+
+    products = db.query(Product).filter(Product.id.in_(product_ids)).all() if product_ids else []
+    products_by_id = {product.id: product for product in products}
+    prepared_items = []
+    subtotal = Decimal("0.00")
+    for raw_item, product_id, quantity in requested_items:
+        product = products_by_id.get(product_id)
+        if not product:
+            continue
+        unit_price = product_price_for_branch(product, quote_branch)
+        subtotal += unit_price * quantity
+        prepared_items.append(("product", product, quantity, unit_price, False))
+        try:
+            requested_add_ons = _requested_add_on_quantities(raw_item, quantity)
+        except HTTPException:
+            requested_add_ons = {}
+        for add_on_id, add_on_quantity in requested_add_ons.items():
+            add_on = products_by_id.get(add_on_id)
+            if (
+                not add_on
+                or not add_on.is_visible
+                or not _is_customer_add_on(add_on)
+                or (quote_branch and not _product_supports_branch(add_on, str(quote_branch)))
+            ):
+                continue
+            add_on_price = product_price_for_branch(add_on, quote_branch)
+            subtotal += add_on_price * add_on_quantity
+            prepared_items.append(("add_on", add_on, add_on_quantity, add_on_price, False))
+
+    campaign, bundle_discount = _active_bundle_discount(db, prepared_items, subtotal)
+    return {
+        "subtotal": float(subtotal),
+        "bundle_discount": float(bundle_discount),
+        "total_after_bundle": float(max(Decimal("0.00"), subtotal - bundle_discount)),
+        "bundle_campaign": {
+            "id": str(campaign.id),
+            "name": campaign.name,
+            "minimum_quantity": campaign.minimum_quantity,
+            "eligible_category": campaign.eligible_category,
+            "discount_percent": float(campaign.discount_value or 0),
+        } if campaign else None,
+    }
 
 @router.get("/my", response_model=List[dict])
 def get_my_orders(
@@ -899,14 +1235,15 @@ def get_my_orders(
     orders = query.order_by(Order.created_at.desc()).offset(offset).limit(limit).all()
     return [serialize_order(o, include_details=False) for o in orders]
 
-@router.get("/", response_model=List[dict])
+@router.get("/")
 def list_orders(
     status: Optional[str] = Query(None, description="Filter by status"),
     search: Optional[str] = Query(None, description="Search by order number or customer name/email"),
     branch: Optional[str] = Query(None, description="Filter by branch"),
-    date_range: Optional[str] = Query("last_30_days", description="Recent date window. Use all_time to include older orders."),
+    date_range: Optional[str] = Query("all_time", description="Date window. Use all_time to include older orders."),
     limit: int = Query(25, ge=1, le=100),
     offset: int = Query(0, ge=0),
+    paginated: bool = Query(False, description="Return items with the filtered total for server-side pagination."),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
@@ -916,7 +1253,7 @@ def list_orders(
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
 
-    return _raw_list_orders(
+    items = _raw_list_orders(
         db,
         status=status,
         search=search,
@@ -925,6 +1262,28 @@ def list_orders(
         limit=limit,
         offset=offset,
     )
+    if not paginated:
+        return items
+
+    total = _raw_order_count(
+        db,
+        status=status,
+        search=search,
+        branch=branch,
+        date_range=date_range,
+    )
+    return {
+        "items": items,
+        "total": total,
+        "status_counts": _raw_order_status_counts(
+            db,
+            search=search,
+            branch=branch,
+            date_range=date_range,
+        ),
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @router.get("/{order_id}", response_model=dict)
@@ -1041,15 +1400,7 @@ async def create_order(
                 Arrangement.id == item_uuid
             ).with_for_update().first()
             if arrangement:
-                if getattr(arrangement, "items", None):
-                    for component in arrangement.items:
-                        required = component.quantity * quantity
-                        inventory = db.query(Inventory).filter(
-                            Inventory.product_id == component.product_id
-                        ).with_for_update().first()
-                        if not inventory or _inventory_stock_for_branch(inventory, raw_branch) < required:
-                            raise HTTPException(status_code=400, detail="Insufficient raw materials for custom order.")
-                        _deduct_inventory_stock(inventory, required, raw_branch)
+                _deduct_custom_arrangement_materials(db, arrangement, quantity, raw_branch)
                 unit_price = Decimal(str(arrangement.estimated_price or 0))
                 prepared_items.append(("arrangement", arrangement, quantity, unit_price, False))
             else:
@@ -1057,7 +1408,6 @@ async def create_order(
                 inventory = db.query(Inventory).filter(
                     Inventory.product_id == item_uuid
                 ).with_for_update().first()
-                has_recipe = bool(db.query(ProductRecipe.id).filter(ProductRecipe.parent_product_id == item_uuid).first())
                 if not product or not product.is_available:
                     raise HTTPException(status_code=404, detail=f"Product unavailable: {item_id}")
                 if not _product_supports_branch(product, raw_branch):
@@ -1065,10 +1415,9 @@ async def create_order(
                         status_code=400,
                         detail=f"{product.name} is not available in the {raw_branch} branch.",
                     )
-                unit_price = Decimal(str(product.price or 0))
-                if has_recipe:
-                    _deduct_product_recipe_materials(db, product, quantity, raw_branch)
-                else:
+                unit_price = product_price_for_branch(product, raw_branch)
+                has_recipe = _deduct_product_recipe_materials(db, product, quantity, raw_branch)
+                if not has_recipe:
                     if not inventory:
                         raise HTTPException(status_code=404, detail=f"Product unavailable: {item_id}")
                     active_reserved = _active_reserved_quantity(db, item_uuid, raw_branch)
@@ -1084,6 +1433,23 @@ async def create_order(
                 raise HTTPException(status_code=400, detail=f"Invalid price for item: {item_id}")
             total_amount += unit_price * quantity
 
+            for add_on_id, add_on_quantity in _requested_add_on_quantities(incoming, quantity).items():
+                add_on, add_on_inventory, add_on_price = _load_customer_add_on(db, add_on_id, raw_branch)
+                active_reserved = _active_reserved_quantity(db, add_on_id, raw_branch)
+                available = _inventory_stock_for_branch(add_on_inventory, raw_branch) - active_reserved
+                if available < add_on_quantity:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Insufficient {raw_branch} stock for {add_on.name}. Only {available} available.",
+                    )
+                if add_on_price <= 0:
+                    raise HTTPException(status_code=400, detail=f"Invalid price for add-on: {add_on.name}")
+                _deduct_inventory_stock(add_on_inventory, add_on_quantity, raw_branch)
+                if int(add_on_inventory.current_stock or 0) <= 0:
+                    add_on.is_available = False
+                prepared_items.append(("add_on", add_on, add_on_quantity, add_on_price, False))
+                total_amount += add_on_price * add_on_quantity
+
         if fulfillment_method in {"delivery", "lalamove"}:
             delivery_fee = Decimal(str(delivery_settings["delivery_fee"]))
         else:
@@ -1095,10 +1461,11 @@ async def create_order(
                 detail=f"Minimum order is ₱{float(minimum_order):,.2f}.",
             )
         voucher_code = str(payload.get("voucher_code") or payload.get("voucherCode") or "").strip()
-        discount_amount = Decimal("0.00")
+        _bundle_campaign, discount_amount = _active_bundle_discount(db, prepared_items, total_amount)
         normalized_voucher = None
         if voucher_code:
-            promo, discount_amount = validate_voucher(db, voucher_code, total_amount)
+            promo, voucher_discount = validate_voucher(db, voucher_code, total_amount)
+            discount_amount += voucher_discount
             normalized_voucher = promo.code
 
         pos_discount_type = str(payload.get("pos_discount_type") or payload.get("discount_type") or "none").strip().lower()
@@ -1157,11 +1524,11 @@ async def create_order(
             for item in cart_items
         }
         for item_type, entity, quantity, unit_price, should_reserve_stock in prepared_items:
-            incoming = incoming_by_id.get(str(entity.id), {})
+            incoming = incoming_by_id.get(str(entity.id), {}) if item_type != "add_on" else {}
             card_message = str(incoming.get("card_message") or incoming.get("cardMessage") or "").strip() or None
             order_item = OrderItem(
                 order_id=order.id,
-                product_id=entity.id if item_type == "product" else None,
+                product_id=entity.id if item_type in {"product", "add_on"} else None,
                 arrangement_id=entity.id if item_type == "arrangement" else None,
                 quantity=quantity,
                 price_at_purchase=unit_price,
@@ -1170,7 +1537,7 @@ async def create_order(
             )
             db.add(order_item)
             db.flush()
-            if item_type == "product" and should_reserve_stock:
+            if item_type in {"product", "add_on"} and should_reserve_stock:
                 db.add(StockReservation(
                     order_item_id=order_item.id,
                     product_id=entity.id,
@@ -1409,8 +1776,7 @@ async def create_orders(
             if inventory.current_stock <= 0:
                 product.is_available = False
             
-            raw_price = getattr(product, 'price', 0) or 0
-            db_price = Decimal(str(raw_price))
+            db_price = product_price_for_branch(product, final_branch_name)
             product_id = product.id
 
         if db_price <= 0:

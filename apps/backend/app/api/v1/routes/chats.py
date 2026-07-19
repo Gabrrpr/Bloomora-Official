@@ -66,6 +66,7 @@ def get_predetermined_reply(message_text: str | None) -> str | None:
 
 def serialize_chat(msg: Chat) -> dict:
     """Convert a Chat ORM object to a plain dict compatible with MessageOut."""
+    context_id = getattr(msg, "context_id", None)
     return {
         "id": msg.id,
         "user_id": msg.user_id,
@@ -75,7 +76,8 @@ def serialize_chat(msg: Chat) -> dict:
         "is_read": msg.is_read,
         "created_at": msg.created_at,
         # 🚀 ADDED CONTEXT SUPPORT
-        "context_id": getattr(msg, "context_id", None),
+        "context_id": context_id,
+        "is_auto_reply": str(context_id or "").startswith("support-automation:"),
     }
 
 
@@ -282,7 +284,7 @@ async def create_message(
                     sender="staff",
                     image_url=None,
                     is_read=0,
-                    context_id=None,
+                    context_id="support-automation:predetermined",
                 )
                 db.add(auto_reply)
                 db.commit()

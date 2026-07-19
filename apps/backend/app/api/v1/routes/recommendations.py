@@ -2,7 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session, joinedload
 from typing import List
 from pydantic import BaseModel
-# Import your database session and models
+
 from app.core.dependencies import get_db, get_current_user
 from app.models import Product, Order, OrderItem, User, ProductStatusEnum
 
@@ -73,7 +73,7 @@ async def get_homepage_recommendations(
             
         df = pd.DataFrame(catalog_data)
         
-   
+   # cleans the product names and categories to lowercase for TF-IDF vectorization
         df["name_clean"] = df["name"].fillna("").astype(str).str.lower()
         df["cat_clean"] = df["category"].fillna("").astype(str).str.lower()
         df["metadata_soup"] = df["name_clean"] + " " + df["cat_clean"]
@@ -97,7 +97,7 @@ async def get_homepage_recommendations(
         if not bought_product_ids:
             return []
 
-        # 5. Build Customer Taste Profile
+        # Building the Customer Taste Profile
         bought_items_df = df[df["id"].isin(bought_product_ids)]
         
         if bought_items_df.empty:

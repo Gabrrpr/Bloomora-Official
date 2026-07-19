@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { api } from "../services/api"
 import { DEFAULT_ORDERING, ORDERING_KEY, SETTINGS_PATH } from "../config/legalContent"
+import { getTopNavigationInset } from "../utils/modalViewport.js"
 
 function normalizeSettings(settings) {
   if (typeof settings !== "string") return settings && typeof settings === "object" ? settings : {}
@@ -16,6 +17,10 @@ function normalizeSettings(settings) {
 export default function OrderingFulfillmentModal({ open, onClose }) {
   const dialogRef = useRef(null)
   const [doc, setDoc] = useState(DEFAULT_ORDERING)
+  const [viewportHeight, setViewportHeight] = useState(() => (
+    typeof window === "undefined" ? 800 : window.visualViewport?.height || window.innerHeight
+  ))
+  const [topInset, setTopInset] = useState(() => getTopNavigationInset())
 
   useEffect(() => {
     if (!open) return
@@ -55,25 +60,40 @@ export default function OrderingFulfillmentModal({ open, onClose }) {
     }
   }, [open, onClose])
 
+  useEffect(() => {
+    if (!open) return
+    const updateViewportMetrics = () => {
+      setViewportHeight(window.visualViewport?.height || window.innerHeight)
+      setTopInset(getTopNavigationInset())
+    }
+    updateViewportMetrics()
+    const frame = window.requestAnimationFrame(updateViewportMetrics)
+    window.addEventListener("resize", updateViewportMetrics)
+    window.visualViewport?.addEventListener("resize", updateViewportMetrics)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener("resize", updateViewportMetrics)
+      window.visualViewport?.removeEventListener("resize", updateViewportMetrics)
+    }
+  }, [open])
+
   if (!open) return null
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[80] overflow-y-auto bg-black/55 backdrop-blur-sm"
+      className="fixed inset-0 z-[80] flex items-center justify-center overflow-hidden bg-black/55 px-2 py-4 backdrop-blur-sm sm:px-4"
+      style={{ top: topInset }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="ordering-policy-modal-title"
       onClick={event => { if (event.target === event.currentTarget) onClose?.() }}
     >
-      <div
-        className="flex min-h-full w-full items-center justify-center p-4 sm:p-6"
-        onClick={event => { if (event.target === event.currentTarget) onClose?.() }}
-      >
         <div
           ref={dialogRef}
           tabIndex={-1}
           className="flex min-h-0 w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl outline-none"
-          style={{ height: "min(760px, calc(100dvh - 32px))", maxHeight: "calc(100dvh - 32px)" }}
+          style={{ height: Math.max(96, Math.min(760, viewportHeight - topInset - 32)) }}
+          onClick={event => event.stopPropagation()}
         >
         <div className="flex flex-shrink-0 items-start justify-between gap-4 border-b border-gray-100 bg-gradient-to-br from-green-50 to-white px-5 py-4 sm:px-6 sm:py-5">
           <div className="flex min-w-0 items-start gap-3">
@@ -105,7 +125,6 @@ export default function OrderingFulfillmentModal({ open, onClose }) {
 
         <div className="flex flex-shrink-0 justify-end border-t border-gray-100 bg-gray-50 px-5 py-3 sm:px-6 sm:py-4">
           <button type="button" onClick={onClose} className="rounded-xl bg-green-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-green-800">Close</button>
-        </div>
         </div>
       </div>
     </div>,

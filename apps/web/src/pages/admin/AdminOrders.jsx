@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, Fragment } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef, Fragment } from "react"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
 import { DG, G, ADMIN_PAGE_SIZE, StatusBadge } from "./_adminShared"
@@ -7,14 +7,12 @@ import estingsWordmark from "../../assets/Estings.svg"
 // 🚀 NEW: Import Fallback Image
 import ImageNotFound from "../../assets/default-img/ImageNotFound.webp"
 
-const ORDER_STATUSES = ["All", "Pending", "Confirmed", "Preparing", "Ready for Pickup", "Out for Delivery", "Delivered", "Completed", "Cancelled"]
-const MANUAL_ORDER_STATUSES = [
-  { label: "Confirmed", value: "confirmed" },
-  { label: "Preparing", value: "preparing" },
-  { label: "Ready for Pickup", value: "ready_for_pickup" },
-  { label: "Completed", value: "completed" },
-  { label: "Cancelled", value: "cancelled" },
-]
+const ORDER_WORKFLOW_STATUSES = ["Paid", "Confirmed", "Preparing", "Ready for Pickup", "Completed", "Cancelled"]
+const ORDER_STATUSES = ["All", ...ORDER_WORKFLOW_STATUSES]
+const MANUAL_ORDER_STATUSES = ORDER_WORKFLOW_STATUSES.map(label => ({
+  label,
+  value: label.toLowerCase().replace(/ /g, "_"),
+}))
 
 const SEARCH_SAMPLES = ["John Dela Cruz", "ORD-5FA237AC", "Maria Santos", "ORD-9C4E1B07"]
 const BRANCHES       = ["All Branches", "Manila", "Pampanga"]
@@ -147,14 +145,17 @@ export default function AdminOrders() {
   const [search, setSearch]         = useState("")
   const [statusFilter, setStatus]   = useState("All")
   const [branch, setBranch]         = useState("All Branches")
-  const [dateRange, setDateRange]   = useState("Last 30 Days")
+  const [dateRange, setDateRange]   = useState("All Time")
   const [orders, setOrders]         = useState([])
+  const [totalOrders, setTotalOrders] = useState(0)
+  const [serverStatusCounts, setServerStatusCounts] = useState({})
   const [loading, setLoading]       = useState(true)
   const [error, setError]           = useState(null)
   const [viewingOrder, setViewingOrder] = useState(null)
   const [viewingOrderLoading, setViewingOrderLoading] = useState(false)
   const [imagePreview, setImagePreview] = useState(null)
   const [page, setPage] = useState(1);
+  const ordersRequestId = useRef(0)
   const [entered, setEntered] = useState(false)
   const [phText, setPhText] = useState("")
 
@@ -208,13 +209,34 @@ export default function AdminOrders() {
   }
 
   const fetchOrders = useCallback(async () => {
+    const requestId = ++ordersRequestId.current
     setLoading(true); setError(null)
     try {
-      const data = await api.getAdminOrders({ status: statusFilter, search: search.trim() || undefined, branch, date_range: dateRange })
-      setOrders(Array.isArray(data) ? data : [])
-    } catch (e) { setError(e?.message || "Failed to load orders"); setOrders([]) }
-    finally { setLoading(false) }
-  }, [statusFilter, search, branch, dateRange])
+      const data = await api.getAdminOrders({
+        status: statusFilter,
+        search: search.trim() || undefined,
+        branch,
+        date_range: dateRange,
+        limit: PAGE_SIZE,
+        offset: (page - 1) * PAGE_SIZE,
+        paginated: true,
+      })
+      if (requestId !== ordersRequestId.current) return
+      const nextOrders = Array.isArray(data?.items) ? data.items : []
+      const nextTotal = Number(data?.total || 0)
+      setOrders(nextOrders)
+      setTotalOrders(nextTotal)
+      setServerStatusCounts(data?.status_counts && typeof data.status_counts === "object" ? data.status_counts : {})
+      if (page > 1 && nextOrders.length === 0 && nextTotal > 0) {
+        setPage(Math.max(1, Math.ceil(nextTotal / PAGE_SIZE)))
+      }
+    } catch (e) {
+      if (requestId !== ordersRequestId.current) return
+      setError(e?.message || "Failed to load orders"); setOrders([]); setTotalOrders(0); setServerStatusCounts({})
+    } finally {
+      if (requestId === ordersRequestId.current) setLoading(false)
+    }
+  }, [statusFilter, search, branch, dateRange, page, PAGE_SIZE])
 
   useEffect(() => { fetchOrders() }, [fetchOrders])
   useEffect(() => { setPage(1) }, [statusFilter, search, branch, dateRange])
@@ -273,26 +295,16 @@ export default function AdminOrders() {
     return () => clearTimeout(timer)
   }, [search])
 
-  const counts = {
-    "Out for Delivery": orders.filter(o => formatStatus(o.status) === "Out for Delivery").length,
-    Pending:   orders.filter(o => formatStatus(o.status) === "Pending").length,
-    Preparing: orders.filter(o => formatStatus(o.status) === "Preparing").length,
-    Cancelled: orders.filter(o => formatStatus(o.status) === "Cancelled").length,
-  }
+  const counts = ORDER_WORKFLOW_STATUSES.reduce((result, status) => {
+    const apiStatus = statusToApi(status)
+    result[status] = Number(serverStatusCounts[apiStatus] || 0)
+    return result
+  }, {})
 
-  const filtered = orders.filter(o => {
-    const matchStatus = statusFilter === "All" || formatStatus(o.status) === statusFilter;
-    const matchBranch = branch === "All Branches" || (o.branch || "").toLowerCase() === branch.toLowerCase();
-    const matchSearch = !search ||
-      (o.order_number || "").toLowerCase().includes(search.toLowerCase()) ||
-      (o.customer_name || "").toLowerCase().includes(search.toLowerCase());
-      
-    return matchStatus && matchBranch && matchSearch;
-  });
-
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const filtered = orders;
+  const totalPages = Math.max(1, Math.ceil(totalOrders / PAGE_SIZE));
   const pageSafe = Math.min(page, totalPages);
-  const paginatedOrders = filtered.slice((pageSafe - 1) * PAGE_SIZE, pageSafe * PAGE_SIZE);
+  const paginatedOrders = filtered;
 
   const subTxt   = isDark ? "#94a3b8" : "#64748b"
   const toolbarBg  = isDark ? "#111827" : "#fafbfc"
@@ -305,9 +317,11 @@ export default function AdminOrders() {
   const errTxt     = isDark ? "#f87171" : "#dc2626"
 
   const STAT_CARDS = [
-    { label: "Out for Delivery", sub: "On the way",        key: "Out for Delivery", green: true },
-    { label: "Pending",          sub: "Need action today", key: "Pending" },
+    { label: "Paid",             sub: "Payment received",  key: "Paid", green: true },
+    { label: "Confirmed",        sub: "Order accepted",    key: "Confirmed" },
     { label: "Preparing",        sub: "In progress",       key: "Preparing" },
+    { label: "Ready for Pickup", sub: "Ready to collect",  key: "Ready for Pickup" },
+    { label: "Completed",        sub: "Order fulfilled",   key: "Completed" },
     { label: "Cancelled",        sub: "Review cases",      key: "Cancelled", red: true },
   ]
 
@@ -347,6 +361,7 @@ export default function AdminOrders() {
 
   const isPosMaterial = (p) => {
     const raw = String(`${p?.product_group || ""} ${p?.product_type || ""} ${p?.category_name || ""} ${p?.category || ""} ${p?.name || ""}`).toLowerCase()
+    if (raw.includes("pot filler")) return false
     return p?.is_customization_material === true
       || raw.includes("material")
       || raw.includes("raw")
@@ -1583,7 +1598,7 @@ export default function AdminOrders() {
         <div>
           <p className="text-sm font-medium" style={{ color: subTxt }}>Your total orders</p>
           <div className="flex items-baseline gap-3 mt-0.5">
-            <span className="text-4xl font-bold" style={{ color: isDark ? "#4ade80" : DG }}>{orders.length}</span>
+            <span className="text-4xl font-bold" style={{ color: isDark ? "#4ade80" : DG }}>{totalOrders}</span>
             <span className="text-sm font-semibold text-green-500">↑ 0% vs last week</span>
           </div>
         </div>
@@ -1594,7 +1609,7 @@ export default function AdminOrders() {
       </div>
 
       {/* ── Stat cards ── */}
-      <div className={`grid grid-cols-2 lg:grid-cols-4 gap-3 no-print ${entered ? "" : "orders-rise"}`} style={{ animationDelay: "0.18s" }}>
+      <div className={`grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 no-print ${entered ? "" : "orders-rise"}`} style={{ animationDelay: "0.18s" }}>
         {STAT_CARDS.map(c => (
           <button key={c.key} onClick={() => setStatus(statusFilter === c.key ? "All" : c.key)}
             className="rounded-xl p-4 sm:p-5 text-left transition-all duration-200 hover:scale-[1.03]"
@@ -1723,7 +1738,10 @@ export default function AdminOrders() {
           </table>
         </div>
         <div className="flex items-center justify-between px-4 sm:px-5 py-3" style={{ borderTop: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
-          <span className="text-sm" style={{ color: subTxt }}>Showing {paginatedOrders.length} of {filtered.length} entries</span>
+          <span className="text-sm" style={{ color: subTxt }}>
+            Showing {paginatedOrders.length > 0 ? (pageSafe - 1) * PAGE_SIZE + 1 : 0}
+            {" to "}{Math.min((pageSafe - 1) * PAGE_SIZE + paginatedOrders.length, totalOrders)} of {totalOrders} entries
+          </span>
           <div className="flex items-center gap-1">
             <button disabled={page <= 1} onClick={() => setPage(p => p - 1)} className="px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all disabled:opacity-50"
               style={{ background: isDark ? "#1e293b" : "white", color: isDark ? "#94a3b8" : "#6b7280", border: `1px solid ${isDark ? "#374151" : "#e2e8f0"}` }}>←</button>

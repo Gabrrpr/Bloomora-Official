@@ -18,6 +18,7 @@ class MessageOut(BaseModel):
     is_read: int
     created_at: datetime
     context_id: Optional[str] = None
+    is_auto_reply: bool = False
 
     class Config:
         from_attributes = True

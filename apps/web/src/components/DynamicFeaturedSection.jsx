@@ -271,7 +271,7 @@ export default function DynamicFeaturedSections({ branch, onNavigate, onPreview 
 
         const [settingsData, productsData] = await Promise.all([
           api.get("/products/admin/settings/homepage").catch(() => null),
-          api.get("/products/").catch(() => [])
+          api.get(`/products/?branch=${encodeURIComponent(normalizedBranch)}`).catch(() => [])
         ])
 
         if (!isMounted) return

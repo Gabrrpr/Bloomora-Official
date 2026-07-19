@@ -231,9 +231,7 @@ function ItemRow({ item, idx, total, t, isDark, onUpdate, onDelete, onMove, drag
             </svg>
           </button>
           <button
-            onClick={() => {
-              if (window.confirm("Delete this question?")) onDelete()
-            }}
+            onClick={onDelete}
             title="Delete"
             className="w-6 h-6 rounded flex items-center justify-center transition-all"
             style={{ color: t.dangerColor, backgroundColor: t.cardBg, border: `1px solid ${t.cardBorder}` }}
@@ -266,6 +264,57 @@ function ItemRow({ item, idx, total, t, isDark, onUpdate, onDelete, onMove, drag
 }
 
 // ─── Main ────────────────────────────────────────────────────────────────────
+function FeedbackBanner({ feedback, onClose, isDark }) {
+  if (!feedback) return null
+  const success = feedback.type === "success"
+  const colors = success
+    ? { bg: isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4", border: isDark ? "rgba(74,222,128,0.35)" : "#bbf7d0", text: isDark ? "#86efac" : "#166534" }
+    : { bg: isDark ? "rgba(248,113,113,0.12)" : "#fef2f2", border: isDark ? "rgba(248,113,113,0.35)" : "#fecaca", text: isDark ? "#fca5a5" : "#991b1b" }
+  return (
+    <div className="flex items-start gap-3 px-4 py-3 rounded-xl" role="status"
+      style={{ backgroundColor: colors.bg, border: `1px solid ${colors.border}`, color: colors.text }}>
+      <div className="w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 font-bold"
+        style={{ backgroundColor: success ? "rgba(34,197,94,0.15)" : "rgba(239,68,68,0.15)" }}>
+        {success ? "✓" : "!"}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold">{success ? "Changes saved" : "Please review the FAQ"}</p>
+        <p className="text-xs mt-0.5 opacity-90">{feedback.message}</p>
+      </div>
+      <button type="button" onClick={onClose} aria-label="Dismiss message" className="text-lg leading-none opacity-70 hover:opacity-100">×</button>
+    </div>
+  )
+}
+
+function ConfirmationModal({ confirmation, onCancel, onConfirm, isDark }) {
+  if (!confirmation) return null
+  return (
+    <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4"
+      style={{ backgroundColor: "rgba(15,23,42,0.62)", backdropFilter: "blur(3px)" }}>
+      <div className="w-full max-w-md rounded-2xl overflow-hidden" role="dialog" aria-modal="true" aria-labelledby="faq-confirm-title"
+        style={{ backgroundColor: isDark ? "#1e293b" : "#ffffff", border: `1px solid ${isDark ? "#475569" : "#e5e7eb"}`, boxShadow: "0 24px 70px rgba(0,0,0,0.28)" }}>
+        <div className="p-5">
+          <div className="w-11 h-11 rounded-full flex items-center justify-center mb-4"
+            style={{ color: isDark ? "#fca5a5" : "#dc2626", backgroundColor: isDark ? "rgba(248,113,113,0.12)" : "#fef2f2" }}>
+            <svg width="21" height="21" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0Zm-9 3.75h.008v.008H12v-.008Z" />
+            </svg>
+          </div>
+          <h2 id="faq-confirm-title" className="text-lg font-bold" style={{ color: isDark ? "#f8fafc" : "#111827" }}>{confirmation.title}</h2>
+          <p className="text-sm mt-2 leading-relaxed" style={{ color: isDark ? "#cbd5e1" : "#6b7280" }}>{confirmation.message}</p>
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-4" style={{ backgroundColor: isDark ? "#162032" : "#f9fafb", borderTop: `1px solid ${isDark ? "#334155" : "#e5e7eb"}` }}>
+          <button type="button" onClick={onCancel} className="px-4 py-2 text-sm font-semibold rounded-lg"
+            style={{ color: isDark ? "#cbd5e1" : "#4b5563", border: `1px solid ${isDark ? "#475569" : "#d1d5db"}` }}>Cancel</button>
+          <button type="button" onClick={onConfirm} className="px-4 py-2 text-sm font-bold text-white rounded-lg bg-red-600 hover:bg-red-700">
+            {confirmation.confirmLabel || "Confirm"}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function AdminFAQ() {
   const { isDark } = useTheme()
   const t = useTokens(isDark)
@@ -275,6 +324,8 @@ export default function AdminFAQ() {
   const [previewOpenIdx, setPrevOpen] = useState(0)
   const [dirty, setDirty]             = useState(false)
   const [saved, setSaved]             = useState(false)
+  const [feedback, setFeedback]       = useState(null)
+  const [confirmation, setConfirmation] = useState(null)
   const [editingCatName, setEditingCatName] = useState(false)
   // Drives the one-time entrance animation; removed after it plays so it never replays.
   const [entered, setEntered] = useState(false)
@@ -318,7 +369,7 @@ export default function AdminFAQ() {
   const activeCat = faqs[activeCatIdx]
 
   // ─── mutations ──
-  const markDirty = () => { setDirty(true); setSaved(false) }
+  const markDirty = () => { setDirty(true); setSaved(false); setFeedback(null) }
 
   const updateCategory = (idx, patch) => {
     setFaqs(prev => prev.map((c, i) => i === idx ? { ...c, ...patch } : c))
@@ -335,13 +386,20 @@ export default function AdminFAQ() {
 
   const deleteCategory = idx => {
     if (faqs.length <= 1) {
-      alert("You need at least one category.")
+      setFeedback({ type: "error", message: "At least one FAQ category is required." })
       return
     }
-    if (!window.confirm(`Delete category "${faqs[idx].category}" and all its questions?`)) return
-    setFaqs(prev => prev.filter((_, i) => i !== idx))
-    setActiveCat(Math.max(0, idx - 1))
-    markDirty()
+    const category = faqs[idx]
+    setConfirmation({
+      title: "Delete this category?",
+      message: `“${category.category || "Untitled category"}” and its ${category.items.length} question${category.items.length === 1 ? "" : "s"} will be removed from the editor.`,
+      confirmLabel: "Delete category",
+      onConfirm: () => {
+        setFaqs(prev => prev.filter((_, i) => i !== idx))
+        setActiveCat(Math.max(0, idx - 1))
+        markDirty()
+      },
+    })
   }
 
   const moveCategory = (from, to) => {
@@ -383,6 +441,16 @@ export default function AdminFAQ() {
     markDirty()
   }
 
+  const requestDeleteItem = itemIdx => {
+    const item = activeCat?.items?.[itemIdx]
+    setConfirmation({
+      title: "Delete this question?",
+      message: `“${item?.q?.trim() || "Untitled question"}” will be removed from ${activeCat?.category || "this category"}.`,
+      confirmLabel: "Delete question",
+      onConfirm: () => deleteItem(itemIdx),
+    })
+  }
+
   const moveItem = (from, to) => {
     if (to < 0 || to >= (activeCat?.items.length || 0)) return
     setFaqs(prev => prev.map((c, i) => {
@@ -396,6 +464,38 @@ export default function AdminFAQ() {
   }
 
   const handleSave = async () => {
+    const normalizedCategories = new Set()
+    for (let categoryIndex = 0; categoryIndex < faqs.length; categoryIndex += 1) {
+      const category = faqs[categoryIndex]
+      const categoryName = String(category.category || "").trim()
+      if (!categoryName) {
+        setActiveCat(categoryIndex)
+        setFeedback({ type: "error", message: `Category ${categoryIndex + 1} needs a name before you can save.` })
+        return
+      }
+      const categoryKey = categoryName.toLowerCase()
+      if (normalizedCategories.has(categoryKey)) {
+        setActiveCat(categoryIndex)
+        setFeedback({ type: "error", message: `The category name “${categoryName}” is duplicated. Use a unique category name.` })
+        return
+      }
+      normalizedCategories.add(categoryKey)
+
+      for (let itemIndex = 0; itemIndex < category.items.length; itemIndex += 1) {
+        const item = category.items[itemIndex]
+        if (!String(item.q || "").trim()) {
+          setActiveCat(categoryIndex)
+          setFeedback({ type: "error", message: `Question ${itemIndex + 1} in “${categoryName}” cannot be empty.` })
+          return
+        }
+        if (!String(item.a || "").trim()) {
+          setActiveCat(categoryIndex)
+          setFeedback({ type: "error", message: `Add an answer to question ${itemIndex + 1} in “${categoryName}”.` })
+          return
+        }
+      }
+    }
+
     try {
       const savedFaqs = await api.put(FAQ_ADMIN_PATH, faqs)
       setFaqs(savedFaqs)
@@ -403,22 +503,41 @@ export default function AdminFAQ() {
       window.dispatchEvent(new CustomEvent(FAQ_UPDATED_EVENT, { detail: { faqs: savedFaqs } }))
       setDirty(false)
       setSaved(true)
+      setFeedback({ type: "success", message: "All FAQ categories and questions are valid and are now live on the customer site." })
       setTimeout(() => setSaved(false), 2500)
     } catch (err) {
-      alert("Failed to save: " + err.message)
+      setFeedback({ type: "error", message: `The FAQ could not be saved. ${err.message || "Please try again."}` })
     }
   }
 
   const handleReset = () => {
-    if (!window.confirm("Reset all FAQs to the defaults? This cannot be undone.")) return
-    setFaqs(DEFAULT_FAQS)
-    setActiveCat(0)
-    markDirty()
+    setConfirmation({
+      title: "Reset all FAQ content?",
+      message: "Every unsaved category, question, and answer will be replaced with the default FAQ content.",
+      confirmLabel: "Reset to defaults",
+      onConfirm: () => {
+        setFaqs(DEFAULT_FAQS)
+        setActiveCat(0)
+        markDirty()
+      },
+    })
+  }
+
+  const confirmPendingAction = () => {
+    const action = confirmation?.onConfirm
+    setConfirmation(null)
+    action?.()
   }
 
   return (
     <div className="space-y-5">
       <SaveToast show={saved} isDark={isDark} message="FAQ saved!" sub="Your FAQ updates are now live." />
+      <ConfirmationModal
+        confirmation={confirmation}
+        onCancel={() => setConfirmation(null)}
+        onConfirm={confirmPendingAction}
+        isDark={isDark}
+      />
       {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
       <style>{`
         @keyframes faqRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -460,6 +579,8 @@ export default function AdminFAQ() {
           </button>
         </div>
       </div>
+
+      <FeedbackBanner feedback={feedback} onClose={() => setFeedback(null)} isDark={isDark} />
 
       {/* main split */}
       <div className={`grid grid-cols-1 xl:grid-cols-[1.1fr_1fr] gap-5 ${entered ? "" : "faq-rise"}`} style={{ animationDelay: "0.18s" }}>
@@ -575,7 +696,7 @@ export default function AdminFAQ() {
                       t={t}
                       isDark={isDark}
                       onUpdate={next => updateItem(i, next)}
-                      onDelete={() => deleteItem(i)}
+                      onDelete={() => requestDeleteItem(i)}
                       onMove={moveItem}
                     />
                   ))}

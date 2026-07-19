@@ -10,6 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Order, OrderItem, OrderStatusEnum, Product, Review, User, WishlistItem
+from app.services.product_pricing import product_price_payload
 
 
 MOBILE_FEED_TABS = {"explore", "new", "for-you"}
@@ -298,6 +299,7 @@ def serialize_product(
     wishlist_ids: set[uuid.UUID],
     now: datetime,
 ) -> dict:
+    price_payload = product_price_payload(product, branch)
     return {
         "type": "product",
         "id": str(product.id),
@@ -306,8 +308,9 @@ def serialize_product(
             "id": str(product.id),
             "name": product.name,
             "description": product.description,
-            "price": float(product.price or 0),
-            "original_price": float(product.original_price) if product.original_price else None,
+            "price": price_payload["price"],
+            "original_price": price_payload["original_price"],
+            "flash_sale_discount_percent": price_payload["flash_sale_discount_percent"],
             "category": product.category,
             "product_group": product.product_group,
             "product_type": product.product_type,

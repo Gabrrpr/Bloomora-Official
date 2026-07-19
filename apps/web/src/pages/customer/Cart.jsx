@@ -5,9 +5,15 @@ import { computeDiscount } from "../../utils/vouchers.js"
 import { useAuth } from "../../context/AuthContext"
 import { api } from "../../services/api.js"
 import { useCurrency } from "../../context/CuurencyContext.jsx"
+import { useBranch } from "../../context/BranchContext"
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
+
+const getItemAddOns = item => {
+  const addOns = item?.addOns || item?.add_ons || item?.addons || []
+  return Array.isArray(addOns) ? addOns.filter(Boolean) : []
+}
 
 function QtyControl({ qty, onDecrease, onIncrease, isDark }) {
   const bg  = isDark ? "#1e293b" : "white"
@@ -30,15 +36,16 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
   const { isDark } = useTheme()
   const { user } = useAuth()
   const { formatPrice } = useCurrency() || {}
+  const { branch } = useBranch()
   const money = formatPrice || ((value) => new Intl.NumberFormat(undefined, { style: "currency", currency: "PHP" }).format(Number(value || 0)))
   const [items, setItems]         = useState([])
   const [selectAll, setSelectAll] = useState(false)
-  const [catalogOpen, setCatalogOpen] = useState(false)
 
   // ── Voucher ──────────────────────────────────────────────────────────────
   const [voucher, setVoucher]               = useState("")
   const [appliedVoucher, setAppliedVoucher] = useState(null)
   const [voucherMsg, setVoucherMsg]         = useState(null) // { type:"error"|"success", text }
+  const [bundleQuote, setBundleQuote]       = useState(null)
 
   useEffect(() => {
     let active = true
@@ -61,10 +68,31 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
     setCartCount(getCartCount(savedItems))
   }
   const checkedItems = items.filter(i => i.checked)
-  const subtotal     = checkedItems.reduce((s,i) => s+(i.price||0)*(i.qty||1), 0)
-  const shipping     = checkedItems.length > 0 ? 100 : 0
-  const discount     = computeDiscount(appliedVoucher, subtotal)
-  const total        = Math.max(0, subtotal + shipping - discount)
+  const subtotal     = checkedItems.reduce((s,i) => s+Number(i.totalPrice ?? i.price ?? 0)*(i.qty||1), 0)
+  const quoteItems = checkedItems.map(item => ({
+    id: item.id,
+    qty: item.qty || 1,
+    add_ons: getItemAddOns(item),
+  }))
+  const quoteSignature = JSON.stringify(quoteItems)
+
+  useEffect(() => {
+    let active = true
+    if (!checkedItems.length) {
+      setBundleQuote(null)
+      return () => { active = false }
+    }
+    api.quoteOrder(quoteItems, branch)
+      .then(quote => { if (active) setBundleQuote(quote) })
+      .catch(() => { if (active) setBundleQuote(null) })
+    return () => { active = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quoteSignature, branch])
+
+  const voucherDiscount = computeDiscount(appliedVoucher, subtotal)
+  const bundleDiscount = Number(bundleQuote?.bundle_discount || 0)
+  const totalDiscount = voucherDiscount + bundleDiscount
+  const total = Math.max(0, subtotal - totalDiscount)
 
   const applyVoucher = async () => {
     if (!checkedItems.length) return setVoucherMsg({ type: "error", text: "Add products before applying a voucher." })
@@ -212,13 +240,36 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold mb-0.5 truncate" style={{ color:labelC }}>{item.name}</p>
                         <p className="text-xs leading-relaxed line-clamp-2" style={{ color:subC }}>{item.desc}</p>
+                        {getItemAddOns(item).length > 0 && (
+                          <div className="mt-2 rounded-lg px-2.5 py-2 space-y-1"
+                            style={{ backgroundColor:isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4", border:`1px solid ${isDark ? "rgba(74,222,128,0.18)" : "#dcfce7"}` }}>
+                            <p className="text-[10px] font-bold uppercase tracking-wide" style={{ color:isDark ? "#86efac" : DG }}>
+                              Selected add-ons
+                            </p>
+                            {getItemAddOns(item).map((addOn, index) => {
+                              const perProductQty = Math.max(1, Number(addOn.qty || addOn.quantity || 1))
+                              const totalAddOnQty = perProductQty * Math.max(1, Number(item.qty || 1))
+                              const totalAddOnPrice = Number(addOn.price || 0) * totalAddOnQty
+                              return (
+                                <div key={addOn.id || `${addOn.name}-${index}`} className="flex items-center justify-between gap-3 text-[11px]">
+                                  <span className="min-w-0 truncate" style={{ color:labelC }}>
+                                    {addOn.name || "Add-on"} <span style={{ color:subC }}>× {totalAddOnQty}</span>
+                                  </span>
+                                  <span className="font-semibold flex-shrink-0" style={{ color:priceC }}>
+                                    +{money(totalAddOnPrice)}
+                                  </span>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
 
                       {/* Controls — desktop only (stacked at right) */}
                       <div className="hidden sm:flex flex-col items-end gap-2 flex-shrink-0">
                         <QtyControl qty={item.qty||1} onDecrease={()=>handleQty(item.id,item.group,-1)} onIncrease={()=>handleQty(item.id,item.group,1)} isDark={isDark}/>
                         <span className="text-sm font-bold" style={{ color:priceC }}>
-                          {money((item.price||0)*(item.qty||1))}
+                          {money(Number(item.totalPrice ?? item.price ?? 0)*(item.qty||1))}
                         </span>
                       </div>
 
@@ -238,7 +289,7 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
                     <div className="flex sm:hidden items-center justify-between gap-3 mt-3">
                       <QtyControl qty={item.qty||1} onDecrease={()=>handleQty(item.id,item.group,-1)} onIncrease={()=>handleQty(item.id,item.group,1)} isDark={isDark}/>
                       <span className="text-sm font-bold" style={{ color:priceC }}>
-                        {money((item.price||0)*(item.qty||1))}
+                        {money(Number(item.totalPrice ?? item.price ?? 0)*(item.qty||1))}
                       </span>
                     </div>
                   </div>
@@ -259,30 +310,6 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
               </div>
             )}
 
-            {/* Catalog section */}
-            <div className="rounded-xl overflow-hidden" style={{ backgroundColor:cardBg, border:`1px solid ${cardBdr}` }}>
-              <button onClick={() => setCatalogOpen(p=>!p)}
-                className="w-full px-4 py-3.5 flex items-center justify-between text-left transition-colors"
-                onMouseEnter={e => e.currentTarget.style.backgroundColor=isDark?"rgba(74,222,128,0.04)":"#f8fffe"}
-                onMouseLeave={e => e.currentTarget.style.backgroundColor="transparent"}>
-                <div className="flex items-center gap-2.5">
-                  <input type="checkbox" className="w-4 h-4 rounded" style={{ accentColor:G }} onClick={e=>e.stopPropagation()}/>
-                  <span className="text-sm font-semibold" style={{ color:labelC }}>From the catalog</span>
-                </div>
-                <div className="flex items-center gap-2" style={{ color:subC }}>
-                  <span className="text-xs font-medium">3 ITEMS</span>
-                  <svg className="w-4 h-4 transition-transform duration-200" style={{ transform:catalogOpen?"rotate(180deg)":"rotate(0)" }}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/>
-                  </svg>
-                </div>
-              </button>
-              {catalogOpen && (
-                <div className="px-4 pb-3" style={{ borderTop:`1px solid ${hdrBdr}` }}>
-                  <p className="text-sm py-4 text-center" style={{ color:subC }}>Connect to backend to show catalog items</p>
-                </div>
-              )}
-            </div>
           </div>
 
           {/* ── Right — Order Summary ── */}
@@ -300,14 +327,18 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
                 <span style={{ color:subC }}>Subtotal ({checkedItems.length} item{checkedItems.length!==1?"s":""})</span>
                 <span className="font-semibold" style={{ color:labelC }}>{money(subtotal)}</span>
               </div>
-              <div className="flex justify-between">
-                <span style={{ color:subC }}>Shipping Fee</span>
-                <span className="font-semibold" style={{ color:labelC }}>{shipping>0 ? money(shipping) : "—"}</span>
-              </div>
-              {discount > 0 && (
+              {bundleDiscount > 0 && (
+                <div className="flex justify-between">
+                  <span style={{ color:okC }}>
+                    Bundle discount ({Number(bundleQuote?.bundle_campaign?.discount_percent || 0)}% off)
+                  </span>
+                  <span className="font-semibold" style={{ color:okC }}>−{money(bundleDiscount)}</span>
+                </div>
+              )}
+              {voucherDiscount > 0 && (
                 <div className="flex justify-between">
                   <span style={{ color:okC }}>Voucher{appliedVoucher ? ` (${appliedVoucher.code})` : ""}</span>
-                  <span className="font-semibold" style={{ color:okC }}>−{money(discount)}</span>
+                  <span className="font-semibold" style={{ color:okC }}>−{money(voucherDiscount)}</span>
                 </div>
               )}
               <div className="h-px my-1" style={{ backgroundColor:divC }}/>
@@ -344,7 +375,7 @@ export default function Cart({ onNavigate, cartCount, setCartCount }) {
                   <div className="min-w-0">
                     <p className="text-xs font-bold truncate" style={{ color:okC }}>{appliedVoucher.code}</p>
                     <p className="text-[11px]" style={{ color:subC }}>
-                      {appliedVoucher.type==="percent" ? `${appliedVoucher.value}% off` : `${money(appliedVoucher.value)} off`} · −{money(discount)}
+                      {appliedVoucher.type==="percent" ? `${appliedVoucher.value}% off` : `${money(appliedVoucher.value)} off`} · −{money(voucherDiscount)}
                     </p>
                   </div>
                   <button onClick={removeVoucher}

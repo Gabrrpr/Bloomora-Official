@@ -1,14 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text, extract, desc
+from sqlalchemy import func, text, extract, desc, case, and_
 from datetime import datetime, timezone, timedelta
 from typing import List
+from math import ceil
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.user import User
 from app.models.order import Order
-from app.models import RoleEnum, Transaction, PaymentStatusEnum, Product, OrderItem
+from app.models import RoleEnum, Transaction, PaymentStatusEnum, Product, ProductStatusEnum, OrderItem
+from app.services.customization_inventory import is_customization_material_product
 
 router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 
@@ -27,6 +29,16 @@ DEMAND_STATUSES = [
     "delivered",
     "completed",
 ]
+
+
+def _three_period_simple_moving_average(weekly_actuals: list[int]) -> float:
+    if len(weekly_actuals) != 3:
+        raise ValueError("Three weekly actual-demand values are required for the 3-period SMA.")
+    return sum(weekly_actuals) / 3
+
+
+def _finished_product_demand_rows(rows: list, limit: int = 5) -> list:
+    return [row for row in rows if not is_customization_material_product(row)][:limit]
 
 @router.get("/revenue")
 def get_revenue(
@@ -198,18 +210,38 @@ def get_recent_orders(
 @router.get("/trending")
 def get_trending_products(
     branch: str = "all",
-    days: int = 30,
+    days: int = 21,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    window_days = max(1, min(days, 365))
-    since = datetime.now(timezone.utc) - timedelta(days=window_days)
+    # Three consecutive rolling seven-day periods ending now. This includes
+    # today's paid demand immediately and is independent of calendar-month weeks.
+    # The next seven-day forecast is the exact 3-period SMA: (W1 + W2 + W3) / 3.
+    period_end = datetime.now(timezone.utc)
+    week_3_start = period_end - timedelta(days=7)
+    week_2_start = period_end - timedelta(days=14)
+    week_1_start = period_end - timedelta(days=21)
 
     q = db.query(
         Product.id,
         Product.name,
+        Product.category,
+        Product.product_type,
+        Product.product_group,
+        Product.is_customization_material,
         func.sum(OrderItem.quantity).label("sold"),
-        (func.sum(OrderItem.quantity) / window_days).label("avg_daily_demand"),
+        func.sum(case(
+            (and_(Order.created_at >= week_1_start, Order.created_at < week_2_start), OrderItem.quantity),
+            else_=0,
+        )).label("week_1_demand"),
+        func.sum(case(
+            (and_(Order.created_at >= week_2_start, Order.created_at < week_3_start), OrderItem.quantity),
+            else_=0,
+        )).label("week_2_demand"),
+        func.sum(case(
+            (and_(Order.created_at >= week_3_start, Order.created_at < period_end), OrderItem.quantity),
+            else_=0,
+        )).label("week_3_demand"),
     ).join(
         OrderItem, OrderItem.product_id == Product.id
     ).join(
@@ -217,25 +249,50 @@ def get_trending_products(
     ).join(
         Transaction, Transaction.order_id == Order.id
     ).filter(
-        Order.created_at >= since,
+        Order.created_at >= week_1_start,
+        Order.created_at < period_end,
         Order.status.in_(DEMAND_STATUSES),
         Transaction.status == PaymentStatusEnum.paid,
+        Product.is_visible.is_(True),
+        Product.status == ProductStatusEnum.active,
+        Product.is_customization_material.is_(False),
     )
 
     clean_branch = branch.strip().lower()
     if clean_branch not in ["all", "all branches"]:
         q = q.filter(func.lower(Order.branch_name) == clean_branch)
 
-    results = q.group_by(Product.id, Product.name).order_by(desc("sold")).limit(5).all()
+    results = q.group_by(
+        Product.id,
+        Product.name,
+        Product.category,
+        Product.product_type,
+        Product.product_group,
+        Product.is_customization_material,
+    ).order_by(desc("sold")).all()
+    results = _finished_product_demand_rows(results)
     
-    return [
-        {
-            "id": str(r.id),
-            "name": r.name,
-            "sold": int(r.sold or 0),
-            "period_days": window_days,
-            "avg_daily_demand": round(float(r.avg_daily_demand or 0), 2),
-            "forecast_next_7_days": int(round(float(r.avg_daily_demand or 0) * 7)),
-        }
-        for r in results
-    ]
+    result = []
+    for row in results:
+        weekly_actuals = [
+            int(row.week_1_demand or 0),
+            int(row.week_2_demand or 0),
+            int(row.week_3_demand or 0),
+        ]
+        sma = _three_period_simple_moving_average(weekly_actuals)
+        result.append({
+            "id": str(row.id),
+            "name": row.name,
+            "sold": int(row.sold or 0),
+            "period_days": 21,
+            "period_count": 3,
+            "period_length_days": 7,
+            "forecast_method": "three_period_simple_moving_average",
+            "weekly_actuals": weekly_actuals,
+            "week_1_demand": weekly_actuals[0],
+            "week_2_demand": weekly_actuals[1],
+            "week_3_demand": weekly_actuals[2],
+            "simple_moving_average": round(sma, 2),
+            "forecast_next_7_days": ceil(sma),
+        })
+    return result

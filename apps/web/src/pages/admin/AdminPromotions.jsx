@@ -56,8 +56,61 @@ function compressImage(file, maxDim = 400, quality = 0.8) {
 }
 
 const blankForm = { code: "", type: "percent", value: "", minSpend: "", expires: "", active: true }
+const blankBundleForm = { name: "", category: "", minimumQuantity: "", discountPercent: "", active: true }
 const blankAnnForm = { emoji: "", image: "", text: "", active: true }
 const EMOJI_CHOICES = ["🌸", "🌷", "💐", "🎁", "❤️", "🎉", "✨", "🚚", "⏰", "🏷️"]
+
+function PromotionConfirmationModal({ confirmation, busy, error, isDark, onCancel, onConfirm }) {
+  useEffect(() => {
+    if (!confirmation || busy) return undefined
+    const closeOnEscape = event => { if (event.key === "Escape") onCancel() }
+    window.addEventListener("keydown", closeOnEscape)
+    return () => window.removeEventListener("keydown", closeOnEscape)
+  }, [confirmation, busy, onCancel])
+
+  if (!confirmation) return null
+
+  const panelBg = isDark ? "#1e293b" : "#ffffff"
+  const titleColor = isDark ? "#f8fafc" : "#111827"
+  const copyColor = isDark ? "#cbd5e1" : "#6b7280"
+  const borderColor = isDark ? "#334155" : "#e5e7eb"
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center px-4" role="presentation">
+      <button type="button" aria-label="Close confirmation" onClick={busy ? undefined : onCancel}
+        className="absolute inset-0 cursor-default border-none" style={{ background: "rgba(15,23,42,0.62)", backdropFilter: "blur(3px)" }} />
+      <div role="alertdialog" aria-modal="true" aria-labelledby="promotion-confirm-title" aria-describedby="promotion-confirm-message"
+        className="relative w-full max-w-md overflow-hidden rounded-2xl shadow-2xl"
+        style={{ background: panelBg, border: `1px solid ${borderColor}` }}>
+        <div className="p-6">
+          <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-full"
+            style={{ background: isDark ? "rgba(239,68,68,0.14)" : "#fef2f2", color: isDark ? "#fca5a5" : "#dc2626" }}>
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01M5.07 19h13.86a2 2 0 001.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16a2 2 0 001.73 3z" />
+            </svg>
+          </div>
+          <h2 id="promotion-confirm-title" className="text-lg font-bold" style={{ color: titleColor }}>{confirmation.title}</h2>
+          <p id="promotion-confirm-message" className="mt-2 text-sm leading-6" style={{ color: copyColor }}>{confirmation.message}</p>
+          {error && (
+            <div className="mt-4 flex items-start gap-2 rounded-lg px-3 py-2 text-xs font-medium"
+              style={{ background: isDark ? "rgba(239,68,68,0.12)" : "#fef2f2", border: `1px solid ${isDark ? "rgba(239,68,68,0.3)" : "#fecaca"}`, color: isDark ? "#fca5a5" : "#dc2626" }}>
+              <span aria-hidden="true">!</span><span>{error}</span>
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 px-6 py-4" style={{ background: isDark ? "#162032" : "#f8fafc", borderTop: `1px solid ${borderColor}` }}>
+          <button type="button" onClick={onCancel} disabled={busy}
+            className="rounded-lg px-4 py-2 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ color: copyColor, border: `1px solid ${borderColor}`, background: panelBg }}>Cancel</button>
+          <button type="button" onClick={onConfirm} disabled={busy}
+            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60">
+            {busy ? "Deleting..." : confirmation.confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 export default function AdminPromotions() {
   const { isDark } = useTheme()
@@ -98,18 +151,41 @@ export default function AdminPromotions() {
   const [promoCategory, setPromoCategory] = useState("All")
   const [selectedPromoIds, setSelectedPromoIds] = useState([])
   const [flashDiscount, setFlashDiscount] = useState("")
+  const [bundlePromotions, setBundlePromotions] = useState([])
+  const [bundleForm, setBundleForm] = useState(blankBundleForm)
+  const [bundleError, setBundleError] = useState("")
+  const [bundleSaving, setBundleSaving] = useState(false)
 
   const [flashSaleLoading, setFlashSaleLoading] = useState(false)
   const [flashSaleError, setFlashSaleError] = useState("")
   const [flashSaleSuccess, setFlashSaleSuccess] = useState("")
+  const [confirmation, setConfirmation] = useState(null)
+  const [confirmationBusy, setConfirmationBusy] = useState(false)
+  const [confirmationError, setConfirmationError] = useState("")
   // Drives the one-time entrance animation; removed after it plays so it never replays.
   const [entered, setEntered] = useState(false)
 
   useEffect(() => {
-    api.getAdminProducts()
-       .then(data => setProducts(data.data || data))
+    api.getProducts({ limit: 100, branch })
+       .then(data => {
+         const list = data?.items || data?.data || data || []
+         setProducts(list.filter(product =>
+           product.is_visible !== false
+           && product.status !== "inactive"
+           && product.is_customization_material !== true
+         ))
+       })
        .catch(err => console.error("Failed to load products for flash sale", err))
-  }, [])
+  }, [branch])
+
+  const loadBundlePromotions = () => api.getCampaigns()
+    .then(data => {
+      const list = data?.campaigns || data?.data || data || []
+      setBundlePromotions((Array.isArray(list) ? list : []).filter(campaign => campaign.discount_type === "bundle_percent"))
+    })
+    .catch(err => console.error("Failed to load bundle promotions", err))
+
+  useEffect(() => { loadBundlePromotions() }, [])
 
   const loadBackendPromos = () => api.getPromos()
     .then(data => setVouchers((data || []).map(v => ({
@@ -137,7 +213,7 @@ export default function AdminPromotions() {
   const matchesBranch = (p) => {
     if (!p) return false;
     const b = branch.toLowerCase();
-    if (Array.isArray(p.branches)) return p.branches.map(x => x.toLowerCase()).includes(b);
+    if (Array.isArray(p.branches)) return p.branches.length === 0 || p.branches.map(x => x.toLowerCase()).includes(b);
     if (p.branch) return p.branch.toLowerCase() === b;
     if (p.branch_name) return p.branch_name.toLowerCase() === b;
     return false;
@@ -154,6 +230,12 @@ export default function AdminPromotions() {
     const matchesCategory = promoCategory === "All" || p.category?.trim().toLowerCase() === promoCategory.toLowerCase();
     return matchesBranch(p) && matchesCategory;
   });
+
+  const bundleCategoryProductCount = products.filter(product =>
+    matchesBranch(product)
+    && bundleForm.category
+    && product.category?.trim().toLowerCase() === bundleForm.category.toLowerCase()
+  ).length
 
   const branchSaleProducts = products.filter(p => {
     const currentPrice = Number(p.price || 0)
@@ -253,11 +335,19 @@ export default function AdminPromotions() {
     })
     await loadBackendPromos()
   }
-  const deleteVoucher = async (code) => {
+  const deleteVoucher = (code) => {
     const voucher = vouchers.find(v => (v.code || "").toUpperCase() === code.toUpperCase())
-    if (voucher?.id) await api.deletePromo(voucher.id)
-    await loadBackendPromos()
-    if (isEditing && editingCode.toUpperCase() === code.toUpperCase()) resetForm()
+    setConfirmation({
+      title: "Delete promo code?",
+      message: `The promo code “${code}” will no longer be available to customers. This action cannot be undone.`,
+      confirmLabel: "Delete promo code",
+      action: async () => {
+        if (voucher?.id) await api.deletePromo(voucher.id)
+        await loadBackendPromos()
+        if (isEditing && editingCode.toUpperCase() === code.toUpperCase()) resetForm()
+      },
+    })
+    setConfirmationError("")
   }
 
 
@@ -299,7 +389,19 @@ export default function AdminPromotions() {
   }
 
   const toggleAnn = (id) => persistAnnouncements(announcements.map(a => a.id === id ? { ...a, active: !(a.active !== false) } : a))
-  const deleteAnn = (id) => { persistAnnouncements(announcements.filter(a => a.id !== id)); if (annIsEditing && annEditingId === id) resetAnnForm() }
+  const deleteAnn = (id) => {
+    const announcement = announcements.find(item => item.id === id)
+    setConfirmation({
+      title: "Delete customer notification?",
+      message: `“${announcement?.text || "This notification"}” will be removed from the customer notification bar.`,
+      confirmLabel: "Delete notification",
+      action: async () => {
+        persistAnnouncements(announcements.filter(a => a.id !== id))
+        if (annIsEditing && annEditingId === id) resetAnnForm()
+      },
+    })
+    setConfirmationError("")
+  }
 
   const discountLabel = (v) => v.type === "percent" ? `${v.value}% off` : `₱${Number(v.value).toLocaleString()} off`
 
@@ -342,7 +444,10 @@ export default function AdminPromotions() {
     try {
       // Process all selected products in parallel
       await Promise.all(selectedPromoIds.map(id => 
-        api.post(`/products/admin/${id}/promote`, { discount_percent: Number(flashDiscount) })
+        api.post(`/products/admin/${id}/promote`, {
+          discount_percent: Number(flashDiscount),
+          branch: branch.toLowerCase(),
+        })
       ));
       
       // Create a smart announcement based on count
@@ -368,8 +473,9 @@ export default function AdminPromotions() {
       setTimeout(() => setFlashSaleSuccess(""), 4000);
       
       // Refresh product list to get new prices
-      const freshProducts = await api.getAdminProducts();
-      setProducts(freshProducts.data || freshProducts);
+      const freshProducts = await api.getProducts({ limit: 100, branch });
+      const freshList = freshProducts?.items || freshProducts?.data || freshProducts || [];
+      setProducts(freshList.filter(product => product.is_customization_material !== true));
 
     } catch (err) {
       setFlashSaleError("Failed to apply promotion: " + (err.response?.data?.detail || err.message));
@@ -378,9 +484,90 @@ export default function AdminPromotions() {
     }
   }
 
+  const submitBundlePromotion = async () => {
+    const name = bundleForm.name.trim()
+    const minimumQuantity = Number(bundleForm.minimumQuantity)
+    const discountPercent = Number(bundleForm.discountPercent)
+    if (!name) return setBundleError("Enter a bundle promotion name.")
+    if (!bundleForm.category) return setBundleError("Select an eligible product category.")
+    if (!Number.isInteger(minimumQuantity) || minimumQuantity < 2) return setBundleError("Minimum items must be at least 2.")
+    if (!(discountPercent > 0 && discountPercent <= 100)) return setBundleError("Enter a percentage from 1 to 100.")
+    if (bundleCategoryProductCount === 0) return setBundleError(`No customer-visible products are available in ${bundleForm.category} for ${branch}.`)
+
+    setBundleSaving(true)
+    setBundleError("")
+    try {
+      const payload = {
+        name,
+        campaign_key: `bundle_${Date.now()}`,
+        start_at: new Date().toISOString(),
+        end_at: null,
+        is_active: bundleForm.active,
+        discount_type: "bundle_percent",
+        discount_value: discountPercent,
+        minimum_quantity: minimumQuantity,
+        eligible_category: bundleForm.category.trim().toLowerCase(),
+      }
+      await api.createCampaign(payload)
+      setBundleForm(blankBundleForm)
+      await loadBundlePromotions()
+      setSaved(true); setTimeout(() => setSaved(false), 2000)
+    } catch (error) {
+      setBundleError(error.message || "Unable to save bundle promotion.")
+    } finally {
+      setBundleSaving(false)
+    }
+  }
+
+  const toggleBundlePromotion = async campaign => {
+    await api.updateCampaign(campaign.id, { is_active: !campaign.is_active })
+    await loadBundlePromotions()
+  }
+
+  const deleteBundlePromotion = campaign => {
+    setConfirmation({
+      title: "Delete bundle promotion?",
+      message: `The automatic discount “${campaign.name}” will stop applying to eligible customer orders.`,
+      confirmLabel: "Delete bundle discount",
+      action: async () => {
+        try {
+          await api.deleteCampaign(campaign.id)
+        } catch (error) {
+          // A campaign may already have been deleted after an earlier 204
+          // response was incorrectly treated as a JSON parsing failure.
+          if (!/campaign not found/i.test(error.message || "")) throw error
+        }
+        await loadBundlePromotions()
+      },
+    })
+    setConfirmationError("")
+  }
+
+  const closeConfirmation = () => {
+    if (confirmationBusy) return
+    setConfirmation(null)
+    setConfirmationError("")
+  }
+
+  const confirmPromotionAction = async () => {
+    if (!confirmation?.action || confirmationBusy) return
+    setConfirmationBusy(true)
+    setConfirmationError("")
+    try {
+      await confirmation.action()
+      setConfirmation(null)
+    } catch (error) {
+      setConfirmationError(error.message || "The promotion could not be deleted. Please try again.")
+    } finally {
+      setConfirmationBusy(false)
+    }
+  }
+
   return (
     <div className="space-y-5">
       <SaveToast show={savedFlash || annSaved} isDark={isDark} message="Saved!" sub="Your promotion changes are now live." />
+      <PromotionConfirmationModal confirmation={confirmation} busy={confirmationBusy} error={confirmationError}
+        isDark={isDark} onCancel={closeConfirmation} onConfirm={confirmPromotionAction} />
       {/* Gentle fade + rise so content eases in once loaded instead of flashing. */}
       <style>{`
         @keyframes promoRise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
@@ -404,6 +591,7 @@ export default function AdminPromotions() {
               onClick={() => {
                 setBranch(b);
                 setSelectedPromoIds([]); // Clear selection to prevent cross-branch mistakes
+                setBundleForm(form => ({ ...form, category: "" }));
               }}
               className="px-6 py-2 rounded-md font-bold transition-all text-sm"
               style={{
@@ -678,6 +866,98 @@ export default function AdminPromotions() {
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium" style={{ background: isDark ? "rgba(74,222,128,0.12)" : "#f0fdf4", border: `1px solid ${isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0"}`, color: isDark ? "#4ade80" : G }}>
               <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/></svg>
               {flashSaleSuccess}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Quantity-based bundle discounts */}
+      <div className={`rounded-xl overflow-hidden ${entered ? "" : "promo-rise"}`}
+        style={{ backgroundColor: cardBg, border: `1px solid ${cardBdr}`, boxShadow: isDark ? "none" : "0 1px 3px rgba(0,0,0,0.04)", animationDelay: "0.3s" }}>
+        <div className="px-5 py-3.5" style={{ borderBottom: `1px solid ${headerBdr}`, backgroundColor: headerBg }}>
+          <p className="text-sm font-semibold" style={{ color: bodyTxt }}>Bundle Discounts ({branch})</p>
+          <p className="text-xs mt-0.5" style={{ color: mutedTxt }}>
+            Apply a percentage to the order subtotal once the customer buys the minimum quantity from one product category.
+          </p>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {bundleError && (
+            <div className="px-3 py-2 rounded-lg text-xs font-medium"
+              style={{ background: isDark ? "rgba(239,68,68,0.12)" : "#fef2f2", border: `1px solid ${isDark ? "rgba(239,68,68,0.3)" : "#fecaca"}`, color: isDark ? "#fca5a5" : "#dc2626" }}>
+              {bundleError}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: mutedTxt }}>Promotion Name</label>
+              <input value={bundleForm.name} onChange={e => setBundleForm(form => ({ ...form, name: e.target.value }))}
+                placeholder="e.g. Buy 3 and Save" className="w-full px-3 py-2.5 text-sm rounded-lg outline-none" style={inputStyle} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: mutedTxt }}>Eligible Category</label>
+              <select value={bundleForm.category}
+                onChange={e => setBundleForm(form => ({ ...form, category: e.target.value }))}
+                className="w-full px-3 py-2.5 text-sm rounded-lg outline-none" style={inputStyle}>
+                <option value="">Select a category</option>
+                {promoCategories.filter(category => category !== "All").map(category => (
+                  <option key={category} value={category}>{category}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: mutedTxt }}>Minimum Items</label>
+              <input type="number" min="2" value={bundleForm.minimumQuantity}
+                onChange={e => setBundleForm(form => ({ ...form, minimumQuantity: e.target.value }))}
+                placeholder="e.g. 3" className="w-full px-3 py-2.5 text-sm rounded-lg outline-none" style={inputStyle} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: mutedTxt }}>Percentage Off</label>
+              <input type="number" min="1" max="100" value={bundleForm.discountPercent}
+                onChange={e => setBundleForm(form => ({ ...form, discountPercent: e.target.value }))}
+                placeholder="e.g. 15" className="w-full px-3 py-2.5 text-sm rounded-lg outline-none" style={inputStyle} />
+            </div>
+          </div>
+
+          {bundleForm.category && (
+            <p className="text-xs px-3 py-2 rounded-lg" style={{ color: subTxt, backgroundColor: isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4" }}>
+              {bundleCategoryProductCount} customer-visible {bundleForm.category.toLowerCase()} product(s) are currently available for {branch}. Raw materials are excluded.
+            </p>
+          )}
+
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <label className="flex items-center gap-2 text-xs font-semibold" style={{ color: subTxt }}>
+              <input type="checkbox" checked={bundleForm.active} onChange={e => setBundleForm(form => ({ ...form, active: e.target.checked }))} />
+              Activate immediately
+            </label>
+            <button type="button" onClick={submitBundlePromotion} disabled={bundleSaving}
+              className="px-5 py-2.5 text-sm font-bold text-white rounded-lg disabled:opacity-50"
+              style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}>
+              {bundleSaving ? "Saving..." : "Create Bundle Discount"}
+            </button>
+          </div>
+
+          {bundlePromotions.length > 0 && (
+            <div className="space-y-2 pt-2" style={{ borderTop: `1px solid ${divider}` }}>
+              {bundlePromotions.map(campaign => (
+                <div key={campaign.id} className="flex items-center justify-between gap-3 p-3 rounded-lg" style={{ border: `1px solid ${inputBdr}` }}>
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold truncate" style={{ color: bodyTxt }}>{campaign.name}</p>
+                    <p className="text-xs" style={{ color: mutedTxt }}>
+                      Buy {campaign.minimum_quantity}+ {campaign.eligible_category || "eligible items"} · {Number(campaign.discount_value)}% off
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => toggleBundlePromotion(campaign)} className="px-3 py-1.5 text-xs font-bold rounded-md"
+                      style={{ color: campaign.is_active ? accentG : subTxt, border: `1px solid ${inputBdr}` }}>
+                      {campaign.is_active ? "Active" : "Inactive"}
+                    </button>
+                    <button type="button" onClick={() => deleteBundlePromotion(campaign)} className="px-3 py-1.5 text-xs font-bold rounded-md text-red-500"
+                      style={{ border: `1px solid ${inputBdr}` }}>Delete</button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

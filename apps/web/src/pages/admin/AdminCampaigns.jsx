@@ -478,7 +478,7 @@ export default function AdminCampaigns() {
       const res = await api.getCampaigns()
       const data = res.data || res
       const list = data?.campaigns ? data.campaigns : data || []
-      setCampaigns(Array.isArray(list) ? list : [])
+      setCampaigns((Array.isArray(list) ? list : []).filter(campaign => campaign.discount_type !== "bundle_percent"))
     } catch (e) {
       console.error(e)
       setCampaigns([])

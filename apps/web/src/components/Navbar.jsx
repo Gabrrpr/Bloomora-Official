@@ -409,7 +409,7 @@ function PromoCarousel({ onNavigate, leftSlot, promos }) {
             <span className="sm:hidden">{promo.short}</span>
             <span className="hidden sm:inline">{promo.text}</span>
             &nbsp;<strong>{promo.highlight}</strong>{" — "}
-            <button onClick={(e) => { e.stopPropagation(); onNavigate?.(promo.page); }} style={{ fontWeight:700, textDecoration:"underline", textUnderlineOffset:"2px", background:"none", border:"none", color:"white", cursor:"pointer", letterSpacing:"0.05em", padding:0, display:"inline", whiteSpace:"nowrap" }}
+            <button onClick={(e) => { e.stopPropagation(); onNavigate?.(promo.page, promo.param); }} style={{ fontWeight:700, textDecoration:"underline", textUnderlineOffset:"2px", background:"none", border:"none", color:"white", cursor:"pointer", letterSpacing:"0.05em", padding:0, display:"inline", whiteSpace:"nowrap" }}
               onMouseEnter={e => e.currentTarget.style.opacity="0.75"} onMouseLeave={e => e.currentTarget.style.opacity="1"}>{promo.cta}</button>
           </span>
         </div>
@@ -501,7 +501,7 @@ function CartDropdown({ cartCount, onNavigate, navBottom }) {
       window.removeEventListener("bloomora:cart-updated", update);
     };
   }, []);
-  const subtotal = cartItems.reduce((s, i) => s + (i.price||0)*(i.qty||1), 0);
+  const subtotal = cartItems.reduce((s, i) => s + Number(i.totalPrice ?? i.price ?? 0)*(i.qty||1), 0);
   const bg  = isDark ? "#1a2332" : "white";
   const bdr = isDark ? "#2d3748" : "#e5e7eb";
   const textPrimary   = isDark ? "#e5e7eb" : "#111827";
@@ -555,7 +555,7 @@ function CartDropdown({ cartCount, onNavigate, navBottom }) {
                 <p className="text-xs font-medium truncate" style={{ color:textPrimary }}>{item.name}</p>
                 <p className="text-[11px]" style={{ color:textSecondary }}>Qty: {item.qty||1}</p>
               </div>
-              <span className="text-xs font-semibold flex-shrink-0" style={{ color:textPrimary }}>₱{((item.price||0)*(item.qty||1)).toLocaleString()}</span>
+              <span className="text-xs font-semibold flex-shrink-0" style={{ color:textPrimary }}>₱{(Number(item.totalPrice ?? item.price ?? 0)*(item.qty||1)).toLocaleString()}</span>
             </div>
           ))}
           {cartItems.length>4&&<p className="px-4 py-2 text-[11px] text-center" style={{ color:textSecondary }}>+{cartItems.length-4} more item(s)</p>}
@@ -962,13 +962,34 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
     isCustomCategory: true,
   }));
 
-  const campaignLinks = activeCampaigns.map(c => ({
+  const campaignLinks = activeCampaigns
+    .filter(campaign => campaign.discount_type !== "bundle_percent")
+    .map(c => ({
     label: c.name,
     page: "shop",
     isCampaign: true,
     campaignKey: c.campaign_key,
     highlight: true,
   }));
+
+  const bundleNotificationPromos = activeCampaigns
+    .filter(campaign => campaign.discount_type === "bundle_percent")
+    .map(campaign => {
+      const category = String(campaign.eligible_category || "eligible items").trim()
+      const categoryLabel = category.replace(/\b\w/g, letter => letter.toUpperCase())
+      const minimum = Number(campaign.minimum_quantity || 1)
+      const discount = Number(campaign.discount_value || 0)
+      return {
+        short: `Buy ${minimum}+ ${categoryLabel}`,
+        text: campaign.name || `Buy ${minimum}+ ${categoryLabel}`,
+        highlight: `${discount}% OFF`,
+        cta: "SHOP NOW",
+        page: "shop",
+        param: category,
+      }
+    })
+
+  const notificationBarPromos = [...bundleNotificationPromos, ...navPromos]
 
   const shopIndex = NAV_LINKS.findIndex(l => l.label === "Shop");
   const FINAL_NAV_LINKS = [
@@ -1093,7 +1114,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
         ref={navRef}
         style={{ zIndex: 99999, pointerEvents: "auto", position: "sticky" }}
       >
-        <PromoCarousel onNavigate={onNavigate} promos={navPromos} leftSlot={
+        <PromoCarousel onNavigate={onNavigate} promos={notificationBarPromos} leftSlot={
           <div className="flex items-center gap-2 flex-shrink-0" ref={locationRef}>
             {/* "STORE BRANCH" label — now shown at all sizes (own row on mobile) */}
             <span className="text-[11px] uppercase tracking-wide font-semibold whitespace-nowrap" style={{ color: "rgba(255,255,255,0.65)" }}>Store Branch</span>

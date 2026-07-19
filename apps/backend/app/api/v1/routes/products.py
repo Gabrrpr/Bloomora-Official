@@ -14,6 +14,8 @@ from app.core.config import settings
 from app.core.dependencies import get_db, get_current_user, require_staff
 from app.models import User, RoleEnum, Product, Inventory, ProductStatusEnum, Review, Order, OrderItem, ProductRecipe, StockReservation
 from app.models.campaigns import Campaign
+from app.services.customization_inventory import is_customization_material_product
+from app.services.product_pricing import flash_sale_discount, product_price_payload
 from app.utils.logger import log_activity
 
 class StockLogCreate(BaseModel):
@@ -105,27 +107,95 @@ def _subtract_reserved_stock(stock_value: int, reserved_value: int) -> int:
     return max(0, int(stock_value or 0) - int(reserved_value or 0))
 
 def _is_customization_material_product(product: Product) -> bool:
-    raw = " ".join([
-        str(getattr(product, "category", "") or ""),
-        str(getattr(product, "product_type", "") or ""),
-        str(getattr(product, "product_group", "") or ""),
-        str(getattr(product, "name", "") or ""),
-    ]).lower()
-    if any(term in raw for term in ("arrangement", "bouquet", "gift set", "floral design")):
-        return False
-    if bool(getattr(product, "is_customization_material", False)):
-        return True
-    return any(term in raw for term in (
-        "flower", "rose", "tulip", "carnation", "sunflower", "stem",
-        "vase", "wrapping", "wrapper", "ribbon", "accessory", "add-on",
-        "addon", "filler", "box", "container", "foam", "material", "raw",
-    ))
+    return is_customization_material_product(product)
 
-def serialize_product(p: Product) -> dict:
+def _recipe_requirements(db: Session, product: Product) -> list[tuple[str, Decimal]]:
+    requirements: dict[str, Decimal] = {}
+    composition = getattr(product, "composition", None) or []
+    if isinstance(composition, list):
+        for item in composition:
+            if not isinstance(item, dict):
+                continue
+            component_id = item.get("product_id") or item.get("id")
+            if not component_id:
+                continue
+            quantity = Decimal(str(item.get("quantity") or item.get("qty") or 1))
+            if quantity <= 0:
+                continue
+            key = str(component_id)
+            requirements[key] = requirements.get(key, Decimal("0")) + quantity
+
+    if not requirements:
+        rows = db.query(ProductRecipe).filter(ProductRecipe.parent_product_id == product.id).all()
+        for row in rows:
+            quantity = Decimal(str(row.quantity_required or 0))
+            if quantity <= 0:
+                continue
+            key = str(row.component_product_id)
+            requirements[key] = requirements.get(key, Decimal("0")) + quantity
+
+    return list(requirements.items())
+
+def _calculate_buildable_recipe_stock(
+    requirements: list[tuple[str, Decimal]],
+    inventory_by_product_id: dict[str, object],
+) -> Optional[dict[str, int]]:
+    if not requirements:
+        return None
+
+    buildable = {"stock": None, "stock_manila": None, "stock_pampanga": None}
+    for component_id, quantity in requirements:
+        inventory = inventory_by_product_id.get(str(component_id))
+        component_stock = {
+            "stock": int(getattr(inventory, "current_stock", 0) or 0),
+            "stock_manila": int(getattr(inventory, "stock_manila", 0) or 0),
+            "stock_pampanga": int(getattr(inventory, "stock_pampanga", 0) or 0),
+        }
+        for key, stock in component_stock.items():
+            possible = int(Decimal(stock) // quantity)
+            buildable[key] = possible if buildable[key] is None else min(buildable[key], possible)
+
+    manila_buildable = int(buildable["stock_manila"] or 0)
+    pampanga_buildable = int(buildable["stock_pampanga"] or 0)
+    return {
+        "stock": manila_buildable + pampanga_buildable,
+        "stock_manila": manila_buildable,
+        "stock_pampanga": pampanga_buildable,
+    }
+
+def _recipe_buildable_stock(db: Session, product: Product) -> Optional[dict[str, int]]:
+    requirements = _recipe_requirements(db, product)
+    if not requirements:
+        return None
+
+    component_ids = []
+    for component_id, _quantity in requirements:
+        try:
+            component_ids.append(uuid.UUID(str(component_id)))
+        except (TypeError, ValueError):
+            continue
+    inventories = (
+        db.query(Inventory)
+        .filter(Inventory.product_id.in_(component_ids))
+        .all()
+        if component_ids
+        else []
+    )
+    inventory_by_product_id = {str(inventory.product_id): inventory for inventory in inventories}
+    return _calculate_buildable_recipe_stock(requirements, inventory_by_product_id)
+
+def serialize_product(p: Product, db: Optional[Session] = None, branch: Optional[str] = None) -> dict:
     inv = p.inventory
+    recipe_stock = _recipe_buildable_stock(db, p) if db else None
+    total_stock = recipe_stock["stock"] if recipe_stock else (inv.current_stock if inv else 0)
+    manila_stock = recipe_stock["stock_manila"] if recipe_stock else (getattr(inv, "stock_manila", 0) if inv else 0)
+    pampanga_stock = recipe_stock["stock_pampanga"] if recipe_stock else (getattr(inv, "stock_pampanga", 0) if inv else 0)
+    normalized_branch = str(branch or "").strip().lower()
+    selected_stock = pampanga_stock if normalized_branch == "pampanga" else manila_stock if normalized_branch == "manila" else total_stock
 
     cost_per_unit = float(inv.cost_per_unit) if (inv and inv.cost_per_unit is not None) else None
-    current_price = float(p.price) if p.price else 0
+    price_payload = product_price_payload(p, branch)
+    current_price = price_payload["price"]
     
     markup_percentage = None
     if cost_per_unit and cost_per_unit > 0 and current_price > 0:
@@ -143,12 +213,12 @@ def serialize_product(p: Product) -> dict:
         "is_customization_material": bool(getattr(p, "is_customization_material", False)),
         "image_url": p.image_url,
         "image": p.image_url,
-        "is_available": effective_is_available(p, inv),
+        "is_available": product_status_value(p) != ProductStatusEnum.inactive.value and selected_stock > 0,
         "status": product_status_value(p),
         
-        "stock": inv.current_stock if inv else 0,
-        "stock_manila": getattr(inv, "stock_manila", 0) if inv else 0,
-        "stock_pampanga": getattr(inv, "stock_pampanga", 0) if inv else 0,
+        "stock": selected_stock if normalized_branch in {"manila", "pampanga"} else total_stock,
+        "stock_manila": manila_stock,
+        "stock_pampanga": pampanga_stock,
         
         "reorder_point": inv.reorder_point if inv else 10,
         "unit_type": inv.unit_type if (inv and inv.unit_type) else "piece",
@@ -158,7 +228,9 @@ def serialize_product(p: Product) -> dict:
         "branches": getattr(p, "branches", []),
         "is_visible": getattr(p, "is_visible", True),
         "tags": getattr(p, "tags", []),
-        "original_price": float(p.original_price) if getattr(p, "original_price", None) else None,
+        "original_price": price_payload["original_price"],
+        "flash_sale_discount_percent": price_payload["flash_sale_discount_percent"],
+        "flash_sale_discounts": price_payload["flash_sale_discounts"],
         "base_price": cost_per_unit,
         "labor_cost": getattr(p, "labor_cost", 0), 
         "markup_percentage": markup_percentage,
@@ -226,25 +298,36 @@ def with_review_summary(payload: dict, summary: dict[str, float | int] | None) -
     return payload
 
 @router.get("/flash-sales", response_model=List[dict])
-def get_flash_sales(db: Session = Depends(get_db)):
+def get_flash_sales(
+    branch: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
     try:
         products = (
             db.query(Product)
             .options(joinedload(Product.inventory))
-            .filter(Product.original_price.isnot(None))
-        .filter(Product.is_visible == True)
-        .filter(Product.status == ProductStatusEnum.active)
-        .all()
-    )
+            .filter(Product.is_visible == True)
+            .filter(Product.status == ProductStatusEnum.active)
+            .filter(Product.is_customization_material.is_(False))
+            .all()
+        )
+        products = [
+            product for product in products
+            if flash_sale_discount(product, branch) > 0
+        ]
 
         review_summaries = get_review_summaries(db, [p.id for p in products])
-        return [with_review_summary(serialize_product(p), review_summaries.get(p.id)) for p in products]
+        return [with_review_summary(serialize_product(p, db, branch), review_summaries.get(p.id)) for p in products]
     except Exception as e:
         print("CRITICAL ERROR IN FLASH SALES ROUTE:", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/search", response_model=List[dict])
-def search_products(q: str = "", db: Session = Depends(get_db)):
+def search_products(
+    q: str = "",
+    branch: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
     if not q or not q.strip():
         return []
 
@@ -261,6 +344,7 @@ def search_products(q: str = "", db: Session = Depends(get_db)):
             and_(
                 Product.is_visible == True,
                 Product.status == ProductStatusEnum.active,
+                Product.is_customization_material.is_(False),
                 or_(
                     func.lower(Product.name).ilike(search_term),
                     func.lower(Product.category).ilike(search_term),
@@ -274,10 +358,43 @@ def search_products(q: str = "", db: Session = Depends(get_db)):
         )
         .all()
     )
-
-
     review_summaries = get_review_summaries(db, [p.id for p in results])
-    return [with_review_summary(serialize_product(p), review_summaries.get(p.id)) for p in results]
+    return [with_review_summary(serialize_product(p, db, branch), review_summaries.get(p.id)) for p in results]
+
+
+@router.get("/add-ons", response_model=List[dict])
+def get_add_on_products(
+    branch: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
+    """Return purchasable add-ons using the requested branch's inventory."""
+    normalized_branch = str(branch or "").strip().lower()
+    products = (
+        db.query(Product)
+        .options(joinedload(Product.inventory))
+        .filter(
+            Product.is_visible == True,
+            Product.status != ProductStatusEnum.inactive,
+            func.lower(func.trim(cast(Product.category, String))).in_(["add-on", "addon"]),
+        )
+        .order_by(Product.name.asc())
+        .all()
+    )
+    if normalized_branch in {"manila", "pampanga"}:
+        products = [
+            product
+            for product in products
+            if not (getattr(product, "branches", None) or [])
+            or normalized_branch in {
+                str(value).strip().lower()
+                for value in (getattr(product, "branches", None) or [])
+            }
+            or "all" in {
+                str(value).strip().lower()
+                for value in (getattr(product, "branches", None) or [])
+            }
+        ]
+    return [serialize_product(product, db, branch) for product in products]
 
 @router.get("/customization/all", response_model=List[dict])
 def get_customization_products(db: Session = Depends(get_db)):
@@ -325,6 +442,7 @@ def get_customization_products(db: Session = Depends(get_db)):
             "is_visible": p.is_visible,
             "product_group": p.product_group.lower().strip() if p.product_group else "",
             "product_type": p.product_type.lower().strip() if p.product_type else "",
+            "is_customization_material": bool(getattr(p, "is_customization_material", False)),
             "is_customization_material": bool(getattr(p, "is_customization_material", False)),
             "stock": stock,
             "stock_manila": getattr(inv, "stock_manila", 0) if inv else 0,
@@ -465,6 +583,7 @@ def get_products(
             and_(
                 Product.is_visible == True,
                 Product.status == ProductStatusEnum.active,
+                Product.is_customization_material.is_(False),
             )
         )
         .options(joinedload(Product.inventory))
@@ -589,24 +708,31 @@ def get_products(
 
     rows = []
     for p in products:
+        recipe_stock = _recipe_buildable_stock(db, p)
+        total_stock = recipe_stock["stock"] if recipe_stock else (p.inventory.current_stock if p.inventory else 0)
+        manila_stock = recipe_stock["stock_manila"] if recipe_stock else (getattr(p.inventory, "stock_manila", 0) if p.inventory else 0)
+        pampanga_stock = recipe_stock["stock_pampanga"] if recipe_stock else (getattr(p.inventory, "stock_pampanga", 0) if p.inventory else 0)
+        selected_stock = pampanga_stock if normalized_branch == "pampanga" else manila_stock if normalized_branch == "manila" else total_stock
+        price_payload = product_price_payload(p, branch)
         product_data = {
             "id": str(p.id),
             "name": p.name,
             "description": p.description,
             "care_guide": getattr(p, "care_guide", None),
-            "price": float(p.price) if p.price else 0,
+            "price": price_payload["price"],
             "category": (p.category.value if hasattr(p.category, "value") else str(p.category)).lower().strip() if p.category else "",
             "product_group": p.product_group.lower().strip() if p.product_group else "floral",
             "product_type": p.product_type.lower().strip() if p.product_type else "",
-            "original_price": float(p.original_price) if getattr(p, "original_price", None) else None,
+            "original_price": price_payload["original_price"],
+            "flash_sale_discount_percent": price_payload["flash_sale_discount_percent"],
+            "flash_sale_discounts": price_payload["flash_sale_discounts"],
             "image_url": p.image_url,
-            "is_available": effective_is_available(p, p.inventory),
+            "is_available": selected_stock > 0,
             "is_visible": p.is_visible,
             "status": product_status_value(p),
-            "stock": p.inventory.current_stock if p.inventory else 0,
-            
-            "stock_manila": getattr(p.inventory, "stock_manila", 0) if p.inventory else 0,
-            "stock_pampanga": getattr(p.inventory, "stock_pampanga", 0) if p.inventory else 0,
+            "stock": selected_stock if normalized_branch in {"manila", "pampanga"} else total_stock,
+            "stock_manila": manila_stock,
+            "stock_pampanga": pampanga_stock,
             
             "season_key": p.season_key,
             "limited_start_at": p.limited_start_at.isoformat() if p.limited_start_at else None,
@@ -675,6 +801,16 @@ def get_admin_products(
                 "stock_manila": available_stock_manila,
                 "stock_pampanga": available_stock_pampanga,
             }
+            recipe_stock = _recipe_buildable_stock(db, p)
+            if recipe_stock:
+                available_stock = recipe_stock["stock"]
+                available_stock_manila = recipe_stock["stock_manila"]
+                available_stock_pampanga = recipe_stock["stock_pampanga"]
+                availability_inv.update({
+                    "current_stock": available_stock,
+                    "stock_manila": available_stock_manila,
+                    "stock_pampanga": available_stock_pampanga,
+                })
             
             cost_per_unit = float(inv.get("cost_per_unit")) if inv and inv.get("cost_per_unit") is not None else None
             current_price = float(p.price) if p.price else 0
@@ -745,7 +881,7 @@ def get_low_stock(
         .limit(limit)
         .all()
     )
-    return [serialize_product(p) for p in products]
+    return [serialize_product(p, db) for p in products]
 
 @router.post("/admin/upload-image", response_model=dict)
 async def upload_product_image(
@@ -881,7 +1017,7 @@ def create_product(
 
     if parsed_comp:
         for item in parsed_comp:
-            comp_id = item.get("id")
+            comp_id = item.get("product_id") or item.get("id")
             qty = item.get("qty") or item.get("quantity") or 1
 
             if comp_id:
@@ -910,7 +1046,7 @@ def create_product(
     db.commit()
     db.refresh(new_product)
 
-    return {"status": "success", "product": serialize_product(new_product)}
+    return {"status": "success", "product": serialize_product(new_product, db)}
 
 @router.put("/admin/{product_id}", response_model=dict)
 def update_product(
@@ -1024,7 +1160,7 @@ def update_product(
                 product.composition = parsed_comp
                 db.query(ProductRecipe).filter(ProductRecipe.parent_product_id == product.id).delete()
                 for item in parsed_comp:
-                    comp_id = item.get("id")
+                    comp_id = item.get("product_id") or item.get("id")
                     qty = item.get("qty") or item.get("quantity") or 1
                     if comp_id:
                         new_recipe_link = ProductRecipe(
@@ -1138,7 +1274,7 @@ def update_product(
             role=current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role)
         )
 
-        return {"status": "success", "product": serialize_product(product)}
+        return {"status": "success", "product": serialize_product(product, db)}
 
     except Exception as e:
         db.rollback()
@@ -1179,6 +1315,7 @@ def save_homepage_layout(
 def apply_promotion(
     product_id: str,
     discount_percent: int = Body(..., embed=True),
+    branch: str = Body(..., embed=True),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
@@ -1186,27 +1323,39 @@ def apply_promotion(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    if discount_percent <= 0:
-        if product.original_price:
-            product.price = product.original_price
-            product.original_price = None
+    normalized_branch = str(branch or "").strip().lower()
+    if normalized_branch not in {"manila", "pampanga"}:
+        raise HTTPException(status_code=400, detail="Select either the Manila or Pampanga branch.")
+    if discount_percent < 0 or discount_percent > 99:
+        raise HTTPException(status_code=400, detail="Discount must be between 0 and 99 percent.")
+
+    discounts = dict(getattr(product, "flash_sale_discounts", None) or {})
+    if discount_percent == 0:
+        discounts.pop(normalized_branch, None)
+        product.flash_sale_discounts = discounts
         db.commit()
-        return {"status": "success", "message": "Promotion removed."}
+        return {"status": "success", "message": f"{branch.title()} promotion removed."}
 
-    raw_original = getattr(product, "original_price", None)
-    base_price = raw_original if raw_original else product.price
-    discount_multiplier = Decimal((100 - discount_percent) / 100.0)
+    if (
+        not product.is_visible
+        or product_status_value(product) != ProductStatusEnum.active.value
+        or bool(getattr(product, "is_customization_material", False))
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Flash sales can only include active customer-visible products, not raw materials.",
+        )
 
-    product.original_price = base_price
-    product.price = base_price * discount_multiplier
+    discounts[normalized_branch] = discount_percent
+    product.flash_sale_discounts = discounts
 
     db.commit()
     db.refresh(product)
 
     return {
         "status": "success",
-        "message": "Promotion applied!",
-        "product": serialize_product(product),
+        "message": f"Promotion applied to the {branch.title()} branch!",
+        "product": serialize_product(product, db, normalized_branch),
     }
 
 @router.delete("/admin/{product_id}", response_model=dict)
@@ -1267,7 +1416,11 @@ def log_stock_receipt(
         return {"status": "warning", "message": "Stock updated, but log was skipped."}
 
 @router.get("/{product_id}", response_model=dict)
-def get_product(product_id: str, db: Session = Depends(get_db)):
+def get_product(
+    product_id: str,
+    branch: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+):
     try:
         prod_uuid = uuid.UUID(product_id)
     except ValueError:
@@ -1278,17 +1431,7 @@ def get_product(product_id: str, db: Session = Depends(get_db)):
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    return {
-        "id": str(product.id),
-        "name": product.name,
-        "description": product.description,
-        "care_guide": getattr(product, "care_guide", None),
-        "price": float(product.price) if product.price else 0,
-        "category": product.category.value if hasattr(product.category, "value") else product.category,
-        "image_url": product.image_url,
-        "is_available": effective_is_available(product),
-        "status": product_status_value(product),
-    }
+    return serialize_product(product, db, branch)
     
 @router.post("/admin/rename-category")
 def rename_category(

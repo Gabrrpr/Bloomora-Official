@@ -3,6 +3,11 @@ from typing import Dict, List, Optional
 from uuid import UUID
 
 
+class SelectedCustomizationItem(BaseModel):
+    product_id: UUID
+    quantity: int = Field(default=1, ge=1, le=999)
+
+
 class CustomizationRequest(BaseModel):
     prompt_text: str
     flower_id: Optional[UUID] = None
@@ -11,6 +16,7 @@ class CustomizationRequest(BaseModel):
     accessory_id: Optional[UUID] = None
     arrangement_type: Optional[str] = None
     review_only: bool = False
+    selected_items: List[SelectedCustomizationItem] = Field(default_factory=list)
 
 
 class AlternativeItem(BaseModel):

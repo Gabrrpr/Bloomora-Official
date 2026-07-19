@@ -747,7 +747,10 @@ function LowStockCard({ branch, lowStock, t, isDark, onManage }) {
 }
 
 function TrendingProductsCard({ branch, trending, t, isDark }) {
-  const demandValue = item => Number(item.forecast_next_7_days ?? item.sold ?? 0)
+  const hasCurrentSma = item => item.forecast_method === "three_period_simple_moving_average"
+    && Array.isArray(item.weekly_actuals)
+    && item.weekly_actuals.length === 3
+  const demandValue = item => hasCurrentSma(item) ? Number(item.forecast_next_7_days ?? 0) : 0
   const maxDemand = trending.length > 0 ? Math.max(...trending.map(demandValue), 1) : 1;
 
   return (
@@ -761,7 +764,7 @@ function TrendingProductsCard({ branch, trending, t, isDark }) {
         </div>
         <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-md" 
           style={{ backgroundColor: isDark ? "rgba(59,130,246,0.15)" : "#eff6ff", color: isDark ? "#60a5fa" : "#2563eb" }}>
-          30-day rate
+          3-week SMA
         </span>
       </div>
       
@@ -774,16 +777,20 @@ function TrendingProductsCard({ branch, trending, t, isDark }) {
         ) : (
           trending.slice(0, 5).map((item, idx) => {
             const pct = Math.max(5, (demandValue(item) / maxDemand) * 100);
+            const hasSma = hasCurrentSma(item)
+            const weeklyActuals = hasSma ? item.weekly_actuals : []
             return (
               <div key={item.id || idx} className="flex flex-col gap-1.5">
                 <div className="flex justify-between items-end">
                   <p className="text-sm font-medium truncate" style={{ color: t.textPrimary }}>{item.name}</p>
                   <p className="text-xs font-bold whitespace-nowrap" style={{ color: t.textSecondary }}>
-                    {item.forecast_next_7_days ?? 0} next 7d
+                    {hasSma ? `Supply ${item.forecast_next_7_days ?? 0} for the next 7 days` : "Forecast updating…"}
                   </p>
                 </div>
                 <p className="text-[11px]" style={{ color: t.textMuted }}>
-                  {item.sold} sold in {item.period_days || 30}d · avg {Number(item.avg_daily_demand || 0).toFixed(2)}/day
+                  {hasSma
+                    ? `SMA: (${weeklyActuals.join(" + ")}) ÷ 3 = ${Number(item.simple_moving_average || 0).toFixed(2)}`
+                    : "Waiting for the three-week SMA data from the server."}
                 </p>
                 <div className="w-full h-2 rounded-full overflow-hidden" style={{ backgroundColor: isDark ? "#334155" : "#f1f5f9" }}>
                   <div className="h-full rounded-full transition-all duration-700" 
@@ -951,7 +958,7 @@ function DashboardPanel({ user, onNavigate }) {
       })
       .catch(() => {});
 
-    const pTrending = api.get(`/dashboard/trending?branch=${branchParam}&days=30`)
+    const pTrending = api.get(`/dashboard/trending?branch=${branchParam}&days=21`)
       .then(data => setTrending(Array.isArray(data) ? data : []))
       .catch(err => {
         console.error("Demand Forecast Fetch Error:", err)
@@ -1014,8 +1021,8 @@ function DashboardPanel({ user, onNavigate }) {
       "Branch",
       "Metric or Item",
       "Category",
-      "Units Sold Last 30 Days",
-      "Average Daily Demand",
+      "Units Sold Last 21 Days",
+      "3-Week Simple Moving Average",
       "Forecast Next 7 Days",
       "Current Stock",
       "Reorder Point",
@@ -1068,7 +1075,8 @@ function DashboardPanel({ user, onNavigate }) {
       const reorderPoint = matchedStock ? Number(matchedStock.reorder_point ?? 0) : ""
       const forecast = Number(item.forecast_next_7_days ?? 0)
       const sold = Number(item.sold ?? 0)
-      const avg = Number(item.avg_daily_demand ?? 0)
+      const sma = Number(item.simple_moving_average ?? 0)
+      const weeks = item.weekly_actuals || [0, 0, 0]
       const action = matchedStock
         ? `Stock up soon; forecast says about ${forecast} unit(s) may sell in the next 7 days and current stock is ${stock}.`
         : `Trending product; prepare inventory for about ${forecast} possible sale(s) in the next 7 days.`
@@ -1079,13 +1087,13 @@ function DashboardPanel({ user, onNavigate }) {
         `${index + 1}. ${item.name}`,
         matchedStock?.category || "",
         sold,
-        avg.toFixed(2),
+        sma.toFixed(2),
         forecast,
         stock,
         reorderPoint,
         action,
         "",
-        `Based on Simple Moving Average: (${sold} sold / ${item.period_days || 30} days) x 7`,
+        `Exact 3-period SMA: (${weeks[0]} + ${weeks[1]} + ${weeks[2]}) / 3 = ${sma.toFixed(2)}; supply recommendation is rounded up to ${forecast}`,
       ])
     })
 
@@ -1578,7 +1586,7 @@ function DashboardPanel({ user, onNavigate }) {
               <p className="print-section-sub">Top sellers by units sold · {branchLabel}</p>
             </div>
             <p className="print-section-sub" style={{ margin: "0 2px 7px" }}>
-              Formula used: Simple Moving Average = (units sold in the last 30 days / 30) x 7 days.
+              Formula used: Three-period Simple Moving Average (SMA) = (oldest 7-day demand + middle 7-day demand + latest 7-day demand) ÷ 3. These are rolling periods ending now, not calendar-month weeks. The supply recommendation rounds the result up to a whole unit.
             </p>
             <div className="twrap">
               <table>
@@ -1586,9 +1594,11 @@ function DashboardPanel({ user, onNavigate }) {
                   <tr>
                     <th className="tr-rank num">Rank</th>
                     <th className="tr-name">Product</th>
-                    <th className="tr-sold num">30d Sold</th>
-                    <th className="tr-avg num">Avg/Day</th>
-                    <th className="tr-next num">Next 7d</th>
+                    <th className="tr-sold num">Week 1</th>
+                    <th className="tr-avg num">Week 2</th>
+                    <th className="tr-avg num">Week 3</th>
+                    <th className="tr-next num">3-Week SMA</th>
+                    <th className="tr-next num">Supply</th>
                     <th className="tr-action">Stock-Up Recommendation</th>
                   </tr>
                 </thead>
@@ -1597,8 +1607,10 @@ function DashboardPanel({ user, onNavigate }) {
                     <tr key={item.id || i} className={i % 2 === 1 ? "alt" : ""}>
                       <td className="num nowrap muted">{i + 1}</td>
                       <td><span className="item-name">{item.name}</span></td>
-                      <td className="num nowrap">{item.sold ?? 0}</td>
-                      <td className="num nowrap">{Number(item.avg_daily_demand || 0).toFixed(2)}</td>
+                      <td className="num nowrap">{item.week_1_demand ?? 0}</td>
+                      <td className="num nowrap">{item.week_2_demand ?? 0}</td>
+                      <td className="num nowrap">{item.week_3_demand ?? 0}</td>
+                      <td className="num nowrap">{Number(item.simple_moving_average || 0).toFixed(2)}</td>
                       <td className="num nowrap">{item.forecast_next_7_days ?? 0}</td>
                       <td className="muted">Prepare about {item.forecast_next_7_days ?? 0} unit{Number(item.forecast_next_7_days ?? 0) === 1 ? "" : "s"} for the next 7 days.</td>
                     </tr>
