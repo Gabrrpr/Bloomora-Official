@@ -167,7 +167,7 @@ def checkout_settings(db: Session = Depends(get_db)):
     return {
         "delivery": delivery,
         "shipping_methods": [
-            serialize_shipping_method(method, base_rate_override=delivery.get("delivery_fee", 0))
+            serialize_shipping_method(method)
             for method in shipping_methods
         ],
     }

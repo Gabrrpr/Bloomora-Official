@@ -1,5 +1,5 @@
 import { Image } from 'expo-image';
-import { Check, Flower2, Pencil, ShoppingCart, Sparkles } from 'lucide-react-native';
+import { Check, Flower2, Pencil, RefreshCw, ShoppingCart, Sparkles } from 'lucide-react-native';
 import { memo, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, {
@@ -33,7 +33,10 @@ type AiArrangementResultProps = {
   onBuyNow: () => void;
   onChangeArrangementName: (value: string) => void;
   onChangeCardMessage: (value: string) => void;
+  onEditPrompt: () => void;
+  onRegenerate: () => void;
   onToggleAddOn: (addOnId: string) => void;
+  regenerating: boolean;
   prompt: string;
   result: GenerationResult;
   selectedAddOnIds: ReadonlySet<string>;
@@ -50,9 +53,12 @@ export const AiArrangementResult = memo(function AiArrangementResult({
   onBuyNow,
   onChangeArrangementName,
   onChangeCardMessage,
+  onEditPrompt,
+  onRegenerate,
   onToggleAddOn,
   prompt,
   result,
+  regenerating,
   selectedAddOnIds,
 }: AiArrangementResultProps) {
   const insets = useSafeAreaInsets();
@@ -100,6 +106,19 @@ export const AiArrangementResult = memo(function AiArrangementResult({
         <View style={styles.promptRecap}>
           <Sparkles color={theme.colors.primary} size={15} strokeWidth={2.3} />
           <Text numberOfLines={2} style={styles.promptText}>{prompt}</Text>
+        </View>
+
+        <View style={styles.designActions}>
+          <MotionPressable accessibilityLabel="Edit arrangement request" accessibilityRole="button"
+            disabled={regenerating} onPress={onEditPrompt} style={styles.designActionButton}>
+            <Pencil color={theme.colors.primary} size={16} strokeWidth={2.2} />
+            <Text style={styles.designActionText}>Edit request</Text>
+          </MotionPressable>
+          <MotionPressable accessibilityLabel="Regenerate arrangement image" accessibilityRole="button"
+            disabled={regenerating} onPress={onRegenerate} style={styles.designActionButton}>
+            {regenerating ? <ActivityIndicator color={theme.colors.primary} size="small" /> : <RefreshCw color={theme.colors.primary} size={16} strokeWidth={2.2} />}
+            <Text style={styles.designActionText}>{regenerating ? 'Regenerating…' : 'Regenerate image'}</Text>
+          </MotionPressable>
         </View>
 
         <Animated.View style={[styles.previewCard, imageStyle]}>
@@ -390,6 +409,13 @@ const styles = StyleSheet.create({
   aboutContent: { gap: 13 },
   aboutRow: { alignItems: 'flex-start', flexDirection: 'row', gap: 9 },
   aboutText: { color: theme.colors.textMuted, flex: 1, fontFamily: Fonts.sans, fontSize: 12, lineHeight: 18 },
+  designActions: { flexDirection: 'row', gap: 10 },
+  designActionButton: {
+    alignItems: 'center', backgroundColor: theme.colors.white, borderColor: theme.colors.border,
+    borderRadius: 12, borderWidth: 1, flex: 1, flexDirection: 'row', gap: 7,
+    justifyContent: 'center', minHeight: 44, paddingHorizontal: 10,
+  },
+  designActionText: { color: theme.colors.primaryDark, fontFamily: Fonts.sansSemiBold, fontSize: 12 },
   actionBar: {
     alignItems: 'center',
     backgroundColor: theme.colors.white,

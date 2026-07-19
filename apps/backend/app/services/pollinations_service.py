@@ -1,3 +1,4 @@
+import asyncio
 import httpx
 import io
 import secrets
@@ -15,10 +16,14 @@ class PollinationsGenerationError(RuntimeError):
 
 
 class PollinationsService:
+    # Pollinations' public/shared-IP tier accepts only one queued generation at
+    # a time. Keep this process from creating its own queue-full collisions.
+    _generation_lock = asyncio.Lock()
+
     def __init__(self):
         self.base_url = "https://gen.pollinations.ai/image/"
-        self.fallback_base_url = "https://image.pollinations.ai/prompt/"
         self.model = "flux"
+        self.fallback_model = "zimage"
 
     def _build_prompt_variants(self, optimized_prompt: str, arrangement_type: str):
         style = str(arrangement_type or "bouquet").strip().lower()
@@ -58,19 +63,22 @@ class PollinationsService:
         return [polished_prompt, f"{optimized_prompt}. {style_prompt}"]
 
     def _pollinations_urls(self, encoded_prompt: str, clean_key: str, seed: int):
-        query = f"width=768&height=768&model={self.model}&nologo=true&seed={seed}"
-        urls = []
-        if clean_key:
-            keyed_query = f"{query}&key={clean_key}"
-            urls.extend([
-                f"{self.base_url}{encoded_prompt}?{keyed_query}",
-                f"{self.fallback_base_url}{encoded_prompt}?{keyed_query}",
-            ])
+        # Use only the current unified endpoint. Authentication is sent in the
+        # Authorization header so the secret key never appears in URLs/logs.
+        return [
+            f"{self.base_url}{encoded_prompt}?width=768&height=768&model={model}&nologo=true&seed={seed}"
+            for model in (self.model, self.fallback_model)
+        ]
 
-        # Pollinations also exposes a public endpoint. This keeps previews
-        # available when a configured key temporarily runs out of pollen.
-        urls.append(f"{self.fallback_base_url}{encoded_prompt}?{query}")
-        return urls
+    @staticmethod
+    def _compact_prompt(prompt: str, max_words: int = 280, max_chars: int = 1600) -> str:
+        """Keep the recipe-first prompt inside conservative image-model limits."""
+        normalized = " ".join(str(prompt or "").split())
+        words = normalized.split(" ")
+        compact = " ".join(words[:max_words])
+        if len(compact) > max_chars:
+            compact = compact[:max_chars].rsplit(" ", 1)[0]
+        return compact.strip(" ,.;")
 
     def _create_demo_preview(self, optimized_prompt: str, arrangement_type: str) -> bytes:
         style = str(arrangement_type or "bouquet").strip().lower()
@@ -146,45 +154,87 @@ class PollinationsService:
 
         prompt_variants = self._build_prompt_variants(optimized_prompt, arrangement_type)
         clean_key = settings.POLLINATIONS_API_KEY.strip()
+        if not clean_key:
+            raise PollinationsGenerationError(
+                "AI image generation is not configured. Please contact support."
+            )
+        auth_headers = {"Authorization": f"Bearer {clean_key}"}
         image_bytes = None
         budget_exhausted = False
+        provider_overloaded = False
+        provider_timed_out = False
+        stop_retrying = False
         generation_seed = secrets.randbelow(2_000_000_000)
 
-        async with httpx.AsyncClient(follow_redirects=True) as client:
-            for attempt, prompt_variant in enumerate(prompt_variants, start=1):
-                # Preserve the exact recipe plus arrangement-specific visual rules.
-                safe_prompt = " ".join(prompt_variant.split())[:3000]
-                encoded_prompt = quote(safe_prompt, safe="")
+        try:
+            await asyncio.wait_for(self._generation_lock.acquire(), timeout=5.0)
+        except asyncio.TimeoutError as exc:
+            raise PollinationsGenerationError(
+                "The AI image generator is currently processing another design. "
+                "Please wait a moment, then select Regenerate image."
+            ) from exc
 
-                attempt_seed = generation_seed + attempt
-                for url_index, pollinations_url in enumerate(self._pollinations_urls(encoded_prompt, clean_key, attempt_seed), start=1):
-                    try:
-                        resp = await client.get(pollinations_url, timeout=httpx.Timeout(55.0, connect=15.0))
-                        resp.raise_for_status()
-                        content_type = resp.headers.get("content-type", "")
-                        if "image" not in content_type.lower():
-                            print(
-                                "Pollinations returned non-image content "
-                                f"on attempt {attempt}.{url_index}: status={resp.status_code}, "
-                                f"content-type={content_type}, body={resp.text[:300]}"
+        try:
+            async with httpx.AsyncClient(follow_redirects=True) as client:
+                for attempt, prompt_variant in enumerate(prompt_variants, start=1):
+                    # Preserve the exact recipe plus arrangement-specific visual rules.
+                    # The exact material recipe is intentionally at the start.
+                    # FLUX/Fireworks can fail internally when long style rules
+                    # push the prompt beyond its workflow token capacity.
+                    safe_prompt = self._compact_prompt(prompt_variant)
+                    encoded_prompt = quote(safe_prompt, safe="")
+
+                    attempt_seed = generation_seed + attempt
+                    for url_index, pollinations_url in enumerate(self._pollinations_urls(encoded_prompt, clean_key, attempt_seed), start=1):
+                        try:
+                            # Image generation commonly exceeds one minute. A short
+                            # read timeout abandons a valid authenticated job while
+                            # it is still rendering and causes subsequent queue errors.
+                            resp = await client.get(
+                                pollinations_url,
+                                headers=auth_headers,
+                                timeout=httpx.Timeout(180.0, connect=15.0),
                             )
-                            continue
-                        image_bytes = resp.content
-                        break
-                    except httpx.HTTPStatusError as e:
-                        body = e.response.text[:300] if e.response is not None else ""
-                        status_code = e.response.status_code if e.response is not None else "unknown"
-                        normalized_body = body.lower()
-                        if "budget too low" in normalized_body or "payment_required" in normalized_body:
-                            budget_exhausted = True
-                        print(f"Pollinations HTTP error on attempt {attempt}.{url_index}: status={status_code}, body={body}")
-                    except httpx.RequestError as e:
-                        print(f"Pollinations request error on attempt {attempt}.{url_index}: {type(e).__name__}: {repr(e)}")
-                    except Exception as e:
-                        print(f"Pollinations unexpected error on attempt {attempt}.{url_index}: {type(e).__name__}: {repr(e)}")
+                            resp.raise_for_status()
+                            content_type = resp.headers.get("content-type", "")
+                            if "image" not in content_type.lower():
+                                print(
+                                    "Pollinations returned non-image content "
+                                    f"on attempt {attempt}.{url_index}: status={resp.status_code}, "
+                                    f"content-type={content_type}, body={resp.text[:300]}"
+                                )
+                                continue
+                            image_bytes = resp.content
+                            break
+                        except httpx.HTTPStatusError as e:
+                            body = e.response.text[:300] if e.response is not None else ""
+                            status_code = e.response.status_code if e.response is not None else "unknown"
+                            normalized_body = body.lower()
+                            if "budget too low" in normalized_body or "payment_required" in normalized_body:
+                                budget_exhausted = True
+                                stop_retrying = True
+                            if status_code == 429 or "queue full" in normalized_body or "too many requests" in normalized_body:
+                                provider_overloaded = True
+                                stop_retrying = True
+                            print(f"Pollinations HTTP error on attempt {attempt}.{url_index}: status={status_code}, body={body}")
+                        except httpx.TimeoutException as e:
+                            # The timed-out request can remain in Pollinations' queue.
+                            # Trying another endpoint immediately only produces 429s.
+                            provider_timed_out = True
+                            stop_retrying = True
+                            print(f"Pollinations request timed out on attempt {attempt}.{url_index}: {type(e).__name__}: {repr(e)}")
+                        except httpx.RequestError as e:
+                            print(f"Pollinations request error on attempt {attempt}.{url_index}: {type(e).__name__}: {repr(e)}")
+                        except Exception as e:
+                            print(f"Pollinations unexpected error on attempt {attempt}.{url_index}: {type(e).__name__}: {repr(e)}")
 
-                if image_bytes:
-                    break
+                        if stop_retrying:
+                            break
+
+                    if image_bytes or stop_retrying:
+                        break
+        finally:
+            self._generation_lock.release()
 
         if not image_bytes:
             print("Pollinations timed out or failed on all attempts. No generic preview will be substituted.")
@@ -193,7 +243,20 @@ class PollinationsService:
                     "The AI image service has temporarily run out of generation credit. "
                     "Your selected items are still saved on this page; please try again later."
                 )
-            return None
+            if provider_overloaded:
+                raise PollinationsGenerationError(
+                    "The AI image generator is temporarily busy. Your design details are still on this page; "
+                    "please wait about a minute, then select Regenerate image."
+                )
+            if provider_timed_out:
+                raise PollinationsGenerationError(
+                    "The AI image generator is taking longer than expected. Your design details are still on this page; "
+                    "please wait about a minute, then select Regenerate image."
+                )
+            raise PollinationsGenerationError(
+                "The AI image generator is temporarily unavailable. Your design details are still on this page; "
+                "please try Regenerate image shortly."
+            )
 
         try:
             img = Image.open(io.BytesIO(image_bytes)).convert("RGBA")

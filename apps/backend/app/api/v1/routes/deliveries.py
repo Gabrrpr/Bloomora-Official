@@ -1095,30 +1095,29 @@ def create_delivery_order(
 
     vehicle = None
     vehicle_id = payload.get("vehicle_id") or payload.get("vehicleId")
-    if not vehicle_id:
-        raise HTTPException(status_code=400, detail="Select an active vehicle for this dispatch.")
-    try:
-        vehicle_uuid = uuid.UUID(str(vehicle_id))
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid vehicle ID.")
-    vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_uuid, Vehicle.is_active == True).with_for_update().first()
-    if not vehicle:
-        raise HTTPException(status_code=400, detail="Selected vehicle not found or inactive.")
-    if str(vehicle.branch or "").lower() != branch.lower():
-        raise HTTPException(status_code=400, detail="The vehicle must belong to the selected branch.")
-    if vehicle.assigned_rider_id and vehicle.assigned_rider_id != rider.id:
-        raise HTTPException(status_code=400, detail="The selected vehicle is assigned to another rider.")
-    vehicle_dispatch = db.query(DeliveryOrder).filter(
-        DeliveryOrder.vehicle_id == vehicle.id,
-        DeliveryOrder.status.in_([
-            DeliveryOrderStatusEnum.assigned,
-            DeliveryOrderStatusEnum.picked_up,
-            DeliveryOrderStatusEnum.in_progress,
-        ]),
-    ).first()
-    if vehicle_dispatch:
-        raise HTTPException(status_code=400, detail=f"This vehicle is already used by {vehicle_dispatch.delivery_order_number}.")
-    vehicle.assigned_rider_id = rider.id
+    if vehicle_id:
+        try:
+            vehicle_uuid = uuid.UUID(str(vehicle_id))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid vehicle ID.")
+        vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_uuid, Vehicle.is_active == True).with_for_update().first()
+        if not vehicle:
+            raise HTTPException(status_code=400, detail="Selected vehicle not found or inactive.")
+        if str(vehicle.branch or "").lower() != branch.lower():
+            raise HTTPException(status_code=400, detail="The vehicle must belong to the selected branch.")
+        if vehicle.assigned_rider_id and vehicle.assigned_rider_id != rider.id:
+            raise HTTPException(status_code=400, detail="The selected vehicle is assigned to another rider.")
+        vehicle_dispatch = db.query(DeliveryOrder).filter(
+            DeliveryOrder.vehicle_id == vehicle.id,
+            DeliveryOrder.status.in_([
+                DeliveryOrderStatusEnum.assigned,
+                DeliveryOrderStatusEnum.picked_up,
+                DeliveryOrderStatusEnum.in_progress,
+            ]),
+        ).first()
+        if vehicle_dispatch:
+            raise HTTPException(status_code=400, detail=f"This vehicle is already used by {vehicle_dispatch.delivery_order_number}.")
+        vehicle.assigned_rider_id = rider.id
 
     notes = str(payload.get("notes") or "").strip() or None
 

@@ -1116,10 +1116,18 @@ def _calculate_bundle_discount(
     campaigns: list[Campaign],
     prepared_items: list[tuple],
     subtotal: Decimal,
+    branch: Optional[str] = None,
 ) -> tuple[Optional[Campaign], Decimal]:
     best_campaign = None
     best_discount = Decimal("0.00")
     for campaign in campaigns:
+        campaign_branches = {
+            str(value or "").strip().lower()
+            for value in (getattr(campaign, "branches", None) or ["all"])
+        }
+        normalized_branch = str(branch or "").strip().lower()
+        if normalized_branch and "all" not in campaign_branches and normalized_branch not in campaign_branches:
+            continue
         minimum_quantity = int(getattr(campaign, "minimum_quantity", 0) or 0)
         percentage = Decimal(str(getattr(campaign, "discount_value", 0) or 0))
         eligible_category = str(getattr(campaign, "eligible_category", "") or "").strip().lower()
@@ -1152,6 +1160,7 @@ def _active_bundle_discount(
     db: Session,
     prepared_items: list[tuple],
     subtotal: Decimal,
+    branch: Optional[str] = None,
 ) -> tuple[Optional[Campaign], Decimal]:
     now = datetime.now(timezone.utc)
     campaigns = (
@@ -1164,7 +1173,7 @@ def _active_bundle_discount(
         )
         .all()
     )
-    return _calculate_bundle_discount(campaigns, prepared_items, subtotal)
+    return _calculate_bundle_discount(campaigns, prepared_items, subtotal, branch)
 
 
 @router.post("/quote", response_model=dict)
@@ -1224,7 +1233,7 @@ def quote_order(
             subtotal += add_on_price * add_on_quantity
             prepared_items.append(("add_on", add_on, add_on_quantity, add_on_price, False))
 
-    campaign, bundle_discount = _active_bundle_discount(db, prepared_items, subtotal)
+    campaign, bundle_discount = _active_bundle_discount(db, prepared_items, subtotal, quote_branch)
     return {
         "subtotal": float(subtotal),
         "bundle_discount": float(bundle_discount),
@@ -1481,7 +1490,11 @@ async def create_order(
                 total_amount += add_on_price * add_on_quantity
 
         if fulfillment_method in {"delivery", "lalamove"}:
-            delivery_fee = Decimal(str(delivery_settings["delivery_fee"]))
+            delivery_fee = Decimal(str(
+                shipping_method.base_rate
+                if shipping_method is not None
+                else delivery_settings["delivery_fee"]
+            ))
         else:
             delivery_fee = Decimal("0.00")
         minimum_order = Decimal(str(delivery_settings["minimum_order"]))
@@ -1491,7 +1504,7 @@ async def create_order(
                 detail=f"Minimum order is ₱{float(minimum_order):,.2f}.",
             )
         voucher_code = str(payload.get("voucher_code") or payload.get("voucherCode") or "").strip()
-        _bundle_campaign, discount_amount = _active_bundle_discount(db, prepared_items, total_amount)
+        _bundle_campaign, discount_amount = _active_bundle_discount(db, prepared_items, total_amount, raw_branch)
         normalized_voucher = None
         if voucher_code:
             promo, voucher_discount = validate_voucher(db, voucher_code, total_amount)

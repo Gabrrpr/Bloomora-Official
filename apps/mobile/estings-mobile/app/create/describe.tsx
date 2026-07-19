@@ -344,6 +344,46 @@ export default function DescribeArrangementScreen() {
     requestAnimationFrame(() => promptInputRef.current?.focus());
   }, []);
 
+  const handleEditGeneratedPrompt = useCallback(() => {
+    setResult(null);
+    setRecipePreview(null);
+    setError(null);
+    setAddedToCart(false);
+    requestAnimationFrame(() => promptInputRef.current?.focus());
+  }, []);
+
+  const handleRegenerateResult = useCallback(async () => {
+    if (!result || isProcessing) return;
+    const session = await requireSignedIn('regenerate your arrangement');
+    if (!session) return;
+    if (aiUsage?.remaining === 0) {
+      Alert.alert('Daily limit reached', `You have reached your daily limit of ${aiUsage.limit} AI generations.`);
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const data = await checkAndGenerate({ prompt_text: prompt.trim() });
+      if (data.success) {
+        setResult(data);
+        setAddedToCart(false);
+        setAiUsage(current => current
+          ? { ...current, remaining: data.remaining_generations ?? current.remaining }
+          : current);
+      } else if (data.validation) {
+        setResult(null);
+        setRecipePreview(null);
+        setQuantityValidation(data.validation);
+      } else {
+        Alert.alert('Could not regenerate', formatGenerationError(data.message));
+      }
+    } catch (regenerationError: unknown) {
+      const message = regenerationError instanceof Error ? regenerationError.message : null;
+      Alert.alert('Could not regenerate', formatGenerationError(message));
+    } finally {
+      setIsProcessing(false);
+    }
+  }, [aiUsage, isProcessing, prompt, result]);
+
   const handleToggleAddOn = useCallback((addOnId: string) => {
     setSelectedAddOnIds((current) => {
       const next = new Set(current);
@@ -492,9 +532,12 @@ export default function DescribeArrangementScreen() {
           onBuyNow={handleBuyNow}
           onChangeArrangementName={handleArrangementNameChange}
           onChangeCardMessage={handleCardMessageChange}
+          onEditPrompt={handleEditGeneratedPrompt}
+          onRegenerate={handleRegenerateResult}
           onToggleAddOn={handleToggleAddOn}
           prompt={prompt}
           result={result}
+          regenerating={isProcessing}
           selectedAddOnIds={selectedAddOnIds}
         />
       ) : recipePreview ? (

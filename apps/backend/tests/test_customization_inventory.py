@@ -66,6 +66,28 @@ class CustomizationInventoryTests(unittest.TestCase):
 
         self.assertFalse(_is_customization_material_product(product))
 
+    def test_customer_ribbon_accessory_is_not_inferred_as_raw_material(self):
+        product = SimpleNamespace(
+            category="Accessory",
+            product_type="Ribbon",
+            product_group="Non-floral",
+            name="Satin Gift Ribbon",
+            is_customization_material=False,
+        )
+
+        self.assertFalse(_is_customization_material_product(product))
+
+    def test_explicit_customization_ribbon_can_still_be_a_material(self):
+        product = SimpleNamespace(
+            category="Accessory",
+            product_type="Ribbon",
+            product_group="Raw Materials",
+            name="Florist Finishing Ribbon",
+            is_customization_material=True,
+        )
+
+        self.assertTrue(_is_customization_material_product(product))
+
 
 if __name__ == "__main__":
     unittest.main()

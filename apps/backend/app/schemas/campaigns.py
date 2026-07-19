@@ -14,6 +14,7 @@ class CampaignCreateRequest(BaseModel):
     discount_value: Optional[float] = Field(None, ge=0)
     minimum_quantity: Optional[int] = Field(None, ge=1)
     eligible_category: Optional[str] = Field(None, min_length=1, max_length=100)
+    branches: List[str] = Field(default_factory=lambda: ["all"])
 
 
 class CampaignUpdateRequest(BaseModel):
@@ -26,6 +27,7 @@ class CampaignUpdateRequest(BaseModel):
     discount_value: Optional[float] = Field(None, ge=0)
     minimum_quantity: Optional[int] = Field(None, ge=1)
     eligible_category: Optional[str] = Field(None, min_length=1, max_length=100)
+    branches: Optional[List[str]] = None
     
 class CampaignProductsRequest(BaseModel):
     product_ids: List[UUID]
@@ -33,6 +35,7 @@ class CampaignProductsRequest(BaseModel):
     discount_value: Optional[float] = Field(None, ge=0)
     minimum_quantity: Optional[int] = Field(None, ge=1)
     eligible_category: Optional[str] = Field(None, min_length=1, max_length=100)
+    branches: Optional[List[str]] = None
 
 
 class CampaignOut(BaseModel):
@@ -46,6 +49,7 @@ class CampaignOut(BaseModel):
     discount_value: Optional[float] = None
     minimum_quantity: Optional[int] = None
     eligible_category: Optional[str] = None
+    branches: List[str] = Field(default_factory=lambda: ["all"])
     product_ids: List[UUID] = []
 
 

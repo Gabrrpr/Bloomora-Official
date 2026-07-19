@@ -325,9 +325,6 @@ function SidebarContent({
   const HIDDEN_CATS = [
     "add-on",
     "addon",
-    "accessory",
-    "pot fillers",
-    "pot filler",
     "wrapping",
     "ribbon",
     "filler",

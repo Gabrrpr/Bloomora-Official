@@ -89,8 +89,6 @@ def generate_otp() -> str:
     return ''.join(random.choices(string.digits, k=6))
 
 def send_otp_email(to_email: str, otp: str, first_name: str = None):
-    print(f"[DEVELOPER LOG] OTP for {to_email} is: {otp}")
-    
     greeting = f"Hi {first_name}," if first_name else "Hi there,"
 
     html = f"""

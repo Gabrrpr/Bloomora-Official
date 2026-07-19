@@ -82,6 +82,23 @@ class BundleDiscountTests(unittest.TestCase):
         self.assertIs(selected, campaign)
         self.assertEqual(discount, Decimal("150.00"))
 
+    def test_bundle_only_applies_to_configured_branch(self):
+        product_id = uuid.uuid4()
+        campaign = SimpleNamespace(
+            minimum_quantity=2,
+            discount_value=10,
+            eligible_category="bouquets",
+            products=[],
+            branches=["manila"],
+        )
+
+        selected, discount = _calculate_bundle_discount(
+            [campaign], [product_item(product_id, 2)], Decimal("500.00"), "Pampanga"
+        )
+
+        self.assertIsNone(selected)
+        self.assertEqual(discount, Decimal("0.00"))
+
 
 if __name__ == "__main__":
     unittest.main()

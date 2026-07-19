@@ -528,53 +528,33 @@ function ReceiveStockModal({ inventory, onClose, onSaved, isDark }) {
 
     setSaving(true);
     setValErr("");
-    const ok = [], failed = [];
-    const updatedItemsForState = []; 
+    const receiptLines = validLines.map(id => ({
+      product_id: id,
+      quantity: parseInt(lines[id].qty) || 0,
+      purchasing_price: parseFloat(lines[id].cost) || 0,
+      date_of_issuance: lines[id].date,
+      notes: `Stock invoice - Delivered to ${branch}`,
+    }));
 
-    for (const id of validLines) {
-      const item = itemById(id);
-      if (!item) { failed.push(id); continue; }
-
-      const received = parseInt(lines[id].qty) || 0;
-      const totalCost = parseFloat(lines[id].cost) || 0;
-      
-      const currentManila = parseInt(item.stock_manila ?? 0);
-      const currentPampanga = parseInt(item.stock_pampanga ?? 0);
-      
-      const newManila = branch === "Manila" ? currentManila + received : currentManila;
-      const newPampanga = branch === "Pampanga" ? currentPampanga + received : currentPampanga;
-      const totalGlobalStock = newManila + newPampanga;
-
-      try {
-        const fd = new FormData();
-        fd.append("stock_manila", newManila);
-        fd.append("stock_pampanga", newPampanga);
-        fd.append("stock", totalGlobalStock);
-        
-        // Restocking an existing product must never change its established
-        // base cost. Total paid is retained only in the stock receipt log.
-        await api.put(`/products/admin/${id}`, fd);
-
-        await api.post(`/products/admin/stock-logs`, {
-          product_id: id,
-          qty_change: received,
-          purchasing_price: totalCost,
-          date_of_issuance: lines[id].date,
-          branch: branch, 
-          notes: `Manual Restock - Delivered to ${branch}` 
-        });
-
-        ok.push(item.name);
-        updatedItemsForState.push({ id, stock_manila: newManila, stock_pampanga: newPampanga, stock: totalGlobalStock });
-      } catch (e) {
-        console.error("Restock failed for", id, e);
-        failed.push(item.name);
-      }
+    try {
+      const response = await api.post("/products/admin/stock-receipts", {
+        branch,
+        lines: receiptLines,
+      });
+      const updatedItemsForState = Array.isArray(response?.items) ? response.items : [];
+      const ok = updatedItemsForState.map(item => item.name);
+      setResult({ ok, failed: [] });
+      onSaved(ok.length, updatedItemsForState);
+    } catch (error) {
+      console.error("Stock invoice failed", error);
+      setResult({
+        ok: [],
+        failed: validLines.map(id => itemById(id)?.name || id),
+      });
+      setValErr(error?.message || "The invoice was not applied. No stock quantities were changed.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
-    setResult({ ok, failed });
-    
-    if (failed.length === 0) onSaved(ok.length, updatedItemsForState);
   };
 
   const totalUnits = validLines.reduce((s, id) => s + (parseInt(lines[id].qty) || 0), 0);

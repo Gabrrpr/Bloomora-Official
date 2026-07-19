@@ -647,7 +647,7 @@ export default function CheckoutScreen() {
     if (fulfillmentMethod !== 'pickup') {
       if (!deliveryAddress.trim()) {
         nextErrors.address = 'Choose a saved address or add a delivery address.';
-      } else if ((fulfillmentMethod === 'lalamove' || selectedShippingMethodCode === 'standard') && !verifiedDeliveryAddress?.is_serviceable) {
+      } else if (!verifiedDeliveryAddress?.is_serviceable) {
         nextErrors.address = 'Confirm this address on the map so the rider can find the exact location.';
       }
     }
@@ -954,6 +954,11 @@ export default function CheckoutScreen() {
           </View>
           {validationErrors.date ? <Text style={styles.fieldError}>{validationErrors.date}</Text> : null}
           {isTodayUnavailable ? <Text style={styles.helperText}>Same-day delivery is unavailable after {sameDayCutoffLabel}.</Text> : null}
+          {fulfillmentMethod !== 'pickup' && storeBranch === 'manila' ? (
+            <Text style={styles.helperText}>
+              Manila delivery notice: The selected date for {displayedShippingMethods.find((method) => method.code === selectedShippingMethodCode)?.courier_name ?? 'your courier'} is a requested schedule, not a guaranteed fixed arrival time. We will notify you when the final schedule is confirmed.
+            </Text>
+          ) : null}
           {voucherError ? <Text style={styles.fieldError}>{voucherError}</Text> : null}
           {fulfillmentMethod === 'pickup' ? (
             <Text style={styles.helperText}>Orders are prepared during store hours. You’ll receive a notification once your order is ready for pickup on the selected date.</Text>

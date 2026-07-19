@@ -6,8 +6,8 @@ from app.services.customization_rules import InventoryMaterial, safe_inventory_q
 
 
 MATERIAL_KEYWORDS = (
-    "flower", "flowers", "vase", "wrapping", "wrapper", "ribbon",
-    "accessory", "accessories", "add-on", "addon", "filler", "stem",
+    "flower", "flowers", "vase", "wrapping", "wrapper",
+    "filler", "stem",
     "box", "container", "foam", "material", "raw",
 )
 ARRANGEMENT_KEYWORDS = ("arrangement", "bouquet", "floral design", "gift set")
@@ -33,8 +33,15 @@ def is_customization_material_product(product: Product) -> bool:
     searchable_text = " ".join(str(value or "") for value in searchable_values).lower()
     if any(keyword in searchable_text for keyword in ARRANGEMENT_KEYWORDS):
         return False
+    # Customer accessories (including ribbons and add-ons) belong to the
+    # storefront unless staff explicitly marks the row as a raw material.
     if bool(getattr(product, "is_customization_material", False)):
         return True
+
+    if any(keyword in searchable_text for keyword in (
+        "ribbon", "accessory", "accessories", "add-on", "addon",
+    )):
+        return False
 
     material_keywords = MATERIAL_KEYWORDS + (
         "rose", "tulip", "carnation", "sunflower",

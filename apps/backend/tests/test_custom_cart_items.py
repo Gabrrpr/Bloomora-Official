@@ -29,6 +29,20 @@ class ExistingItemSession:
 
 
 class CustomCartItemTests(unittest.TestCase):
+    def test_product_cart_snapshot_uses_current_server_price(self):
+        product = SimpleNamespace(
+            id=uuid.uuid4(), name="Ribbon", description="Satin", category="Ribbon",
+            price=175, original_price=None, product_group="Non-floral", product_type="Accessory",
+            image_url=None, is_available=True, is_visible=True, status="active",
+            inventory=SimpleNamespace(current_stock=12), branches=[],
+        )
+        item = SimpleNamespace(
+            id=uuid.uuid4(), item_data={"price": 1}, item_key=f"product:{product.id}",
+            product=product, product_id=product.id, quantity=1,
+        )
+
+        self.assertEqual(_serialize(item)["web_item"]["price"], 175.0)
+
     def test_generated_arrangement_upsert_is_idempotent_and_preserves_recipe_snapshot(self):
         item = SimpleNamespace(
             id=uuid.uuid4(),

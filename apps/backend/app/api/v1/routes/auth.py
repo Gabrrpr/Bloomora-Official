@@ -88,6 +88,16 @@ def allow_dev_otp_fallback() -> bool:
     return app_env not in {"production", "prod"}
 
 
+def log_dev_otp(purpose: str, email: str, otp: str) -> None:
+    """Print local OTPs immediately without leaking them in production logs."""
+    if not allow_dev_otp_fallback():
+        return
+    print(
+        f"\n[DEV OTP] {purpose.upper()} | email={email} | code={otp}\n",
+        flush=True,
+    )
+
+
 def _safe_email_delivery_log(error: str | None) -> str:
     text = str(error or "")
     if "not owned by user" in text or "sender address rejected" in text or "5.7.1" in text or "553" in text:
@@ -260,6 +270,7 @@ def send_otp(request: Request, payload: SendOTPRequest, db: Session = Depends(ge
 
     otp = generate_otp()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    log_dev_otp("registration", payload.email, otp)
 
     if existing:
         existing.otp_code = otp
@@ -389,6 +400,7 @@ def forgot_password_send_otp(request: Request, payload: SendOTPRequest, db: Sess
 
     otp = generate_otp()
     expires_at = datetime.now(timezone.utc) + timedelta(minutes=10)
+    log_dev_otp("password reset", payload.email, otp)
     user.otp_code = otp
     user.otp_expires_at = expires_at
     db.commit()

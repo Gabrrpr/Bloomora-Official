@@ -383,6 +383,7 @@ async def check_and_generate(
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
+            headers={"Retry-After": "60"},
         ) from exc
 
     arrangement_type = normalize_arrangement_type(

@@ -686,8 +686,6 @@ export default function AdminDeliveryPage() {
   const createDispatch = async () => {
     if (!dispatchForm.riderId)
       return setWizardError("Select an available rider.");
-    if (!dispatchForm.vehicleId)
-      return setWizardError("Select an active vehicle for this dispatch.");
     setCreating(true);
     setWizardError("");
     try {
@@ -2123,7 +2121,7 @@ export default function AdminDeliveryPage() {
                   </select>
                 </label>
                 <label className="block text-sm font-bold">
-                  Vehicle
+                  Vehicle <span className="font-normal text-slate-400">(optional)</span>
                   <select
                     value={dispatchForm.vehicleId}
                     onChange={(event) =>
@@ -2134,7 +2132,7 @@ export default function AdminDeliveryPage() {
                     }
                     className="mt-1 w-full rounded-xl border px-3 py-2.5 dark:border-slate-600 dark:bg-slate-800"
                   >
-                    <option value="">Select vehicle</option>
+                    <option value="">No vehicle assignment</option>
                     {activeVehicles.map((vehicle) => (
                       <option key={vehicle.id} value={vehicle.id}>
                         {vehicle.plateNumber} · {label(vehicle.vehicleType)}

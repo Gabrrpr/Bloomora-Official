@@ -845,7 +845,7 @@ export default function Checkout({ onNavigate }) {
         setError("Please select an available shipping option for this address.");
         return;
       }
-      if ((selectedShippingMethod.supports_live_booking || selectedShippingMethod.code === "standard") && (!activeDeliveryPin?.lat || !activeDeliveryPin?.lng)) {
+      if (!activeDeliveryPin?.lat || !activeDeliveryPin?.lng) {
         setError(`Please confirm the delivery pin before using ${selectedShippingMethod.courier_name}.`);
         return;
       }
@@ -879,7 +879,7 @@ export default function Checkout({ onNavigate }) {
         setError("Please select an available shipping option for this address.");
         return;
       }
-      if ((selectedShippingMethod.supports_live_booking || selectedShippingMethod.code === "standard") && (!activeDeliveryPin?.lat || !activeDeliveryPin?.lng)) {
+      if (!activeDeliveryPin?.lat || !activeDeliveryPin?.lng) {
         setError(`Please confirm the delivery pin before using ${selectedShippingMethod.courier_name}.`);
         return;
       }
@@ -1340,12 +1340,14 @@ export default function Checkout({ onNavigate }) {
                 Delivered anytime on <span className="font-semibold text-gray-700">{fmt(deliveryDate)}</span> during business hours (9 AM to 6 PM). Our team coordinates the exact timing with the recipient.
               </p>
               
+              {fulfillmentMethod === "delivery" && String(addressBranch || "").toLowerCase() === "manila" && (
               <div className="flex items-start gap-2 p-3 rounded-xl bg-amber-50 border border-amber-200 mt-2">
                 <svg className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
                 <p className="text-[11px] text-amber-800 leading-relaxed">
-                  <strong>Note:</strong> Your selected delivery date is not final and is subject to change depending on our daily order volume. You will receive a notification confirming your final delivery schedule.
+                  <strong>Manila delivery notice:</strong> The date selected for {selectedShippingMethod?.courier_name || "your courier"} is a requested schedule, not a guaranteed fixed arrival time. It may change based on courier availability and daily order volume. We will notify you when the final schedule is confirmed.
                 </p>
               </div>
+              )}
             </div>
 
             {/* Payment method */}

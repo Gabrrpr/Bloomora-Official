@@ -26,6 +26,17 @@ class StockLogCreate(BaseModel):
     branch: str
     notes: Optional[str] = None
 
+class StockReceiptLine(BaseModel):
+    product_id: str
+    quantity: int
+    purchasing_price: float
+    date_of_issuance: str
+    notes: Optional[str] = None
+
+class StockReceiptCreate(BaseModel):
+    branch: str
+    lines: List[StockReceiptLine]
+
 class RenameCategorySchema(BaseModel):
     old_category: str
     new_category: str
@@ -1387,6 +1398,88 @@ def delete_product(
         db.commit()
         return {"status": "success", "delete_type": "soft", "message": "Product archived to protect order history."}
     
+@router.post("/admin/stock-receipts", response_model=dict)
+def receive_stock_invoice(
+    receipt: StockReceiptCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    """Apply a complete stock invoice atomically using locked inventory rows."""
+    branch = str(receipt.branch or "").strip().title()
+    if branch not in {"Manila", "Pampanga"}:
+        raise HTTPException(status_code=400, detail="Select either the Manila or Pampanga branch.")
+    if not receipt.lines:
+        raise HTTPException(status_code=400, detail="Add at least one invoice line.")
+
+    stock_attr = "stock_manila" if branch == "Manila" else "stock_pampanga"
+    seen_ids = set()
+    updated = []
+    try:
+        for line in receipt.lines:
+            if line.quantity <= 0:
+                raise HTTPException(status_code=400, detail="Received quantity must be greater than zero.")
+            if line.purchasing_price < 0:
+                raise HTTPException(status_code=400, detail="Purchasing price cannot be negative.")
+            try:
+                product_id = uuid.UUID(str(line.product_id))
+            except (TypeError, ValueError):
+                raise HTTPException(status_code=400, detail=f"Invalid product ID: {line.product_id}")
+            if product_id in seen_ids:
+                raise HTTPException(status_code=400, detail="Each product may appear only once per invoice.")
+            seen_ids.add(product_id)
+
+            product = db.query(Product).filter(Product.id == product_id).with_for_update().first()
+            if not product:
+                raise HTTPException(status_code=404, detail=f"Product not found: {line.product_id}")
+            inventory = db.query(Inventory).filter(Inventory.product_id == product_id).with_for_update().first()
+            if not inventory:
+                inventory = Inventory(product_id=product_id, current_stock=0, stock_manila=0, stock_pampanga=0)
+                db.add(inventory)
+                db.flush()
+
+            setattr(inventory, stock_attr, int(getattr(inventory, stock_attr, 0) or 0) + line.quantity)
+            inventory.current_stock = int(inventory.stock_manila or 0) + int(inventory.stock_pampanga or 0)
+            if inventory.current_stock > 0 and product.status != ProductStatusEnum.inactive:
+                product.is_available = True
+
+            db.execute(text("""
+                INSERT INTO stock_logs
+                    (id, product_id, qty_change, purchasing_price, date_of_issuance, branch, notes, created_at)
+                VALUES
+                    (:id, :pid, :qty, :price, :doi, :branch, :notes, now())
+            """), {
+                "id": str(uuid.uuid4()),
+                "pid": str(product_id),
+                "qty": line.quantity,
+                "price": line.purchasing_price,
+                "doi": line.date_of_issuance,
+                "branch": branch,
+                "notes": line.notes or f"Stock invoice received for {branch}",
+            })
+            updated.append((product, inventory))
+
+        db.commit()
+        return {
+            "status": "success",
+            "items": [
+                {
+                    "id": str(product.id),
+                    "name": product.name,
+                    "stock": int(inventory.current_stock or 0),
+                    "stock_manila": int(inventory.stock_manila or 0),
+                    "stock_pampanga": int(inventory.stock_pampanga or 0),
+                }
+                for product, inventory in updated
+            ],
+        }
+    except HTTPException:
+        db.rollback()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Stock invoice was not applied: {exc}")
+
+
 @router.post("/admin/stock-logs")
 def log_stock_receipt(
     log: StockLogCreate,

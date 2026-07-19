@@ -17,8 +17,7 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 # Philippine Timezone (UTC+8)
 PH_TZ = timezone(timedelta(hours=8))
 
-# 🚀 THE FIX: The VIP List of statuses that actually count as "Revenue"
-REVENUE_STATUSES = ["delivered", "confirmed", "preparing", "out_for_delivery", "completed", "paid"]
+# Order statuses used for demand forecasting after payment.
 DEMAND_STATUSES = [
     "paid",
     "confirmed",
@@ -71,8 +70,7 @@ def get_revenue(
     ).join(
         Transaction, Order.id == Transaction.order_id
     ).filter(
-        # 🚀 THE FIX: Applied the expanded status list here!
-        Order.status.in_(REVENUE_STATUSES),
+        # Payment state is the single source of truth for recognized revenue.
         Transaction.status == PaymentStatusEnum.paid
     )
 
@@ -114,8 +112,6 @@ def get_summary(
         Transaction, Order.id == Transaction.order_id
     ).filter(
         Order.created_at >= start_of_today_utc,
-        # 🚀 THE FIX: Applied the expanded status list here!
-        Order.status.in_(REVENUE_STATUSES),
         Transaction.status == PaymentStatusEnum.paid,
     )
 

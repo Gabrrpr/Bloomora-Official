@@ -1122,40 +1122,6 @@ export default function DescribeArrangement({ onNavigate }) {
 
                   {/* Right meta */}
                   <div className="flex flex-col gap-5 pt-1">
-                    <div className="rounded-xl border p-4" style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>
-                      <div className="flex items-center justify-between gap-3 mb-2">
-                        <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: mutedC }}>
-                          Edit your last request
-                        </label>
-                        <span className="text-[10px]" style={{ color: mutedC }}>{prompt.length} / {MAX}</span>
-                      </div>
-                      <textarea
-                        value={prompt}
-                        onChange={event => setPrompt(event.target.value.slice(0, MAX))}
-                        rows={3}
-                        className="w-full resize-none rounded-xl border px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-600"
-                        style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
-                      />
-                      <div className="mt-3 flex flex-wrap justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={editLastPrompt}
-                          className="rounded-lg border px-3 py-2 text-xs font-semibold"
-                          style={{ borderColor: tileBdr, color: subHeadC }}
-                        >
-                          Try another idea
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleGenerate({ preserveResult: true })}
-                          disabled={loading || !prompt.trim() || aiUsage?.remaining === 0}
-                          className="rounded-lg px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
-                          style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}
-                        >
-                          Regenerate from prompt
-                        </button>
-                      </div>
-                    </div>
                     <div>
                       <label className="text-[11px] font-semibold uppercase tracking-wider block mb-1.5" style={{ color: mutedC }}>Arrangement name</label>
                       <input
@@ -1408,9 +1374,29 @@ export default function DescribeArrangement({ onNavigate }) {
                             <tr key={idx} className="border-b" style={{ borderColor: tableRowBdr }}>
                               <td className="px-3 py-2.5" style={{ color: bodyC }}>
                                 <div className="flex items-center justify-between gap-3">
-                                  <div className="min-w-0">
-                                    <span className="block truncate">{item.product_name}</span>
-                                    {isFlower && <span className="text-[10px]" style={{ color: mutedC }}>Flower stem</span>}
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div
+                                      className="relative w-10 h-10 rounded-lg border overflow-hidden flex-shrink-0 flex items-center justify-center"
+                                      style={{ borderColor: tileBdr, backgroundColor: isDark ? "#1e293b" : "#f0fdf4", color: accentG }}
+                                    >
+                                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.7} d="M12 21v-8m0 0c-3.5 0-6-2.2-6-5 3.5 0 6 2.2 6 5Zm0 0c3.5 0 6-2.2 6-5-3.5 0-6 2.2-6 5ZM12 7a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z" />
+                                      </svg>
+                                      {item.image_url && (
+                                        <img
+                                          src={item.image_url}
+                                          alt={item.product_name}
+                                          className="absolute inset-0 w-full h-full object-cover"
+                                          onError={event => { event.currentTarget.style.display = "none" }}
+                                        />
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <span className="block truncate">{item.product_name}</span>
+                                      <span className="text-[10px]" style={{ color: mutedC }}>
+                                        {isFlower ? "Flower stem" : item.material_type}
+                                      </span>
+                                    </div>
                                   </div>
                                   <div className="inline-flex items-center rounded-lg border overflow-hidden flex-shrink-0" style={{ borderColor: tileBdr, backgroundColor: inputBg }}>
                                     <button
@@ -1463,7 +1449,20 @@ export default function DescribeArrangement({ onNavigate }) {
                       </table>
                     </div>
                     <div className="mt-4 p-4 rounded-xl border" style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>
-                      <label className="text-[11px] font-semibold uppercase tracking-wider block mb-2" style={{ color: mutedC }}>Suggestions for the regenerated image</label>
+                      <label className="text-[11px] font-semibold uppercase tracking-wider block mb-2" style={{ color: mutedC }}>Regenerate your design</label>
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <span className="text-xs font-medium" style={{ color: subHeadC }}>Original request</span>
+                        <span className="text-[10px]" style={{ color: mutedC }}>{prompt.length} / {MAX}</span>
+                      </div>
+                      <textarea
+                        value={prompt}
+                        onChange={event => setPrompt(event.target.value.slice(0, MAX))}
+                        placeholder="Describe the arrangement you want..."
+                        rows={3}
+                        className="w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-1 focus:ring-green-600 transition resize-none"
+                        style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
+                      />
+                      <label className="text-xs font-medium block mt-3 mb-2" style={{ color: subHeadC }}>Visual suggestions (optional)</label>
                       <textarea
                         value={imageSuggestion}
                         onChange={e => setImageSuggestion(e.target.value.slice(0, 260))}
@@ -1473,11 +1472,16 @@ export default function DescribeArrangement({ onNavigate }) {
                         style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
                       />
                       <div className="mt-3 flex items-center justify-between gap-3">
-                        <span className="text-[10px]" style={{ color: mutedC }}>{imageSuggestion.length} / 260</span>
+                        <div>
+                          <span className="text-[10px] block" style={{ color: mutedC }}>{imageSuggestion.length} / 260</span>
+                          <button type="button" onClick={editLastPrompt} className="mt-1 text-xs font-semibold hover:underline" style={{ color: accentG }}>
+                            Start a different idea
+                          </button>
+                        </div>
                         <button
                           type="button"
                           onClick={handleRegenerateFromEdits}
-                          disabled={loading || aiUsage?.remaining === 0}
+                          disabled={loading || !prompt.trim() || aiUsage?.remaining === 0}
                           className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white rounded-lg transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                           style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}
                         >

@@ -41,6 +41,21 @@ def _validate_discount(discount_type: Optional[str], discount_value: Optional[fl
     return discount_type, discount_value
 
 
+def _normalize_branches(branches: Optional[List[str]]) -> List[str]:
+    normalized = list(dict.fromkeys(str(branch or "").strip().lower() for branch in (branches or ["all"])))
+    normalized = [branch for branch in normalized if branch]
+    if not normalized or "all" in normalized:
+        return ["all"]
+    if any(branch not in {"manila", "pampanga"} for branch in normalized):
+        raise HTTPException(status_code=400, detail="Campaign branches must be Manila, Pampanga, or all.")
+    return normalized
+
+
+def _validate_schedule(start_at: datetime, end_at: Optional[datetime]) -> None:
+    if end_at is not None and end_at < start_at:
+        raise HTTPException(status_code=400, detail="Campaign end date must be on or after its start date.")
+
+
 def serialize_campaign(campaign: Campaign) -> dict:
     return {
         "id": campaign.id,
@@ -53,6 +68,7 @@ def serialize_campaign(campaign: Campaign) -> dict:
         "discount_value": float(campaign.discount_value) if campaign.discount_value is not None else None,
         "minimum_quantity": campaign.minimum_quantity,
         "eligible_category": campaign.eligible_category,
+        "branches": campaign.branches or ["all"],
         "product_ids": [p.id for p in campaign.products or []],
     }
 
@@ -81,6 +97,7 @@ def create_campaign(
         raise HTTPException(status_code=409, detail="campaign_key already exists")
 
     discount_type, discount_value = _validate_discount(payload.discount_type, payload.discount_value)
+    _validate_schedule(payload.start_at, payload.end_at)
     if discount_type == "bundle_percent" and (not payload.minimum_quantity or not payload.eligible_category):
         raise HTTPException(status_code=400, detail="Bundle campaigns require a minimum quantity and eligible category.")
 
@@ -94,6 +111,7 @@ def create_campaign(
         discount_value=discount_value,
         minimum_quantity=payload.minimum_quantity if discount_type == "bundle_percent" else None,
         eligible_category=payload.eligible_category.strip().lower() if discount_type == "bundle_percent" and payload.eligible_category else None,
+        branches=_normalize_branches(payload.branches),
     )
     db.add(campaign)
     db.commit()
@@ -132,10 +150,13 @@ def update_campaign(
             campaign.eligible_category = None
     if "eligible_category" in fields_set:
         campaign.eligible_category = payload.eligible_category.strip().lower() if payload.eligible_category else None
+    if "branches" in fields_set:
+        campaign.branches = _normalize_branches(payload.branches)
     if campaign.discount_type == "bundle_percent" and (
         not campaign.minimum_quantity or (not campaign.eligible_category and not campaign.products)
     ):
         raise HTTPException(status_code=400, detail="Bundle campaigns require a minimum quantity and eligible category.")
+    _validate_schedule(campaign.start_at, campaign.end_at)
 
     db.commit()
     db.refresh(campaign)
@@ -199,6 +220,8 @@ def set_campaign_products(
         campaign.minimum_quantity = payload.minimum_quantity
     if "eligible_category" in fields_set:
         campaign.eligible_category = payload.eligible_category.strip().lower() if payload.eligible_category else None
+    if "branches" in fields_set:
+        campaign.branches = _normalize_branches(payload.branches)
     if campaign.discount_type == "bundle_percent" and (
         not campaign.minimum_quantity or (not campaign.eligible_category and not campaign.products)
     ):

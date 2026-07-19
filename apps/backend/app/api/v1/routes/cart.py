@@ -78,7 +78,8 @@ def _serialize(item: CartItem) -> dict:
         }
     web_item.setdefault("name", product.name)
     web_item.setdefault("desc", product.description or product.category)
-    web_item.setdefault("price", float(product.price or 0))
+    # Product prices are server-owned; never keep a stale or modified snapshot.
+    web_item["price"] = float(product.price or 0)
     web_item.setdefault("img", product.image_url)
     return {
         "id": str(item.id),

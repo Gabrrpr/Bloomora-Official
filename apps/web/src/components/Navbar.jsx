@@ -24,8 +24,6 @@ const SHOP_MENU_EXCLUDED_CATEGORY_WORDS = [
   "wrapping",
   "wrapper",
   "wrap",
-  "accessory",
-  "accessories",
   "floral foam",
   "foam",
   "supply",
@@ -37,6 +35,9 @@ const SHOP_MENU_EXCLUDED_CATEGORY_WORDS = [
 function isCustomerShopCategory(value) {
   const label = String(value || "").trim().toLowerCase()
   if (!label) return false
+  // Pot fillers are standalone customer products even though ordinary floral
+  // fillers remain internal arrangement materials.
+  if (label === "pot filler" || label === "pot fillers") return true
   return !SHOP_MENU_EXCLUDED_CATEGORY_WORDS.some(word => label.includes(word))
 }
 

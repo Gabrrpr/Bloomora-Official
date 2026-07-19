@@ -56,7 +56,10 @@ function compressImage(file, maxDim = 400, quality = 0.8) {
 }
 
 const blankForm = { code: "", type: "percent", value: "", minSpend: "", expires: "", active: true }
-const blankBundleForm = { name: "", category: "", minimumQuantity: "", discountPercent: "", active: true }
+const blankBundleForm = {
+  name: "", category: "", minimumQuantity: "", discountPercent: "",
+  startDate: new Date().toISOString().slice(0, 10), endDate: "", active: true,
+}
 const blankAnnForm = { emoji: "", image: "", text: "", active: true }
 const EMOJI_CHOICES = ["🌸", "🌷", "💐", "🎁", "❤️", "🎉", "✨", "🚚", "⏰", "🏷️"]
 
@@ -181,11 +184,15 @@ export default function AdminPromotions() {
   const loadBundlePromotions = () => api.getCampaigns()
     .then(data => {
       const list = data?.campaigns || data?.data || data || []
-      setBundlePromotions((Array.isArray(list) ? list : []).filter(campaign => campaign.discount_type === "bundle_percent"))
+      setBundlePromotions((Array.isArray(list) ? list : []).filter(campaign => {
+        const branches = campaign.branches || ["all"]
+        return campaign.discount_type === "bundle_percent"
+          && (branches.includes("all") || branches.includes(branch.toLowerCase()))
+      }))
     })
     .catch(err => console.error("Failed to load bundle promotions", err))
 
-  useEffect(() => { loadBundlePromotions() }, [])
+  useEffect(() => { loadBundlePromotions() }, [branch])
 
   const loadBackendPromos = () => api.getPromos()
     .then(data => setVouchers((data || []).map(v => ({
@@ -490,6 +497,8 @@ export default function AdminPromotions() {
     const discountPercent = Number(bundleForm.discountPercent)
     if (!name) return setBundleError("Enter a bundle promotion name.")
     if (!bundleForm.category) return setBundleError("Select an eligible product category.")
+    if (!bundleForm.startDate || !bundleForm.endDate) return setBundleError("Select the promotion start and end dates.")
+    if (bundleForm.endDate < bundleForm.startDate) return setBundleError("The end date must be on or after the start date.")
     if (!Number.isInteger(minimumQuantity) || minimumQuantity < 2) return setBundleError("Minimum items must be at least 2.")
     if (!(discountPercent > 0 && discountPercent <= 100)) return setBundleError("Enter a percentage from 1 to 100.")
     if (bundleCategoryProductCount === 0) return setBundleError(`No customer-visible products are available in ${bundleForm.category} for ${branch}.`)
@@ -500,13 +509,14 @@ export default function AdminPromotions() {
       const payload = {
         name,
         campaign_key: `bundle_${Date.now()}`,
-        start_at: new Date().toISOString(),
-        end_at: null,
+        start_at: new Date(`${bundleForm.startDate}T00:00:00+08:00`).toISOString(),
+        end_at: new Date(`${bundleForm.endDate}T23:59:59+08:00`).toISOString(),
         is_active: bundleForm.active,
         discount_type: "bundle_percent",
         discount_value: discountPercent,
         minimum_quantity: minimumQuantity,
         eligible_category: bundleForm.category.trim().toLowerCase(),
+        branches: [branch.toLowerCase()],
       }
       await api.createCampaign(payload)
       setBundleForm(blankBundleForm)
@@ -920,6 +930,21 @@ export default function AdminPromotions() {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: mutedTxt }}>Start Date</label>
+              <input type="date" value={bundleForm.startDate}
+                onChange={e => setBundleForm(form => ({ ...form, startDate: e.target.value }))}
+                className="w-full px-3 py-2.5 text-sm rounded-lg outline-none" style={inputStyle} />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold mb-1.5" style={{ color: mutedTxt }}>End Date</label>
+              <input type="date" min={bundleForm.startDate} value={bundleForm.endDate}
+                onChange={e => setBundleForm(form => ({ ...form, endDate: e.target.value }))}
+                className="w-full px-3 py-2.5 text-sm rounded-lg outline-none" style={inputStyle} />
+            </div>
+          </div>
+
           {bundleForm.category && (
             <p className="text-xs px-3 py-2 rounded-lg" style={{ color: subTxt, backgroundColor: isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4" }}>
               {bundleCategoryProductCount} customer-visible {bundleForm.category.toLowerCase()} product(s) are currently available for {branch}. Raw materials are excluded.
@@ -946,6 +971,10 @@ export default function AdminPromotions() {
                     <p className="text-sm font-bold truncate" style={{ color: bodyTxt }}>{campaign.name}</p>
                     <p className="text-xs" style={{ color: mutedTxt }}>
                       Buy {campaign.minimum_quantity}+ {campaign.eligible_category || "eligible items"} · {Number(campaign.discount_value)}% off
+                    </p>
+                    <p className="text-[11px]" style={{ color: mutedTxt }}>
+                      {(campaign.branches || ["all"]).map(value => value === "all" ? "All branches" : value[0].toUpperCase() + value.slice(1)).join(", ")}
+                      {" · "}{new Date(campaign.start_at).toLocaleDateString()}–{campaign.end_at ? new Date(campaign.end_at).toLocaleDateString() : "No end date"}
                     </p>
                   </div>
                   <div className="flex items-center gap-2">

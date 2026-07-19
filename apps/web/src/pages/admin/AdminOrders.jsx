@@ -241,8 +241,8 @@ export default function AdminOrders() {
   useEffect(() => { fetchOrders() }, [fetchOrders])
   useEffect(() => { setPage(1) }, [statusFilter, search, branch, dateRange])
 
-  const loadPosCatalog = useCallback(async () => {
-    setPosCatalogLoading(true);
+  const loadPosCatalog = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setPosCatalogLoading(true);
     try {
       const adminRes = await (api.getAdminProducts ? api.getAdminProducts() : api.get("/products/admin/all"));
       const adminList = Array.isArray(adminRes) ? adminRes : (adminRes.data || []);
@@ -256,12 +256,26 @@ export default function AdminOrders() {
     } catch (e) {
       console.warn("Failed to load POS catalog:", e);
     } finally {
-      setPosCatalogLoading(false);
+      if (!silent) setPosCatalogLoading(false);
     }
   }, [])
 
   useEffect(() => {
     if (posOpen) loadPosCatalog();
+  }, [posOpen, loadPosCatalog])
+
+  useEffect(() => {
+    if (!posOpen) return undefined
+    const refresh = () => loadPosCatalog({ silent: true })
+    const timer = window.setInterval(refresh, 4000)
+    const onVisibility = () => { if (document.visibilityState === "visible") refresh() }
+    window.addEventListener("focus", refresh)
+    document.addEventListener("visibilitychange", onVisibility)
+    return () => {
+      window.clearInterval(timer)
+      window.removeEventListener("focus", refresh)
+      document.removeEventListener("visibilitychange", onVisibility)
+    }
   }, [posOpen, loadPosCatalog])
 
   useEffect(() => {
