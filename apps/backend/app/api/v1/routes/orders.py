@@ -14,6 +14,7 @@ import secrets
 # 🚀 INJECTED SECURE DEPENDENCIES
 from app.core.dependencies import get_db, get_current_user, require_staff
 from app.models import User, RoleEnum, Order, OrderItem, StockReservation, OrderStatusEnum, Arrangement, Transaction, PaymentMethodEnum, PaymentStatusEnum, Product, Inventory, ProductRecipe, ShippingMethod, Delivery
+from app.services.delivery_tracking import EXTERNAL_PROVIDERS, active_external_shipment, apply_external_status, get_or_create_external_shipment, serialize_external_shipment
 from app.utils.lalamove import book_lalamove_delivery
 
 # We use your dedicated PayMongo service instead of raw requests!
@@ -320,15 +321,38 @@ def _shipping_method_supports_branch(method: ShippingMethod, branch: str) -> boo
 
 def _delivery_tracking(order: Order) -> dict:
     delivery = getattr(order, "delivery", None)
+    external_shipment = active_external_shipment(order)
     rider = delivery.rider if delivery else None
     vehicle = delivery.vehicle if delivery else None
+    mode = "in_house" if str(order.delivery_provider or "").lower() == "standard" else "external" if external_shipment else None
+    external_data = serialize_external_shipment(external_shipment) if external_shipment else None
+    external_events = external_data["events"] if external_data else []
+    in_house_events = []
+    if delivery:
+        for status, timestamp in (
+            ("assigned", delivery.assigned_at),
+            ("picked_up", delivery.picked_up_at),
+            ("in_transit", delivery.in_transit_at),
+            ("arrived", delivery.arrived_at),
+            ("delivered", delivery.delivered_at),
+        ):
+            if timestamp:
+                in_house_events.append({"status": status, "createdAt": timestamp.isoformat()})
     return {
+        "mode": mode,
         "delivery_id": str(delivery.id) if delivery else None,
-        "provider": order.delivery_provider,
+        "provider": external_shipment.provider_code if external_shipment else order.delivery_provider,
+        "provider_name": external_data["providerName"] if external_data else None,
+        "external_reference": external_data["externalReference"] if external_data else None,
+        "tracking_url": external_data["trackingUrl"] if external_data else None,
+        "events": external_events if external_shipment else in_house_events,
+        "intervention_required": external_data["interventionRequired"] if external_data else bool(
+            delivery and (delivery.status.value if hasattr(delivery.status, "value") else str(delivery.status)) in {"issue_reported", "failed"}
+        ),
         "lalamove_order_id": order.lalamove_order_id,
         "lalamove_share_link": order.lalamove_share_link,
         "lalamove_status": order.lalamove_status,
-        "status": (
+        "status": external_shipment.status if external_shipment else (
             delivery.status.value
             if delivery and hasattr(delivery.status, "value")
             else (str(delivery.status) if delivery else None)
@@ -341,6 +365,10 @@ def _delivery_tracking(order: Order) -> dict:
         "delivered_at": delivery.delivered_at.isoformat() if delivery and delivery.delivered_at else None,
         "proof_photo_url": delivery.proof_photo_url if delivery else None,
         "proof_note": delivery.proof_note if delivery else None,
+        "issue_note": delivery.issue_note if delivery else None,
+        "route_available": bool(delivery and delivery.route_geometry),
+        "route_endpoint": f"/deliveries/{delivery.id}/route" if delivery else None,
+        "street_photos_endpoint": f"/deliveries/{delivery.id}/street-photos" if delivery else None,
         "rider": {
             "id": str(rider.id),
             "name": f"{rider.first_name} {rider.last_name}".strip() or rider.username,
@@ -1140,7 +1168,13 @@ async def create_order(
             shipping_method_id=shipping_method.id if shipping_method else None,
             courier_selected=shipping_method.courier_name if shipping_method else None,
             shipping_delivery_type=shipping_method.delivery_type if shipping_method else None,
-            delivery_provider=(shipping_method.code if shipping_method else (payload.get("deliveryProvider") or payload.get("delivery_provider"))),
+            delivery_provider=(
+                shipping_method.code
+                if shipping_method
+                else (payload.get("deliveryProvider") or payload.get("delivery_provider") or ("standard" if fulfillment_method == "delivery" else None))
+            ),
+            delivery_pin_verified_at=(datetime.now(timezone.utc) if delivery_lat is not None and delivery_lng is not None else None),
+            delivery_pin_verified_by_id=(current_user.id if delivery_lat is not None and delivery_lng is not None else None),
             time_slot=payload.get("timeSlot") or payload.get("time_slot") or "anytime",
             subtotal_amount=total_amount,
             delivery_fee=delivery_fee,
@@ -1150,6 +1184,8 @@ async def create_order(
         order.total_amount = max(Decimal("0.00"), order.subtotal_amount + order.delivery_fee - order.discount_amount)
         db.add(order)
         db.flush()
+        if str(order.delivery_provider or "").lower() in EXTERNAL_PROVIDERS:
+            get_or_create_external_shipment(db, order, current_user.id)
 
         reserved_until = datetime.now(timezone.utc) + timedelta(hours=1)
         incoming_by_id = {
@@ -1257,6 +1293,17 @@ async def create_order(
                 order.lalamove_share_link = lalamove_res["share_link"]
                 order.lalamove_status = lalamove_res["status"]
                 order.status = OrderStatusEnum.preparing
+                shipment = get_or_create_external_shipment(db, order, current_user.id)
+                shipment.external_reference = order.lalamove_order_id
+                shipment.tracking_url = order.lalamove_share_link
+                apply_external_status(
+                    db,
+                    shipment,
+                    "booked",
+                    provider_status=order.lalamove_status,
+                    message="Lalamove booking confirmed.",
+                    raw_payload={"source": "checkout", "orderId": order.lalamove_order_id},
+                )
                 db.commit()
                 print(f"Lalamove Order Created: {order.lalamove_order_id}")
 
@@ -1264,6 +1311,16 @@ async def create_order(
                 print(f"❌ Lalamove Booking Failed: {str(e)}")
                 order.delivery_provider = "lalamove"
                 order.lalamove_status = "booking_failed"
+                shipment = get_or_create_external_shipment(db, order, current_user.id)
+                shipment.last_error = str(e)
+                apply_external_status(
+                    db,
+                    shipment,
+                    "failed",
+                    provider_status="booking_failed",
+                    message="Automatic Lalamove booking failed. Staff intervention is required.",
+                    raw_payload={"source": "checkout", "error": str(e)},
+                )
                 db.commit()
                 # Even if Lalamove fails, the order is already placed.
                 # You might want to email the staff to book manually.

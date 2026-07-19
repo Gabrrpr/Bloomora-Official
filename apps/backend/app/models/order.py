@@ -72,6 +72,8 @@ class Order(Base):
     delivery_lat = Column(Numeric(10, 7), nullable=True)
     delivery_lng = Column(Numeric(10, 7), nullable=True)
     delivery_geocode_precision = Column(String(50), nullable=True)
+    delivery_pin_verified_at = Column(DateTime(timezone=True), nullable=True)
+    delivery_pin_verified_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
     delivery_notes = Column(Text, nullable=True)
     special_note = Column(Text, nullable=True)
     scheduled_at = Column(DateTime(timezone=True), nullable=True)
@@ -106,6 +108,7 @@ class Order(Base):
     delivery = relationship("Delivery", back_populates="order", uselist=False)
     shipping_method = relationship("ShippingMethod", foreign_keys=[shipping_method_id])
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+    external_shipments = relationship("ExternalShipment", back_populates="order", cascade="all, delete-orphan")
 
 
 class Transaction(Base):
@@ -153,6 +156,17 @@ class Delivery(Base):
     proof_photo_url = Column(Text, nullable=True)
     proof_note = Column(Text, nullable=True)
     vehicle_id = Column(UUID(as_uuid=True), ForeignKey("vehicles.id"), nullable=True)
+    stop_sequence = Column(Integer, nullable=False, default=1)
+    route_geometry = Column(JSON, nullable=True)
+    route_distance_m = Column(Integer, nullable=True)
+    route_duration_s = Column(Integer, nullable=True)
+    route_generated_at = Column(DateTime(timezone=True), nullable=True)
+    status_before_issue = Column(String(40), nullable=True)
+    issue_code = Column(String(80), nullable=True)
+    issue_note = Column(Text, nullable=True)
+    issue_reported_at = Column(DateTime(timezone=True), nullable=True)
+    issue_resolved_at = Column(DateTime(timezone=True), nullable=True)
+    issue_resolution_note = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 
@@ -174,6 +188,11 @@ class DeliveryOrder(Base):
     status = Column(Enum(DeliveryOrderStatusEnum), nullable=False, default=DeliveryOrderStatusEnum.assigned)
     notes = Column(Text, nullable=True)
     created_by_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=True)
+    idempotency_key = Column(String(120), nullable=True, unique=True, index=True)
+    route_geometry = Column(JSON, nullable=True)
+    route_distance_m = Column(Integer, nullable=True)
+    route_duration_s = Column(Integer, nullable=True)
+    route_generated_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=now_utc)
     updated_at = Column(DateTime(timezone=True), default=now_utc, onupdate=now_utc)
 

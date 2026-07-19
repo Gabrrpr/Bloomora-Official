@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { api } from "../../services/api.js"
 import { useTheme } from "../../context/ThemeContext"
 import Footer from "../../components/Footer.jsx"
+import DeliveryRouteMap from "../../components/delivery/DeliveryRouteMap.jsx"
 
 const TABS = ["All", "Pending", "Confirmed", "Preparing", "Ready for Pickup", "Out for Delivery", "Delivered", "Completed", "Cancelled"]
 const ORDERS_PAGE_SIZE = 8
@@ -47,6 +48,27 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
   const tracking = order.delivery_tracking || {}
   const rider = tracking.rider
   const vehicle = tracking.vehicle
+  const [trackingExpanded, setTrackingExpanded] = useState(false)
+  const [trackingLoading, setTrackingLoading] = useState(false)
+  const [trackingError, setTrackingError] = useState("")
+  const [routePreview, setRoutePreview] = useState(null)
+  const [streetPhotos, setStreetPhotos] = useState([])
+
+  const openTracking = async () => {
+    const nextOpen = !trackingExpanded
+    setTrackingExpanded(nextOpen)
+    if (!nextOpen || tracking.mode === "external" || !tracking.delivery_id || routePreview) return
+    setTrackingLoading(true)
+    setTrackingError("")
+    const [routeResult, photosResult] = await Promise.allSettled([
+      api.get(`/deliveries/${encodeURIComponent(tracking.delivery_id)}/route`),
+      api.get(`/deliveries/${encodeURIComponent(tracking.delivery_id)}/street-photos`),
+    ])
+    if (routeResult.status === "fulfilled") setRoutePreview(routeResult.value)
+    else setTrackingError(routeResult.reason?.message || "The planned route is temporarily unavailable.")
+    if (photosResult.status === "fulfilled") setStreetPhotos(photosResult.value?.photos || [])
+    setTrackingLoading(false)
+  }
 
   const { isDark } = useTheme()
   const lineBdr  = isDark ? "#2d3748" : "#E8EDE3"
@@ -156,10 +178,10 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
               Contact shop
             </button>
 
-            {tracking.lalamove_share_link && (
+            {(tracking.tracking_url || tracking.lalamove_share_link) && (
               <button
                 onClick={() => {
-                  window.open(tracking.lalamove_share_link, "_blank", "noopener,noreferrer")
+                  window.open(tracking.tracking_url || tracking.lalamove_share_link, "_blank", "noopener,noreferrer")
                 }}
                 className="flex-shrink-0 min-w-max px-4 py-2 text-sm font-semibold rounded-lg transition text-white"
                 style={{ background: "#4A6741" }}
@@ -167,6 +189,12 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
                 onMouseLeave={e => e.currentTarget.style.background = "#4A6741"}
               >
                 Track order
+              </button>
+            )}
+
+            {(tracking.status || tracking.delivery_id || tracking.mode === "external") && (
+              <button onClick={() => void openTracking()} className="flex-shrink-0 min-w-max px-4 py-2 text-sm font-semibold rounded-lg transition" style={{ border: `1px solid ${btnBdr}`, color: greenTxt, background: btnBg }}>
+                {trackingExpanded ? "Hide tracking details" : "View tracking details"}
               </button>
             )}
 
@@ -207,7 +235,7 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
             )}
           </div>
         </div>
-        {(tracking.lalamove_share_link || rider || vehicle || tracking.lalamove_status || tracking.status) && (
+        {(tracking.tracking_url || tracking.lalamove_share_link || rider || vehicle || tracking.lalamove_status || tracking.status) && (
           <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 text-xs">
             {(tracking.lalamove_status || tracking.status) && (
               <div className="rounded-lg border border-gray-100 bg-white px-3 py-2">
@@ -231,17 +259,32 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
                 {vehicle.plate_number && <p className="text-gray-500">{vehicle.plate_number}</p>}
               </div>
             )}
-            {tracking.lalamove_share_link && (
+            {(tracking.tracking_url || tracking.lalamove_share_link) && (
               <a
-                href={tracking.lalamove_share_link}
+                href={tracking.tracking_url || tracking.lalamove_share_link}
                 target="_blank"
                 rel="noreferrer"
                 className="rounded-lg border border-[#D6E4CC] bg-white px-3 py-2 font-semibold"
                 style={{ color: "#2D5016" }}
               >
-                Open Lalamove live tracking
+                Open official courier tracking
               </a>
             )}
+          </div>
+        )}
+
+        {trackingExpanded && (
+          <div className="mt-4 space-y-4 rounded-xl border border-[#D6E4CC] bg-white p-4">
+            <div>
+              <p className="font-semibold text-gray-800">{tracking.mode === "external" ? `${tracking.provider_name || formatStatus(tracking.provider)} shipment` : "In-house delivery"}</p>
+              <p className="mt-1 text-xs text-gray-500">{tracking.mode === "external" ? `Reference: ${tracking.external_reference || "Awaiting booking"}` : "Planned route — not live rider location"}</p>
+            </div>
+            {tracking.events?.length > 0 && <div className="grid gap-2 sm:grid-cols-2">{tracking.events.map((event, eventIndex) => <div key={`${event.status}-${eventIndex}`} className="rounded-lg bg-gray-50 px-3 py-2 text-xs"><p className="font-semibold text-gray-700">{formatStatus(event.status)}</p><p className="text-gray-400">{event.createdAt ? new Date(event.createdAt).toLocaleString("en-PH") : "Status recorded"}</p></div>)}</div>}
+            {tracking.intervention_required && <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">The courier reported an exception. Esting&apos;s staff will review or rebook this delivery.</div>}
+            {trackingLoading && <p className="py-8 text-center text-sm text-gray-500">Loading planned route…</p>}
+            {trackingError && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{trackingError}</p>}
+            {routePreview && <><DeliveryRouteMap geometry={routePreview.geometry} markers={routePreview.markers || []} height={360} /><p className="text-xs text-gray-500">{routePreview.available ? `${((routePreview.distanceM || 0) / 1000).toFixed(1)} km · about ${Math.round((routePreview.durationS || 0) / 60)} minutes planned driving time` : routePreview.availabilityReason}</p></>}
+            {tracking.mode !== "external" && <div><p className="mb-2 text-sm font-semibold text-gray-700">Nearby street photos</p>{streetPhotos.length ? <div className="flex gap-3 overflow-x-auto pb-2">{streetPhotos.map((photo) => <figure key={photo.id} className="w-56 flex-none overflow-hidden rounded-lg border"><img src={photo.imageUrl} alt="Nearby KartaView street imagery" className="h-32 w-full object-cover" /><figcaption className="p-2 text-[10px] text-gray-500">{photo.capturedAt ? `Captured ${new Date(photo.capturedAt).toLocaleDateString()}` : "Nearby KartaView imagery"}</figcaption></figure>)}</div> : <p className="text-xs text-gray-500">No street photos are available near this destination.</p>}<p className="mt-2 text-[10px] text-gray-400">Nearby imagery © KartaView contributors · May not show the exact property.</p></div>}
           </div>
         )}
       </div>

@@ -47,6 +47,7 @@ export type CustomerDeliveryTracking = {
   arrivedAt?: string | null;
   deliveredAt?: string | null;
   deliveryId?: string | null;
+  mode?: 'in_house' | 'external' | null;
   estimatedArrival?: string | null;
   inTransitAt?: string | null;
   lalamoveOrderId?: string | null;
@@ -56,6 +57,12 @@ export type CustomerDeliveryTracking = {
   proofNote?: string | null;
   proofPhotoUrl?: string | null;
   provider?: string | null;
+  providerName?: string | null;
+  externalReference?: string | null;
+  trackingUrl?: string | null;
+  events?: { createdAt?: string | null; status: string }[];
+  interventionRequired?: boolean;
+  routeAvailable?: boolean;
   rider?: {
     id: string;
     name?: string | null;
@@ -70,6 +77,33 @@ export type CustomerDeliveryTracking = {
     plateNumber?: string | null;
     vehicleType?: string | null;
   } | null;
+};
+
+export type CustomerRoutePreview = {
+  attribution: string;
+  availabilityReason?: string | null;
+  available: boolean;
+  distanceM?: number | null;
+  durationS?: number | null;
+  generatedAt?: string | null;
+  geometry?: { coordinates: number[][]; type: 'LineString' } | null;
+  mapAttribution: string;
+  markers: {
+    address?: string | null;
+    deliveryId?: string;
+    label: string;
+    latitude: number;
+    longitude: number;
+    stopSequence?: number;
+    type: 'origin' | 'destination';
+  }[];
+};
+
+export type CustomerStreetPhoto = {
+  capturedAt?: string | null;
+  distanceM?: number | null;
+  id: string;
+  imageUrl: string;
 };
 
 export type CustomerOrderItem = {
@@ -128,6 +162,7 @@ type BackendDeliveryTracking = {
   arrived_at?: string | null;
   delivered_at?: string | null;
   delivery_id?: string | null;
+  mode?: 'in_house' | 'external' | null;
   estimated_arrival?: string | null;
   in_transit_at?: string | null;
   lalamove_order_id?: string | null;
@@ -137,6 +172,12 @@ type BackendDeliveryTracking = {
   proof_note?: string | null;
   proof_photo_url?: string | null;
   provider?: string | null;
+  provider_name?: string | null;
+  external_reference?: string | null;
+  tracking_url?: string | null;
+  events?: { createdAt?: string | null; status: string }[];
+  intervention_required?: boolean;
+  route_available?: boolean;
   rider?: {
     id: string;
     name?: string | null;
@@ -191,6 +232,14 @@ export async function getOrderById({
   );
 
   return mergeCheckoutOrders(orders.map(mapBackendOrder));
+}
+
+export async function getCustomerDeliveryRoute({ deliveryId, session }: { deliveryId: string; session: AuthSession }) {
+  return apiFetch<CustomerRoutePreview>(`/deliveries/${encodeURIComponent(deliveryId)}/route`, { method: 'GET', token: session.accessToken });
+}
+
+export async function getCustomerStreetPhotos({ deliveryId, session }: { deliveryId: string; session: AuthSession }) {
+  return apiFetch<{ attribution: string; coverageAvailable: boolean; photos: CustomerStreetPhoto[] }>(`/deliveries/${encodeURIComponent(deliveryId)}/street-photos`, { method: 'GET', token: session.accessToken });
 }
 
 function mapBackendOrder(order: BackendOrder): CustomerOrder {
@@ -265,6 +314,7 @@ function mapDeliveryTracking(tracking?: BackendDeliveryTracking | null): Custome
     arrivedAt: tracking.arrived_at,
     deliveredAt: tracking.delivered_at,
     deliveryId: tracking.delivery_id,
+    mode: tracking.mode,
     estimatedArrival: tracking.estimated_arrival,
     inTransitAt: tracking.in_transit_at,
     lalamoveOrderId: tracking.lalamove_order_id,
@@ -274,6 +324,12 @@ function mapDeliveryTracking(tracking?: BackendDeliveryTracking | null): Custome
     proofNote: tracking.proof_note,
     proofPhotoUrl: tracking.proof_photo_url,
     provider: tracking.provider,
+    providerName: tracking.provider_name,
+    externalReference: tracking.external_reference,
+    trackingUrl: tracking.tracking_url,
+    events: tracking.events,
+    interventionRequired: tracking.intervention_required,
+    routeAvailable: tracking.route_available,
     rider: tracking.rider,
     status: tracking.status,
     vehicle: tracking.vehicle

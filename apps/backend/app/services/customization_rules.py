@@ -399,7 +399,9 @@ def build_complete_image_prompt(
     if arrangement_type == "bouquet":
         presentation_rule = (
             f"Show a finished hand-tied bouquet visibly wrapped with {presentation_names}; "
-            "the stems must be enclosed and secured, never shown as loose flowers."
+            "the stems must be enclosed and secured, never shown as loose flowers. "
+            "The wrapping must have overlapping layers, natural folds and creases, and soft contact shadows. "
+            "Do not render flat wrapping or a rigid geometric cone."
         )
     elif arrangement_type == "vase":
         presentation_rule = (
@@ -414,10 +416,19 @@ def build_complete_image_prompt(
 
     clean_notes = " ".join(str(design_notes or "").split()).strip(" .")
     design_rule = f"Design direction: {clean_notes}. " if clean_notes else ""
+    flower_names = _join_human_readable([
+        f"{item.quantity} {item.product_name}"
+        for item in grouped.get("flower", [])
+    ])
+    flower_rule = (
+        f"Mandatory visible flower varieties: {flower_names}; each variety must be clearly recognizable. "
+        if flower_names
+        else ""
+    )
     return (
         "Ultra-realistic front-facing product photo of one complete retail florist arrangement. "
         f"Use exactly these florist materials: {exact_materials}. "
-        f"{presentation_rule} {design_rule}"
+        f"{flower_rule}{presentation_rule} {design_rule}"
         "Clean studio lighting, natural textures, no top-down view. "
         "Do not add or omit products. No cards, chocolates, balloons, jewelry, people, readable text, or watermarks."
     )
@@ -474,6 +485,64 @@ def build_default_recipe_suggestion(
         suggested_prompt=suggested_prompt,
         adjustment_reasons=reasons,
     )
+
+
+def build_stocked_prompt_suggestions(
+    arrangement_type: str,
+    inventory: Iterable[InventoryMaterial],
+    design_notes: str = "",
+    limit: int = 3,
+) -> list[str]:
+    """Build distinct, complete prompt options using only safely stocked materials."""
+    inventory_items = list(inventory)
+    safe_flowers = sorted(
+        [item for item in inventory_items if item.is_flower and item.safe_quantity > 0],
+        key=lambda item: (-item.safe_quantity, item.product_name.casefold()),
+    )
+    if not safe_flowers:
+        return []
+
+    style_options = [
+        "soft, balanced, and elegant",
+        "full, romantic, and gently layered",
+        "bright, cheerful, and naturally textured",
+    ]
+    clean_notes = " ".join(str(design_notes or "").split()).strip(" .")
+    prompts: list[str] = []
+    rule = ARRANGEMENT_RULES[arrangement_type]
+
+    for index in range(max(1, min(limit, 3))):
+        primary = safe_flowers[index % len(safe_flowers)]
+        secondary = safe_flowers[(index + 1) % len(safe_flowers)] if len(safe_flowers) > 1 else None
+        target_stems = max(1, min(rule.max_stems, primary.safe_quantity + (secondary.safe_quantity if secondary else 0)))
+        primary_quantity = min(primary.safe_quantity, max(1, round(target_stems * 0.65)))
+        seed = [RequestedMaterial(primary.product_id, primary.product_name, primary_quantity)]
+        remaining = target_stems - primary_quantity
+        if secondary and remaining > 0:
+            secondary_quantity = min(secondary.safe_quantity, remaining)
+            if secondary_quantity > 0:
+                seed.append(RequestedMaterial(secondary.product_id, secondary.product_name, secondary_quantity))
+
+        recipe, missing_presentation = resolve_complete_recipe(
+            arrangement_type,
+            seed,
+            inventory_items,
+            include_finishing_suggestions=True,
+        )
+        if missing_presentation or not recipe_has_flowers(recipe, inventory_items):
+            continue
+        style = style_options[index]
+        notes = f"{clean_notes}; {style}" if clean_notes else style
+        prompt = build_complete_recipe_prompt(
+            arrangement_type,
+            recipe,
+            inventory_items,
+            notes,
+        )
+        if prompt and prompt not in prompts:
+            prompts.append(prompt)
+
+    return prompts
 
 
 def build_presentation_recovery(
@@ -658,7 +727,7 @@ def build_quantity_adjustment(
         arrangement_type,
         seed_recipe,
         inventory_items,
-        include_finishing_suggestions=False,
+        include_finishing_suggestions=True,
     )
     suggested_rows = _recipe_validation_rows(complete_recipe, inventory_items)
 

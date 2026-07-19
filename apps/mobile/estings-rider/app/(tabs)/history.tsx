@@ -117,7 +117,7 @@ export default function HistoryScreen() {
                     <DeliveryStopCard
                       key={delivery.id}
                       delivery={delivery}
-                      variant="completed"
+                      variant={delivery.status === 'delivered' ? 'completed' : 'compact'}
                       onPress={() => router.push({ pathname: '/delivery/[id]', params: { id: delivery.id } })}
                     />
                   ))}

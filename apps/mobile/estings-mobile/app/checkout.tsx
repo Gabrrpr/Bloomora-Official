@@ -310,7 +310,7 @@ export default function CheckoutScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [isPaying, setIsPaying] = useState(false);
   const [fulfillmentMethod, setFulfillmentMethod] = useState<FulfillmentMethod>('delivery');
-  const [selectedShippingMethodCode, setSelectedShippingMethodCode] = useState('lbc');
+  const [selectedShippingMethodCode, setSelectedShippingMethodCode] = useState('standard');
   const [storeBranch, setCheckoutStoreBranch] = useState<StoreBranch>(
     params.branch === 'pampanga' ? 'pampanga' : 'manila',
   );
@@ -340,6 +340,25 @@ export default function CheckoutScreen() {
   const [shippingMethods, setShippingMethods] = useState<ShippingMethod[]>([]);
   const [appliedVoucher, setAppliedVoucher] = useState<AppliedVoucher | null>(null);
   const [voucherError, setVoucherError] = useState<string | null>(null);
+  const standardShippingMethod = useMemo<ShippingMethod>(() => ({
+    id: 'standard',
+    code: 'standard',
+    courier_name: "Esting's Delivery",
+    delivery_type: 'In-house standard delivery',
+    description: "Handled directly by Esting's delivery riders in Pampanga.",
+    service_area: 'pampanga',
+    base_rate: deliverySettings.delivery_fee,
+    sort_order: 0,
+    is_active: true,
+    supports_live_booking: false,
+  }), [deliverySettings.delivery_fee]);
+  const displayedShippingMethods = useMemo(
+    () => [
+      ...(storeBranch === 'pampanga' ? [standardShippingMethod] : []),
+      ...(shippingMethods.length ? shippingMethods : fallbackShippingMethods),
+    ],
+    [shippingMethods, standardShippingMethod, storeBranch],
+  );
   const isTodayUnavailable = useMemo(() => {
     if (fulfillmentMethod === 'pickup') return false;
     const [hour, minute] = deliverySettings.same_day_cutoff.split(':').map(Number);
@@ -358,13 +377,12 @@ export default function CheckoutScreen() {
 
   const summary = useMemo(() => {
     const subtotalCents = items.reduce((total, item) => total + item.product.priceCents * item.quantity, 0);
-    const shippingMethod = shippingMethods.find((method) => method.code === selectedShippingMethodCode)
-      ?? fallbackShippingMethods.find((method) => method.code === selectedShippingMethodCode);
+    const shippingMethod = displayedShippingMethods.find((method) => method.code === selectedShippingMethodCode);
     const deliveryFee = shippingMethod?.base_rate ?? deliverySettings.delivery_fee;
     const feeCents = fulfillmentMethod === 'delivery' ? Math.round(deliveryFee * 100) : 0;
     const discountCents = Math.round((appliedVoucher?.discount ?? 0) * 100);
     return { discountCents, feeCents, subtotalCents, totalCents: Math.max(0, subtotalCents + feeCents - discountCents) };
-  }, [appliedVoucher?.discount, deliverySettings.delivery_fee, fulfillmentMethod, items, selectedShippingMethodCode, shippingMethods]);
+  }, [appliedVoucher?.discount, deliverySettings.delivery_fee, displayedShippingMethods, fulfillmentMethod, items, selectedShippingMethodCode]);
   const verifiedDeliveryAddress: VerifiedAddress | null = oneTimeAddress?.verifiedAddress
     ?? (accountAddress?.is_verified ? accountAddress : null);
   /* Legacy address-summary state from the pre-courier-selection checkout.
@@ -423,14 +441,19 @@ export default function CheckoutScreen() {
         }));
         setItems(selectedIds.size ? hydratedItems.filter((item) => selectedIds.has(item.product.id)) : hydratedItems);
         setSession(nextSession);
-        setCheckoutStoreBranch(params.branch === 'pampanga' || params.branch === 'manila' ? params.branch : savedStoreBranch);
+        const resolvedStoreBranch = params.branch === 'pampanga' || params.branch === 'manila'
+          ? params.branch
+          : savedStoreBranch;
+        setCheckoutStoreBranch(resolvedStoreBranch);
         if (checkoutSettings?.delivery) setDeliverySettings(checkoutSettings.delivery);
         const availableShippingMethods = Array.isArray(checkoutSettings?.shipping_methods)
           ? checkoutSettings.shipping_methods
           : [];
         setShippingMethods(availableShippingMethods);
         setSelectedShippingMethodCode((current) =>
-          availableShippingMethods.some((method) => method.code === current)
+          (current === 'standard' && resolvedStoreBranch === 'pampanga')
+            ? current
+            : availableShippingMethods.some((method) => method.code === current)
             ? current
             : (availableShippingMethods[0]?.code ?? current),
         );
@@ -624,7 +647,7 @@ export default function CheckoutScreen() {
     if (fulfillmentMethod !== 'pickup') {
       if (!deliveryAddress.trim()) {
         nextErrors.address = 'Choose a saved address or add a delivery address.';
-      } else if (fulfillmentMethod === 'lalamove' && !verifiedDeliveryAddress?.is_serviceable) {
+      } else if ((fulfillmentMethod === 'lalamove' || selectedShippingMethodCode === 'standard') && !verifiedDeliveryAddress?.is_serviceable) {
         nextErrors.address = 'Confirm this address on the map so the rider can find the exact location.';
       }
     }
@@ -848,10 +871,11 @@ export default function CheckoutScreen() {
         <Section title="2. Choose a fulfillment method">
           <Text style={styles.sectionHint}>Select the courier or pickup option that works best for this order.</Text>
           <View style={styles.deliveryOptions}>
-            {(shippingMethods.length ? shippingMethods : fallbackShippingMethods).map((method) => (
+            {displayedShippingMethods.map((method) => (
               <DeliveryProviderOption
                 active={fulfillmentMethod !== 'pickup' && selectedShippingMethodCode === method.code}
                 image={method.code === 'lalamove' ? lalamoveLogo : undefined}
+                icon={method.code === 'standard' ? <Truck color={fulfillmentMethod !== 'pickup' && selectedShippingMethodCode === method.code ? theme.colors.primary : theme.colors.textMuted} size={24} /> : undefined}
                 key={method.id}
                 label={method.courier_name}
                 note={`${method.delivery_type}${method.description ? `\n${method.description}` : ''}`}

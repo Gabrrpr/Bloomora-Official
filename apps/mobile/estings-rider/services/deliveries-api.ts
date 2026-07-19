@@ -26,6 +26,9 @@ export type RiderDelivery = {
   branch?: string | null;
   customerNotes?: string | null;
   deliveredAt?: string | null;
+  destinationLat?: number | null;
+  destinationLng?: number | null;
+  destinationPinVerified?: boolean;
   deliveryNotes?: string | null;
   estimatedArrival?: string | null;
   handlingNotes: string[];
@@ -40,10 +43,47 @@ export type RiderDelivery = {
   pickedUpAt?: string | null;
   proofNote?: string | null;
   proofPhotoUrl?: string | null;
+  issueCode?: string | null;
+  issueNote?: string | null;
+  issueReportedAt?: string | null;
+  issueResolvedAt?: string | null;
+  issueResolutionNote?: string | null;
   recipientName: string;
   recipientPhone: string;
   scheduledAt?: string | null;
   status: RiderDeliveryStatus;
+  stopSequence?: number;
+};
+
+export type RouteMarker = {
+  address?: string | null;
+  deliveryId?: string;
+  label: string;
+  latitude: number;
+  longitude: number;
+  orderId?: string;
+  stopSequence?: number;
+  type: 'origin' | 'destination';
+};
+
+export type RoutePreview = {
+  attribution: string;
+  availabilityReason?: string | null;
+  available: boolean;
+  distanceM?: number | null;
+  durationS?: number | null;
+  generatedAt?: string | null;
+  geometry?: { coordinates: number[][]; type: 'LineString' } | null;
+  mapAttribution: string;
+  markers: RouteMarker[];
+};
+
+export type StreetPhoto = {
+  capturedAt?: string | null;
+  distanceM?: number | null;
+  id: string;
+  imageUrl: string;
+  sequenceId?: string | number | null;
 };
 
 export type RiderDeliveryOrder = {
@@ -94,6 +134,22 @@ export async function updateRiderAvailability(riderIsAvailable: boolean) {
 
 export async function getMyDeliveryOrders() {
   return apiFetchWithSession<RiderDeliveryOrder[]>('/deliveries/rider/delivery-orders/me');
+}
+
+export async function confirmDispatchPickup(deliveryOrderId: string) {
+  return apiFetchWithSession<RiderDeliveryOrder>(`/deliveries/rider/delivery-orders/${encodeURIComponent(deliveryOrderId)}/pickup`, { method: 'POST' });
+}
+
+export async function getDispatchRoute(deliveryOrderId: string) {
+  return apiFetchWithSession<RoutePreview>(`/deliveries/rider/delivery-orders/${encodeURIComponent(deliveryOrderId)}/route`);
+}
+
+export async function getDeliveryRoute(deliveryId: string) {
+  return apiFetchWithSession<RoutePreview>(`/deliveries/${encodeURIComponent(deliveryId)}/route`);
+}
+
+export async function getDeliveryStreetPhotos(deliveryId: string) {
+  return apiFetchWithSession<{ attribution: string; coverageAvailable: boolean; photos: StreetPhoto[] }>(`/deliveries/${encodeURIComponent(deliveryId)}/street-photos`);
 }
 
 export async function getMyDeliveryHistory() {

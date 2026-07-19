@@ -22,7 +22,7 @@ export function DeliveryStopCard({
 }) {
   const dark = variant === 'featuredDark';
   const compact = variant === 'compact' || variant === 'completed';
-  const completed = variant === 'completed' || delivery.status === 'delivered';
+  const completed = delivery.status === 'delivered';
   const progress = getProgress(delivery.status);
   const destination = getDestination(delivery);
 

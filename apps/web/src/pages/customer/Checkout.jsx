@@ -13,6 +13,7 @@ import OrderingFulfillmentModal from "../../components/OrderingFulfillmentModal.
 
 const G = "#2E8B34"
 const DG = "#0C573E"
+const STANDARD_DELIVERY_ID = "standard"
 
 const PICKUP_BRANCHES = {
   Manila: {
@@ -100,7 +101,7 @@ export default function Checkout({ onNavigate }) {
   const [fulfillmentMethod, setFulfillmentMethod] = useState("delivery");
   const [deliverySettings, setDeliverySettings] = useState({ delivery_fee: 100, minimum_order: 0, same_day_cutoff: "14:00" });
   const [shippingMethods, setShippingMethods] = useState([]);
-  const [selectedShippingMethodId, setSelectedShippingMethodId] = useState(null);
+  const [selectedShippingMethodId, setSelectedShippingMethodId] = useState(STANDARD_DELIVERY_ID);
   const [voucher, setVoucher] = useState("")
   const [appliedVoucher, setAppliedVoucher] = useState(null)
   const [voucherMsg, setVoucherMsg] = useState(null)
@@ -344,9 +345,23 @@ export default function Checkout({ onNavigate }) {
     if (area === "pampanga") return "Pampanga"
     return "supported areas"
   }
+  const standardDeliveryMethod = useMemo(() => ({
+    id: STANDARD_DELIVERY_ID,
+    code: "standard",
+    courier_name: "Esting's Delivery",
+    delivery_type: "In-house standard delivery",
+    description: "Handled directly by Esting's delivery riders.",
+    service_area: "pampanga",
+    base_rate: Number(deliverySettings.delivery_fee || 0),
+    supports_live_booking: false,
+  }), [deliverySettings.delivery_fee])
+  const deliveryMethods = useMemo(
+    () => [standardDeliveryMethod, ...shippingMethods],
+    [shippingMethods, standardDeliveryMethod]
+  )
   const availableShippingMethods = useMemo(
-    () => shippingMethods.filter(method => methodSupportsBranch(method, deliveryAddressBranch)),
-    [shippingMethods, deliveryAddressBranch]
+    () => deliveryMethods.filter(method => methodSupportsBranch(method, deliveryAddressBranch || selectedStoreBranch)),
+    [deliveryMethods, deliveryAddressBranch, selectedStoreBranch]
   )
   const selectedShippingMethod = availableShippingMethods.find(method => method.id === selectedShippingMethodId) || null
   const shipping = cartItems.length > 0 && fulfillmentMethod === "delivery"
@@ -704,7 +719,7 @@ export default function Checkout({ onNavigate }) {
         paymongo_success_url: `${window.location.origin}/confirmation?payment=success`,
         paymongo_cancel_url: `${window.location.origin}/checkout?payment=cancelled`,
         fulfillment_method: fulfillmentMethod,
-        shipping_method_id: fulfillmentMethod === "delivery" ? selectedShippingMethod?.id : null,
+        shipping_method_id: fulfillmentMethod === "delivery" && selectedShippingMethod?.code !== "standard" ? selectedShippingMethod?.id : null,
         shipping_method_code: fulfillmentMethod === "delivery" ? selectedShippingMethod?.code : null,
         delivery_provider: fulfillmentMethod === "delivery" ? selectedShippingMethod?.code : null,
         special_note: orderNote.trim() || null,
@@ -752,7 +767,7 @@ export default function Checkout({ onNavigate }) {
         setError("Please select an available shipping option for this address.");
         return;
       }
-      if (selectedShippingMethod.supports_live_booking && (!activeDeliveryPin?.lat || !activeDeliveryPin?.lng)) {
+      if ((selectedShippingMethod.supports_live_booking || selectedShippingMethod.code === "standard") && (!activeDeliveryPin?.lat || !activeDeliveryPin?.lng)) {
         setError(`Please confirm the delivery pin before using ${selectedShippingMethod.courier_name}.`);
         return;
       }
@@ -786,7 +801,7 @@ export default function Checkout({ onNavigate }) {
         setError("Please select an available shipping option for this address.");
         return;
       }
-      if (selectedShippingMethod.supports_live_booking && (!activeDeliveryPin?.lat || !activeDeliveryPin?.lng)) {
+      if ((selectedShippingMethod.supports_live_booking || selectedShippingMethod.code === "standard") && (!activeDeliveryPin?.lat || !activeDeliveryPin?.lng)) {
         setError(`Please confirm the delivery pin before using ${selectedShippingMethod.courier_name}.`);
         return;
       }
@@ -1075,8 +1090,8 @@ export default function Checkout({ onNavigate }) {
               {/* Delivery option */}
               <p className="text-xs font-medium text-gray-500 mb-3">Fulfillment method</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
-                {shippingMethods.map(method => {
-                  const isAvailable = methodSupportsBranch(method, deliveryAddressBranch)
+                {deliveryMethods.map(method => {
+                  const isAvailable = methodSupportsBranch(method, deliveryAddressBranch || selectedStoreBranch)
                   const isSelected = fulfillmentMethod === "delivery" && selectedShippingMethodId === method.id
                   return (
                     <div
