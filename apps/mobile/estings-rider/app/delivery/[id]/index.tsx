@@ -18,16 +18,21 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { DeliveryStopCard, StatusTag } from '@/components/rider/delivery-stop-card';
+import { PlannedRouteMap } from '@/components/rider/planned-route-map';
 import { RouteStrip } from '@/components/rider/route-strip';
 import { SwipeToConfirm } from '@/components/rider/swipe-to-confirm';
 import { Fonts, theme } from '@/constants/theme';
 import { authenticateWithScreenLock } from '@/services/biometrics';
 import {
   getDeliveryById,
+  getDeliveryRoute,
+  getDeliveryStreetPhotos,
   submitDeliveryProof,
   updateDeliveryStatus,
   type RiderDelivery,
   type RiderDeliveryStatus,
+  type RoutePreview,
+  type StreetPhoto,
 } from '@/services/deliveries-api';
 import { addCompletedDeliveryNotification } from '@/services/rider-notifications';
 
@@ -68,6 +73,8 @@ export default function DeliveryDetailsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [routePreview, setRoutePreview] = useState<RoutePreview | null>(null);
+  const [streetPhotos, setStreetPhotos] = useState<StreetPhoto[]>([]);
   const [isCameraOpen, setIsCameraOpen] = useState(false);
   const [cameraStage, setCameraStage] = useState<CameraStage>('preview');
   const [capturedPhotoUri, setCapturedPhotoUri] = useState<string | null>(null);
@@ -84,7 +91,7 @@ export default function DeliveryDetailsScreen() {
   const hasProof = Boolean(delivery?.proofPhotoUrl);
   const nextAction = useMemo(() => getNextAction(status, hasProof), [hasProof, status]);
   const showSwipeArrived = status === 'out_for_delivery' && !isUpdating;
-  const showPrimaryButton = !showSwipeArrived && !isCompleted;
+  const showPrimaryButton = !showSwipeArrived && !isCompleted && Boolean(nextAction);
 
   const loadDelivery = useCallback(async () => {
     if (!deliveryId) {
@@ -94,8 +101,14 @@ export default function DeliveryDetailsScreen() {
     }
 
     try {
-      const nextDelivery = await getDeliveryById(deliveryId);
+      const [nextDelivery, nextRoute, nextPhotos] = await Promise.all([
+        getDeliveryById(deliveryId),
+        getDeliveryRoute(deliveryId).catch(() => null),
+        getDeliveryStreetPhotos(deliveryId).catch(() => null),
+      ]);
       setDelivery(nextDelivery);
+      setRoutePreview(nextRoute);
+      setStreetPhotos(nextPhotos?.photos ?? []);
       setError(null);
     } catch (nextError) {
       setDelivery(null);
@@ -378,6 +391,27 @@ export default function DeliveryDetailsScreen() {
 
             <RouteStrip address={delivery.address} estimatedArrival={delivery.estimatedArrival} recipientName={delivery.recipientName} />
 
+            {routePreview ? <PlannedRouteMap preview={routePreview} /> : null}
+
+            {delivery.status === 'issue_reported' ? (
+              <View style={styles.issueWaitingCard}>
+                <Feather color={theme.colors.danger} name="alert-circle" size={20} />
+                <View style={styles.issueWaitingCopy}>
+                  <Text style={styles.issueWaitingTitle}>Dispatch support is reviewing this issue</Text>
+                  <Text style={styles.issueWaitingText}>{delivery.issueNote || 'Wait for an administrator to resolve the issue before continuing.'}</Text>
+                </View>
+              </View>
+            ) : null}
+
+            <SectionCard title="Nearby street photos">
+              {streetPhotos.length ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.streetPhotoList}>
+                  {streetPhotos.map((photo) => <View key={photo.id} style={styles.streetPhotoCard}><Image contentFit="cover" source={{ uri: photo.imageUrl }} style={styles.streetPhotoImage} /><Text numberOfLines={1} style={styles.streetPhotoCaption}>{photo.capturedAt ? `Captured ${new Date(photo.capturedAt).toLocaleDateString()}` : 'Nearby KartaView imagery'}</Text></View>)}
+                </ScrollView>
+              ) : <Text style={styles.streetPhotoEmpty}>No street photos are available near this destination. Use the verified pin and address instead.</Text>}
+              <Text style={styles.streetPhotoAttribution}>Nearby imagery © KartaView contributors · Photos may not show the exact property.</Text>
+            </SectionCard>
+
             <SectionCard title="Progress">
               <View style={styles.progressRow}>
                 {progressSteps.map((step, index) => {
@@ -497,8 +531,8 @@ export default function DeliveryDetailsScreen() {
           <View style={styles.footerActions}>
             <Pressable
               accessibilityRole="button"
-              disabled={!delivery || isCompleted || isUpdating}
-              style={({ pressed }) => [styles.issueButton, (!delivery || isCompleted) && styles.disabledButton, pressed && styles.pressed]}
+              disabled={!delivery || isCompleted || isUpdating || status === 'issue_reported'}
+              style={({ pressed }) => [styles.issueButton, (!delivery || isCompleted || status === 'issue_reported') && styles.disabledButton, pressed && styles.pressed]}
               onPress={() => setIsIssueOpen(true)}>
               <Feather color={theme.colors.text} name="alert-circle" size={18} />
               <Text style={styles.issueButtonText}>Report Issue</Text>
@@ -1371,6 +1405,25 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 19,
   },
+  issueWaitingCard: {
+    alignItems: 'flex-start',
+    backgroundColor: theme.colors.redSoft,
+    borderColor: 'rgba(180,35,24,0.18)',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    padding: theme.spacing.md,
+  },
+  issueWaitingCopy: { flex: 1, gap: 3 },
+  issueWaitingText: { color: theme.colors.textMuted, fontFamily: Fonts.sans, fontSize: 12, lineHeight: 17 },
+  issueWaitingTitle: { color: theme.colors.danger, fontFamily: Fonts.sansBold, fontSize: 14, lineHeight: 19 },
+  streetPhotoAttribution: { color: theme.colors.textMuted, fontFamily: Fonts.sans, fontSize: 10, lineHeight: 14, marginTop: theme.spacing.sm },
+  streetPhotoCaption: { color: theme.colors.textMuted, fontFamily: Fonts.sans, fontSize: 10, lineHeight: 14, padding: 8 },
+  streetPhotoCard: { backgroundColor: theme.colors.surfaceAlt, borderRadius: 12, overflow: 'hidden', width: 210 },
+  streetPhotoEmpty: { color: theme.colors.textMuted, fontFamily: Fonts.sans, fontSize: 13, lineHeight: 19 },
+  streetPhotoImage: { height: 125, width: '100%' },
+  streetPhotoList: { gap: theme.spacing.sm },
   screen: {
     backgroundColor: theme.colors.surfaceAlt,
     flex: 1,

@@ -37,6 +37,13 @@ class Settings(BaseSettings):
     GEOCODING_BASE_URL: str = "https://nominatim.openstreetmap.org"
     GEOCODING_USER_AGENT: str = "Bloomora/1.0 (delivery geocoding)"
 
+    # Delivery route previews
+    OPENROUTESERVICE_API_KEY: str = ""
+    OPENROUTESERVICE_BASE_URL: str = "https://api.heigit.org/openrouteservice"
+    OPENROUTESERVICE_TIMEOUT_SECONDS: float = 12.0
+    KARTAVIEW_BASE_URL: str = "https://api.openstreetcam.org/2.0"
+    DELIVERY_MAP_STYLE_URL: str = "https://tiles.openfreemap.org/styles/liberty"
+
     # PayMongo
     PAYMONGO_SECRET_KEY: str = ""
     PAYMONGO_BASE_URL: str = "https://api.paymongo.com"

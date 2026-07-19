@@ -8,6 +8,7 @@ from app.services.customization_rules import (
     build_default_recipe_suggestion,
     build_presentation_recovery,
     build_quantity_adjustment,
+    build_stocked_prompt_suggestions,
     extract_prompt_requested_materials,
     has_specific_material_request,
     normalize_arrangement_type,
@@ -149,6 +150,28 @@ class CustomizationRuleTests(unittest.TestCase):
             {"flower", "filler", "wrapping", "accessory"},
         )
         self.assertTrue(suggestion.suggested_prompt)
+
+    def test_stocked_prompt_options_include_filler_ribbon_and_three_editable_ideas(self):
+        inventory = [
+            flower("rose", "Roses", 30),
+            flower("sunflower", "Sunflowers", 20),
+            material("filler", "Baby's Breath", "filler", 10),
+            material("wrap", "Kraft Wrapper", "wrapping", 10),
+            material("ribbon", "Satin Ribbon", "accessory", 10),
+        ]
+
+        prompts = build_stocked_prompt_suggestions(
+            "bouquet",
+            inventory,
+            "pastel birthday arrangement",
+        )
+
+        self.assertEqual(len(prompts), 3)
+        self.assertEqual(len(set(prompts)), 3)
+        for prompt in prompts:
+            self.assertIn("Baby's Breath", prompt)
+            self.assertIn("Satin Ribbon", prompt)
+            self.assertIn("Kraft Wrapper", prompt)
 
     def test_style_only_prompt_is_vague_but_named_or_quantity_prompt_is_specific(self):
         inventory = [flower("rose", "Red Roses", 30)]

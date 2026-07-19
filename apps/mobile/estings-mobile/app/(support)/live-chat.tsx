@@ -79,7 +79,6 @@ type AttachmentKind = 'image' | 'file';
 type EmptySheetType = 'products' | 'orders' | 'cart';
 type FloatingMenuType = 'attachments' | 'chat-options';
 type MessageGroupPosition = 'single' | 'first' | 'middle' | 'last';
-type FaqTopicId = 'ordering-delivery' | 'products-customization' | 'payments-cancellations';
 type SuggestedQuestion = {
   id: string;
   label: string;
@@ -125,24 +124,6 @@ const initialMessages: ChatMessage[] = [
     id: 'support-welcome',
     sender: 'support',
     text: "Hi there! \u{1F44B} Welcome to Esting's Flowers. How can we help you today? Our team is here to assist you.",
-  },
-];
-
-const faqTopics: { id: FaqTopicId; label: string; terms: string[] }[] = [
-  {
-    id: 'ordering-delivery',
-    label: 'Ordering & Delivery',
-    terms: ['order', 'delivery', 'shipping', 'track', 'address', 'same day', 'pickup'],
-  },
-  {
-    id: 'products-customization',
-    label: 'Products & Customization',
-    terms: ['product', 'flower', 'bouquet', 'arrangement', 'custom', 'bulk', 'fresh'],
-  },
-  {
-    id: 'payments-cancellations',
-    label: 'Payments & Cancellations',
-    terms: ['payment', 'pay', 'card', 'gcash', 'maya', 'cod', 'cancel', 'refund'],
   },
 ];
 
@@ -193,10 +174,9 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
   const [isSending, setIsSending] = useState(false);
   const [supportStatus, setSupportStatus] = useState<SupportStatus>('Connecting');
   const [faqCategories, setFaqCategories] = useState<FaqCategory[]>(fallbackFaqs);
-  const [selectedFaqTopicId, setSelectedFaqTopicId] = useState<FaqTopicId | null>(null);
+  const [selectedFaqCategoryId, setSelectedFaqCategoryId] = useState<string | null>(null);
   const [activeFloatingMenu, setActiveFloatingMenu] = useState<FloatingMenuType | null>(null);
   const [composerHeight, setComposerHeight] = useState(64);
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isChatAgreementVisible, setIsChatAgreementVisible] = useState(!hasAcceptedChatAgreementThisSession);
   const [emptySheetType, setEmptySheetType] = useState<EmptySheetType | null>(null);
@@ -248,21 +228,25 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
   const canScrollInput = inputHeight >= inputMaxHeight;
   const isActive = supportStatus === 'Active';
   const emptySheet = emptySheetType ? emptySheetContent[emptySheetType] : null;
-  const selectedFaqTopic = faqTopics.find((topic) => topic.id === selectedFaqTopicId) ?? null;
+  const selectedFaqCategory = faqCategories.find(
+    (category) => category.id === selectedFaqCategoryId,
+  ) ?? null;
   const suggestedQuestions = useMemo<SuggestedQuestion[]>(() => {
-    if (!selectedFaqTopic) {
-      return faqTopics.map((topic) => ({ id: topic.id, label: topic.label }));
+    if (!selectedFaqCategory) {
+      return faqCategories.map((category) => ({ id: category.id, label: category.category }));
     }
 
-    return getFaqQuestionsForTopic(selectedFaqTopic, faqCategories).map((item) => ({
+    return selectedFaqCategory.items.filter((item) => item.q && item.a).map((item) => ({
       id: item.id,
       label: item.q,
     }));
-  }, [faqCategories, selectedFaqTopic]);
+  }, [faqCategories, selectedFaqCategory]);
   const latestCustomerMessageId = useMemo(() => getLatestCustomerMessageId(messages), [messages]);
   const headerTopPadding = insets.top > 0 ? insets.top + 2 : theme.spacing.lg;
   const bottomSystemInset = Math.max(insets.bottom, theme.spacing.sm);
-  const composerBottomPadding = bottomSystemInset + theme.spacing.xs + (Platform.OS === 'android' ? keyboardHeight : 0);
+  // KeyboardAvoidingView moves the composer once. Do not also add the keyboard
+  // height here, or Android leaves a large empty gap above the keyboard.
+  const composerBottomPadding = bottomSystemInset + theme.spacing.xs;
   const floatingMenuBottom = composerHeight + theme.spacing.sm;
   const chatOptionsTop = headerTopPadding + 64;
 
@@ -496,8 +480,7 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
 
     const showSubscription = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      (event) => {
-        setKeyboardHeight(event.endCoordinates.height);
+      () => {
         setActiveFloatingMenu(null);
         setTimeout(scrollToLatest, 80);
       }
@@ -505,7 +488,6 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
     const hideSubscription = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
       () => {
-        setKeyboardHeight(0);
         setTimeout(scrollToLatest, 80);
       }
     );
@@ -729,17 +711,18 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
   }
 
   function handleSuggestedQuestion(question: SuggestedQuestion) {
-    if (!selectedFaqTopicId && isFaqTopicId(question.id)) {
-      setSelectedFaqTopicId(question.id);
+    if (!selectedFaqCategory) {
+      const category = faqCategories.find((item) => item.id === question.id);
+      if (category) setSelectedFaqCategoryId(category.id);
       return;
     }
 
-    setSelectedFaqTopicId(null);
+    setSelectedFaqCategoryId(null);
     void sendMessage(question.label);
   }
 
   function handleBackToFaqTopics() {
-    setSelectedFaqTopicId(null);
+    setSelectedFaqCategoryId(null);
   }
 
   async function handleAttachmentOption(option: AttachmentOption) {
@@ -936,10 +919,10 @@ export default function LiveChatScreen({ onRequestClose }: { onRequestClose?: ()
           );
         })}
         <SuggestedQuestionsCard
-          onBack={selectedFaqTopic ? handleBackToFaqTopics : undefined}
+          onBack={selectedFaqCategory ? handleBackToFaqTopics : undefined}
           onQuestionPress={handleSuggestedQuestion}
           questions={suggestedQuestions}
-          title={selectedFaqTopic ? selectedFaqTopic.label : 'Choose an inquiry'}
+          title={selectedFaqCategory ? selectedFaqCategory.category : 'Choose an inquiry'}
         />
       </ScrollView>
 
@@ -1446,27 +1429,6 @@ function SuggestedQuestionsCard({
       </View>
     </View>
   );
-}
-
-function isFaqTopicId(value: string): value is FaqTopicId {
-  return faqTopics.some((topic) => topic.id === value);
-}
-
-function getFaqQuestionsForTopic(
-  topic: { terms: string[] },
-  categories: FaqCategory[],
-) {
-  const containsTopicTerm = (value: string) => {
-    const normalized = value.toLowerCase();
-    return topic.terms.some((term) => normalized.includes(term));
-  };
-  const categoryMatches = categories.filter((category) => containsTopicTerm(category.category));
-  const candidateItems = (categoryMatches.length ? categoryMatches : categories).flatMap(
-    (category) => category.items,
-  );
-  const matchingItems = candidateItems.filter((item) => containsTopicTerm(`${item.q} ${item.a}`));
-
-  return (matchingItems.length ? matchingItems : candidateItems).filter((item) => item.q && item.a);
 }
 
 function HeaderGradient() {

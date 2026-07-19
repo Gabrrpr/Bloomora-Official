@@ -5,7 +5,8 @@ from typing import Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request
 from sqlalchemy import func, inspect
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.config import settings
 from app.core.dependencies import get_current_user, get_db, require_delivery, require_staff
@@ -27,6 +28,19 @@ from app.models import (
     User,
     Vehicle,
     VehicleTypeEnum,
+    BranchDeliverySetting,
+    ExternalShipment,
+)
+from app.services.delivery_maps import nearby_street_photos, request_route, unavailable_route
+from app.services.delivery_tracking import (
+    EXTERNAL_PROVIDERS,
+    EXTERNAL_STATUSES,
+    active_external_shipment,
+    apply_external_status,
+    get_or_create_external_shipment,
+    normalize_provider,
+    provider_display_name,
+    serialize_external_shipment,
 )
 
 router = APIRouter(prefix="/deliveries", tags=["Deliveries"])
@@ -41,9 +55,38 @@ RIDER_STATUS_ORDER = [
     DeliveryStatusEnum.delivered,
 ]
 
+DELIVERY_SCHEMA_COLUMNS = {
+    "orders": {"delivery_pin_verified_at", "delivery_pin_verified_by_id"},
+    "delivery_orders": {"idempotency_key", "route_geometry", "route_distance_m", "route_duration_s", "route_generated_at"},
+    "deliveries": {"stop_sequence", "route_geometry", "route_distance_m", "route_duration_s", "route_generated_at", "status_before_issue", "issue_code", "issue_note", "issue_reported_at", "issue_resolved_at", "issue_resolution_note"},
+}
+DELIVERY_SCHEMA_TABLES = {"branch_delivery_settings", "external_shipments", "external_shipment_events"}
+
 
 def _role_value(user: User) -> str:
     return user.role.value if hasattr(user.role, "value") else str(user.role)
+
+
+def _delivery_schema_status(db: Session) -> dict:
+    database = inspect(db.get_bind())
+    table_names = set(database.get_table_names())
+    missing = [f"table:{name}" for name in sorted(DELIVERY_SCHEMA_TABLES - table_names)]
+    for table_name, required_columns in DELIVERY_SCHEMA_COLUMNS.items():
+        if table_name not in table_names:
+            missing.append(f"table:{table_name}")
+            continue
+        present_columns = {column["name"] for column in database.get_columns(table_name)}
+        missing.extend(f"column:{table_name}.{name}" for name in sorted(required_columns - present_columns))
+    ready = not missing
+    return {
+        "ready": ready,
+        "requiredRevision": "f1a2b3c4d5e6",
+        "missing": missing,
+        "message": None if ready else (
+            "The delivery database update has not been applied. Verify Alembic revision "
+            "e0f1a2b3c4d5 is present, then upgrade through f1a2b3c4d5e6 before using delivery operations."
+        ),
+    }
 
 
 def _delivery_status_value(status) -> str:
@@ -255,6 +298,9 @@ def serialize_delivery(delivery: Delivery) -> dict:
         "recipientName": recipient_name,
         "recipientPhone": _recipient_phone(order),
         "address": order.delivery_address or "",
+        "destinationLat": float(order.delivery_lat) if order.delivery_lat is not None else None,
+        "destinationLng": float(order.delivery_lng) if order.delivery_lng is not None else None,
+        "destinationPinVerified": order.delivery_lat is not None and order.delivery_lng is not None,
         "branch": order.branch_name,
         "imageUrl": _serialize_delivery_image(order),
         "itemCount": _delivery_item_count(order),
@@ -266,6 +312,7 @@ def serialize_delivery(delivery: Delivery) -> dict:
         "orderStatus": _order_status_value(order.status),
         "deliveryOrderId": str(delivery.delivery_order_id) if delivery.delivery_order_id else None,
         "deliveryOrderNumber": delivery.delivery_order.delivery_order_number if delivery.delivery_order else None,
+        "stopSequence": delivery.stop_sequence,
         "assignedRider": _serialize_rider(delivery),
         "assignedVehicle": _serialize_vehicle(delivery),
         "assignedArea": delivery.assigned_area,
@@ -278,6 +325,12 @@ def serialize_delivery(delivery: Delivery) -> dict:
         "deliveredAt": delivery.delivered_at.isoformat() if delivery.delivered_at else None,
         "proofPhotoUrl": delivery.proof_photo_url,
         "proofNote": delivery.proof_note,
+        "issueCode": delivery.issue_code,
+        "issueNote": delivery.issue_note,
+        "issueReportedAt": delivery.issue_reported_at.isoformat() if delivery.issue_reported_at else None,
+        "issueResolvedAt": delivery.issue_resolved_at.isoformat() if delivery.issue_resolved_at else None,
+        "issueResolutionNote": delivery.issue_resolution_note,
+        "routeAvailable": bool(delivery.route_geometry),
         "createdAt": delivery.created_at.isoformat() if delivery.created_at else None,
         "updatedAt": delivery.updated_at.isoformat() if delivery.updated_at else None,
     }
@@ -286,6 +339,16 @@ def serialize_delivery(delivery: Delivery) -> dict:
 def _serialize_assignable_order(order: Order) -> dict:
     item_summary, handling_notes = _serialize_items(order)
     recipient_name = _recipient_name(order)
+
+    provider = normalize_provider(order.delivery_provider)
+    has_pin = order.delivery_lat is not None and order.delivery_lng is not None
+    reasons = []
+    if not provider:
+        reasons.append("Choose whether this is standard or third-party delivery.")
+    elif provider != "standard":
+        reasons.append(f"{provider_display_name(provider)} is tracked as an external shipment.")
+    if provider == "standard" and not has_pin:
+        reasons.append("The customer destination pin was not captured at checkout.")
 
     return {
         "id": str(order.id),
@@ -298,16 +361,20 @@ def _serialize_assignable_order(order: Order) -> dict:
         "handlingNotes": handling_notes,
         "scheduledAt": order.scheduled_at.isoformat() if order.scheduled_at else None,
         "status": _order_status_value(order.status),
+        "deliveryProvider": provider or None,
+        "deliveryMode": "in_house" if provider == "standard" else "external" if provider else "needs_review",
+        "destinationLat": float(order.delivery_lat) if order.delivery_lat is not None else None,
+        "destinationLng": float(order.delivery_lng) if order.delivery_lng is not None else None,
+        "destinationPinVerified": has_pin,
+        "dispatchEligible": provider == "standard" and has_pin,
+        "blockingReasons": reasons,
     }
 
 
 def _serialize_delivery_order(delivery_order: DeliveryOrder) -> dict:
     deliveries = sorted(
         delivery_order.deliveries or [],
-        key=lambda delivery: (
-            delivery.order.scheduled_at if delivery.order and delivery.order.scheduled_at else delivery.created_at or datetime.min.replace(tzinfo=timezone.utc),
-            delivery.created_at or datetime.min.replace(tzinfo=timezone.utc),
-        ),
+        key=lambda delivery: (delivery.stop_sequence or 1, delivery.created_at or datetime.min.replace(tzinfo=timezone.utc)),
     )
     rider = delivery_order.rider
     vehicle = delivery_order.vehicle
@@ -323,6 +390,9 @@ def _serialize_delivery_order(delivery_order: DeliveryOrder) -> dict:
         "vehiclePlateNumber": vehicle.plate_number if vehicle else None,
         "vehicleType": _vehicle_type_value(vehicle.vehicle_type) if vehicle else None,
         "stopCount": len(deliveries),
+        "routeAvailable": bool(delivery_order.route_geometry),
+        "routeDistanceM": delivery_order.route_distance_m,
+        "routeDurationS": delivery_order.route_duration_s,
         "deliveries": [serialize_delivery(delivery) for delivery in deliveries],
         "createdAt": delivery_order.created_at.isoformat() if delivery_order.created_at else None,
         "updatedAt": delivery_order.updated_at.isoformat() if delivery_order.updated_at else None,
@@ -526,9 +596,109 @@ def _get_delivery_for_user(db: Session, delivery_id: str, user: User) -> Deliver
     if role == "delivery" and delivery.rider_id != user.id:
         raise HTTPException(status_code=403, detail="This delivery is assigned to another rider.")
     if role not in {"admin", "staff", "delivery"}:
-        raise HTTPException(status_code=403, detail="Not authorized to view this delivery.")
+        if not delivery.order or delivery.order.user_id != user.id:
+            raise HTTPException(status_code=403, detail="Not authorized to view this delivery.")
 
     return delivery
+
+
+def _serialize_branch_setting(setting: BranchDeliverySetting) -> dict:
+    return {
+        "id": str(setting.id),
+        "branch": setting.branch,
+        "pickupAddress": setting.pickup_address,
+        "pickupLat": float(setting.pickup_lat),
+        "pickupLng": float(setting.pickup_lng),
+        "isVerified": setting.is_verified,
+        "verifiedAt": setting.verified_at.isoformat() if setting.verified_at else None,
+        "updatedAt": setting.updated_at.isoformat() if setting.updated_at else None,
+    }
+
+
+def _route_markers(setting: BranchDeliverySetting, deliveries: list[Delivery]) -> list[dict]:
+    markers = [{
+        "type": "origin",
+        "label": f"{setting.branch} branch",
+        "address": setting.pickup_address,
+        "latitude": float(setting.pickup_lat),
+        "longitude": float(setting.pickup_lng),
+    }]
+    for delivery in deliveries:
+        order = delivery.order
+        if not order or order.delivery_lat is None or order.delivery_lng is None:
+            continue
+        markers.append({
+            "type": "destination",
+            "label": f"Stop {delivery.stop_sequence}: {_recipient_name(order)}",
+            "address": order.delivery_address,
+            "latitude": float(order.delivery_lat),
+            "longitude": float(order.delivery_lng),
+            "deliveryId": str(delivery.id),
+            "orderId": str(order.id),
+            "stopSequence": delivery.stop_sequence,
+        })
+    return markers
+
+
+def _stored_route(entity, markers: list[dict]) -> dict | None:
+    if not entity.route_geometry:
+        return None
+    return {
+        "available": True,
+        "geometry": entity.route_geometry,
+        "markers": markers,
+        "distanceM": entity.route_distance_m,
+        "durationS": entity.route_duration_s,
+        "generatedAt": entity.route_generated_at.isoformat() if entity.route_generated_at else None,
+        "availabilityReason": None,
+        "attribution": "© openrouteservice.org by HeiGIT | Map data © OpenStreetMap contributors",
+        "mapAttribution": "© OpenStreetMap contributors | OpenFreeMap",
+    }
+
+
+def _generate_and_store_route(db: Session, entity, setting: BranchDeliverySetting, deliveries: list[Delivery]) -> dict:
+    markers = _route_markers(setting, deliveries)
+    coordinates = [(marker["latitude"], marker["longitude"]) for marker in markers]
+    preview = request_route(coordinates, markers)
+    if preview["available"]:
+        entity.route_geometry = preview["geometry"]
+        entity.route_distance_m = preview["distanceM"]
+        entity.route_duration_s = preview["durationS"]
+        entity.route_generated_at = datetime.fromisoformat(preview["generatedAt"])
+        db.flush()
+    return preview
+
+
+def _route_for_delivery(db: Session, delivery: Delivery, regenerate: bool = False) -> dict:
+    branch = delivery.order.branch_name if delivery.order else None
+    setting = db.query(BranchDeliverySetting).filter(
+        func.lower(BranchDeliverySetting.branch) == str(branch or "").lower(),
+        BranchDeliverySetting.is_verified.is_(True),
+    ).first()
+    if not setting:
+        return unavailable_route([], "The branch pickup pin has not been verified.")
+    markers = _route_markers(setting, [delivery])
+    if not regenerate:
+        cached = _stored_route(delivery, markers)
+        if cached:
+            return cached
+    return _generate_and_store_route(db, delivery, setting, [delivery])
+
+
+def _route_for_delivery_order(db: Session, delivery_order: DeliveryOrder, regenerate: bool = False) -> dict:
+    setting = db.query(BranchDeliverySetting).filter(
+        func.lower(BranchDeliverySetting.branch) == delivery_order.branch.lower(),
+        BranchDeliverySetting.is_verified.is_(True),
+    ).first()
+    if not setting:
+        return unavailable_route([], "The branch pickup pin has not been verified.")
+    deliveries = sorted(delivery_order.deliveries or [], key=lambda item: item.stop_sequence or 1)
+    markers = _route_markers(setting, deliveries)
+    if not regenerate:
+        cached = _stored_route(delivery_order, markers)
+        if cached:
+            return cached
+    return _generate_and_store_route(db, delivery_order, setting, deliveries)
 
 
 # ── Rider Endpoints ──────────────────────────────────────────────────────────
@@ -837,6 +1007,14 @@ def assign_vehicle_rider(
     return _serialize_vehicle_item(vehicle)
 
 
+@router.get("/admin/schema-status", response_model=dict)
+def get_delivery_schema_status(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    return _delivery_schema_status(db)
+
+
 @router.get("/admin/delivery-orders", response_model=list[dict])
 def list_delivery_orders(
     branch: Optional[str] = Query("Pampanga"),
@@ -867,32 +1045,80 @@ def create_delivery_order(
     if not isinstance(order_ids, list) or not order_ids:
         raise HTTPException(status_code=400, detail="Select at least one order to dispatch.")
 
+    idempotency_key = str(payload.get("idempotency_key") or payload.get("idempotencyKey") or "").strip() or None
+    if not idempotency_key:
+        raise HTTPException(status_code=400, detail="An idempotency key is required to create a dispatch.")
+    existing_request = _delivery_order_query(db).filter(DeliveryOrder.idempotency_key == idempotency_key).first()
+    if existing_request:
+        return _serialize_delivery_order(existing_request)
+
     try:
         rider_uuid = uuid.UUID(str(payload.get("rider_id") or payload.get("riderId")))
         order_uuids = [uuid.UUID(str(order_id)) for order_id in dict.fromkeys(order_ids)]
-    except ValueError:
+    except (ValueError, TypeError):
         raise HTTPException(status_code=400, detail="Invalid rider or order ID.")
 
-    rider = db.query(User).filter(User.id == rider_uuid).first()
+    rider = db.query(User).filter(User.id == rider_uuid).with_for_update().first()
     _ensure_rider_can_receive_dispatch(rider)
+    active_dispatch = db.query(DeliveryOrder).filter(
+        DeliveryOrder.rider_id == rider.id,
+        DeliveryOrder.status.in_([
+            DeliveryOrderStatusEnum.assigned,
+            DeliveryOrderStatusEnum.picked_up,
+            DeliveryOrderStatusEnum.in_progress,
+        ]),
+    ).first()
+    if active_dispatch:
+        raise HTTPException(status_code=400, detail=f"This rider already has active dispatch {active_dispatch.delivery_order_number}.")
+
+    branch = str(payload.get("branch") or getattr(rider.branch, "value", rider.branch) or "").strip().title()
+    if branch not in {"Manila", "Pampanga"}:
+        raise HTTPException(status_code=400, detail="Select either the Manila or Pampanga branch.")
+    rider_branch = str(getattr(rider.branch, "value", rider.branch) or "").strip()
+    if rider_branch.lower() != branch.lower():
+        raise HTTPException(status_code=400, detail="The rider must belong to the selected branch.")
+
+    branch_setting = db.query(BranchDeliverySetting).filter(
+        func.lower(BranchDeliverySetting.branch) == branch.lower(),
+        BranchDeliverySetting.is_verified.is_(True),
+    ).first()
+    if not branch_setting:
+        raise HTTPException(status_code=400, detail=f"Verify the {branch} branch pickup pin in Delivery Settings first.")
 
     vehicle = None
     vehicle_id = payload.get("vehicle_id") or payload.get("vehicleId")
-    if vehicle_id:
-        try:
-            vehicle_uuid = uuid.UUID(str(vehicle_id))
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid vehicle ID.")
-        vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_uuid, Vehicle.is_active == True).first()
-        if not vehicle:
-            raise HTTPException(status_code=400, detail="Selected vehicle not found or inactive.")
+    if not vehicle_id:
+        raise HTTPException(status_code=400, detail="Select an active vehicle for this dispatch.")
+    try:
+        vehicle_uuid = uuid.UUID(str(vehicle_id))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid vehicle ID.")
+    vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_uuid, Vehicle.is_active == True).with_for_update().first()
+    if not vehicle:
+        raise HTTPException(status_code=400, detail="Selected vehicle not found or inactive.")
+    if str(vehicle.branch or "").lower() != branch.lower():
+        raise HTTPException(status_code=400, detail="The vehicle must belong to the selected branch.")
+    if vehicle.assigned_rider_id and vehicle.assigned_rider_id != rider.id:
+        raise HTTPException(status_code=400, detail="The selected vehicle is assigned to another rider.")
+    vehicle_dispatch = db.query(DeliveryOrder).filter(
+        DeliveryOrder.vehicle_id == vehicle.id,
+        DeliveryOrder.status.in_([
+            DeliveryOrderStatusEnum.assigned,
+            DeliveryOrderStatusEnum.picked_up,
+            DeliveryOrderStatusEnum.in_progress,
+        ]),
+    ).first()
+    if vehicle_dispatch:
+        raise HTTPException(status_code=400, detail=f"This vehicle is already used by {vehicle_dispatch.delivery_order_number}.")
+    vehicle.assigned_rider_id = rider.id
 
-    branch = str(payload.get("branch") or getattr(rider.branch, "value", rider.branch) or "Pampanga").strip() or "Pampanga"
     notes = str(payload.get("notes") or "").strip() or None
 
-    orders = db.query(Order).options(joinedload(Order.transaction)).filter(Order.id.in_(order_uuids)).all()
+    orders = db.query(Order).filter(Order.id.in_(order_uuids)).with_for_update().all()
     if len(orders) != len(order_uuids):
         raise HTTPException(status_code=400, detail="One or more selected orders could not be found.")
+    order_by_id = {order.id: order for order in orders}
+    orders = [order_by_id[order_id] for order_id in order_uuids]
 
     existing_delivery = db.query(Delivery).filter(Delivery.order_id.in_(order_uuids)).first()
     if existing_delivery:
@@ -903,10 +1129,19 @@ def create_delivery_order(
         order_number = f"ORD-{order.id.hex[:8].upper()}"
         if payment_status != PaymentStatusEnum.paid:
             raise HTTPException(status_code=400, detail=f"{order_number} is not paid.")
-        if order.fulfillment_method and order.fulfillment_method != "delivery":
+        if order.fulfillment_method != "delivery":
             raise HTTPException(status_code=400, detail=f"{order_number} is not a delivery order.")
+        if normalize_provider(order.delivery_provider) != "standard":
+            raise HTTPException(status_code=400, detail=f"{order_number} is not an in-house standard delivery.")
         if order.status != OrderStatusEnum.ready_for_pickup:
             raise HTTPException(status_code=400, detail=f"{order_number} is not ready for pickup.")
+        if str(order.branch_name or "").lower() != branch.lower():
+            raise HTTPException(status_code=400, detail=f"{order_number} belongs to a different branch.")
+        if order.delivery_lat is None or order.delivery_lng is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"The destination pin for {order_number} was not captured at checkout.",
+            )
 
     delivery_order = DeliveryOrder(
         id=uuid.uuid4(),
@@ -917,11 +1152,12 @@ def create_delivery_order(
         status=DeliveryOrderStatusEnum.assigned,
         notes=notes,
         created_by_id=current_user.id,
+        idempotency_key=idempotency_key,
     )
     db.add(delivery_order)
 
     now = datetime.now(timezone.utc)
-    for order in orders:
+    for stop_sequence, order in enumerate(orders, start=1):
         delivery = Delivery(
             id=uuid.uuid4(),
             order_id=order.id,
@@ -931,15 +1167,26 @@ def create_delivery_order(
             assigned_area=order.branch_name or branch,
             status=DeliveryStatusEnum.assigned,
             assigned_at=now,
+            stop_sequence=stop_sequence,
         )
         db.add(delivery)
         _create_rider_assignment_notification(db, delivery)
         order.status = OrderStatusEnum.ready_for_pickup
 
+    db.flush()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        if idempotency_key:
+            existing_request = _delivery_order_query(db).filter(DeliveryOrder.idempotency_key == idempotency_key).first()
+            if existing_request:
+                return _serialize_delivery_order(existing_request)
+        raise HTTPException(status_code=409, detail="The dispatch could not be created because its data changed. Refresh and try again.") from exc
+    hydrated = _delivery_order_query(db).filter(DeliveryOrder.id == delivery_order.id).first()
+    _generate_and_store_route(db, hydrated, branch_setting, list(hydrated.deliveries or []))
     db.commit()
-    return _serialize_delivery_order(
-        _delivery_order_query(db).filter(DeliveryOrder.id == delivery_order.id).first()
-    )
+    return _serialize_delivery_order(_delivery_order_query(db).filter(DeliveryOrder.id == delivery_order.id).first())
 
 
 # ── Admin Delivery Assignment ────────────────────────────────────────────────
@@ -948,55 +1195,19 @@ def create_delivery_order(
 def assign_delivery(
     payload: dict = Body(...),
     db: Session = Depends(get_db),
-    _: User = Depends(require_staff),
+    current_user: User = Depends(require_staff),
 ):
-    try:
-        order_uuid = uuid.UUID(str(payload.get("order_id") or payload.get("orderId")))
-        rider_uuid = uuid.UUID(str(payload.get("rider_id") or payload.get("riderId")))
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid order or rider ID.")
-
-    order = db.query(Order).options(joinedload(Order.transaction)).filter(Order.id == order_uuid).first()
-    if not order:
-        raise HTTPException(status_code=404, detail="Order not found.")
-
-    rider = db.query(User).filter(User.id == rider_uuid).first()
-    _ensure_rider_can_receive_dispatch(rider)
-
-    payment_status = order.transaction.status if order.transaction else None
-    if payment_status != PaymentStatusEnum.paid:
-        raise HTTPException(status_code=400, detail="Only paid orders can be assigned for delivery.")
-    if order.fulfillment_method and order.fulfillment_method != "delivery":
-        raise HTTPException(status_code=400, detail="Only delivery orders can be assigned to riders.")
-    if order.status != OrderStatusEnum.ready_for_pickup:
-        raise HTTPException(status_code=400, detail="Only orders marked ready for pickup can be assigned for delivery.")
-
-    delivery = db.query(Delivery).filter(Delivery.order_id == order.id).first()
-    if not delivery:
-        delivery = Delivery(id=uuid.uuid4(), order_id=order.id)
-        db.add(delivery)
-
-    delivery.rider_id = rider.id
-    delivery.assigned_area = str(payload.get("assigned_area") or payload.get("assignedArea") or "").strip() or None
-    delivery.status = DeliveryStatusEnum.assigned
-    delivery.assigned_at = datetime.now(timezone.utc)
-    order.status = OrderStatusEnum.ready_for_pickup
-
-    vehicle_id = payload.get("vehicle_id") or payload.get("vehicleId")
-    if vehicle_id:
-        try:
-            vehicle_uuid = uuid.UUID(str(vehicle_id))
-            vehicle = db.query(Vehicle).filter(Vehicle.id == vehicle_uuid, Vehicle.is_active == True).first()
-            if not vehicle:
-                raise HTTPException(status_code=400, detail="Selected vehicle not found or inactive.")
-            delivery.vehicle_id = vehicle.id
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid vehicle ID.")
-
-    _create_rider_assignment_notification(db, delivery)
-    db.commit()
-    db.refresh(delivery)
-    return serialize_delivery(_delivery_query(db).filter(Delivery.id == delivery.id).first())
+    order_id = payload.get("order_id") or payload.get("orderId")
+    rider_id = payload.get("rider_id") or payload.get("riderId")
+    dispatch_payload = {
+        "order_ids": [order_id],
+        "rider_id": rider_id,
+        "vehicle_id": payload.get("vehicle_id") or payload.get("vehicleId"),
+        "branch": payload.get("branch"),
+        "notes": payload.get("notes") or "Created through the legacy single-order assignment flow.",
+        "idempotency_key": payload.get("idempotency_key") or payload.get("idempotencyKey") or f"legacy-assign:{order_id}",
+    }
+    return create_delivery_order(dispatch_payload, db, current_user)
 
 
 @router.get("/admin/riders", response_model=list[dict])
@@ -1039,6 +1250,349 @@ def list_assignable_orders(
 
     orders = query.order_by(Order.scheduled_at.asc(), Order.created_at.asc()).limit(limit).all()
     return [_serialize_assignable_order(order) for order in orders]
+
+
+@router.get("/admin/branch-settings", response_model=list[dict])
+def list_branch_delivery_settings(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    settings_rows = db.query(BranchDeliverySetting).order_by(BranchDeliverySetting.branch.asc()).all()
+    return [_serialize_branch_setting(setting) for setting in settings_rows]
+
+
+@router.put("/admin/branch-settings/{branch}", response_model=dict)
+def save_branch_delivery_setting(
+    branch: str,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    normalized_branch = branch.strip().title()
+    if normalized_branch not in {"Manila", "Pampanga"}:
+        raise HTTPException(status_code=400, detail="Select either the Manila or Pampanga branch.")
+    address = str(payload.get("pickup_address") or payload.get("pickupAddress") or "").strip()
+    try:
+        lat = float(payload.get("pickup_lat") or payload.get("pickupLat"))
+        lng = float(payload.get("pickup_lng") or payload.get("pickupLng"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Choose a valid branch pickup pin.")
+    if not address or not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        raise HTTPException(status_code=400, detail="Enter the pickup address and a valid map pin.")
+
+    setting = db.query(BranchDeliverySetting).filter(
+        func.lower(BranchDeliverySetting.branch) == normalized_branch.lower()
+    ).first()
+    if not setting:
+        setting = BranchDeliverySetting(id=uuid.uuid4(), branch=normalized_branch)
+        db.add(setting)
+    setting.pickup_address = address
+    setting.pickup_lat = lat
+    setting.pickup_lng = lng
+    setting.is_verified = True
+    setting.verified_by_id = current_user.id
+    setting.verified_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(setting)
+    return _serialize_branch_setting(setting)
+
+
+@router.patch("/admin/orders/{order_id}/destination-pin", response_model=dict)
+def verify_order_destination_pin(
+    order_id: uuid.UUID,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    try:
+        lat = float(payload.get("latitude") or payload.get("lat"))
+        lng = float(payload.get("longitude") or payload.get("lng"))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Choose a valid destination pin.")
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
+        raise HTTPException(status_code=400, detail="Destination coordinates are outside the valid range.")
+    address = str(payload.get("address") or order.delivery_address or "").strip()
+    if not address:
+        raise HTTPException(status_code=400, detail="Delivery address is required.")
+    order.delivery_address = address
+    order.delivery_lat = lat
+    order.delivery_lng = lng
+    order.delivery_geocode_precision = "admin_verified_pin"
+    order.delivery_pin_verified_at = datetime.now(timezone.utc)
+    order.delivery_pin_verified_by_id = current_user.id
+    db.commit()
+    return _serialize_assignable_order(order)
+
+
+@router.patch("/admin/orders/{order_id}/delivery-method", response_model=dict)
+def review_order_delivery_method(
+    order_id: uuid.UUID,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    order = db.query(Order).filter(Order.id == order_id).first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    provider = normalize_provider(payload.get("provider") or payload.get("delivery_provider"))
+    if provider != "standard" and provider not in EXTERNAL_PROVIDERS:
+        raise HTTPException(status_code=400, detail="Select standard delivery or a supported external courier.")
+    order.delivery_provider = provider
+    if provider in EXTERNAL_PROVIDERS:
+        get_or_create_external_shipment(db, order, current_user.id)
+    db.commit()
+    return _serialize_assignable_order(order)
+
+
+@router.get("/admin/external-shipments", response_model=list[dict])
+def list_external_shipments(
+    branch: Optional[str] = Query(None),
+    include_inactive: bool = Query(False),
+    limit: int = Query(100, ge=1, le=300),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    query = db.query(ExternalShipment).options(
+        joinedload(ExternalShipment.order).joinedload(Order.user),
+        selectinload(ExternalShipment.events),
+    )
+    if branch:
+        query = query.join(Order).filter(func.lower(Order.branch_name) == branch.lower())
+    if not include_inactive:
+        query = query.filter(ExternalShipment.is_active.is_(True))
+    shipments = query.order_by(ExternalShipment.updated_at.desc()).limit(limit).all()
+    return [serialize_external_shipment(shipment) for shipment in shipments]
+
+
+@router.post("/admin/external-shipments", response_model=dict)
+def create_external_shipment(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    try:
+        order_id = uuid.UUID(str(payload.get("order_id") or payload.get("orderId")))
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid order ID.")
+    order = db.query(Order).filter(Order.id == order_id).with_for_update().first()
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found.")
+    provider = normalize_provider(payload.get("provider") or order.delivery_provider)
+    if provider not in EXTERNAL_PROVIDERS:
+        raise HTTPException(status_code=400, detail="Select a supported external courier.")
+    for existing in order.external_shipments or []:
+        existing.is_active = False
+    order.delivery_provider = provider
+    shipment = ExternalShipment(
+        id=uuid.uuid4(),
+        order_id=order.id,
+        provider_code=provider,
+        provider_name=provider_display_name(provider, payload.get("provider_name")),
+        external_reference=str(payload.get("external_reference") or "").strip() or None,
+        tracking_url=str(payload.get("tracking_url") or "").strip() or None,
+        status="awaiting_booking",
+        is_active=True,
+        created_by_id=current_user.id,
+    )
+    db.add(shipment)
+    db.flush()
+    apply_external_status(db, shipment, str(payload.get("status") or "awaiting_booking"), message="Shipment created by staff.")
+    db.commit()
+    return serialize_external_shipment(shipment)
+
+
+@router.patch("/admin/external-shipments/{shipment_id}", response_model=dict)
+def update_external_shipment(
+    shipment_id: uuid.UUID,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    shipment = db.query(ExternalShipment).options(selectinload(ExternalShipment.events)).filter(
+        ExternalShipment.id == shipment_id
+    ).with_for_update().first()
+    if not shipment:
+        raise HTTPException(status_code=404, detail="External shipment not found.")
+    if normalize_provider(shipment.provider_code) == "lalamove":
+        raise HTTPException(
+            status_code=409,
+            detail="Lalamove tracking is updated automatically from booking and webhook events.",
+        )
+    status = str(payload.get("status") or shipment.status).strip().lower()
+    if status not in EXTERNAL_STATUSES:
+        raise HTTPException(status_code=400, detail="Invalid external shipment status.")
+    if "external_reference" in payload:
+        shipment.external_reference = str(payload.get("external_reference") or "").strip() or None
+    if "tracking_url" in payload:
+        shipment.tracking_url = str(payload.get("tracking_url") or "").strip() or None
+    shipment.last_error = str(payload.get("last_error") or "").strip() or None
+    apply_external_status(
+        db,
+        shipment,
+        status,
+        provider_status=str(payload.get("provider_status") or "").strip() or None,
+        message=str(payload.get("message") or "Status updated by staff.").strip(),
+        raw_payload={"source": "admin", **payload},
+    )
+    db.commit()
+    return serialize_external_shipment(shipment)
+
+
+@router.post("/rider/delivery-orders/{delivery_order_id}/pickup", response_model=dict)
+def confirm_dispatch_pickup(
+    delivery_order_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_delivery),
+):
+    delivery_order = db.query(DeliveryOrder).filter(
+        DeliveryOrder.id == delivery_order_id,
+        DeliveryOrder.rider_id == current_user.id,
+    ).with_for_update().first()
+    if not delivery_order:
+        raise HTTPException(status_code=404, detail="Dispatch not found or assigned to another rider.")
+    if delivery_order.status not in {DeliveryOrderStatusEnum.assigned, DeliveryOrderStatusEnum.picked_up}:
+        raise HTTPException(status_code=400, detail="This dispatch cannot be picked up in its current state.")
+    now = datetime.now(timezone.utc)
+    for delivery in delivery_order.deliveries or []:
+        if delivery.status == DeliveryStatusEnum.assigned:
+            delivery.status = DeliveryStatusEnum.picked_up
+            delivery.picked_up_at = now
+    delivery_order.status = DeliveryOrderStatusEnum.picked_up
+    db.commit()
+    hydrated = _delivery_order_query(db).filter(DeliveryOrder.id == delivery_order.id).first()
+    return _serialize_delivery_order(hydrated)
+
+
+@router.get("/rider/delivery-orders/{delivery_order_id}/route", response_model=dict)
+def get_rider_dispatch_route(
+    delivery_order_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_delivery),
+):
+    delivery_order = _delivery_order_query(db).filter(
+        DeliveryOrder.id == delivery_order_id,
+        DeliveryOrder.rider_id == current_user.id,
+    ).first()
+    if not delivery_order:
+        raise HTTPException(status_code=404, detail="Dispatch not found or assigned to another rider.")
+    preview = _route_for_delivery_order(db, delivery_order)
+    db.commit()
+    return preview
+
+
+@router.get("/admin/delivery-orders/{delivery_order_id}/route", response_model=dict)
+def get_admin_dispatch_route(
+    delivery_order_id: uuid.UUID,
+    regenerate: bool = Query(False),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    delivery_order = _delivery_order_query(db).filter(DeliveryOrder.id == delivery_order_id).first()
+    if not delivery_order:
+        raise HTTPException(status_code=404, detail="Dispatch not found.")
+    preview = _route_for_delivery_order(db, delivery_order, regenerate=regenerate)
+    db.commit()
+    return preview
+
+
+@router.post("/admin/routes/preview", response_model=dict)
+def preview_admin_dispatch_route(
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    branch = str(payload.get("branch") or "").strip().title()
+    order_ids = payload.get("order_ids") or payload.get("orderIds") or []
+    try:
+        order_uuids = [uuid.UUID(str(order_id)) for order_id in dict.fromkeys(order_ids)]
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="One or more order IDs are invalid.")
+    setting = db.query(BranchDeliverySetting).filter(
+        func.lower(BranchDeliverySetting.branch) == branch.lower(),
+        BranchDeliverySetting.is_verified.is_(True),
+    ).first()
+    if not setting:
+        return unavailable_route([], f"Verify the {branch or 'selected'} branch pickup pin first.")
+    orders = db.query(Order).filter(Order.id.in_(order_uuids)).all()
+    order_by_id = {order.id: order for order in orders}
+    ordered = [order_by_id[order_id] for order_id in order_uuids if order_id in order_by_id]
+    markers = [{
+        "type": "origin",
+        "label": f"{setting.branch} branch",
+        "address": setting.pickup_address,
+        "latitude": float(setting.pickup_lat),
+        "longitude": float(setting.pickup_lng),
+    }]
+    for sequence, order in enumerate(ordered, start=1):
+        if order.delivery_lat is None or order.delivery_lng is None:
+            continue
+        markers.append({
+            "type": "destination",
+            "label": f"Stop {sequence}: {_recipient_name(order)}",
+            "address": order.delivery_address,
+            "latitude": float(order.delivery_lat),
+            "longitude": float(order.delivery_lng),
+            "orderId": str(order.id),
+            "stopSequence": sequence,
+        })
+    coordinates = [(marker["latitude"], marker["longitude"]) for marker in markers]
+    return request_route(coordinates, markers)
+
+
+@router.patch("/admin/deliveries/{delivery_id}/resolve-issue", response_model=dict)
+def resolve_delivery_issue(
+    delivery_id: uuid.UUID,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db),
+    _: User = Depends(require_staff),
+):
+    delivery = db.query(Delivery).filter(Delivery.id == delivery_id).with_for_update().first()
+    if not delivery:
+        raise HTTPException(status_code=404, detail="Delivery not found.")
+    if delivery.status != DeliveryStatusEnum.issue_reported:
+        raise HTTPException(status_code=400, detail="This delivery does not have an open issue.")
+    note = str(payload.get("resolution_note") or payload.get("resolutionNote") or "").strip()
+    if not note:
+        raise HTTPException(status_code=400, detail="Resolution note is required.")
+    try:
+        restored_status = DeliveryStatusEnum(delivery.status_before_issue or "out_for_delivery")
+    except ValueError:
+        restored_status = DeliveryStatusEnum.out_for_delivery
+    delivery.status = restored_status
+    delivery.issue_resolved_at = datetime.now(timezone.utc)
+    delivery.issue_resolution_note = note
+    _sync_delivery_order_status(delivery.delivery_order)
+    db.commit()
+    hydrated = _delivery_query(db).filter(Delivery.id == delivery.id).first()
+    return serialize_delivery(hydrated)
+
+
+@router.get("/{delivery_id}/route", response_model=dict)
+def get_delivery_route(
+    delivery_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    delivery = _get_delivery_for_user(db, delivery_id, current_user)
+    preview = _route_for_delivery(db, delivery)
+    db.commit()
+    return preview
+
+
+@router.get("/{delivery_id}/street-photos", response_model=dict)
+def get_delivery_street_photos(
+    delivery_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    delivery = _get_delivery_for_user(db, delivery_id, current_user)
+    order = delivery.order
+    if not order or order.delivery_lat is None or order.delivery_lng is None:
+        return {"photos": [], "coverageAvailable": False, "attribution": "Street-level imagery © KartaView contributors"}
+    return nearby_street_photos(float(order.delivery_lat), float(order.delivery_lng))
 
 @router.post("/{delivery_id}/assign-lalamove")
 def assign_lalamove_rider(
@@ -1119,8 +1673,13 @@ def update_delivery_status(
     if next_status == DeliveryStatusEnum.issue_reported:
         if not issue_note:
             raise HTTPException(status_code=400, detail="Issue note is required.")
+        delivery.status_before_issue = _delivery_status_value(current_status)
         delivery.status = DeliveryStatusEnum.issue_reported
-        delivery.proof_note = issue_note
+        delivery.issue_code = str(payload.get("issue_code") or "other").strip() or "other"
+        delivery.issue_note = issue_note
+        delivery.issue_reported_at = now
+        delivery.issue_resolved_at = None
+        delivery.issue_resolution_note = None
         _sync_delivery_order_status(delivery.delivery_order)
         db.commit()
         db.refresh(delivery)
@@ -1130,7 +1689,9 @@ def update_delivery_status(
         if not issue_note:
             raise HTTPException(status_code=400, detail="Failure note is required.")
         delivery.status = DeliveryStatusEnum.failed
-        delivery.proof_note = issue_note
+        delivery.issue_code = str(payload.get("issue_code") or "delivery_failed").strip() or "delivery_failed"
+        delivery.issue_note = issue_note
+        delivery.issue_reported_at = now
         _sync_delivery_order_status(delivery.delivery_order)
         db.commit()
         db.refresh(delivery)

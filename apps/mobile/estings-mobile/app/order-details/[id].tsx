@@ -7,10 +7,18 @@ import { ActivityIndicator, Alert, Linking, Pressable, ScrollView, StyleSheet, T
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AppPageHeader } from '@/components/app-page-header';
+import { CustomerDeliveryRouteMap } from '@/components/customer-delivery-route-map';
 import { formatPhp } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { getAuthSession } from '@/services/auth-session';
-import { getOrderById, type CustomerOrder } from '@/services/orders-api';
+import {
+  getCustomerDeliveryRoute,
+  getCustomerStreetPhotos,
+  getOrderById,
+  type CustomerOrder,
+  type CustomerRoutePreview,
+  type CustomerStreetPhoto,
+} from '@/services/orders-api';
 import { getPayMongoPaymentStatus } from '@/services/payments-api';
 
 export function ErrorBoundary({ error, retry }: { error: Error; retry: () => void }) {
@@ -252,9 +260,29 @@ function SummaryRow({ emphasized = false, label, value }: { emphasized?: boolean
 
 function DeliveryTrackingView({ order }: { order: CustomerOrder }) {
   const tracking = order.deliveryTracking;
+  const [routePreview, setRoutePreview] = useState<CustomerRoutePreview | null>(null);
+  const [streetPhotos, setStreetPhotos] = useState<CustomerStreetPhoto[]>([]);
+
+  useEffect(() => {
+    if (!tracking?.deliveryId || tracking.mode === 'external') return;
+    let mounted = true;
+    getAuthSession().then((session) => {
+      if (!session || !mounted) return;
+      return Promise.all([
+        getCustomerDeliveryRoute({ deliveryId: tracking.deliveryId!, session }).catch(() => null),
+        getCustomerStreetPhotos({ deliveryId: tracking.deliveryId!, session }).catch(() => null),
+      ]).then(([preview, photos]) => {
+        if (!mounted) return;
+        setRoutePreview(preview);
+        setStreetPhotos(photos?.photos ?? []);
+      });
+    });
+    return () => { mounted = false; };
+  }, [tracking?.deliveryId, tracking?.mode]);
+
   if (!tracking) return null;
 
-  const timeline = [
+  const timeline = tracking.events?.length ? tracking.events.map((event, index) => ({ key: `${event.status}-${index}`, label: formatLabel(event.status), time: event.createdAt })) : [
     { key: 'assigned', label: 'Assigned', time: tracking.assignedAt },
     { key: 'picked-up', label: 'Picked up', time: tracking.pickedUpAt },
     { key: 'out-for-delivery', label: 'Out for delivery', time: tracking.inTransitAt },
@@ -267,8 +295,8 @@ function DeliveryTrackingView({ order }: { order: CustomerOrder }) {
       <View style={styles.trackingHeader}>
         <Truck color={theme.colors.primary} size={20} />
         <View style={styles.trackingHeaderCopy}>
-          <Text style={styles.trackingTitle}>Delivery Tracking</Text>
-          <Text selectable style={styles.trackingMeta}>Delivery ID: {tracking.deliveryId || 'To be assigned'}</Text>
+          <Text style={styles.trackingTitle}>{tracking.mode === 'external' ? `${tracking.providerName || formatLabel(tracking.provider || 'external courier')} Tracking` : 'In-house Delivery Tracking'}</Text>
+          <Text selectable style={styles.trackingMeta}>{tracking.mode === 'external' ? `Reference: ${tracking.externalReference || 'Awaiting booking'}` : `Delivery ID: ${tracking.deliveryId || 'To be assigned'}`}</Text>
         </View>
       </View>
 
@@ -291,9 +319,17 @@ function DeliveryTrackingView({ order }: { order: CustomerOrder }) {
 
       <View style={styles.trackingDetailsGrid}>
         <TrackingDetail icon="truck" label="Status" value={formatLabel(tracking.status || order.status)} />
-        <TrackingDetail icon="user" label="Rider" value={tracking.rider?.name || 'To be assigned'} />
-        <TrackingDetail icon="map" label="Vehicle" value={formatVehicle(tracking.vehicle)} />
+        {tracking.mode !== 'external' ? <TrackingDetail icon="user" label="Rider" value={tracking.rider?.name || 'To be assigned'} /> : null}
+        {tracking.mode !== 'external' ? <TrackingDetail icon="map" label="Vehicle" value={formatVehicle(tracking.vehicle)} /> : null}
       </View>
+
+      {tracking.trackingUrl ? <Pressable accessibilityRole="link" style={styles.trackingLinkButton} onPress={() => void Linking.openURL(tracking.trackingUrl!)}><Text style={styles.trackingLinkText}>Open official courier tracking</Text></Pressable> : null}
+
+      {tracking.interventionRequired ? <View style={styles.trackingWarning}><Text style={styles.trackingWarningText}>The courier reported a delivery exception. Esting&apos;s staff will review or rebook it.</Text></View> : null}
+
+      {routePreview ? <CustomerDeliveryRouteMap preview={routePreview} /> : null}
+
+      {tracking.mode !== 'external' ? <View style={styles.customerStreetSection}><Text style={styles.customerStreetTitle}>Nearby street photos</Text>{streetPhotos.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.customerStreetList}>{streetPhotos.map((photo) => <View key={photo.id} style={styles.customerStreetCard}><Image contentFit="cover" source={{ uri: photo.imageUrl }} style={styles.customerStreetImage} /><Text style={styles.customerStreetCaption}>{photo.capturedAt ? `Captured ${new Date(photo.capturedAt).toLocaleDateString()}` : 'Nearby KartaView imagery'}</Text></View>)}</ScrollView> : <Text style={styles.customerStreetEmpty}>No nearby street photos are available for this address.</Text>}<Text style={styles.customerStreetAttribution}>Nearby imagery © KartaView contributors · May not show the exact property.</Text></View> : null}
 
       {tracking.proofPhotoUrl ? (
         <View style={styles.proofPanel}>
@@ -445,4 +481,16 @@ const styles = StyleSheet.create({
   trackingStepTime: { color: '#999999', fontFamily: Fonts.sans, fontSize: 11 },
   trackingTimeline: { gap: 10 },
   trackingTitle: { color: '#333333', fontFamily: Fonts.sansMedium, fontSize: 17 },
+  trackingLinkButton: { alignItems: 'center', backgroundColor: theme.colors.primary, borderRadius: theme.radius.sm, justifyContent: 'center', minHeight: 46, paddingHorizontal: 14 },
+  trackingLinkText: { color: '#FFFFFF', fontFamily: Fonts.sansMedium, fontSize: 14 },
+  trackingWarning: { backgroundColor: '#FFF4E5', borderColor: '#F4C87A', borderRadius: theme.radius.sm, borderWidth: 1, padding: 12 },
+  trackingWarningText: { color: '#7A4A00', fontFamily: Fonts.sans, fontSize: 12, lineHeight: 18 },
+  customerStreetAttribution: { color: '#888888', fontFamily: Fonts.sans, fontSize: 10, lineHeight: 14 },
+  customerStreetCaption: { color: '#666666', fontFamily: Fonts.sans, fontSize: 10, lineHeight: 14, padding: 8 },
+  customerStreetCard: { backgroundColor: '#F6F8F6', borderRadius: theme.radius.sm, overflow: 'hidden', width: 205 },
+  customerStreetEmpty: { color: '#777777', fontFamily: Fonts.sans, fontSize: 12, lineHeight: 17 },
+  customerStreetImage: { height: 120, width: '100%' },
+  customerStreetList: { gap: 10 },
+  customerStreetSection: { gap: 9 },
+  customerStreetTitle: { color: '#333333', fontFamily: Fonts.sansMedium, fontSize: 15 },
 });

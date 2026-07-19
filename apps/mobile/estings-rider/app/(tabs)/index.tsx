@@ -10,7 +10,6 @@ import { getAuthSession, type AuthUser } from '@/services/auth-session';
 import {
   getMyDeliveries,
   getMyDeliveryOrders,
-  updateDeliveryStatus,
   type RiderDelivery,
   type RiderDeliveryOrder,
   type RiderDeliveryStatus,
@@ -24,8 +23,6 @@ export default function HomeScreen() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isConfirmingPickup, setIsConfirmingPickup] = useState(false);
-  const [pickupFailures, setPickupFailures] = useState<string[]>([]);
   const [selectedDeliveryId, setSelectedDeliveryId] = useState<string | null>(null);
 
   const sortedDeliveries = useMemo(() => sortDeliveries(deliveries), [deliveries]);
@@ -58,7 +55,6 @@ export default function HomeScreen() {
       setRider(session?.user ?? null);
       setDeliveries(nextDeliveries);
       setDeliveryOrders(nextDeliveryOrders);
-      setPickupFailures([]);
       setSelectedDeliveryId((current) => {
         if (current && nextDeliveries.some((delivery) => delivery.id === current)) return current;
         return nextDeliveries[0]?.id ?? null;
@@ -175,37 +171,9 @@ export default function HomeScreen() {
     }
   }
 
-  async function handleConfirmPickupBatch() {
-    if (assignedDeliveries.length === 0) {
-      return;
-    }
-
-    setIsConfirmingPickup(true);
-    setPickupFailures([]);
-
-    const results = await Promise.allSettled(assignedDeliveries.map((delivery) => updateDeliveryStatus(delivery.id, 'picked_up')));
-    const nextDeliveries: RiderDelivery[] = [];
-    const failedOrderNumbers: string[] = [];
-
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        nextDeliveries.push(result.value);
-        return;
-      }
-      failedOrderNumbers.push(assignedDeliveries[index]?.orderNumber ?? 'Order');
-    });
-
-    if (nextDeliveries.length > 0) {
-      setDeliveries((current) => current.map((delivery) => nextDeliveries.find((nextDelivery) => nextDelivery.id === delivery.id) ?? delivery));
-      setSelectedDeliveryId((current) => current ?? nextDeliveries[0]?.id ?? null);
-    }
-
-    setPickupFailures(failedOrderNumbers);
-    setIsConfirmingPickup(false);
-
-    if (failedOrderNumbers.length > 0) {
-      Alert.alert('Pickup not complete', 'Some orders were not updated. Please try again.');
-    }
+  function handleReviewDispatch() {
+    if (!activeDeliveryOrder) return;
+    router.push({ pathname: '/dispatch/[id]', params: { id: activeDeliveryOrder.id } });
   }
 
   return (
@@ -266,21 +234,13 @@ export default function HomeScreen() {
           {assignedDeliveries.length > 0 ? (
             <Pressable
               accessibilityRole="button"
-              disabled={isConfirmingPickup}
-              style={({ pressed }) => [styles.pickupButton, isConfirmingPickup && styles.disabledAction, pressed && !isConfirmingPickup && styles.pressed]}
-              onPress={() => void handleConfirmPickupBatch()}>
+              style={({ pressed }) => [styles.pickupButton, pressed && styles.pressed]}
+              onPress={handleReviewDispatch}>
               <Feather color={theme.colors.white} name="package" size={18} />
-              <Text style={styles.pickupButtonText}>{isConfirmingPickup ? 'Confirming pickup...' : `Confirm pickup for ${assignedDeliveries.length} order${assignedDeliveries.length === 1 ? '' : 's'}`}</Text>
+              <Text style={styles.pickupButtonText}>Review items & start dispatch</Text>
             </Pressable>
           ) : null}
         </>
-      ) : null}
-
-      {pickupFailures.length > 0 ? (
-        <View style={styles.retryNotice}>
-          <Feather color={theme.colors.danger} name="alert-circle" size={16} />
-          <Text selectable style={styles.retryText}>{pickupFailures.join(', ')} still needs pickup confirmation.</Text>
-        </View>
       ) : null}
 
       {nextStops.length > 0 ? (

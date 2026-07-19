@@ -131,6 +131,7 @@ export default function DescribeArrangement({ onNavigate }) {
   const [aiUsage, setAiUsage] = useState(null)
   const [unavailableItems, setUnavailableItems] = useState([])
   const [recipeReview, setRecipeReview] = useState(null)
+  const [promptAlternatives, setPromptAlternatives] = useState([])
   const [fetchingProducts, setFetchingProducts] = useState(true)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [customName, setCustomName] = useState("")
@@ -142,6 +143,7 @@ export default function DescribeArrangement({ onNavigate }) {
   const [progress, setProgress] = useState(0)
   const [factIdx, setFactIdx] = useState(0)
   const promptSuggestionsRef = useRef(null)
+  const promptEditorRef = useRef(null)
 
   // ── Dark-mode color tokens ──
   const pageBg       = isDark ? "radial-gradient(1100px 600px at 50% -8%, #0f2018 0%, #0d1a14 45%, #0f172a 100%)" : "radial-gradient(1100px 600px at 50% -8%, #eaf6ec 0%, #f4f9f1 45%, #fbf7ef 100%)"
@@ -398,7 +400,7 @@ export default function DescribeArrangement({ onNavigate }) {
     setShowAIPanel(false);
   }
 
-  const handleGenerate = async () => {
+  const handleGenerate = async ({ preserveResult = false } = {}) => {
     // 🚀 NEW: Redirect guests to login
     if (!localStorage.getItem('access_token')) {
       window.location.href = '/login';
@@ -412,9 +414,10 @@ export default function DescribeArrangement({ onNavigate }) {
     if (!prompt.trim()) return
     setLoading(true)
     setError(null)
-    setResult(null)
+    if (!preserveResult) setResult(null)
     setUnavailableItems([])
     setRecipeReview(null)
+    setPromptAlternatives([])
     setSelectedAddOns([])
 
     try {
@@ -430,6 +433,11 @@ export default function DescribeArrangement({ onNavigate }) {
       if (selectedMaterials.accessory) payload.accessory_id = selectedMaterials.accessory;
       
       const data = await api.checkAndGenerate(payload)
+      setPromptAlternatives(
+        Array.isArray(data.prompt_suggestions)
+          ? data.prompt_suggestions.slice(0, 3)
+          : [],
+      )
 
       if (data.validation) {
         setRecipeReview({ ...data.validation, message: data.message })
@@ -508,6 +516,7 @@ export default function DescribeArrangement({ onNavigate }) {
     setError(null)
     setUnavailableItems([])
     setRecipeReview(null)
+    setPromptAlternatives([])
 
     try {
       const revisedStyle = inferArrangementStyle(result.price_breakdown.items)
@@ -515,6 +524,11 @@ export default function DescribeArrangement({ onNavigate }) {
         prompt_text: revisedPrompt,
         arrangement_type: normalizeArrangementStyle(revisedStyle),
       })
+      setPromptAlternatives(
+        Array.isArray(data.prompt_suggestions)
+          ? data.prompt_suggestions.slice(0, 3)
+          : [],
+      )
 
       if (data.validation) {
         setRecipeReview({ ...data.validation, message: data.message })
@@ -615,10 +629,30 @@ export default function DescribeArrangement({ onNavigate }) {
     setError(null)
   }
 
+  const usePromptAlternative = (suggestion) => {
+    setPrompt(suggestion.slice(0, MAX))
+    setPromptAlternatives([])
+    setUnavailableItems([])
+    setRecipeReview(null)
+    setError(null)
+    window.requestAnimationFrame(() => {
+      promptEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    })
+  }
+
+  const editLastPrompt = () => {
+    setResult(null)
+    setImageSuggestion("")
+    window.requestAnimationFrame(() => {
+      promptEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    })
+  }
+
   const resetAll = () => {
     setResult(null); 
     setUnavailableItems([]); 
     setRecipeReview(null);
+    setPromptAlternatives([]);
     setSelectedAddOns([]);
     setCardMessage("");
     setShowAIPanel(false);
@@ -668,7 +702,7 @@ export default function DescribeArrangement({ onNavigate }) {
 
           {/* ── Left column ── */}
           <div className="space-y-5" style={{ animation: "daRise 0.6s ease 0.16s both" }}>
-            <div className="backdrop-blur-sm border rounded-3xl p-6 sm:p-7"
+            <div ref={promptEditorRef} className="backdrop-blur-sm border rounded-3xl p-6 sm:p-7 scroll-mt-24"
               style={{ backgroundColor: cardBg, borderColor: cardBdr, boxShadow: cardShadow }}>
               <div className="flex items-center gap-2.5 mb-1.5">
                 <span className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: iconCircleBg, color: accentG }}>
@@ -890,7 +924,7 @@ export default function DescribeArrangement({ onNavigate }) {
                   )}
                 </div>
                 <button
-                  onClick={handleGenerate}
+                  onClick={() => handleGenerate()}
                   disabled={!customizationEnabled || !prompt.trim() || loading || (aiUsage?.remaining === 0)}
                   className="flex items-center justify-center gap-2 px-7 py-3.5 text-base font-bold text-white rounded-2xl transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-50 whitespace-nowrap"
                   style={{ background: customizationEnabled && prompt.trim() && aiUsage?.remaining !== 0 ? "linear-gradient(135deg, #e879a0, #f43f5e)" : (isDark ? "#475569" : "#d1d5db") }}
@@ -1000,6 +1034,46 @@ export default function DescribeArrangement({ onNavigate }) {
               </div>
             )}
 
+            {promptAlternatives.length > 0 && (
+              <div
+                className="border rounded-2xl p-6"
+                style={{
+                  backgroundColor: cardBg,
+                  borderColor: isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0",
+                }}
+              >
+                <div className="mb-4">
+                  <h3 className="text-base font-semibold" style={{ color: subHeadC }}>
+                    Try a stock-ready idea
+                  </h3>
+                  <p className="mt-1 text-sm" style={{ color: bodyC }}>
+                    These options use quantities and materials currently available, including presentation and finishing materials when stocked.
+                  </p>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-3">
+                  {promptAlternatives.map((suggestion, index) => (
+                    <button
+                      type="button"
+                      key={`${suggestion}-${index}`}
+                      onClick={() => usePromptAlternative(suggestion)}
+                      className="rounded-xl border p-4 text-left transition hover:-translate-y-0.5 hover:border-green-500"
+                      style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}
+                    >
+                      <span className="text-[10px] font-bold uppercase tracking-widest" style={{ color: accentG }}>
+                        Option {index + 1}
+                      </span>
+                      <span className="mt-2 block text-xs leading-relaxed" style={{ color: subHeadC }}>
+                        {suggestion}
+                      </span>
+                      <span className="mt-3 block text-xs font-bold" style={{ color: accentG }}>
+                        Use and edit this idea
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {result && result.success && (
               <div className="border rounded-3xl overflow-hidden"
                 style={{ backgroundColor: cardBg, borderColor: cardBdr, boxShadow: cardShadow }}>
@@ -1048,6 +1122,40 @@ export default function DescribeArrangement({ onNavigate }) {
 
                   {/* Right meta */}
                   <div className="flex flex-col gap-5 pt-1">
+                    <div className="rounded-xl border p-4" style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>
+                      <div className="flex items-center justify-between gap-3 mb-2">
+                        <label className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: mutedC }}>
+                          Edit your last request
+                        </label>
+                        <span className="text-[10px]" style={{ color: mutedC }}>{prompt.length} / {MAX}</span>
+                      </div>
+                      <textarea
+                        value={prompt}
+                        onChange={event => setPrompt(event.target.value.slice(0, MAX))}
+                        rows={3}
+                        className="w-full resize-none rounded-xl border px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-green-600"
+                        style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
+                      />
+                      <div className="mt-3 flex flex-wrap justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={editLastPrompt}
+                          className="rounded-lg border px-3 py-2 text-xs font-semibold"
+                          style={{ borderColor: tileBdr, color: subHeadC }}
+                        >
+                          Try another idea
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleGenerate({ preserveResult: true })}
+                          disabled={loading || !prompt.trim() || aiUsage?.remaining === 0}
+                          className="rounded-lg px-3 py-2 text-xs font-bold text-white disabled:opacity-50"
+                          style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}
+                        >
+                          Regenerate from prompt
+                        </button>
+                      </div>
+                    </div>
                     <div>
                       <label className="text-[11px] font-semibold uppercase tracking-wider block mb-1.5" style={{ color: mutedC }}>Arrangement name</label>
                       <input

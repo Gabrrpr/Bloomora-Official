@@ -28,6 +28,7 @@ from app.services.customization_rules import (
     build_default_recipe_suggestion,
     build_presentation_recovery,
     build_quantity_adjustment,
+    build_stocked_prompt_suggestions,
     extract_prompt_requested_materials,
     get_material_type_label,
     has_specific_material_request,
@@ -198,7 +199,12 @@ def _recipe_product_id(recipe, inventory_catalog, material_type: str) -> Optiona
         ),
         None,
     )
-    return uuid.UUID(match) if match else None
+    if not match:
+        return None
+    try:
+        return uuid.UUID(match)
+    except (TypeError, ValueError):
+        return None
 
 
 def _recipe_material_name(recipe, inventory_catalog, material_type: str) -> Optional[str]:
@@ -228,6 +234,7 @@ def _lookup_arrangement_material(db: Session, model, product_id: Optional[uuid.U
 def _quantity_adjustment_response(
     adjustment: QuantityAdjustment,
     remaining: int,
+    prompt_suggestions: Optional[list[str]] = None,
 ) -> CustomizationResponse:
     label = "flower box" if adjustment.arrangement_type == "box" else adjustment.arrangement_type
     if not adjustment.suggested_prompt:
@@ -249,6 +256,7 @@ def _quantity_adjustment_response(
         generated_image_url=None,
         remaining_generations=remaining,
         validation=QuantityValidation(**adjustment.__dict__),
+        prompt_suggestions=prompt_suggestions or [],
     )
 
 
@@ -339,18 +347,27 @@ async def check_and_generate(
             )
 
     # ── Step 3: If explicit materials are unavailable, return early ───────
+    inventory_catalog = load_customization_inventory(db)
+
     if unavailable_items:
         remaining = get_remaining_generations(db, current_user.id)
+        suggestion_type = _infer_arrangement_type(
+            payload.arrangement_type,
+            payload.prompt_text,
+        )
         return CustomizationResponse(
             success=False,
             message="Some selected materials are currently unavailable. Please choose from the suggested alternatives.",
             generated_image_url=None,
             unavailable_items=unavailable_items,
             remaining_generations=remaining,
+            prompt_suggestions=build_stocked_prompt_suggestions(
+                suggestion_type,
+                inventory_catalog,
+            ),
         )
 
     # ── Step 4: Gemini Intelligent Prompt Validation ──────────────────────
-    inventory_catalog = load_customization_inventory(db)
     inventory_for_extraction = [
         {
             "product_id": item.product_id,
@@ -372,6 +389,15 @@ async def check_and_generate(
         payload.arrangement_type or ai_verdict.get("arrangement_type"),
         payload.prompt_text,
     )
+    design_notes = ai_verdict.get("design_notes") or ""
+
+    def stocked_prompt_options(option_type: str, catalog=None) -> list[str]:
+        return build_stocked_prompt_suggestions(
+            option_type,
+            catalog or inventory_catalog,
+            design_notes,
+        )
+
     if payload.selected_items:
         # Mix & Match already knows every selected product and quantity. Never
         # let Gemini or visual prompt wording alter that exact recipe.
@@ -413,13 +439,12 @@ async def check_and_generate(
             inventory_catalog,
             ai_verdict.get("feedback"),
         )
-        recipe_from_suggestion = _suggested_items_to_recipe(recovery)
-        if recipe_from_suggestion:
-            arrangement_type = recovery.arrangement_type
-            requested_materials = recipe_from_suggestion
-        else:
-            remaining = get_remaining_generations(db, current_user.id)
-            return _quantity_adjustment_response(recovery, remaining)
+        remaining = get_remaining_generations(db, current_user.id)
+        return _quantity_adjustment_response(
+            recovery,
+            remaining,
+            stocked_prompt_options(recovery.arrangement_type),
+        )
 
     if requested_materials:
         quantity_adjustment = build_quantity_adjustment(
@@ -440,10 +465,18 @@ async def check_and_generate(
                     requested_materials = recipe_from_suggestion
                 else:
                     remaining = get_remaining_generations(db, current_user.id)
-                    return _quantity_adjustment_response(quantity_adjustment, remaining)
+                    return _quantity_adjustment_response(
+                        quantity_adjustment,
+                        remaining,
+                        stocked_prompt_options(quantity_adjustment.arrangement_type),
+                    )
             else:
                 remaining = get_remaining_generations(db, current_user.id)
-                return _quantity_adjustment_response(quantity_adjustment, remaining)
+                return _quantity_adjustment_response(
+                    quantity_adjustment,
+                    remaining,
+                    stocked_prompt_options(quantity_adjustment.arrangement_type),
+                )
 
     if not requested_materials and (
         ai_verdict.get("is_possible") or is_probably_floral_request(payload.prompt_text)
@@ -459,7 +492,11 @@ async def check_and_generate(
             requested_materials = recipe_from_suggestion
         else:
             remaining = get_remaining_generations(db, current_user.id)
-            return _quantity_adjustment_response(recovery, remaining)
+            return _quantity_adjustment_response(
+                recovery,
+                remaining,
+                stocked_prompt_options(recovery.arrangement_type),
+            )
 
     if not ai_verdict.get("is_possible"):
         remaining = get_remaining_generations(db, current_user.id)
@@ -468,6 +505,7 @@ async def check_and_generate(
             message=ai_verdict.get("feedback") or "We cannot fulfill this arrangement with our current stock.",
             generated_image_url=None,
             remaining_generations=remaining,
+            prompt_suggestions=stocked_prompt_options(arrangement_type),
         )
 
     # ── Step 5: Look up material records using product IDs ────────────────
@@ -480,7 +518,14 @@ async def check_and_generate(
     )
     if refreshed_adjustment:
         remaining = get_remaining_generations(db, current_user.id)
-        return _quantity_adjustment_response(refreshed_adjustment, remaining)
+        return _quantity_adjustment_response(
+            refreshed_adjustment,
+            remaining,
+            stocked_prompt_options(
+                refreshed_adjustment.arrangement_type,
+                refreshed_inventory,
+            ),
+        )
 
     complete_recipe, missing_presentation = resolve_complete_recipe(
         arrangement_type,
@@ -495,7 +540,11 @@ async def check_and_generate(
             "A complete arrangement needs at least one safely available flower.",
         )
         remaining = get_remaining_generations(db, current_user.id)
-        return _quantity_adjustment_response(recovery, remaining)
+        return _quantity_adjustment_response(
+            recovery,
+            remaining,
+            stocked_prompt_options(recovery.arrangement_type, refreshed_inventory),
+        )
     if missing_presentation:
         recovery = build_presentation_recovery(
             arrangement_type,
@@ -505,7 +554,11 @@ async def check_and_generate(
             include_finishing_suggestions=True,
         )
         remaining = get_remaining_generations(db, current_user.id)
-        return _quantity_adjustment_response(recovery, remaining)
+        return _quantity_adjustment_response(
+            recovery,
+            remaining,
+            stocked_prompt_options(recovery.arrangement_type, refreshed_inventory),
+        )
 
     price_breakdown = _calculate_complete_recipe_price(complete_recipe, refreshed_inventory)
     final_image_prompt = build_complete_image_prompt(
@@ -547,7 +600,6 @@ async def check_and_generate(
     )
     db.add(arrangement)
     db.commit()
-    db.refresh(arrangement)
 
     # ── Step 7: Generate image via Pollinations (Using Optimized Prompt) ──
     style_visual_rule = _arrangement_visual_rule(arrangement_type)

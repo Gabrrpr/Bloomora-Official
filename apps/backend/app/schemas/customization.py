@@ -98,4 +98,5 @@ class CustomizationResponse(BaseModel):
     remaining_generations: int = 5
     unavailable_items: List[UnavailableItem] = Field(default_factory=list)
     validation: Optional[QuantityValidation] = None
+    prompt_suggestions: List[str] = Field(default_factory=list)
 

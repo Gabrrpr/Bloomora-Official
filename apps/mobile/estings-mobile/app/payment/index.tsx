@@ -335,6 +335,15 @@ export default function PaymentScreen() {
             label={isProcessing ? 'Opening PayMongo…' : getPaymentButtonLabel(method)}
             onPress={handleContinue}
           />
+          <Pressable
+            accessibilityHint="Opens the policy in the Help Center"
+            accessibilityRole="link"
+            onPress={() => router.push('/help-center/ordering' as Href)}
+            style={({ pressed }) => [styles.policyLink, pressed && styles.pressed]}>
+            <Text style={styles.policyLinkText}>
+              By proceeding with payment, you acknowledge and agree to our Ordering &amp; Fulfillment Policy.
+            </Text>
+          </Pressable>
         </View>
       </ScrollView>
     </View>
@@ -563,6 +572,8 @@ const styles = StyleSheet.create({
   receiptPreview: { borderRadius: theme.radius.sm, height: 110, width: '100%' },
   primaryButton: { alignItems: 'center', backgroundColor: theme.colors.primary, borderRadius: theme.radius.sm, justifyContent: 'center', marginTop: 10, minHeight: 56 },
   primaryButtonText: { color: '#FFFFFF', fontFamily: Fonts.sansBold, fontSize: 16 },
+  policyLink: { alignItems: 'center', justifyContent: 'center', minHeight: 36, paddingHorizontal: 12 },
+  policyLinkText: { color: theme.colors.primary, fontFamily: Fonts.sansMedium, fontSize: 13, textAlign: 'center', textDecorationLine: 'underline' },
   buttonDisabled: { backgroundColor: '#9BCB9F' },
   secondaryButton: { alignItems: 'center', backgroundColor: '#BFECC4', borderRadius: theme.radius.sm, justifyContent: 'center', minHeight: 56, width: '100%' },
   secondaryButtonText: { color: theme.colors.primary, fontFamily: Fonts.sansBold, fontSize: 16 },

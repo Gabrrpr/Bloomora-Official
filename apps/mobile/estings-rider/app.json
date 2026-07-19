@@ -48,7 +48,8 @@
           "faceIDPermission": "Allow Esting's Rider App to use Face ID for faster rider account access."
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "@maplibre/maplibre-react-native"
     ],
     "runtimeVersion": {
       "policy": "appVersion"

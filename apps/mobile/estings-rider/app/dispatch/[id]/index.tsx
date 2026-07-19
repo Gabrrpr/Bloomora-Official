@@ -13,7 +13,15 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Fonts, theme } from '@/constants/theme';
-import { getMyDeliveryOrders, type RiderDelivery, type RiderDeliveryOrder } from '@/services/deliveries-api';
+import { PlannedRouteMap } from '@/components/rider/planned-route-map';
+import {
+  confirmDispatchPickup,
+  getDispatchRoute,
+  getMyDeliveryOrders,
+  type RiderDelivery,
+  type RiderDeliveryOrder,
+  type RoutePreview,
+} from '@/services/deliveries-api';
 
 export default function DispatchConfirmScreen() {
   const insets = useSafeAreaInsets();
@@ -24,15 +32,18 @@ export default function DispatchConfirmScreen() {
   const [checkedIds, setCheckedIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [routePreview, setRoutePreview] = useState<RoutePreview | null>(null);
+  const [isStarting, setIsStarting] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
 
-    getMyDeliveryOrders()
-      .then((orders) => {
+    Promise.all([getMyDeliveryOrders(), getDispatchRoute(dispatchId).catch(() => null)])
+      .then(([orders, preview]) => {
         if (!isMounted) return;
         const found = orders.find((o) => o.id === dispatchId) ?? null;
         setDispatchOrder(found);
+        setRoutePreview(preview);
         setError(null);
       })
       .catch((err) => {
@@ -71,14 +82,24 @@ export default function DispatchConfirmScreen() {
     [checkedIds, deliveries.length],
   );
 
-  function handleStartRoute() {
+  async function handleStartRoute() {
     if (!allChecked) return;
-    // Navigate to the first delivery in this dispatch
-    const firstDelivery = deliveries[0];
-    if (firstDelivery) {
-      router.replace({ pathname: '/delivery/[id]', params: { id: firstDelivery.id, dispatchId: dispatchOrder?.id ?? '', stopIndex: '0', stopTotal: String(deliveries.length) } });
-    } else {
-      router.back();
+    if (!dispatchOrder) return;
+    setIsStarting(true);
+    setError(null);
+    try {
+      const updated = await confirmDispatchPickup(dispatchOrder.id);
+      setDispatchOrder(updated);
+      const firstDelivery = updated.deliveries[0];
+      if (firstDelivery) {
+        router.replace({ pathname: '/delivery/[id]', params: { id: firstDelivery.id, dispatchId: updated.id, stopIndex: '0', stopTotal: String(updated.deliveries.length) } });
+      } else {
+        router.back();
+      }
+    } catch (startError) {
+      setError(startError instanceof Error ? startError.message : 'Unable to start this dispatch.');
+    } finally {
+      setIsStarting(false);
     }
   }
 
@@ -121,6 +142,8 @@ export default function DispatchConfirmScreen() {
             ) : null}
           </View>
         ) : null}
+
+        {routePreview ? <PlannedRouteMap preview={routePreview} /> : null}
 
         {/* Progress indicator */}
         {deliveries.length > 0 ? (
@@ -217,16 +240,16 @@ export default function DispatchConfirmScreen() {
         ) : null}
         <Pressable
           accessibilityRole="button"
-          disabled={!allChecked}
+          disabled={!allChecked || isStarting}
           style={({ pressed }) => [
             styles.startButton,
-            !allChecked && styles.startButtonDisabled,
-            pressed && allChecked && styles.pressed,
+            (!allChecked || isStarting) && styles.startButtonDisabled,
+            pressed && allChecked && !isStarting && styles.pressed,
           ]}
-          onPress={handleStartRoute}>
+          onPress={() => void handleStartRoute()}>
           <Feather color={theme.colors.white} name="navigation" size={18} />
           <Text style={styles.startButtonText}>
-            {allChecked ? 'Start Delivery Route' : `Confirm all ${deliveries.length} items first`}
+            {isStarting ? 'Starting route…' : allChecked ? 'Confirm pickup & start route' : `Confirm all ${deliveries.length} items first`}
           </Text>
         </Pressable>
       </View>
