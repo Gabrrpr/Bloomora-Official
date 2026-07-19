@@ -9,6 +9,7 @@ import httpx
 from app.api.v1.routes.deliveries import (
     DELIVERY_SCHEMA_COLUMNS,
     DELIVERY_SCHEMA_TABLES,
+    _create_rider_assignment_notifications,
     _delivery_schema_status,
     _serialize_assignable_order,
     _sync_delivery_order_status,
@@ -88,6 +89,19 @@ class DeliveryEligibilityTests(unittest.TestCase):
 
 
 class DeliveryWorkflowTests(unittest.TestCase):
+    def test_delivery_rows_are_flushed_before_assignment_notifications(self):
+        events = []
+        db = SimpleNamespace(flush=lambda: events.append("flush"))
+        deliveries = [SimpleNamespace(id="delivery-1"), SimpleNamespace(id="delivery-2")]
+
+        with patch(
+            "app.api.v1.routes.deliveries._create_rider_assignment_notification",
+            side_effect=lambda _db, delivery: events.append(f"notify:{delivery.id}"),
+        ):
+            _create_rider_assignment_notifications(db, deliveries)
+
+        self.assertEqual(events, ["flush", "notify:delivery-1", "notify:delivery-2"])
+
     def test_dispatch_status_is_derived_from_stops(self):
         delivery_order = DeliveryOrder(
             id=uuid.uuid4(),

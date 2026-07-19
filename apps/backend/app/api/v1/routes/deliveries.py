@@ -541,6 +541,14 @@ def _create_rider_assignment_notification(db: Session, delivery: Delivery) -> No
     db.add(notification)
 
 
+def _create_rider_assignment_notifications(db: Session, deliveries: list[Delivery]) -> None:
+    # Sessions disable autoflush, so persist the delivery rows before notifications
+    # reference their IDs through notifications.delivery_id.
+    db.flush()
+    for delivery in deliveries:
+        _create_rider_assignment_notification(db, delivery)
+
+
 def _create_customer_delivery_notification_once(db: Session, delivery: Delivery, status: DeliveryStatusEnum) -> None:
     if not delivery.order or status not in {DeliveryStatusEnum.out_for_delivery, DeliveryStatusEnum.delivered}:
         return
@@ -1157,6 +1165,7 @@ def create_delivery_order(
     db.add(delivery_order)
 
     now = datetime.now(timezone.utc)
+    deliveries_to_notify = []
     for stop_sequence, order in enumerate(orders, start=1):
         delivery = Delivery(
             id=uuid.uuid4(),
@@ -1170,9 +1179,10 @@ def create_delivery_order(
             stop_sequence=stop_sequence,
         )
         db.add(delivery)
-        _create_rider_assignment_notification(db, delivery)
+        deliveries_to_notify.append(delivery)
         order.status = OrderStatusEnum.ready_for_pickup
 
+    _create_rider_assignment_notifications(db, deliveries_to_notify)
     db.flush()
     try:
         db.commit()
