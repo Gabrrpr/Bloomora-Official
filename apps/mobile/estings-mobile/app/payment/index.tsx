@@ -32,6 +32,8 @@ import { createPayMongoCheckout, getPayMongoPaymentStatus } from '@/services/pay
 
 type PaymentMethod = 'paymongo' | 'gcash' | 'bank';
 
+const PAYMONGO_BUTTON_LOCK_MS = 2 * 60 * 1000;
+
 const paymentLogos = {
   gcash: gcashLogo,
   mastercard: mastercardLogo,
@@ -54,9 +56,12 @@ export default function PaymentScreen() {
   const [receiptUri, setReceiptUri] = useState<string | null>(null);
   const [isSummaryExpanded, setIsSummaryExpanded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [paymongoLockedUntil, setPaymongoLockedUntil] = useState(0);
+  const [paymongoLockRemainingSeconds, setPaymongoLockRemainingSeconds] = useState(0);
   const [remainingSeconds, setRemainingSeconds] = useState(0);
   const allowLeaveRef = useRef(false);
   const isCheckingLeaveRef = useRef(false);
+  const paymongoLockedUntilRef = useRef(0);
 
   useEffect(() => {
     const removeBefore = navigation.addListener('beforeRemove', (event) => {
@@ -137,6 +142,29 @@ export default function PaymentScreen() {
     return () => clearInterval(timer);
   }, [order?.expiresAt]);
 
+  useEffect(() => {
+    const updatePaymentLock = () => {
+      setPaymongoLockRemainingSeconds(
+        paymongoLockedUntil > 0
+          ? Math.max(0, Math.ceil((paymongoLockedUntil - Date.now()) / 1000))
+          : 0,
+      );
+    };
+
+    updatePaymentLock();
+    if (paymongoLockedUntil <= Date.now()) return;
+
+    const timer = setInterval(updatePaymentLock, 1000);
+    const unlockTimer = setTimeout(
+      () => setPaymongoLockedUntil(0),
+      Math.max(0, paymongoLockedUntil - Date.now()),
+    );
+    return () => {
+      clearInterval(timer);
+      clearTimeout(unlockTimer);
+    };
+  }, [paymongoLockedUntil]);
+
   const items = order?.items ?? [];
   const totalCents = Math.round((order?.totalAmount ?? 0) * 100);
   const deliveryFeeCents = Math.round((order?.deliveryFee ?? 0) * 100);
@@ -159,7 +187,7 @@ export default function PaymentScreen() {
   };
 
   const handleContinue = async () => {
-    if (!method || isProcessing) return;
+    if (!method || isProcessing || Date.now() < paymongoLockedUntilRef.current) return;
     if (method !== 'paymongo') {
       Alert.alert(
         'Manual payment unavailable',
@@ -180,6 +208,9 @@ export default function PaymentScreen() {
       Alert.alert('Payment expired', 'This order is no longer available for payment. Return to your cart and check out again.');
       return;
     }
+    const lockedUntil = Date.now() + PAYMONGO_BUTTON_LOCK_MS;
+    paymongoLockedUntilRef.current = lockedUntil;
+    setPaymongoLockedUntil(lockedUntil);
     setIsProcessing(true);
     try {
       const webOrigin = Platform.OS === 'web' ? globalThis.location.origin : null;
@@ -331,8 +362,8 @@ export default function PaymentScreen() {
             />
           </PaymentOption>
           <PrimaryButton
-            disabled={remainingSeconds <= 0 || !method || (method !== 'paymongo' && !receiptUri)}
-            label={isProcessing ? 'Opening PayMongo…' : getPaymentButtonLabel(method)}
+            disabled={isProcessing || paymongoLockRemainingSeconds > 0 || remainingSeconds <= 0 || !method || (method !== 'paymongo' && !receiptUri)}
+            label={paymongoLockRemainingSeconds > 0 ? 'Waiting for Payment...' : isProcessing ? 'Opening PayMongo…' : getPaymentButtonLabel(method)}
             onPress={handleContinue}
           />
           <Pressable

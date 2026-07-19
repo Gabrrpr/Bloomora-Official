@@ -375,7 +375,9 @@ def _selected_shipping_method(db: Session, payload: dict) -> ShippingMethod | No
         or ""
     ).strip().lower()
     if raw_code == "standard":
-        raw_code = "lbc"
+        # Standard is the virtual in-house delivery option. It intentionally has
+        # no ShippingMethod row; external courier codes are stored in that table.
+        return None
     if raw_id:
         try:
             method_uuid = uuid.UUID(raw_id)

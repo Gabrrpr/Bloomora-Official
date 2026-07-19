@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from app.api.v1.routes.orders import (
     _paymongo_payment_method_types,
     _resolve_checkout_branch,
+    _selected_shipping_method,
     serialize_order,
 )
 
@@ -29,6 +30,14 @@ class CheckoutOrderHelperTests(unittest.TestCase):
         )
 
         self.assertEqual(branch, "Manila")
+
+    def test_standard_delivery_is_not_rewritten_to_an_external_courier(self):
+        method = _selected_shipping_method(
+            None,
+            {"delivery_provider": "standard"},
+        )
+
+        self.assertIsNone(method)
 
     def test_selected_branch_is_kept_for_lalamove(self):
         branch = _resolve_checkout_branch(
