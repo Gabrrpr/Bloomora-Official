@@ -104,6 +104,7 @@ export type CustomerStreetPhoto = {
   distanceM?: number | null;
   id: string;
   imageUrl: string;
+  imageUrls?: string[];
 };
 
 export type CustomerOrderItem = {
@@ -116,6 +117,26 @@ export type CustomerOrderItem = {
   quantity: number;
   totalAmount: number;
 };
+
+export function getUniqueOrderItems(items: CustomerOrderItem[]) {
+  const uniqueItems = new Map<string, CustomerOrderItem>();
+
+  for (const item of items) {
+    const key = item.productId || `${item.productName.trim().toLowerCase()}|${item.imageUrl || ''}`;
+    const existing = uniqueItems.get(key);
+    if (existing) {
+      uniqueItems.set(key, {
+        ...existing,
+        quantity: existing.quantity + item.quantity,
+        totalAmount: existing.totalAmount + item.totalAmount,
+      });
+    } else {
+      uniqueItems.set(key, item);
+    }
+  }
+
+  return [...uniqueItems.values()];
+}
 
 type BackendOrder = {
   branch?: string | null;

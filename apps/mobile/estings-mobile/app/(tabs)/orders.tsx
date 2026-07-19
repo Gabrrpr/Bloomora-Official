@@ -9,7 +9,7 @@ import { AppPageHeader } from '@/components/app-page-header';
 import { formatPhp } from '@/constants/shop';
 import { Fonts, theme } from '@/constants/theme';
 import { getAuthSession, type AuthSession } from '@/services/auth-session';
-import { getMyOrders, type CustomerOrder } from '@/services/orders-api';
+import { getMyOrders, getUniqueOrderItems, type CustomerOrder } from '@/services/orders-api';
 import { getPayMongoPaymentStatus } from '@/services/payments-api';
 
 type OrderTab = 'all' | 'to_pay' | 'processing' | 'shipped' | 'completed' | 'failed';
@@ -149,6 +149,7 @@ export default function OrdersScreen() {
 function OrderCard({ order }: { order: CustomerOrder }) {
   const status = getCustomerStatus(order);
   const pending = getOrderTab(order) === 'to_pay';
+  const uniqueItems = getUniqueOrderItems(order.items);
   return (
     <Pressable onPress={() => router.push(`/order-details/${order.id}` as Href)} style={({ pressed }) => [styles.card, pressed && styles.pressed]}>
       <View style={styles.cardHeader}>
@@ -165,7 +166,7 @@ function OrderCard({ order }: { order: CustomerOrder }) {
         <ScheduleValue icon={Clock3} label="Delivery Time" value={formatScheduleTime(order.scheduledAt)} />
       </View>
 
-      {order.items.slice(0, 2).map((item) => (
+      {uniqueItems.map((item) => (
         <View key={item.id} style={styles.productRow}>
           {item.imageUrl ? <Image contentFit="cover" source={{ uri: item.imageUrl }} style={styles.productImage} /> : <View style={styles.imageFallback}><ImageOff color={theme.colors.primary} size={23} /></View>}
           <View style={styles.productCopy}>
@@ -175,8 +176,6 @@ function OrderCard({ order }: { order: CustomerOrder }) {
           <View style={styles.productPriceColumn}><Text style={styles.quantity}>x{item.quantity}</Text><Text style={styles.productPrice}>{formatPhp(Math.round(item.totalAmount * 100))}</Text></View>
         </View>
       ))}
-      {order.items.length > 2 ? <Text style={styles.moreItems}>+ {order.items.length - 2} more items</Text> : null}
-
       <View style={styles.dashedDivider} />
       <View style={styles.totalRow}><Text style={styles.totalLabel}>Total</Text><Text style={styles.totalValue}>{formatPhp(Math.round(order.totalAmount * 100))}</Text></View>
       {pending ? (

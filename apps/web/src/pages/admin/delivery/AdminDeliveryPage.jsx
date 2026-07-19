@@ -2080,9 +2080,9 @@ export default function AdminDeliveryPage() {
                     markers={routePreview?.markers || []}
                   />
                 )}
-                {routePreview?.availabilityReason && (
+                {publicRouteAvailabilityReason(routePreview?.availabilityReason) && (
                   <p className="mt-2 text-sm text-amber-700">
-                    {routePreview.availabilityReason}
+                    {publicRouteAvailabilityReason(routePreview.availabilityReason)}
                   </p>
                 )}
                 {routePreview?.available && (
@@ -2344,9 +2344,9 @@ export default function AdminDeliveryPage() {
                 markers={routeModal.preview?.markers || []}
                 height={520}
               />
-              {routeModal.preview?.availabilityReason && (
+              {publicRouteAvailabilityReason(routeModal.preview?.availabilityReason) && (
                 <p className="mt-3 text-sm text-amber-700">
-                  {routeModal.preview.availabilityReason}
+                  {publicRouteAvailabilityReason(routeModal.preview.availabilityReason)}
                 </p>
               )}
             </>
@@ -2355,4 +2355,8 @@ export default function AdminDeliveryPage() {
       )}
     </div>
   );
+}
+
+function publicRouteAvailabilityReason(reason) {
+  return reason === "Route service is not configured. Pins remain available." ? null : reason;
 }

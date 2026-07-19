@@ -15,6 +15,7 @@ import {
   getCustomerDeliveryRoute,
   getCustomerStreetPhotos,
   getOrderById,
+  getUniqueOrderItems,
   type CustomerOrder,
   type CustomerRoutePreview,
   type CustomerStreetPhoto,
@@ -44,6 +45,7 @@ export default function OrderDetailsScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const [order, setOrder] = useState<CustomerOrder | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isMapInteracting, setIsMapInteracting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [now, setNow] = useState(Date.now());
 
@@ -114,7 +116,7 @@ export default function OrderDetailsScreen() {
         onBack={goBackFromOrderDetails}
         title="Order Details"
       />
-      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 32 }]} scrollEnabled={!isMapInteracting} showsVerticalScrollIndicator={false}>
         {isLoading ? (
           <View style={styles.state}><ActivityIndicator color={theme.colors.primary} /><Text style={styles.muted}>Loading order details</Text></View>
         ) : errorMessage || !order ? (
@@ -192,11 +194,11 @@ export default function OrderDetailsScreen() {
               </View>
               <DetailValue label="Address" value={order.deliveryAddress || `Pickup at ${order.branch || "Esting's"}`} />
               {order.deliveryNotes ? <DetailValue label="Delivery Notes" value={order.deliveryNotes} /> : null}
-              {order.deliveryTracking ? <DeliveryTrackingView order={order} /> : null}
+              {order.deliveryTracking ? <DeliveryTrackingView order={order} onMapInteractionChange={setIsMapInteracting} /> : null}
               <View style={styles.divider} />
 
               <Text style={styles.sectionTitle}>Order Summary</Text>
-              {(order.items ?? []).map((item) => (
+              {getUniqueOrderItems(order.items ?? []).map((item) => (
                 <View key={item.id} style={styles.productRow}>
                   {item.imageUrl ? <Image contentFit="cover" source={{ uri: item.imageUrl }} style={styles.image} /> : <View style={styles.imageFallback}><ImageOff color={theme.colors.primary} size={25} /></View>}
                   <View style={styles.productCopy}>
@@ -258,7 +260,13 @@ function SummaryRow({ emphasized = false, label, value }: { emphasized?: boolean
   return <View style={styles.summaryRow}><Text style={[styles.summaryLabel, emphasized && styles.totalText]}>{label}</Text><Text selectable style={[styles.summaryValue, emphasized && styles.totalValue]}>{value}</Text></View>;
 }
 
-function DeliveryTrackingView({ order }: { order: CustomerOrder }) {
+function DeliveryTrackingView({
+  order,
+  onMapInteractionChange,
+}: {
+  order: CustomerOrder;
+  onMapInteractionChange: (isInteracting: boolean) => void;
+}) {
   const tracking = order.deliveryTracking;
   const [routePreview, setRoutePreview] = useState<CustomerRoutePreview | null>(null);
   const [streetPhotos, setStreetPhotos] = useState<CustomerStreetPhoto[]>([]);
@@ -277,8 +285,11 @@ function DeliveryTrackingView({ order }: { order: CustomerOrder }) {
         setStreetPhotos(photos?.photos ?? []);
       });
     });
-    return () => { mounted = false; };
-  }, [tracking?.deliveryId, tracking?.mode]);
+    return () => {
+      mounted = false;
+      onMapInteractionChange(false);
+    };
+  }, [onMapInteractionChange, tracking?.deliveryId, tracking?.mode]);
 
   if (!tracking) return null;
 
@@ -327,9 +338,9 @@ function DeliveryTrackingView({ order }: { order: CustomerOrder }) {
 
       {tracking.interventionRequired ? <View style={styles.trackingWarning}><Text style={styles.trackingWarningText}>The courier reported a delivery exception. Esting&apos;s staff will review or rebook it.</Text></View> : null}
 
-      {routePreview ? <CustomerDeliveryRouteMap preview={routePreview} /> : null}
+      {routePreview ? <CustomerDeliveryRouteMap preview={routePreview} onMapInteractionChange={onMapInteractionChange} /> : null}
 
-      {tracking.mode !== 'external' ? <View style={styles.customerStreetSection}><Text style={styles.customerStreetTitle}>Nearby street photos</Text>{streetPhotos.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.customerStreetList}>{streetPhotos.map((photo) => <View key={photo.id} style={styles.customerStreetCard}><Image contentFit="cover" source={{ uri: photo.imageUrl }} style={styles.customerStreetImage} /><Text style={styles.customerStreetCaption}>{photo.capturedAt ? `Captured ${new Date(photo.capturedAt).toLocaleDateString()}` : 'Nearby KartaView imagery'}</Text></View>)}</ScrollView> : <Text style={styles.customerStreetEmpty}>No nearby street photos are available for this address.</Text>}<Text style={styles.customerStreetAttribution}>Nearby imagery © KartaView contributors · May not show the exact property.</Text></View> : null}
+      {tracking.mode !== 'external' ? <View style={styles.customerStreetSection}><Text style={styles.customerStreetTitle}>Nearby street photos</Text>{streetPhotos.length ? <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.customerStreetList}>{streetPhotos.map((photo) => <CustomerStreetPhotoCard key={photo.id} photo={photo} />)}</ScrollView> : <Text style={styles.customerStreetEmpty}>No nearby street photos are available for this address.</Text>}<Text style={styles.customerStreetAttribution}>Nearby imagery © KartaView contributors · May not show the exact property.</Text></View> : null}
 
       {tracking.proofPhotoUrl ? (
         <View style={styles.proofPanel}>
@@ -363,6 +374,40 @@ function TrackingDetail({
       <Text selectable style={styles.trackingDetailValue}>{value}</Text>
     </View>
   );
+}
+
+function CustomerStreetPhotoCard({ photo }: { photo: CustomerStreetPhoto }) {
+  const sources = getStreetPhotoSources(photo);
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const sourceUri = sources[sourceIndex];
+
+  useEffect(() => setSourceIndex(0), [photo.id]);
+
+  return (
+    <View style={styles.customerStreetCard}>
+      {sourceUri ? (
+        <Image contentFit="cover" source={{ uri: sourceUri }} style={styles.customerStreetImage} onError={() => setSourceIndex((index) => index + 1)} />
+      ) : (
+        <View style={[styles.customerStreetImage, styles.customerStreetFallback]}>
+          <ImageOff color={theme.colors.primary} size={24} />
+          <Text style={styles.customerStreetFallbackText}>Image unavailable</Text>
+        </View>
+      )}
+      <Text style={styles.customerStreetCaption}>{photo.capturedAt ? `Captured ${new Date(photo.capturedAt).toLocaleDateString()}` : 'Nearby KartaView imagery'}</Text>
+    </View>
+  );
+}
+
+function getStreetPhotoSources(photo: CustomerStreetPhoto) {
+  const sources: string[] = [];
+  for (const candidate of [...(photo.imageUrls ?? []), photo.imageUrl]) {
+    if (!candidate) continue;
+    const secureUrl = candidate.replace(/^http:\/\//, 'https://').replace('[[sizeprefix]]', 'lth');
+    const thumbnailUrl = secureUrl.replace('/wrapped_proc/', '/lth/').replace('/proc/', '/lth/');
+    if (!sources.includes(thumbnailUrl)) sources.push(thumbnailUrl);
+    if (!sources.includes(secureUrl)) sources.push(secureUrl);
+  }
+  return sources;
 }
 
 function formatVehicle(vehicle: NonNullable<CustomerOrder['deliveryTracking']>['vehicle']) {
@@ -489,6 +534,8 @@ const styles = StyleSheet.create({
   customerStreetCaption: { color: '#666666', fontFamily: Fonts.sans, fontSize: 10, lineHeight: 14, padding: 8 },
   customerStreetCard: { backgroundColor: '#F6F8F6', borderRadius: theme.radius.sm, overflow: 'hidden', width: 205 },
   customerStreetEmpty: { color: '#777777', fontFamily: Fonts.sans, fontSize: 12, lineHeight: 17 },
+  customerStreetFallback: { alignItems: 'center', backgroundColor: '#EDF1ED', gap: 5, justifyContent: 'center' },
+  customerStreetFallbackText: { color: '#777777', fontFamily: Fonts.sansMedium, fontSize: 11 },
   customerStreetImage: { height: 120, width: '100%' },
   customerStreetList: { gap: 10 },
   customerStreetSection: { gap: 9 },

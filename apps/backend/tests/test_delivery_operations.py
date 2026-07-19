@@ -12,10 +12,11 @@ from app.api.v1.routes.deliveries import (
     _create_rider_assignment_notifications,
     _delivery_schema_status,
     _serialize_assignable_order,
+    _serialize_delivery_items,
     _sync_delivery_order_status,
 )
 from app.models import Delivery, DeliveryOrder, DeliveryOrderStatusEnum, DeliveryStatusEnum, Order, OrderStatusEnum
-from app.services.delivery_maps import _photo_cache, nearby_street_photos, request_route
+from app.services.delivery_maps import _photo_cache, _street_photo_urls, nearby_street_photos, request_route
 from app.services.delivery_tracking import apply_external_status, external_event_key, normalize_provider
 
 
@@ -86,6 +87,20 @@ class DeliveryEligibilityTests(unittest.TestCase):
     def test_provider_normalization_is_stable(self):
         self.assertEqual(normalize_provider("Grab Express"), "grab_express")
         self.assertEqual(normalize_provider("MOVE-IT"), "move_it")
+
+    def test_rider_delivery_items_include_each_unique_product(self):
+        bouquet_id = uuid.uuid4()
+        chocolate_id = uuid.uuid4()
+        order = SimpleNamespace(items=[
+            SimpleNamespace(id=uuid.uuid4(), product_id=bouquet_id, arrangement_id=None, quantity=1, price_at_purchase=1000, product=SimpleNamespace(name="Scarlet Promise", image_url="bouquet.jpg"), arrangement=None),
+            SimpleNamespace(id=uuid.uuid4(), product_id=chocolate_id, arrangement_id=None, quantity=1, price_at_purchase=750, product=SimpleNamespace(name="Ferrero Rocher 24pc", image_url="chocolate.jpg"), arrangement=None),
+        ])
+
+        items = _serialize_delivery_items(order)
+
+        self.assertEqual([item["name"] for item in items], ["Scarlet Promise", "Ferrero Rocher 24pc"])
+        self.assertEqual([item["imageUrl"] for item in items], ["bouquet.jpg", "chocolate.jpg"])
+        self.assertEqual([item["totalAmount"] for item in items], [1000, 750])
 
 
 class DeliveryWorkflowTests(unittest.TestCase):
@@ -188,7 +203,7 @@ class DeliveryRouteTests(unittest.TestCase):
             preview = request_route([(14.6, 120.9), (14.7, 121.0)], markers)
         self.assertFalse(preview["available"])
         self.assertEqual(preview["markers"], markers)
-        self.assertIn("not configured", preview["availabilityReason"])
+        self.assertIsNone(preview["availabilityReason"])
 
     def test_route_response_is_normalized_to_public_contract(self):
         response = SimpleNamespace(
@@ -228,6 +243,15 @@ class DeliveryRouteTests(unittest.TestCase):
             photos = nearby_street_photos(14.6, 120.9)
         self.assertFalse(photos["coverageAvailable"])
         self.assertEqual(photos["photos"], [])
+
+    def test_street_photo_urls_prefer_https_mobile_thumbnail(self):
+        urls = _street_photo_urls({
+            "fileurl": "http://storage.example/files/[[sizeprefix]]/photo.jpg",
+            "fileurlLTh": "http://storage.example/files/lth/photo.jpg",
+            "fileurlProc": "https://storage.example/files/proc/photo.jpg",
+        })
+        self.assertEqual(urls[0], "https://storage.example/files/lth/photo.jpg")
+        self.assertNotIn("http://storage.example/files/lth/photo.jpg", urls)
 
     def test_street_photo_timeout_returns_empty_coverage(self):
         with patch(

@@ -36,6 +36,7 @@ export type RiderDelivery = {
   imageUrl?: string | null;
   inTransitAt?: string | null;
   itemCount?: number | null;
+  items?: RiderDeliveryItem[];
   itemSummary: string;
   orderId: string;
   orderNumber: string;
@@ -53,6 +54,17 @@ export type RiderDelivery = {
   scheduledAt?: string | null;
   status: RiderDeliveryStatus;
   stopSequence?: number;
+};
+
+export type RiderDeliveryItem = {
+  arrangementId?: string | null;
+  id: string;
+  imageUrl?: string | null;
+  name: string;
+  productId?: string | null;
+  quantity: number;
+  totalAmount?: number;
+  unitPrice?: number;
 };
 
 export type RouteMarker = {
@@ -83,6 +95,7 @@ export type StreetPhoto = {
   distanceM?: number | null;
   id: string;
   imageUrl: string;
+  imageUrls?: string[];
   sequenceId?: string | number | null;
 };
 
