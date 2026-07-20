@@ -14,7 +14,31 @@ STREET_PHOTO_ATTRIBUTION = "Street-level imagery © KartaView contributors"
 _photo_cache: TTLCache = TTLCache(maxsize=500, ttl=60 * 60)
 
 
-def unavailable_route(markers: list[dict], reason: str) -> dict:
+def _street_photo_urls(row: dict) -> list[str]:
+    """Prefer mobile-sized KartaView images and normalize legacy cleartext URLs."""
+    candidates = [
+        row.get("fileurlLTh"),
+        row.get("fileUrlLTh"),
+        row.get("fileurlTh"),
+        row.get("fileUrlTh"),
+        row.get("fileurlProc"),
+        row.get("fileUrlProc"),
+        row.get("fileurl"),
+        row.get("fileUrl"),
+    ]
+    urls = []
+    for candidate in candidates:
+        if not isinstance(candidate, str) or not candidate.strip():
+            continue
+        url = candidate.strip().replace("[[sizeprefix]]", "lth")
+        if url.startswith("http://"):
+            url = f"https://{url[7:]}"
+        if url.startswith("https://") and url not in urls:
+            urls.append(url)
+    return urls
+
+
+def unavailable_route(markers: list[dict], reason: str | None) -> dict:
     return {
         "available": False,
         "geometry": None,
@@ -33,7 +57,9 @@ def request_route(coordinates: Iterable[tuple[float, float]], markers: list[dict
     if len(points) < 2:
         return unavailable_route(markers, "At least two verified map pins are required.")
     if not settings.OPENROUTESERVICE_API_KEY:
-        return unavailable_route(markers, "Route service is not configured. Pins remain available.")
+        # Missing server configuration is an internal deployment detail and
+        # should not be surfaced in customer- or rider-facing applications.
+        return unavailable_route(markers, None)
 
     try:
         response = httpx.post(
@@ -81,13 +107,14 @@ def nearby_street_photos(lat: float, lng: float, radius_m: int = 500, limit: int
         rows = payload.get("result", {}).get("data") or payload.get("data") or []
         photos = []
         for row in rows[:limit]:
-            image_url = row.get("fileurlProc") or row.get("fileUrlProc") or row.get("fileurlLTh") or row.get("fileUrl")
-            if not image_url:
+            image_urls = _street_photo_urls(row)
+            if not image_urls:
                 continue
             photos.append({
-                "id": str(row.get("id") or row.get("photoId") or image_url),
-                "imageUrl": image_url,
-                "capturedAt": row.get("dateAdded") or row.get("dateProcessed"),
+                "id": str(row.get("id") or row.get("photoId") or image_urls[0]),
+                "imageUrl": image_urls[0],
+                "imageUrls": image_urls,
+                "capturedAt": row.get("shotDate") or row.get("dateAdded") or row.get("dateProcessed"),
                 "sequenceId": row.get("sequenceId"),
                 "distanceM": row.get("distance"),
             })

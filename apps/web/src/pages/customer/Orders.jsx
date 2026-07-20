@@ -283,13 +283,17 @@ function OrderCard({ order, onNavigate, idx = 0 }) {
             {tracking.intervention_required && <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">The courier reported an exception. Esting&apos;s staff will review or rebook this delivery.</div>}
             {trackingLoading && <p className="py-8 text-center text-sm text-gray-500">Loading planned route…</p>}
             {trackingError && <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">{trackingError}</p>}
-            {routePreview && <><DeliveryRouteMap geometry={routePreview.geometry} markers={routePreview.markers || []} height={360} /><p className="text-xs text-gray-500">{routePreview.available ? `${((routePreview.distanceM || 0) / 1000).toFixed(1)} km · about ${Math.round((routePreview.durationS || 0) / 60)} minutes planned driving time` : routePreview.availabilityReason}</p></>}
+            {routePreview && <><DeliveryRouteMap geometry={routePreview.geometry} markers={routePreview.markers || []} height={360} />{routePreview.available ? <p className="text-xs text-gray-500">{`${((routePreview.distanceM || 0) / 1000).toFixed(1)} km · about ${Math.round((routePreview.durationS || 0) / 60)} minutes planned driving time`}</p> : publicRouteAvailabilityReason(routePreview.availabilityReason) ? <p className="text-xs text-gray-500">{publicRouteAvailabilityReason(routePreview.availabilityReason)}</p> : null}</>}
             {tracking.mode !== "external" && <div><p className="mb-2 text-sm font-semibold text-gray-700">Nearby street photos</p>{streetPhotos.length ? <div className="flex gap-3 overflow-x-auto pb-2">{streetPhotos.map((photo) => <figure key={photo.id} className="w-56 flex-none overflow-hidden rounded-lg border"><img src={photo.imageUrl} alt="Nearby KartaView street imagery" className="h-32 w-full object-cover" /><figcaption className="p-2 text-[10px] text-gray-500">{photo.capturedAt ? `Captured ${new Date(photo.capturedAt).toLocaleDateString()}` : "Nearby KartaView imagery"}</figcaption></figure>)}</div> : <p className="text-xs text-gray-500">No street photos are available near this destination.</p>}<p className="mt-2 text-[10px] text-gray-400">Nearby imagery © KartaView contributors · May not show the exact property.</p></div>}
           </div>
         )}
       </div>
     </div>
   )
+}
+
+function publicRouteAvailabilityReason(reason) {
+  return reason === "Route service is not configured. Pins remain available." ? null : reason;
 }
 
 export default function Orders({ onNavigate, embedded = false }) {

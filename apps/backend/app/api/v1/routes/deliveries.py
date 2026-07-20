@@ -235,6 +235,69 @@ def _serialize_items(order: Order) -> tuple[str, list[str]]:
     return ", ".join(item_names), handling_notes
 
 
+def _serialize_delivery_items(order: Order) -> list[dict]:
+    """Return every unique line item needed by the rider-facing order summary."""
+    serialized: dict[str, dict] = {}
+
+    for index, item in enumerate(order.items or []):
+        product = item.product
+        arrangement = item.arrangement
+        item_id = getattr(item, "id", None)
+        product_id = getattr(item, "product_id", None)
+        arrangement_id = getattr(item, "arrangement_id", None)
+        unique_key = str(product_id or arrangement_id or item_id or index)
+        name = (
+            product.name
+            if product
+            else arrangement.name
+            if arrangement and arrangement.name
+            else "Flower order"
+        )
+        image_url = getattr(product, "image_url", None) if product else None
+        if not image_url and arrangement:
+            image_url = (
+                getattr(arrangement, "image_url", None)
+                or getattr(arrangement, "generated_image_url", None)
+            )
+
+        if unique_key in serialized:
+            serialized[unique_key]["quantity"] += int(getattr(item, "quantity", None) or 1)
+            serialized[unique_key]["totalAmount"] += float(
+                (getattr(item, "price_at_purchase", None) or 0)
+                * (getattr(item, "quantity", None) or 1)
+            )
+            continue
+
+        quantity = int(getattr(item, "quantity", None) or 1)
+        unit_price = float(getattr(item, "price_at_purchase", None) or 0)
+
+        serialized[unique_key] = {
+            "id": str(item_id or unique_key),
+            "productId": str(product_id) if product_id else None,
+            "arrangementId": str(arrangement_id) if arrangement_id else None,
+            "name": name,
+            "imageUrl": image_url,
+            "quantity": quantity,
+            "unitPrice": unit_price,
+            "totalAmount": unit_price * quantity,
+        }
+
+    if serialized:
+        return list(serialized.values())
+
+    fallback = getattr(order, "product", None)
+    return [{
+        "id": str(getattr(order, "id", "legacy-item")),
+        "productId": str(getattr(fallback, "id", "")) or None,
+        "arrangementId": None,
+        "name": getattr(fallback, "name", None) or "Flower order",
+        "imageUrl": getattr(fallback, "image_url", None),
+        "quantity": int(getattr(order, "quantity", None) or 1),
+        "unitPrice": float(getattr(order, "total_amount", None) or 0),
+        "totalAmount": float(getattr(order, "total_amount", None) or 0),
+    }]
+
+
 def _delivery_item_count(order: Order) -> int:
     if getattr(order, "items", None):
         return sum(1 for item in order.items or [] if item)
@@ -289,6 +352,7 @@ def serialize_delivery(delivery: Delivery) -> dict:
         raise HTTPException(status_code=500, detail="Delivery has no linked order.")
 
     item_summary, handling_notes = _serialize_items(order)
+    items = _serialize_delivery_items(order)
     recipient_name = _recipient_name(order)
 
     return {
@@ -303,7 +367,8 @@ def serialize_delivery(delivery: Delivery) -> dict:
         "destinationPinVerified": order.delivery_lat is not None and order.delivery_lng is not None,
         "branch": order.branch_name,
         "imageUrl": _serialize_delivery_image(order),
-        "itemCount": _delivery_item_count(order),
+        "itemCount": len(items),
+        "items": items,
         "itemSummary": item_summary,
         "handlingNotes": handling_notes,
         "deliveryNotes": order.delivery_notes,

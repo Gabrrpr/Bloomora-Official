@@ -25,6 +25,7 @@ export function DeliveryStopCard({
   const completed = delivery.status === 'delivered';
   const progress = getProgress(delivery.status);
   const destination = getDestination(delivery);
+  const items = getDisplayItems(delivery);
 
   return (
     <Pressable
@@ -38,8 +39,14 @@ export function DeliveryStopCard({
       ]}
       onPress={onPress}>
       <View style={styles.headerRow}>
-        <StatusTag status={completed ? 'delivered' : delivery.status} dark={dark} />
-        <Feather color={dark ? theme.colors.white : theme.colors.textMuted} name="chevron-right" size={compact ? 18 : 20} />
+        <View style={styles.orderBlock}>
+          <Text style={[styles.orderLabel, dark && styles.mutedOnDark]}>ORDER</Text>
+          <Text selectable style={[styles.orderId, dark && styles.textOnDark]}>{delivery.orderNumber}</Text>
+        </View>
+        <View style={styles.headerActions}>
+          <StatusTag status={completed ? 'delivered' : delivery.status} dark={dark} />
+          <Feather color={dark ? theme.colors.white : theme.colors.textMuted} name="chevron-right" size={compact ? 18 : 20} />
+        </View>
       </View>
 
       <View style={styles.routeRow}>
@@ -61,11 +68,9 @@ export function DeliveryStopCard({
       ) : null}
 
       <View style={[styles.metaRow, compact && styles.metaRowCompact]}>
-        <Text selectable numberOfLines={1} style={[styles.orderId, dark && styles.mutedOnDark]}>
-          Order ID #{delivery.orderNumber}
-        </Text>
         <View style={styles.recipientBlock}>
-          <Text numberOfLines={1} style={[styles.recipientName, dark && styles.mutedOnDark]}>
+          <Text style={[styles.recipientLabel, dark && styles.mutedOnDark]}>Recipient</Text>
+          <Text numberOfLines={1} style={[styles.recipientName, dark && styles.textOnDark]}>
             {delivery.recipientName}
           </Text>
           {!compact ? (
@@ -74,21 +79,24 @@ export function DeliveryStopCard({
             </Text>
           ) : null}
         </View>
+        {!compact ? <Text numberOfLines={2} style={[styles.itemSummary, dark && styles.mutedOnDark]}>{items.map((item) => item.name).join(' · ')}</Text> : null}
       </View>
 
       {!compact ? (
         <View style={styles.bottomRow}>
           <View style={styles.productRow}>
-            <View style={[styles.productBox, dark && styles.productBoxDark]}>
-              {delivery.imageUrl ? (
-                <Image contentFit="cover" source={{ uri: delivery.imageUrl }} style={styles.productImage} />
-              ) : (
-                <Text style={styles.productText}>product image</Text>
-              )}
-            </View>
-            {getExtraItemCount(delivery) > 0 ? (
+            {items.slice(0, 3).map((item) => (
+              <View key={item.id} style={[styles.productBox, dark && styles.productBoxDark]}>
+                {item.imageUrl ? (
+                  <Image contentFit="cover" source={{ uri: item.imageUrl }} style={styles.productImage} />
+                ) : (
+                  <Feather color={theme.colors.textMuted} name="image" size={22} />
+                )}
+              </View>
+            ))}
+            {items.length > 3 ? (
               <View style={[styles.moreBox, dark && styles.productBoxDark]}>
-                <Text style={styles.moreText}>+{getExtraItemCount(delivery)}</Text>
+                <Text style={styles.moreText}>+{items.length - 3}</Text>
               </View>
             ) : null}
           </View>
@@ -153,15 +161,9 @@ function getProgress(status: RiderDeliveryStatus) {
   return progress[status];
 }
 
-function getExtraItemCount(delivery: RiderDelivery) {
-  const itemCount = Number(delivery.itemCount ?? deriveItemCount(delivery.itemSummary));
-  if (!Number.isFinite(itemCount) || itemCount <= 1) return 0;
-  return Math.min(9, itemCount - 1);
-}
-
-function deriveItemCount(summary: string) {
-  if (!summary.trim()) return 1;
-  return summary.split(',').filter((part) => part.trim()).length || 1;
+function getDisplayItems(delivery: RiderDelivery) {
+  if (delivery.items?.length) return delivery.items;
+  return [{ id: `${delivery.id}-item`, imageUrl: delivery.imageUrl, name: delivery.itemSummary || 'Flower order', quantity: 1 }];
 }
 
 const styles = StyleSheet.create({
@@ -203,8 +205,10 @@ const styles = StyleSheet.create({
   headerRow: {
     alignItems: 'center',
     flexDirection: 'row',
+    gap: theme.spacing.sm,
     justifyContent: 'space-between',
   },
+  headerActions: { alignItems: 'center', flexDirection: 'row', flexShrink: 0, gap: theme.spacing.sm },
   iconButton: {
     alignItems: 'center',
     height: 34,
@@ -238,12 +242,13 @@ const styles = StyleSheet.create({
     color: '#A7A7A7',
   },
   orderId: {
-    color: theme.colors.textMuted,
-    flex: 1,
-    fontFamily: Fonts.sansMedium,
-    fontSize: 15,
-    lineHeight: 20,
+    color: theme.colors.text,
+    fontFamily: Fonts.sansBold,
+    fontSize: 16,
+    lineHeight: 21,
   },
+  orderBlock: { flex: 1, gap: 1, minWidth: 0 },
+  orderLabel: { color: theme.colors.textMuted, fontFamily: Fonts.sansBold, fontSize: 9, letterSpacing: 0.8, lineHeight: 12 },
   origin: {
     color: theme.colors.text,
     flex: 1,
@@ -303,28 +308,27 @@ const styles = StyleSheet.create({
     borderColor: '#686868',
   },
   recipientBlock: {
-    alignItems: 'flex-end',
     flex: 1,
   },
+  recipientLabel: { color: theme.colors.textMuted, fontFamily: Fonts.sansMedium, fontSize: 10, lineHeight: 14 },
   recipientName: {
     color: theme.colors.textMuted,
     fontFamily: Fonts.sansMedium,
     fontSize: 15,
     lineHeight: 20,
-    textAlign: 'right',
   },
   recipientPhone: {
     color: theme.colors.textMuted,
     fontFamily: Fonts.sans,
     fontSize: 15,
     lineHeight: 20,
-    textAlign: 'right',
   },
   routeRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.sm,
   },
+  itemSummary: { color: theme.colors.textMuted, flex: 1, fontFamily: Fonts.sansMedium, fontSize: 11, lineHeight: 16, textAlign: 'right' },
   routeArrow: {
     alignItems: 'center',
     justifyContent: 'center',

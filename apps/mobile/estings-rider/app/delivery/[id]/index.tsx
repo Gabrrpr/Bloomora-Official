@@ -79,6 +79,8 @@ export default function DeliveryDetailsScreen() {
   const [cameraStage, setCameraStage] = useState<CameraStage>('preview');
   const [capturedPhotoUri, setCapturedPhotoUri] = useState<string | null>(null);
   const [isIssueOpen, setIsIssueOpen] = useState(false);
+  const [isMapInteracting, setIsMapInteracting] = useState(false);
+  const [isProofOpen, setIsProofOpen] = useState(false);
   const [issueNote, setIssueNote] = useState(issuePresets[0]);
   const [proofNote, setProofNote] = useState('Received by recipient');
   const [permission, requestPermission] = useCameraPermissions();
@@ -341,6 +343,7 @@ export default function DeliveryDetailsScreen() {
     <View style={styles.screen}>
       <ScrollView
         contentInsetAdjustmentBehavior="automatic"
+        scrollEnabled={!isMapInteracting}
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[
           styles.content,
@@ -354,8 +357,9 @@ export default function DeliveryDetailsScreen() {
             <Feather color={theme.colors.text} name="chevron-left" size={24} />
           </Pressable>
           <View style={styles.headerCopy}>
-            <Text selectable numberOfLines={1} style={styles.headerTitle}>
-              {delivery ? `Order ID #${delivery.orderNumber}` : 'Order Details'}
+            <Text style={styles.headerEyebrow}>ORDER DETAILS</Text>
+            <Text selectable adjustsFontSizeToFit minimumFontScale={0.72} numberOfLines={1} style={styles.headerTitle}>
+              {delivery?.orderNumber ?? 'Loading order'}
             </Text>
             <Text style={styles.headerSubtitle}>
               {hasStopContext && stopIndex !== null && stopTotal !== null ? `Stop ${stopIndex + 1} of ${stopTotal}` : 'Delivery task'}
@@ -391,7 +395,7 @@ export default function DeliveryDetailsScreen() {
 
             <RouteStrip address={delivery.address} estimatedArrival={delivery.estimatedArrival} recipientName={delivery.recipientName} />
 
-            {routePreview ? <PlannedRouteMap preview={routePreview} /> : null}
+            {routePreview ? <PlannedRouteMap preview={routePreview} onMapInteractionChange={setIsMapInteracting} /> : null}
 
             {delivery.status === 'issue_reported' ? (
               <View style={styles.issueWaitingCard}>
@@ -406,7 +410,7 @@ export default function DeliveryDetailsScreen() {
             <SectionCard title="Nearby street photos">
               {streetPhotos.length ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.streetPhotoList}>
-                  {streetPhotos.map((photo) => <View key={photo.id} style={styles.streetPhotoCard}><Image contentFit="cover" source={{ uri: photo.imageUrl }} style={styles.streetPhotoImage} /><Text numberOfLines={1} style={styles.streetPhotoCaption}>{photo.capturedAt ? `Captured ${new Date(photo.capturedAt).toLocaleDateString()}` : 'Nearby KartaView imagery'}</Text></View>)}
+                  {streetPhotos.map((photo) => <StreetPhotoCard key={photo.id} photo={photo} />)}
                 </ScrollView>
               ) : <Text style={styles.streetPhotoEmpty}>No street photos are available near this destination. Use the verified pin and address instead.</Text>}
               <Text style={styles.streetPhotoAttribution}>Nearby imagery © KartaView contributors · Photos may not show the exact property.</Text>
@@ -464,20 +468,28 @@ export default function DeliveryDetailsScreen() {
             </SectionCard>
 
             <SectionCard title="Order">
-              <View style={styles.itemRow}>
-                <View style={styles.productImageWrap}>
-                  {delivery.imageUrl ? (
-                    <Image contentFit="cover" source={{ uri: delivery.imageUrl }} style={styles.productImageAsset} />
-                  ) : (
-                    <Text style={styles.productPlaceholder}>product image</Text>
-                  )}
-                </View>
-                <View style={styles.itemCopy}>
-                  <Text style={styles.itemName}>{delivery.itemSummary}</Text>
-                  <Text style={styles.itemMeta}>{delivery.branch ? `${delivery.branch} branch` : 'Assigned branch'}</Text>
-                  {delivery.scheduledAt ? <Text style={styles.itemMeta}>Scheduled {formatDisplayDate(delivery.scheduledAt)}</Text> : null}
-                </View>
+              <View style={styles.orderItemList}>
+                {getOrderItems(delivery).map((item) => (
+                  <View key={item.id} style={styles.itemRow}>
+                    <View style={styles.productImageWrap}>
+                      {item.imageUrl ? (
+                        <Image contentFit="cover" source={{ uri: item.imageUrl }} style={styles.productImageAsset} />
+                      ) : (
+                        <Feather color={theme.colors.textMuted} name="image" size={25} />
+                      )}
+                    </View>
+                    <View style={styles.itemCopy}>
+                      <Text style={styles.itemName}>{item.name}</Text>
+                      <Text style={styles.itemMeta}>{delivery.branch ? `${delivery.branch} branch` : 'Assigned branch'}</Text>
+                    </View>
+                    <View style={styles.itemEnd}>
+                      <View style={styles.quantityBadge}><Text style={styles.quantityText}>×{item.quantity}</Text></View>
+                      <Text style={styles.itemPrice}>{formatPhp(item.totalAmount)}</Text>
+                    </View>
+                  </View>
+                ))}
               </View>
+              {delivery.scheduledAt ? <Text style={styles.itemMeta}>Scheduled {formatDisplayDate(delivery.scheduledAt)}</Text> : null}
 
               {delivery.handlingNotes.length > 0 ? (
                 <View style={styles.noteList}>
@@ -505,9 +517,18 @@ export default function DeliveryDetailsScreen() {
             {delivery.proofPhotoUrl ? (
               <SectionCard title="Proof">
                 <View style={styles.proofPreview}>
-                  <Image contentFit="cover" source={{ uri: delivery.proofPhotoUrl }} style={styles.proofImage} />
+                  <Pressable
+                    accessibilityHint="Opens the proof photo in a full-screen viewer"
+                    accessibilityLabel="Expand proof photo"
+                    accessibilityRole="button"
+                    style={({ pressed }) => [styles.proofImageButton, pressed && styles.pressed]}
+                    onPress={() => setIsProofOpen(true)}>
+                    <Image contentFit="cover" source={{ uri: delivery.proofPhotoUrl }} style={styles.proofImage} />
+                    <View style={styles.proofExpandIcon}><Feather color={theme.colors.white} name="maximize-2" size={14} /></View>
+                  </Pressable>
                   <View style={styles.proofCopy}>
                     <Text style={styles.proofText}>Proof photo added</Text>
+                    <Text style={styles.proofTapHint}>Tap photo to expand</Text>
                     {delivery.proofNote ? <Text style={styles.proofNote}>{delivery.proofNote}</Text> : null}
                     {delivery.deliveredAt ? <Text style={styles.proofNote}>Completed {formatDisplayDateTime(delivery.deliveredAt)}</Text> : null}
                   </View>
@@ -556,6 +577,22 @@ export default function DeliveryDetailsScreen() {
           </View>
         )}
       </View>
+
+      <Modal animationType="fade" visible={isProofOpen} onRequestClose={() => setIsProofOpen(false)}>
+        <View style={[styles.proofViewer, { paddingTop: insets.top + theme.spacing.md, paddingBottom: insets.bottom + theme.spacing.md }]}>
+          <View style={styles.proofViewerHeader}>
+            <View style={styles.proofViewerCopy}>
+              <Text style={styles.proofViewerTitle}>Proof of delivery</Text>
+              <Text numberOfLines={1} style={styles.proofViewerSubtitle}>{delivery?.orderNumber}</Text>
+            </View>
+            <Pressable accessibilityLabel="Close proof photo" accessibilityRole="button" style={styles.proofViewerClose} onPress={() => setIsProofOpen(false)}>
+              <Feather color={theme.colors.white} name="x" size={24} />
+            </Pressable>
+          </View>
+          {delivery?.proofPhotoUrl ? <Image contentFit="contain" source={{ uri: delivery.proofPhotoUrl }} style={styles.proofViewerImage} /> : null}
+          {delivery?.proofNote ? <Text style={styles.proofViewerNote}>{delivery.proofNote}</Text> : null}
+        </View>
+      </Modal>
 
       <Modal animationType="slide" visible={isCameraOpen} onRequestClose={handleCloseCamera}>
         <View style={styles.cameraScreen}>
@@ -739,6 +776,52 @@ function SystemAction({
   );
 }
 
+function StreetPhotoCard({ photo }: { photo: StreetPhoto }) {
+  const sources = getStreetPhotoSources(photo);
+  const [sourceIndex, setSourceIndex] = useState(0);
+  const sourceUri = sources[sourceIndex];
+
+  useEffect(() => setSourceIndex(0), [photo.id]);
+
+  return (
+    <View style={styles.streetPhotoCard}>
+      {sourceUri ? (
+        <Image
+          contentFit="cover"
+          source={{ uri: sourceUri }}
+          style={styles.streetPhotoImage}
+          onError={() => setSourceIndex((index) => index + 1)}
+        />
+      ) : (
+        <View style={[styles.streetPhotoImage, styles.streetPhotoFallback]}>
+          <Feather color={theme.colors.textMuted} name="image" size={24} />
+          <Text style={styles.streetPhotoFallbackText}>Image unavailable</Text>
+        </View>
+      )}
+      <Text numberOfLines={1} style={styles.streetPhotoCaption}>
+        {photo.capturedAt ? `Captured ${new Date(photo.capturedAt).toLocaleDateString()}` : 'Nearby KartaView imagery'}
+      </Text>
+    </View>
+  );
+}
+
+function getStreetPhotoSources(photo: StreetPhoto) {
+  const sources: string[] = [];
+  for (const candidate of [...(photo.imageUrls ?? []), photo.imageUrl]) {
+    if (!candidate) continue;
+    const secureUrl = candidate.replace(/^http:\/\//, 'https://').replace('[[sizeprefix]]', 'lth');
+    const thumbnailUrl = secureUrl.replace('/wrapped_proc/', '/lth/').replace('/proc/', '/lth/');
+    if (!sources.includes(thumbnailUrl)) sources.push(thumbnailUrl);
+    if (!sources.includes(secureUrl)) sources.push(secureUrl);
+  }
+  return sources;
+}
+
+function getOrderItems(delivery: RiderDelivery) {
+  if (delivery.items?.length) return delivery.items;
+  return [{ id: `${delivery.id}-item`, imageUrl: delivery.imageUrl, name: delivery.itemSummary || 'Flower order', quantity: 1 }];
+}
+
 function getProgressIndex(status: RiderDeliveryStatus) {
   if (status === 'delivered') return 4;
   if (status === 'arrived' || status === 'issue_reported' || status === 'failed') return 3;
@@ -799,6 +882,11 @@ function formatDisplayDateTime(value: string) {
     minute: '2-digit',
     month: 'short',
   }).format(date);
+}
+
+function formatPhp(value?: number) {
+  if (value === undefined || value === null || !Number.isFinite(value)) return 'Price unavailable';
+  return new Intl.NumberFormat('en-PH', { currency: 'PHP', style: 'currency' }).format(value);
 }
 
 const styles = StyleSheet.create({
@@ -1056,8 +1144,10 @@ const styles = StyleSheet.create({
   },
   headerCopy: {
     flex: 1,
-    gap: 2,
+    gap: 1,
+    minWidth: 0,
   },
+  headerEyebrow: { color: theme.colors.primaryDark, fontFamily: Fonts.sansBold, fontSize: 9, letterSpacing: 0.9, lineHeight: 12 },
   headerSubtitle: {
     color: theme.colors.textMuted,
     fontFamily: Fonts.sansSemiBold,
@@ -1239,6 +1329,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.md,
   },
+  itemEnd: { alignItems: 'flex-end', gap: 6 },
+  itemPrice: { color: theme.colors.text, fontFamily: Fonts.sansBold, fontSize: 13, lineHeight: 18 },
+  orderItemList: { gap: theme.spacing.md },
+  quantityBadge: { alignItems: 'center', backgroundColor: theme.colors.greenSoft, borderRadius: theme.radius.pill, justifyContent: 'center', minHeight: 32, minWidth: 42, paddingHorizontal: 10 },
+  quantityText: { color: theme.colors.primaryDark, fontFamily: Fonts.sansBold, fontSize: 12, lineHeight: 16 },
   modalBackdrop: {
     backgroundColor: 'rgba(0, 0, 0, 0.28)',
     flex: 1,
@@ -1369,6 +1464,8 @@ const styles = StyleSheet.create({
     height: 72,
     width: 72,
   },
+  proofImageButton: { borderRadius: 14, height: 72, overflow: 'hidden', position: 'relative', width: 72 },
+  proofExpandIcon: { alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.58)', borderRadius: theme.radius.pill, bottom: 5, height: 25, justifyContent: 'center', position: 'absolute', right: 5, width: 25 },
   proofForm: {
     backgroundColor: '#111111',
     gap: theme.spacing.sm,
@@ -1394,6 +1491,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 17,
   },
+  proofTapHint: { color: theme.colors.primary, fontFamily: Fonts.sansSemiBold, fontSize: 11, lineHeight: 15 },
   proofPreview: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -1405,6 +1503,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 19,
   },
+  proofViewer: { backgroundColor: '#050505', flex: 1 },
+  proofViewerClose: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: theme.radius.pill, height: 44, justifyContent: 'center', width: 44 },
+  proofViewerCopy: { flex: 1, gap: 2 },
+  proofViewerHeader: { alignItems: 'center', flexDirection: 'row', gap: theme.spacing.md, paddingHorizontal: theme.spacing.lg },
+  proofViewerImage: { flex: 1, marginVertical: theme.spacing.md, width: '100%' },
+  proofViewerNote: { color: 'rgba(255,255,255,0.82)', fontFamily: Fonts.sans, fontSize: 13, lineHeight: 19, paddingHorizontal: theme.spacing.lg, textAlign: 'center' },
+  proofViewerSubtitle: { color: 'rgba(255,255,255,0.62)', fontFamily: Fonts.sansMedium, fontSize: 12, lineHeight: 16 },
+  proofViewerTitle: { color: theme.colors.white, fontFamily: Fonts.sansBold, fontSize: 18, lineHeight: 23 },
   issueWaitingCard: {
     alignItems: 'flex-start',
     backgroundColor: theme.colors.redSoft,
@@ -1423,6 +1529,8 @@ const styles = StyleSheet.create({
   streetPhotoCard: { backgroundColor: theme.colors.surfaceAlt, borderRadius: 12, overflow: 'hidden', width: 210 },
   streetPhotoEmpty: { color: theme.colors.textMuted, fontFamily: Fonts.sans, fontSize: 13, lineHeight: 19 },
   streetPhotoImage: { height: 125, width: '100%' },
+  streetPhotoFallback: { alignItems: 'center', backgroundColor: theme.colors.surfaceAlt, gap: 5, justifyContent: 'center' },
+  streetPhotoFallbackText: { color: theme.colors.textMuted, fontFamily: Fonts.sansMedium, fontSize: 11 },
   streetPhotoList: { gap: theme.spacing.sm },
   screen: {
     backgroundColor: theme.colors.surfaceAlt,
