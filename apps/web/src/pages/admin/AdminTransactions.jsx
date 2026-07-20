@@ -8,9 +8,21 @@ const DATE_OPTIONS   = ["All Time", "Today", "Yesterday", "This Week", "This Mon
 const TYPE_OPTIONS   = ["Type: All", "Sale", "Refund", "Void"]
 const METHOD_OPTIONS = ["Method: All", "Cash", "GCash", "Maya", "Credit Card", "Bank Transfer"]
 const STATUS_OPTIONS = ["Status: All", "Paid", "Pending", "Failed", "Refunded"]
+const BRANCH_OPTIONS = ["All Branches", "Manila", "Pampanga"]
 const ITEMS_PER_PAGE = ADMIN_PAGE_SIZE
 
 const SEARCH_SAMPLES = ["John Dela Cruz", "Maria Santos", "Carlo Ramos", "Angela Cruz"]
+
+function manilaDateKey(value) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+  const part = type => parts.find(entry => entry.type === type)?.value || "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
 
 const PRINT_STATUS_META = [
   { key: "Paid",     label: "Paid",     cls: "s-paid",     dot: "#16a34a" },
@@ -130,6 +142,9 @@ export default function AdminTransactions() {
   const [typeFilter, setTypeFilter]     = useState("Type: All")
   const [methodFilter, setMethodFilter] = useState("Method: All")
   const [statusFilter, setStatusFilter] = useState("Status: All")
+  const [branchFilter, setBranchFilter] = useState("All Branches")
+  const [summaryStats, setSummaryStats] = useState({ revenueToday: 0, ordersToday: 0, loaded: false })
+  const [transactionTotal, setTransactionTotal] = useState(0)
   
   // 🚀 New Pagination State
   const [currentPage, setCurrentPage]   = useState(1)
@@ -150,9 +165,30 @@ export default function AdminTransactions() {
   const fetchTransactions = async () => {
     setLoading(true);
     try {
-      const res = await api.getAdminOrders();
+      const selectedBranch = branchFilter === "All Branches" ? undefined : branchFilter;
+      const dashboardBranch = selectedBranch ? selectedBranch.toLowerCase() : "all";
+      const [ordersResult, summaryResult] = await Promise.allSettled([
+        api.getAdminOrders({ branch: selectedBranch, limit: 100, paginated: true }),
+        api.get(`/dashboard/summary?branch=${encodeURIComponent(dashboardBranch)}`),
+      ]);
+
+      if (ordersResult.status !== "fulfilled") throw ordersResult.reason;
+
+      const res = ordersResult.value;
       let rawData = res.data || res;
-      let rawList = Array.isArray(rawData) ? rawData : (rawData.orders || rawData.transactions || rawData.data || []);
+      let rawList = Array.isArray(rawData) ? rawData : (rawData.items || rawData.orders || rawData.transactions || rawData.data || []);
+      setTransactionTotal(Number(rawData.total ?? rawList.length));
+
+      if (summaryResult.status === "fulfilled") {
+        setSummaryStats({
+          revenueToday: Number(summaryResult.value?.revenue_today || 0),
+          ordersToday: Number(summaryResult.value?.orders_today || 0),
+          loaded: true,
+        });
+      } else {
+        console.error("Failed to load transaction summary", summaryResult.reason);
+        setSummaryStats({ revenueToday: 0, ordersToday: 0, loaded: false });
+      }
 
       const normalizedList = rawList.map(t => {
         const rawProvider = String(t.payment_provider || t.provider || t.transaction?.provider || "").toLowerCase();
@@ -203,6 +239,7 @@ export default function AdminTransactions() {
           payment_method: cleanMethod,
           total_price: price,
           payment_status: cleanStatus,
+          branch: t.branch || t.branch_name || "Unknown",
           created_at: t.created_at || t.date || t.created || new Date().toISOString()
         };
       });
@@ -216,12 +253,12 @@ export default function AdminTransactions() {
     }
   }
 
-  useEffect(() => { fetchTransactions() }, []);
+  useEffect(() => { fetchTransactions() }, [branchFilter]);
 
   // 🚀 Reset pagination to page 1 whenever any filter changes!
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, dateFilter, typeFilter, methodFilter, statusFilter]);
+  }, [search, dateFilter, typeFilter, methodFilter, statusFilter, branchFilter]);
 
   useEffect(() => {
     if (loading) { setEntered(false); return }
@@ -244,35 +281,46 @@ export default function AdminTransactions() {
     return () => clearTimeout(timer)
   }, [search]);
 
-  const stats = useMemo(() => {
-    const todayStr = new Date().toISOString().slice(0, 10);
+  const loadedPageStats = useMemo(() => {
+    const todayStr = manilaDateKey(new Date());
     const todayTransactions = transactions.filter(t => 
-      t.created_at.startsWith(todayStr) && 
+      manilaDateKey(t.created_at) === todayStr &&
       (t.payment_status.toLowerCase() === "paid" || t.payment_status.toLowerCase() === "success")
     );
     const todayRevenue = todayTransactions.reduce((sum, t) => sum + t.total_price, 0);
     
     return {
+      revenueValue: todayRevenue,
       revenue: `₱${todayRevenue.toLocaleString()}`,
       count: todayTransactions.length,
       totalCount: transactions.length
     }
   }, [transactions]);
 
+  const selectedBranchLabel = branchFilter === "All Branches" ? "All Branches" : branchFilter;
+  const stats = useMemo(() => {
+    const revenueToday = summaryStats.loaded ? summaryStats.revenueToday : loadedPageStats.revenueValue;
+    return {
+      revenue: `\u20B1${revenueToday.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+      count: summaryStats.loaded ? summaryStats.ordersToday : loadedPageStats.count,
+      totalCount: transactionTotal,
+    };
+  }, [summaryStats, transactionTotal, loadedPageStats]);
+
   const STAT_CARDS = [
-    { label: "Total Revenue Today", sub: "All successful sales",  value: stats.revenue, note: "Live data", green: true  },
-    { label: "Net Sales Today",     sub: "After refunds & voids", value: stats.revenue, note: "Live data", blue: true   },
-    { label: "Total Transactions",  sub: "All time history",      value: stats.totalCount, note: "Overall volume", purple: true },
+    { label: "Total Revenue Today", sub: "Paid transactions only", value: stats.revenue, note: selectedBranchLabel, green: true  },
+    { label: "Net Sales Today", sub: "Excludes refunds and unpaid sales", value: stats.revenue, note: selectedBranchLabel, blue: true },
+    { label: "Total Transactions", sub: "All time history", value: stats.totalCount, note: selectedBranchLabel, purple: true },
   ]
 
-  const COLS = ["Transaction ID", "Customer", "Reference", "Method", "Total", "Status", "Date & Time", "Action"]
+  const COLS = ["Transaction ID", "Customer", "Reference", "Branch", "Method", "Total", "Status", "Date & Time", "Action"]
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const today = new Date();
     const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
-    const todayStr = today.toISOString().slice(0, 10);
-    const yesterdayStr = yesterday.toISOString().slice(0, 10);
+    const todayStr = manilaDateKey(today);
+    const yesterdayStr = manilaDateKey(yesterday);
 
     return transactions.filter(t => {
       const matchSearch = !q || t.id.toLowerCase().includes(q) || t.payment_reference.toLowerCase().includes(q) || t.customer_name.toLowerCase().includes(q);
@@ -281,7 +329,7 @@ export default function AdminTransactions() {
       const matchMethod = methodFilter === "Method: All" || t.payment_method.includes(cleanFilterMethod);
       
       let matchDate = true;
-      const tDateStr = t.created_at.slice(0, 10);
+      const tDateStr = manilaDateKey(t.created_at);
       
       if (dateFilter === "Today") matchDate = tDateStr === todayStr;
       if (dateFilter === "Yesterday") matchDate = tDateStr === yesterdayStr;
@@ -293,9 +341,10 @@ export default function AdminTransactions() {
         matchDate = tDateStr.slice(0, 7) === todayStr.slice(0, 7);
       }
 
-      return matchSearch && matchStatus && matchMethod && matchDate;
+      const matchBranch = branchFilter === "All Branches" || String(t.branch || "").toLowerCase() === branchFilter.toLowerCase();
+      return matchSearch && matchStatus && matchMethod && matchDate && matchBranch;
     });
-  }, [transactions, search, statusFilter, methodFilter, dateFilter]);
+  }, [transactions, search, statusFilter, methodFilter, dateFilter, branchFilter]);
 
   // 🚀 Paginate the filtered data
   const paginatedData = useMemo(() => {
@@ -346,6 +395,7 @@ export default function AdminTransactions() {
 
   const printScope = [
     dateFilter !== "All Time" ? `Period: ${dateFilter}` : "All Time",
+    `Branch: ${selectedBranchLabel}`,
     methodFilter !== "Method: All" ? `Method: ${methodFilter}` : "All Methods",
     statusFilter !== "Status: All" ? `Status: ${statusFilter}` : "All Statuses",
     search ? `Search: "${search}"` : null,
@@ -358,6 +408,7 @@ export default function AdminTransactions() {
       t.id,
       t.is_walk_in_pos ? `${t.customer_name} (Walk-in POS)` : t.customer_name,
       t.payment_reference || "N/A",
+      t.branch,
       t.payment_method,
       t.total_price,
       t.payment_status,
@@ -553,6 +604,7 @@ export default function AdminTransactions() {
           <div className="flex items-baseline gap-3 mt-0.5">
             <span className="text-4xl font-bold" style={{ color: isDark ? "#4ade80" : DG }}>{stats.revenue}</span>
             <span className="text-sm font-semibold" style={{ color: subTxt }}>Today's Total</span>
+            <BranchBadge branch={branchFilter === "All Branches" ? "all" : branchFilter} />
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -665,6 +717,7 @@ export default function AdminTransactions() {
           {/* Toolbar */}
           <div className="p-3 sm:p-4 no-print" style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
             <div className="flex items-center gap-2 flex-wrap">
+              <SelectFilter value={branchFilter} onChange={setBranchFilter} options={BRANCH_OPTIONS} minWidth="145px" isDark={isDark} />
               <SelectFilter value={dateFilter}   onChange={setDateFilter}   options={DATE_OPTIONS}   minWidth="130px" isDark={isDark} icon={CalendarIcon} />
               <SelectFilter value={typeFilter}   onChange={setTypeFilter}   options={TYPE_OPTIONS}   minWidth="120px" isDark={isDark} />
               <SelectFilter value={methodFilter} onChange={setMethodFilter} options={METHOD_OPTIONS} minWidth="140px" isDark={isDark} />
@@ -686,7 +739,7 @@ export default function AdminTransactions() {
 
           {/* Table */}
           <div className="overflow-x-auto">
-            <table className="w-full" style={{ minWidth: "820px" }}>
+            <table className="w-full" style={{ minWidth: "940px" }}>
               <thead style={{ borderBottom: `1px solid ${toolbarBdr}`, backgroundColor: toolbarBg }}>
                 <tr>
                   {COLS.map(h => (
@@ -698,7 +751,7 @@ export default function AdminTransactions() {
               <tbody style={{ borderTop: `1px solid ${toolbarBdr}` }}>
                 {loading ? (
                   <tr>
-                    <td colSpan={8} className="px-5 py-12 text-center text-sm" style={{ color: subTxt }}>
+                    <td colSpan={9} className="px-5 py-12 text-center text-sm" style={{ color: subTxt }}>
                       Loading transactions...
                     </td>
                   </tr>
@@ -720,6 +773,7 @@ export default function AdminTransactions() {
                       <td className="px-4 py-3 text-sm font-mono" style={{ color: isDark ? "#94a3b8" : "#4b5563" }}>
                         {t.payment_reference || <span className="italic opacity-50">None</span>}
                       </td>
+                      <td className="px-4 py-3"><BranchBadge branch={t.branch} /></td>
                       <td className="px-4 py-3 text-sm font-medium" style={{ color: subTxt }}>{t.payment_method}</td>
                       <td className="px-4 py-3 text-sm font-bold" style={{ color: isDark ? "#4ade80" : DG }}>₱{(+t.total_price).toLocaleString()}</td>
                       <td className="px-4 py-3">
@@ -733,7 +787,7 @@ export default function AdminTransactions() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={8} className="px-5 py-12 text-center text-sm" style={{ color: subTxt }}>
+                    <td colSpan={9} className="px-5 py-12 text-center text-sm" style={{ color: subTxt }}>
                       No transactions found.
                     </td>
                   </tr>
@@ -866,7 +920,10 @@ export default function AdminTransactions() {
              <div className="flex items-center justify-between px-6 py-4" style={{ borderBottom: `1px solid ${isDark ? "#374151" : "#e5e7eb"}` }}>
                <div>
                  <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: isDark ? "#94a3b8" : "#9ca3af" }}>Payment Details</p>
-                 <p className="text-sm font-bold font-mono" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>#{selectedTransaction.id.slice(0, 8)}</p>
+                 <div className="flex items-center gap-2">
+                   <p className="text-sm font-bold font-mono" style={{ color: isDark ? "#f1f5f9" : "#111827" }}>#{selectedTransaction.id.slice(0, 8)}</p>
+                   <BranchBadge branch={selectedTransaction.branch} />
+                 </div>
                </div>
                <button
                  onClick={closeTransactionDetail}
