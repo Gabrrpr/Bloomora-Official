@@ -1,57 +1,55 @@
-"""ensure stock receipt logs
+"""repair stock receipt log columns on legacy databases
 
-Revision ID: a7b8c9d0e1f3
-Revises: z6a7b8c9d0e1
+Revision ID: b8c9d0e1f4a5
+Revises: a7b8c9d0e1f3
+
+The preceding migration creates ``stock_logs`` when it is absent, but
+``CREATE TABLE IF NOT EXISTS`` does not add columns to an older table that
+already exists. Add every receipt column independently so this migration is
+safe for both legacy and clean databases.
 """
 
 from alembic import op
 
 
-revision = "a7b8c9d0e1f3"
-down_revision = "z6a7b8c9d0e1"
+revision = "b8c9d0e1f4a5"
+down_revision = "a7b8c9d0e1f3"
 branch_labels = None
 depends_on = None
 
 
 def upgrade():
-    # Some deployed databases already have this legacy table. Keep the
-    # migration safe for both existing installations and clean deployments.
-    op.execute("""
-        CREATE TABLE IF NOT EXISTS stock_logs (
-            id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-            product_id UUID NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-            qty_change INTEGER NOT NULL,
-            purchasing_price NUMERIC(12, 2) NOT NULL DEFAULT 0,
-            date_of_issuance DATE NOT NULL,
-            branch VARCHAR(50) NOT NULL,
-            notes TEXT NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-        )
-    """)
-    # CREATE TABLE IF NOT EXISTS is a no-op for legacy installations. Repair
-    # their existing table before indexing columns that may not exist yet.
-    op.execute("""
+    op.execute(
+        """
         ALTER TABLE stock_logs
             ADD COLUMN IF NOT EXISTS purchasing_price NUMERIC(12, 2) NOT NULL DEFAULT 0,
             ADD COLUMN IF NOT EXISTS date_of_issuance DATE,
             ADD COLUMN IF NOT EXISTS branch VARCHAR(50),
             ADD COLUMN IF NOT EXISTS notes TEXT,
             ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-    """)
-    op.execute("""
+        """
+    )
+
+    # Existing log records predate branch-aware stock receipts. Keep those
+    # records usable without falsely assigning them to Manila or Pampanga.
+    op.execute(
+        """
         UPDATE stock_logs
         SET date_of_issuance = COALESCE(date_of_issuance, created_at::date, CURRENT_DATE),
             branch = COALESCE(NULLIF(BTRIM(branch), ''), 'Unspecified')
         WHERE date_of_issuance IS NULL
            OR branch IS NULL
            OR BTRIM(branch) = ''
-    """)
+        """
+    )
     op.execute("ALTER TABLE stock_logs ALTER COLUMN date_of_issuance SET NOT NULL")
     op.execute("ALTER TABLE stock_logs ALTER COLUMN branch SET NOT NULL")
     op.execute("CREATE INDEX IF NOT EXISTS ix_stock_logs_product_id ON stock_logs (product_id)")
     op.execute("CREATE INDEX IF NOT EXISTS ix_stock_logs_created_at ON stock_logs (created_at)")
+    op.execute("CREATE INDEX IF NOT EXISTS ix_stock_logs_branch ON stock_logs (branch)")
 
 
 def downgrade():
-    # Intentionally preserve receipt history and legacy installations.
+    # Preserve stock audit history and columns that may have existed before
+    # this repair migration.
     pass

@@ -78,6 +78,7 @@ class StockReceiptTests(unittest.TestCase):
         self.assertTrue(product.is_available)
         self.assertEqual(result["items"][0]["stock"], 12)
         self.assertEqual(session.executed[0]["branch"], "Manila")
+        self.assertNotIn("id", session.executed[0])
 
 
 if __name__ == "__main__":

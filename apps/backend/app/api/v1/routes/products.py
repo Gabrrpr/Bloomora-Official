@@ -1444,11 +1444,10 @@ def receive_stock_invoice(
 
             db.execute(text("""
                 INSERT INTO stock_logs
-                    (id, product_id, qty_change, purchasing_price, date_of_issuance, branch, notes, created_at)
+                    (product_id, qty_change, purchasing_price, date_of_issuance, branch, notes, created_at)
                 VALUES
-                    (:id, :pid, :qty, :price, :doi, :branch, :notes, now())
+                    (:pid, :qty, :price, :doi, :branch, :notes, now())
             """), {
-                "id": str(uuid.uuid4()),
                 "pid": str(product_id),
                 "qty": line.quantity,
                 "price": line.purchasing_price,
@@ -1488,11 +1487,10 @@ def log_stock_receipt(
 ):
     try:
         query = text("""
-            INSERT INTO stock_logs (id, product_id, qty_change, purchasing_price, date_of_issuance, branch, notes, created_at)
-            VALUES (:id, :pid, :qty, :price, :doi, :branch, :notes, now())
+            INSERT INTO stock_logs (product_id, qty_change, purchasing_price, date_of_issuance, branch, notes, created_at)
+            VALUES (:pid, :qty, :price, :doi, :branch, :notes, now())
         """)
         db.execute(query, {
-            "id": str(uuid.uuid4()),
             "pid": log.product_id,
             "qty": log.qty_change,
             "price": log.purchasing_price,
