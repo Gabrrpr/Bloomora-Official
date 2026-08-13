@@ -128,17 +128,23 @@ export default function Home({ onNavigate, isCustomizationEnabled }) {
             }}>
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 px-5 pt-5 pb-4">
-              <div className="flex items-center gap-2.5">
-                <span className="flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0 text-white shadow-sm"
-                  style={{ background: "linear-gradient(135deg, #ea580c, #f97316)" }}>
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M13 2L3 14h7l-1 8 10-12h-7l1-8z" /></svg>
-                </span>
+              <div className="flex items-end justify-between gap-3 flex-1">
                 <div>
-                  <h2 className="text-xl sm:text-2xl font-bold leading-tight" style={{ color: isDark ? "#fff7ed" : "#7c2d12" }}>
+                  <div
+                    className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider mb-2"
+                    style={{
+                      backgroundColor: isDark ? "rgba(251,146,60,0.14)" : "#ffedd5",
+                      color: isDark ? "#fdba74" : "#c2410c",
+                    }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: isDark ? "#fdba74" : "#f97316" }} />
+                    Limited-time deals
+                  </div>
+                  <h2 className="text-2xl sm:text-3xl font-extrabold leading-tight tracking-tight" style={{ color: isDark ? "#f8fafc" : "#111827" }}>
                     Flash Sale
                   </h2>
-                  <p className="text-xs mt-0.5" style={{ color: isDark ? "#fdba74" : "#c2410c" }}>
-                    Limited-time prices for your branch
+                  <p className="text-sm mt-1" style={{ color: isDark ? "#cbd5e1" : "#64748b" }}>
+                    Branch-ready deals with live markdowns and fresh availability.
                   </p>
                 </div>
               </div>

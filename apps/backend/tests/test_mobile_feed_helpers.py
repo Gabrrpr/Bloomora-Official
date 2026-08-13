@@ -13,7 +13,7 @@ from app.api.v1.routes.mobile_feed import (
     _for_you_product_bucket,
     _product_tie_breaker,
 )
-from app.services.mobile_recommendations import product_score
+from app.services.mobile_recommendations import eligible_products, product_score
 
 
 class MobileFeedHelperTests(unittest.TestCase):
@@ -137,6 +137,26 @@ class MobileFeedHelperTests(unittest.TestCase):
             ),
         ]
         self.assertTrue(all(_for_you_product_bucket(product) is None for product in products))
+
+    def test_eligible_products_excludes_raw_materials_from_every_tab(self):
+        now = datetime.now(timezone.utc)
+        raw_material = SimpleNamespace(
+            category="Flowers",
+            product_group="Raw Materials",
+            product_type="Rose stem",
+            name="Red Ecuador Rose",
+            description="Single stem for custom arrangements",
+            tags=[],
+            occasions=[],
+            is_customization_material=False,
+            branches=["manila"],
+            inventory=SimpleNamespace(stock_manila=20, stock_pampanga=0, current_stock=20),
+            limited_start_at=None,
+            limited_end_at=None,
+        )
+
+        for tab in ("explore", "new", "for-you"):
+            self.assertEqual(eligible_products([raw_material], tab, "manila", now), [])
 
     def test_explore_score_uses_popularity_rating_and_recency(self):
         now = datetime.now(timezone.utc)

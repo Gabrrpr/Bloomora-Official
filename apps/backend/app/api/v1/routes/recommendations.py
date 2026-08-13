@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 from app.core.dependencies import get_db, get_current_user
 from app.models import Product, Order, OrderItem, User, ProductStatusEnum
+from app.services.customization_inventory import is_customization_material_product
 
 # NOTE: pandas and scikit-learn are imported lazily inside the function
 # to avoid crashing the server at startup when they are not installed.
@@ -17,6 +18,15 @@ class ProductSchema(BaseModel):
     category: str
     price: float
     image_url: str = None
+
+
+def _is_home_recommendation_product(product: Product) -> bool:
+    """Keep inventory-only materials out of customer recommendations.
+
+    The explicit flag handles correctly maintained products, while the shared
+    classifier also catches older rows whose raw-material flag was not set.
+    """
+    return not is_customization_material_product(product)
 
 @router.get("/home", response_model=List[dict])
 async def get_homepage_recommendations(
@@ -45,9 +55,15 @@ async def get_homepage_recommendations(
                 Product.is_available == True,
                 Product.is_visible == True,
                 Product.status != ProductStatusEnum.inactive,
+                Product.is_customization_material.is_(False),
             )
             .all()
         )
+        active_products = [
+            product
+            for product in active_products
+            if _is_home_recommendation_product(product)
+        ]
         
         if not active_products:
             return []

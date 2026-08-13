@@ -10,6 +10,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Order, OrderItem, OrderStatusEnum, Product, Review, User, WishlistItem
+from app.services.customization_inventory import is_customization_material_product
 from app.services.product_pricing import product_price_payload
 
 
@@ -88,6 +89,8 @@ def product_matches_branch(product: Product, branch: str) -> bool:
 def eligible_products(products: list[Product], tab: str, branch: str, now: datetime) -> list[Product]:
     result = []
     for product in products:
+        if is_customization_material_product(product):
+            continue
         if not product_matches_branch(product, branch):
             continue
         if branch_stock(product, branch) <= 0:

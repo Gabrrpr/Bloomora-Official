@@ -60,16 +60,22 @@ export default function RecommendedProducts({ onPreview, wishlist = [], toggleWi
         }}
       >
         {/* Header */}
-        <div className="flex items-center gap-2.5 px-5 pt-5 pb-4">
-          <span className="flex items-center justify-center w-9 h-9 rounded-xl flex-shrink-0 text-white shadow-sm"
-            style={{ background: "linear-gradient(135deg, #0C573E, #2E8B34)" }}>
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M11.48 3.5a.56.56 0 011.04 0l2.12 5.11a.56.56 0 00.48.35l5.52.44c.5.04.7.66.32.99l-4.2 3.6a.56.56 0 00-.18.56l1.28 5.38a.56.56 0 01-.84.61l-4.72-2.88a.56.56 0 00-.59 0l-4.72 2.88a.56.56 0 01-.84-.61l1.28-5.38a.56.56 0 00-.18-.56l-4.2-3.6a.56.56 0 01.32-.99l5.52-.44a.56.56 0 00.48-.35L11.48 3.5z" /></svg>
-          </span>
+        <div className="px-5 pt-5 pb-4">
           <div>
-            <h2 className="text-xl sm:text-2xl font-bold leading-tight" style={{ color: isDark ? "#f0fdf4" : "#14532d" }}>
+            <div
+              className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider mb-2"
+              style={{
+                backgroundColor: isDark ? "rgba(74,222,128,0.12)" : "#dcfce7",
+                color: isDark ? "#86efac" : "#0C573E",
+              }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: isDark ? "#86efac" : "#2E8B34" }} />
+              Based on your taste
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold leading-tight tracking-tight" style={{ color: isDark ? "#f8fafc" : "#111827" }}>
               Recommended For You
             </h2>
-            <p className="text-xs mt-0.5" style={{ color: isDark ? "#86efac" : "#15803d" }}>
+            <p className="text-sm mt-1" style={{ color: isDark ? "#cbd5e1" : "#64748b" }}>
               Fresh picks shaped by your activity and previous orders.
             </p>
           </div>
