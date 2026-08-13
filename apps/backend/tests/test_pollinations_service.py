@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from urllib.parse import unquote
 
 import httpx
+from PIL import Image
 
 from app.services.pollinations_service import PollinationsGenerationError, PollinationsService
 
@@ -46,6 +47,15 @@ class PollinationsServiceTests(unittest.TestCase):
         self.assertTrue(compact.startswith(recipe))
         self.assertLessEqual(len(compact), 1600)
         self.assertLessEqual(len(compact.split()), 280)
+
+    def test_brand_fallback_changes_the_logo_area_without_web_assets(self):
+        source = Image.new("RGB", (768, 768), "white")
+
+        with patch("app.services.pollinations_service.Path.exists", return_value=False):
+            branded = self.service._apply_estings_brand(source)
+
+        self.assertEqual(branded.mode, "RGBA")
+        self.assertNotEqual(branded.getpixel((50, 50)), (255, 255, 255, 255))
 
 
 class PollinationsFailureTests(unittest.IsolatedAsyncioTestCase):

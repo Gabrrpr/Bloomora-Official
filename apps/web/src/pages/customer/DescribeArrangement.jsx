@@ -3,6 +3,7 @@ import { createPortal } from "react-dom"
 import { api } from "../../services/api.js"
 import { addToCart } from "../../utils/cart.js"
 import { useTheme } from "../../context/ThemeContext"
+import estingsLogo from "../../assets/EstingsLogo.svg"
 import {
   ARRANGEMENT_STEM_LIMITS,
   getArrangementStemLimit as getSharedArrangementStemLimit,
@@ -140,7 +141,6 @@ export default function DescribeArrangement({ onNavigate }) {
 
   const [typedPlaceholder, setTypedPlaceholder] = useState("")
   const [promptFocused, setPromptFocused] = useState(false)
-  const [progress, setProgress] = useState(0)
   const [factIdx, setFactIdx] = useState(0)
   const promptSuggestionsRef = useRef(null)
   const promptEditorRef = useRef(null)
@@ -237,18 +237,14 @@ export default function DescribeArrangement({ onNavigate }) {
   }, [prompt, promptFocused])
 
   useEffect(() => {
-    if (!loading) { setProgress(0); return }
-    setProgress(8)
+    if (!loading) return
     setFactIdx(Math.floor(Math.random() * FLOWER_FACTS.length))
 
-    const prog = setInterval(() => {
-      setProgress(p => (p >= 99 ? 99 : p + Math.max(0.25, (99 - p) * (0.05 + Math.random() * 0.04))))
-    }, 280)
     const facts = setInterval(() => {
       setFactIdx(i => (i + 1) % FLOWER_FACTS.length)
     }, 3600)
 
-    return () => { clearInterval(prog); clearInterval(facts) }
+    return () => clearInterval(facts)
   }, [loading])
 
   const getProductsByCategory = (category) => products.filter(p => {
@@ -449,8 +445,8 @@ export default function DescribeArrangement({ onNavigate }) {
       } else if (data.success) {
         const normalizedData = normalizeGeneratedResult(data)
 
-        setProgress(100)
         setResult(normalizedData)
+        setLoading(false)
         setCustomName(normalizedData.price_breakdown?.items?.[0]?.product_name || "AI Arrangement")
         setAiUsage(prev => prev ? { ...prev, remaining: normalizedData.remaining_generations } : prev)
       } else {
@@ -539,8 +535,8 @@ export default function DescribeArrangement({ onNavigate }) {
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
       } else if (data.success) {
         const normalizedData = normalizeGeneratedResult(data)
-        setProgress(100)
         setResult(normalizedData)
+        setLoading(false)
         setCustomName(prev => prev || normalizedData.price_breakdown?.items?.[0]?.product_name || "AI Arrangement")
         setAiUsage(prev => prev ? { ...prev, remaining: normalizedData.remaining_generations } : prev)
       } else {
@@ -1575,51 +1571,41 @@ export default function DescribeArrangement({ onNavigate }) {
 
     {loading && (
       <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-        style={{ backgroundColor: isDark ? "rgba(8,15,10,0.6)" : "rgba(12,87,62,0.35)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
-        <div className="w-full max-w-md rounded-3xl px-8 py-10 text-center shadow-2xl"
-          style={{ backgroundColor: isDark ? "#1e293b" : "#ffffff", animation: "daPop 0.3s cubic-bezier(0.34,1.56,0.64,1) both" }}>
-          <div className="w-16 h-16 mx-auto mb-5 rounded-full flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, rgba(244,114,182,0.18), rgba(46,139,52,0.14))" }}>
-            <svg className="w-10 h-10" viewBox="0 0 48 48" fill="none" style={{ animation: "daBob 2.6s ease-in-out infinite" }}>
-              <path d="M24 30V44" stroke="#2E8B34" strokeWidth="2.4" strokeLinecap="round" />
-              <path d="M24 38c-3.5 0-6.3-2-7-5.2 3.5-.6 6.3 1.2 7 5.2Z" fill="#34a853" />
-              <path d="M24 34c3-0.2 5.6-2 6.4-4.8-3.2-0.4-5.8 1.4-6.4 4.8Z" fill="#2E8B34" />
-              {[0,60,120,180,240,300].map(deg => (
-                <ellipse key={deg} cx="24" cy="12" rx="5.2" ry="8" fill="#f472b6" transform={`rotate(${deg} 24 22)`} />
+        style={{ backgroundColor: isDark ? "rgba(4,12,8,0.74)" : "rgba(8,47,32,0.48)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)" }}>
+        <div className="relative w-full max-w-lg overflow-hidden rounded-[2rem] px-6 py-7 text-center shadow-2xl sm:px-9 sm:py-9"
+          style={{ background: isDark ? "linear-gradient(145deg,#14231b,#1e293b)" : "linear-gradient(145deg,#fffefb,#f3faf3)", border: `1px solid ${isDark ? "rgba(134,239,172,.18)" : "rgba(46,139,52,.18)"}`, animation: "daPop 0.3s cubic-bezier(0.34,1.56,0.64,1) both" }}>
+          <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full opacity-30 blur-3xl" style={{ backgroundColor: accentPink }} />
+          <div className="absolute -bottom-20 -left-16 h-52 w-52 rounded-full opacity-25 blur-3xl" style={{ backgroundColor: accentG }} />
+
+          <div className="relative">
+            <img src={estingsLogo} alt="Esting's Flowers" className="mx-auto mb-5 h-14 w-14 rounded-full shadow-lg" />
+
+            <div className="da-arrangement-stage mx-auto mb-6 flex h-40 w-full max-w-sm items-end justify-center overflow-hidden rounded-3xl"
+              style={{ background: isDark ? "linear-gradient(180deg,rgba(15,23,42,.15),rgba(74,222,128,.08))" : "linear-gradient(180deg,rgba(255,255,255,.2),rgba(220,252,231,.8))", border: `1px solid ${isDark ? "rgba(134,239,172,.12)" : "#dcfce7"}` }}>
+              <div className="da-wrap" />
+              {[0, 1, 2, 3, 4, 5, 6].map(index => (
+                <span key={index} className={`da-bloom da-bloom-${index + 1}`} />
               ))}
-              {[30,90,150,210,270,330].map(deg => (
-                <ellipse key={deg} cx="24" cy="15" rx="3.2" ry="5" fill="#ec4899" opacity="0.45" transform={`rotate(${deg} 24 22)`} />
+            </div>
+
+            <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.24em]" style={{ color: accentPink }}>Your idea is blooming</p>
+            <h3 className="mb-2 text-2xl font-extrabold tracking-tight" style={{ color: headingC }}>Creating your arrangement</h3>
+            <p className="mx-auto mb-6 max-w-sm text-sm leading-relaxed" style={{ color: bodyC }}>
+              Matching your flowers, checking the recipe, and rendering the final preview. It will appear the moment it is ready.
+            </p>
+
+            <div className="mb-6 flex items-center justify-center gap-2" aria-label="Generation in progress">
+              {[0, 1, 2].map(index => (
+                <span key={index} className="da-status-dot h-2.5 w-2.5 rounded-full" style={{ backgroundColor: index === 1 ? accentPink : accentG, animationDelay: `${index * 180}ms` }} />
               ))}
-              <circle cx="24" cy="22" r="6" fill="#fbbf24" />
-              <circle cx="24" cy="22" r="3.2" fill="#f59e0b" />
-            </svg>
-          </div>
-
-          <h3 className="text-xl font-bold mb-1.5" style={{ color: accentDG }}>Creating your arrangement</h3>
-          <p className="text-sm mb-7" style={{ color: mutedC }}>Arranging every petal just for you...</p>
-
-          <div className="relative w-full mb-2" style={{ paddingTop: "12px" }}>
-            <div className="w-full h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: isDark ? "#0f172a" : "#f1ece6" }}>
-              <div className="h-full rounded-full transition-all duration-300 ease-out"
-                style={{ width: `${progress}%`, background: "linear-gradient(90deg, #f472b6, #fbbf24 55%, #2E8B34)" }} />
             </div>
-            <div className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ease-out" style={{ left: `${progress}%`, top: "17px" }}>
-              <svg className="w-[30px] h-[30px]" viewBox="0 0 24 24" fill="none" style={{ animation: "daSpin 4s linear infinite", filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.2))" }}>
-                {[0,72,144,216,288].map(deg => (
-                  <ellipse key={deg} cx="12" cy="6.5" rx="2.8" ry="4.2" fill="#f472b6" transform={`rotate(${deg} 12 12)`} />
-                ))}
-                <circle cx="12" cy="12" r="3.4" fill="#fbbf24" />
-                <circle cx="12" cy="12" r="1.6" fill="#f59e0b" />
-              </svg>
-            </div>
-          </div>
-          <p className="text-xs font-semibold mb-7" style={{ color: mutedC }}>{Math.round(progress)}%</p>
 
-          <div className="rounded-2xl px-5 py-4 text-left" style={{ backgroundColor: isDark ? "rgba(219,39,119,0.1)" : "#fdf2f8", border: `1px solid ${isDark ? "rgba(219,39,119,0.3)" : "#fbcfe8"}` }}>
-            <p className="text-xs font-bold tracking-wider uppercase mb-1.5" style={{ color: isDark ? "#f9a8d4" : "#db2777" }}>Did you know?</p>
+            <div className="rounded-2xl px-5 py-4 text-left" style={{ backgroundColor: isDark ? "rgba(219,39,119,0.1)" : "rgba(253,242,248,.85)", border: `1px solid ${isDark ? "rgba(219,39,119,0.3)" : "#fbcfe8"}` }}>
+            <p className="text-xs font-bold tracking-wider uppercase mb-1.5" style={{ color: isDark ? "#f9a8d4" : "#db2777" }}>While you wait</p>
             <p key={factIdx} className="text-sm leading-relaxed" style={{ color: isDark ? "#cbd5e1" : "#4b5563", animation: "daFade 0.5s ease both" }}>
               {FLOWER_FACTS[factIdx]}
             </p>
+            </div>
           </div>
         </div>
       </div>
@@ -1680,9 +1666,26 @@ export default function DescribeArrangement({ onNavigate }) {
       @keyframes daFade { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
       @keyframes daSpin { to { transform:rotate(360deg); } }
       @keyframes daBob  { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-3px); } }
+      @keyframes daPulse { 0%,100% { opacity:.35; transform:scale(.76); } 50% { opacity:1; transform:scale(1); } }
+      @keyframes daBloomIn { 0% { opacity:0; transform:translate(-50%,-50%) scale(.2) rotate(-18deg); } 42%,100% { opacity:1; transform:translate(-50%,-50%) scale(1) rotate(0); } }
+      @keyframes daWrapIn { 0% { opacity:0; transform:translateX(-50%) translateY(24px) scale(.84); } 35%,100% { opacity:1; transform:translateX(-50%) translateY(0) scale(1); } }
       @keyframes titleShine { to { background-position: -200% 0; } }
+      .da-arrangement-stage { position:relative; isolation:isolate; }
+      .da-wrap { position:absolute; left:50%; bottom:-28px; width:145px; height:128px; transform:translateX(-50%); background:linear-gradient(145deg,#fce7f3,#f9a8d4); clip-path:polygon(9% 0,91% 0,72% 100%,28% 100%); border-radius:18px; animation:daWrapIn 2.8s ease-in-out infinite; }
+      .da-wrap::after { content:""; position:absolute; left:12%; right:12%; top:42%; height:9px; border-radius:99px; background:#2E8B34; box-shadow:0 2px 8px rgba(12,87,62,.2); }
+      .da-bloom { position:absolute; left:50%; top:43%; width:47px; height:47px; border-radius:52% 48% 55% 45%; background:radial-gradient(circle at 48% 48%,#fef3c7 0 13%,#f472b6 15% 48%,#db2777 50% 100%); box-shadow:0 8px 16px rgba(219,39,119,.15); animation:daBloomIn 2.8s ease-in-out infinite; }
+      .da-bloom::before,.da-bloom::after { content:""; position:absolute; inset:7px; border:2px solid rgba(255,255,255,.5); border-radius:60% 40% 55% 45%; transform:rotate(50deg); }
+      .da-bloom::after { inset:14px; transform:rotate(-28deg); }
+      .da-bloom-1 { margin:-45px 0 0 -58px; animation-delay:.05s; }
+      .da-bloom-2 { margin:-53px 0 0 0; animation-delay:.15s; background:radial-gradient(circle at 48% 48%,#fef3c7 0 13%,#f9a8d4 15% 48%,#ec4899 50% 100%); }
+      .da-bloom-3 { margin:-43px 0 0 58px; animation-delay:.25s; }
+      .da-bloom-4 { margin:-8px 0 0 -80px; animation-delay:.32s; background:radial-gradient(circle at 48% 48%,#fef3c7 0 13%,#fbcfe8 15% 48%,#f472b6 50% 100%); }
+      .da-bloom-5 { margin:0 0 0 -29px; animation-delay:.4s; }
+      .da-bloom-6 { margin:-2px 0 0 28px; animation-delay:.48s; background:radial-gradient(circle at 48% 48%,#fef3c7 0 13%,#fde68a 15% 48%,#f59e0b 50% 100%); }
+      .da-bloom-7 { margin:-8px 0 0 78px; animation-delay:.56s; }
+      .da-status-dot { animation:daPulse 1.25s ease-in-out infinite; }
       .shine-text { background-image: linear-gradient(110deg, var(--shine-base) 0%, var(--shine-base) 42%, #ffffff 50%, var(--shine-base) 58%, var(--shine-base) 100%); background-size: 200% 100%; background-position: 0% 0; -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; will-change: background-position; animation: titleShine 3.5s linear infinite; }
-      @media (prefers-reduced-motion: reduce) { .shine-text { animation: none; } }
+      @media (prefers-reduced-motion: reduce) { .shine-text,.da-wrap,.da-bloom,.da-status-dot { animation: none; } }
     `}</style>
     </>
   )

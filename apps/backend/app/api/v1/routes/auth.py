@@ -462,7 +462,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     if not user.is_verified:
         raise HTTPException(status_code=400, detail="Please verify your email first.")
 
-    # 🚀 Tokens generated ONLY if all checks pass
+
     access_token = create_access_token(data={"sub": str(user.id)})
     refresh_token = create_refresh_token(data={"sub": str(user.id)})
     
@@ -486,7 +486,7 @@ def login(request: Request, payload: LoginRequest, db: Session = Depends(get_db)
     }
 
 
-# ── Refresh Token ─────────────────────────────────────────────────────────────
+
 @router.post("/refresh")
 def refresh_token(payload: RefreshTokenRequest, db: Session = Depends(get_db)):
     token_payload = decode_token(payload.refresh_token, expected_type="refresh")
@@ -519,7 +519,7 @@ def refresh_token(payload: RefreshTokenRequest, db: Session = Depends(get_db)):
     }
 
 
-# ── Google OAuth ──────────────────────────────────────────────────────────────
+
 @router.get("/google")
 async def google_login(request: Request):
     request.session["oauth_frontend_url"] = normalize_frontend_url(
@@ -539,7 +539,6 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url=f"{login_url}?error=google_auth_failed")
 
     try:
-        # 🚀 SECURITY FIX: Use Authlib wrapper to securely enforce and check state CSRF parameter
         token_data = await oauth.google.authorize_access_token(request)
         resp = await oauth.google.get("https://www.googleapis.com/oauth2/v2/userinfo", token=token_data)
         user_info = resp.json()
