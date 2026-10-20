@@ -51,6 +51,18 @@ router = APIRouter(prefix="/customization", tags=["Customization"])
 pollinations = PollinationsService()
 
 
+def _prompt_for_interpretation(payload: CustomizationRequest) -> str:
+    original = " ".join(str(payload.prompt_text or "").split())
+    revision = " ".join(str(payload.revision_instruction or "").split())
+    if not revision:
+        return original
+    return (
+        f'Original arrangement request: "{original}". '
+        f'Revision to the previously generated image: "{revision}". '
+        "Apply the revision to that existing concept and preserve every detail that the customer did not ask to change."
+    )
+
+
 def _merge_explicit_materials(
     payload: CustomizationRequest,
     requested_materials: list[RequestedMaterial],
@@ -78,15 +90,23 @@ def _merge_explicit_materials(
 def _merge_prompt_requested_materials(
     ai_materials: list[RequestedMaterial],
     prompt_materials: list[RequestedMaterial],
+    inventory_catalog,
 ) -> list[RequestedMaterial]:
-    """Keep Gemini's quantities while restoring any stocked flowers named in the prompt."""
+    """Prefer deterministic explicit matches while retaining AI-only materials."""
+    inventory_by_id = {item.product_id: item for item in inventory_catalog}
     merged: dict[str, RequestedMaterial] = {}
     for material in ai_materials:
         key = material.product_id or f"unknown:{material.product_name.casefold()}"
         merged[key] = material
     for material in prompt_materials:
         key = material.product_id or f"unknown:{material.product_name.casefold()}"
-        merged.setdefault(key, material)
+        matched = inventory_by_id.get(material.product_id or "")
+        if matched and not matched.is_flower:
+            for existing_key, existing in list(merged.items()):
+                existing_match = inventory_by_id.get(existing.product_id or "")
+                if existing_match and existing_match.material_type == matched.material_type:
+                    merged.pop(existing_key)
+        merged[key] = material if key not in merged else merged[key]
     return list(merged.values())
 
 
@@ -159,8 +179,9 @@ def _arrangement_visual_rule(arrangement_type: str) -> str:
         "white studio background, photographed from a front eye-level product view with a very slight high angle so the flower "
         "cluster is visible. Make the selected wrapping look physically realistic: layered overlapping panels around the stems, "
         "believable material thickness, natural folds and creases, slightly irregular edges, compression where it is held, and soft "
-        "contact shadows between layers. Match its real material finish, such as matte fibrous kraft paper or glossy translucent "
-        "cellophane. Never render the wrapping as a flat pasted texture, a rigid geometric cone, floating sheets, or a smooth CGI shell. "
+        "contact shadows between layers. Match the exact wrapper color and material named in the recipe; never default to brown, beige, "
+        "or kraft paper when the selected wrapper is white or another color. Never render the wrapping as a flat pasted texture, a rigid "
+        "geometric cone, floating sheets, or a smooth CGI shell. "
         "Secure it only with finishing materials explicitly listed in the recipe. The bouquet should have a rounded/full flower head "
         "cluster at the top and the wrapped stem bundle tapering downward. Keep the whole bouquet visible "
         "from flower tips to bottom wrap. Do not show a vase, acrylic box, basket, top-down flat lay, or loose flowers outside the wrapper. "
@@ -310,6 +331,8 @@ async def check_and_generate(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    interpretation_prompt = _prompt_for_interpretation(payload)
+
     # ── Step 1: Check daily AI usage limit ───────────────────────────────
     # Reviewing uses Gemini extraction but does not consume an image-generation credit.
     if not payload.review_only and has_reached_daily_limit(db, current_user.id):
@@ -378,7 +401,7 @@ async def check_and_generate(
         for item in inventory_catalog
     ]
     try:
-        ai_verdict = validate_and_optimize_prompt(payload.prompt_text, inventory_for_extraction)
+        ai_verdict = validate_and_optimize_prompt(interpretation_prompt, inventory_for_extraction)
     except PromptExtractionError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -388,7 +411,7 @@ async def check_and_generate(
 
     arrangement_type = normalize_arrangement_type(
         payload.arrangement_type or ai_verdict.get("arrangement_type"),
-        payload.prompt_text,
+        interpretation_prompt,
     )
     design_notes = ai_verdict.get("design_notes") or ""
 
@@ -409,12 +432,13 @@ async def check_and_generate(
             inventory_catalog,
         )
         prompt_requested_materials = extract_prompt_requested_materials(
-            payload.prompt_text,
+            interpretation_prompt,
             inventory_catalog,
         )
         requested_materials = _merge_prompt_requested_materials(
             requested_materials,
             prompt_requested_materials,
+            inventory_catalog,
         )
         requested_materials = _merge_explicit_materials(
             payload,
@@ -428,7 +452,7 @@ async def check_and_generate(
         payload.accessory_id,
     ))
     is_specific_request = has_explicit_selection or has_specific_material_request(
-        payload.prompt_text,
+        interpretation_prompt,
         inventory_catalog,
     )
 
@@ -456,7 +480,7 @@ async def check_and_generate(
         if quantity_adjustment:
             can_auto_apply_suggestion = (
                 not has_explicit_selection
-                and not _has_explicit_quantity_request(payload.prompt_text)
+                and not _has_explicit_quantity_request(interpretation_prompt)
                 and bool(quantity_adjustment.suggested_items)
             )
             if can_auto_apply_suggestion:
@@ -593,7 +617,8 @@ async def check_and_generate(
     # ── Step 6: Save arrangement ──────────────────────────────────────────
     arrangement = Arrangement(
         id=uuid.uuid4(),
-        prompt_text=payload.prompt_text,
+        user_id=current_user.id,
+        prompt_text=interpretation_prompt,
         flower_id=flower.id if flower else None,
         vase_id=vase.id if vase else None,
         wrapping_id=wrapping.id if wrapping else None,
@@ -656,7 +681,7 @@ async def check_and_generate(
     log_ai_usage(
         db=db,
         user_id=current_user.id,
-        prompt_text=payload.prompt_text,
+        prompt_text=interpretation_prompt,
         image_url=generated_url,
     )
 

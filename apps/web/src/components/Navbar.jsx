@@ -1146,16 +1146,21 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
           </div>
         } />
 
-        <nav className="border-b px-4 sm:px-6 lg:px-8 py-3" style={{
-          backgroundColor: isDark ? "#111827" : "white",
-          borderColor: isDark ? "#2d3748" : "#DAEDD5",
+        <nav className="border-b px-4 sm:px-6 lg:px-8 py-2.5 sm:py-3" style={{
+          backgroundColor: isDark ? "rgba(17,24,39,0.97)" : "rgba(255,255,255,0.96)",
+          borderColor: isDark ? "rgba(74,222,128,0.14)" : "rgba(46,139,52,0.14)",
+          boxShadow: isDark ? "0 10px 28px rgba(0,0,0,0.18)" : "0 8px 24px rgba(38,88,45,0.07)",
+          backdropFilter: "blur(16px)",
         }}>
-          <div className="flex items-center justify-between gap-4">
+          <div className="max-w-[1440px] mx-auto flex items-center justify-between gap-3 sm:gap-4 w-full">
 
             {/* Logo */}
-            <div className="flex items-center gap-2 flex-shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onNavigate?.("home"); }}>
-              <img src={estingsLogo} alt="Esting's Logo" className="w-9 h-9 sm:w-10 sm:h-10 object-contain"
+            <div className="group flex items-center gap-2 flex-shrink-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); onNavigate?.("home"); }}>
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center transition-transform duration-200 group-hover:scale-105"
+                style={{ background: isDark ? "rgba(74,222,128,0.10)" : "#f1faef", border: `1px solid ${isDark ? "rgba(74,222,128,0.18)" : "#e1f0dc"}` }}>
+                <img src={estingsLogo} alt="Esting's Logo" className="w-8 h-8 sm:w-9 sm:h-9 object-contain"
                 style={{ filter: isDark ? "brightness(1.15)" : "none" }}/>
+              </div>
               <div className="hidden sm:flex flex-col leading-none items-start">
                 <img src={estingsText} alt="Esting's" className="h-6 sm:h-7 object-contain"
                   style={{ filter: isDark ? "brightness(0) invert(1)" : "none" }}/>
@@ -1167,7 +1172,8 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
             </div>
 
             {/* Desktop nav links */}
-            <div className="hidden lg:flex items-center gap-5 xl:gap-8 flex-1 justify-center">
+            <div className="hidden lg:flex items-center gap-0.5 xl:gap-1.5 flex-1 justify-center mx-2 xl:mx-5 p-1 rounded-2xl"
+              style={{ backgroundColor: isDark ? "rgba(255,255,255,0.035)" : "#f7fbf5", border: `1px solid ${isDark ? "rgba(255,255,255,0.06)" : "#edf5ea"}` }}>
 
               {FINAL_NAV_LINKS.map(link => {
                 // Only treat a link as having a menu when it actually has items.
@@ -1179,13 +1185,14 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
                   onMouseEnter={() => hasMenu && openMenuD(link.label)}
                   onMouseLeave={() => hasMenu && closeMenuD()}>
                   <button onClick={(e) => { e.stopPropagation(); handleNavClick(link); }}
-                    className="flex items-center gap-0.5 text-sm font-medium pb-1 whitespace-nowrap transition-colors relative"
+                    className="flex items-center gap-0.5 text-sm font-medium px-3 py-2 rounded-xl whitespace-nowrap transition-all relative"
                     style={{
                       color: active===link.label ? (isDark?"#4ade80":SITE_GREEN) : (link.highlight ? (isDark?"#ff6b81":"#f43f5e") : (isDark ? "#d1d5db" : "#4b5563")),
-                      borderBottom: active===link.label ? `2px solid ${isDark?"#4ade80":SITE_GREEN}` : "2px solid transparent",
+                      backgroundColor: active===link.label ? (isDark ? "rgba(74,222,128,0.12)" : "#ffffff") : "transparent",
+                      boxShadow: active===link.label && !isDark ? "0 2px 8px rgba(46,139,52,0.08)" : "none",
                     }}
-                    onMouseEnter={e => { if (active!==link.label) e.currentTarget.style.color = link.highlight ? (isDark?"#ff4d6d":"#e11d48") : (isDark ? "#86efac" : VIBRANT_GREEN); }}
-                    onMouseLeave={e => { if (active!==link.label) e.currentTarget.style.color = link.highlight ? (isDark?"#ff6b81":"#f43f5e") : (isDark ? "#d1d5db" : "#4b5563"); }}>
+                    onMouseEnter={e => { if (active!==link.label) { e.currentTarget.style.color = link.highlight ? (isDark?"#ff4d6d":"#e11d48") : (isDark ? "#86efac" : VIBRANT_GREEN); e.currentTarget.style.backgroundColor = isDark ? "rgba(74,222,128,0.08)" : "#ffffff"; } }}
+                    onMouseLeave={e => { if (active!==link.label) { e.currentTarget.style.color = link.highlight ? (isDark?"#ff6b81":"#f43f5e") : (isDark ? "#d1d5db" : "#4b5563"); e.currentTarget.style.backgroundColor = "transparent"; } }}>
                     {link.highlight && <FloatingHearts />}
                     {link.label}
                     {hasMenu && <svg className="w-3 h-3 text-gray-400 ml-0.5 transition-transform" style={{ transform:openMenu===link.label?"rotate(180deg)":"rotate(0)" }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="m19.5 8.25-7.5 7.5-7.5-7.5"/></svg>}
@@ -1235,7 +1242,7 @@ export default function Navbar({ cartCount: propCartCount, onNavigate, isCustomi
             </div>
 
             {/* Right side icons */}
-            <div className="flex items-center gap-1 sm:gap-2">
+            <div className="flex items-center gap-1 sm:gap-2 pl-1.5 sm:pl-2 border-l" style={{ borderColor: isDark ? "rgba(255,255,255,0.10)" : "#edf1ec" }}>
               <div className="relative" ref={cartRef}>
                 <button onClick={(e) => { e.stopPropagation(); setCartOpen(false); onNavigate?.("cart"); }}
                   className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-full transition-colors relative"

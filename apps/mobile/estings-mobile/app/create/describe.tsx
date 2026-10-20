@@ -78,6 +78,7 @@ export default function DescribeArrangementScreen() {
   const speechPromptBase = useRef('');
 
   const [prompt, setPrompt] = useState('');
+  const [revisionInstruction, setRevisionInstruction] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState<GenerationResult | null>(null);
   const [recipePreview, setRecipePreview] = useState<DyaRecipePreview | null>(null);
@@ -315,6 +316,7 @@ export default function DescribeArrangementScreen() {
 
       if (data.success) {
         setResult(data);
+        setRevisionInstruction('');
         setArrangementName(data.price_breakdown?.items?.[0]?.product_name || 'AI Arrangement');
         setCardMessage('');
         setSelectedAddOnIds(new Set());
@@ -346,6 +348,7 @@ export default function DescribeArrangementScreen() {
 
   const handleEditGeneratedPrompt = useCallback(() => {
     setResult(null);
+    setRevisionInstruction('');
     setRecipePreview(null);
     setError(null);
     setAddedToCart(false);
@@ -362,9 +365,17 @@ export default function DescribeArrangementScreen() {
     }
     setIsProcessing(true);
     try {
-      const data = await checkAndGenerate({ prompt_text: prompt.trim() });
+      const selectedItems = (result.price_breakdown?.items ?? [])
+        .filter((item) => Boolean(item.product_id))
+        .map((item) => ({ product_id: item.product_id as string, quantity: item.quantity }));
+      const data = await checkAndGenerate({
+        prompt_text: prompt.trim(),
+        revision_instruction: revisionInstruction.trim() || 'Create another variation of this image while preserving the current design.',
+        selected_items: selectedItems,
+      });
       if (data.success) {
         setResult(data);
+        setRevisionInstruction('');
         setAddedToCart(false);
         setAiUsage(current => current
           ? { ...current, remaining: data.remaining_generations ?? current.remaining }
@@ -382,7 +393,7 @@ export default function DescribeArrangementScreen() {
     } finally {
       setIsProcessing(false);
     }
-  }, [aiUsage, isProcessing, prompt, result]);
+  }, [aiUsage, isProcessing, prompt, result, revisionInstruction]);
 
   const handleToggleAddOn = useCallback((addOnId: string) => {
     setSelectedAddOnIds((current) => {
@@ -532,12 +543,14 @@ export default function DescribeArrangementScreen() {
           onBuyNow={handleBuyNow}
           onChangeArrangementName={handleArrangementNameChange}
           onChangeCardMessage={handleCardMessageChange}
+          onChangeRevisionInstruction={setRevisionInstruction}
           onEditPrompt={handleEditGeneratedPrompt}
           onRegenerate={handleRegenerateResult}
           onToggleAddOn={handleToggleAddOn}
           prompt={prompt}
           result={result}
           regenerating={isProcessing}
+          revisionInstruction={revisionInstruction}
           selectedAddOnIds={selectedAddOnIds}
         />
       ) : recipePreview ? (

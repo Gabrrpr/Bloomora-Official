@@ -26,6 +26,7 @@ function ReviewCard({ review, t }) {
   const name   = review.customer_name || review.name || review.user_name || "Customer"
   const rating = review.star_rating ?? review.rating ?? 5
   const text   = review.comment || review.text || review.review || ""
+  const itemName = review.arrangement_name || review.product_name || "Custom arrangement"
   const date   = review.created_at ? new Date(review.created_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" }) : ""
   const initial = name.trim().charAt(0).toUpperCase() || "C"
 
@@ -46,6 +47,7 @@ function ReviewCard({ review, t }) {
         <img src={review.image_url} alt="Custom bouquet"
           className="w-full h-36 object-cover rounded-xl mb-2.5" style={{ backgroundColor: t.innerBdr }} />
       )}
+      <p className="text-[11px] font-semibold uppercase tracking-wide mb-1" style={{ color: t.mutedC }}>{itemName} · Verified purchase</p>
       {text && <p className="text-sm leading-relaxed" style={{ color: t.bodyC }}>{text}</p>}
     </div>
   )

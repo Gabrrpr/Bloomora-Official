@@ -6,6 +6,7 @@ import { generateCardMessage, RELATIONSHIP_OPTIONS, OCCASION_OPTIONS, TONE_OPTIO
 import { useTheme } from "../../context/ThemeContext"
 import { getArrangementStemLimit, getArrangementVisualRule, normalizeArrangementStyle } from "../../utils/arrangementRules.js"
 import FallbackImage from "../../components/FallbackImage.jsx" // 🚀 ADDED THIS IMPORT
+import ArrangementLoadingOverlay from "../../components/ArrangementLoadingOverlay.jsx"
 import arrangementBouquet from "../../assets/MakeItPersonal/arrangement_bouquet.webp"
 import arrangementBox from "../../assets/MakeItPersonal/arrangement_box.webp"
 import arrangementVase from "../../assets/MakeItPersonal/arrangement_vase.webp"
@@ -79,18 +80,6 @@ const ARRANGEMENTS = [
 // The only container offered for the Box arrangement — a clear acrylic box.
 // It's a presentation choice (not a stocked product), so it isn't sent as a
 // wrapping_id; it just drives the AI prompt and the step's completion state.
-// Fun facts cycled through while the AI generates the arrangement.
-const FLOWER_FACTS = [
-  "Roses can live for over a week with fresh water and a clean stem cut.",
-  "Sunflowers turn to follow the sun across the sky, a habit called heliotropism.",
-  "Tulips were once so prized in the 1600s that their bulbs were worth more than gold.",
-  "Carnations are among the longest-lasting cut flowers, often blooming for two to three weeks.",
-  "The fragrance of a flower is strongest just after it fully opens.",
-  "Lavender has been used for centuries to bring a sense of calm and relaxation.",
-  "Adding a little sugar to the vase water can help cut flowers stay fresh longer.",
-  "Baby's breath symbolizes everlasting love, which is why it pairs so well with roses.",
-]
-
 // ── Stock badge (dark-mode aware) ──
 function StockBadge({ status, isDark }) {
   const styles = {
@@ -306,10 +295,6 @@ export default function MixAndMatch({ onNavigate }) {
 
   const [customizationEnabled, setCustomizationEnabled] = useState(true)
 
-  // ── Loading overlay progress + fun-fact cycling (UI only) ──
-  const [progress, setProgress] = useState(0)
-  const [factIdx, setFactIdx] = useState(0)
-
   // ── Dark-mode color tokens (rendering only, never logic) ──
   const pageBg     = isDark
     ? "radial-gradient(1100px 600px at 50% -8%, #0f2018 0%, #0d1a14 45%, #0f172a 100%)"
@@ -375,22 +360,6 @@ export default function MixAndMatch({ onNavigate }) {
     }
     load()
   }, [])
-
-  // ── Loading overlay: animate progress bar + rotate facts (UI only) ──
-  useEffect(() => {
-    if (!generating) { setProgress(0); return }
-    setProgress(8)
-    setFactIdx(Math.floor(Math.random() * FLOWER_FACTS.length))
-
-    const prog = setInterval(() => {
-      setProgress(p => (p >= 99 ? 99 : p + Math.max(0.25, (99 - p) * (0.05 + Math.random() * 0.04))))
-    }, 280)
-    const facts = setInterval(() => {
-      setFactIdx(i => (i + 1) % FLOWER_FACTS.length)
-    }, 3600)
-
-    return () => { clearInterval(prog); clearInterval(facts) }
-  }, [generating])
 
   // 🚀 FIX: Smart Category Checker
   const getCat = (p) => {
@@ -600,7 +569,6 @@ export default function MixAndMatch({ onNavigate }) {
         setUnavailableItems(data.unavailable_items)
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
       } else if (data.success) {
-        setProgress(100)
         const generatedItems = data.price_breakdown?.items || []
         if (generatedItems.length) {
           const nextFlowerQty = {}
@@ -1512,66 +1480,7 @@ export default function MixAndMatch({ onNavigate }) {
       </div>
     </div>
 
-    {/* ── Loading overlay: blurred backdrop + centered progress + flower facts ── */}
-    {generating && (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-        style={{ backgroundColor: isDark ? "rgba(8,15,10,0.6)" : "rgba(12,87,62,0.35)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
-        <div className="w-full max-w-md rounded-3xl px-8 py-10 text-center shadow-2xl"
-          style={{ backgroundColor: isDark ? "#1e293b" : "#ffffff", animation: "mmPop 0.3s cubic-bezier(0.34,1.56,0.64,1) both" }}>
-          {/* Bloom icon */}
-          <div className="w-16 h-16 mx-auto mb-5 rounded-full flex items-center justify-center"
-            style={{ background: "linear-gradient(135deg, rgba(244,114,182,0.18), rgba(46,139,52,0.14))" }}>
-            <svg className="w-10 h-10" viewBox="0 0 48 48" fill="none" style={{ animation: "mmBob 2.6s ease-in-out infinite" }}>
-              <path d="M24 30V44" stroke="#2E8B34" strokeWidth="2.4" strokeLinecap="round" />
-              <path d="M24 38c-3.5 0-6.3-2-7-5.2 3.5-.6 6.3 1.2 7 5.2Z" fill="#34a853" />
-              <path d="M24 34c3-.2 5.6-2 6.4-4.8-3.2-.4-5.8 1.4-6.4 4.8Z" fill="#2E8B34" />
-              {[0,60,120,180,240,300].map(deg => (
-                <ellipse key={deg} cx="24" cy="12" rx="5.2" ry="8" fill="#f472b6"
-                  transform={`rotate(${deg} 24 22)`} />
-              ))}
-              {[30,90,150,210,270,330].map(deg => (
-                <ellipse key={deg} cx="24" cy="15" rx="3.2" ry="5" fill="#ec4899" opacity="0.45"
-                  transform={`rotate(${deg} 24 22)`} />
-              ))}
-              <circle cx="24" cy="22" r="6" fill="#fbbf24" />
-              <circle cx="24" cy="22" r="3.2" fill="#f59e0b" />
-            </svg>
-          </div>
-
-          <h3 className="text-xl font-bold mb-1.5" style={{ color: accentDG }}>Creating your bouquet</h3>
-          <p className="text-sm mb-7" style={{ color: mutedC }}>Arranging every petal just for you...</p>
-
-          {/* Growing progress bar with a flower riding the leading edge */}
-          <div className="relative w-full mb-2" style={{ paddingTop: "12px" }}>
-            <div className="w-full h-2.5 rounded-full overflow-hidden" style={{ backgroundColor: isDark ? "#0f172a" : "#f1ece6" }}>
-              <div className="h-full rounded-full transition-all duration-300 ease-out"
-                style={{ width: `${progress}%`, background: "linear-gradient(90deg, #f472b6, #fbbf24 55%, #2E8B34)" }} />
-            </div>
-            <div className="absolute -translate-x-1/2 -translate-y-1/2 transition-all duration-300 ease-out"
-              style={{ left: `${progress}%`, top: "17px" }}>
-              <svg className="w-[30px] h-[30px]" viewBox="0 0 24 24" fill="none" style={{ animation: "mmSpin 4s linear infinite", filter: "drop-shadow(0 2px 4px rgba(0,0,0,0.2))" }}>
-                {[0,72,144,216,288].map(deg => (
-                  <ellipse key={deg} cx="12" cy="6.5" rx="2.8" ry="4.2" fill="#f472b6"
-                    transform={`rotate(${deg} 12 12)`} />
-                ))}
-                <circle cx="12" cy="12" r="3.4" fill="#fbbf24" />
-                <circle cx="12" cy="12" r="1.6" fill="#f59e0b" />
-              </svg>
-            </div>
-          </div>
-          <p className="text-xs font-semibold mb-7" style={{ color: mutedC }}>{Math.round(progress)}%</p>
-
-          {/* Fun fact */}
-          <div className="rounded-2xl px-5 py-4 text-left"
-            style={{ backgroundColor: isDark ? "rgba(219,39,119,0.1)" : "#fdf2f8", border: `1px solid ${isDark ? "rgba(219,39,119,0.3)" : "#fbcfe8"}` }}>
-            <p className="text-xs font-bold tracking-wider uppercase mb-1.5" style={{ color: isDark ? "#f9a8d4" : "#db2777" }}>Did you know?</p>
-            <p key={factIdx} className="text-sm leading-relaxed" style={{ color: isDark ? "#cbd5e1" : "#4b5563", animation: "mmFade 0.5s ease both" }}>
-              {FLOWER_FACTS[factIdx]}
-            </p>
-          </div>
-        </div>
-      </div>
-    )}
+    <ArrangementLoadingOverlay loading={generating} isDark={isDark} />
 
     {/* Keyframes for the loading overlay animations */}
     <style>{`

@@ -3,12 +3,11 @@ import { createPortal } from "react-dom"
 import { api } from "../../services/api.js"
 import { addToCart } from "../../utils/cart.js"
 import { useTheme } from "../../context/ThemeContext"
-import estingsLogo from "../../assets/EstingsLogo.svg"
+import ArrangementLoadingOverlay from "../../components/ArrangementLoadingOverlay.jsx"
 import {
   ARRANGEMENT_STEM_LIMITS,
   getArrangementStemLimit as getSharedArrangementStemLimit,
   getArrangementStyleLabel as getSharedArrangementStyleLabel,
-  getArrangementVisualRule,
   normalizeArrangementStyle,
 } from "../../utils/arrangementRules.js"
 
@@ -54,17 +53,6 @@ const MATERIAL_CATEGORIES = [
   { key: "vase", label: "Vases" },
   { key: "wrapping", label: "Wrappings" },
   { key: "accessory", label: "Accessories" },
-]
-
-const FLOWER_FACTS = [
-  "Roses can live for over a week with fresh water and a clean stem cut.",
-  "Sunflowers turn to follow the sun across the sky, a habit called heliotropism.",
-  "Tulips were once so prized in the 1600s that their bulbs were worth more than gold.",
-  "Carnations are among the longest-lasting cut flowers, often blooming for two to three weeks.",
-  "The fragrance of a flower is strongest just after it fully opens.",
-  "Lavender has been used for centuries to bring a sense of calm and relaxation.",
-  "Adding a little sugar to the vase water can help cut flowers stay fresh longer.",
-  "Baby's breath symbolizes everlasting love, which is why it pairs so well with roses.",
 ]
 
 // ── Flower petal loader (matches the admin pages for a coherent loading look) ──
@@ -141,7 +129,6 @@ export default function DescribeArrangement({ onNavigate }) {
 
   const [typedPlaceholder, setTypedPlaceholder] = useState("")
   const [promptFocused, setPromptFocused] = useState(false)
-  const [factIdx, setFactIdx] = useState(0)
   const promptSuggestionsRef = useRef(null)
   const promptEditorRef = useRef(null)
 
@@ -235,17 +222,6 @@ export default function DescribeArrangement({ onNavigate }) {
     timer = setTimeout(tick, 400)
     return () => clearTimeout(timer)
   }, [prompt, promptFocused])
-
-  useEffect(() => {
-    if (!loading) return
-    setFactIdx(Math.floor(Math.random() * FLOWER_FACTS.length))
-
-    const facts = setInterval(() => {
-      setFactIdx(i => (i + 1) % FLOWER_FACTS.length)
-    }, 3600)
-
-    return () => clearInterval(facts)
-  }, [loading])
 
   const getProductsByCategory = (category) => products.filter(p => {
     if (p.category !== category || p.status === "inactive") return false;
@@ -499,14 +475,10 @@ export default function DescribeArrangement({ onNavigate }) {
       return
     }
 
-    const editedRecipe = result.price_breakdown.items
-      .map(item => `${item.quantity} ${item.product_name}`)
-      .join(", ")
     const suggestionText = imageSuggestion.trim()
-    const currentStemLimit = getArrangementStemLimit(result.price_breakdown.items)
-    const currentStyle = inferArrangementStyle(result.price_breakdown.items)
-    const currentStyleLabel = getSharedArrangementStyleLabel(currentStyle).toLowerCase()
-    const revisedPrompt = `Customer originally requested: "${prompt.trim()}". Regenerate the floral arrangement image using this exact updated item recipe and quantities: ${editedRecipe}. Arrangement style may be bouquet, boxed arrangement, or vase arrangement based on the customer's request and visual preferences. Current inferred style: ${currentStyleLabel}. Shared visual rule for this style: ${getArrangementVisualRule(currentStyle)} Flower stem capacity rule for this style: use no more than ${currentStemLimit} total flower stems. ${suggestionText ? `Customer visual preferences: ${suggestionText}.` : ""} Keep the same listed materials and quantities, interpret the customer's visual preferences for color balance, fullness, and mood without breaking the shared arrangement style rule. Ultra-realistic professional florist portfolio photo, studio lighting, clean neutral background, no people, no readable text, no watermarks.`
+    const selectedItems = result.price_breakdown.items
+      .filter(item => item.product_id)
+      .map(item => ({ product_id: item.product_id, quantity: item.quantity }))
 
     setLoading(true)
     setError(null)
@@ -517,8 +489,10 @@ export default function DescribeArrangement({ onNavigate }) {
     try {
       const revisedStyle = inferArrangementStyle(result.price_breakdown.items)
       const data = await api.checkAndGenerate({
-        prompt_text: revisedPrompt,
+        prompt_text: prompt.trim(),
+        revision_instruction: suggestionText || "Create another variation of this image while preserving the current design.",
         arrangement_type: normalizeArrangementStyle(revisedStyle),
+        selected_items: selectedItems,
       })
       setPromptAlternatives(
         Array.isArray(data.prompt_suggestions)
@@ -1458,11 +1432,11 @@ export default function DescribeArrangement({ onNavigate }) {
                         className="w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-1 focus:ring-green-600 transition resize-none"
                         style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
                       />
-                      <label className="text-xs font-medium block mt-3 mb-2" style={{ color: subHeadC }}>Visual suggestions (optional)</label>
+                      <label className="text-xs font-medium block mt-3 mb-2" style={{ color: subHeadC }}>What should change in this image? (optional)</label>
                       <textarea
                         value={imageSuggestion}
                         onChange={e => setImageSuggestion(e.target.value.slice(0, 260))}
-                        placeholder="e.g. Make it fuller, softer pink, more elegant, boxed style, vase style, brighter lighting..."
+                        placeholder="e.g. Keep the flowers, but make the wrapping pure white and the overall look more playful..."
                         rows={3}
                         className="w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-1 focus:ring-green-600 transition resize-none"
                         style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
@@ -1569,47 +1543,7 @@ export default function DescribeArrangement({ onNavigate }) {
       </div>
     </div>
 
-    {loading && (
-      <div className="fixed inset-0 z-[60] flex items-center justify-center p-4"
-        style={{ backgroundColor: isDark ? "rgba(4,12,8,0.74)" : "rgba(8,47,32,0.48)", backdropFilter: "blur(14px)", WebkitBackdropFilter: "blur(14px)" }}>
-        <div className="relative w-full max-w-lg overflow-hidden rounded-[2rem] px-6 py-7 text-center shadow-2xl sm:px-9 sm:py-9"
-          style={{ background: isDark ? "linear-gradient(145deg,#14231b,#1e293b)" : "linear-gradient(145deg,#fffefb,#f3faf3)", border: `1px solid ${isDark ? "rgba(134,239,172,.18)" : "rgba(46,139,52,.18)"}`, animation: "daPop 0.3s cubic-bezier(0.34,1.56,0.64,1) both" }}>
-          <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full opacity-30 blur-3xl" style={{ backgroundColor: accentPink }} />
-          <div className="absolute -bottom-20 -left-16 h-52 w-52 rounded-full opacity-25 blur-3xl" style={{ backgroundColor: accentG }} />
-
-          <div className="relative">
-            <img src={estingsLogo} alt="Esting's Flowers" className="mx-auto mb-5 h-14 w-14 rounded-full shadow-lg" />
-
-            <div className="da-arrangement-stage mx-auto mb-6 flex h-40 w-full max-w-sm items-end justify-center overflow-hidden rounded-3xl"
-              style={{ background: isDark ? "linear-gradient(180deg,rgba(15,23,42,.15),rgba(74,222,128,.08))" : "linear-gradient(180deg,rgba(255,255,255,.2),rgba(220,252,231,.8))", border: `1px solid ${isDark ? "rgba(134,239,172,.12)" : "#dcfce7"}` }}>
-              <div className="da-wrap" />
-              {[0, 1, 2, 3, 4, 5, 6].map(index => (
-                <span key={index} className={`da-bloom da-bloom-${index + 1}`} />
-              ))}
-            </div>
-
-            <p className="mb-2 text-[10px] font-extrabold uppercase tracking-[0.24em]" style={{ color: accentPink }}>Your idea is blooming</p>
-            <h3 className="mb-2 text-2xl font-extrabold tracking-tight" style={{ color: headingC }}>Creating your arrangement</h3>
-            <p className="mx-auto mb-6 max-w-sm text-sm leading-relaxed" style={{ color: bodyC }}>
-              Matching your flowers, checking the recipe, and rendering the final preview. It will appear the moment it is ready.
-            </p>
-
-            <div className="mb-6 flex items-center justify-center gap-2" aria-label="Generation in progress">
-              {[0, 1, 2].map(index => (
-                <span key={index} className="da-status-dot h-2.5 w-2.5 rounded-full" style={{ backgroundColor: index === 1 ? accentPink : accentG, animationDelay: `${index * 180}ms` }} />
-              ))}
-            </div>
-
-            <div className="rounded-2xl px-5 py-4 text-left" style={{ backgroundColor: isDark ? "rgba(219,39,119,0.1)" : "rgba(253,242,248,.85)", border: `1px solid ${isDark ? "rgba(219,39,119,0.3)" : "#fbcfe8"}` }}>
-            <p className="text-xs font-bold tracking-wider uppercase mb-1.5" style={{ color: isDark ? "#f9a8d4" : "#db2777" }}>While you wait</p>
-            <p key={factIdx} className="text-sm leading-relaxed" style={{ color: isDark ? "#cbd5e1" : "#4b5563", animation: "daFade 0.5s ease both" }}>
-              {FLOWER_FACTS[factIdx]}
-            </p>
-            </div>
-          </div>
-        </div>
-      </div>
-    )}
+    <ArrangementLoadingOverlay loading={loading} isDark={isDark} />
 
     {result?.generated_image_url && createPortal(
       <div

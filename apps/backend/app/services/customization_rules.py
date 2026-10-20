@@ -151,12 +151,12 @@ def extract_prompt_requested_materials(
     prompt_text: str,
     inventory: Iterable[InventoryMaterial],
 ) -> list[RequestedMaterial]:
-    """Recovers simple flower quantities when AI extraction omits a legitimate request."""
+    """Recovers explicitly named stocked materials when AI extraction omits them."""
     prompt = _normalize_search_text(prompt_text)
     candidates: list[tuple[int, int, str, InventoryMaterial]] = []
 
     for material in inventory:
-        if not material.is_flower:
+        if material.material_type not in {"flower", "filler", "wrapping", "vase", "box", "accessory"}:
             continue
         for alias in _material_aliases(material.product_name):
             match = re.search(rf"\b{re.escape(alias)}\b", prompt)
@@ -187,10 +187,19 @@ def extract_prompt_requested_materials(
         selected.append((start, end, material))
 
     recovered: list[RequestedMaterial] = []
+    selected_flower_count = sum(1 for _, _, material in selected if material.is_flower)
     for start, _, material in selected:
         quantity = _quantity_before_match(prompt, start)
+        if material.is_flower and selected_flower_count == 1:
+            referential_quantity = _referential_flower_quantity(prompt)
+            if referential_quantity > 0:
+                quantity = referential_quantity
         if quantity <= 0:
-            quantity = min(6, material.safe_quantity) if material.safe_quantity > 0 else 6
+            quantity = (
+                min(6, material.safe_quantity) if material.is_flower and material.safe_quantity > 0
+                else 6 if material.is_flower
+                else 1
+            )
         recovered.append(
             RequestedMaterial(
                 product_id=material.product_id,
@@ -399,6 +408,8 @@ def build_complete_image_prompt(
     if arrangement_type == "bouquet":
         presentation_rule = (
             f"Show a finished hand-tied bouquet visibly wrapped with {presentation_names}; "
+            f"the visible wrapping must match the named wrapper color and material exactly ({presentation_names}). "
+            "Never substitute brown, beige, or kraft-colored wrapping unless that color or material is explicitly named in the recipe. "
             "the stems must be enclosed and secured, never shown as loose flowers. "
             "The wrapping must have overlapping layers, natural folds and creases, and soft contact shadows. "
             "Do not render flat wrapping or a rigid geometric cone."
@@ -985,6 +996,24 @@ def _material_aliases(product_name: str) -> list[str]:
     normalized = _normalize_search_text(product_name)
     singular_name = _singularize(normalized)
     aliases = {normalized, singular_name, _pluralize(singular_name)}
+    if "wrapper" in normalized:
+        aliases.add(normalized.replace("wrapper", "wrapping"))
+    if "wrapping" in normalized:
+        aliases.add(normalized.replace("wrapping", "wrapper"))
+    wrapping_terms = {"paper", "wrap", "wrapper", "wrapping"}
+    ignored_descriptors = {"classic", "premium", "standard"}
+    if any(term in normalized.split() for term in wrapping_terms):
+        descriptors = [
+            word for word in normalized.split()
+            if word not in wrapping_terms and word not in ignored_descriptors
+        ]
+        for descriptor in descriptors:
+            aliases.update({
+                f"{descriptor} wrap",
+                f"{descriptor} wrapper",
+                f"{descriptor} wrapping",
+                f"{descriptor} wrapping paper",
+            })
     words = normalized.split()
     if words:
         final_word = words[-1]
@@ -994,6 +1023,21 @@ def _material_aliases(product_name: str) -> list[str]:
             aliases.add(singular_word)
             aliases.add(_pluralize(singular_word))
     return sorted((alias for alias in aliases if len(alias) >= 3), key=len, reverse=True)
+
+
+def _referential_flower_quantity(prompt: str) -> int:
+    """Resolve phrases such as “rose bouquet ... contains 15 of those”."""
+    number = (
+        r"\d[\d,]*|one|two|three|four|five|six|seven|eight|nine|ten|"
+        r"eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty"
+    )
+    match = re.search(
+        rf"\b(?:contains?|include(?:s)?|use|using|with|make it)\s+(?P<number>{number})\s+(?:of\s+)?(?:those|them|stems?|flowers?|blooms?)\b",
+        prompt,
+    ) or re.search(rf"\b(?P<number>{number})\s+of\s+(?:those|them)\b", prompt)
+    if not match:
+        return 0
+    return _quantity_before_match(f" {match.group('number')} flower", len(f" {match.group('number')} "))
 
 
 def _quantity_before_match(prompt: str, match_start: int) -> int:

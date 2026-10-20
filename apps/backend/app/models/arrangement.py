@@ -29,6 +29,7 @@ class Arrangement(Base):
     user        = relationship("User", back_populates="arrangements")  # ← add
     orders      = relationship("Order", back_populates="arrangement")
     order_items = relationship("OrderItem", back_populates="arrangement")
+    reviews     = relationship("Review", back_populates="arrangement")
     flower      = relationship("Flower", back_populates="arrangements", foreign_keys=[flower_id])
     vase        = relationship("Vase", back_populates="arrangements", foreign_keys=[vase_id])
     wrapping    = relationship("Wrapping", back_populates="arrangements", foreign_keys=[wrapping_id])

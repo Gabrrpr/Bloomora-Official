@@ -10,6 +10,7 @@ class SelectedCustomizationItem(BaseModel):
 
 class CustomizationRequest(BaseModel):
     prompt_text: str
+    revision_instruction: Optional[str] = Field(default=None, max_length=500)
     flower_id: Optional[UUID] = None
     vase_id: Optional[UUID] = None
     wrapping_id: Optional[UUID] = None

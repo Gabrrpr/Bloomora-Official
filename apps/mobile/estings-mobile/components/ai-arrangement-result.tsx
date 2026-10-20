@@ -33,10 +33,12 @@ type AiArrangementResultProps = {
   onBuyNow: () => void;
   onChangeArrangementName: (value: string) => void;
   onChangeCardMessage: (value: string) => void;
+  onChangeRevisionInstruction: (value: string) => void;
   onEditPrompt: () => void;
   onRegenerate: () => void;
   onToggleAddOn: (addOnId: string) => void;
   regenerating: boolean;
+  revisionInstruction: string;
   prompt: string;
   result: GenerationResult;
   selectedAddOnIds: ReadonlySet<string>;
@@ -53,12 +55,14 @@ export const AiArrangementResult = memo(function AiArrangementResult({
   onBuyNow,
   onChangeArrangementName,
   onChangeCardMessage,
+  onChangeRevisionInstruction,
   onEditPrompt,
   onRegenerate,
   onToggleAddOn,
   prompt,
   result,
   regenerating,
+  revisionInstruction,
   selectedAddOnIds,
 }: AiArrangementResultProps) {
   const insets = useSafeAreaInsets();
@@ -141,6 +145,22 @@ export const AiArrangementResult = memo(function AiArrangementResult({
             <Text style={styles.aiBadgeText}>AI Concept</Text>
           </View>
         </Animated.View>
+
+        <View style={styles.revisionCard}>
+          <Text style={styles.revisionLabel}>What should change in this image?</Text>
+          <TextInput
+            accessibilityLabel="Changes for the generated arrangement image"
+            editable={!regenerating}
+            maxLength={500}
+            multiline
+            onChangeText={onChangeRevisionInstruction}
+            placeholder="Keep the flowers, but make the wrapping pure white and the look more playful..."
+            placeholderTextColor={theme.colors.textMuted}
+            style={styles.revisionInput}
+            value={revisionInstruction}
+          />
+          <Text style={styles.revisionHint}>Regenerate applies this note to the current preview and keeps unmentioned recipe details.</Text>
+        </View>
 
         <Animated.View style={[styles.resultContent, contentStyle]}>
           <View style={styles.summaryCard}>
@@ -311,6 +331,30 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   promptText: { color: '#465048', flex: 1, fontFamily: Fonts.sansMedium, fontSize: 12, lineHeight: 18 },
+  revisionCard: {
+    backgroundColor: theme.colors.white,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    gap: 8,
+    padding: 14,
+  },
+  revisionLabel: { color: theme.colors.text, fontFamily: Fonts.sansBold, fontSize: 13 },
+  revisionInput: {
+    backgroundColor: theme.colors.surfaceAlt,
+    borderColor: theme.colors.subtleBorder,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    color: theme.colors.text,
+    fontFamily: Fonts.sansMedium,
+    fontSize: 13,
+    lineHeight: 19,
+    minHeight: 78,
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    textAlignVertical: 'top',
+  },
+  revisionHint: { color: theme.colors.textMuted, fontFamily: Fonts.sansMedium, fontSize: 11, lineHeight: 16 },
   previewCard: {
     backgroundColor: theme.colors.white,
     borderRadius: 20,

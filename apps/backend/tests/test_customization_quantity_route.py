@@ -7,6 +7,8 @@ from unittest.mock import AsyncMock, patch
 from app.api.v1.routes.customization import (
     _calculate_complete_recipe_price,
     _merge_explicit_materials,
+    _merge_prompt_requested_materials,
+    _prompt_for_interpretation,
     check_and_generate,
 )
 from app.schemas.customization import CustomizationRequest
@@ -26,6 +28,30 @@ class WriteTrackingSession:
 
 
 class CustomizationQuantityRouteTests(unittest.TestCase):
+    def test_revision_is_interpreted_as_a_change_to_the_existing_concept(self):
+        prompt = _prompt_for_interpretation(CustomizationRequest(
+            prompt_text="15 roses with white wrapping",
+            revision_instruction="Make it more playful but keep the wrapping white",
+        ))
+
+        self.assertIn("previously generated image", prompt)
+        self.assertIn("preserve every detail", prompt)
+        self.assertIn("keep the wrapping white", prompt)
+
+    def test_explicit_wrapper_text_overrides_an_ai_selected_kraft_wrapper(self):
+        inventory = [
+            InventoryMaterial("white-wrap", "White Wrapper", "wrapping", "wrapping", 10),
+            InventoryMaterial("kraft-wrap", "Kraft Wrapper", "wrapping", "wrapping", 10),
+        ]
+
+        merged = _merge_prompt_requested_materials(
+            [RequestedMaterial("kraft-wrap", "Kraft Wrapper", 1)],
+            [RequestedMaterial("white-wrap", "White Wrapper", 1)],
+            inventory,
+        )
+
+        self.assertEqual([(item.product_name, item.quantity) for item in merged], [("White Wrapper", 1)])
+
     def test_selected_stocked_box_is_merged_from_the_container_id(self):
         flower_id = str(uuid.uuid4())
         box_id = str(uuid.uuid4())

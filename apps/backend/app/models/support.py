@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import CheckConstraint, Column, String, Text, Integer, Boolean, Enum, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy import CheckConstraint, Column, String, Text, Integer, Boolean, Enum, DateTime, ForeignKey, UniqueConstraint, Index
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from .base import Base, now_utc
@@ -17,12 +17,19 @@ class Review(Base):
     __tablename__ = "reviews"
     __table_args__ = (
         CheckConstraint("star_rating >= 1 AND star_rating <= 5", name="ck_reviews_star_rating"),
+        CheckConstraint(
+            "(product_id IS NOT NULL AND arrangement_id IS NULL) OR "
+            "(product_id IS NULL AND arrangement_id IS NOT NULL)",
+            name="ck_reviews_exactly_one_item_type",
+        ),
         UniqueConstraint("user_id", "product_id", name="uq_reviews_user_product"),
+        Index("uq_reviews_user_arrangement", "user_id", "arrangement_id", unique=True),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=False)
+    product_id = Column(UUID(as_uuid=True), ForeignKey("products.id"), nullable=True)
+    arrangement_id = Column(UUID(as_uuid=True), ForeignKey("arrangements.id"), nullable=True)
     order_id = Column(UUID(as_uuid=True), ForeignKey("orders.id"), nullable=False)
     star_rating = Column(Integer, nullable=False)       # 1 to 5
     comment = Column(Text, nullable=True)
@@ -33,6 +40,7 @@ class Review(Base):
     # Relationships
     user = relationship("User", back_populates="reviews")
     product = relationship("Product", back_populates="reviews")
+    arrangement = relationship("Arrangement", back_populates="reviews")
 
 
 class Chat(Base):

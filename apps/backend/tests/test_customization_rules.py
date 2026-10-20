@@ -127,6 +127,28 @@ class CustomizationRuleTests(unittest.TestCase):
         self.assertIsNotNone(adjustment)
         self.assertEqual(adjustment.suggested_items[0]["quantity"], 24)
 
+    def test_referential_quantity_and_white_wrapping_are_recovered_exactly(self):
+        inventory = [
+            flower("rose", "Roses", 30),
+            material("white-wrap", "Classic White Wrapping Paper", "wrapping", 10),
+            material("kraft-wrap", "Kraft Brown Wrapping Paper", "wrapping", 10),
+        ]
+
+        requested = extract_prompt_requested_materials(
+            "I want a rose bouquet that contains 15 of those with white wrapping",
+            inventory,
+        )
+
+        self.assertEqual(
+            {item.product_name: item.quantity for item in requested},
+            {"Roses": 15, "Classic White Wrapping Paper": 1},
+        )
+
+        image_prompt = build_complete_image_prompt("bouquet", requested, inventory)
+        self.assertIn("15 Roses", image_prompt)
+        self.assertIn("match the named wrapper color", image_prompt)
+        self.assertIn("Never substitute brown", image_prompt)
+
     def test_unspecified_flower_request_gets_available_recipe(self):
         suggestion = build_default_recipe_suggestion(
             "bouquet",

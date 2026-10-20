@@ -99,7 +99,9 @@ export type GenerationPayload = {
   accessory_id?: string;
   flower_id?: string;
   prompt_text: string;
+  revision_instruction?: string;
   review_only?: boolean;
+  selected_items?: { product_id: string; quantity: number }[];
   vase_id?: string;
   wrapping_id?: string;
 };
