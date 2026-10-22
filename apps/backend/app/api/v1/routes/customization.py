@@ -175,16 +175,18 @@ def _arrangement_visual_rule(arrangement_type: str) -> str:
             "balanced fresh stems standing naturally inside the vase. Do not show bouquet wrapping, a flower box, or a top-down view. "
         )
     return (
-        "Visual style lock: bouquet arrangement. Match this product style: a full upright hand-tied bouquet centered on a clean "
-        "white studio background, photographed from a front eye-level product view with a very slight high angle so the flower "
+        "Visual style lock: bouquet arrangement. Match this product style: a full upright hand-tied bouquet centered in a vertical portrait "
+        "product frame with generous space above and below on a clean white studio background, photographed from a front eye-level "
+        "product view with a very slight high angle so the flower "
         "cluster is visible. Make the selected wrapping look physically realistic: layered overlapping panels around the stems, "
         "believable material thickness, natural folds and creases, slightly irregular edges, compression where it is held, and soft "
         "contact shadows between layers. Match the exact wrapper color and material named in the recipe; never default to brown, beige, "
         "or kraft paper when the selected wrapper is white or another color. Never render the wrapping as a flat pasted texture, a rigid "
         "geometric cone, floating sheets, or a smooth CGI shell. "
         "Secure it only with finishing materials explicitly listed in the recipe. The bouquet should have a rounded/full flower head "
-        "cluster at the top and the wrapped stem bundle tapering downward. Keep the whole bouquet visible "
-        "from flower tips to bottom wrap. Do not show a vase, acrylic box, basket, top-down flat lay, or loose flowers outside the wrapper. "
+        "cluster at the top and the wrapped stem bundle tapering downward to a visible bottom tip or bow. Keep the whole bouquet visible "
+        "from flower tips through the full wrapped body; do not close-crop or cut off the stems. Do not show a vase, acrylic box, basket, "
+        "top-down flat lay, or loose flowers outside the wrapper. "
     )
 
 

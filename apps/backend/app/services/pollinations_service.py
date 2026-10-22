@@ -53,20 +53,23 @@ class PollinationsService:
             )
         else:
             style_prompt = (
-                "Full upright hand-tied bouquet centered on a clean white studio background, front eye-level "
-                "florist product photo with slight high angle, rounded full flower cluster at the top, layered "
-                "realistic folded wrapping material flaring outward around the blooms, natural creases and contact "
-                "shadows, only recipe-listed finishing materials, wrapped stem bundle tapering downward, whole bouquet visible from flower tips to "
-                "bottom wrap, no vase, no acrylic box, no basket, no top-down flat lay, no people, no text, no watermarks"
+                "Full upright hand-tied bouquet centered in a vertical portrait product frame with generous space above and below, "
+                "front eye-level florist product photo with slight high angle, rounded full flower cluster at the top, layered "
+                "realistic folded wrapping material flaring outward around the blooms, natural creases and contact shadows, "
+                "only recipe-listed finishing materials, wrapped stem bundle tapering downward to a visible bottom tip or bow, "
+                "show the complete bouquet from flower tips through the full wrapped body, no close-up crop, no cut-off stems, "
+                "no vase, no acrylic box, no basket, no top-down flat lay, no people, no text, no watermarks"
             )
 
         return [polished_prompt, f"{optimized_prompt}. {style_prompt}"]
 
-    def _pollinations_urls(self, encoded_prompt: str, clean_key: str, seed: int):
+    def _pollinations_urls(self, encoded_prompt: str, clean_key: str, seed: int, arrangement_type: str = "bouquet"):
         # Use only the current unified endpoint. Authentication is sent in the
         # Authorization header so the secret key never appears in URLs/logs.
+        style = str(arrangement_type or "bouquet").strip().lower()
+        width, height = (768, 1024) if style in {"bouquet", "vase"} else (1024, 1024)
         return [
-            f"{self.base_url}{encoded_prompt}?width=768&height=768&model={model}&nologo=true&seed={seed}"
+            f"{self.base_url}{encoded_prompt}?width={width}&height={height}&model={model}&nologo=true&seed={seed}"
             for model in (self.model, self.fallback_model)
         ]
 
@@ -238,7 +241,7 @@ class PollinationsService:
                     encoded_prompt = quote(safe_prompt, safe="")
 
                     attempt_seed = generation_seed + attempt
-                    for url_index, pollinations_url in enumerate(self._pollinations_urls(encoded_prompt, clean_key, attempt_seed), start=1):
+                    for url_index, pollinations_url in enumerate(self._pollinations_urls(encoded_prompt, clean_key, attempt_seed, arrangement_type), start=1):
                         try:
                             # Image generation commonly exceeds one minute. A short
                             # read timeout abandons a valid authenticated job while

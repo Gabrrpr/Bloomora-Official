@@ -441,7 +441,8 @@ def build_complete_image_prompt(
         else ""
     )
     return (
-        "Ultra-realistic front-facing product photo of one complete retail florist arrangement. "
+        "Ultra-realistic front-facing product photo of one complete retail florist arrangement. For bouquets, use a vertical portrait frame "
+        "with generous space above and below so the full flower head, wrapped body, stems, and bow remain visible. "
         f"Use exactly these florist materials: {exact_materials}. "
         f"{flower_rule}{presentation_rule} {design_rule}"
         "Clean studio lighting, natural textures, no top-down view. "

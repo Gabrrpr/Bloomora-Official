@@ -757,7 +757,7 @@ export default function MixAndMatch({ onNavigate }) {
                   {result.generated_image_url
                     ? (
                       <>
-                        <img src={result.generated_image_url} alt={arrangementName} className="w-full h-full object-cover transition-transform duration-[600ms] ease-out group-hover:scale-[1.06]" />
+                        <img src={result.generated_image_url} alt={arrangementName} className="w-full h-full object-contain p-2 transition-transform duration-[600ms] ease-out group-hover:scale-[1.03]" />
                         {/* Always-visible zoom pill */}
                         <div className="absolute top-3 right-3 flex items-center gap-1.5 px-2.5 py-1.5 rounded-full backdrop-blur-md transition-all opacity-90 group-hover:opacity-100 group-hover:scale-105"
                           style={{ backgroundColor: "rgba(0,0,0,0.45)", boxShadow: "0 2px 8px rgba(0,0,0,0.25)" }}>
