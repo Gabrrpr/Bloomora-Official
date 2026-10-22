@@ -70,8 +70,17 @@ const AUTO_PLAY_MS = 6500
 function resolveImage(slide) {
   if (!slide.image) return heroBg1
   if (IMAGE_MAP[slide.image]) return IMAGE_MAP[slide.image]
-  if (String(slide.image).startsWith("http")) return slide.image
+  if (String(slide.image).startsWith("http") || String(slide.image).startsWith("data:")) return slide.image
   return heroBg1
+}
+
+function normalizeSlides(slides) {
+  return slides.map((slide, index) => ({
+    ...slide,
+    id: slide.id || `hero-${index}`,
+    accent: slide.accent || "#2E8B34",
+    image: resolveImage(slide),
+  }))
 }
 
 function slideNumber(index) {
@@ -82,10 +91,18 @@ function shortTitle(slide) {
   return String(slide.headline || slide.tag || "Our flowers").split("\n")[0]
 }
 
-export default function HeroCarousel({ onNavigate }) {
+export default function HeroCarousel({ onNavigate, slides: previewSlides = null, initialSlide = 0, readOnly = false }) {
   const { isDark } = useTheme()
-  const [heroes, setHeroes] = useState(DEFAULT_HEROES)
-  const [current, setCurrent] = useState(0)
+  const [heroes, setHeroes] = useState(() => (
+    Array.isArray(previewSlides) && previewSlides.length > 0
+      ? normalizeSlides(previewSlides)
+      : DEFAULT_HEROES
+  ))
+  const [current, setCurrent] = useState(() => (
+    Array.isArray(previewSlides) && previewSlides.length > 0
+      ? Math.min(Math.max(initialSlide, 0), previewSlides.length - 1)
+      : 0
+  ))
   const [animating, setAnimating] = useState(false)
   const [progress, setProgress] = useState(0)
   const [interactionPaused, setInteractionPaused] = useState(false)
@@ -93,20 +110,26 @@ export default function HeroCarousel({ onNavigate }) {
   const paused = interactionPaused || userPaused
 
   useEffect(() => {
+    if (Array.isArray(previewSlides)) {
+      if (previewSlides.length > 0) {
+        setHeroes(normalizeSlides(previewSlides))
+        setCurrent(Math.min(Math.max(initialSlide, 0), previewSlides.length - 1))
+      } else {
+        setHeroes([])
+        setCurrent(0)
+      }
+      return undefined
+    }
+
     api.getHeroSlides()
       .then((data) => {
         if (data?.slides && Array.isArray(data.slides) && data.slides.length > 0) {
-          setHeroes(data.slides.map((slide, index) => ({
-            ...slide,
-            id: slide.id || `hero-${index}`,
-            accent: slide.accent || "#2E8B34",
-            image: resolveImage(slide),
-          })))
+          setHeroes(normalizeSlides(data.slides))
           setCurrent(0)
         }
       })
       .catch(() => {})
-  }, [])
+  }, [initialSlide, previewSlides])
 
   const goTo = (index) => {
     if (animating || index === current || heroes.length < 2) return
@@ -213,7 +236,7 @@ export default function HeroCarousel({ onNavigate }) {
 
               <div className="mt-5 flex flex-nowrap items-center gap-3 sm:mt-8 sm:flex-wrap">
                 <button
-                  onClick={() => onNavigate?.(primaryNav)}
+                  onClick={() => !readOnly && onNavigate?.(primaryNav)}
                   className="hero-story__primary group inline-flex min-h-12 shrink-0 items-center gap-5 whitespace-nowrap rounded-sm bg-[#f6f0e5] px-5 sm:px-6 text-sm font-black text-[#102319] shadow-[0_16px_40px_rgba(0,0,0,0.24)] transition duration-300 hover:-translate-y-0.5 hover:bg-white"
                 >
                   <span>{hero.cta || "Shop Flowers"}</span>
@@ -222,7 +245,7 @@ export default function HeroCarousel({ onNavigate }) {
 
                 {hero.showSecondary !== false && hero.ctaSecondary && (
                   <button
-                    onClick={() => onNavigate?.(secondaryNav)}
+                    onClick={() => !readOnly && onNavigate?.(secondaryNav)}
                     className="hero-story__secondary inline-flex min-h-12 min-w-0 items-center overflow-hidden text-ellipsis whitespace-nowrap border-b border-white/60 px-2 text-sm font-extrabold text-white transition hover:border-white hover:text-white/75"
                   >
                     {hero.ctaSecondary}

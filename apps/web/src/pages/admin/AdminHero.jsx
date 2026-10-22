@@ -3,6 +3,7 @@ import { createPortal } from "react-dom"
 import { useTheme } from "../../context/ThemeContext"
 import { api } from "../../services/api.js"
 import ImageUploader from "../../components/ImageUploader"; // Adjust path as needed
+import HeroCarousel from "../../components/HeroCarousel.jsx"
 
 import heroBg1 from "../../assets/hero/HeroBG1.webp"
 import heroBg2 from "../../assets/hero/HeroBG2.webp"
@@ -543,7 +544,10 @@ export default function AdminHero() {
   const handleSave = async () => {
     setSaving(true); setError("")
     try {
-      await api.updateHeroSlides({ slides })
+      const savedData = await api.updateHeroSlides({ slides })
+      if (savedData?.slides && Array.isArray(savedData.slides)) {
+        setSlides(savedData.slides)
+      }
       setSaved(true); setTimeout(() => setSaved(false), 2000)
     } catch (e) {
       setError(e.message || "Failed to save hero slides.")
@@ -663,7 +667,7 @@ const isCustomImageActive = activeSlide.image === "custom" || activeSlide.image?
           </div>
           <p className="text-xs" style={{ color:subTxt }}>Updates as you type</p>
         </div>
-        <HeroPreview slide={activeSlide} isDark={isDark} />
+        <HeroCarousel slides={slides} initialSlide={activeIdx} readOnly />
       </div>
 
       {/* Falling Roses toggle */}

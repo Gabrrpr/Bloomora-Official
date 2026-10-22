@@ -160,10 +160,20 @@ export default function ChatWidget() {
 
   // Load products properly to feed the Context Bubble
   useEffect(() => {
-    api.getProducts().then(res => {
-      const items = res.data || res.products || (Array.isArray(res) ? res : []);
+    api
+    .getProducts({
+      limit: 100,
+      offset: 0,
+      paginated: true,
+    })
+    .then((res) => {
+      const items = Array.isArray(res)
+      ? res
+      : res?.items || res?.data || res?.products || [];
+
       setAllProducts(items);
-    }).catch(console.error);
+    })
+    .catch(console.error);
   }, []);
 
   useEffect(() => {

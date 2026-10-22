@@ -407,7 +407,11 @@ export const api = {
 
   // ── Site Customization ──────────────────────────────────────────────────
   async getHeroSlides() {
-    return api.get('/site-customization/hero');
+    // Hero content is editable CMS data. Prevent the browser/CDN from
+    // serving an older GET response immediately after an admin save.
+    return api.request(`/site-customization/hero?_=${Date.now()}`, {
+      cache: 'no-store',
+    });
   },
 
   async updateHeroSlides(data) {
