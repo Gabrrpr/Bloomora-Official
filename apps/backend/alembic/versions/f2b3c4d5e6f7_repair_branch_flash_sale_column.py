@@ -1,7 +1,7 @@
 """repair missing branch flash sale column
 
 Revision ID: f2b3c4d5e6f7
-Revises: f1a2b3c4d5e6
+Revises: f1a2b3c4d5e7
 
 Some databases were stamped at the preceding revision without the physical
 column. Keep this repair idempotent so it is also safe on databases where the
@@ -12,7 +12,7 @@ from alembic import op
 
 
 revision = "f2b3c4d5e6f7"
-down_revision = "f1a2b3c4d5e6"
+down_revision = "f1a2b3c4d5e7"
 branch_labels = None
 depends_on = None
 
