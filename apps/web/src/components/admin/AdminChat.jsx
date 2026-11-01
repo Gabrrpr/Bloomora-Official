@@ -8,6 +8,13 @@ import UnsendModal from "../../components/UnsendModal"
 const DG = "#0C573E"
 const G = "#2E8B34"
 
+function formatChatTimestamp(value) {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  return date.toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
+}
+
 // Rotating reassurance messages shown while an image uploads.
 const SENDING_MESSAGES = [
   "Sending image… please wait",
@@ -393,7 +400,7 @@ export default function AdminChat() {
       } catch (err) { alert("Failed to upload image."); setSending(false); return; }
     }
 
-    const newMsg = { id: Date.now(), sender: "staff", text: textToSend, image: imageUrl, time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) };
+    const newMsg = { id: Date.now(), sender: "staff", text: textToSend, image: imageUrl, time: new Date().toISOString() };
     setMessages(prev => [...prev, newMsg]);
     setInput(""); setAttachedImage(null); setShowQuickReplies(false);
     try { await api.sendMessage(activeId, textToSend, imageUrl); } catch (err) { console.error(err); } finally { setSending(false); }
@@ -409,7 +416,7 @@ export default function AdminChat() {
         sender: msg.sender === 'customer' ? 'customer' : 'staff', 
         text: msg.message, 
         image: msg.image_url, 
-        time: msg.created_at ? new Date(msg.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : '',
+        time: msg.created_at || '',
         context_id: msg.context_id, // 🚀 ADDED mapping
         is_auto_reply: Boolean(msg.is_auto_reply || String(msg.context_id || "").startsWith("support-automation:"))
       }))
@@ -488,7 +495,7 @@ export default function AdminChat() {
             sender: data.sender === 'staff' ? 'staff' : 'customer',
             text: data.message || data.text,
             image: data.image_url,
-            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            time: data.created_at || new Date().toISOString(),
             context_id: data.context_id, // 🚀 ADDED mapping
             is_auto_reply: isAutomatedReply
         }]);
@@ -661,6 +668,11 @@ export default function AdminChat() {
                             }}>
                             {msg.text}
                           </div>
+                        )}
+                        {msg.time && (
+                          <p className={`mt-1 text-[10px] ${isStaff ? "text-right" : "text-left"}`} style={{ color: isDark ? "#64748b" : "#9ca3af" }}>
+                            {formatChatTimestamp(msg.time)}
+                          </p>
                         )}
                       </div>
                     </div>

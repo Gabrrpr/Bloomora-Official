@@ -595,6 +595,23 @@ async def check_and_generate(
         ai_verdict.get("design_notes") or "",
     )
 
+    # A regeneration suggestion must reach the image model verbatim. Gemini's
+    # design_notes are intentionally limited to general visual preferences, so
+    # relying on them alone can cause a specific requested change to be lost.
+    # Keep the stocked recipe immutable while making the requested visual edit
+    # explicit and mandatory for the image generator.
+    revision_instruction = " ".join(str(payload.revision_instruction or "").split()).strip()
+    if revision_instruction:
+        final_image_prompt = (
+            f"{final_image_prompt} Customer-requested visual revision: {revision_instruction}. "
+            "Apply this revision visibly to the arrangement itself, not only to the background. "
+            "Preserve the exact named flower varieties, materials, quantities, arrangement type, "
+            "and price recipe; do not add, remove, or replace stocked items. If the revision names "
+            "a flower or material that is not already in the exact recipe, ignore that part of the "
+            "revision and do not render the unlisted item. The image must show only the flowers and "
+            "materials listed in the recipe so it matches the cost breakdown."
+        )
+
     if payload.review_only:
         remaining = get_remaining_generations(db, current_user.id)
         return CustomizationResponse(

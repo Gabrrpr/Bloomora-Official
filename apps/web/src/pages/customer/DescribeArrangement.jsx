@@ -98,6 +98,7 @@ export default function DescribeArrangement({ onNavigate }) {
   const currentBranch = localStorage.getItem("selectedBranch") || localStorage.getItem("branch") || "Manila"
 
   const [prompt, setPrompt] = useState("")
+  const [originalPrompt, setOriginalPrompt] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
@@ -384,6 +385,7 @@ export default function DescribeArrangement({ onNavigate }) {
       return
     }
     if (!prompt.trim()) return
+    setOriginalPrompt(prompt.trim())
     setLoading(true)
     setError(null)
     if (!preserveResult) setResult(null)
@@ -476,6 +478,7 @@ export default function DescribeArrangement({ onNavigate }) {
     }
 
     const suggestionText = imageSuggestion.trim()
+    const basePrompt = originalPrompt.trim() || prompt.trim()
     const selectedItems = result.price_breakdown.items
       .filter(item => item.product_id)
       .map(item => ({ product_id: item.product_id, quantity: item.quantity }))
@@ -489,8 +492,8 @@ export default function DescribeArrangement({ onNavigate }) {
     try {
       const revisedStyle = inferArrangementStyle(result.price_breakdown.items)
       const data = await api.checkAndGenerate({
-        prompt_text: prompt.trim(),
-        revision_instruction: suggestionText || "Create another variation of this image while preserving the current design.",
+        prompt_text: basePrompt,
+        revision_instruction: suggestionText || "Make a visual variation while preserving the original arrangement, selected flowers, materials, quantities, and overall design.",
         arrangement_type: normalizeArrangementStyle(revisedStyle),
         selected_items: selectedItems,
       })
@@ -612,6 +615,7 @@ export default function DescribeArrangement({ onNavigate }) {
 
   const editLastPrompt = () => {
     setResult(null)
+    setOriginalPrompt("")
     setImageSuggestion("")
     window.requestAnimationFrame(() => {
       promptEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
@@ -620,6 +624,7 @@ export default function DescribeArrangement({ onNavigate }) {
 
   const resetAll = () => {
     setResult(null); 
+    setOriginalPrompt("")
     setUnavailableItems([]); 
     setRecipeReview(null);
     setPromptAlternatives([]);
@@ -1421,18 +1426,18 @@ export default function DescribeArrangement({ onNavigate }) {
                     <div className="mt-4 p-4 rounded-xl border" style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>
                       <label className="text-[11px] font-semibold uppercase tracking-wider block mb-2" style={{ color: mutedC }}>Regenerate your design</label>
                       <div className="flex items-center justify-between gap-3 mb-2">
-                        <span className="text-xs font-medium" style={{ color: subHeadC }}>Original request</span>
+                        <span className="text-xs font-medium" style={{ color: subHeadC }}>Original request (kept as the base)</span>
                         <span className="text-[10px]" style={{ color: mutedC }}>{prompt.length} / {MAX}</span>
                       </div>
                       <textarea
                         value={prompt}
-                        onChange={event => setPrompt(event.target.value.slice(0, MAX))}
-                        placeholder="Describe the arrangement you want..."
+                        readOnly
+                        placeholder="Your original arrangement request"
                         rows={3}
-                        className="w-full px-3 py-2.5 text-sm border rounded-xl focus:outline-none focus:ring-1 focus:ring-green-600 transition resize-none"
-                        style={{ backgroundColor: inputBg, borderColor: inputBdr, color: inputText }}
+                        className="w-full px-3 py-2.5 text-sm border rounded-xl resize-none opacity-80 cursor-not-allowed"
+                        style={{ backgroundColor: isDark ? "rgba(15,23,42,0.55)" : "#f8fafc", borderColor: inputBdr, color: inputText }}
                       />
-                      <label className="text-xs font-medium block mt-3 mb-2" style={{ color: subHeadC }}>What should change in this image? (optional)</label>
+                      <label className="text-xs font-medium block mt-3 mb-2" style={{ color: subHeadC }}>What should change in this image? (optional suggestion)</label>
                       <textarea
                         value={imageSuggestion}
                         onChange={e => setImageSuggestion(e.target.value.slice(0, 260))}

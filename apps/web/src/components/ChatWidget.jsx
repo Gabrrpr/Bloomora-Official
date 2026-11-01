@@ -8,6 +8,13 @@ import { FAQ_UPDATED_EVENT, loadFaqCategories } from '../utils/faqContent.js'
 const G  = "#2E8B34"
 const DG = "#0C573E"
 
+function formatChatTimestamp(value) {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  return date.toLocaleString("en-PH", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })
+}
+
 import estingsLogo from '../assets/EstingsLogo.svg'
 
 const FALLBACK_QUICK_REPLIES = ["What flowers do you offer?", "How does delivery work?", "Can I customize a bouquet?", "What are your store hours?", "Do you deliver same day?"]
@@ -292,7 +299,7 @@ export default function ChatWidget() {
           setMessages(prev => {
             const last = prev[prev.length - 1]
             if (last && last.from === 'bot' && last.text === data.message) return prev
-            return [...prev, { id: data.id || Date.now(), from: 'bot', text: data.message, image: data.image_url, context_id: data.context_id }]
+            return [...prev, { id: data.id || Date.now(), from: 'bot', text: data.message, image: data.image_url, time: data.created_at || new Date().toISOString(), context_id: data.context_id }]
           })
         }
         websocket.onclose = () => { wsRef.current = null }
@@ -333,6 +340,7 @@ export default function ChatWidget() {
       from: "user",
       text: text || null,
       image: imageData || null,
+      time: new Date().toISOString(),
       context_id: contextId
     }])
 
@@ -496,6 +504,11 @@ export default function ChatWidget() {
                       <div className="px-3.5 py-2.5 text-sm leading-relaxed shadow-sm" style={{ borderRadius: msg.from === "user" ? "18px 18px 4px 18px" : "18px 18px 18px 4px", backgroundColor: msg.from === "user" ? DG : botMsgBg, color: msg.from === "user" ? "white" : botMsgText, border: msg.from === "bot" ? `1px solid ${botMsgBdr}` : "none", whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
                         {msg.text}
                       </div>
+                    )}
+                    {msg.time && (
+                      <p className={`mt-1 text-[10px] ${msg.from === "user" ? "text-right" : "text-left"}`} style={{ color: isDark ? "#64748b" : "#9ca3af" }}>
+                        {formatChatTimestamp(msg.time)}
+                      </p>
                     )}
                   </div>
                 </div>

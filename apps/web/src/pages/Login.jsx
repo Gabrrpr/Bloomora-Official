@@ -281,14 +281,14 @@ export default function Login({ onNavigate }) {
     <>
       {loading && <FlowerLoader message="Signing you in..." />}
 
-      <div className="min-h-screen overflow-hidden">
-        <div className="min-h-screen flex">
+      <div className="min-h-screen">
+        <div className="min-h-screen flex items-stretch">
 
-          <div className="hidden lg:block lg:w-1/2 flex-shrink-0 sticky top-0 h-screen" style={leftStyle}>
+          <div className="hidden lg:block lg:w-1/2 flex-shrink-0 self-stretch" style={leftStyle}>
             <FlowerPanel />
           </div>
 
-          <div className="w-full lg:w-1/2 flex flex-col bg-gray-50 overflow-y-auto" style={rightStyle}>
+          <div className="w-full lg:w-1/2 flex flex-col bg-white" style={rightStyle}>
             <MobileFlowerBanner />
 
             <div className="flex-1 flex items-center justify-center px-6 py-12">

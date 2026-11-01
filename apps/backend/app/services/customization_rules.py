@@ -437,6 +437,7 @@ def build_complete_image_prompt(
     ])
     flower_rule = (
         f"Mandatory visible flower varieties: {flower_names}; each variety must be clearly recognizable. "
+        f"Only these named flower varieties are allowed in the image; do not add any other flower species or colors, even as filler. "
         if flower_names
         else ""
     )

@@ -66,10 +66,10 @@ def validate_and_optimize_prompt(user_prompt: str, inventory_list: list[dict]) -
     2. If it is malicious, nonsensical, non-floral, or requests materials absent from the inventory, set is_possible to false and explain why.
        Do NOT reject a legitimate request merely because its quantity exceeds stock or a standard arrangement size. Extract the original quantity exactly; the backend applies deterministic quantity rules.
     3. If possible, set is_possible to true, and create the 'optimized_prompt'. 
-       CRITICAL: The 'optimized_prompt' must be a highly concise visual description for an image generator (MAXIMUM 300 characters / 2 sentences). Do not mention add-ons like chocolates or cards.
+       CRITICAL: The 'optimized_prompt' must be a highly concise visual description for an image generator (MAXIMUM 300 characters / 2 sentences). Do not invent or add flower varieties that the user did not request. Do not mention add-ons like chocolates or cards.
     4. Set arrangement_type to bouquet, vase, or box. Default to bouquet when no presentation is stated.
     5. List the exact product_id and name of every inventory item requested. Preserve explicit quantities exactly. If no quantity is given, choose a modest realistic quantity.
-    6. Return design_notes containing only visual preferences such as colors, mood, occasion, and style. Exclude quantities and product names because Python builds the final stocked recipe.
+    6. Return design_notes containing only visual preferences such as colors, mood, occasion, and style. Extract these preferences even when the requested material is unavailable, so the backend can suggest a stocked replacement that still matches the customer's original intent. Never introduce additional flower varieties in design_notes. Exclude quantities and product names because Python builds the final stocked recipe.
     
     User Request: {user_prompt}
     """

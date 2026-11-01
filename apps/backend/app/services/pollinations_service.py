@@ -56,6 +56,7 @@ class PollinationsService:
                 "Full upright hand-tied bouquet centered in a vertical portrait product frame with generous space above and below, "
                 "front eye-level florist product photo with slight high angle, rounded full flower cluster at the top, layered "
                 "realistic folded wrapping material flaring outward around the blooms, natural creases and contact shadows, "
+                "only the exact flower varieties named in the recipe, no other flower species, no roses unless roses are explicitly named, "
                 "only recipe-listed finishing materials, wrapped stem bundle tapering downward to a visible bottom tip or bow, "
                 "show the complete bouquet from flower tips through the full wrapped body, no close-up crop, no cut-off stems, "
                 "no vase, no acrylic box, no basket, no top-down flat lay, no people, no text, no watermarks"
