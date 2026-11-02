@@ -33,18 +33,11 @@ class PollinationsService:
         )
 
         if style == "box":
-            style_prompt = (
-                "Real premium florist product photo of a transparent acrylic flower display case with a square footprint, "
-                "straight upright clear walls, shallow clear upper cover enclosing the bloom heads, transparent horizontal "
-                "support plate at mid-height, and flat deep rose-red base. Exactly the recipe-listed bloom count forms a compact "
-                "even grid in the upper half. Every short green stem passes through a separate round hole in the support plate and "
-                "is visible in the empty lower half. Slightly elevated front three-quarter camera view shows the top, front, one "
-                "side, support tray, stems, and base at once; entire case centered on a clean white studio background. Straight "
-                "parallel rectangular edges, physically connected acrylic panels, subtle realistic reflections, small blank oval "
-                "label low on front. Not cardboard, not a vase, not a basket, not a terrarium, not a jewelry box, not a hand-tied "
-                "bouquet, not tilted, not diamond-shaped, not solid glass. No ribbon, wrapping, extra flowers, readable text, people, or watermarks"
+            box_structure = (
+                "Overhead view, camera 90 degrees directly above a square acrylic box. "
+                "One horizontal 3x3 grid of upward-facing blooms; stems hidden below. No fillers. "
             )
-            return [polished_prompt, f"{optimized_prompt}. {style_prompt}"]
+            return [f"{box_structure}{optimized_prompt}"]
         elif style == "vase":
             style_prompt = (
                 "Elegant fresh flower vase arrangement, upright vase fully visible from eye level, balanced "
@@ -97,20 +90,22 @@ class PollinationsService:
 
         if style == "box":
             centers = [
-                (390, 355), (510, 350), (630, 355),
-                (405, 470), (525, 465), (645, 470),
-                (420, 585), (540, 580), (660, 585),
+                (390, 330), (510, 325), (630, 330),
+                (405, 425), (525, 420), (645, 425),
+                (420, 515), (540, 510), (660, 515),
             ]
-            draw.polygon([(270, 300), (720, 300), (805, 390), (350, 390)], fill="#f8fafc", outline="#94a3b8")
-            draw.polygon([(350, 390), (805, 390), (760, 765), (300, 765)], fill="#fff7ed", outline="#94a3b8")
-            draw.polygon([(300, 765), (760, 765), (695, 835), (365, 835)], fill="#fecdd3", outline="#94a3b8")
-            draw.line((350, 390, 300, 765), fill="#94a3b8", width=4)
-            draw.line((805, 390, 760, 765), fill="#94a3b8", width=4)
-            draw.line((270, 300, 350, 390), fill="#cbd5e1", width=3)
-            draw.line((720, 300, 805, 390), fill="#cbd5e1", width=3)
-            draw.rectangle((330, 640, 770, 700), fill="#fda4af", outline="#fb7185")
-            draw.line((330, 640, 770, 640), fill="#e2e8f0", width=4)
-            stem_base = (535, 680)
+            # Keep the fallback preview upright and box-like: the reference is
+            # a clear acrylic case, not a tilted diamond or round gift box.
+            draw.polygon([(250, 250), (750, 250), (850, 350), (350, 350)], fill="#f8fafc", outline="#94a3b8")
+            draw.polygon([(350, 350), (850, 350), (760, 820), (300, 820)], fill="#fff7ed", outline="#94a3b8")
+            draw.polygon([(300, 820), (760, 820), (700, 875), (360, 875)], fill="#9f1239", outline="#881337")
+            draw.line((350, 350, 300, 820), fill="#94a3b8", width=4)
+            draw.line((850, 350, 760, 820), fill="#94a3b8", width=4)
+            draw.line((250, 250, 350, 350), fill="#cbd5e1", width=3)
+            draw.line((750, 250, 850, 350), fill="#cbd5e1", width=3)
+            draw.rectangle((330, 570, 800, 625), fill="#fda4af", outline="#fb7185")
+            draw.line((330, 570, 800, 570), fill="#e2e8f0", width=4)
+            stem_base = (540, 610)
         elif style == "vase":
             draw.rounded_rectangle((405, 565, 620, 815), radius=42, fill="#e0f2fe", outline="#38bdf8", width=5)
             draw.ellipse((390, 535, 635, 610), fill="#f0f9ff", outline="#38bdf8", width=4)

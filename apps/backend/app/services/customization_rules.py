@@ -269,6 +269,8 @@ def resolve_complete_recipe(
         if material is None:
             continue
         material_type = material.material_type
+        if arrangement_type == "box" and material_type == "filler":
+            continue
         if material_type in REQUIRED_PRESENTATION_TYPES.values() and material_type != required_presentation:
             continue
         if material_type not in {"flower", "filler", "accessory", required_presentation}:
@@ -322,6 +324,8 @@ def resolve_complete_recipe(
         )
 
     for optional_type in ("filler", "accessory"):
+        if arrangement_type == "box" and optional_type == "filler":
+            continue
         if optional_type not in requested_material_types:
             continue
         has_optional_type = any(
@@ -340,6 +344,8 @@ def resolve_complete_recipe(
 
     if include_finishing_suggestions:
         for optional_type in ("filler", "accessory"):
+            if arrangement_type == "box" and optional_type == "filler":
+                continue
             has_optional_type = any(
                 inventory_by_id[product_id].material_type == optional_type
                 for product_id in resolved
@@ -398,8 +404,17 @@ def build_complete_image_prompt(
         if material:
             grouped.setdefault(material.material_type, []).append(item)
 
+    # Box visuals must not render wrapping/accessories (for example a bow)
+    # inside the acrylic case. They remain part of the order recipe and price.
+    visual_recipe_items = recipe_items
+    if arrangement_type == "box":
+        visual_recipe_items = [
+            item for item in recipe_items
+            if inventory_by_id.get(item.product_id or "")
+            and inventory_by_id[item.product_id or ""].material_type not in {"wrapping", "accessory", "filler"}
+        ]
     exact_materials = _join_human_readable(
-        [f"{item.quantity} {item.product_name}" for item in recipe_items]
+        [f"{item.quantity} {item.product_name}" for item in visual_recipe_items]
     )
     presentation_names = ", ".join(
         item.product_name
@@ -421,7 +436,7 @@ def build_complete_image_prompt(
         )
     else:
         presentation_rule = (
-            f"Show the flowers inside the selected transparent acrylic flower display case, {presentation_names}. "
+            f"Show only the flowers and the selected transparent acrylic flower display case, {presentation_names}; ignore any selected wrapping or accessory for the box image. "
             "Use a two-level construction: exact recipe-listed bloom heads in a compact grid under the shallow clear upper cover, "
             "with short stems passing through individual holes in a transparent mid-height support plate and visibly continuing "
             "into the lower compartment above a deep rose-red base. Show the complete upright rectangular case from a slightly "
@@ -441,6 +456,23 @@ def build_complete_image_prompt(
         if flower_names
         else ""
     )
+    if arrangement_type == "box":
+        # Keep the box recipe free from the generic bouquet framing below.
+        # Free-form design notes can repeat wrapper/bow directions from the
+        # customer prompt, conflicting with the acrylic display structure.
+        return (
+            f"Straight overhead photograph, camera looking vertically down at 90 degrees into a square acrylic florist case. Exact visible materials: {exact_materials}. "
+            f"{flower_rule}"
+            "Case width approximately equals depth; height is less than width. "
+            "A single horizontal layer of flower heads faces upward beneath a flat transparent lid. "
+            "A transparent support plate has exactly nine holes in three rows of three. "
+            "All blooms sit at the SAME height in ONE horizontal 3 by 3 grid. "
+            "A thin deep rose-red base is glimpsed through empty holes. No flowers on the base or on additional shelves. "
+            "Only the upward-facing heads and square acrylic rim are prominent; stems are hidden below the heads. "
+            "All four corners visible, rim parallel to image edges, no front or side view. Unoccupied holes remain empty. "
+            "No fillers, greenery, extra blooms, wrapping, bow, tied stems, tall display cabinet, solid pedestal, or flowers outside the case. "
+            "White background, realistic acrylic reflections."
+        )
     return (
         "Ultra-realistic front-facing product photo of one complete retail florist arrangement. For bouquets, use a vertical portrait frame "
         "with generous space above and below so the full flower head, wrapped body, stems, and bow remain visible. "

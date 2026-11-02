@@ -8,6 +8,11 @@ class SelectedCustomizationItem(BaseModel):
     quantity: int = Field(default=1, ge=1, le=999)
 
 
+class BoxPosition(BaseModel):
+    hole: int = Field(ge=0, le=8)
+    product_id: UUID
+
+
 class CustomizationRequest(BaseModel):
     prompt_text: str
     revision_instruction: Optional[str] = Field(default=None, max_length=500)
@@ -18,6 +23,7 @@ class CustomizationRequest(BaseModel):
     arrangement_type: Optional[str] = None
     review_only: bool = False
     selected_items: List[SelectedCustomizationItem] = Field(default_factory=list)
+    box_positions: List[BoxPosition] = Field(default_factory=list, max_length=9)
 
 
 class AlternativeItem(BaseModel):

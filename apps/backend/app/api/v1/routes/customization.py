@@ -158,17 +158,7 @@ def _infer_arrangement_type(arrangement_type: Optional[str], prompt_text: str) -
 
 def _arrangement_visual_rule(arrangement_type: str) -> str:
     if arrangement_type == "box":
-        return (
-            "Visual style lock: boxed arrangement. Render a premium transparent acrylic florist display case with a square "
-            "footprint, straight upright clear walls, a shallow clear upper cover around the bloom heads, a transparent horizontal "
-            "support plate at mid-height, and a flat deep rose-red base. Place exactly the recipe-listed number of bloom heads in a "
-            "compact evenly spaced grid in the upper half, nearly filling that compartment but remaining below the cover. Each short "
-            "green stem must pass through its own circular hole in the support plate and remain visible in the empty lower compartment. "
-            "Use a slightly elevated front three-quarter product angle showing the top, front, one side, support plate, stems, and base. "
-            "Keep all box edges straight, parallel, level, rectangular, and physically connected. Add only a small blank oval label low "
-            "on the front. This is not a cardboard gift box, vase, basket, terrarium, jewelry box, hand-tied bouquet, tilted diamond, "
-            "or solid glass block. No ribbon, wrapping paper, extra flowers, readable text, flowers outside the case, or blooms above the cover. "
-        )
+        return "Straight overhead product photograph, camera directly above the acrylic box looking vertically down at 90 degrees. Square rim parallel to the image edges, all four corners visible. Exactly nine planting holes in a 3 by 3 grid on ONE horizontal plane. Show only the selected flower heads facing upward at their assigned holes; unoccupied holes remain empty. Stems are hidden beneath the heads from this angle. Clear acrylic rim and subtle transparent lid reflections, thin red base visible only through gaps. No fillers, greenery, additional blooms, shelves, bow, wrapping, front view, side view, or tilted perspective. White studio background."
     if arrangement_type == "vase":
         return (
             "Visual style lock: vase arrangement. Show an upright vase arrangement from eye level with the full vase visible, "
@@ -588,6 +578,23 @@ async def check_and_generate(
         )
 
     price_breakdown = _calculate_complete_recipe_price(complete_recipe, refreshed_inventory)
+    placement_rule = ""
+    if payload.box_positions:
+        from collections import Counter
+        inventory_by_id = {item.product_id: item for item in refreshed_inventory}
+        expected = Counter()
+        for item in complete_recipe:
+            material = inventory_by_id.get(item.product_id)
+            if material and material.material_type == "flower":
+                expected[item.product_id] += item.quantity
+        actual = Counter(str(position.product_id) for position in payload.box_positions)
+        holes = [position.hole for position in payload.box_positions]
+        if arrangement_type != "box" or len(set(holes)) != len(holes) or actual != expected:
+            raise HTTPException(status_code=422, detail="Box positions must match the selected flowers, with one stem per hole.")
+        by_hole = {position.hole: inventory_by_id[str(position.product_id)].product_name for position in payload.box_positions}
+        placement_rule = "Box layout viewed from above; holes 1-3 back row, 4-6 middle row, 7-9 front row: " + "; ".join(
+            f"{hole + 1}: {by_hole.get(hole, 'EMPTY')}" for hole in range(9)
+        ) + ". One separate stem per occupied hole; leave EMPTY holes visibly empty. "
     final_image_prompt = build_complete_image_prompt(
         arrangement_type,
         complete_recipe,
@@ -650,15 +657,51 @@ async def check_and_generate(
     style_visual_rule = _arrangement_visual_rule(arrangement_type)
     # Keep the exact stocked recipe first so downstream length limits cannot
     # truncate the customer's requested materials.
-    final_image_prompt = f"{final_image_prompt} {style_visual_rule}"
+    final_image_prompt = f"{placement_rule}{final_image_prompt} {style_visual_rule}"
+    if placement_rule:
+        arrangement.prompt_text += "\nFlorist placement reference: " + placement_rule
+        db.commit()
     
     try:
-        generated_url = await pollinations.generate_arrangement_image(
-            db=db,
-            arrangement_id=str(arrangement.id),
-            optimized_prompt=final_image_prompt,
-            arrangement_type=arrangement_type,
-        )
+        if arrangement_type == "box":
+            from app.services.box_preview import build_box_preview
+            from app.core.config import settings
+            catalog = {item.product_id: item for item in refreshed_inventory}
+            positions = [(position.hole, str(position.product_id)) for position in payload.box_positions]
+            if not positions:
+                flower_ids = [
+                    item.product_id for item in complete_recipe
+                    if catalog[item.product_id].material_type == "flower"
+                    for _ in range(item.quantity)
+                ]
+                positions = list(enumerate(flower_ids))
+            slots = [
+                {"hole": hole, "product_id": product_id,
+                 "name": catalog[product_id].product_name,
+                 "image_url": catalog[product_id].image_url}
+                for hole, product_id in positions
+            ]
+            try:
+                ribbon_material = catalog.get(accessory_product_id)
+                ribbon = (
+                    {"product_id": ribbon_material.product_id,
+                     "name": ribbon_material.product_name,
+                     "image_url": ribbon_material.image_url}
+                    if ribbon_material else None
+                )
+                generated_url = await build_box_preview(slots, settings.SUPABASE_URL, ribbon=ribbon)
+            except Exception as exc:
+                raise PollinationsGenerationError(
+                    "Could not build the box preview. Check that each selected flower and accessory has a PNG, JPEG, or WebP photo in shop storage."
+                ) from exc
+            arrangement.prompt_text += "\nBox positions: " + str(positions)
+        else:
+            generated_url = await pollinations.generate_arrangement_image(
+                db=db,
+                arrangement_id=str(arrangement.id),
+                optimized_prompt=final_image_prompt,
+                arrangement_type=arrangement_type,
+            )
     except PollinationsGenerationError as exc:
         db.delete(arrangement)
         db.commit()

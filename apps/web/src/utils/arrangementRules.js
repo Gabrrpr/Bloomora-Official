@@ -31,12 +31,7 @@ export function getArrangementVisualRule(style) {
   const normalized = normalizeArrangementStyle(style)
 
   if (normalized === "box") {
-    return (
-      "Use a premium transparent acrylic florist display box matching this physical construction: a straight, upright square-footprint case with clear vertical walls, a shallow transparent upper cover around the flower heads, a clear horizontal support plate at mid-height, and a flat deep rose-red base. " +
-      "Place exactly the customer's selected number of bloom heads in a compact, evenly spaced grid in the upper half. The flower heads should nearly fill the upper compartment while remaining below the clear cover. Show each short green stem passing downward through its own round hole in the clear support plate and visibly continuing into the empty lower compartment. " +
-      "Photograph the whole box from a slightly elevated front three-quarter angle so the top cover, front wall, one side wall, support plate, stems, and red base are simultaneously visible. Keep all edges straight, parallel, upright, and rectangular. Add a small blank oval florist label centered low on the front wall. " +
-      "This is a rigid acrylic flower display case, not a cardboard gift box, vase, basket, terrarium, jewelry box, hand-tied bouquet, tilted diamond, or solid glass block. Do not add ribbon, wrapping paper, extra flowers, readable text, flowers outside the case, or flowers above the cover."
-    )
+    return "Straight overhead product photograph, camera directly above the acrylic box looking vertically down at 90 degrees. Square rim parallel to the image edges, all four corners visible. Exactly nine planting holes in a 3 by 3 grid on ONE horizontal plane. Show only the selected flower heads facing upward at their assigned holes; unoccupied holes remain empty. Stems are hidden beneath the heads from this angle. Clear acrylic rim and subtle transparent lid reflections, thin red base visible only through gaps. No fillers, greenery, additional blooms, shelves, bow, wrapping, front view, side view, or tilted perspective. White studio background."
   }
 
   if (normalized === "vase") {

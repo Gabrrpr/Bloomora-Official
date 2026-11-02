@@ -7,8 +7,9 @@ import { useTheme } from "../../context/ThemeContext"
 import { getArrangementStemLimit, getArrangementVisualRule, normalizeArrangementStyle } from "../../utils/arrangementRules.js"
 import FallbackImage from "../../components/FallbackImage.jsx" // 🚀 ADDED THIS IMPORT
 import ArrangementLoadingOverlay from "../../components/ArrangementLoadingOverlay.jsx"
+import { prepareGenerationSound, playGenerationSound } from "../../utils/generationSound.js"
 import arrangementBouquet from "../../assets/MakeItPersonal/arrangement_bouquet.webp"
-import arrangementBox from "../../assets/MakeItPersonal/arrangement_box.webp"
+import arrangementBox from "../../assets/MakeItPersonal/arrangement_box_reference.png"
 import arrangementVase from "../../assets/MakeItPersonal/arrangement_vase.webp"
 
 const G  = "#2E8B34"
@@ -415,10 +416,27 @@ export default function MixAndMatch({ onNavigate }) {
     return c === "flower" || c === "flowers";
   });
 
-  const fillerList = products.filter(isFiller);
+  const fillerList = arrangementType === "box" ? [] : products.filter(isFiller);
 
   const selectedFlowers = flowerList.filter(p => (flowerQty[p.id] || 0) > 0)
   const totalStems = selectedFlowers.reduce((sum, p) => sum + (flowerQty[p.id] || 0), 0)
+  const [boxSlots, setBoxSlots] = useState(Array(9).fill(null))
+  useEffect(() => {
+    setBoxSlots(previous => {
+      const remaining = { ...flowerQty }
+      const next = previous.map(id => {
+        if (id && remaining[id] > 0) { remaining[id]--; return id }
+        return null
+      })
+      for (const product of selectedFlowers) {
+        while (remaining[product.id] > 0 && next.includes(null)) {
+          next[next.indexOf(null)] = product.id
+          remaining[product.id]--
+        }
+      }
+      return next
+    })
+  }, [flowerQty])
 
   const maxStems = ARRANGEMENTS.find(a => a.key === arrangementType)?.maxStems ?? 24
   const atStemLimit = totalStems >= maxStems
@@ -497,6 +515,7 @@ export default function MixAndMatch({ onNavigate }) {
   }
 
   const handleGenerate = async () => {
+    prepareGenerationSound()
     // 🚀 NEW: Redirect guests to login
     if (!localStorage.getItem('access_token')) {
       window.location.href = '/login';
@@ -561,6 +580,7 @@ export default function MixAndMatch({ onNavigate }) {
         // Unlike a prose prompt, this structured recipe cannot accidentally
         // count the box's visual "6 to 9 blooms" instruction as extra stems.
         selected_items: selectedItems,
+        box_positions: arrangementType === "box" ? boxSlots.map((id, hole) => id ? { hole, product_id: id } : null).filter(Boolean) : [],
       })
       if (data.validation) {
         setRecipeReview({ ...data.validation, message: data.message })
@@ -588,6 +608,7 @@ export default function MixAndMatch({ onNavigate }) {
         }
         if (data.arrangement_type) setArrangementType(data.arrangement_type)
         setResult(data)
+        if (data.generated_image_url) playGenerationSound()
         setCustomName(data.price_breakdown?.items?.[0]?.product_name || "Custom Arrangement")
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
         setCompleted(true)
@@ -1387,6 +1408,36 @@ export default function MixAndMatch({ onNavigate }) {
                   </div>
                 )
               })()}
+                  {step === 2 && arrangementType === "box" && (
+                    <div className="rounded-xl border p-4 mt-5" style={{ borderColor: tileBdr }}>
+                      <p className="font-semibold" style={{ color: headingC }}>Position your flowers</p>
+                      <p className="text-sm mb-3" style={{ color: mutedC }}>Top view · back row at top. Choose a flower for each hole. Moving a flower swaps its position with the chosen hole. Unused holes stay empty.</p>
+                      <div className="grid grid-cols-3 gap-3">
+                        {boxSlots.map((id, hole) => (
+                          <label key={hole} className="rounded-lg border p-2" style={{ borderColor: tileBdr, color: headingC }}>
+                            <span className="block text-xs mb-2">Hole {hole + 1}</span>
+                            <div className="aspect-square rounded-lg overflow-hidden mb-2 flex items-center justify-center" style={{ background: tileBg }}>
+                              {id ? <FallbackImage src={selectedFlowers.find(product => product.id === id)?.image_url || PLACEHOLDER_IMAGE} fallbackSrc={PLACEHOLDER_IMAGE} alt={selectedFlowers.find(product => product.id === id)?.name || "Selected flower"} className="w-full h-full object-contain" /> : <span className="text-sm" style={{ color: mutedC }}>Empty hole</span>}
+                            </div>
+                            <select aria-label={`Flower in hole ${hole + 1}`} className="w-full text-sm rounded p-1" style={{ background: tileBg, color: headingC }} value={id || ""} onChange={event => {
+                              const target = event.target.value || null
+                              setBoxSlots(previous => {
+                                const source = previous.findIndex((value, index) => index !== hole && value === target)
+                                if (source < 0) return previous
+                                const next = [...previous]
+                                ;[next[hole], next[source]] = [next[source], next[hole]]
+                                return next
+                              })
+                            }}>
+                              <option value="">Empty</option>
+                              {selectedFlowers.map(product => <option key={product.id} value={product.id}>{product.name}</option>)}
+                            </select>
+                          </label>
+                        ))}
+                      </div>
+                      <p className="text-xs mt-2" style={{ color: mutedC }}>Front of box · {totalStems} of 9 holes filled</p>
+                    </div>
+                  )}
             </div>
           )}
 
@@ -1402,7 +1453,7 @@ export default function MixAndMatch({ onNavigate }) {
             <div className="mt-4 px-4 py-2.5 rounded-xl text-sm" style={{ backgroundColor: tileSelBg }}>
               <span className="font-medium" style={{ color: accentG }}>
                 {totalStems} stem{totalStems !== 1 ? "s" : ""} across {selectedFlowers.length} flower{selectedFlowers.length !== 1 ? "s" : ""}
-                {fillerIds.length > 0 ? ` · ${fillerIds.length} filler${fillerIds.length !== 1 ? "s" : ""}` : ""}
+                {arrangementType !== "box" && fillerIds.length > 0 ? ` · ${fillerIds.length} filler${fillerIds.length !== 1 ? "s" : ""}` : ""}
               </span>
             </div>
           )}

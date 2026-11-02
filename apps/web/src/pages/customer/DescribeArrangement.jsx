@@ -4,6 +4,7 @@ import { api } from "../../services/api.js"
 import { addToCart } from "../../utils/cart.js"
 import { useTheme } from "../../context/ThemeContext"
 import ArrangementLoadingOverlay from "../../components/ArrangementLoadingOverlay.jsx"
+import { prepareGenerationSound, playGenerationSound } from "../../utils/generationSound.js"
 import {
   ARRANGEMENT_STEM_LIMITS,
   getArrangementStemLimit as getSharedArrangementStemLimit,
@@ -374,6 +375,7 @@ export default function DescribeArrangement({ onNavigate }) {
   }
 
   const handleGenerate = async ({ preserveResult = false } = {}) => {
+    prepareGenerationSound()
     // 🚀 NEW: Redirect guests to login
     if (!localStorage.getItem('access_token')) {
       window.location.href = '/login';
@@ -424,6 +426,7 @@ export default function DescribeArrangement({ onNavigate }) {
         const normalizedData = normalizeGeneratedResult(data)
 
         setResult(normalizedData)
+        if (normalizedData.generated_image_url) playGenerationSound()
         setLoading(false)
         setCustomName(normalizedData.price_breakdown?.items?.[0]?.product_name || "AI Arrangement")
         setAiUsage(prev => prev ? { ...prev, remaining: normalizedData.remaining_generations } : prev)
@@ -466,6 +469,7 @@ export default function DescribeArrangement({ onNavigate }) {
   }
 
   const handleRegenerateFromEdits = async () => {
+    prepareGenerationSound()
     if (!localStorage.getItem('access_token')) {
       window.location.href = '/login';
       return;
@@ -513,6 +517,7 @@ export default function DescribeArrangement({ onNavigate }) {
       } else if (data.success) {
         const normalizedData = normalizeGeneratedResult(data)
         setResult(normalizedData)
+        if (normalizedData.generated_image_url) playGenerationSound()
         setLoading(false)
         setCustomName(prev => prev || normalizedData.price_breakdown?.items?.[0]?.product_name || "AI Arrangement")
         setAiUsage(prev => prev ? { ...prev, remaining: normalizedData.remaining_generations } : prev)
