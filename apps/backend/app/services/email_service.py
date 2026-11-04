@@ -6,6 +6,7 @@ import ssl
 from pathlib import Path
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.image import MIMEImage
 from email.utils import formataddr
 from dotenv import load_dotenv
 
@@ -22,6 +23,7 @@ ESTINGS_LOGO_SVG = (
     '<path d="M185.21 25.1582C184.521 24.4367 184.545 21.3995 184.85 20.4124C185.203 19.2667 189.877 13.5264 190.953 12.6684C196.234 8.45398 202.066 15.1693 198.708 18.7768C197.371 20.2149 191.981 21.8895 189.78 23.1862C188.679 23.8346 186.483 26.489 185.21 25.1557V25.1582Z" fill="#2E8B34"/>'
     '</svg>'
 )
+ESTINGS_LOGO_PATH = Path(__file__).resolve().parents[3] / "web" / "src" / "assets" / "EstingsLogo.png"
 
 # ── CORE SMTP SENDER UTILITY ──────────────────────────────────────────────────
 def _send_email_via_hostinger(to_email: str, subject: str, html_content: str):
@@ -52,7 +54,17 @@ def _send_email_via_hostinger(to_email: str, subject: str, html_content: str):
     msg["To"] = to_email
     msg["Subject"] = subject
 
-    msg.attach(MIMEText(html_content, "html"))
+    msg.attach(MIMEText(html_content, "html", "utf-8"))
+
+    # Embed the real repository logo as an inline CID image. This works in
+    # email clients that block remote images and gives the HTML an accessible
+    # alt-text fallback when images are disabled.
+    if "cid:estings-logo" in html_content and ESTINGS_LOGO_PATH.exists():
+        with ESTINGS_LOGO_PATH.open("rb") as logo_file:
+            logo_part = MIMEImage(logo_file.read(), _subtype="png")
+        logo_part.add_header("Content-ID", "<estings-logo>")
+        logo_part.add_header("Content-Disposition", "inline", filename="estings-logo.png")
+        msg.attach(logo_part)
 
     try:
         print(f"🚀 Attempting to send live email to {to_email}...")
@@ -89,7 +101,7 @@ def generate_otp() -> str:
     return ''.join(random.choices(string.digits, k=6))
 
 def send_otp_email(to_email: str, otp: str, first_name: str = None):
-    greeting = f"Hi {first_name}," if first_name else "Hi there,"
+    greeting = f"Hi {first_name}!" if first_name else "Hi there!"
 
     html = f"""
     <!DOCTYPE html>
@@ -97,26 +109,27 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Esting's Verification Code</title>
+        <title>Welcome to Esting's</title>
     </head>
-    <body style="margin:0;padding:0;background-color:#f4f6f4;font-family:Arial,Helvetica,sans-serif;">
-        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f4f6f4;">
+    <body style="margin:0;padding:0;background-color:#f7f4ee;font-family:Arial,Helvetica,sans-serif;color:#24352a;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color:#f7f4ee;">
             <tr>
-                <td align="center" style="padding:32px 16px;">
-                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="max-width:520px;width:100%;background:#ffffff;border:1px solid #e6ebe6;border-radius:14px;overflow:hidden;">
+                <td align="center" style="padding:38px 16px;">
+                    <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="max-width:560px;width:100%;background:#ffffff;border:1px solid #e8e4da;border-radius:22px;overflow:hidden;">
 
                         <tr>
-                            <td align="center" style="padding:36px 40px 26px;border-bottom:1px solid #f0f2f0;">
-                                {ESTINGS_LOGO_SVG}
-                                <p style="margin:14px 0 0;color:#6b7280;font-size:11px;letter-spacing:2px;text-transform:uppercase;">Flowers International Inc</p>
+                            <td align="center" style="padding:34px 40px 30px;background:#f1f7ee;border-bottom:1px solid #e2ecd9;">
+                                <img src="cid:estings-logo" width="176" alt="Esting's" style="display:block;width:176px;max-width:100%;height:auto;border:0;">
+                                <p style="margin:16px 0 0;color:#55715b;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;">Flowers, thoughtfully delivered</p>
                             </td>
                         </tr>
 
                         <tr>
-                            <td style="padding:34px 40px 4px;">
-                                <p style="margin:0 0 14px;color:#111827;font-size:16px;line-height:1.6;">{greeting}</p>
-                                <p style="margin:0 0 26px;color:#4b5563;font-size:15px;line-height:1.65;">
-                                    Use the verification code below to continue. For your security, it expires in <strong style="color:#2E8B34;">10 minutes</strong>.
+                            <td style="padding:36px 40px 8px;">
+                                <p style="margin:0 0 10px;color:#2E8B34;font-size:13px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">Welcome to Esting's</p>
+                                <p style="margin:0 0 14px;color:#24352a;font-size:28px;line-height:1.2;font-weight:700;">Let’s make something beautiful bloom.</p>
+                                <p style="margin:0 0 26px;color:#5f6f63;font-size:15px;line-height:1.7;">
+                                    {greeting} We’re so happy you’re here. Confirm your email below and you’ll be ready to discover thoughtful flowers and gifts made for meaningful moments.
                                 </p>
                             </td>
                         </tr>
@@ -125,9 +138,10 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
                             <td style="padding:0 40px;">
                                 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
                                     <tr>
-                                        <td align="center" style="background:#f4f9f4;border:1px solid #d8e8da;border-radius:12px;padding:26px;">
-                                            <p style="margin:0 0 12px;color:#6b7280;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Verification Code</p>
-                                            <p style="margin:0;color:#1f5132;font-size:36px;font-weight:700;letter-spacing:10px;font-family:'Courier New',Courier,monospace;">{otp}</p>
+                                        <td align="center" style="background:#fffaf0;border:1px solid #eadfbe;border-radius:16px;padding:26px 20px;">
+                                            <p style="margin:0 0 12px;color:#8b7650;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Your welcome code</p>
+                                            <p style="margin:0;color:#2E8B34;font-size:36px;font-weight:700;letter-spacing:10px;font-family:'Courier New',Courier,monospace;">{otp}</p>
+                                            <p style="margin:14px 0 0;color:#8b7650;font-size:12px;">For your security, this code expires in 10 minutes.</p>
                                         </td>
                                     </tr>
                                 </table>
@@ -135,17 +149,17 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
                         </tr>
 
                         <tr>
-                            <td style="padding:22px 40px 34px;">
-                                <p style="margin:0;color:#9ca3af;font-size:13px;line-height:1.6;text-align:center;">
-                                    If you didn't request this code, you can safely ignore this email.
+                            <td style="padding:24px 40px 34px;">
+                                <p style="margin:0;color:#7b887d;font-size:13px;line-height:1.6;text-align:center;">
+                                    Didn’t request this email? You can safely ignore it—your account will remain secure.
                                 </p>
                             </td>
                         </tr>
 
                         <tr>
-                            <td style="padding:22px 40px;background:#fafbfa;border-top:1px solid #f0f2f0;text-align:center;">
-                                <p style="margin:0 0 4px;color:#374151;font-size:13px;font-weight:600;">Esting's Flowers International Inc</p>
-                                <p style="margin:0;color:#9ca3af;font-size:11px;">&copy; Esting's Flowers International Inc. All rights reserved.</p>
+                            <td style="padding:24px 40px;background:#fbfcfa;border-top:1px solid #edf1eb;text-align:center;">
+                                <p style="margin:0 0 5px;color:#2E8B34;font-size:13px;font-weight:700;">Esting's Flowers International Inc</p>
+                                <p style="margin:0;color:#9aa69c;font-size:11px;">A little more beauty for every day.</p>
                             </td>
                         </tr>
 
@@ -157,7 +171,7 @@ def send_otp_email(to_email: str, otp: str, first_name: str = None):
     </html>
     """
 
-    subject = "Your Esting's Verification Code"
+    subject = "Welcome to Esting's — let's get you blooming"
     return _send_email_via_hostinger(to_email, subject, html)
 
 
