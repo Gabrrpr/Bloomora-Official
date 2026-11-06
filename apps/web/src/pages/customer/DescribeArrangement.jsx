@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react"
 import { createPortal } from "react-dom"
+import ArrangementPreviewNotice from "../../components/ArrangementPreviewNotice.jsx"
 import { api } from "../../services/api.js"
 import { addToCart } from "../../utils/cart.js"
 import { useTheme } from "../../context/ThemeContext"
@@ -16,7 +17,7 @@ import { generateCardMessage, RELATIONSHIP_OPTIONS, OCCASION_OPTIONS, TONE_OPTIO
 
 const G  = "#2E8B34"
 const DG = "#0C573E"
-const GENERATION_PROBLEM_MESSAGE = "There is a problem generating this arrangement. Please try again."
+const GENERATION_PROBLEM_MESSAGE = "System issue: We could not generate this arrangement. Please try again in a moment."
 
 function formatGenerationError(message, fallback = GENERATION_PROBLEM_MESSAGE) {
   const trimmedMessage = typeof message === "string" ? message.trim() : ""
@@ -25,7 +26,15 @@ function formatGenerationError(message, fallback = GENERATION_PROBLEM_MESSAGE) {
     return fallback
   }
 
-  return trimmedMessage
+  if (/no image generation was used|could not match|not applied|specify|stocked material|stem limit|quantity adjustment|unavailable|choose from|not supported|cannot add|cannot place|animals?|dogs?|characters?/i.test(trimmedMessage)) {
+    return `Request issue: ${trimmedMessage}`
+  }
+
+  if (/api error|server|network|internet|connect|temporarily|generator|generation credit|service|timeout|try again later/i.test(trimmedMessage)) {
+    return `System issue: ${trimmedMessage}`
+  }
+
+  return `Generation issue: ${trimmedMessage}`
 }
 
 const PROMPT_TIPS = [
@@ -103,6 +112,7 @@ export default function DescribeArrangement({ onNavigate }) {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState(null)
+  const [promptFeedback, setPromptFeedback] = useState("")
   const [products, setProducts] = useState([])
   
   const [liveAddOns, setLiveAddOns] = useState([])
@@ -390,6 +400,7 @@ export default function DescribeArrangement({ onNavigate }) {
     setOriginalPrompt(prompt.trim())
     setLoading(true)
     setError(null)
+    setPromptFeedback("")
     if (!preserveResult) setResult(null)
     setUnavailableItems([])
     setRecipeReview(null)
@@ -426,6 +437,7 @@ export default function DescribeArrangement({ onNavigate }) {
         const normalizedData = normalizeGeneratedResult(data)
 
         setResult(normalizedData)
+        setPromptFeedback(data.prompt_feedback || "Your request was understood and used to create this arrangement.")
         if (normalizedData.generated_image_url) playGenerationSound()
         setLoading(false)
         setCustomName(normalizedData.price_breakdown?.items?.[0]?.product_name || "AI Arrangement")
@@ -489,6 +501,7 @@ export default function DescribeArrangement({ onNavigate }) {
 
     setLoading(true)
     setError(null)
+    setPromptFeedback("")
     setUnavailableItems([])
     setRecipeReview(null)
     setPromptAlternatives([])
@@ -517,6 +530,7 @@ export default function DescribeArrangement({ onNavigate }) {
       } else if (data.success) {
         const normalizedData = normalizeGeneratedResult(data)
         setResult(normalizedData)
+        setPromptFeedback(data.prompt_feedback || "Your request was understood and used to regenerate this arrangement.")
         if (normalizedData.generated_image_url) playGenerationSound()
         setLoading(false)
         setCustomName(prev => prev || normalizedData.price_breakdown?.items?.[0]?.product_name || "AI Arrangement")
@@ -758,6 +772,7 @@ export default function DescribeArrangement({ onNavigate }) {
                         setPrompt(text)
                         setRecipeReview(null)
                         setError(null)
+    setPromptFeedback("")
                       }}
                       className="flex-shrink-0 px-3 py-2 rounded-full text-xs font-semibold border transition-all hover:shadow-sm"
                       style={{
@@ -1073,6 +1088,16 @@ export default function DescribeArrangement({ onNavigate }) {
                 </div>
 
                 {/* ── Top zone: image + meta ── */}
+                <ArrangementPreviewNotice isDark={isDark} />
+                {promptFeedback && (
+                  <div className="mx-7 mb-4 flex items-start gap-2.5 rounded-xl border px-4 py-3 text-sm"
+                    style={{ backgroundColor: isDark ? "rgba(74,222,128,0.1)" : "#f0fdf4", borderColor: isDark ? "rgba(74,222,128,0.3)" : "#bbf7d0", color: isDark ? "#bbf7d0" : "#166534" }}>
+                    <svg className="mt-0.5 h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                    </svg>
+                    <span className="leading-snug"><strong>Prompt understood:</strong> {promptFeedback}</span>
+                  </div>
+                )}
                 <div className="px-7 grid grid-cols-1 md:grid-cols-[380px_1fr] gap-6 mb-0">
                   {/* Image */}
                   <div
@@ -1080,6 +1105,7 @@ export default function DescribeArrangement({ onNavigate }) {
                     style={{ borderColor: dividerC, backgroundColor: tilePlaceBg, boxShadow: cardShadow }}
                     onClick={() => result.generated_image_url && setLightboxOpen(true)}
                   >
+                    <span className="absolute bottom-3 left-3 z-10 rounded-lg bg-amber-100 px-2.5 py-1.5 text-xs font-semibold text-amber-950 shadow-sm pointer-events-none">Preview only</span>
                     {result.generated_image_url ? (
                       <>
                         <img src={result.generated_image_url} alt={arrangementName} className="w-full h-full object-contain p-2 transition-transform duration-[600ms] ease-out group-hover:scale-[1.03]" />
@@ -1140,22 +1166,6 @@ export default function DescribeArrangement({ onNavigate }) {
                   </div>
                 </div>
 
-                {/* ── Prominent Disclaimer Moved Right Under Image ── */}
-                <div className="mx-7 mt-6 mb-2 p-4 flex items-start gap-3 rounded-2xl border" 
-                     style={{ borderColor: isDark ? "rgba(59,130,246,0.2)" : "#bfdbfe", backgroundColor: isDark ? "rgba(59,130,246,0.05)" : "#eff6ff" }}>
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center mt-0.5" 
-                       style={{ backgroundColor: isDark ? "rgba(59,130,246,0.15)" : "#dbeafe", color: isDark ? "#60a5fa" : "#3b82f6" }}>
-                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-bold mb-1" style={{ color: isDark ? "#93c5fd" : "#1e40af" }}>AI Concept Preview</p>
-                    <p className="text-xs leading-relaxed" style={{ color: isDark ? "#bfdbfe" : "#1e3a8a" }}>
-                      This image is an AI-generated concept to show the overall color palette and vibe. Your final handcrafted arrangement will strictly follow the exact stem counts and materials listed below in your <strong>Cost breakdown</strong>.
-                    </p>
-                  </div>
-                </div>
 
                 {/* ── Sections ── */}
                 <div className="px-7 pb-2 mt-3 flex flex-col divide-y" style={{ borderColor: softBdr }}>
@@ -1443,6 +1453,7 @@ export default function DescribeArrangement({ onNavigate }) {
                         style={{ backgroundColor: isDark ? "rgba(15,23,42,0.55)" : "#f8fafc", borderColor: inputBdr, color: inputText }}
                       />
                       <label className="text-xs font-medium block mt-3 mb-2" style={{ color: subHeadC }}>What should change in this image? (optional suggestion)</label>
+                      <p className="text-xs mb-2" style={{ color: mutedC }}>Flower changes update your recipe and price. If an addition exceeds this arrangement's stem limit, you will review a quantity adjustment before an image generation is used.</p>
                       <textarea
                         value={imageSuggestion}
                         onChange={e => setImageSuggestion(e.target.value.slice(0, 260))}

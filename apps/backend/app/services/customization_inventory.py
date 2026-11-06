@@ -11,7 +11,11 @@ MATERIAL_KEYWORDS = (
     "box", "container", "foam", "material", "raw",
 )
 ARRANGEMENT_KEYWORDS = ("arrangement", "bouquet", "floral design", "gift set")
-SHOP_ONLY_KEYWORDS = ("pot filler", "pot fillers")
+SHOP_ONLY_KEYWORDS = (
+    "pot filler", "pot fillers",
+    # This is a storefront supply item, not a customer customization material.
+    "50 yards ribbon", "50 yard ribbon", "50yd ribbon", "50 yds ribbon",
+)
 
 
 def is_shop_only_customization_product(*values: object) -> bool:

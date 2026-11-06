@@ -62,6 +62,16 @@ REQUIRED_PRESENTATION_TYPES = {
     "box": "box",
 }
 
+FLOWER_COLOR_TERMS = {
+    "red", "pink", "white", "yellow", "orange", "purple", "lavender",
+    "blue", "peach", "cream", "maroon", "burgundy", "coral",
+}
+FLOWER_NAME_TERMS = {
+    "rose", "roses", "tulip", "tulips", "sunflower", "sunflowers",
+    "carnation", "carnations", "lily", "lilies", "orchid", "orchids",
+    "peony", "peonies", "gerbera", "gerberas", "hydrangea", "hydrangeas",
+}
+
 
 def public_arrangement_rules() -> dict[str, dict[str, object]]:
     return {
@@ -163,6 +173,26 @@ def extract_prompt_requested_materials(
             if match:
                 candidates.append((match.start(), match.end(), alias, material))
 
+    # New customers often describe a mood or color instead of knowing flower
+    # names. Recover stocked flowers whose product names carry those colors so
+    # a request such as "pink and red flowers" becomes a real recipe.
+    requested_colors = [
+        color for color in FLOWER_COLOR_TERMS
+        if re.search(rf"\b{re.escape(color)}\b", prompt)
+    ]
+    for material in inventory:
+        if not material.is_flower:
+            continue
+        material_name = _normalize_search_text(material.product_name)
+        matched_color = next(
+            (color for color in requested_colors if re.search(rf"\b{re.escape(color)}\b", material_name)),
+            None,
+        )
+        if matched_color:
+            match = re.search(rf"\b{re.escape(matched_color)}\b", prompt)
+            if match:
+                candidates.append((match.start(), match.end(), matched_color, material))
+
     # Prefer the most specific product name. When a generic flower word matches
     # several variants, prefer the variant with the most safely usable stock.
     candidates.sort(
@@ -237,10 +267,23 @@ def has_specific_material_request(
     if any(re.search(rf"\b{word}\b", prompt) for word in quantity_words):
         return True
 
-    return any(
+    if any(
         re.search(rf"\b{re.escape(alias)}\b", prompt)
         for material in inventory
         for alias in _material_aliases(material.product_name)
+    ):
+        return True
+
+    # Color preferences are specific enough to guide deterministic inventory
+    # selection even when the customer does not name a flower variety.
+    return any(
+        material.is_flower
+        and any(
+            re.search(rf"\b{re.escape(color)}\b", prompt)
+            and re.search(rf"\b{re.escape(color)}\b", _normalize_search_text(material.product_name))
+            for color in FLOWER_COLOR_TERMS
+        )
+        for material in inventory
     )
 
 
@@ -343,7 +386,9 @@ def resolve_complete_recipe(
             )
 
     if include_finishing_suggestions:
-        for optional_type in ("filler", "accessory"):
+        # Accessories must be requested; suggestions must not silently charge
+        # for the first stocked ribbon.
+        for optional_type in ("filler",):
             if arrangement_type == "box" and optional_type == "filler":
                 continue
             has_optional_type = any(
@@ -427,7 +472,8 @@ def build_complete_image_prompt(
             "Never substitute brown, beige, or kraft-colored wrapping unless that color or material is explicitly named in the recipe. "
             "the stems must be enclosed and secured, never shown as loose flowers. "
             "The wrapping must have overlapping layers, natural folds and creases, and soft contact shadows. "
-            "Do not render flat wrapping or a rigid geometric cone."
+            "Do not render flat wrapping or a rigid geometric cone. If a ribbon is listed, show exactly one small bow at the single binding point; "
+            "never duplicate the ribbon, add a second bow, or place a separate ribbon at the bottom."
         )
     elif arrangement_type == "vase":
         presentation_rule = (
@@ -479,7 +525,9 @@ def build_complete_image_prompt(
         f"Use exactly these florist materials: {exact_materials}. "
         f"{flower_rule}{presentation_rule} {design_rule}"
         "Clean studio lighting, natural textures, no top-down view. "
-        "Do not add or omit products. No cards, chocolates, balloons, jewelry, people, readable text, or watermarks."
+        "Do not add or omit products. No cards, chocolates, balloons, jewelry, people, readable text, or watermarks. "
+        "Do not add a gold ribbon, anniversary ribbon, shop-supply ribbon, or any 50-yards ribbon. "
+        "Only show a ribbon or bow when it is explicitly present in the exact customization recipe above, and render that accessory only once."
     )
 
 
@@ -1056,6 +1104,12 @@ def _material_aliases(product_name: str) -> list[str]:
             aliases.add(final_word)
             aliases.add(singular_word)
             aliases.add(_pluralize(singular_word))
+        # Let "add sunflower" resolve products named "Sunflower Stem",
+        # "Sunflower Stems", or similar inventory descriptions.
+        for word in words:
+            if word in FLOWER_NAME_TERMS:
+                singular_flower = _singularize(word)
+                aliases.update({word, singular_flower, _pluralize(singular_flower)})
     return sorted((alias for alias in aliases if len(alias) >= 3), key=len, reverse=True)
 
 

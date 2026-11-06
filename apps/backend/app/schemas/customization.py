@@ -98,6 +98,7 @@ class PriceBreakdown(BaseModel):
 class CustomizationResponse(BaseModel):
     success: bool
     message: str
+    prompt_feedback: Optional[str] = None
     generated_image_url: Optional[str] = None
     arrangement_id: Optional[str] = None
     arrangement_type: Optional[str] = None

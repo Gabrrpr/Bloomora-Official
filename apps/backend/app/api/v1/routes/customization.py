@@ -63,6 +63,26 @@ def _prompt_for_interpretation(payload: CustomizationRequest) -> str:
     )
 
 
+def _unsupported_visual_feedback(prompt_text: str) -> Optional[str]:
+    """Reject non-floral subjects that the image generator cannot fulfill safely."""
+    prompt = " ".join(str(prompt_text or "").casefold().split())
+    animal_terms = ("dog", "dogs", "cat", "cats", "pet", "pets", "animal", "animals")
+    if any(re.search(rf"\b{re.escape(term)}\b", prompt) for term in animal_terms):
+        return (
+            "This customization can generate flowers, colors, wrapping, containers, and floral styling, "
+            "but it cannot place animals or barking dogs inside the arrangement. Please describe the floral "
+            "design you want instead."
+        )
+
+    person_as_subject = r"\b(?:with|beside|next to|on the side|standing beside)\s+(?:a|the)?\s*(?:person|people|man|woman|mom|mother|dad|father)\b"
+    if re.search(person_as_subject, prompt):
+        return (
+            "This customization can create the floral arrangement, but it cannot add a person or character "
+            "beside it. Please describe the flowers, colors, wrapping, and occasion instead."
+        )
+    return None
+
+
 def _merge_explicit_materials(
     payload: CustomizationRequest,
     requested_materials: list[RequestedMaterial],
@@ -248,6 +268,7 @@ def _quantity_adjustment_response(
     adjustment: QuantityAdjustment,
     remaining: int,
     prompt_suggestions: Optional[list[str]] = None,
+    ai_feedback: Optional[str] = None,
 ) -> CustomizationResponse:
     label = "flower box" if adjustment.arrangement_type == "box" else adjustment.arrangement_type
     if not adjustment.suggested_prompt:
@@ -263,6 +284,9 @@ def _quantity_adjustment_response(
         )
     else:
         message = f"This {label} needs stock adjustments. Review the suggested recipe below."
+    feedback = " ".join(str(ai_feedback or "").split()).strip()
+    if feedback and feedback.lower() not in message.lower():
+        message = f"{message} Why: {feedback}"
     return CustomizationResponse(
         success=False,
         message=message,
@@ -392,6 +416,17 @@ async def check_and_generate(
         }
         for item in inventory_catalog
     ]
+    revising_selection = bool(payload.selected_items and payload.revision_instruction)
+    if revising_selection:
+        baseline = _requested_materials_from_selection(payload, inventory_catalog)
+        interpretation_prompt = (
+            "Current confirmed recipe: "
+            + "; ".join(f"{item.quantity} {item.product_name}" for item in baseline)
+            + f". Customer revision: {payload.revision_instruction}. "
+            "Return the complete revised recipe in used_items, including unchanged items. "
+            "Apply requested flower additions, removals, replacements, and quantities to this recipe. "
+            "Preserve all other products and quantities. Do not add optional accessories or ribbons."
+        )
     try:
         ai_verdict = validate_and_optimize_prompt(interpretation_prompt, inventory_for_extraction)
     except PromptExtractionError as exc:
@@ -400,6 +435,15 @@ async def check_and_generate(
             detail=str(exc),
             headers={"Retry-After": "60"},
         ) from exc
+
+    unsupported_visual_feedback = _unsupported_visual_feedback(interpretation_prompt)
+    if unsupported_visual_feedback:
+        ai_verdict = {
+            **(ai_verdict or {}),
+            "is_possible": False,
+            "feedback": unsupported_visual_feedback,
+            "used_items": [],
+        }
 
     arrangement_type = normalize_arrangement_type(
         payload.arrangement_type or ai_verdict.get("arrangement_type"),
@@ -414,7 +458,7 @@ async def check_and_generate(
             design_notes,
         )
 
-    if payload.selected_items:
+    if payload.selected_items and not revising_selection:
         # Mix & Match already knows every selected product and quantity. Never
         # let Gemini or visual prompt wording alter that exact recipe.
         requested_materials = _requested_materials_from_selection(payload, inventory_catalog)
@@ -429,7 +473,7 @@ async def check_and_generate(
         )
         requested_materials = _merge_prompt_requested_materials(
             requested_materials,
-            prompt_requested_materials,
+            [] if revising_selection else prompt_requested_materials,
             inventory_catalog,
         )
         requested_materials = _merge_explicit_materials(
@@ -437,12 +481,64 @@ async def check_and_generate(
             requested_materials,
             inventory_catalog,
         )
+        # Extraction may invent a finishing ribbon. Only accept accessories
+        # selected previously or explicitly requested by the customer.
+        accessory_text = f"{payload.prompt_text} {payload.revision_instruction or ''}"
+        allowed_accessories = {str(item.product_id) for item in payload.selected_items or []}
+        if payload.accessory_id:
+            allowed_accessories.add(str(payload.accessory_id))
+        if not re.search(r"\b(ribbons?|bows?|accessor(?:y|ies))\b", accessory_text, re.I):
+            catalog_by_id = {item.product_id: item for item in inventory_catalog}
+            requested_materials = [
+                item for item in requested_materials
+                if item.product_id in allowed_accessories
+                or not catalog_by_id.get(item.product_id)
+                or catalog_by_id[item.product_id].material_type != "accessory"
+            ]
     has_explicit_selection = bool(payload.selected_items) or any((
         payload.flower_id,
         payload.vase_id,
         payload.wrapping_id,
         payload.accessory_id,
     ))
+    if revising_selection:
+        revision = str(payload.revision_instruction).strip()
+        # Simple additions are arithmetic on the confirmed recipe. An AI
+        # extractor may omit them or silently reduce totals to the stem cap.
+        is_addition_revision = (
+            re.search(r"\b(?:add|include)\b", revision, re.I)
+            and not re.search(r"\b(?:do\s+not|don't|without|remove|replace|swap)\b", revision, re.I)
+        )
+        if is_addition_revision:
+            additions = extract_prompt_requested_materials(revision, inventory_catalog)
+            if not additions:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "We could not add that flower because it was not matched to an available customization item. "
+                        "Please try the exact stocked flower name or choose it from the flower list. No image generation was used."
+                    ),
+                )
+            merged = {item.product_id: item for item in baseline}
+            for item in additions:
+                quantity = item.quantity if re.search(r"\b(?:\d+|one|two|three|four|five|six|seven|eight|nine|ten)\b", revision, re.I) else 1
+                previous = merged.get(item.product_id)
+                merged[item.product_id] = RequestedMaterial(
+                    item.product_id, item.product_name,
+                    quantity + (previous.quantity if previous else 0),
+                )
+            requested_materials = list(merged.values())
+        elif re.search(r"\b(add|include|replace|remove|swap|tulips?|roses?|sunflowers?|gerbera)\b", revision, re.I):
+            before = {item.product_id: item.quantity for item in baseline}
+            after = {item.product_id: item.quantity for item in requested_materials}
+            if not after or before == after:
+                raise HTTPException(
+                    status_code=422,
+                    detail=(
+                        "The requested flower change was not applied. The flower may be unavailable for customization "
+                        "or the instruction may need a clearer stocked flower name. No image generation was used."
+                    ),
+                )
     is_specific_request = has_explicit_selection or has_specific_material_request(
         interpretation_prompt,
         inventory_catalog,
@@ -461,6 +557,7 @@ async def check_and_generate(
             recovery,
             remaining,
             stocked_prompt_options(recovery.arrangement_type),
+            ai_verdict.get("feedback"),
         )
 
     if requested_materials:
@@ -513,6 +610,7 @@ async def check_and_generate(
                 recovery,
                 remaining,
                 stocked_prompt_options(recovery.arrangement_type),
+                ai_verdict.get("feedback"),
             )
 
     if not ai_verdict.get("is_possible"):
@@ -548,7 +646,11 @@ async def check_and_generate(
         arrangement_type,
         requested_materials,
         refreshed_inventory,
-        include_finishing_suggestions=True,
+        # Finishing accessories are optional. Only include one when it was
+        # explicitly requested/selected; otherwise the resolver would inject
+        # the first stocked ribbon into every generated arrangement and its
+        # price breakdown.
+        include_finishing_suggestions=False,
     )
     if not recipe_has_flowers(complete_recipe, refreshed_inventory):
         recovery = build_default_recipe_suggestion(
@@ -748,11 +850,18 @@ async def check_and_generate(
     )
 
     remaining = get_remaining_generations(db, current_user.id)
+    prompt_feedback = " ".join(str(ai_verdict.get("feedback") or "").split()).strip()
+    if not prompt_feedback:
+        prompt_feedback = (
+            f"Your request was understood as a {arrangement_type} using the available flowers and materials "
+            "while keeping your requested colors, occasion, and style preferences."
+        )
 
     # Ensure frontend always gets a price_breakdown with items/total.
     return CustomizationResponse(
         success=True,
         message=f"Your arrangement has been generated! You have {remaining} AI generation(s) left today.",
+        prompt_feedback=prompt_feedback,
         arrangement_type=arrangement_type,
         generated_image_url=generated_url,
         arrangement_id=str(arrangement.id),

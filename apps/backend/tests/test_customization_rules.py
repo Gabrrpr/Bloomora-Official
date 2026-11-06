@@ -169,11 +169,11 @@ class CustomizationRuleTests(unittest.TestCase):
         self.assertEqual(flower_total, 24)
         self.assertEqual(
             {item["material_type"] for item in suggestion.suggested_items},
-            {"flower", "filler", "wrapping", "accessory"},
+            {"flower", "filler", "wrapping"},
         )
         self.assertTrue(suggestion.suggested_prompt)
 
-    def test_stocked_prompt_options_include_filler_ribbon_and_three_editable_ideas(self):
+    def test_stocked_prompt_options_include_filler_without_automatic_ribbon(self):
         inventory = [
             flower("rose", "Roses", 30),
             flower("sunflower", "Sunflowers", 20),
@@ -192,8 +192,28 @@ class CustomizationRuleTests(unittest.TestCase):
         self.assertEqual(len(set(prompts)), 3)
         for prompt in prompts:
             self.assertIn("Baby's Breath", prompt)
-            self.assertIn("Satin Ribbon", prompt)
+            self.assertNotIn("Satin Ribbon", prompt)
             self.assertIn("Kraft Wrapper", prompt)
+
+    def test_color_only_prompt_recovers_matching_stocked_flowers(self):
+        inventory = [
+            flower("pink-rose", "Pink Roses", 20),
+            flower("red-tulip", "Red Tulips", 20),
+            flower("white-lily", "White Lilies", 20),
+        ]
+
+        prompt = "I want a bouquet for my mother on Mother's Day; she likes pink and red flowers"
+        recovered = extract_prompt_requested_materials(prompt, inventory)
+
+        self.assertEqual({item.product_name for item in recovered}, {"Pink Roses", "Red Tulips"})
+        self.assertTrue(has_specific_material_request(prompt, inventory))
+
+    def test_flower_name_matches_inventory_stem_description(self):
+        inventory = [flower("sunflower-stem", "Sunflower Stems", 20)]
+
+        recovered = extract_prompt_requested_materials("add sunflower", inventory)
+
+        self.assertEqual([item.product_name for item in recovered], ["Sunflower Stems"])
 
     def test_style_only_prompt_is_vague_but_named_or_quantity_prompt_is_specific(self):
         inventory = [flower("rose", "Red Roses", 30)]
@@ -297,7 +317,7 @@ class CustomizationRuleTests(unittest.TestCase):
         self.assertEqual(recovery.arrangement_type, "vase")
         self.assertEqual(
             {item["material_type"] for item in recovery.suggested_items},
-            {"flower", "filler", "vase", "accessory"},
+            {"flower", "filler", "vase"},
         )
         self.assertEqual(
             sum(item["quantity"] for item in recovery.suggested_items if item["material_type"] == "flower"),

@@ -88,6 +88,17 @@ class CustomizationInventoryTests(unittest.TestCase):
 
         self.assertTrue(_is_customization_material_product(product))
 
+    def test_shop_gold_50_yards_ribbon_is_not_a_customization_material(self):
+        product = SimpleNamespace(
+            category="Accessory",
+            product_type="Ribbon",
+            product_group="Shop Supplies",
+            name="Gold 50 yards Ribbon",
+            is_customization_material=True,
+        )
+
+        self.assertFalse(_is_customization_material_product(product))
+
 
 if __name__ == "__main__":
     unittest.main()

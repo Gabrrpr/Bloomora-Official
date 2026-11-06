@@ -1,6 +1,7 @@
 import asyncio
 import httpx
 import io
+import os
 import secrets
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
@@ -46,22 +47,35 @@ class PollinationsService:
             )
         else:
             style_prompt = (
-                "Full upright hand-tied bouquet centered in a vertical portrait product frame with generous space above and below, "
-                "front eye-level florist product photo with slight high angle, rounded full flower cluster at the top, layered "
-                "realistic folded wrapping material flaring outward around the blooms, natural creases and contact shadows, "
+                "One compact, cohesive hand-tied florist bouquet—not a vase arrangement, not a standing floral display, and not a row of individual stems—"
+                "centered in a vertical portrait product frame with generous space above and below. Front eye-level florist product photo with a slight high angle. "
+                "Create one rounded, dense flower cluster with the blooms grouped together at a consistent bouquet height; no tall spikes, no widely separated flowers, "
+                "and no flowers floating outside the main cluster. Show one tied stem bundle tapering down into a single wrapped base, with the stems gathered at one hand-tied point. "
+                "Use layered realistic folded wrapping material around the lower half of the bouquet, natural creases and contact shadows, "
+                "if a finishing ribbon is listed, use exactly one small neat bow at the single stem-binding point; never duplicate the bow, "
+                "never place a second ribbon at the bottom, and never add extra ribbon loops or tails. "
                 "only the exact flower varieties named in the recipe, no other flower species, no roses unless roses are explicitly named, "
-                "only recipe-listed finishing materials, wrapped stem bundle tapering downward to a visible bottom tip or bow, "
+                "only recipe-listed finishing materials, wrapped stem bundle tapering downward to a visible bottom tip, "
                 "show the complete bouquet from flower tips through the full wrapped body, no close-up crop, no cut-off stems, "
-                "no vase, no acrylic box, no basket, no top-down flat lay, no people, no text, no watermarks"
+                "no oversized bow, no large decorative loops, no vase, no acrylic box, no basket, no top-down flat lay, no people, no text, no watermarks"
             )
 
-        return [polished_prompt, f"{optimized_prompt}. {style_prompt}"]
+        # Run the arrangement-specific prompt first. The provider stops at the
+        # first successful response, so the generic prompt must not win before
+        # the bouquet structure rules have had a chance to apply.
+        return [f"{optimized_prompt}. {style_prompt}", polished_prompt]
 
     def _pollinations_urls(self, encoded_prompt: str, clean_key: str, seed: int, arrangement_type: str = "bouquet"):
         # Use only the current unified endpoint. Authentication is sent in the
         # Authorization header so the secret key never appears in URLs/logs.
         style = str(arrangement_type or "bouquet").strip().lower()
-        width, height = (768, 1024) if style in {"bouquet", "vase"} else (1024, 1024)
+        # Request a genuinely high-resolution source so the saved preview does
+        # not have to be enlarged from the old 768px-wide output. Keep these
+        # configurable because provider limits and account tiers can differ.
+        portrait_width = max(1024, int(os.getenv("POLLINATIONS_IMAGE_WIDTH", "2048")))
+        portrait_height = max(1536, int(os.getenv("POLLINATIONS_IMAGE_HEIGHT", "3072")))
+        square_size = max(1024, int(os.getenv("POLLINATIONS_IMAGE_SQUARE_SIZE", "2048")))
+        width, height = (portrait_width, portrait_height) if style in {"bouquet", "vase"} else (square_size, square_size)
         return [
             f"{self.base_url}{encoded_prompt}?width={width}&height={height}&model={model}&nologo=true&seed={seed}"
             for model in (self.model, self.fallback_model)

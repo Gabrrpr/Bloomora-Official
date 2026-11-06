@@ -2341,10 +2341,13 @@ export default function AdminProducts({ onNavigate }) {
     
     let mb = true;
     if (branchFilter && branchFilter !== "All Branches") {
+      const productBranches = Array.isArray(p.branches)
+        ? p.branches.map(branch => String(branch || "").trim().toLowerCase()).filter(Boolean)
+        : []
       if (branchFilter === "Unassigned") {
-        mb = !p.branches || p.branches.length === 0; 
+        mb = productBranches.length === 0
       } else {
-        mb = Array.isArray(p.branches) && p.branches.includes(branchFilter);
+        mb = productBranches.includes(String(branchFilter).trim().toLowerCase())
       }
     }
     

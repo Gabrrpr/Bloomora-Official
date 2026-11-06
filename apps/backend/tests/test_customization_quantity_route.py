@@ -28,6 +28,78 @@ class WriteTrackingSession:
 
 
 class CustomizationQuantityRouteTests(unittest.TestCase):
+    def test_tulip_addition_over_full_bouquet_returns_review_without_using_credit(self):
+        gerbera, sunflower, tulip, wrapper = [str(uuid.uuid4()) for _ in range(4)]
+        inventory = [
+            InventoryMaterial(gerbera, "Orange Gerbera", "flower", "flower", 50, 100),
+            InventoryMaterial(sunflower, "Sunflower", "flower", "flower", 50, 80),
+            InventoryMaterial(tulip, "Pink Tulips", "flower", "flower", 50, 120),
+            InventoryMaterial(wrapper, "Brown Abaca Wrapper", "wrapping", "wrapping", 20, 50),
+        ]
+        unchanged = [{"product_id": gerbera, "quantity": 16}, {"product_id": sunflower, "quantity": 8}, {"product_id": wrapper, "quantity": 1}]
+        # Reproduce an extractor ignoring the revision (including its fallback).
+        for extracted in (unchanged, []):
+            with (
+                self.subTest(extracted=extracted),
+                patch("app.api.v1.routes.customization.load_customization_inventory", return_value=inventory),
+                patch("app.api.v1.routes.customization.validate_and_optimize_prompt", return_value={"is_possible": True, "used_items": extracted}),
+                patch("app.api.v1.routes.customization.has_reached_daily_limit", return_value=False),
+                patch("app.api.v1.routes.customization.get_remaining_generations", return_value=5),
+                patch("app.api.v1.routes.customization.log_ai_usage") as usage,
+                patch("app.api.v1.routes.customization.pollinations.generate_arrangement_image", AsyncMock()) as image,
+            ):
+                session = WriteTrackingSession()
+                response = asyncio.run(check_and_generate(
+                    CustomizationRequest(prompt_text="A complete bouquet with 16 Orange Gerbera and 8 Sunflower", arrangement_type="bouquet",
+                        revision_instruction="add atleast 5 pink tulips", selected_items=unchanged),
+                    session, SimpleNamespace(id="customer"),
+                ))
+            self.assertFalse(response.success)
+            self.assertEqual(response.validation.requested_total, 29)
+            self.assertEqual(next(item.requested_quantity for item in response.validation.requested_items if item.product_id == tulip), 5)
+            self.assertEqual(response.remaining_generations, 5)
+            usage.assert_not_called()
+            image.assert_not_awaited()
+            self.assertEqual(session.commits, 0)
+
+    def test_regeneration_reprices_added_flower_without_invented_ribbon(self):
+        rose, tulip, box, ribbon = [str(uuid.uuid4()) for _ in range(4)]
+        inventory = [
+            InventoryMaterial(rose, "Red Roses", "flower", "flower", 30, 100),
+            InventoryMaterial(tulip, "Pink Tulips", "flower", "flower", 30, 80),
+            InventoryMaterial(box, "Acrylic Box", "box", "box", 10, 200),
+            InventoryMaterial(ribbon, "Gold 50 yards Ribbon", "accessory", "ribbon", 10, 50),
+        ]
+        verdict = {
+            "is_possible": True, "arrangement_type": "box", "design_notes": "",
+            "used_items": [
+                {"product_id": rose, "quantity": 4},
+                {"product_id": tulip, "quantity": 2},
+                {"product_id": box, "quantity": 1},
+                {"product_id": ribbon, "quantity": 1},
+            ],
+        }
+        with (
+            patch("app.api.v1.routes.customization.load_customization_inventory", return_value=inventory),
+            patch("app.api.v1.routes.customization.validate_and_optimize_prompt", return_value=verdict) as extraction,
+            patch("app.api.v1.routes.customization.get_remaining_generations", return_value=5),
+        ):
+            response = asyncio.run(check_and_generate(
+                CustomizationRequest(
+                    prompt_text="4 Red Roses in a box", arrangement_type="box",
+                    revision_instruction="Add 2 Pink Tulips", review_only=True,
+                    selected_items=[{"product_id": rose, "quantity": 4}, {"product_id": box, "quantity": 1}],
+                ), WriteTrackingSession(), SimpleNamespace(id="customer"),
+            ))
+        self.assertTrue(response.success)
+        self.assertEqual(
+            {item.product_id: item.quantity for item in response.price_breakdown.items},
+            {rose: 4, tulip: 2, box: 1},
+        )
+        self.assertEqual(response.price_breakdown.total_price, 760)
+        self.assertIn("Current confirmed recipe: 4 Red Roses; 1 Acrylic Box", extraction.call_args.args[0])
+        self.assertIn("Add 2 Pink Tulips", extraction.call_args.args[0])
+
     def test_revision_is_interpreted_as_a_change_to_the_existing_concept(self):
         prompt = _prompt_for_interpretation(CustomizationRequest(
             prompt_text="15 roses with white wrapping",
@@ -189,9 +261,9 @@ class CustomizationQuantityRouteTests(unittest.TestCase):
         self.assertTrue(response.success)
         self.assertEqual(
             {item.product_name for item in response.price_breakdown.items},
-            {"Roses", "Kraft Wrapper", "Baby's Breath", "Satin Ribbon"},
+            {"Roses", "Kraft Wrapper"},
         )
-        self.assertEqual(response.price_breakdown.total_price, 1290)
+        self.assertEqual(response.price_breakdown.total_price, 1250)
         self.assertEqual(session.added, [])
         self.assertEqual(session.commits, 0)
 
@@ -411,7 +483,7 @@ class CustomizationQuantityRouteTests(unittest.TestCase):
         self.assertFalse(response.success)
         self.assertEqual(
             {item.material_type for item in response.validation.suggested_items},
-            {"flower", "filler", "wrapping", "accessory"},
+            {"flower", "filler", "wrapping"},
         )
         self.assertTrue(response.validation.suggested_prompt)
         self.assertEqual(session.commits, 0)
