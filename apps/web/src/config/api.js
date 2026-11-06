@@ -1,11 +1,18 @@
 const trimTrailingSlash = (value) => value.replace(/\/+$/, "");
 
+const defaultApiBase = import.meta.env.PROD
+  ? "https://api.estings.shop/api/v1"
+  : "http://127.0.0.1:8000/api/v1";
+const defaultWsBase = import.meta.env.PROD
+  ? "wss://api.estings.shop/api/v1"
+  : "ws://127.0.0.1:8000/api/v1";
+
 export const API_BASE = trimTrailingSlash(
-  import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api/v1" 
+  import.meta.env.VITE_API_BASE_URL || defaultApiBase
 );
 
 export const WS_BASE = trimTrailingSlash(
-  import.meta.env.VITE_WS_BASE_URL || "ws://127.0.0.1:8000/api/v1" // 🚀 CHANGED TO LOCAL
+  import.meta.env.VITE_WS_BASE_URL || defaultWsBase
 );
 
 export function chatWsUrl(userId, token) {
