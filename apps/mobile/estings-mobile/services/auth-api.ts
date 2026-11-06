@@ -1,7 +1,10 @@
 import * as WebBrowser from 'expo-web-browser';
+import * as Crypto from 'expo-crypto';
+import { Platform } from 'react-native';
 
 import { apiFetch, getApiBaseUrl, initializeApiBaseUrl } from '@/services/api-client';
 import { clearAuthSession, getAuthSession, saveAuthSession, type AuthSession, type AuthUser } from '@/services/auth-session';
+import { OAUTH_NATIVE_CALLBACK_URL, OAUTH_WEB_BASE_URL, parseOAuthReturn } from '@/utils/oauth-redirect';
 
 type LoginResponse = {
   access_token: string;
@@ -26,6 +29,7 @@ type OAuthExchangeResponse = {
 };
 
 type AuthMessageResponse = {
+  delivery?: string;
   message?: string;
   status?: string;
 };
@@ -51,8 +55,26 @@ type UpdateProfileResponse = AuthMessageResponse & {
   user: AuthUser;
 };
 
-const productionWebBaseUrl = 'https://blueviolet-otter-621683.hostingersite.com';
-const defaultWebBaseUrl = process.env.EXPO_PUBLIC_WEB_URL ?? (__DEV__ ? 'http://localhost:5173' : productionWebBaseUrl);
+export function getOAuthWebBaseUrl() {
+  // Browser popups must return to their opener's origin. A native build's
+  // website override must never send a web preview to a different application.
+  if (Platform.OS === 'web' && typeof window !== 'undefined') return window.location.origin;
+  return (process.env.EXPO_PUBLIC_WEB_URL ?? OAUTH_WEB_BASE_URL).replace(/\/$/, '');
+}
+
+export function getOAuthCallbackUrl() {
+  return Platform.OS === 'web' ? `${getOAuthWebBaseUrl()}/oauth/callback` : OAUTH_NATIVE_CALLBACK_URL;
+}
+
+type OAuthAttempt = {
+  webBaseUrl: string;
+  expiresAt: number;
+  appState?: string;
+  verifier?: string;
+  code?: string;
+  completion?: Promise<AuthSession>;
+};
+let oauthAttempt: OAuthAttempt | null = null;
 
 export async function loginWithPassword(identifier: string, password: string) {
   const response = await apiFetch<LoginResponse>('/auth/login', {
@@ -80,26 +102,67 @@ export async function loginWithOAuthProvider(provider: OAuthProvider) {
   await initializeApiBaseUrl();
 
   const apiBaseUrl = getApiBaseUrl().replace(/\/$/, '');
-  const webBaseUrl = defaultWebBaseUrl.replace(/\/$/, '');
-  const webCallbackUrl = `${webBaseUrl}/oauth/callback`;
-  const authUrl = `${apiBaseUrl}/auth/${provider}?frontend_url=${encodeURIComponent(webBaseUrl)}`;
-  const authResult = await WebBrowser.openAuthSessionAsync(authUrl, webCallbackUrl, {
-    preferEphemeralSession: false,
-  });
-
-  if (authResult.type !== 'success') {
-    throw new Error('Sign in was cancelled.');
+  const webBaseUrl = getOAuthWebBaseUrl();
+  const callbackUrl = getOAuthCallbackUrl();
+  const native = Platform.OS !== 'web';
+  const hexNonce = () => Array.from(Crypto.getRandomBytes(32), (byte) => byte.toString(16).padStart(2, '0')).join('');
+  const verifier = native ? hexNonce() : undefined;
+  const appState = native ? hexNonce() : undefined;
+  const challenge = verifier ? (await Crypto.digestStringAsync(Crypto.CryptoDigestAlgorithm.SHA256, verifier, {
+    encoding: Crypto.CryptoEncoding.BASE64,
+  })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '') : undefined;
+  const attempt: OAuthAttempt = { webBaseUrl: native ? callbackUrl : webBaseUrl, appState, verifier, expiresAt: Date.now() + 5 * 60 * 1000 };
+  oauthAttempt = attempt;
+  const authQuery = native
+    ? `client=mobile&code_challenge=${encodeURIComponent(challenge!)}&app_state=${appState}`
+    : `frontend_url=${encodeURIComponent(webBaseUrl)}`;
+  const authUrl = `${apiBaseUrl}/auth/${provider}?${authQuery}`;
+  try {
+    const authResult = await WebBrowser.openAuthSessionAsync(authUrl, callbackUrl, {
+      preferEphemeralSession: false,
+    });
+    // App Links may deliver the callback through Expo Router before the browser
+    // session resolves. Both paths share one exchange and session write.
+    if (attempt.completion) return await attempt.completion;
+    if (authResult.type !== 'success') {
+      throw new Error(authResult.type === 'cancel'
+        ? 'Sign in was cancelled.'
+        : Platform.OS === 'web'
+          ? 'The sign-in window closed before returning to this preview. Please try again.'
+          : 'Sign-in did not return to the app. Please try again, or use email sign-in.');
+    }
+    return await completeOAuthSignInFromUrl(authResult.url);
+  } finally {
+    // Keep the completed attempt briefly so a late Router delivery of the same
+    // App Link reuses it instead of sending a signed-in customer back to login.
+    if (oauthAttempt === attempt && !attempt.completion) oauthAttempt = null;
   }
+}
 
-  const code = getOAuthCodeFromUrl(authResult.url);
-
-  if (!code) {
-    throw new Error('OAuth sign in did not return a valid code.');
+export function completeOAuthSignInFromUrl(url: string): Promise<AuthSession> {
+  const attempt = oauthAttempt;
+  if (!attempt || Date.now() > attempt.expiresAt) {
+    return Promise.reject(new Error('Your sign-in session expired. Please start sign-in again in the app.'));
   }
+  const code = parseOAuthReturn(url, attempt.webBaseUrl, attempt.appState);
+  if (attempt.completion) {
+    if (attempt.code !== code) return Promise.reject(new Error('A different sign-in is already completing. Please try again.'));
+    return attempt.completion;
+  }
+  attempt.code = code;
+  attempt.completion = exchangeOAuthSession(code, attempt);
+  return attempt.completion;
+}
 
-  const exchange = await apiFetch<OAuthExchangeResponse>(`/auth/oauth/exchange?code=${encodeURIComponent(code)}`, {
-    skipAuthRefresh: true,
-  });
+async function exchangeOAuthSession(code: string, attempt: OAuthAttempt) {
+  const exchange = await apiFetch<OAuthExchangeResponse>(attempt.verifier
+    ? '/auth/oauth/exchange' : `/auth/oauth/exchange?code=${encodeURIComponent(code)}`, {
+      skipAuthRefresh: true,
+      ...(attempt.verifier ? {
+        method: 'POST',
+        body: JSON.stringify({ code, code_verifier: attempt.verifier }),
+      } : {}),
+    });
   const user = await apiFetch<AuthUser>('/auth/me', {
     skipAuthRefresh: true,
     token: exchange.access_token,
@@ -115,6 +178,7 @@ export async function loginWithOAuthProvider(provider: OAuthProvider) {
   };
 
   await ensureCustomerSession(session);
+  if (oauthAttempt !== attempt) throw new Error('Your sign-in session changed. Please try again.');
   await saveAuthSession(session);
 
   return session;
@@ -225,7 +289,7 @@ export async function resetForgotPassword({
     body: JSON.stringify({
       email: email.trim(),
       new_password: newPassword,
-      otp,
+      otp: otp.trim(),
     }),
     method: 'POST',
     skipAuthRefresh: true,
@@ -293,16 +357,6 @@ export async function deleteMyAccount(password: string, session: AuthSession) {
   await clearAuthSession();
 
   return response;
-}
-
-function getOAuthCodeFromUrl(url: string) {
-  try {
-    return new URL(url).searchParams.get('code');
-  } catch {
-    const match = /[?&]code=([^&]+)/.exec(url);
-
-    return match ? decodeURIComponent(match[1]) : null;
-  }
 }
 
 async function ensureCustomerSession(session: AuthSession) {

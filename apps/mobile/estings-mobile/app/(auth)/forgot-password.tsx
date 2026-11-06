@@ -20,7 +20,7 @@ import { resetForgotPassword, sendForgotPasswordOtp } from '@/services/auth-api'
 import { type FormErrors, isSixDigitOtp, isValidEmail, required } from '@/utils/auth-validation';
 
 type ForgotField = 'email' | 'otp' | 'newPassword' | 'confirmPassword';
-type ForgotStep = 'email' | 'otp' | 'reset';
+type ForgotStep = 'email' | 'reset' | 'otp';
 type PasswordStrength = 'Weak' | 'Fair' | 'Good' | 'Strong';
 
 export default function ForgotPasswordScreen() {
@@ -120,12 +120,15 @@ export default function ForgotPasswordScreen() {
   }
 
   function handleBack() {
-    if (step === 'reset') {
-      setStep('otp');
+    if (isSubmitting) return;
+    setRequestMessage(null);
+    setErrors({});
+    if (step === 'otp') {
+      setStep('reset');
       return;
     }
 
-    if (step === 'otp') {
+    if (step === 'reset') {
       setStep('email');
       return;
     }
@@ -153,9 +156,10 @@ export default function ForgotPasswordScreen() {
     if (step === 'email' && validateEmail()) {
       setIsSubmitting(true);
       try {
-        await sendForgotPasswordOtp(email);
+        const response = await sendForgotPasswordOtp(email);
         setOtp('');
-        setStep('otp');
+        setStep('reset');
+        setRequestMessage(getResetCodeMessage(response));
       } catch (error) {
         setRequestMessage(error instanceof Error ? error.message : 'Unable to send reset code. Please try again.');
       } finally {
@@ -164,12 +168,14 @@ export default function ForgotPasswordScreen() {
       return;
     }
 
-    if (step === 'otp' && validateOtp()) {
-      setStep('reset');
+    if (step === 'reset' && validateReset()) {
+      setStep('otp');
       return;
     }
 
-    if (step === 'reset' && validateReset()) {
+    // The reset endpoint verifies the OTP and changes the password atomically.
+    // There is no separate password-reset OTP verification endpoint.
+    if (step === 'otp' && validateOtp()) {
       setIsSubmitting(true);
       try {
         await resetForgotPassword({
@@ -177,9 +183,13 @@ export default function ForgotPasswordScreen() {
           newPassword,
           otp,
         });
-        router.replace('/login');
+        router.replace({ pathname: '/login', params: { passwordReset: 'success' } });
       } catch (error) {
-        setRequestMessage(error instanceof Error ? error.message : 'Unable to reset password. Please try again.');
+        const message = error instanceof Error ? error.message : 'Unable to reset password. Please try again.';
+        setRequestMessage(message);
+        if (/invalid or expired reset code/i.test(message)) {
+          setErrors({ otp: message });
+        }
       } finally {
         setIsSubmitting(false);
       }
@@ -195,9 +205,11 @@ export default function ForgotPasswordScreen() {
     setIsSubmitting(true);
 
     try {
-      await sendForgotPasswordOtp(email);
+      const response = await sendForgotPasswordOtp(email);
       setOtp('');
+      setErrors({});
       setResendSeconds(30);
+      setRequestMessage(getResetCodeMessage(response));
     } catch (error) {
       setRequestMessage(error instanceof Error ? error.message : 'Unable to resend reset code. Please try again.');
     } finally {
@@ -321,7 +333,7 @@ export default function ForgotPasswordScreen() {
                 onPress={handleResendCode}
                 style={({ pressed }) => [styles.resendButton, pressed && resendSeconds === 0 && !isSubmitting && styles.pressed]}>
                 <Text style={[styles.resendText, resendSeconds === 0 && !isSubmitting && styles.resendTextReady]}>
-                  {isSubmitting ? 'Sending...' : resendSeconds > 0 ? `Resend Code in ${resendSeconds} seconds` : 'Resend Code'}
+                  {isSubmitting ? 'Please wait...' : resendSeconds > 0 ? `Resend Code in ${resendSeconds} seconds` : 'Resend Code'}
                 </Text>
               </Pressable>
               <Pressable
@@ -585,19 +597,26 @@ function SimpleField({
   );
 }
 
+function getResetCodeMessage(response: { delivery?: string; message?: string }) {
+  if (response.delivery === 'dev_fallback') {
+    return 'Email delivery is unavailable in this development environment. For local testing, use the reset code from the backend terminal.';
+  }
+  return response.message ?? 'If an account exists for this email, a reset code has been sent.';
+}
+
 function getStepCopy(step: ForgotStep) {
   if (step === 'otp') {
     return {
-      action: 'Verify',
-      subtitle: 'Please enter the one-time PIN (OTP) that we sent to your email.',
+      action: 'Verify Code & Reset Password',
+      subtitle: 'Enter the 6-digit code from your email. We will verify it and save your new password together.',
       title: 'One-Time PIN',
     };
   }
 
   if (step === 'reset') {
     return {
-      action: 'Reset Password',
-      subtitle: 'Choose a new password for your account.',
+      action: 'Next',
+      subtitle: 'Choose a new password, then confirm it with the code sent to your email.',
       title: 'Reset password',
     };
   }
@@ -611,11 +630,11 @@ function getStepCopy(step: ForgotStep) {
 
 function getStepNumber(step: ForgotStep) {
   if (step === 'otp') {
-    return 2;
+    return 3;
   }
 
   if (step === 'reset') {
-    return 3;
+    return 2;
   }
 
   return 1;
@@ -630,8 +649,8 @@ function getActionLabel(step: ForgotStep, isSubmitting: boolean, fallback: strin
     return 'Sending Code...';
   }
 
-  if (step === 'reset') {
-    return 'Resetting...';
+  if (step === 'otp') {
+    return 'Verifying & Resetting...';
   }
 
   return fallback;
