@@ -14,7 +14,7 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.estings.shop/api/v1",
-        "EXPO_PUBLIC_WEB_URL": "https://blueviolet-otter-621683.hostingersite.com"
+        "EXPO_PUBLIC_WEB_URL": "https://estings.shop"
       }
     },
     "apk": {
@@ -22,7 +22,7 @@
       "environment": "production",
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.estings.shop/api/v1",
-        "EXPO_PUBLIC_WEB_URL": "https://blueviolet-otter-621683.hostingersite.com"
+        "EXPO_PUBLIC_WEB_URL": "https://estings.shop"
       },
       "android": {
         "buildType": "apk"
@@ -33,7 +33,7 @@
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_API_URL": "https://api.estings.shop/api/v1",
-        "EXPO_PUBLIC_WEB_URL": "https://blueviolet-otter-621683.hostingersite.com"
+        "EXPO_PUBLIC_WEB_URL": "https://estings.shop"
       }
     }
   },

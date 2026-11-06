@@ -1,5 +1,6 @@
 import { FontAwesome } from '@expo/vector-icons';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { Check, ChevronLeft, CircleHelp, Eye, EyeOff, LockKeyhole, Mail } from 'lucide-react-native';
 import { useEffect, useState } from 'react';
 import {
@@ -21,6 +22,7 @@ import { Fonts, theme } from '@/constants/theme';
 import { ApiError } from '@/services/api-client';
 import { loginWithOAuthProvider, loginWithPassword } from '@/services/auth-api';
 import { type FormErrors, isValidEmail, required } from '@/utils/auth-validation';
+import { getOAuthErrorMessage } from '@/utils/oauth-redirect';
 
 type LoginField = 'identifier' | 'password';
 const cooldownDurationSeconds = 30;
@@ -28,6 +30,7 @@ const maxFailedSignInAttempts = 3;
 const serviceUnavailableStatuses = new Set([502, 503, 504]);
 
 export default function LoginScreen() {
+  const params = useLocalSearchParams<{ error?: string; oauthError?: string; passwordReset?: string }>();
   const insets = useSafeAreaInsets();
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
@@ -38,6 +41,20 @@ export default function LoginScreen() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [socialSubmittingProvider, setSocialSubmittingProvider] = useState<'facebook' | 'google' | null>(null);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (params.oauthError) setSubmitError(params.oauthError);
+  }, [params.oauthError]);
+
+  useEffect(() => {
+    if (!params.error) return;
+    // Provider failures return to /login instead of /oauth/callback. In a web
+    // popup, return that failure to the opener so it can stop its loading state.
+    if (Platform.OS === 'web' && typeof window !== 'undefined' && window.opener) {
+      WebBrowser.maybeCompleteAuthSession({ skipRedirectCheck: true });
+    }
+    setSubmitError(getOAuthErrorMessage(params.error));
+  }, [params.error]);
 
   useEffect(() => {
     if (cooldownSeconds <= 0) {
@@ -146,7 +163,7 @@ export default function LoginScreen() {
           ? message
           : message.toLowerCase().includes('cancel')
             ? 'Social sign in was cancelled.'
-            : `Unable to continue with ${provider === 'google' ? 'Google' : 'Facebook'}, please try again.`,
+            : message || `Unable to continue with ${provider === 'google' ? 'Google' : 'Facebook'}, please try again.`,
       );
     } finally {
       setSocialSubmittingProvider(null);
@@ -191,6 +208,11 @@ export default function LoginScreen() {
         </View>
 
         <View style={styles.formPanel}>
+          {params.passwordReset === 'success' ? (
+            <Text accessibilityRole="alert" style={{ color: theme.colors.primary, marginBottom: 12 }}>
+              Password reset successfully. Sign in with your new password.
+            </Text>
+          ) : null}
           <LoginFieldInput
             error={errors.identifier}
             icon={Mail}

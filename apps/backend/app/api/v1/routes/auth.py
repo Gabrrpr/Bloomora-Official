@@ -6,6 +6,14 @@ from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 import uuid
 import os
+import base64
+import hashlib
+import hmac
+import json
+import re
+import secrets
+from urllib.parse import urlencode
+from cryptography.fernet import Fernet, InvalidToken
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
 load_dotenv()
@@ -115,6 +123,48 @@ def oauth_frontend_url(request: Request) -> str:
     return normalize_frontend_url(request.session.pop("oauth_frontend_url", FRONTEND_URL))
 
 
+MOBILE_OAUTH_CALLBACK = "bloomoramobile://oauth/callback"
+
+
+def prepare_oauth_return(request: Request, provider: str) -> str:
+    """Bind the return destination to this provider's OAuth state."""
+    mobile = request.query_params.get("client") == "mobile"
+    context = {"frontend_url": normalize_frontend_url(request.query_params.get("frontend_url"))}
+    if mobile:
+        challenge = request.query_params.get("code_challenge", "")
+        app_state = request.query_params.get("app_state", "")
+        if not re.fullmatch(r"[A-Za-z0-9_-]{43}", challenge) or not re.fullmatch(r"[A-Za-z0-9_-]{32,128}", app_state):
+            raise HTTPException(status_code=400, detail="Invalid mobile sign-in request.")
+        context.update(mobile=True, code_challenge=challenge, app_state=app_state)
+    # Bound cookie size when customers abandon several sign-in attempts.
+    keys = [key for key in request.session if key.startswith("oauth_return:")]
+    for key in keys[:-3]:
+        request.session.pop(key, None)
+    state = secrets.token_urlsafe(32)
+    request.session[f"oauth_return:{provider}:{state}"] = context
+    return state
+
+
+def consume_oauth_return(request: Request, provider: str) -> dict:
+    context = request.session.pop(f"oauth_return:{provider}:{request.query_params.get('state', '')}", None)
+    if context is None:
+        # Compatibility with a web login initiated before the backend deploy.
+        return {"frontend_url": oauth_frontend_url(request)}
+    return context
+
+
+def oauth_result_redirect(context: dict, *, code: str | None = None, error: str | None = None):
+    params = {"code": code} if code is not None else {"error": error}
+    if context.get("mobile"):
+        # This destination is fixed; never redirect to a client-supplied URI.
+        target = MOBILE_OAUTH_CALLBACK
+        params["state"] = context["app_state"]
+    else:
+        frontend = normalize_frontend_url(context.get("frontend_url"))
+        target = f"{frontend}/oauth/callback" if code is not None else f"{frontend}/login"
+    return RedirectResponse(url=f"{target}?{urlencode(params)}", headers={"Cache-Control": "no-store"})
+
+
 oauth = OAuth()
 oauth.register(
     name='google',
@@ -185,18 +235,44 @@ oauth_exchange_serializer = URLSafeTimedSerializer(
     salt="oauth-token-exchange",
 )
 OAUTH_EXCHANGE_MAX_AGE_SECONDS = 120
+mobile_oauth_cipher = Fernet(base64.urlsafe_b64encode(
+    hmac.new(settings.SECRET_KEY.encode(), b"mobile-oauth-exchange", hashlib.sha256).digest()
+))
 
-def store_oauth_tokens(access_token: str, refresh_token: str, role: str) -> str:
+def store_oauth_tokens(access_token: str, refresh_token: str, role: str, code_challenge: str | None = None) -> str:
     """Return a short-lived signed code safe for frontend redirects."""
-    return oauth_exchange_serializer.dumps({
+    tokens = {
         "access_token": access_token,
         "refresh_token": refresh_token,
         "role": role,
-    })
+    }
+    if code_challenge:
+        # A signed serializer is readable, not encrypted. Keep mobile tokens
+        # encrypted so an app intercepting the custom-scheme URL cannot decode
+        # them and bypass the proof-key exchange.
+        return oauth_exchange_serializer.dumps({
+            "mobile_tokens": mobile_oauth_cipher.encrypt(json.dumps(tokens).encode()).decode(),
+            "code_challenge": code_challenge,
+        })
+    return oauth_exchange_serializer.dumps(tokens)
 
 @router.get("/oauth/exchange")
 def exchange_oauth_code(code: str):
     """Frontend calls this immediately after redirect."""
+    return _exchange_oauth_code(code)
+
+
+class MobileOAuthExchangeRequest(BaseModel):
+    code: str
+    code_verifier: str
+
+
+@router.post("/oauth/exchange")
+def exchange_mobile_oauth_code(payload: MobileOAuthExchangeRequest):
+    return _exchange_oauth_code(payload.code, payload.code_verifier)
+
+
+def _exchange_oauth_code(code: str, code_verifier: str | None = None):
     try:
         data = oauth_exchange_serializer.loads(
             code,
@@ -206,6 +282,18 @@ def exchange_oauth_code(code: str):
         raise HTTPException(status_code=400, detail="OAuth login expired. Please try again.")
     except BadSignature:
         raise HTTPException(status_code=400, detail="Invalid OAuth login code.")
+
+    challenge = data.get("code_challenge")
+    if challenge:
+        if not code_verifier or not re.fullmatch(r"[A-Za-z0-9._~-]{43,128}", code_verifier):
+            raise HTTPException(status_code=400, detail="Invalid mobile sign-in proof.")
+        actual = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
+        if not secrets.compare_digest(actual, challenge):
+            raise HTTPException(status_code=400, detail="Invalid mobile sign-in proof.")
+        try:
+            data = json.loads(mobile_oauth_cipher.decrypt(data["mobile_tokens"].encode()))
+        except (InvalidToken, KeyError, ValueError):
+            raise HTTPException(status_code=400, detail="Invalid mobile login code.")
 
     return {
         "access_token": data["access_token"], 
@@ -522,21 +610,17 @@ def refresh_token(payload: RefreshTokenRequest, db: Session = Depends(get_db)):
 
 @router.get("/google")
 async def google_login(request: Request):
-    request.session["oauth_frontend_url"] = normalize_frontend_url(
-        request.query_params.get("frontend_url")
-    )
-    return await oauth.google.authorize_redirect(request, GOOGLE_REDIRECT_URI)
+    state = prepare_oauth_return(request, "google")
+    return await oauth.google.authorize_redirect(request, GOOGLE_REDIRECT_URI, state=state)
 
 
 @router.get("/google/callback")
 async def google_callback(request: Request, db: Session = Depends(get_db)):
-    frontend_url = oauth_frontend_url(request)
-    login_url = f"{frontend_url}/login"
-    oauth_callback_url = f"{frontend_url}/oauth/callback"
+    context = consume_oauth_return(request, "google")
 
     error = request.query_params.get("error")
     if error:
-        return RedirectResponse(url=f"{login_url}?error=google_auth_failed")
+        return oauth_result_redirect(context, error="google_auth_failed")
 
     try:
         token_data = await oauth.google.authorize_access_token(request)
@@ -545,7 +629,9 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
 
         email = user_info.get("email")
         if not email:
-            return RedirectResponse(url=f"{frontend_url}/?error=no_email")
+            if context.get("mobile"):
+                return oauth_result_redirect(context, error="google_auth_failed")
+            return RedirectResponse(url=f"{normalize_frontend_url(context.get('frontend_url'))}/?error=no_email")
 
         first_name = user_info.get("given_name", "")
         last_name = user_info.get("family_name", "User")
@@ -558,32 +644,28 @@ async def google_callback(request: Request, db: Session = Depends(get_db)):
         
         role = user.role.value if hasattr(user.role, 'value') else user.role
 
-        exchange_code = store_oauth_tokens(jwt_access, jwt_refresh, role)
-        return RedirectResponse(url=f"{oauth_callback_url}?code={exchange_code}")
+        exchange_code = store_oauth_tokens(jwt_access, jwt_refresh, role, context.get("code_challenge"))
+        return oauth_result_redirect(context, code=exchange_code)
 
     except Exception as e:
         print("Google OAuth error:", e)
-        return RedirectResponse(url=f"{login_url}?error=google_auth_failed")
+        return oauth_result_redirect(context, error="google_auth_failed")
 
 
 # ── Facebook OAuth ────────────────────────────────────────────────────────────
 @router.get("/facebook")
 async def facebook_login(request: Request):
-    request.session["oauth_frontend_url"] = normalize_frontend_url(
-        request.query_params.get("frontend_url")
-    )
-    return await oauth.facebook.authorize_redirect(request, FACEBOOK_REDIRECT_URI)
+    state = prepare_oauth_return(request, "facebook")
+    return await oauth.facebook.authorize_redirect(request, FACEBOOK_REDIRECT_URI, state=state)
 
 
 @router.get("/facebook/callback")
 async def facebook_callback(request: Request, db: Session = Depends(get_db)):
-    frontend_url = oauth_frontend_url(request)
-    login_url = f"{frontend_url}/login"
-    oauth_callback_url = f"{frontend_url}/oauth/callback"
+    context = consume_oauth_return(request, "facebook")
 
     error = request.query_params.get("error")
     if error:
-        return RedirectResponse(url=f"{login_url}?error=facebook_auth_failed")
+        return oauth_result_redirect(context, error="facebook_auth_failed")
 
     try:
         token = await oauth.facebook.authorize_access_token(request)
@@ -606,15 +688,15 @@ async def facebook_callback(request: Request, db: Session = Depends(get_db)):
         
         role = user.role.value if hasattr(user.role, 'value') else user.role
 
-        exchange_code = store_oauth_tokens(jwt_access, jwt_refresh, role)
-        return RedirectResponse(url=f"{oauth_callback_url}?code={exchange_code}")
+        exchange_code = store_oauth_tokens(jwt_access, jwt_refresh, role, context.get("code_challenge"))
+        return oauth_result_redirect(context, code=exchange_code)
 
     except HTTPException as e:
         print("Facebook OAuth error:", e.detail)
-        return RedirectResponse(url=f"{login_url}?error=facebook_email_required")
+        return oauth_result_redirect(context, error="facebook_email_required")
     except Exception as e:
         print("Facebook OAuth error:", e)
-        return RedirectResponse(url=f"{login_url}?error=facebook_auth_failed")
+        return oauth_result_redirect(context, error="facebook_auth_failed")
 
 
 # ── Me ────────────────────────────────────────────────────────────────────────
