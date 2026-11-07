@@ -510,14 +510,26 @@ def forgot_password_send_otp(request: Request, payload: SendOTPRequest, db: Sess
     return generic_response
 
 
-@router.post("/forgot-password/reset")
-def forgot_password_reset(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == payload.email).first()
-
-    if not user or user.otp_code != payload.otp:
+def validate_password_reset_otp(email: str, otp: str, db: Session):
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not user.is_verified or not re.fullmatch(r"\d{6}", otp) or user.otp_code != otp:
         raise HTTPException(status_code=400, detail="Invalid or expired reset code.")
     if not user.otp_expires_at or user.otp_expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=400, detail="Invalid or expired reset code.")
+    return user
+
+
+@router.post("/forgot-password/verify-otp")
+@limiter.limit("5/minute")
+def forgot_password_verify_otp(request: Request, payload: VerifyOTPRequest, db: Session = Depends(get_db)):
+    # The final reset rechecks and consumes the code; verification leaves it valid.
+    validate_password_reset_otp(payload.email, payload.otp, db)
+    return {"status": "success", "message": "Reset code verified."}
+
+
+@router.post("/forgot-password/reset")
+def forgot_password_reset(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+    user = validate_password_reset_otp(payload.email, payload.otp, db)
     if len(payload.new_password) < 6:
         raise HTTPException(status_code=400, detail="Password must be at least 6 characters.")
 
