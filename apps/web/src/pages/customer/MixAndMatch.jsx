@@ -10,7 +10,7 @@ import FallbackImage from "../../components/FallbackImage.jsx" // 🚀 ADDED THI
 import ArrangementLoadingOverlay from "../../components/ArrangementLoadingOverlay.jsx"
 import { prepareGenerationSound, playGenerationSound } from "../../utils/generationSound.js"
 import arrangementBouquet from "../../assets/MakeItPersonal/arrangement_bouquet.webp"
-import arrangementBox from "../../assets/MakeItPersonal/arrangement_box_reference.png"
+import arrangementBox from "../../assets/MakeItPersonal/arrangement_box.webp"
 import arrangementVase from "../../assets/MakeItPersonal/arrangement_vase.webp"
 
 const G  = "#2E8B34"
@@ -351,7 +351,7 @@ export default function MixAndMatch({ onNavigate }) {
         const [toggleRes, prodRes, usageRes] = await Promise.all([
           api.isCustomizationEnabled().catch(() => ({ enabled: true })),
           api.getCustomizationProducts(),
-          api.getAiUsage().catch(() => ({ remaining: 5, limit: 5 })),
+          api.getAiUsage().catch(() => ({ remaining: 5, limit: 5, unlimited: true })),
         ])
 
         setCustomizationEnabled(toggleRes.enabled)
@@ -618,7 +618,7 @@ export default function MixAndMatch({ onNavigate }) {
         if (data.arrangement_type) setArrangementType(data.arrangement_type)
         setResult(data)
         if (data.generated_image_url) playGenerationSound()
-        setCustomName(data.price_breakdown?.items?.[0]?.product_name || "Custom Arrangement")
+        setCustomName("Custom Arrangement")
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
         setCompleted(true)
       } else {
@@ -652,7 +652,7 @@ export default function MixAndMatch({ onNavigate }) {
   }
 
   const regenerateCurrentDesign = () => {
-    if (generating || aiUsage?.remaining === 0) return
+    if (generating || (!aiUsage?.unlimited && aiUsage?.remaining === 0)) return
     setCompleted(false)
     setStep(3)
     void handleGenerate()
@@ -879,7 +879,7 @@ export default function MixAndMatch({ onNavigate }) {
                             </div>
                             <div className="flex justify-between">
                               <span style={{ color: bodyC }}>AI uses left</span>
-                              <span style={{ color: subHeadC }}>{result.remaining_generations} today</span>
+                              <span style={{ color: subHeadC }}>{result.unlimited_generations ? "Unlimited" : `${result.remaining_generations} today`}</span>
                             </div>
                           </div>
                         </div>
@@ -1025,7 +1025,7 @@ export default function MixAndMatch({ onNavigate }) {
 
                   <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-2 flex-shrink-0">
                     <button type="button" onClick={regenerateCurrentDesign}
-                      disabled={generating || aiUsage?.remaining === 0}
+                      disabled={generating || (!aiUsage?.unlimited && aiUsage?.remaining === 0)}
                       className="w-full py-2.5 text-sm font-semibold rounded-lg flex items-center justify-center gap-2 border transition disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{ borderColor: accentG, color: accentG, backgroundColor: isDark ? "rgba(74,222,128,0.08)" : "#f0fdf4" }}>
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1149,7 +1149,7 @@ export default function MixAndMatch({ onNavigate }) {
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs" style={{ color: bodyC }}>
-                {aiUsage ? `${aiUsage.remaining} / ${aiUsage.limit} AI left` : "Loading AI usage..."}
+                {aiUsage ? (aiUsage.unlimited ? "Unlimited AI previews" : `${aiUsage.remaining} / ${aiUsage.limit} AI left`) : "Loading AI usage..."}
               </span>
               <span className="text-xs" style={{ color: mutedC }}>Step {step + 1} of {STEPS.length}</span>
             </div>
@@ -1158,13 +1158,13 @@ export default function MixAndMatch({ onNavigate }) {
         </div>
 
         {/* AI usage warnings */}
-        {aiUsage && aiUsage.remaining === 0 && (
+        {aiUsage && !aiUsage.unlimited && aiUsage.remaining === 0 && (
           <div className="mb-5 px-4 py-3 rounded-xl text-sm"
             style={{ backgroundColor: isDark ? "rgba(239,68,68,0.12)" : "#fef2f2", border: `1px solid ${isDark ? "rgba(239,68,68,0.3)" : "#fee2e2"}`, color: isDark ? "#fca5a5" : "#dc2626" }}>
             You have reached your daily limit of {aiUsage.limit} AI generations. Please try again tomorrow.
           </div>
         )}
-        {aiUsage && aiUsage.remaining > 0 && aiUsage.remaining <= 2 && (
+        {aiUsage && !aiUsage.unlimited && aiUsage.remaining > 0 && aiUsage.remaining <= 2 && (
           <div className="mb-5 px-4 py-3 rounded-xl text-sm"
             style={{ backgroundColor: isDark ? "rgba(245,158,11,0.12)" : "#fffbeb", border: `1px solid ${isDark ? "rgba(245,158,11,0.3)" : "#fef3c7"}`, color: isDark ? "#fcd34d" : "#b45309" }}>
             You have {aiUsage.remaining} AI generation{aiUsage.remaining !== 1 ? "s" : ""} left today.
@@ -1486,10 +1486,10 @@ export default function MixAndMatch({ onNavigate }) {
             </button>
             <button
               onClick={handleNext}
-              disabled={generating || !canProceed() || (aiUsage?.remaining === 0 && step === STEPS.length - 1)}
+              disabled={generating || !canProceed() || (!aiUsage?.unlimited && aiUsage?.remaining === 0 && step === STEPS.length - 1)}
               className="flex items-center gap-2 px-7 py-3 text-base font-bold rounded-2xl transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-50"
               style={{
-                background: (!generating && canProceed() && !(aiUsage?.remaining === 0 && step === STEPS.length - 1))
+                background: (!generating && canProceed() && !(!aiUsage?.unlimited && aiUsage?.remaining === 0 && step === STEPS.length - 1))
                   ? (step === STEPS.length - 1 ? "linear-gradient(135deg, #e879a0, #f43f5e)" : accentG)
                   : (isDark ? "#475569" : "#d1d5db"),
                 color: "#ffffff",

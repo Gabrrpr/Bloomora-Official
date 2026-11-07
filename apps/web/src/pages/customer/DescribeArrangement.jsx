@@ -37,6 +37,11 @@ function formatGenerationError(message, fallback = GENERATION_PROBLEM_MESSAGE) {
   return `Generation issue: ${trimmedMessage}`
 }
 
+function explainNoGeneration(message, fallback = "We couldn't generate an image yet. Review the suggested recipe or choose an available material, then try again.") {
+  const detail = typeof message === "string" ? message.trim() : ""
+  return detail ? `We couldn't generate an image yet. ${detail} Review the guidance below, then try again.` : fallback
+}
+
 const PROMPT_TIPS = [
   { title: "Theme or occasion", content: "Specify a theme, occasion, or the vibe you want: e.g. 'A romantic Valentine's Day arrangement' or 'A cheerful birthday arrangement.'" },
   { title: "Colors you'd like", content: "Mention any specific colors or a color palette: e.g. 'Soft pink and cream' or 'Vibrant and colorful.'" },
@@ -177,7 +182,7 @@ export default function DescribeArrangement({ onNavigate }) {
         const [toggleRes, productsRes, usageRes] = await Promise.all([
           api.isCustomizationEnabled().catch(() => ({ enabled: true })),
           api.getCustomizationProducts(),
-          api.getAiUsage().catch(() => ({ remaining: 5, limit: 5 })),
+          api.getAiUsage().catch(() => ({ remaining: 5, limit: 5, unlimited: true })),
         ])
         setCustomizationEnabled(toggleRes.enabled)
         
@@ -428,10 +433,11 @@ export default function DescribeArrangement({ onNavigate }) {
 
       if (data.validation) {
         setRecipeReview({ ...data.validation, message: data.message })
-        setError(null)
+        setError(explainNoGeneration(data.message))
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
       } else if (data.unavailable_items && data.unavailable_items.length > 0) {
         setUnavailableItems(data.unavailable_items)
+        setError(explainNoGeneration(data.message, "We couldn't generate an image yet because one or more requested materials are unavailable. Choose a suggested alternative, then try again."))
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
       } else if (data.success) {
         const normalizedData = normalizeGeneratedResult(data)
@@ -443,7 +449,7 @@ export default function DescribeArrangement({ onNavigate }) {
         setCustomName(normalizedData.price_breakdown?.items?.[0]?.product_name || "AI Arrangement")
         setAiUsage(prev => prev ? { ...prev, remaining: normalizedData.remaining_generations } : prev)
       } else {
-        setError(formatGenerationError(data.message, "Generation failed. Please try again."))
+        setError(explainNoGeneration(data.message, "We couldn't generate an image yet. Please review your request and try again."))
       }
     } catch (e) {
       setError(formatGenerationError(e.message))
@@ -522,10 +528,11 @@ export default function DescribeArrangement({ onNavigate }) {
 
       if (data.validation) {
         setRecipeReview({ ...data.validation, message: data.message })
-        setError(null)
+        setError(explainNoGeneration(data.message))
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
       } else if (data.unavailable_items && data.unavailable_items.length > 0) {
         setUnavailableItems(data.unavailable_items)
+        setError(explainNoGeneration(data.message, "We couldn't regenerate this image yet because one or more materials are unavailable. Choose a suggested alternative, then try again."))
         setAiUsage(prev => prev ? { ...prev, remaining: data.remaining_generations } : prev)
       } else if (data.success) {
         const normalizedData = normalizeGeneratedResult(data)
@@ -536,7 +543,7 @@ export default function DescribeArrangement({ onNavigate }) {
         setCustomName(prev => prev || normalizedData.price_breakdown?.items?.[0]?.product_name || "AI Arrangement")
         setAiUsage(prev => prev ? { ...prev, remaining: normalizedData.remaining_generations } : prev)
       } else {
-        setError(formatGenerationError(data.message, "Generation failed. Please try again."))
+        setError(explainNoGeneration(data.message, "We couldn't regenerate an image yet. Please review your request and try again."))
       }
     } catch (e) {
       setError(formatGenerationError(e.message))
@@ -894,13 +901,13 @@ export default function DescribeArrangement({ onNavigate }) {
                 )}
               </div>
 
-              {aiUsage && aiUsage.remaining === 0 && (
+              {aiUsage && !aiUsage.unlimited && aiUsage.remaining === 0 && (
                 <div className="mt-4 px-4 py-3 rounded-xl text-sm"
                   style={{ backgroundColor: isDark ? "rgba(239,68,68,0.12)" : "#fef2f2", border: `1px solid ${isDark ? "rgba(239,68,68,0.3)" : "#fee2e2"}`, color: isDark ? "#fca5a5" : "#dc2626" }}>
                   You have reached your daily limit of {aiUsage.limit} AI generations. Please try again tomorrow.
                 </div>
               )}
-              {aiUsage && aiUsage.remaining > 0 && aiUsage.remaining <= 2 && (
+              {aiUsage && !aiUsage.unlimited && aiUsage.remaining > 0 && aiUsage.remaining <= 2 && (
                 <div className="mt-4 px-4 py-3 rounded-xl text-sm"
                   style={{ backgroundColor: isDark ? "rgba(245,158,11,0.12)" : "#fffbeb", border: `1px solid ${isDark ? "rgba(245,158,11,0.3)" : "#fef3c7"}`, color: isDark ? "#fcd34d" : "#b45309" }}>
                   You have {aiUsage.remaining} AI generation{aiUsage.remaining !== 1 ? "s" : ""} left today.
@@ -913,16 +920,16 @@ export default function DescribeArrangement({ onNavigate }) {
                     <path d="M12 2a10 10 0 100 20A10 10 0 0012 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
                   </svg>
                   {aiUsage ? (
-                    <span>{aiUsage.remaining} / {aiUsage.limit} AI generations left today</span>
+                    <span>{aiUsage.unlimited ? "Unlimited AI generations" : `${aiUsage.remaining} / ${aiUsage.limit} AI generations left today`}</span>
                   ) : (
                     <span>Loading AI usage...</span>
                   )}
                 </div>
                 <button
                   onClick={() => handleGenerate()}
-                  disabled={!customizationEnabled || !prompt.trim() || loading || (aiUsage?.remaining === 0)}
+                  disabled={!customizationEnabled || !prompt.trim() || loading || (!aiUsage?.unlimited && aiUsage?.remaining === 0)}
                   className="flex items-center justify-center gap-2 px-7 py-3.5 text-base font-bold text-white rounded-2xl transition-all hover:brightness-105 active:scale-[0.98] disabled:opacity-50 whitespace-nowrap"
-                  style={{ background: customizationEnabled && prompt.trim() && aiUsage?.remaining !== 0 ? "linear-gradient(135deg, #e879a0, #f43f5e)" : (isDark ? "#475569" : "#d1d5db") }}
+                  style={{ background: customizationEnabled && prompt.trim() && (aiUsage?.unlimited || aiUsage?.remaining !== 0) ? "linear-gradient(135deg, #e879a0, #f43f5e)" : (isDark ? "#475569" : "#d1d5db") }}
                 >
                   {loading ? (
                     <>
@@ -1472,7 +1479,7 @@ export default function DescribeArrangement({ onNavigate }) {
                         <button
                           type="button"
                           onClick={handleRegenerateFromEdits}
-                          disabled={loading || !prompt.trim() || aiUsage?.remaining === 0}
+                          disabled={loading || !prompt.trim() || (!aiUsage?.unlimited && aiUsage?.remaining === 0)}
                           className="inline-flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-bold text-white rounded-lg transition-all hover:brightness-110 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                           style={{ background: `linear-gradient(135deg, ${DG}, ${G})` }}
                         >
@@ -1491,7 +1498,7 @@ export default function DescribeArrangement({ onNavigate }) {
                       { label: "Availability", value: "In stock" },
                       { label: "Popularity", value: "Top pick" },
                       { label: "Maintenance", value: "Easy care" },
-                      { label: "AI uses left", value: `${result.remaining_generations} today` },
+                      { label: "AI uses left", value: result.unlimited_generations ? "Unlimited" : `${result.remaining_generations} today` },
                     ].map(({ label, value }) => (
                       <div key={label} className="flex flex-col items-center py-2.5 px-2 rounded-xl border text-center"
                         style={{ borderColor: tileBdr, backgroundColor: subtleBoxBg }}>

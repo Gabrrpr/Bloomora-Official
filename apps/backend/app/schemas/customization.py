@@ -104,6 +104,7 @@ class CustomizationResponse(BaseModel):
     arrangement_type: Optional[str] = None
     price_breakdown: Optional[PriceBreakdown] = None
     remaining_generations: int = 5
+    unlimited_generations: bool = False
     unavailable_items: List[UnavailableItem] = Field(default_factory=list)
     validation: Optional[QuantityValidation] = None
     prompt_suggestions: List[str] = Field(default_factory=list)

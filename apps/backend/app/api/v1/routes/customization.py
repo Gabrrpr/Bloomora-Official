@@ -5,11 +5,12 @@ from pydantic import BaseModel
 from google.genai import types
 import uuid
 import re
+from fastapi import Request
 
 from app.core.dependencies import get_db, get_current_user
 from app.models import User, Arrangement
 from app.models.arrangement import Flower, Vase, Wrapping, Accessory
-from app.models.ai_usage_log import DAILY_AI_LIMIT
+from app.models.ai_usage_log import AI_GENERATION_UNLIMITED, DAILY_AI_LIMIT
 from app.schemas.customization import (
     CustomizationRequest,
     CustomizationResponse,
@@ -324,6 +325,7 @@ def _has_explicit_quantity_request(prompt_text: str) -> bool:
 
 @router.get("/ai-usage", tags=["Customization"])
 def get_ai_usage(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -332,6 +334,7 @@ def get_ai_usage(
         "used": DAILY_AI_LIMIT - remaining,
         "remaining": remaining,
         "limit": DAILY_AI_LIMIT,
+        "unlimited": AI_GENERATION_UNLIMITED and request.headers.get("x-client-platform") == "web",
         "message": f"You have {remaining} AI generation(s) left for today."
     }
 
@@ -344,6 +347,7 @@ def get_customization_rules():
 @router.post("/check-and-generate", response_model=CustomizationResponse)
 async def check_and_generate(
     payload: CustomizationRequest,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -351,7 +355,8 @@ async def check_and_generate(
 
     # ── Step 1: Check daily AI usage limit ───────────────────────────────
     # Reviewing uses Gemini extraction but does not consume an image-generation credit.
-    if not payload.review_only and has_reached_daily_limit(db, current_user.id):
+    is_web_exhibit = AI_GENERATION_UNLIMITED and request.headers.get("x-client-platform") == "web"
+    if not payload.review_only and not is_web_exhibit and has_reached_daily_limit(db, current_user.id):
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=f"You have reached your daily limit of {DAILY_AI_LIMIT} AI generations. Please try again tomorrow."

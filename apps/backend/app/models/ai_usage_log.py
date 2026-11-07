@@ -4,7 +4,9 @@ from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.models.base import Base, now_utc
 
-DAILY_AI_LIMIT = 5  # max AI generations per user per day
+# Temporary exhibit mode: generation is unlimited while this experience is being demonstrated.
+AI_GENERATION_UNLIMITED = True
+DAILY_AI_LIMIT = 5  # max AI generations per user per day when exhibit mode is off
 
 
 class AIUsageLog(Base):

@@ -34,6 +34,7 @@ export const api = {
     const url = `${API_BASE}${endpoint}`;
 
     const headers = {
+      'X-Client-Platform': 'web',
       ...(token && { Authorization: `Bearer ${token}` }),
       ...options.headers,
     };
@@ -362,11 +363,13 @@ export const api = {
 
   // ── Customization ───────────────────────────────────────────────────────
   async getAiUsage() {
-    return api.get('/customization/ai-usage');
+    const usage = await api.get('/customization/ai-usage');
+    return { ...usage, unlimited: true };
   },
 
   async checkAndGenerate(data) {
-    return api.post('/customization/check-and-generate', data);
+    const result = await api.post('/customization/check-and-generate', data);
+    return { ...result, unlimited_generations: true };
   },
 
   generateCardMessage: async (cardState) => {
